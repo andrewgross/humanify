@@ -411,5 +411,56 @@ pub fn corroborate(
     }
 }
 
+/// `--probe shingle-probe`'s line for one close pair (prior-version.ts
+/// `probeShingles`): the score as computed, the score with each edge
+/// n-gram's own hash prefix dropped (`edge:<callee>`), the edge and token
+/// counts, and both verdicts against the floor. It changes nothing — the
+/// corroboration verdict is [`corroborate`]'s either way.
+pub fn shingle_probe_line(
+    fresh_id: &str,
+    prior: &std::collections::BTreeSet<String>,
+    fresh: &std::collections::BTreeSet<String>,
+    aligned: usize,
+) -> String {
+    use humanify_model::js::to_fixed;
+    if prior.is_empty() || fresh.is_empty() {
+        return format!(
+            "shingle-probe {fresh_id}: empty set (prior {}, fresh {}), aligned={aligned}",
+            prior.len(),
+            fresh.len()
+        );
+    }
+    let unprefixed = |s: &std::collections::BTreeSet<String>| {
+        s.iter()
+            .map(|tok| match tok.split_once('→') {
+                Some((_, callee)) => format!("edge:{callee}"),
+                None => tok.clone(),
+            })
+            .collect::<std::collections::BTreeSet<String>>()
+    };
+    let as_is = jaccard_similarity(prior, fresh);
+    let no_prefix = jaccard_similarity(&unprefixed(prior), &unprefixed(fresh));
+    let edges =
+        |s: &std::collections::BTreeSet<String>| s.iter().filter(|t| t.contains('→')).count();
+    let verdict = |x: f64| {
+        if x >= SHINGLE_SIMILARITY_FLOOR {
+            "pass"
+        } else {
+            "fail"
+        }
+    };
+    format!(
+        "shingle-probe {fresh_id}: asis={} noprefix={} edges={}/{} tokens={}/{} aligned={aligned} verdict={}/{}",
+        to_fixed(as_is, 4),
+        to_fixed(no_prefix, 4),
+        edges(prior),
+        edges(fresh),
+        prior.len(),
+        fresh.len(),
+        verdict(as_is),
+        verdict(no_prefix)
+    )
+}
+
 #[cfg(test)]
 mod close_test;

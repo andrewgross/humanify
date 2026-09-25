@@ -61,9 +61,37 @@ fn replay(v: &Value) -> Result<(), String> {
         switches: AlignSwitches::default(),
     });
     match (got, v["declined"].as_str()) {
-        (Err(rust), Some(ts)) if rust == ts => Ok(()),
-        (Err(rust), Some(ts)) => Err(format!("decline reason: rust {rust:?}, ts {ts:?}")),
-        (Err(rust), None) => Err(format!("rust declined ({rust}), ts emitted")),
+        (Err(rust), Some(ts)) if rust.reason == ts => {
+            // Finding #40: what the decline leaves on the persisted ledger
+            // — the aliases once the plan is built, the emitted layout once
+            // the tree is being assembled.
+            let want = &v["declinedLedger"];
+            let ts_aliases: Option<Vec<(String, String)>> = want["aliases"].as_array().map(|a| {
+                a.iter()
+                    .map(|e| (strings(e)[0].clone(), strings(e)[1].clone()))
+                    .collect()
+            });
+            if rust.aliases != ts_aliases {
+                return Err(format!(
+                    "declined ledger aliases: rust {:?}, ts {ts_aliases:?}",
+                    rust.aliases
+                ));
+            }
+            let ts_indexes: Option<Vec<usize>> = want["emitIndexes"].as_array().map(|a| {
+                a.iter()
+                    .map(|x| x.as_u64().expect("index") as usize)
+                    .collect()
+            });
+            let rust_indexes = rust.layout.as_ref().map(|l| l.emit_indexes.clone());
+            if rust_indexes != ts_indexes {
+                return Err(format!(
+                    "declined ledger emitIndexes: rust {rust_indexes:?}, ts {ts_indexes:?}"
+                ));
+            }
+            Ok(())
+        }
+        (Err(rust), Some(ts)) => Err(format!("decline reason: rust {:?}, ts {ts:?}", rust.reason)),
+        (Err(rust), None) => Err(format!("rust declined ({}), ts emitted", rust.reason)),
         (Ok(_), Some(ts)) => Err(format!("rust emitted, ts declined ({ts})")),
         (Ok(tree), None) => {
             let ts_tree: Vec<(String, String)> = v["tree"]

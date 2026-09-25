@@ -144,6 +144,141 @@ fn the_verdict_names_the_failed_invariant() {
     );
 }
 
+/// A provider naming every requested identifier `<id>Named`.
+struct SuffixProvider;
+
+impl humanify_model::llm::NameProvider for SuffixProvider {
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        calls
+            .into_iter()
+            .map(|c| {
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: humanify_model::llm::Renames::from_entries(
+                        c.request
+                            .identifiers
+                            .iter()
+                            .map(|i| (i.clone(), Some(format!("{i}Named")))),
+                    ),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+fn ledger_config() -> super::NamingConfig {
+    super::NamingConfig {
+        bundler: None,
+        minifier: None,
+        skip_libraries: true,
+        reconcile_prior_diff: true,
+        naming_floor: true,
+        naming_floor_sweep: true,
+        source_map: false,
+        emit_rename_ledger: true,
+        family_permute_disabled: false,
+        params: humanify_model::llm::CacheKeyParams {
+            model: "m".into(),
+            temperature: Some(0.0),
+            max_tokens: None,
+            reasoning_effort: None,
+        },
+        capture_dump: false,
+        tunables: Default::default(),
+        shingle_probe: false,
+    }
+}
+
+/// `--rename-ledger` (plugin.ts `buildRenameLedgerBundle`): the base stage
+/// derives from the naming-era renames over the FRESH text, each
+/// post-generate pass that applied a rename (the prior-diff reconcile, the
+/// deferred sweep) adds a stage over the text IT renamed, and the whole
+/// ledger replays onto the fresh text to the SHIPPED code — the TS's own
+/// self-check.
+#[test]
+fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
+    use crate::rename::validated::ledger::apply_rename_ledger;
+    let fresh =
+        "function a(b) {\n  var c = b + 1;\n  return c;\n}\nvar d = a(2);\nconsole.log(d);\n";
+    let prior = "function addOne(value) {\n  var result = value + 1;\n  return result;\n}\nvar total = addOne(2);\nconsole.log(total);\n";
+    for prior in [None, Some(prior)] {
+        let out = super::run_naming(
+            &super::NamingInput {
+                fresh,
+                prior,
+                library: None,
+            },
+            &ledger_config(),
+            &super::NamingHooks::default(),
+            &SuffixProvider,
+        )
+        .expect("the stage runs");
+        let bundle = out.rename_ledger.as_ref().expect("a ledger in ledger mode");
+        assert_eq!(bundle.source, fresh);
+        assert!(!bundle.ledger.entries.is_empty(), "the waves renamed");
+        assert_eq!(
+            bundle.stage_sources.len(),
+            bundle.ledger.post.as_ref().map_or(0, Vec::len)
+        );
+        assert_eq!(
+            apply_rename_ledger(fresh, &bundle.ledger).as_deref(),
+            Ok(out.code.as_deref().expect("shipped")),
+            "prior {}",
+            prior.is_some()
+        );
+    }
+    // Without the flag there is no ledger.
+    let mut config = ledger_config();
+    config.emit_rename_ledger = false;
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &super::NamingHooks::default(),
+        &SuffixProvider,
+    )
+    .expect("the stage runs");
+    assert!(out.rename_ledger.is_none());
+}
+
+/// Finding #41: a structural failure NAMES its first diverging token
+/// (`describeStructuralDivergence`) — indented lines, the TS's shape.
+#[test]
+fn a_structural_divergence_is_localised() {
+    use crate::naming::driver::validate::describe_structural_divergence;
+    let fresh = "var a = 1;\nconsole.log(a);\n";
+    assert_eq!(
+        describe_structural_divergence(fresh, "var count = 1;\nconsole.log(count);\n"),
+        None
+    );
+    let detail = describe_structural_divergence(fresh, "var a = 2;\nconsole.log(a);\n")
+        .expect("a divergence");
+    let lines: Vec<&str> = detail.lines().collect();
+    assert_eq!(lines.len(), 5, "{detail}");
+    assert!(
+        lines[0].starts_with("  first divergence at token "),
+        "{detail}"
+    );
+    assert!(lines[0].ends_with(" tokens each"), "{detail}");
+    // The Rust serializer's literal token (its bytes are its own, 02 §4a).
+    assert_eq!(lines[1], "    original: \"N=1;\"");
+    assert_eq!(lines[2], "    output:   \"N=2;\"");
+    assert!(
+        lines[3].starts_with("    original context: ")
+            && lines[4].starts_with("    output context:   ")
+    );
+    let longer = describe_structural_divergence(fresh, "var a = 1;\nconsole.log(a);\nfoo();\n")
+        .expect("a divergence");
+    assert!(longer.contains(" tokens before vs "), "{longer}");
+}
+
 /// Finding #34, fixed TS-first: an `export { x } from "m"` local names a
 /// binding of ANOTHER module, so a correct rename that gives a local binding
 /// the same name is still a pure rename (the nanoid fixture's first version).

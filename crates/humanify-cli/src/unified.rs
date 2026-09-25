@@ -30,6 +30,7 @@ use std::sync::{Arc, Mutex};
 use humanify_core::naming::driver::{
     NamingConfig, NamingHooks, NamingInput, NamingOutcome, run_naming,
 };
+use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::unpack::select_unpack_adapter;
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
@@ -519,6 +520,7 @@ fn pipeline_body(
         provider,
         prior_path,
         ts_hashes.as_ref().map(|h| h.factories.as_slice()),
+        switches.switch_on(Switch::ManifestPriorOrder),
         profiler,
         renderer,
     )?;
@@ -547,8 +549,15 @@ fn pipeline_body(
     failures.preserve(Path::new(out_dir), renderer);
 
     // Stages 10-12: the split, emit and finish (crate::split_stage).
+    let mut placement = humanify_core::place::trail::PlacementTrail::default();
+    let mut split_sections = None;
+    let mut post_split = crate::split_stage::PostSplitRecords::default();
     if opts.split
-        && let Some((outcome, source)) = &last
+        && let Some(NamedFile {
+            outcome,
+            path: source,
+            ..
+        }) = &last
         && let Some(code) = &outcome.code
     {
         let split = crate::split_stage::SplitStageInput {
@@ -564,17 +573,246 @@ fn pipeline_body(
             provider,
         };
         let span = profiler.pipeline_span("split");
-        let ended =
+        let records =
             crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
         span.end(Some(humanify_model::profiling::JsObject::new().with(
             "stable",
-            matches!(ended, crate::split_stage::SplitEnded::Complete),
+            matches!(records.ended, crate::split_stage::SplitEnded::Complete),
         )));
+        placement = records.trail;
+        split_sections = Some(records.dump);
+        post_split = records.post_split;
     }
-    if let (Some(dest), Some((outcome, _))) = (&opts.stats_json, &last) {
-        write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
+    if let Some(NamedFile {
+        outcome,
+        fresh,
+        path,
+    }) = &last
+    {
+        let reports = RunReports {
+            opts,
+            outcome,
+            fresh,
+            placement: &placement,
+            split: split_sections.as_ref(),
+            post_split: &post_split,
+        };
+        reports.write_diagnostics(renderer)?;
+        if let Some(dest) = &opts.stats_json {
+            write_stats_json(
+                dest,
+                outcome,
+                &post_split.claims,
+                &unpacked.vendor_naming,
+                &config,
+                renderer,
+            )?;
+        }
+        if let Some(dir) = &opts.dump_artifacts {
+            let regions: Vec<humanify_core::libdetect::CommentRegion> = mixed_files
+                .iter()
+                .filter(|(p, _)| p == path)
+                .flat_map(|(_, m)| m.regions.iter().cloned())
+                .collect();
+            reports.write_dump(
+                &DumpContext {
+                    dir,
+                    output_dir: Path::new(out_dir),
+                    minified: &bundled_code,
+                    prior: prior.as_deref(),
+                    vendor_prompts: &unpacked.vendor_dispatched,
+                    flags: dump_flags(opts, settings, &config),
+                    params: &naming.config.params,
+                    ts_factories: ts_hashes.as_ref().map(|h| h.factories.as_slice()),
+                    regions: &regions,
+                },
+                renderer,
+            )?;
+        }
+        reports.write_rename_ledger(renderer)?;
     }
     Ok(Ended::Done(failures.close(renderer)))
+}
+
+/// The run's recorded reports, written after the split in the TS order
+/// (unified.ts runPipeline: diagnostics, eval stats, the artifact dump,
+/// the rename ledger).
+struct RunReports<'a> {
+    opts: &'a CommandOptions,
+    outcome: &'a NamingOutcome,
+    /// The formatted text the naming stage ran on.
+    fresh: &'a str,
+    placement: &'a humanify_core::place::trail::PlacementTrail,
+    /// The split's dump sections (its input text is the placement
+    /// trail's anchor); None without a split (the trail is empty then).
+    split: Option<&'a humanify_core::artifact_dump::SplitSections>,
+    /// The finishing passes' trail rows and claims.
+    post_split: &'a crate::split_stage::PostSplitRecords,
+}
+
+/// What `--dump-artifacts` reads beyond the naming outcome.
+struct DumpContext<'a> {
+    dir: &'a str,
+    output_dir: &'a Path,
+    minified: &'a str,
+    prior: Option<&'a str>,
+    vendor_prompts: &'a [humanify_model::llm::LlmCall],
+    flags: humanify_model::js::JsValue,
+    params: &'a humanify_model::llm::CacheKeyParams,
+    ts_factories: Option<&'a [humanify_core::unpack::gate::TsFactoryHash]>,
+    regions: &'a [humanify_core::libdetect::CommentRegion],
+}
+
+/// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
+/// selection and the decision levers; unset optional flags are absent.
+fn dump_flags(
+    opts: &CommandOptions,
+    settings: &Settings,
+    config: &humanify_model::pipeline::PipelineConfig,
+) -> humanify_model::js::JsValue {
+    use humanify_model::js::{JsObject, JsValue};
+    let mut f = JsObject::new();
+    f.insert("split", JsValue::Bool(opts.split));
+    f.insert("splitPure", JsValue::Bool(opts.split_pure));
+    f.insert("bundler", JsValue::str(enum_name(config.bundler_type)));
+    f.insert("minifier", JsValue::str(enum_name(config.minifier_type)));
+    f.insert("skipLibraries", JsValue::Bool(settings.skip_libraries));
+    f.insert(
+        "reconcilePriorDiff",
+        JsValue::Bool(settings.levers.reconcile_prior_diff),
+    );
+    f.insert("namingFloor", JsValue::Bool(settings.levers.naming_floor));
+    f.insert(
+        "namingFloorSweep",
+        JsValue::Bool(settings.levers.naming_floor_sweep),
+    );
+    f.insert("model", JsValue::str(settings.model.as_str()));
+    f.insert_opt(
+        "reasoningEffort",
+        settings.reasoning_effort.map(JsValue::str),
+    );
+    f.insert_opt("disable", opts.disable.as_deref().map(JsValue::str));
+    f.insert_opt("probe", opts.probe.as_deref().map(JsValue::str));
+    JsValue::Object(f)
+}
+
+/// `gitShortSha()`: the CWD's `git rev-parse --short HEAD`, "unknown" when
+/// git cannot answer.
+fn git_short_sha() -> String {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+impl RunReports<'_> {
+    /// `--diagnostics` (buildDiagnosticsReport + writeDiagnosticsFile):
+    /// the naming stage's report with the split's placement trail after
+    /// the strategy trail; indent 2 and a trailing newline.
+    fn write_diagnostics(&self, renderer: &mut dyn ProgressRenderer) -> Result<(), Crash> {
+        use humanify_core::naming::report::diagnostics::{
+            AnchorTexts, DiagnosticsInputs, build_diagnostics_report,
+        };
+        use humanify_model::js::{JsObject, JsValue, stringify_pretty};
+        let (Some(dest), Some(coverage)) = (&self.opts.diagnostics, &self.outcome.coverage) else {
+            return Ok(());
+        };
+        let out = self.outcome;
+        let transfer = out
+            .prior
+            .as_ref()
+            .map(humanify_core::naming::driver::transfer_stats_by_tier);
+        let report = build_diagnostics_report(&DiagnosticsInputs {
+            timestamp: humanify_model::js::iso_now(),
+            reports: &out.reports,
+            coverage,
+            transfer_stats: transfer.as_ref(),
+            trail: &out.trail,
+            texts: AnchorTexts {
+                fresh: self.fresh,
+                generated: out.generated.as_deref(),
+                reconciled: out.reconcile.as_ref().and_then(|r| r.code.as_deref()),
+                shipped: out.code.as_deref(),
+            },
+            contention: &out.processor.contention,
+            extra_trail: &self.post_split.trail,
+        });
+        let JsValue::Object(report) = report else {
+            unreachable!("the report is an object")
+        };
+        let placement = self
+            .placement
+            .diagnostics_report(self.split.map_or("", |s| s.shipped.as_str()));
+        let mut with_placement = JsObject::new();
+        for (k, v) in report.entries() {
+            with_placement.insert(k.clone(), v.clone());
+            if k == "strategyTrails" {
+                with_placement.insert("placementTrails", placement.clone());
+            }
+        }
+        std::fs::write(
+            dest,
+            format!(
+                "{}\n",
+                stringify_pretty(&JsValue::Object(with_placement), 2)
+            ),
+        )
+        .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
+        renderer.message(&format!("Diagnostics written to {dest}"));
+        Ok(())
+    }
+
+    /// `--dump-artifacts` (writeDumpArtifacts): the 07 §2 catalog.
+    fn write_dump(
+        &self,
+        ctx: &DumpContext<'_>,
+        renderer: &mut dyn ProgressRenderer,
+    ) -> Result<(), Crash> {
+        if self.outcome.coverage.is_none() {
+            return Ok(());
+        }
+        humanify_core::artifact_dump::write_artifact_dump(
+            &humanify_core::artifact_dump::DumpInputs {
+                dir: Path::new(ctx.dir),
+                output_dir: ctx.output_dir,
+                flags: ctx.flags.clone(),
+                commit: git_short_sha(),
+                generated_at: humanify_model::js::iso_now(),
+                minified: ctx.minified,
+                prior: ctx.prior,
+                fresh: self.fresh,
+                outcome: self.outcome,
+                split: self.split,
+                vendor_prompts: ctx.vendor_prompts,
+                params: ctx.params,
+                ts_factories: ctx.ts_factories,
+                comment_regions: ctx.regions,
+                extra_trail: &self.post_split.trail,
+            },
+        )
+        .map_err(Crash)?;
+        renderer.message(&format!("Artifact dump written to {}", ctx.dir));
+        Ok(())
+    }
+
+    /// `--rename-ledger` (writeRenameLedger): the ledger, its source
+    /// snapshot, the standalone applier.
+    fn write_rename_ledger(&self, renderer: &mut dyn ProgressRenderer) -> Result<(), Crash> {
+        let (Some(dir), Some(bundle)) = (&self.opts.rename_ledger, &self.outcome.rename_ledger)
+        else {
+            return Ok(());
+        };
+        crate::writers::write_rename_ledger(Path::new(dir), bundle)
+            .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?;
+        renderer.message(&format!(
+            "Rename ledger: {} rename(s) → {dir}/ (apply: node {dir}/apply.mjs)",
+            bundle.ledger.entries.len()
+        ));
+        Ok(())
+    }
 }
 
 /// Stages 1-2: detect, build the pipeline config, select the unpack
@@ -628,6 +866,14 @@ fn detect_stage(
     Ok((config, adapter, fossil_split))
 }
 
+/// The last processed file: its naming outcome, its unpacked path, and
+/// the formatted text the stage ran on (the diagnostics' fresh anchor).
+struct NamedFile {
+    outcome: NamingOutcome,
+    path: std::path::PathBuf,
+    fresh: String,
+}
+
 /// Stages 6-9 per processed file (unminify's plugin loop): the formatted
 /// text, then the naming stage (graph, match, transfer, waves, floor,
 /// generate, the post-generate passes) — core::naming::driver::run_naming,
@@ -653,7 +899,7 @@ impl NamingRun<'_> {
         files: &[humanify_core::unpack::UnpackedFile],
         failures: &mut Failures,
         renderer: &mut dyn ProgressRenderer,
-    ) -> Result<Option<(NamingOutcome, std::path::PathBuf)>, Crash> {
+    ) -> Result<Option<NamedFile>, Crash> {
         let total = files.len();
         let mut last = None;
         for (i, file) in files.iter().enumerate() {
@@ -680,7 +926,11 @@ impl NamingRun<'_> {
                     .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
             }
             failures.record(&outcome, &path, &formatted.text);
-            last = Some((outcome, file.path.clone()));
+            last = Some(NamedFile {
+                outcome,
+                path: file.path.clone(),
+                fresh: formatted.text,
+            });
         }
         Ok(last)
     }
@@ -725,6 +975,23 @@ impl NamingRun<'_> {
             &NamingHooks::default(),
             &self.provider,
         )?;
+        // buildRenameLedgerBundle's self-check (non-fatal: the ledger is a
+        // diagnostic artifact): replayed, it must reproduce the shipped code.
+        if let Some(bundle) = &outcome.rename_ledger {
+            use humanify_core::rename::validated::ledger::apply_rename_ledger;
+            let replayed = apply_rename_ledger(&bundle.source, &bundle.ledger).ok();
+            if replayed.is_none() || replayed != outcome.code {
+                crate::log::debug_log(
+                    "rename-ledger",
+                    "WARNING: replay does not reproduce the shipped output — the ledger may be missing a rename",
+                );
+            }
+        }
+        // `--probe shingle-probe`: the close tier's per-pair census (the TS
+        // logs it inside the match; here after the stage, same lines).
+        for line in &outcome.probe_lines {
+            crate::log::debug_log("prior-version", line);
+        }
         if let Some(text) = &outcome.coverage_text {
             renderer.message(text);
         }
@@ -761,6 +1028,7 @@ fn log_input_output(input: &str, output: &str) {
 fn write_stats_json(
     dest: &str,
     outcome: &NamingOutcome,
+    later_claims: &humanify_core::rename::validated::RenameClaimStats,
     vendor: &humanify_core::modules::vendor_names::VendorNamingStats,
     config: &humanify_model::pipeline::PipelineConfig,
     renderer: &mut dyn ProgressRenderer,
@@ -768,7 +1036,7 @@ fn write_stats_json(
     if outcome.coverage.is_none() {
         return Ok(());
     }
-    let mut stats = outcome.eval_stats();
+    let mut stats = outcome.eval_stats_with(later_claims);
     if vendor.named + vendor.declined + vendor.echoed + vendor.batches_failed > 0 {
         stats.vendor_naming = Some(humanify_model::stats::VendorNamingStats {
             named: vendor.named as f64,
@@ -794,13 +1062,22 @@ struct Failures {
     internal_errors: usize,
 }
 
-/// `checkStructuralInvariant`'s headline. The TS appends the first
-/// diverging token window (describeStructuralDivergence over Babel's token
-/// streams); the Rust has no such streams, so the suffix is omitted — a
-/// declared text difference on a path that already fails the run.
+/// `checkStructuralInvariant`'s headline; the first diverging token window
+/// (`describeStructuralDivergence`) follows it on indented lines — over
+/// the Rust serializer's token stream, so its index and token texts are
+/// the Rust's own (the blessed serializer exemption; finding #41).
 const STRUCTURAL_FAILURE: &str = "Rename changed program structure beyond identifier names \
 (structural signature mismatch): the output is not a pure rename of the input — a statement, \
 literal, operator, or property access differs.";
+
+/// `checkStructuralInvariant`'s message: the headline + `divergenceSuffix`.
+fn structural_failure_message(original: &str, generated: &str) -> String {
+    use humanify_core::naming::driver::validate::describe_structural_divergence;
+    match describe_structural_divergence(original, generated) {
+        Some(detail) => format!("{STRUCTURAL_FAILURE}\n{detail}"),
+        None => STRUCTURAL_FAILURE.to_string(),
+    }
+}
 
 impl Failures {
     /// `preserveFailedOutput` — BEFORE the split, which consumes and
@@ -854,7 +1131,7 @@ impl Failures {
                 None
             }
             Some(Verdict::Structural) => Some(OutputSemanticFailure {
-                message: STRUCTURAL_FAILURE.to_string(),
+                message: structural_failure_message(original, generated),
                 ..OutputSemanticFailure::default()
             }),
             Some(Verdict::Semantic {
@@ -930,6 +1207,21 @@ fn naming_config(
             temperature: Some(0.0),
             max_tokens: settings.max_tokens.map(|t| t as u64),
             reasoning_effort: settings.reasoning_effort.map(str::to_string),
+        },
+        capture_dump: opts.dump_artifacts.is_some(),
+        shingle_probe: switches.switch_on(Switch::ShingleProbe),
+        tunables: {
+            let d = WaveTunables::default();
+            WaveTunables {
+                batch_size: settings.batch_size.map_or(d.batch_size, |n| n as usize),
+                max_retries: settings
+                    .max_retries_per_identifier
+                    .map_or(d.max_retries, |n| n as u32),
+                max_free_retries: settings.max_free_retries.map(|n| n as u32),
+                lane_threshold: settings
+                    .lane_threshold
+                    .map_or(d.lane_threshold, |n| n as usize),
+            }
         },
     }
 }

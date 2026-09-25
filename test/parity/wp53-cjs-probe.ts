@@ -515,7 +515,17 @@ const out = FIXTURES.map((f) => {
     declined,
     tree: tree ? [...tree] : null,
     aliases: tree ? Object.entries(ledger.aliases ?? {}) : null,
-    emitIndexes: tree ? ledger.emitIndexes : null
+    emitIndexes: tree ? ledger.emitIndexes : null,
+    // What a DECLINED emit leaves on the ledger the caller persists
+    // (finding #40): the aliases are assigned once the plan is built, so a
+    // later throw (the wrapper context, the load-time cycle check) keeps
+    // them; the emitted layout only once the tree is being assembled.
+    declinedLedger: tree
+      ? null
+      : {
+          aliases: ledger.aliases ? Object.entries(ledger.aliases) : null,
+          emitIndexes: ledger.emitIndexes ?? null
+        }
   };
 });
 process.stdout.write(`${JSON.stringify(out)}\n`);

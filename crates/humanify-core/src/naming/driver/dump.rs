@@ -13,7 +13,7 @@ use std::path::Path;
 
 use humanify_model::dump::SpanKey;
 use humanify_model::js::{JsObject, JsValue, stringify_pretty};
-use humanify_model::llm::{BatchRenameRequest, CacheKeyParams, NameProvider, StrMap};
+use humanify_model::llm::{CacheKeyParams, NameProvider};
 use serde_json::{Value, json};
 
 use super::library::RecordedName;
@@ -113,6 +113,9 @@ pub fn naming_config_of(meta: &Value) -> NamingConfig {
         emit_rename_ledger: false,
         family_permute_disabled: false,
         params: cache_params_of(meta),
+        capture_dump: false,
+        tunables: Default::default(),
+        shingle_probe: false,
     }
 }
 
@@ -232,7 +235,13 @@ pub fn dump_naming<P: NameProvider>(
         "transfers.json",
         &json!({"schemaVersion": 1, "transfers": rows}).to_string(),
     )?;
-    let names = names_table(&out.trail, &out.waves.names, &out.library_names, &texts);
+    let names = names_table(
+        &out.trail,
+        &out.waves.names,
+        &out.library_names,
+        &texts,
+        &[],
+    );
     let n_names = names.len();
     write(
         "names.json",
@@ -263,13 +272,14 @@ pub fn dump_naming<P: NameProvider>(
     if let Some(coverage) = &out.coverage {
         let transfer = out.prior.as_ref().map(super::transfer_stats_by_tier);
         let diag = build_diagnostics_report(&DiagnosticsInputs {
-            timestamp: iso_now(),
+            timestamp: humanify_model::js::iso_now(),
             reports: &out.reports,
             coverage,
             transfer_stats: transfer.as_ref(),
             trail: &out.trail,
             texts,
             contention: &out.processor.contention,
+            extra_trail: &[],
         });
         write("diag.json", &format!("{}\n", stringify_pretty(&diag, 2)))?;
     }
@@ -295,30 +305,15 @@ pub fn dump_naming<P: NameProvider>(
     })
 }
 
-/// `new Date().toISOString()` (UTC, millisecond precision).
-fn iso_now() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs() as i64;
-    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
-    // Civil-from-days (Howard Hinnant's algorithm).
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(m <= 2);
-    format!(
-        "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z",
-        rem / 3600,
-        rem % 3600 / 60,
-        rem % 60,
-        now.subsec_millis()
-    )
+/// A trail row recorded over a text other than the four anchored ones (the
+/// post-split reconcile's, per split file), keyed as the TS dump keys it:
+/// its label's text (`generated`) converting its RAW offsets — which index
+/// the split file — as if they indexed that text (finding #50).
+pub struct ExtraNameRow<'e> {
+    pub key: SpanKey,
+    /// `line:col` in the row's own text.
+    pub loc: String,
+    pub entry: &'e crate::trail::TrailEntry,
 }
 
 /// `writeNames`: the trail rows (every anchored text; functionId =
@@ -330,6 +325,7 @@ pub fn names_table(
     waves: &[NameRecord],
     library: &[RecordedName],
     texts: &AnchorTexts<'_>,
+    extra: &[ExtraNameRow<'_>],
 ) -> Vec<Value> {
     let lines: Vec<(Anchor, BabelLines<'_>)> = [
         Anchor::Fresh,
@@ -391,6 +387,26 @@ pub fn names_table(
         });
         put(key, row);
     }
+    for x in extra {
+        let e = x.entry;
+        let Some(final_name) = &e.final_name else {
+            continue;
+        };
+        let tier = e
+            .terminal_by
+            .or(e.settled_by)
+            .map(|t| t.as_str())
+            .unwrap_or("?");
+        let row = json!({
+            "target": key_json(&x.key),
+            "oldName": e.old_name,
+            "newName": final_name,
+            "kind": "function",
+            "classified": "renamed",
+            "functionId": format!("{} ({tier})", x.loc),
+        });
+        put(x.key.clone(), row);
+    }
     let recorded = waves
         .iter()
         .map(|r| RecordedName {
@@ -430,70 +446,20 @@ fn key_json(k: &SpanKey) -> Value {
 
 /// prompts.jsonl + cache-keys.jsonl: the waves' dispatches (`site:
 /// "naming"`) then the sweep's (`site: "sweep"`, rounds counted per
-/// functionId from 1), seq in that order.
+/// functionId from 1), seq in that order — the artifact dump's owner
+/// ([`crate::artifact_dump::dispatch_rows`]) over the naming sites only.
 pub fn dispatch_rows(
     waves: &[DispatchRecord],
     sweeps: &[(Anchor, &SweepDispatch)],
     params: &CacheKeyParams,
 ) -> (String, String) {
-    let mut prompts = String::new();
-    let mut keys = String::new();
-    let mut seq = 0u64;
-    let mut push = |prompt: Value, request: &BatchRenameRequest, cache_key: &str| {
-        let mut prompt = prompt;
-        prompt["seq"] = json!(seq);
-        prompts.push_str(&prompt.to_string());
-        prompts.push('\n');
-        let key = json!({
-            "seq": seq,
-            "params": params_json(params),
-            "request": request_material(request),
-            "cacheKey": cache_key,
-        });
-        keys.push_str(&key.to_string());
-        keys.push('\n');
-        seq += 1;
-    };
-    for d in waves {
-        let row = json!({
-            "seq": 0,
-            "functionId": d.function_id,
-            "site": "naming",
-            "round": d.round,
-            "wave": d.wave,
-            "isRetry": d.request.is_retry == Some(true),
-            "cacheKey": d.cache_key,
-            "systemPrompt": d.system_prompt,
-            "userPrompt": d.user_prompt,
-            "identifiers": d.request.identifiers,
-            "targets": d.targets.iter().map(|(sid, s)| json!({
-                "sessionId": sid, "start": s.start, "end": s.end, "text": "fresh"
-            })).collect::<Vec<_>>(),
-        });
-        push(row, &d.request, &d.cache_key);
-    }
-    for (i, (anchor, d)) in sweeps.iter().enumerate() {
-        let row = json!({
-            "seq": 0,
-            "functionId": "coverage-sweep",
-            "site": "sweep",
-            "round": i + 1,
-            "isRetry": false,
-            "cacheKey": d.cache_key,
-            "systemPrompt": d.system_prompt,
-            "userPrompt": d.user_prompt,
-            "identifiers": d.request.identifiers,
-            "targets": d.targets.iter().map(|(name, s)| json!({
-                "sessionId": name,
-                "start": s.start,
-                "end": s.end,
-                "text": anchor.as_str(),
-            })).collect::<Vec<_>>(),
-            "targetsText": anchor.as_str(),
-        });
-        push(row, &d.request, &d.cache_key);
-    }
-    (prompts, keys)
+    use crate::artifact_dump::Dispatch;
+    let dispatches: Vec<Dispatch<'_>> = waves
+        .iter()
+        .map(Dispatch::Naming)
+        .chain(sweeps.iter().map(|(a, d)| Dispatch::Sweep(*a, d)))
+        .collect();
+    crate::artifact_dump::dispatch_rows(&dispatches, params)
 }
 
 /// The waves' own names table at the wave boundary (`waves` verb).
@@ -511,90 +477,6 @@ pub fn wave_boundary_names(
             fresh,
             ..AnchorTexts::default()
         },
+        &[],
     )
-}
-
-fn str_map(m: &StrMap) -> Value {
-    Value::Object(
-        m.0.iter()
-            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-            .collect(),
-    )
-}
-
-/// `cacheKeyMaterialRow`'s request: the typed request flattened, Sets in
-/// their actual order, the callee `snippet` DROPPED (the oracle dump's
-/// shape — 16-findings #7), undefined fields absent.
-fn request_material(r: &BatchRenameRequest) -> Value {
-    let mut o = serde_json::Map::new();
-    o.insert("code".into(), json!(r.code));
-    o.insert("identifiers".into(), json!(r.identifiers));
-    o.insert("usedNames".into(), json!(r.used_names));
-    o.insert(
-        "calleeSignatures".into(),
-        Value::Array(
-            r.callee_signatures
-                .iter()
-                .map(|c| json!({"name": c.name, "params": c.params}))
-                .collect(),
-        ),
-    );
-    o.insert("callsites".into(), json!(r.callsites));
-    if let Some(v) = &r.context_vars {
-        o.insert("contextVars".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_version_code {
-        o.insert("priorVersionCode".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_version_names {
-        o.insert("priorVersionNames".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_name_hints {
-        o.insert("priorNameHints".into(), str_map(v));
-    }
-    if let Some(v) = &r.already_renamed {
-        o.insert("alreadyRenamed".into(), str_map(v));
-    }
-    if let Some(v) = r.is_retry {
-        o.insert("isRetry".into(), json!(v));
-    }
-    if let Some(v) = &r.previous_attempt {
-        o.insert("previousAttempt".into(), str_map(v));
-    }
-    if let Some(f) = &r.failures {
-        o.insert(
-            "failures".into(),
-            json!({
-                "duplicates": f.duplicates,
-                "invalid": f.invalid,
-                "missing": f.missing,
-                "unchanged": f.unchanged,
-            }),
-        );
-    }
-    if let Some(v) = &r.prompt_body {
-        o.insert("promptBody".into(), json!(v));
-    }
-    if let Some(v) = &r.user_prompt {
-        o.insert("userPrompt".into(), json!(v));
-    }
-    if let Some(v) = &r.system_prompt {
-        o.insert("systemPrompt".into(), json!(v));
-    }
-    Value::Object(o)
-}
-
-fn params_json(p: &CacheKeyParams) -> Value {
-    let mut o = serde_json::Map::new();
-    o.insert("model".into(), json!(p.model));
-    if let Some(t) = p.temperature {
-        o.insert("temperature".into(), json!(t as i64));
-    }
-    if let Some(m) = p.max_tokens {
-        o.insert("maxTokens".into(), json!(m));
-    }
-    if let Some(e) = &p.reasoning_effort {
-        o.insert("reasoningEffort".into(), json!(e));
-    }
-    Value::Object(o)
 }

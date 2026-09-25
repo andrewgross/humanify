@@ -87,3 +87,83 @@ pub fn review_split(
         layout,
     }
 }
+
+/// `fileStatementSlices`: one emitted file re-parsed and byte-sliced back
+/// into its statement texts — the program's directives and body merged in
+/// source order (a leading bare string re-parses as a directive).
+fn file_statement_slices(content: &str) -> Vec<&str> {
+    use oxc_span::GetSpan;
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, content, "file.js");
+    let mut spans: Vec<(u32, u32)> = ingest
+        .program
+        .directives
+        .iter()
+        .map(|d| (d.span.start, d.span.end))
+        .chain(ingest.program.body.iter().map(|s| {
+            let sp = s.span();
+            (sp.start, sp.end)
+        }))
+        .collect();
+    spans.sort_by_key(|s| s.0);
+    spans
+        .into_iter()
+        .map(|(s, e)| &content[s as usize..e as usize])
+        .collect()
+}
+
+/// `assertConcatEquivalence` (+ `reconstructBodyParts`): the review tree,
+/// re-sliced per file and replayed through the ledger's `order` (per-file
+/// FIFO cursors), must hold EXACTLY the bundle's statements — as a
+/// multiset, byte for byte. The Rust cuts the tree from the same spans, so
+/// this holds by construction; it is kept because a split that violates it
+/// must fail before anything is written, with the TS's message.
+pub fn assert_concat_equivalence(
+    contents: &[(String, String)],
+    order: &[String],
+    spans: &[(u32, u32)],
+    code: &str,
+) -> Result<(), String> {
+    let parts: Vec<(&str, Vec<&str>)> = contents
+        .iter()
+        .map(|(file, content)| (file.as_str(), file_statement_slices(content)))
+        .collect();
+    let index: std::collections::HashMap<&str, usize> = parts
+        .iter()
+        .enumerate()
+        .map(|(i, (f, _))| (*f, i))
+        .collect();
+    let mut cursor = vec![0usize; parts.len()];
+    let mut rebuilt: Vec<&str> = Vec::with_capacity(order.len());
+    for file in order {
+        let at = index.get(file.as_str()).map_or(0, |&i| cursor[i]);
+        let Some(&i) = index.get(file.as_str()).filter(|&&i| at < parts[i].1.len()) else {
+            return Err(format!("reconstruct: {file} is short of statement {at}"));
+        };
+        rebuilt.push(parts[i].1[at]);
+        cursor[i] += 1;
+    }
+    for (i, (file, slices)) in parts.iter().enumerate() {
+        if cursor[i] != slices.len() {
+            return Err(format!(
+                "reconstruct: {file} has {} statement(s) beyond the ledger",
+                slices.len() - cursor[i]
+            ));
+        }
+    }
+    let mut expected: Vec<&str> = spans
+        .iter()
+        .map(|&(s, e)| &code[s as usize..e as usize])
+        .collect();
+    // `[...x].sort()`: UTF-16 code-unit order (equality is all that is
+    // read, so any total order would do).
+    rebuilt.sort_by(|a, b| cmp_utf16(a, b));
+    expected.sort_by(|a, b| cmp_utf16(a, b));
+    if rebuilt != expected {
+        return Err("stable split: emitted tree does not reconstruct the source statements (tree/ledger invariant violated)".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod review_test;

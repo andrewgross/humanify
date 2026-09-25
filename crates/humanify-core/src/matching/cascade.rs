@@ -172,28 +172,49 @@ pub struct EnclosingStmtAbstainCounts {
 impl EnclosingStmtAbstainCounts {
     /// The TS bag, byte-for-value (the gate compares the whole bag).
     pub fn to_ts_value(&self) -> serde_json::Value {
-        let buckets: serde_json::Map<String, serde_json::Value> = STMT_SPAN_BUCKETS
-            .iter()
-            .zip(self.reached_span_buckets)
-            .map(|(name, count)| (name.to_string(), json!(count)))
-            .collect();
-        json!({
-            "noHashIsStatement": self.no_hash_is_statement,
-            "noHashTooLong": self.no_hash_too_long,
-            "noHashOther": self.no_hash_other,
-            "noNewHolders": self.no_new_holders,
-            "countMismatch": self.count_mismatch,
-            "partnerFiltered": self.partner_filtered,
-            "reached": self.reached,
-            "resolvedLocal": self.resolved_local,
-            "resolvedSpanning": self.resolved_spanning,
-            "countMismatchLocal": self.count_mismatch_local,
-            "countMismatchSpanning": self.count_mismatch_spanning,
-            "spanningParentAgrees": self.spanning_parent_agrees,
-            "spanningParentDisagrees": self.spanning_parent_disagrees,
-            "spanningParentUnknown": self.spanning_parent_unknown,
-            "reachedSpanBuckets": buckets,
-        })
+        serde_json::to_value(self).expect("the stats bag serializes")
+    }
+}
+
+/// The TS object literal's key order (a serialized bag writes it; a
+/// `serde_json::Value` of it sorts).
+impl serde::Serialize for EnclosingStmtAbstainCounts {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut m = s.serialize_map(Some(15))?;
+        m.serialize_entry("noHashIsStatement", &self.no_hash_is_statement)?;
+        m.serialize_entry("noHashTooLong", &self.no_hash_too_long)?;
+        m.serialize_entry("noHashOther", &self.no_hash_other)?;
+        m.serialize_entry("noNewHolders", &self.no_new_holders)?;
+        m.serialize_entry("countMismatch", &self.count_mismatch)?;
+        m.serialize_entry("partnerFiltered", &self.partner_filtered)?;
+        m.serialize_entry("reached", &self.reached)?;
+        m.serialize_entry("resolvedLocal", &self.resolved_local)?;
+        m.serialize_entry("resolvedSpanning", &self.resolved_spanning)?;
+        m.serialize_entry("countMismatchLocal", &self.count_mismatch_local)?;
+        m.serialize_entry("countMismatchSpanning", &self.count_mismatch_spanning)?;
+        m.serialize_entry("spanningParentAgrees", &self.spanning_parent_agrees)?;
+        m.serialize_entry("spanningParentDisagrees", &self.spanning_parent_disagrees)?;
+        m.serialize_entry("spanningParentUnknown", &self.spanning_parent_unknown)?;
+        m.serialize_entry(
+            "reachedSpanBuckets",
+            &SpanBuckets(&self.reached_span_buckets),
+        )?;
+        m.end()
+    }
+}
+
+/// `reachedSpanBuckets`: bucket name → count, in [`STMT_SPAN_BUCKETS`] order.
+struct SpanBuckets<'a>(&'a [usize]);
+
+impl serde::Serialize for SpanBuckets<'_> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut m = s.serialize_map(Some(self.0.len()))?;
+        for (name, count) in STMT_SPAN_BUCKETS.iter().zip(self.0) {
+            m.serialize_entry(name, count)?;
+        }
+        m.end()
     }
 }
 
@@ -228,36 +249,62 @@ pub struct ResolutionStats {
 impl ResolutionStats {
     /// The TS bag, byte-for-value (`emptyResolutionStats` :43's shape).
     pub fn to_ts_value(&self) -> serde_json::Value {
+        serde_json::to_value(self).expect("the stats bag serializes")
+    }
+}
+
+/// The TS object literal's key order (a serialized bag writes it; a
+/// `serde_json::Value` of it sorts).
+impl serde::Serialize for ResolutionStats {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
         let r = &self.propagation_by_rung;
-        json!({
-            "structuralHashUnique": self.structural_hash_unique,
-            "identityResolved": self.identity_resolved,
-            "memberKeyResolved": self.member_key_resolved,
-            "enclosingStatementResolved": self.enclosing_statement_resolved,
-            "calleeShapesResolved": self.callee_shapes_resolved,
-            "callerShapesResolved": self.caller_shapes_resolved,
-            "calleeHashesResolved": self.callee_hashes_resolved,
-            "twoHopShapesResolved": self.two_hop_shapes_resolved,
-            "shingleSimilarityResolved": self.shingle_similarity_resolved,
-            "shingleUnconsultable": self.shingle_unconsultable,
-            "ordinalResolved": self.ordinal_resolved,
-            "interchangeableResolved": self.interchangeable_resolved,
-            "injectivityDemoted": self.injectivity_demoted,
-            "singletonRejected": self.singleton_rejected,
-            "singletonUnguarded": self.singleton_unguarded,
-            "stillAmbiguous": self.still_ambiguous,
-            "unmatched": self.unmatched,
-            "propagationResolved": self.propagation_resolved,
-            "propagationByRung": {
-                "matchedCallee": r.matched_callee,
-                "matchedCaller": r.matched_caller,
-                "scopeParent": r.scope_parent,
-                "externalRefs": r.external_refs,
-                "scopeOrdinal": r.scope_ordinal,
-            },
-            "crossedContainerRevoked": self.crossed_container_revoked,
-            "enclosingStmtAbstain": self.enclosing_stmt_abstain.to_ts_value(),
-        })
+        let mut m = s.serialize_map(Some(21))?;
+        m.serialize_entry("structuralHashUnique", &self.structural_hash_unique)?;
+        m.serialize_entry("identityResolved", &self.identity_resolved)?;
+        m.serialize_entry("memberKeyResolved", &self.member_key_resolved)?;
+        m.serialize_entry(
+            "enclosingStatementResolved",
+            &self.enclosing_statement_resolved,
+        )?;
+        m.serialize_entry("calleeShapesResolved", &self.callee_shapes_resolved)?;
+        m.serialize_entry("callerShapesResolved", &self.caller_shapes_resolved)?;
+        m.serialize_entry("calleeHashesResolved", &self.callee_hashes_resolved)?;
+        m.serialize_entry("twoHopShapesResolved", &self.two_hop_shapes_resolved)?;
+        m.serialize_entry(
+            "shingleSimilarityResolved",
+            &self.shingle_similarity_resolved,
+        )?;
+        m.serialize_entry("shingleUnconsultable", &self.shingle_unconsultable)?;
+        m.serialize_entry("ordinalResolved", &self.ordinal_resolved)?;
+        m.serialize_entry("interchangeableResolved", &self.interchangeable_resolved)?;
+        m.serialize_entry("injectivityDemoted", &self.injectivity_demoted)?;
+        m.serialize_entry("singletonRejected", &self.singleton_rejected)?;
+        m.serialize_entry("singletonUnguarded", &self.singleton_unguarded)?;
+        m.serialize_entry("stillAmbiguous", &self.still_ambiguous)?;
+        m.serialize_entry("unmatched", &self.unmatched)?;
+        m.serialize_entry("propagationResolved", &self.propagation_resolved)?;
+        m.serialize_entry("propagationByRung", &RungCounts(r))?;
+        m.serialize_entry("crossedContainerRevoked", &self.crossed_container_revoked)?;
+        m.serialize_entry("enclosingStmtAbstain", &self.enclosing_stmt_abstain)?;
+        m.end()
+    }
+}
+
+/// `propagationByRung` in the TS literal's order.
+struct RungCounts<'a>(&'a PropagationRungCounts);
+
+impl serde::Serialize for RungCounts<'_> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let r = self.0;
+        let mut m = s.serialize_map(Some(5))?;
+        m.serialize_entry("matchedCallee", &r.matched_callee)?;
+        m.serialize_entry("matchedCaller", &r.matched_caller)?;
+        m.serialize_entry("scopeParent", &r.scope_parent)?;
+        m.serialize_entry("externalRefs", &r.external_refs)?;
+        m.serialize_entry("scopeOrdinal", &r.scope_ordinal)?;
+        m.end()
     }
 }
 

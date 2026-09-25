@@ -1807,27 +1807,53 @@ pub fn gate_dump(
         )
     });
     let stats = &output.dump_stats;
+    let values = [
+        stats.fresh_statements,
+        stats.prior_statements,
+        stats.unique_twins,
+        stats.bucket_twins,
+        stats.module_scoped_twins,
+        stats.module_scoped_ambiguous,
+        stats.outer_refs,
+        stats.private_renames,
+        stats.cascade_conflicts,
+        stats.candidates,
+        stats.vetoed_callee,
+        stats.vetoed_role,
+        stats.vetoed_structural,
+        stats.transferred_twins,
+        stats.pairs,
+    ];
+    let stats: serde_json::Map<String, Value> = TWIN_GATE_STATS_KEYS
+        .iter()
+        .zip(values)
+        .map(|(k, v)| (k.to_string(), json!(v)))
+        .collect();
     json!({
-        "stats": {
-            "freshStatements": stats.fresh_statements,
-            "priorStatements": stats.prior_statements,
-            "uniqueTwins": stats.unique_twins,
-            "bucketTwins": stats.bucket_twins,
-            "moduleScopedTwins": stats.module_scoped_twins,
-            "moduleScopedAmbiguous": stats.module_scoped_ambiguous,
-            "outerRefs": stats.outer_refs,
-            "privateRenames": stats.private_renames,
-            "cascadeConflicts": stats.cascade_conflicts,
-            "candidates": stats.candidates,
-            "vetoedCallee": stats.vetoed_callee,
-            "vetoedRole": stats.vetoed_role,
-            "vetoedStructural": stats.vetoed_structural,
-            "transferredTwins": stats.transferred_twins,
-            "pairs": stats.pairs,
-        },
+        "stats": stats,
         "rows": rows,
     })
 }
+
+/// The twin-gates stats bag's keys, in the TS literal's order (a
+/// `serde_json::Value` sorts them; the dump writer serializes this order).
+pub const TWIN_GATE_STATS_KEYS: [&str; 15] = [
+    "freshStatements",
+    "priorStatements",
+    "uniqueTwins",
+    "bucketTwins",
+    "moduleScopedTwins",
+    "moduleScopedAmbiguous",
+    "outerRefs",
+    "privateRenames",
+    "cascadeConflicts",
+    "candidates",
+    "vetoedCallee",
+    "vetoedRole",
+    "vetoedStructural",
+    "transferredTwins",
+    "pairs",
+];
 
 #[cfg(test)]
 mod gates_test;

@@ -1032,6 +1032,9 @@ pub struct ProviderVendorNamer<'p> {
     provider: &'p dyn NameProvider,
     /// The per-outcome tally.
     pub stats: VendorNamingStats,
+    /// Every call, in dispatch order — the artifact dump's `vendor` site
+    /// (recorded before the provider answers, as `recordPromptDump` is).
+    pub dispatched: Vec<LlmCall>,
 }
 
 impl<'p> ProviderVendorNamer<'p> {
@@ -1039,6 +1042,7 @@ impl<'p> ProviderVendorNamer<'p> {
         ProviderVendorNamer {
             provider,
             stats: VendorNamingStats::default(),
+            dispatched: Vec::new(),
         }
     }
 }
@@ -1054,6 +1058,7 @@ impl VendorNamer for ProviderVendorNamer<'_> {
             user_prompt: request.code.clone(),
             request,
         };
+        self.dispatched.push(call.clone());
         match self.provider.run_wave(vec![call]).pop() {
             Some(Ok(response)) => requests
                 .iter()

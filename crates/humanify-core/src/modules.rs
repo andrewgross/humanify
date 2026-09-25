@@ -928,7 +928,10 @@ pub mod modules_dump {
         Ok(row_count)
     }
 
-    fn site_json(
+    /// One classification site's modules.json object (`recordBunModules`):
+    /// helper var, wrapper, factory rows sorted by span — Null without a
+    /// classification.
+    pub fn site_json(
         data: Option<(
             &super::BunModuleClassification,
             Option<&super::wrapper::WrapperFunction>,
@@ -1003,28 +1006,45 @@ pub mod modules_dump {
     > {
         let text = fs::read_to_string(ts_dump_dir.join("text").join(file))
             .map_err(|e| format!("{file}: {e}"))?;
+        Ok(classify_site(&text)
+            .map_err(|e| format!("{file}: {e}"))?
+            .map(|(c, w)| {
+                let n = c.factories.len();
+                (c, w, n)
+            }))
+    }
+
+    /// One classification site over a text: the Bun CJS classification and
+    /// the wrapper it ran against (None when no helper scan hit).
+    pub fn classify_site(
+        text: &str,
+    ) -> Result<
+        Option<(
+            super::BunModuleClassification,
+            Option<super::wrapper::WrapperFunction>,
+        )>,
+        String,
+    > {
+        // No factory helper, no classification — and no parse (an ESM text
+        // is not a Bun bundle; the scan is the classifier's own first step).
+        if super::identify_bun_cjs_factory(text).is_none() {
+            return Ok(None);
+        }
         let allocator = Allocator::default();
-        let ingest = Ingest::parse(&allocator, &text, "input.js");
+        let ingest = Ingest::parse_unambiguous(&allocator, text);
         if !ingest.errors.is_empty() {
-            return Err(format!(
-                "oxc on {file}: {} diagnostic(s)",
-                ingest.errors.len()
-            ));
+            return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
         }
         let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
         let tables = SymbolTables::build(ingest.semantic());
         let classification = classify_bun_modules(
-            &text,
+            text,
             ingest.program,
             ingest.semantic(),
             wrapper.as_ref().map(|w| w.body_span),
             &tables,
         );
-        let count = classification
-            .as_ref()
-            .map(|c| c.factories.len())
-            .unwrap_or(0);
-        Ok(classification.map(|c| (c, wrapper, count)))
+        Ok(classification.map(|c| (c, wrapper)))
     }
 }
 

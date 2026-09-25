@@ -39,6 +39,9 @@ pub struct CarryResult {
     pub carried: usize,
     /// Reason → count, in first-occurrence order (a JS Map).
     pub abstained: Vec<(String, usize)>,
+    /// The validated renames' claim counters (the run-wide
+    /// `renameClaimStats`).
+    pub claims: crate::rename::validated::RenameClaimStats,
 }
 
 fn bump(abstained: &mut Vec<(String, usize)>, reason: &str) {
@@ -298,6 +301,7 @@ pub fn carry_renames_into_bundle(
         subs.extend(occurrences);
         result.carried += 1;
     }
+    result.claims = state.claim_stats();
     if result.carried == 0 {
         return Ok(result);
     }

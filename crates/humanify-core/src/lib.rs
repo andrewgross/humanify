@@ -3,6 +3,7 @@
 //! config and never reads the process environment.
 #![forbid(unsafe_code)]
 
+pub mod artifact_dump;
 pub mod babel_view;
 pub mod detect;
 pub mod emit;

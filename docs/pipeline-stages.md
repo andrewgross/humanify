@@ -40,6 +40,14 @@ output, because they run once the tree looks finished:
   renames must never carry: the export key is a string, and 238/238 drifted.
 - **finish on disk** — scaffold, bun factory relink, ledgers, eval stats.
 
+After those, the run's REPORTS are written, in this order: `--diagnostics`
+(the naming report with the split's placement trail after the strategy
+trail), `--stats-json`, `--dump-artifacts`, `--rename-ledger`. They observe
+decisions already made — except `--rename-ledger`, which is NOT inert: it
+gates the family permute off (plugin.ts `finalizeWithFamilyPermute`), so a
+ledger run ships a different tree. (Rust: `humanify_cli::unified::RunReports`,
+the dump in `humanify_core::artifact_dump`.)
+
 ## What was missing from the four-stage model
 
 Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:

@@ -317,7 +317,7 @@ fn transfer_rows_have_the_dump_shape_and_order() {
              "finalName": "createObject", "settledBy": "binding-cascade",
              "attempts": [{"tier": "binding-cascade", "outcome": "applied", "proposedName": "createObject"}]},
             {"target": {"text": "fresh", "start": 15, "end": 16}, "oldName": "a",
-             "finalName": null, "settledBy": null,
+             "finalName": null,
              "attempts": [{"tier": "exact-match", "outcome": "rejected", "reason": "target-in-scope", "proposedName": "b"}]}
         ])
     );
