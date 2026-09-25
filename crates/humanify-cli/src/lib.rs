@@ -14,6 +14,7 @@ pub mod pipeline_config;
 pub mod progress;
 pub mod report;
 pub mod settings;
+pub mod split_stage;
 pub mod stages;
 pub mod surface;
 pub mod unified;

@@ -1593,6 +1593,7 @@ fn run_placement(
             prior_ledger: inputs.prior_ledger.map(Into::into),
             prior_text: inputs.prior_text.map(Into::into),
             match_map: inputs.match_map.map(Into::into),
+            carry: None,
             switches,
             namer: namer.as_mut().map(|n| n as &mut dyn SplitNamer),
             reviser: reviser.as_mut().map(|r| r as &mut dyn TreeReviser),

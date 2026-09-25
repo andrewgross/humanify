@@ -29,6 +29,9 @@ use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use humanify_core::naming::driver::{
+    NamingConfig, NamingHooks, NamingInput, NamingOutcome, run_naming,
+};
 use humanify_core::unpack::select_unpack_adapter;
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
@@ -89,6 +92,8 @@ pub struct CommandOptions {
     pub dump_artifacts: Option<String>,
     /// Rust-only (surface::RUST_ONLY_OPTIONS).
     pub beautified_input: Option<String>,
+    /// Rust-only (surface::RUST_ONLY_OPTIONS): the blessed hash-byte injection.
+    pub inject_ts_hashes: Option<String>,
 }
 
 impl CommandOptions {
@@ -131,6 +136,7 @@ impl CommandOptions {
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
             beautified_input: s("beautifiedInput"),
+            inject_ts_hashes: s("injectTsHashes"),
         }
     }
 
@@ -554,12 +560,14 @@ fn pipeline_body(
         .as_deref()
         .filter(|p| !p.is_empty())
         .map(Path::new);
+    let ts_hashes = load_ts_hashes(opts)?;
     let unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
         adapter,
         provider,
         prior_path,
+        ts_hashes.as_ref().map(|h| h.factories.as_slice()),
         profiler,
         renderer,
     )?;
@@ -569,9 +577,12 @@ fn pipeline_body(
         unpacked.files
     };
 
-    // The per-file stages (processFile): format, graph, match, name.
-    let minifier_name = enum_name(config.minifier_type);
+    // The per-file stages (processFile): format, then the naming stage
+    // (graph, match, transfer, waves, floor, generate, the post-generate
+    // passes) — core::naming::driver::run_naming, the one owner.
+    let naming_config = naming_config(settings, &config, opts, switches);
     let total = files_to_process.len();
+    let mut last: Option<(NamingOutcome, std::path::PathBuf)> = None;
     for (i, file) in files_to_process.iter().enumerate() {
         renderer.message(&format!("Processing file {}/{total}", i + 1));
         let code = read_utf8(&file.path.display().to_string())?;
@@ -579,57 +590,147 @@ fn pipeline_body(
             verbose().log(&format!("Skipping empty file {}", file.path.display()));
             continue;
         }
-        // Stage 6 is not ported; its output (the formatted text) can be
-        // supplied by the TS (`--beautified-input`).
+        // Stage 6 is not ported; its output (the formatted text) is
+        // supplied by the TS (`--beautified-input`) — ONE file's text.
         let Some(formatted_path) = &opts.beautified_input else {
             return Ok(Ended::NotYet(stages::FORMAT));
         };
+        if total > 1 {
+            return Err(Crash(format!(
+                "--beautified-input holds one file's formatted text, but {total} files reached the per-file stages"
+            )));
+        }
         let formatted = read_utf8(formatted_path)?;
-        graph_and_match(&formatted, prior.as_deref(), &bundler_name, &minifier_name)?;
-        return Ok(Ended::NotYet(stages::NAMING));
+        let outcome = run_naming(
+            &NamingInput {
+                fresh: &formatted,
+                prior: prior.as_deref(),
+                library: None,
+            },
+            &naming_config,
+            &NamingHooks::default(),
+            &provider,
+        )?;
+        if let Some(text) = &outcome.coverage_text {
+            renderer.message(text);
+        }
+        if outcome.misses > 0 || outcome.errors > 0 {
+            verbose().log(&format!(
+                "Naming: {} cache miss(es), {} provider error(s)",
+                outcome.misses, outcome.errors
+            ));
+        }
+        if !opts.split {
+            // skipFileWrite is off without --split: the file is rewritten.
+            if let Some(code) = &outcome.code {
+                std::fs::write(&file.path, code).map_err(|e| {
+                    Crash(node_fs_error(&e, "open", &file.path.display().to_string()))
+                })?;
+            }
+        }
+        last = Some((outcome, file.path.clone()));
     }
     renderer.message(&format!(
         "Done! You can find your unminified code in {out_dir}"
     ));
-    // Nothing reached the per-file stages, so the run's tail has nothing
-    // to split, write or report beyond the vendor namer's tally.
     report_vendor_naming(&unpacked.vendor_naming, renderer);
+
+    if opts.split
+        && let Some((outcome, source)) = &last
+        && let Some(code) = &outcome.code
+    {
+        let split = crate::split_stage::SplitStageInput {
+            output_dir: Path::new(out_dir),
+            input_file: Path::new(input),
+            processed_source: Some(source),
+            prior_version: prior_path,
+            split_ledger: opts.split_ledger.as_deref(),
+            split_pure: opts.split_pure,
+            fossil: fossil_split,
+            switches,
+            ts_partitions: ts_hashes.as_ref().map(|h| &h.partitions),
+            provider,
+        };
+        let span = profiler.pipeline_span("split");
+        let ended =
+            crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
+        span.end(Some(humanify_model::profiling::JsObject::new().with(
+            "stable",
+            matches!(ended, crate::split_stage::SplitEnded::Complete),
+        )));
+    }
+
+    // `--stats-json` (writeEvalStats): the naming stage's record + the
+    // vendor namer's tally (only when it was asked anything) + the path.
+    if let (Some(dest), Some((outcome, _))) = (&opts.stats_json, &last)
+        && outcome.coverage.is_some()
+    {
+        let v = &unpacked.vendor_naming;
+        let mut stats = outcome.eval_stats();
+        if v.named + v.declined + v.echoed + v.batches_failed > 0 {
+            stats.vendor_naming = Some(humanify_model::stats::VendorNamingStats {
+                named: v.named as f64,
+                declined: v.declined as f64,
+                echoed: v.echoed as f64,
+                batches_failed: v.batches_failed as f64,
+            });
+        }
+        stats.selection = Some(crate::pipeline_config::pipeline_selection_record(&config));
+        crate::writers::write_eval_stats(Path::new(dest), &stats)
+            .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
+        renderer.message(&format!("Eval stats written to {dest}"));
+    }
     Ok(Ended::Done(0))
 }
 
-/// Stages 7-8 over one file's formatted text.
-fn graph_and_match(
-    formatted: &str,
-    prior: Option<&str>,
-    bundler_name: &str,
-    minifier_name: &str,
-) -> Result<(), Crash> {
-    match prior {
-        None => {
-            let g = stages::build_graph(formatted, Some(bundler_name), Some(minifier_name))?;
-            verbose().log(&format!(
-                "Graph: {} function(s), {} module binding(s)",
-                g.functions, g.module_bindings
-            ));
-        }
-        Some(prior_code) => {
-            let m = stages::match_prior(
-                formatted,
-                prior_code,
-                Some(bundler_name),
-                Some(minifier_name),
-            )?;
-            verbose().log(&format!(
-                "Prior matching: {} matched, {} ambiguous, {} unmatched of {} prior function(s); {} binding match(es)",
-                m.matched,
-                m.ambiguous,
-                m.unmatched,
-                m.prior_functions,
-                m.binding_matched.map_or("no".to_string(), |b| b.to_string())
-            ));
-        }
+/// `--inject-ts-hashes <dir>`: the TS dump's factory hashes (modules.json)
+/// and statementHash partition (partitions.json) — the blessed exemption.
+struct TsHashBytes {
+    factories: Vec<humanify_core::unpack::gate::TsFactoryHash>,
+    partitions: humanify_model::dump::PartitionsFile,
+}
+
+fn load_ts_hashes(opts: &CommandOptions) -> Result<Option<TsHashBytes>, Crash> {
+    let Some(dir) = opts.inject_ts_hashes.as_deref() else {
+        return Ok(None);
+    };
+    let dir = Path::new(dir);
+    let factories = humanify_core::unpack::gate::read_ts_factory_hashes(&dir.join("modules.json"))?;
+    let path = dir.join("partitions.json");
+    let text = read_utf8(&path.display().to_string())?;
+    let partitions =
+        serde_json::from_str(&text).map_err(|e| Crash(format!("{}: {e}", path.display())))?;
+    Ok(Some(TsHashBytes {
+        factories,
+        partitions,
+    }))
+}
+
+/// The plugin options the naming stage decides by (createRenamePlugin's).
+fn naming_config(
+    settings: &Settings,
+    config: &humanify_model::pipeline::PipelineConfig,
+    opts: &CommandOptions,
+    switches: &SwitchState,
+) -> NamingConfig {
+    NamingConfig {
+        bundler: Some(enum_name(config.bundler_type)),
+        minifier: Some(enum_name(config.minifier_type)),
+        skip_libraries: settings.skip_libraries,
+        reconcile_prior_diff: settings.levers.reconcile_prior_diff,
+        naming_floor: settings.levers.naming_floor,
+        naming_floor_sweep: settings.levers.naming_floor_sweep,
+        source_map: false,
+        emit_rename_ledger: opts.rename_ledger.is_some(),
+        family_permute_disabled: switches.switch_on(Switch::FamilyPermute),
+        params: CacheKeyParams {
+            model: settings.model.clone(),
+            // The TS passes a literal 0 (unified.ts buildProvider).
+            temperature: Some(0.0),
+            max_tokens: settings.max_tokens.map(|t| t as u64),
+            reasoning_effort: settings.reasoning_effort.map(str::to_string),
+        },
     }
-    Ok(())
 }
 
 /// `loadPriorVersionCode`: an empty prior is an error, never a silent

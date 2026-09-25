@@ -250,3 +250,29 @@ fn utf16_prefix_counts_code_units_like_js_slice() {
     // a Rust String cannot hold — the prefix stops before the pair.
     assert_eq!(crate::js::utf16_prefix("a😀", 2), "a");
 }
+
+/// `Object.fromEntries` over a Map: index keys first (ascending), ordinary
+/// keys in insertion order — the bulk constructor and the one-at-a-time
+/// insert must agree, including on a repeated key.
+#[test]
+fn from_entries_matches_insert_order() {
+    use crate::js::JsObject;
+    let rows = |keys: &[&str]| -> Vec<(String, JsValue)> {
+        keys.iter()
+            .enumerate()
+            .map(|(i, k)| (k.to_string(), JsValue::Number(i as f64)))
+            .collect()
+    };
+    for keys in [
+        &["b", "10", "a", "2", "__proto__", "01"][..],
+        &["x", "y", "x", "3"][..],
+        &[][..],
+    ] {
+        let bulk = JsObject::from_entries(rows(keys));
+        let one: JsObject = rows(keys).into_iter().collect();
+        assert_eq!(bulk, one, "{keys:?}");
+    }
+    let o = JsObject::from_entries(rows(&["b", "10", "a", "2"]));
+    let keys: Vec<&str> = o.entries().iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(keys, ["2", "10", "b", "a"]);
+}

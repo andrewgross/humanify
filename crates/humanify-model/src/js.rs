@@ -94,6 +94,23 @@ impl JsObject {
         self.entries.insert(pos, (key, value));
     }
 
+    /// `Object.fromEntries(entries)` in one pass (a large Map's keys are
+    /// unique by construction): index keys ahead, ascending; ordinary keys
+    /// in insertion order. A repeated key falls back to [`JsObject::insert`]
+    /// (the later value wins, the first position stays).
+    pub fn from_entries(entries: Vec<(String, JsValue)>) -> Self {
+        let mut seen = std::collections::HashSet::with_capacity(entries.len());
+        if !entries.iter().all(|(k, _)| seen.insert(k.as_str())) {
+            return entries.into_iter().collect();
+        }
+        let (mut index, ordinary): (Vec<_>, Vec<_>) = entries
+            .into_iter()
+            .partition(|(k, _)| array_index(k).is_some());
+        index.sort_by_key(|(k, _)| array_index(k));
+        index.extend(ordinary);
+        JsObject { entries: index }
+    }
+
     /// Insert only when `value` is Some — JSON.stringify drops a property
     /// whose value is `undefined`.
     pub fn insert_opt(&mut self, key: &str, value: Option<JsValue>) {

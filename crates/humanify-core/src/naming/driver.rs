@@ -167,6 +167,9 @@ pub struct NamingOutcome {
     pub claims: crate::rename::validated::RenameClaimStats,
     pub output_valid: bool,
     pub fn_hashes: Vec<(String, String)>,
+    /// `renameResult.priorCarry` — the split's tiers regime and the `-vv`
+    /// `prior-match-map.json` read it (None without a prior).
+    pub prior_carry: Option<crate::rename::transfer::carry::PriorCarry>,
     /// Cache misses / provider errors across every LLM pass.
     pub misses: usize,
     pub errors: usize,
@@ -218,6 +221,7 @@ pub fn run_naming<P: NameProvider>(
         prior,
         function_count,
         fn_hashes,
+        prior_carry,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -244,6 +248,7 @@ pub fn run_naming<P: NameProvider>(
         claims: Default::default(),
         output_valid: true,
         fn_hashes,
+        prior_carry,
     };
     let Some(generated) = out.generated.clone() else {
         out.claims = out.trail.claims;
