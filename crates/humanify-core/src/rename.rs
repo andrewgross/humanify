@@ -4,7 +4,9 @@
 
 pub mod eligibility;
 pub mod floor;
+pub mod transfer;
 pub mod validated;
+pub mod votes;
 
 #[cfg(test)]
 mod names_test;

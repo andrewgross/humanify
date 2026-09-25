@@ -80,6 +80,11 @@ enum Command {
         #[arg(long, default_value_t = false)]
         visit_optional: bool,
     },
+    /// WP3.2's phase-3 gate: run parse → graph → matching → the prior-version
+    /// transfer pipeline on a TS dump's texts and write
+    /// transfers-mechanical.json + votes.json. (Migration scaffolding —
+    /// deleted at phase 6.)
+    Transfers { ts_dump: String, out_dir: String },
     /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
     /// per scope and per binding (UTF-16 spans), byte-comparable with
     /// `test/parity/wp31-scope-bundle-probe.mjs` on the same text.
@@ -310,6 +315,21 @@ fn main() {
                 std::path::Path::new(&out_dir),
             ) {
                 Ok(count) => println!("functions: {count} row(s) -> {out_dir}"),
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Command::Transfers { ts_dump, out_dir }) => {
+            match humanify_core::rename::transfer::dump::dump_transfers(
+                std::path::Path::new(&ts_dump),
+                std::path::Path::new(&out_dir),
+            ) {
+                Ok(s) => println!(
+                    "transfers: {} row(s), {} vote row(s) -> {out_dir}",
+                    s.rows, s.votes
+                ),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
                     std::process::exit(1);

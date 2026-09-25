@@ -1,7 +1,6 @@
 //! Tests for the binding-role port ([`super`]) — TS original:
-//! `src/prior-version/binding-role.test.ts` (its 15 cases), plus the
-//! MIRROR WALK's proof test: the shingle token stream joined must equal
-//! the canonical walk's parts byte-for-byte, or the two walks have drifted.
+//! `src/prior-version/binding-role.test.ts` (its 15 cases). The shingle
+//! walk is `matching::statement_align`'s babel-order walk (one owner).
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -9,10 +8,10 @@ use oxc_allocator::Allocator;
 
 use super::{
     BindingRole, RoleSide, SINGLE_VOTE_CONTENT_FLOOR, binding_roles_agree, compute_binding_role,
-    jaccard, verbatim_tokens,
+    jaccard,
 };
 use crate::graph::UnifiedGraph;
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
 /// Parse + graph + tables, handed to the assertions inside the scope that
@@ -325,57 +324,6 @@ fn skips_the_callee_check_when_a_side_references_module_bindings() {
     let next = role_with(Some("H1"), &["a"], &["new:fnB"]);
     let verdict = binding_roles_agree(&prior, &next, &HashMap::new(), false);
     assert!(verdict.agrees);
-}
-
-// ---------------------------------------------------------------------------
-// The mirror walk's proof: the shingle token stream IS the canonical stream
-// ---------------------------------------------------------------------------
-
-#[test]
-fn tokens_join_to_the_canonical_parts() {
-    // DUPLICATION NOTICE follow-through (role.rs's verbatim_tokens): for
-    // any subtree, the tokens joined must equal
-    // canonical_serialize(.., Verbatim).parts byte-for-byte. A masking
-    // decision that drifts between the two walks fails here. The fixture
-    // covers every branch the walk owns: slots, verbatim property keys,
-    // computed keys, labels, per-class privates, strings / numbers /
-    // bigint / regex / templates, bare-statement block unwrapping, and
-    // free identifiers.
-    let code = r#"
-var keep = function compute(alpha, beta) {
-    const obj = { [alpha]: 1, literal: 2, 0: "zero" };
-    obj.literal = obj[alpha] + beta.length;
-    outer: for (const item of obj.entries) {
-        if (item > 0) continue outer;
-        else { break outer; }
-    }
-    try { throw new Error("boom/" + alpha); } catch (err) { log(`${err.message}:${keep}`); }
-    return /ab+c/gi.test(String(alpha)) === (10n ** 2n > 0n);
-};
-class Widget extends Base {
-    #state = 0;
-    static #make(x) { return new Widget(); }
-    get value() { return this.#state; }
-    render(input) { this.#state = input ?? 1; return #state in this; }
-}
-var label = `a${keep}b${widget_ref}`;
-if (keep) { var fallback = label; }
-"#;
-    let allocator = Allocator::default();
-    let ingest = Ingest::parse(&allocator, code, "input.js");
-    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let tables = SymbolTables::build(ingest.semantic());
-    let (_inv, values) =
-        crate::twins::statement_inventory_with_values(code, "fresh", None).expect("inventory");
-    assert!(!values.is_empty());
-    for (i, stmt) in values.iter().enumerate() {
-        let tokens = verbatim_tokens(stmt, &tables).join("");
-        let canonical = canonical_serialize(stmt, &tables, LiteralPolicy::Verbatim).parts;
-        assert_eq!(
-            tokens, canonical,
-            "statement {i}'s mirror walk drifted from the canonical serialization"
-        );
-    }
 }
 
 /// The shingle computation's contract on a real subtree: k-grams of the
