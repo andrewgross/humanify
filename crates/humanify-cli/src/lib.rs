@@ -17,6 +17,7 @@ pub mod settings;
 pub mod stages;
 pub mod surface;
 pub mod unified;
+pub mod unminify;
 pub mod util;
 pub mod writers;
 

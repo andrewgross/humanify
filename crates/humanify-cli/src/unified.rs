@@ -22,23 +22,30 @@
 //!    declared normalization of the TS crash class, 14 §2).
 //!
 //! Stages that are not ported end the run with an `ERROR:` block and
-//! `stages::EXIT_NOT_YET`.
+//! `stages::EXIT_NOT_YET`, after the ported stages before them have run
+//! (and written their part of the tree).
 
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use humanify_core::unpack::select_unpack_adapter;
+use humanify_llm::LlmClient;
+use humanify_llm::provider::{LiveOptions, LiveStack};
 use humanify_model::detection::{
     BundlerType, MinifierType, SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS,
 };
+use humanify_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConfig};
 
 use crate::commander::{OptionValues, ValueSource};
 use crate::kill_switches::{Switch, SwitchState};
 use crate::log::{debug_reset_output, debug_set_output, verbose};
-use crate::pipeline_config::{adapter_named, build_pipeline_config, enum_name};
+use crate::pipeline_config::{build_pipeline_config, enum_name};
 use crate::progress::{ProgressRenderer, create_progress_renderer};
 use crate::settings::{Settings, SettingsInput, resolve_settings};
 use crate::stages::{self, EXIT_NOT_YET, Stage};
+use crate::unminify::{filter_libraries, report_vendor_naming, unpack_bundle};
+use crate::util::MAX_DEFAULT_MODULE_CONCURRENCY;
 
 /// The parsed options (TS `CommandOptions`): commander's values, typed.
 /// Value options stay strings, as commander hands them over; `settings`
@@ -234,7 +241,6 @@ impl From<String> for Crash {
 /// How the pipeline body ended.
 enum Ended {
     /// Ran to its end (exit code: 0, or 1 if a report marked it failed).
-    #[allow(dead_code)] // the report tail arrives with stages 9-12
     Done(i32),
     /// An unported stage.
     NotYet(Stage),
@@ -320,11 +326,17 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
         );
     }
 
+    let provider = match build_provider(&settings) {
+        Ok(p) => p,
+        Err(e) => return crash(&mut *renderer, &e, log_file.is_some()),
+    };
+
     let ended = run_pipeline(
         input,
         &opts,
         &settings,
         &switches,
+        &provider,
         &profiler,
         &mut *renderer,
     );
@@ -421,6 +433,7 @@ fn run_pipeline(
     opts: &CommandOptions,
     settings: &Settings,
     switches: &SwitchState,
+    provider: &dyn NameProvider,
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Ended, Crash> {
@@ -429,7 +442,57 @@ fn run_pipeline(
         eprintln!("\x1b[31mFile {input} not found\x1b[0m");
         return Ok(Ended::Immediate(1));
     }
-    pipeline_body(input, opts, settings, switches, profiler, renderer)
+    pipeline_body(
+        input, opts, settings, switches, provider, profiler, renderer,
+    )
+}
+
+/// `buildProvider`: cache OUTERMOST (hits bypass the limiter and the debug
+/// wrapper), then the rate limiter sized over both lanes, the debug
+/// wrapper, the HTTP client. A miss goes to the endpoint and a non-empty
+/// answer is written to the cache, exactly as the TS provider stack does.
+fn build_provider(settings: &Settings) -> Result<LlmClient<LiveStack>, String> {
+    let max_tokens = settings.max_tokens.map(|t| t as u64);
+    let reasoning_effort = settings.reasoning_effort.map(str::to_string);
+    let mut config = LlmConfig::new(&settings.endpoint, &settings.api_key, &settings.model);
+    config.timeout_ms = settings.timeout as u64;
+    config.reasoning_effort = reasoning_effort.clone();
+    if let Some(t) = max_tokens {
+        config.max_tokens = t;
+    }
+    let defaults = RateLimitConfig::default();
+    let rate = RateLimitConfig {
+        // The OUTER bound over both of the processor's limiters: the
+        // bundler is not detected yet, so the widest default lane.
+        max_concurrent: (settings.concurrency
+            + settings
+                .module_concurrency
+                .unwrap_or(f64::from(MAX_DEFAULT_MODULE_CONCURRENCY)))
+            as usize,
+        retry_attempts: settings
+            .retry_attempts
+            .map_or(defaults.retry_attempts, |r| r as u32),
+        ..defaults
+    };
+    let cache = settings.llm_cache_dir.as_ref().map(|dir| {
+        (
+            std::path::PathBuf::from(dir),
+            CacheKeyParams {
+                model: settings.model.clone(),
+                temperature: Some(0.0),
+                max_tokens,
+                reasoning_effort,
+            },
+        )
+    });
+    LlmClient::live(LiveOptions {
+        config,
+        rate,
+        cache,
+        metrics: None,
+        log: Some(crate::log::llm_log_sink()),
+    })
+    .map_err(|e| e.to_string())
 }
 
 fn pipeline_body(
@@ -437,10 +500,10 @@ fn pipeline_body(
     opts: &CommandOptions,
     settings: &Settings,
     switches: &SwitchState,
+    provider: &dyn NameProvider,
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Ended, Crash> {
-    let _ = settings; // consumed by the stages that are not ported yet
     let bundled_code = read_utf8(input)?;
 
     // Stages 1-2: detect, then select the unpack adapter.
@@ -463,8 +526,9 @@ fn pipeline_body(
         enum_name(config.minifier_type),
         config.unpack_adapter_name
     ));
-    let fossil_split = adapter_named(config.unpack_adapter_name).provides_module_fossils
-        && !switches.switch_on(Switch::FossilSplit);
+    let adapter = select_unpack_adapter(config.unpack_adapter_name)?;
+    let fossil_split =
+        adapter.provides_module_fossils() && !switches.switch_on(Switch::FossilSplit);
     if fossil_split {
         verbose().log("Fossil split: module fossils will drive statement assignment");
     }
@@ -479,16 +543,70 @@ fn pipeline_body(
 
     let prior = load_prior_version_code(opts, renderer)?;
 
-    // Stages 3-6 are not ported; their output (the formatted text) can be
-    // supplied by the TS (`--beautified-input`).
-    let Some(formatted_path) = &opts.beautified_input else {
-        return Ok(Ended::NotYet(stages::UNPACK));
+    // armRecorders: the diagnostics/dump recorders arrive with the stages
+    // that feed them.
+
+    // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
+    // then library detection picks the files the per-file stages process.
+    let out_dir = opts.output_dir.as_deref().unwrap_or("output");
+    let prior_path = opts
+        .prior_version
+        .as_deref()
+        .filter(|p| !p.is_empty())
+        .map(Path::new);
+    let unpacked = unpack_bundle(
+        &bundled_code,
+        Path::new(out_dir),
+        adapter,
+        provider,
+        prior_path,
+        profiler,
+        renderer,
+    )?;
+    let files_to_process = if settings.skip_libraries {
+        filter_libraries(unpacked.files, adapter, profiler, renderer)?.files_to_process
+    } else {
+        unpacked.files
     };
-    let formatted = read_utf8(formatted_path)?;
+
+    // The per-file stages (processFile): format, graph, match, name.
     let minifier_name = enum_name(config.minifier_type);
-    match &prior {
+    let total = files_to_process.len();
+    for (i, file) in files_to_process.iter().enumerate() {
+        renderer.message(&format!("Processing file {}/{total}", i + 1));
+        let code = read_utf8(&file.path.display().to_string())?;
+        if humanify_model::js::trim(&code).is_empty() {
+            verbose().log(&format!("Skipping empty file {}", file.path.display()));
+            continue;
+        }
+        // Stage 6 is not ported; its output (the formatted text) can be
+        // supplied by the TS (`--beautified-input`).
+        let Some(formatted_path) = &opts.beautified_input else {
+            return Ok(Ended::NotYet(stages::FORMAT));
+        };
+        let formatted = read_utf8(formatted_path)?;
+        graph_and_match(&formatted, prior.as_deref(), &bundler_name, &minifier_name)?;
+        return Ok(Ended::NotYet(stages::NAMING));
+    }
+    renderer.message(&format!(
+        "Done! You can find your unminified code in {out_dir}"
+    ));
+    // Nothing reached the per-file stages, so the run's tail has nothing
+    // to split, write or report beyond the vendor namer's tally.
+    report_vendor_naming(&unpacked.vendor_naming, renderer);
+    Ok(Ended::Done(0))
+}
+
+/// Stages 7-8 over one file's formatted text.
+fn graph_and_match(
+    formatted: &str,
+    prior: Option<&str>,
+    bundler_name: &str,
+    minifier_name: &str,
+) -> Result<(), Crash> {
+    match prior {
         None => {
-            let g = stages::build_graph(&formatted, Some(&bundler_name), Some(&minifier_name))?;
+            let g = stages::build_graph(formatted, Some(bundler_name), Some(minifier_name))?;
             verbose().log(&format!(
                 "Graph: {} function(s), {} module binding(s)",
                 g.functions, g.module_bindings
@@ -496,10 +614,10 @@ fn pipeline_body(
         }
         Some(prior_code) => {
             let m = stages::match_prior(
-                &formatted,
+                formatted,
                 prior_code,
-                Some(&bundler_name),
-                Some(&minifier_name),
+                Some(bundler_name),
+                Some(minifier_name),
             )?;
             verbose().log(&format!(
                 "Prior matching: {} matched, {} ambiguous, {} unmatched of {} prior function(s); {} binding match(es)",
@@ -511,7 +629,7 @@ fn pipeline_body(
             ));
         }
     }
-    Ok(Ended::NotYet(stages::NAMING))
+    Ok(())
 }
 
 /// `loadPriorVersionCode`: an empty prior is an error, never a silent
