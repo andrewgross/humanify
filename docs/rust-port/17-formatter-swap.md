@@ -296,6 +296,25 @@ hash8>`; and `finish::relink` sorts every file's require header by
   M3/G4 (`g4-gate.sh`). `identity.sh` is their successor; the 5b-2 eval
   takes over from here.
 
+**After merging rust-port 4c3caf5 (unified-leftovers), 2026-09-25, merge
+76ae724.** The artifact dump no longer injects TS factory hashes (its
+`ts_factories` plumbing went with the flag): `modules.json`,
+`partitions.json` and the written manifest/ledger carry the Rust's bytes
+only. Re-gated one at a time (the machine was shared with a cold TS eval):
+`npm run check` 12/12; the self-consistency gate ×4 serial — every tree
+byte-identical to a9edd6e's, boot both halves, 0 dangling refs, cache +0,
+warm self-hop identical; WP4.6 16/16; M1 ×4; phase 3 ×4. The unified gate's
+non-byte half (`unified-nonbyte.sh`, 85→86 and 118→119, all of
+`--stats-json --diagnostics --dump-artifacts --rename-ledger`): exit 0; the
+dump is internally consistent (`dump-consistency.py`: recorded text hashes,
+`statementHash` family == the written ledger's v2 `hashes`, the vendor
+signature family == the manifest's paths, `modules.json` unpack hashes ==
+the manifest's); `humanify partitions` + `modules` rebuilt from the dump's
+own texts compare IDENTICAL to it; the rename ledger's stage 0 replays
+(its post stage does not — finding #49, the TS ledger reads the same). The
+emitted `apply.mjs` cannot be the replayer on a real bundle (#48's
+quadratic splice); the check replays its semantics in linear time.
+
 ## Recommendation
 
 Port Babel faithfully (strategy a) and split 5b into two steps:
