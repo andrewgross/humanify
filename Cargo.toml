@@ -25,6 +25,8 @@ serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
 clap = { version = "=4.5.47", features = ["derive"] }
 dotenvy = "=0.15.7"
 sha2 = "=0.10.9"
+# The fossil tokens' short hash (fossil-assign.ts shortHash: sha1, 8 hex) — WP5.2.
+sha1 = "=0.10.6"
 # The LLM client (WP4.1): tokio runtime + reqwest HTTP, behind humanify-llm's
 # synchronous NameProvider. native-tls uses the system OpenSSL (rustls'
 # default aws-lc provider needs cmake, absent in the devcontainer).

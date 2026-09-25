@@ -430,7 +430,14 @@ hours when it does not, so WP0.3 is leverage, not overhead.
 - Whether the fresh-grouping path (cluster-assign.ts, no-prior case) can gate
   on the oracle pairs at all — all four pairs have priors. It may need a
   fifth oracle input (a no-prior run of one version) dumped at WP0.4; decide
-  before phase 5a starts.
+  before phase 5a starts. **Answered 2026-09-25 (WP5.1/5.2):** no fifth
+  input. The TS probe `test/parity/wp51-placement-probe.ts` runs
+  `stableSplitFromCode` on each oracle pair's shipped text with no prior
+  (`--regime cluster`) and dumps the same `placement.json`; the Rust verb
+  matches it IDENTICAL on all four texts, with null namer answers and with
+  deterministic answers replayed from a cache (`--answer`). The same probe
+  gates the prior-carried tiers regime, which the oracle pairs (all fossil)
+  also never reach. Gate record: PORTING.md, the WP5.1/5.2 rows.
 - The walk driver script named at M5 lives outside this repo (the walk
   operates in the unpacked-claude-code checkout); confirm its variable name
   for the binary path when phase 6 opens.

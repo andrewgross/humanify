@@ -669,6 +669,122 @@ pub fn number_to_string(x: f64) -> String {
     format!("{sign}{body}")
 }
 
+/// `Math.log(x)` exactly as V8 computes it: fdlibm's `__ieee754_log`
+/// (V8 `base::ieee754::log`), which is NOT always correctly rounded — so
+/// Rust's `f64::ln` (the platform libm) can differ by an ulp, and a
+/// float that feeds a sort or a tie (cluster-assign's IDF weights) must
+/// come out bit-identical.
+pub fn math_log(x: f64) -> f64 {
+    // fdlibm's constants, by their documented bit patterns (e_log.c).
+    const LN2_HI: f64 = f64::from_bits(0x3fe6_2e42_fee0_0000);
+    const LN2_LO: f64 = f64::from_bits(0x3dea_39ef_3579_3c76);
+    const TWO54: f64 = f64::from_bits(0x4350_0000_0000_0000);
+    const LG1: f64 = f64::from_bits(0x3fe5_5555_5555_5593);
+    const LG2: f64 = f64::from_bits(0x3fd9_9999_9997_fa04);
+    const LG3: f64 = f64::from_bits(0x3fd2_4924_9422_9359);
+    const LG4: f64 = f64::from_bits(0x3fcc_71c5_1d8e_78af);
+    const LG5: f64 = f64::from_bits(0x3fc7_4664_96cb_03de);
+    const LG6: f64 = f64::from_bits(0x3fc3_9a09_d078_c69f);
+    const LG7: f64 = f64::from_bits(0x3fc2_f112_df3e_5244);
+    // `0.33333333333333333` in the C source — the double nearest 1/3.
+    const THIRD: f64 = f64::from_bits(0x3fd5_5555_5555_5555);
+    let hi = |v: f64| (v.to_bits() >> 32) as i32;
+    let lo = |v: f64| v.to_bits() as u32;
+    let with_hi = |v: f64, h: i32| f64::from_bits((u64::from(h as u32) << 32) | u64::from(lo(v)));
+
+    let mut x = x;
+    let mut hx = hi(x);
+    let lx = lo(x);
+    let mut k: i32 = 0;
+    if hx < 0x0010_0000 {
+        if ((hx & 0x7fff_ffff) as u32 | lx) == 0 {
+            return f64::NEG_INFINITY;
+        }
+        if hx < 0 {
+            return f64::NAN;
+        }
+        k -= 54;
+        x *= TWO54;
+        hx = hi(x);
+    }
+    if hx >= 0x7ff0_0000 {
+        return x + x;
+    }
+    k += (hx >> 20) - 1023;
+    hx &= 0x000f_ffff;
+    let i = (hx + 0x95f64) & 0x10_0000;
+    x = with_hi(x, hx | (i ^ 0x3ff0_0000));
+    k += i >> 20;
+    let f = x - 1.0;
+    let dk = f64::from(k);
+    if (0x000f_ffff & (2 + hx)) < 3 {
+        if f == 0.0 {
+            return if k == 0 {
+                0.0
+            } else {
+                dk * LN2_HI + dk * LN2_LO
+            };
+        }
+        let r = f * f * (0.5 - THIRD * f);
+        return if k == 0 {
+            f - r
+        } else {
+            dk * LN2_HI - ((r - dk * LN2_LO) - f)
+        };
+    }
+    let s = f / (2.0 + f);
+    let z = s * s;
+    let mut i = hx - 0x6147a;
+    let w = z * z;
+    let j = 0x6b851 - hx;
+    let t1 = w * (LG2 + w * (LG4 + w * LG6));
+    let t2 = z * (LG1 + w * (LG3 + w * (LG5 + w * LG7)));
+    i |= j;
+    let r = t2 + t1;
+    if i > 0 {
+        let hfsq = 0.5 * f * f;
+        if k == 0 {
+            f - (hfsq - s * (hfsq + r))
+        } else {
+            dk * LN2_HI - ((hfsq - (s * (hfsq + r) + dk * LN2_LO)) - f)
+        }
+    } else if k == 0 {
+        f - s * (f - r)
+    } else {
+        dk * LN2_HI - ((s * (f - r) - dk * LN2_LO) - f)
+    }
+}
+
+/// The value of a JS numeric literal from its SOURCE spelling (`raw`) —
+/// what Babel's `NumericLiteral.value` holds. Read the raw text, never a
+/// JSON-parsed `value`: serde_json's default float parser is up to 1 ulp
+/// off (lesson 8; the 2.1.216 FLT_MAX literal `340282346638528860000…`
+/// parsed one ulp high). Handles `_` separators, hex/octal/binary radix
+/// prefixes, and sloppy-mode legacy octal (`017` = 15, `019` = 19).
+/// `None` for a BigInt (`…n`) or anything that is not a numeric literal.
+pub fn numeric_literal_value(raw: &str) -> Option<f64> {
+    let s: String = raw.chars().filter(|c| *c != '_').collect();
+    if s.ends_with('n') {
+        return None;
+    }
+    let radix = |digits: &str, r: u32| u128::from_str_radix(digits, r).ok().map(|v| v as f64);
+    let lower = s.to_ascii_lowercase();
+    if let Some(d) = lower.strip_prefix("0x") {
+        return radix(d, 16);
+    }
+    if let Some(d) = lower.strip_prefix("0o") {
+        return radix(d, 8);
+    }
+    if let Some(d) = lower.strip_prefix("0b") {
+        return radix(d, 2);
+    }
+    let legacy = s.len() > 1 && s.starts_with('0') && s.bytes().all(|b| b.is_ascii_digit());
+    if legacy && s.bytes().all(|b| (b'0'..=b'7').contains(&b)) {
+        return radix(&s, 8);
+    }
+    s.parse::<f64>().ok()
+}
+
 /// `Number.prototype.toFixed(digits)` for finite |x| < 1e21: the integer n
 /// minimizing |n / 10^f - x| over the EXACT binary value of x, the larger n
 /// on a tie (half-up for positives) — Rust's `{:.N}` ties to even, which
