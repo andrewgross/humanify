@@ -132,6 +132,10 @@ pub struct Attempt {
     /// References the binding had WHEN THIS ATTEMPT RAN; None = not
     /// measured (never collapsed into zero — the exp059 smoking gun).
     pub ref_count: Option<u32>,
+    /// The scope block the rename went through (`scopeBlock`, the byte
+    /// span; the diagnostics print it as UTF-16 `start:end`) — the llm
+    /// tier records it.
+    pub scope_block: Option<oxc_span::Span>,
 }
 
 impl Attempt {
@@ -143,6 +147,7 @@ impl Attempt {
             reason: None,
             proposed_name: None,
             ref_count: None,
+            scope_block: None,
         }
     }
 
@@ -153,6 +158,11 @@ impl Attempt {
 
     pub fn proposed(mut self, name: impl Into<String>) -> Attempt {
         self.proposed_name = Some(name.into());
+        self
+    }
+
+    pub fn scope_block(mut self, block: oxc_span::Span) -> Attempt {
+        self.scope_block = Some(block);
         self
     }
 
@@ -196,6 +206,10 @@ pub struct StrategyTrail {
     enabled: bool,
     entries: Vec<TrailEntry>,
     index: BTreeMap<TrailTarget, usize>,
+    /// The run-wide validated-rename claim counters (TS: a module-level
+    /// recorder like the trail): each pass state starts from the trail it
+    /// continues and writes its total back on `finish`.
+    pub claims: crate::rename::validated::RenameClaimStats,
 }
 
 impl StrategyTrail {

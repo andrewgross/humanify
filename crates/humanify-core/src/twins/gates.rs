@@ -791,6 +791,8 @@ fn is_function_declaration(nodes: &AstNodes<'_>, decl_id: oxc_semantic::NodeId) 
         && matches!(
             nodes.get_node(parent_id).kind(),
             AstKind::Program(_)
+                | AstKind::ExportDeclaration(_)
+                | AstKind::ExportFromDeclaration(_)
                 | AstKind::ExportNamedDeclaration(_)
                 | AstKind::ExportDefaultDeclaration(_)
                 | AstKind::BlockStatement(_)

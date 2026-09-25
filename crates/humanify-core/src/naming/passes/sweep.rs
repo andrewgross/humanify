@@ -99,6 +99,8 @@ pub fn is_statement(kind: &AstKind<'_>) -> bool {
             | AstKind::ImportDeclaration(_)
             | AstKind::ExportAllDeclaration(_)
             | AstKind::ExportDefaultDeclaration(_)
+            | AstKind::ExportDeclaration(_)
+            | AstKind::ExportFromDeclaration(_)
             | AstKind::ExportNamedDeclaration(_)
     ) || matches!(kind, AstKind::Function(f) if f.is_declaration())
         || matches!(kind, AstKind::Class(c) if c.is_declaration())

@@ -1,6 +1,6 @@
-//! The WP4.4+4.5 gate's dump (`humanify passes`): run the match stage,
-//! the transfer stage and the LLM waves (warm replay, as `humanify waves`),
-//! then every post-wave pass in plugin order, and write what the TS probe
+//! The WP4.4+4.5 gate's dump (`humanify passes`): the naming driver (the
+//! one orchestration, `naming::driver`) over a TS dump (warm replay) —
+//! every post-wave pass in plugin order — writing what the TS probe
 //! (test/parity/wp445-pass-probe.ts) and the oracle dump record:
 //!
 //! - `passes.json` — each pass's decisions and the sha256 of the text after
@@ -24,21 +24,13 @@ use humanify_model::llm::{CacheKeyParams, NameProvider};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::family_permute::{FamilyPermuteOutcome, PermutePlant, run_family_permute};
-use super::floor_passes::{derive_expression_inner_names, retry_decorated_names};
-use super::sweep::{DeferredSweepOutcome, SweepDispatch, run_deferred_sweep};
-use super::{MintedCensus, census_of_text};
-use crate::matching::matches_dump::read_dump_texts;
-use crate::modules::soundness::collect_eval_with_taint;
-use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
+use super::MintedCensus;
+use super::family_permute::{FamilyPermuteOutcome, PermutePlant};
+use super::sweep::SweepDispatch;
+use crate::naming::driver::dump::run_dump;
+use crate::naming::driver::{NamingHooks, PostPass};
 use crate::naming::reconcile::{ReconcilePlant, ReconcileResult};
-use crate::naming::waves::dump::{StageNaming, cache_params_of, run_stage_waves};
-use crate::naming::waves::generate::TextView;
-use crate::naming::waves::graph_ext::build_naming_graph;
-use crate::naming::waves::render::{FnPrinter, private_rename_edits, render_program_with};
-use crate::prior::{PriorMatchInput, match_prior_version};
-use crate::rename::eligibility::Eligibility;
-use crate::trail::{Anchor, StrategyTrail};
+use crate::trail::Anchor;
 
 /// A planted bug (the gate's red runs).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -82,19 +74,6 @@ fn sha(text: &str) -> String {
         .collect()
 }
 
-/// The naming era's result, carried out of the match stage.
-struct NamingEra {
-    generated: String,
-    trail: StrategyTrail,
-    derived: usize,
-    undecorated: usize,
-    /// class-id skips + decoration skips (the floor's `skipped` so far).
-    floor_skipped: usize,
-    dispatches: usize,
-    misses: usize,
-    errors: usize,
-}
-
 fn read_text(dir: &Path, name: &str) -> Option<String> {
     fs::read_to_string(dir.join(name)).ok()
 }
@@ -103,191 +82,122 @@ fn write_text(out_dir: &Path, name: &str, text: &str) -> Result<(), String> {
     fs::write(out_dir.join("text").join(name), text).map_err(|e| format!("write {name}: {e}"))
 }
 
-/// Run the stages over a TS dump's texts and write the passes dump.
+/// Run the naming driver over a TS dump's texts and write the passes dump.
 pub fn dump_passes<P: NameProvider>(
     ts_dump_dir: &Path,
     out_dir: &Path,
     options: &PassesDumpOptions,
     provider: impl FnOnce(CacheKeyParams) -> P,
 ) -> Result<PassesDumpSummary, String> {
-    let (meta, fresh, prior) = read_dump_texts(ts_dump_dir)?;
-    let flags = &meta["flags"];
-    let bundler = flags["bundler"].as_str();
-    let minifier = flags["minifier"].as_str();
     fs::create_dir_all(out_dir.join("text")).map_err(|e| format!("mkdir: {e}"))?;
-    let params = cache_params_of(&meta);
-    let eligible = Eligibility::new(bundler, minifier);
-    let client = provider(params.clone());
-    let input = PriorMatchInput {
-        fresh: &fresh,
-        prior: &prior,
-        bundler,
-        minifier,
-        visit_optional_calls: false,
-    };
-    let era = match_prior_version(input, |stage| {
-        let semantic = stage.fresh.ingest.semantic();
-        let view = TextView::build(semantic);
-        let ng = build_naming_graph(semantic, stage.fresh.graph, &view);
-        let fns = FnPrinter::nodes(semantic, stage.fresh.graph);
-        let naming = StageNaming {
-            view: &view,
-            ng: &ng,
-            fns: &fns,
-            bundler,
-            minifier,
-        };
-        let (mut waves, private) = run_stage_waves(stage, &naming, &params, None, &client)?;
-        let taint = collect_eval_with_taint(semantic);
-        let derivation =
-            derive_expression_inner_names(semantic, &mut waves.state, &eligible, &taint);
-        let decoration = retry_decorated_names(semantic, &mut waves.state, &eligible, &taint);
-        let privates = private_rename_edits(semantic.source_text(), &private);
-        let generated = render_program_with(semantic, &waves.state, &privates);
-        Ok(NamingEra {
-            generated,
-            derived: derivation.derived,
-            undecorated: decoration.undecorated,
-            floor_skipped: derivation.skipped.len() + decoration.skipped,
-            dispatches: waves.dispatches.len(),
-            misses: waves.misses,
-            errors: waves.errors,
-            trail: waves.state.finish().trail,
-        })
-    })?;
-    write_text(out_dir, "generated.js", &era.generated)?;
-    let mut summary = PassesDumpSummary {
-        dispatches: era.dispatches,
-        misses: era.misses,
-        errors: era.errors,
-        derived: era.derived,
-        undecorated: era.undecorated,
-        ..PassesDumpSummary::default()
-    };
-    let mut passes: Vec<Value> = vec![json!({
-        "pass": "generate",
-        "textSha": sha(&era.generated),
-    })];
-
-    // -- reconcile ----------------------------------------------------------
+    // Bisection: each post-generate pass reads the TS's input text for it.
     let ts_text = |name: &str| {
         options
             .ts_inputs
             .as_ref()
             .and_then(|d| read_text(&d.join("text"), name))
     };
-    let generated = match &options.ts_inputs {
-        Some(_) => read_text(&ts_dump_dir.join("text"), "generated.js").ok_or("TS generated.js")?,
-        None => era.generated.clone(),
-    };
-    let reconcile_plant =
-        (options.plant == Some(PassPlant::ReconcileFlipTier)).then_some(ReconcilePlant::FlipTier);
-    let (recon, trail) = match run_prior_diff_reconciliation(
-        &generated,
-        &prior,
-        &eligible,
-        era.trail,
-        reconcile_plant,
-    ) {
-        Ok(PriorDiffOutcome {
-            result,
-            code,
-            trail,
-        }) => ((Some(result), code), trail),
-        Err((e, trail)) => {
-            eprintln!("reconcile skipped: {e}");
-            ((None, None), trail)
+    let ts_generated = options
+        .ts_inputs
+        .as_ref()
+        .and_then(|_| read_text(&ts_dump_dir.join("text"), "generated.js"));
+    let pass_input = |p: PostPass| -> Option<String> {
+        options.ts_inputs.as_ref()?;
+        match p {
+            PostPass::Reconcile => ts_generated.clone(),
+            PostPass::Sweep => ts_text("reconciled.js").or_else(|| ts_generated.clone()),
+            PostPass::Permute => ts_text("swept.js")
+                .or_else(|| ts_text("reconciled.js"))
+                .or_else(|| ts_generated.clone()),
         }
     };
-    let (recon_result, recon_code) = recon;
-    passes.push(reconcile_row(recon_result.as_ref(), recon_code.as_deref()));
-    summary.reconciled = recon_result.as_ref().map_or(0, |r| r.renames.len());
+    let hooks = NamingHooks {
+        reconcile_plant: (options.plant == Some(PassPlant::ReconcileFlipTier))
+            .then_some(ReconcilePlant::FlipTier),
+        permute_plant: (options.plant == Some(PassPlant::PermuteReverse))
+            .then_some(PermutePlant::TieBreakReversed),
+        pass_input: Some(&pass_input),
+        ..NamingHooks::default()
+    };
+    let (_run, out) = run_dump(ts_dump_dir, &hooks, provider)?;
+    let generated = out.generated.clone().ok_or("no generated text")?;
+    write_text(out_dir, "generated.js", &generated)?;
+    let floor = out.floor.unwrap_or_default();
+    let mut summary = PassesDumpSummary {
+        dispatches: out.waves.dispatches.len(),
+        misses: out.misses,
+        errors: out.errors,
+        derived: floor.derived,
+        undecorated: floor.undecorated,
+        ..PassesDumpSummary::default()
+    };
+    let mut passes: Vec<Value> = vec![json!({
+        "pass": "generate",
+        "textSha": sha(&generated),
+    })];
+
+    // -- reconcile ----------------------------------------------------------
+    let recon_code = out.reconcile.as_ref().and_then(|r| r.code.clone());
+    passes.push(reconcile_row(
+        out.reconcile.as_ref().map(|r| &r.result),
+        recon_code.as_deref(),
+    ));
+    summary.reconciled = out.reconcile.as_ref().map_or(0, |r| r.result.renames.len());
     if let Some(code) = &recon_code {
         write_text(out_dir, "reconciled.js", code)?;
     }
 
     // -- deferred sweep -----------------------------------------------------
-    let sweep_input = match &options.ts_inputs {
-        Some(_) => ts_text("reconciled.js").unwrap_or_else(|| generated.clone()),
-        None => recon_code.clone().unwrap_or_else(|| generated.clone()),
-    };
     let anchor = if recon_code.is_some() {
         Anchor::Reconciled
     } else {
         Anchor::Generated
     };
-    let (sweep, trail) =
-        match run_deferred_sweep(&sweep_input, anchor, &eligible, &client, &params, trail) {
-            Ok(DeferredSweepOutcome { sweep, code, trail }) => (Some((sweep, code)), trail),
-            Err((e, trail)) => {
-                eprintln!("sweep skipped: {e}");
-                (None, trail)
-            }
-        };
-    let swept_code = sweep.as_ref().and_then(|(_, c)| c.clone());
+    let sweep = out.deferred_sweep.as_ref().map(|(_, s)| s);
+    let swept_code = sweep.and_then(|s| s.code.clone());
     passes.push(json!({
         "pass": "deferred-sweep",
         "anchor": anchor.as_str(),
         "ran": sweep.is_some(),
-        "named": sweep.as_ref().map_or(0, |(s, _)| s.named),
-        "skipped": sweep.as_ref().map_or(0, |(s, _)| s.skipped),
+        "named": sweep.map_or(0, |s| s.result.named),
+        "skipped": sweep.map_or(0, |s| s.result.skipped),
         "textSha": swept_code.as_deref().map(sha),
-        "misses": sweep.as_ref().map_or(0, |(s, _)| s.misses),
+        "misses": sweep.map_or(0, |s| s.result.misses),
     }));
-    if let Some((s, _)) = &sweep {
-        summary.swept = s.named;
-        summary.misses += s.misses;
-        summary.errors += s.errors;
-        write_sweep_prompts(out_dir, &s.dispatches, anchor)?;
+    if let Some(s) = sweep {
+        summary.swept = s.result.named;
+        write_sweep_prompts(out_dir, &s.result.dispatches, anchor)?;
     }
     if let Some(code) = &swept_code {
         write_text(out_dir, "swept.js", code)?;
     }
 
     // -- family permute -----------------------------------------------------
-    let permute_input = match &options.ts_inputs {
-        Some(_) => ts_text("swept.js")
-            .or_else(|| ts_text("reconciled.js"))
-            .unwrap_or_else(|| generated.clone()),
-        None => swept_code
-            .clone()
-            .or_else(|| recon_code.clone())
-            .unwrap_or_else(|| generated.clone()),
-    };
-    let permute_plant = (options.plant == Some(PassPlant::PermuteReverse))
-        .then_some(PermutePlant::TieBreakReversed);
-    let permuted = run_family_permute(&permute_input, &prior, &eligible, permute_plant)
-        .map_err(|e| eprintln!("family permute skipped: {e}"))
-        .ok();
-    passes.push(permute_row(permuted.as_ref()));
-    let shipped = permuted
-        .as_ref()
-        .and_then(|p| p.code.clone())
-        .unwrap_or(permute_input);
-    summary.permuted = permuted.as_ref().map_or(0, |p| p.applied);
+    passes.push(permute_row(out.permute.as_ref()));
+    summary.permuted = out.permute.as_ref().map_or(0, |p| p.applied);
+    let shipped = out.code.clone().unwrap_or_default();
     write_text(out_dir, "shipped.js", &shipped)?;
 
     // -- census -------------------------------------------------------------
-    let census = census_of_text(&shipped, &eligible)?;
+    let census = out.census.as_ref().ok_or("no census")?;
     summary.census_total = census.total;
     passes.push(json!({
         "pass": "census",
-        "census": census_json(&census),
+        "census": census_json(census),
         "textSha": sha(&shipped),
     }));
 
     // plugin.ts `floorStats`, the deferred sweep folded in
     // (`resolveFinalOutput`): what stats.json's `namingFloor` reports.
-    let (swept, sweep_skipped) = sweep.as_ref().map_or((0, 0), |(s, _)| (s.named, s.skipped));
     passes.push(json!({
         "pass": "naming-floor-stats",
-        "derived": era.derived,
-        "undecorated": era.undecorated,
-        "swept": swept,
-        "skipped": era.floor_skipped + sweep_skipped,
+        "derived": floor.derived,
+        "undecorated": floor.undecorated,
+        "swept": floor.swept,
+        "skipped": floor.skipped,
     }));
 
-    let rows = trail.transfer_rows();
+    let rows = out.trail.transfer_rows();
     summary.trail_rows = rows.len();
     fs::write(
         out_dir.join("transfers.json"),

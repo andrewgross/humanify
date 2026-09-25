@@ -51,8 +51,8 @@ use std::collections::HashSet;
 use oxc_semantic::Semantic;
 
 use crate::graph::UnifiedGraph;
-use crate::rename::validated::RenameState;
 use crate::rename::validated::scopes::{BScopeId, BindingId};
+use crate::rename::validated::{RejectionReason, RenameState};
 use crate::twins::gates::{PrivateRenameSet, TwinTransferPair};
 
 use evidence::TransferEvidence;
@@ -66,6 +66,22 @@ pub struct TransferStats {
     pub attempted: u64,
     pub applied: u64,
     pub skipped: u64,
+    /// `rejected`: validation rejections by reason, in first-counted order
+    /// (absent in the TS record until the first one).
+    pub rejected: Vec<(String, u64)>,
+}
+
+impl TransferStats {
+    /// TS `recordRejection`: a validation rejection is a skip, counted by
+    /// its reason.
+    pub fn record_rejection(&mut self, reason: RejectionReason) {
+        self.skipped += 1;
+        let key = reason.as_str();
+        match self.rejected.iter_mut().find(|(k, _)| k == key) {
+            Some((_, n)) => *n += 1,
+            None => self.rejected.push((key.to_string(), 1)),
+        }
+    }
 }
 
 /// One external-reference vote (TS `ExternalRefPair`): a matched
@@ -189,6 +205,22 @@ pub struct TransferOutcome {
     pub matched_module_bindings: Vec<(usize, String)>,
     /// What the match collected for the split (TS `MatcherCarry`).
     pub carry: carry::MatcherCarry,
+    /// The plugin result's prior-version counters.
+    pub counts: PriorCounts,
+}
+
+/// `applyPriorVersionIfPresent`'s counters (the coverage summary and
+/// stats.json read them): `functionsMatched` / `functionsAlreadyNamed`
+/// (applyExactMatches: translated pairs vs every slot already alike),
+/// `closeMatchCount` (the close context's size) and the module bindings
+/// applied (`appliedBindingRenames.size` — a Map keyed by old name — plus
+/// the propagated votes and single-vote pins).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PriorCounts {
+    pub functions_matched: usize,
+    pub functions_already_named: usize,
+    pub close_match_count: usize,
+    pub bindings_applied: usize,
 }
 
 /// One named, documented pass of the mechanical transfer phase (TS
@@ -264,7 +296,17 @@ pub fn run_transfer_pipeline(
             fn_close_prior[info.fresh_fn] = Some(info.prior_id.clone());
         }
     }
+    let distinct_binding_renames: HashSet<&str> = run
+        .applied_binding_renames
+        .iter()
+        .map(|(old, _)| old.as_str())
+        .collect();
+    let counts = PriorCounts {
+        bindings_applied: distinct_binding_renames.len() + run.applied_module_votes.len(),
+        ..PriorCounts::default()
+    };
     TransferOutcome {
+        counts,
         rename: run.rename,
         fn_state: run.fn_state,
         fn_transferred: run.fn_transferred,
@@ -290,7 +332,7 @@ pub fn run_transfer_pipeline(
 pub fn apply_prior_version(
     stage: &crate::prior::MatchStage<'_, '_>,
 ) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
-    stage::apply_prior_version(stage)
+    stage::apply_prior_version(stage, &PreFreeze::default())
 }
 
 /// The statement twins over the settled states alone — the SAME inputs
@@ -301,3 +343,12 @@ pub fn statement_twins(
 ) -> Result<crate::twins::gates::TwinGateOutput, String> {
     stage::statement_twins(stage)
 }
+/// [`apply_prior_version`] with the naming driver's library freeze.
+pub fn apply_prior_version_with(
+    stage: &crate::prior::MatchStage<'_, '_>,
+    freeze: &PreFreeze,
+) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
+    stage::apply_prior_version(stage, freeze)
+}
+
+pub use stage::{PreFreeze, pre_transfer_states};

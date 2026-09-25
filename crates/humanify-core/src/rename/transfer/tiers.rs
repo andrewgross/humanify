@@ -107,7 +107,7 @@ pub fn apply_statement_twin_transfers(run: &mut TransferRun<'_, '_>, twins: &Twi
             stats.applied += 1;
         } else {
             let reason = attempt.reason.unwrap_or(RejectionReason::InvalidTarget);
-            stats.skipped += 1;
+            stats.record_rejection(reason);
             run.queue_retry(scope, &pair.old_name, &pair.new_name, reason, bookkeep);
         }
     }
@@ -310,7 +310,7 @@ fn transfer_owned_pair(
         return;
     }
     let reason = attempt.reason.unwrap_or(RejectionReason::InvalidTarget);
-    stats.skipped += 1;
+    stats.record_rejection(reason);
     run.queue_retry(
         scope,
         &pair.old_name,

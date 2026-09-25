@@ -503,6 +503,8 @@ pub struct FamilyPermuteOutcome {
     pub moves: Vec<AppliedMove>,
     /// The re-rendered text — set only when a move applied.
     pub code: Option<String>,
+    /// The validated-rename claims the moves recorded.
+    pub claims: crate::rename::validated::RenameClaimStats,
 }
 
 /// The prior side's members by hash (plain data; the prior parse is
@@ -557,6 +559,7 @@ pub fn run_family_permute(
         buckets,
         skipped: to_apply.len() - moves.len(),
         code: Some(render_program(semantic, &state)),
+        claims: state.claim_stats(),
         moves,
     })
 }

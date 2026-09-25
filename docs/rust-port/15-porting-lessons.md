@@ -380,6 +380,44 @@ passed every corpus gate — the 17 not-inherited vendor files per pair
 differ structurally, so only the unit test's same-length-literal case can
 see it.
 
+## 23. The oracle pairs are one bundler; the fixture corpus is the ESM regime
+
+Every oracle pair is a Bun CJS bundle, so nothing on them ever produced an
+`export` statement. oxc 0.150 splits babel's single `ExportNamedDeclaration`
+into THREE kinds (`ExportDeclaration` for `export const …`,
+`ExportFromDeclaration` for `export … from`, `ExportNamedDeclaration` for a
+bare specifier list); four babel-statement predicates written against the
+bundles listed only the last, so a call inside an `export const` arrow had
+no statement parent and recorded no call site. The first WP4.6 run over the
+e2e fixtures (warm replay from the standing cache — their first-version
+prompts were cached by the WP0.4 cut) found it plus four more ESM-only
+shapes in minutes: an import specifier's declaration text, the shorthand
+babel prints for an aliased specifier renamed to its other side, the
+`export const` split (#16's render half) and the unambiguous source type
+(finding #38).
+
+Lesson: grep the port for every `AstKind::` alternative list that names
+one babel node kind oxc models as several, and run the fixture corpus as a
+regime of every gate that can take a first version.
+
+## 24. A diagnostic count can carry the scope-epoch model
+
+`refCount` (the exp059 instrument on every `llm` trail row) is
+`referencePaths.length + constantViolations.length` of a Babel `Binding` —
+deduped by PATH object. After the prior-match cache clear, a fresh-era crawl
+whose chain reaches a graph-era Binding re-registers each reference in its
+BLOCK through new paths, so 921 of 3,254 counts on 2.1.85→86 are inflated
+(finding #35). Reproducing it needed the traversal model lesson 18 built for
+the prompts, one level finer: which function's traversal first created each
+nested scope's paths (the path cache is keyed by parent node, so the first
+traversal wins), block containment rather than semantic scope (a switch
+discriminant), and `registerBinding`'s skip of a binding's own declaration.
+The first-run gate's IDENTICAL on the no-prior fixtures, and 921 diffs on
+the pairs, is what localized it: one epoch vs two.
+
+Lesson: a field recorded "for debugging" is still output; when it reads an
+object the TS has two copies of, port the copy model, not the field.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -387,5 +425,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/). The doc grows at each
 arc's handback.

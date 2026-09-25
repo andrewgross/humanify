@@ -42,6 +42,13 @@ enum OccForm {
     /// The local of a shorthand `import { x }`: a renamed local prints
     /// `x as local` (babel's ImportSpecifier printer).
     ImportLocal { imported: String },
+    /// The local of an aliased `import { a as b }`: renamed TO the
+    /// imported name it prints `a` alone (babel prints ` as local` only
+    /// when the names differ) — the edit spans from the imported name.
+    ImportAliasLocal { imported: String, from: u32 },
+    /// The local of an aliased `export { a as b }`: renamed TO the
+    /// exported name it prints `b` alone — the edit spans to its end.
+    ExportAliasLocal { exported: String, to: u32 },
 }
 
 /// Every rename-written identifier occurrence, by start.
@@ -143,6 +150,10 @@ impl Occurrences {
             }
             let current = state.name_of(*b);
             let original = &text[*start as usize..*end as usize];
+            if let Some(r) = alias_collapse(form, current, *start, *end) {
+                out.push(r);
+                continue;
+            }
             let rendered = match form {
                 OccForm::Shorthand { key } if current != key => format!("{key}: {current}"),
                 OccForm::ExportLocal { exported } if current != exported => {
@@ -213,7 +224,70 @@ pub fn render_program_with(
     let span = Span::new(0, view.text.len() as u32);
     let mut edits = occ.edits(view.text, state, span);
     edits.extend_from_slice(extra);
+    edits.extend(export_split_edits(semantic, state));
     view.pretty(span, &edits, true)
+}
+
+/// Babel's renamer SPLITS `export const a = 1, b = 2` the first time one
+/// of its bindings is renamed (`splitExportDeclaration`): the declaration
+/// loses its `export`, and `export { a as a, b as b }` (the names at that
+/// moment) follows it; the renamer's own traversal then renames the
+/// specifier's local of the binding it renames. The synthesized specifiers
+/// are never crawled, so a LATER rename of any of those bindings leaves
+/// them behind (16-findings #16 — reproduced, not fixed).
+fn export_split_edits(semantic: &Semantic<'_>, state: &RenameState) -> Vec<Replacement> {
+    use crate::rename::validated::RenameMode;
+    let nodes = semantic.nodes();
+    let text = semantic.source_text();
+    let mut out = Vec::new();
+    for a in state.applied() {
+        if a.mode
+            != (RenameMode::BabelRenamer {
+                splits_export: true,
+            })
+        {
+            continue;
+        }
+        let b = state.view().binding(a.binding);
+        let Some(export) = b.export_ancestor else {
+            continue;
+        };
+        let AstKind::ExportDeclaration(e) = nodes.kind(export) else {
+            continue;
+        };
+        let oxc_ast::ast::Declaration::VariableDeclaration(decl) = &e.declaration else {
+            continue;
+        };
+        let specs: Vec<String> = decl
+            .declarations
+            .iter()
+            .flat_map(|d| d.id.get_binding_identifiers())
+            .map(|id| {
+                let original = id.name.to_string();
+                if id.symbol_id.get() == Some(b.symbol) && a.new_name != original {
+                    format!("{} as {original}", a.new_name)
+                } else {
+                    original
+                }
+            })
+            .collect();
+        out.push(Replacement {
+            span: Span::new(e.span.start, decl.span.start),
+            text: String::new(),
+        });
+        let end = e.span.end;
+        if end > 0 && text.as_bytes()[end as usize - 1] == b';' {
+            out.push(Replacement {
+                span: Span::new(end - 1, end),
+                text: format!(
+                    ";
+export {{ {} }};",
+                    specs.join(", ")
+                ),
+            });
+        }
+    }
+    out
 }
 
 /// The statement-twin tier's private-name rewrites as edits of `text`
@@ -266,6 +340,22 @@ fn occurrence_spans(state: &RenameState) -> HashMap<u32, (u32, BindingId)> {
     by_start
 }
 
+/// An aliased specifier whose local was renamed TO the other side's name
+/// prints that name alone (`import { a }` / `export { b }`).
+fn alias_collapse(form: &OccForm, current: &str, start: u32, end: u32) -> Option<Replacement> {
+    match form {
+        OccForm::ImportAliasLocal { imported, from } if current == imported => Some(Replacement {
+            span: Span::new(*from, end),
+            text: current.to_string(),
+        }),
+        OccForm::ExportAliasLocal { exported, to } if current == exported => Some(Replacement {
+            span: Span::new(start, *to),
+            text: current.to_string(),
+        }),
+        _ => None,
+    }
+}
+
 /// The specifier forms babel prints differently once the local is
 /// renamed: a shorthand `export { x }` / `import { x }`.
 fn specifier_form(kind: &AstKind<'_>) -> Option<(u32, OccForm)> {
@@ -282,6 +372,34 @@ fn specifier_form(kind: &AstKind<'_>) -> Option<(u32, OccForm)> {
                 imported: sp.imported.name().to_string(),
             },
         )),
+        AstKind::ImportSpecifier(sp)
+            if matches!(
+                sp.imported,
+                oxc_ast::ast::ModuleExportName::IdentifierName(_)
+            ) =>
+        {
+            Some((
+                sp.local.span.start,
+                OccForm::ImportAliasLocal {
+                    imported: sp.imported.name().to_string(),
+                    from: sp.imported.span().start,
+                },
+            ))
+        }
+        AstKind::ExportSpecifier(sp)
+            if matches!(
+                sp.exported,
+                oxc_ast::ast::ModuleExportName::IdentifierName(_)
+            ) =>
+        {
+            Some((
+                sp.local.span().start,
+                OccForm::ExportAliasLocal {
+                    exported: sp.exported.name().to_string(),
+                    to: sp.exported.span().end,
+                },
+            ))
+        }
         _ => None,
     }
 }

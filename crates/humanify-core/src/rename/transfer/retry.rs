@@ -126,6 +126,7 @@ pub fn retry_rejected_transfers(
         attempted: arena.len() as u64,
         applied: 0,
         skipped: 0,
+        rejected: Vec::new(),
     };
     let mut pending: Vec<usize> = (0..arena.len())
         .filter(|&i| run.still_pending(&arena[i]))

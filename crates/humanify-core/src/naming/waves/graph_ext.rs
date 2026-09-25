@@ -413,6 +413,8 @@ fn is_babel_statement(nodes: &AstNodes<'_>, id: NodeId) -> bool {
         | AstKind::ImportDeclaration(_)
         | AstKind::ExportAllDeclaration(_)
         | AstKind::ExportDefaultDeclaration(_)
+        | AstKind::ExportDeclaration(_)
+        | AstKind::ExportFromDeclaration(_)
         | AstKind::ExportNamedDeclaration(_) => true,
         AstKind::Function(f) => f.is_declaration(),
         AstKind::Class(c) => c.is_declaration(),
@@ -427,6 +429,8 @@ fn is_babel_declaration(nodes: &AstNodes<'_>, id: NodeId) -> bool {
         | AstKind::ImportDeclaration(_)
         | AstKind::ExportAllDeclaration(_)
         | AstKind::ExportDefaultDeclaration(_)
+        | AstKind::ExportDeclaration(_)
+        | AstKind::ExportFromDeclaration(_)
         | AstKind::ExportNamedDeclaration(_) => true,
         AstKind::Function(f) => f.is_declaration(),
         AstKind::Class(c) => c.is_declaration(),
@@ -554,6 +558,16 @@ fn declaration_text(nodes: &AstNodes<'_>, view: &TextView<'_>, decl: NodeId) -> 
     match nodes.kind(decl) {
         AstKind::VariableDeclarator(_) => {
             cap_declaration_text(statement_code(nodes, view, nodes.parent_id(decl)))
+        }
+        // `getImportSpecifierText`: the whole import declaration, UNCAPPED.
+        AstKind::ImportSpecifier(_)
+        | AstKind::ImportDefaultSpecifier(_)
+        | AstKind::ImportNamespaceSpecifier(_) => {
+            let mut cur = decl;
+            while !matches!(nodes.kind(cur), AstKind::ImportDeclaration(_)) {
+                cur = nodes.parent_id(cur);
+            }
+            statement_code(nodes, view, cur)
         }
         _ => cap_declaration_text(view.pretty(nodes.get_node(decl).span(), &[], true)),
     }

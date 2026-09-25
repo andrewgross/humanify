@@ -283,7 +283,7 @@ impl RenameState {
             next_order,
             split_exports: BTreeSet::new(),
             carried: BTreeSet::new(),
-            claims: RenameClaimStats::default(),
+            claims: trail.claims,
             applied: Vec::new(),
             trail,
             opt_outs: TrailOptOuts::default(),
@@ -389,6 +389,11 @@ impl RenameState {
 
     pub fn trail(&self) -> &StrategyTrail {
         &self.trail
+    }
+
+    /// Every applied rename so far, in apply order.
+    pub fn applied(&self) -> &[AppliedRename] {
+        &self.applied
     }
 
     pub fn claim_stats(&self) -> RenameClaimStats {
@@ -809,10 +814,12 @@ impl RenameState {
             })
             .collect();
         symbol_names.sort_by_key(|(s, _)| s.index());
+        let mut trail = self.trail;
+        trail.claims = self.claims;
         RenameOutcome {
             symbol_names,
             applied: self.applied,
-            trail: self.trail,
+            trail,
             claims: self.claims,
             opt_outs: self.opt_outs,
         }

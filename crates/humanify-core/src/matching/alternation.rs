@@ -500,6 +500,8 @@ fn holding_session_ids(
                     && matches!(
                         nodes.get_node(parent_id).kind(),
                         AstKind::Program(_)
+                            | AstKind::ExportDeclaration(_)
+                            | AstKind::ExportFromDeclaration(_)
                             | AstKind::ExportNamedDeclaration(_)
                             | AstKind::ExportDefaultDeclaration(_)
                             | AstKind::BlockStatement(_)
