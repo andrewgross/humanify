@@ -1,3 +1,4 @@
+import { ownEntry } from "../shared/own-entry.js";
 import type { IsEligibleFn } from "../rename/rename-eligibility.js";
 
 /**
@@ -137,7 +138,7 @@ function renderPriorNameHints(
   if (!priorNameHints) return "";
   const pairs: Array<[string, string]> = [];
   for (const id of identifiers) {
-    const prior = priorNameHints[id];
+    const prior = ownEntry(priorNameHints, id);
     if (prior && prior !== id) pairs.push([id, prior]);
     if (pairs.length >= MAX_PRIOR_NAME_HINTS) break;
   }
@@ -185,7 +186,7 @@ function renderRetryDiagnostics(
   let section = `Your previous rename suggestions had issues:\n`;
 
   for (const name of failures.duplicates) {
-    const suggested = previousAttempt[name];
+    const suggested = ownEntry(previousAttempt, name);
     if (suggested) {
       section += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
     } else {
@@ -196,7 +197,7 @@ function renderRetryDiagnostics(
     section += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
   }
   for (const name of failures.invalid) {
-    const suggested = previousAttempt[name];
+    const suggested = ownEntry(previousAttempt, name);
     if (suggested) {
       section += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
     } else {
@@ -214,7 +215,7 @@ function renderRetryDiagnostics(
     ...failures.unchanged,
     ...failures.invalid
   ]) {
-    const suggested = previousAttempt[name];
+    const suggested = ownEntry(previousAttempt, name);
     if (suggested) rejectedNames.add(suggested);
   }
   if (rejectedNames.size > 0) {
@@ -348,7 +349,7 @@ function buildIdentifierProfile(
     section += `  Declaration: ${decls[0]}\n`;
   }
 
-  const assignments = assignmentContext[id];
+  const assignments = ownEntry(assignmentContext, id);
   if (assignments && assignments.length > 0) {
     section += `  Assignments:\n`;
     for (const a of assignments) {
@@ -360,7 +361,7 @@ function buildIdentifierProfile(
     }
   }
 
-  const usages = usageExamples[id];
+  const usages = ownEntry(usageExamples, id);
   if (usages && usages.length > 0) {
     section += `  Usage:\n`;
     for (const u of usages) {
@@ -404,7 +405,7 @@ export function buildModuleLevelRenameBody(
       declByIdentifier,
       assignmentContext,
       usageExamples,
-      suggestedNames?.[id]
+      ownEntry(suggestedNames, id)
     );
     prompt += "\n";
   }
@@ -471,7 +472,7 @@ export function buildModuleLevelRetryPrefix(
   let prefix = `Your previous rename suggestions had issues:\n`;
 
   for (const name of failures.duplicates) {
-    const suggested = previousAttempt[name];
+    const suggested = ownEntry(previousAttempt, name);
     if (suggested) {
       prefix += `- "${name}" was suggested as "${suggested}" but that conflicts with an existing name\n`;
     }
@@ -480,7 +481,7 @@ export function buildModuleLevelRetryPrefix(
     prefix += `- "${name}" was returned as itself — you MUST suggest a DIFFERENT name\n`;
   }
   for (const name of failures.invalid) {
-    const suggested = previousAttempt[name];
+    const suggested = ownEntry(previousAttempt, name);
     if (suggested) {
       prefix += `- "${name}" was suggested as "${suggested}" which is not allowed (reserved word, global built-in, or invalid syntax)\n`;
     }
@@ -495,7 +496,7 @@ export function buildModuleLevelRetryPrefix(
     ...failures.unchanged,
     ...failures.invalid
   ]) {
-    const suggested = previousAttempt[name];
+    const suggested = ownEntry(previousAttempt, name);
     if (suggested) rejectedNames.add(suggested);
   }
   if (rejectedNames.size > 0) {

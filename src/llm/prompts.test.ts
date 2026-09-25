@@ -412,3 +412,60 @@ describe("buildBatchRenamePrompt per-identifier prior-name hints", () => {
     );
   });
 });
+
+/**
+ * 16-findings-queue #12 (found by the Rust port, WP4.2): the prompt
+ * builders read their records with bare `record[id]`, so an identifier
+ * named after an Object.prototype member with no entry of its own fell
+ * through to the built-in: a binding named `toString` was told its prior
+ * name was `function toString() { [native code] }`, and a module identifier
+ * named `hasOwnProperty` with no assignment context CRASHED the build
+ * (`for…of` over a function). Only own entries may be read.
+ */
+describe("prompt records read only own entries", () => {
+  it("does not hint a prior name for toString when the hints lack it", () => {
+    const prompt = buildBatchRenamePrompt(
+      "function a(toString) { return toString; }",
+      ["toString"],
+      new Set(),
+      [],
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { other: "renamed" }
+    );
+    assert.ok(!prompt.includes("[native code]"), prompt);
+  });
+
+  it("does not report a phantom previous suggestion for valueOf", () => {
+    const prompt = buildBatchRenameRetryPrompt(
+      "function a(valueOf) { return valueOf; }",
+      ["valueOf"],
+      new Set(),
+      {},
+      {
+        duplicates: ["valueOf"],
+        invalid: ["valueOf"],
+        missing: [],
+        unchanged: ["valueOf"]
+      }
+    );
+    assert.ok(!prompt.includes("[native code]"), prompt);
+  });
+
+  it("builds a module prompt for hasOwnProperty without crashing", () => {
+    assert.doesNotThrow(() =>
+      buildModuleLevelRenameBody(
+        ["var hasOwnProperty = 1;"],
+        {},
+        {},
+        ["hasOwnProperty"],
+        new Set(),
+        () => true,
+        {}
+      )
+    );
+  });
+});

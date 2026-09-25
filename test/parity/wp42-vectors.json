@@ -2259,7 +2259,7 @@
      "b": "bee"
     }
    ],
-   "out": "Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n```javascript\nx\n```\n\nIdentifiers to rename: toString, constructor, valueOf, __proto__, b\n\nIMPORTANT — A prior version of this function was already named:\n\n```javascript\nprior\n```\n\nYou MUST reuse the names from the prior version unless the function's behavior has changed enough that a name is no longer accurate. Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. Only choose a different name when the identifier's purpose has fundamentally changed. If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., \"handleError\" → \"handleComponentError\") rather than an unrelated name.\n\nThese identifiers were named as follows in the prior version. Reuse the exact name unless the identifier's role changed:\n  toString → function toString() { [native code] }\n  constructor → function Object() { [native code] }\n  valueOf → function valueOf() { [native code] }\n  __proto__ → [object Object]\n  b → bee\n\nYou MUST respond with a JSON object containing exactly 5 mappings — one for each identifier listed above:\n{ \"toString\": \"descriptiveName\", \"constructor\": \"descriptiveName\", \"valueOf\": \"descriptiveName\", \"__proto__\": \"descriptiveName\", \"b\": \"descriptiveName\" }"
+   "out": "Analyze this function and suggest descriptive names for ALL listed identifiers:\n\n```javascript\nx\n```\n\nIdentifiers to rename: toString, constructor, valueOf, __proto__, b\n\nIMPORTANT — A prior version of this function was already named:\n\n```javascript\nprior\n```\n\nYou MUST reuse the names from the prior version unless the function's behavior has changed enough that a name is no longer accurate. Small structural changes (reordered conditions, added error handling, extra parameters) do NOT justify renaming — keep the prior names. Only choose a different name when the identifier's purpose has fundamentally changed. If a prior name conflicts with an already-used name listed below, choose a close variant (e.g., \"handleError\" → \"handleComponentError\") rather than an unrelated name.\n\nThese identifiers were named as follows in the prior version. Reuse the exact name unless the identifier's role changed:\n  b → bee\n\nYou MUST respond with a JSON object containing exactly 5 mappings — one for each identifier listed above:\n{ \"toString\": \"descriptiveName\", \"constructor\": \"descriptiveName\", \"valueOf\": \"descriptiveName\", \"__proto__\": \"descriptiveName\", \"b\": \"descriptiveName\" }"
   },
   {
    "name": "batch-hint-cap",
@@ -2730,7 +2730,7 @@
     "",
     {}
    ],
-   "out": "Your previous rename suggestions had issues:\n- \"toString\" was suggested as \"function toString() { [native code] }\" but that conflicts with an existing name\n- \"valueOf\" was suggested as \"function valueOf() { [native code] }\" which is not allowed (reserved word, global built-in, or invalid syntax)\n\nDO NOT suggest these names: function toString() { [native code] }, function valueOf() { [native code] }\n\n\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n```javascript\nx\n```\n\nIdentifiers still needing names: toString\n\nNames already in use (MUST avoid ALL of these): q\n"
+   "out": "Your previous rename suggestions had issues:\n- \"toString\" had a duplicate/conflicting name\n- \"valueOf\" had an invalid suggested name\n\n\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n```javascript\nx\n```\n\nIdentifiers still needing names: toString\n\nNames already in use (MUST avoid ALL of these): q\n"
   },
   {
    "name": "response-instruction",
@@ -3101,7 +3101,7 @@
      "a": "b"
     }
    ],
-   "out": "Analyze these top-level module identifiers and suggest descriptive names.\n\nWhere a \"Prior version name\" is shown, strongly prefer that name unless the binding's purpose has fundamentally changed in this version.\n\nIdentifier: toString\n  Prior version name: function toString() { [native code] }\n  Declaration: var toString = 1;\n\nIdentifier: valueOf\n  Prior version name: function valueOf() { [native code] }\n\nIdentifiers to rename: toString, valueOf\n\n"
+   "out": "Analyze these top-level module identifiers and suggest descriptive names.\n\nWhere a \"Prior version name\" is shown, strongly prefer that name unless the binding's purpose has fundamentally changed in this version.\n\nIdentifier: toString\n  Declaration: var toString = 1;\n\nIdentifier: valueOf\n\nIdentifiers to rename: toString, valueOf\n\n"
   },
   {
    "name": "module-retry-prefix",
@@ -3163,7 +3163,7 @@
      "unchanged": []
     }
    ],
-   "out": "Your previous rename suggestions had issues:\n- \"toString\" was suggested as \"function toString() { [native code] }\" but that conflicts with an existing name\n- \"constructor\" was suggested as \"function Object() { [native code] }\" which is not allowed (reserved word, global built-in, or invalid syntax)\n\nDO NOT suggest these names: function toString() { [native code] }, function Object() { [native code] }\n\nPlease suggest DIFFERENT names for the remaining identifiers below:\n"
+   "out": "Your previous rename suggestions had issues:\n\nPlease suggest DIFFERENT names for the remaining identifiers below:\n"
   }
  ]
 }

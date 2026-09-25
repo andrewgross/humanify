@@ -1,3 +1,4 @@
+import { ownEntry } from "../shared/own-entry.js";
 import type { NodePath } from "@babel/core";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
@@ -808,7 +809,7 @@ export function buildUnifiedGraph(
   const assignmentContext = collectAssignmentContext(ast, identifierSet);
   const assignmentCounts: Record<string, number> = {};
   for (const id of allIdentifiers) {
-    assignmentCounts[id] = assignmentContext[id]?.length ?? 0;
+    assignmentCounts[id] = ownEntry(assignmentContext, id)?.length ?? 0;
   }
   const usageExamples = collectUsageExamples(
     ast,

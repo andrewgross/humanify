@@ -6,6 +6,7 @@
  * dependency-ordered function processing.
  */
 
+import { ownEntry } from "../shared/own-entry.js";
 import type { GeneratorOptions, GeneratorResult } from "@babel/generator";
 import type * as babelTraverse from "@babel/traverse";
 import * as t from "@babel/types";
@@ -1718,7 +1719,8 @@ function getIdentifierUsageStatement(
   if (!identifiers.has(name)) return null;
 
   // Cap total context: assignments + usages ≤ MAX_CONTEXT_SNIPPETS
-  const remaining = MAX_CONTEXT_SNIPPETS - (assignmentCounts[name] || 0);
+  const remaining =
+    MAX_CONTEXT_SNIPPETS - (ownEntry(assignmentCounts, name) || 0);
   if (examples[name].length >= remaining) return null;
 
   // Skip the declaration itself

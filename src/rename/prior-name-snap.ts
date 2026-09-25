@@ -24,6 +24,7 @@
  * genuinely repurposed binding from being snapped.
  */
 
+import { ownEntry } from "../shared/own-entry.js";
 import { DECORATION_WORDS } from "../llm/validation.js";
 
 /** LLM-authored decorations we strip but never produce. */
@@ -96,7 +97,7 @@ export function snapSuggestionToPrior(
   priorNameSnaps?: Record<string, string>
 ): string {
   if (oldName && priorNameSnaps) {
-    const slotPrior = priorNameSnaps[oldName];
+    const slotPrior = ownEntry(priorNameSnaps, oldName);
     if (slotPrior) return slotPrior;
   }
   const prior = priorStemIndex.get(nameStem(suggestion));

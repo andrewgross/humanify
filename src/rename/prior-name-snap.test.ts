@@ -172,3 +172,17 @@ describe("snapToKnownPrior", () => {
     );
   });
 });
+
+/**
+ * 16-findings-queue #12: a bare `priorNameSnaps[oldName]` fell through to
+ * Object.prototype, so a binding named `toString` with no snap of its own
+ * "snapped" to the built-in function. Only own entries may snap.
+ */
+describe("snapSuggestionToPrior reads only own snap entries", () => {
+  it("does not snap toString to Object.prototype.toString", () => {
+    const out = snapSuggestionToPrior("stringify", new Map(), "toString", {
+      other: "x"
+    });
+    assert.strictEqual(out, "stringify");
+  });
+});

@@ -1,3 +1,4 @@
+import { ownEntry } from "../shared/own-entry.js";
 import type * as t from "@babel/types";
 import { defaultModuleConcurrency } from "../commands/default-args.js";
 import type {
@@ -756,7 +757,7 @@ export class RenameProcessor {
       // Each binding's suggestedName is its exact prior-version name —
       // when the LLM merely re-decorates it, reuse the prior verbatim.
       transformSuggestion: (oldName, suggestion) => {
-        const prior = suggestedNames[oldName];
+        const prior = ownEntry(suggestedNames, oldName);
         if (!prior || prior === suggestion) return suggestion;
         return snapToKnownPrior(prior, suggestion);
       },
@@ -1305,9 +1306,10 @@ export class RenameProcessor {
         false
       );
       for (const name of stragBatch) {
-        if (response.renames[name]) {
+        const suggestion = ownEntry(response.renames, name);
+        if (suggestion) {
           const nameState = idState.get(name);
-          if (nameState) nameState.lastSuggestion = response.renames[name];
+          if (nameState) nameState.lastSuggestion = suggestion;
         }
       }
     } catch (error) {
@@ -2529,7 +2531,8 @@ function classifyFailedIdentifiers(
     if (successes.has(name)) continue;
     const state = idState.get(name);
     if (!state) throw new Error(`Identifier state not found: ${name}`);
-    if (responseRenames[name]) state.lastSuggestion = responseRenames[name];
+    const suggestion = ownEntry(responseRenames, name);
+    if (suggestion) state.lastSuggestion = suggestion;
 
     const isFreeRetry =
       dupSet.has(name) &&
@@ -2544,7 +2547,7 @@ function classifyFailedIdentifiers(
 
     recordAttempt(
       state,
-      responseRenames[name],
+      suggestion,
       failureResult(name, dupSet, invSet, unchSet)
     );
 
@@ -2576,7 +2579,9 @@ function isFreeDuplicateRetry(
   state: IdentifierAttemptState,
   maxFreeRetries: number
 ): boolean {
-  const suggestedName = sanitizeIdentifier(responseRenames[name] || "");
+  const suggestedName = sanitizeIdentifier(
+    ownEntry(responseRenames, name) || ""
+  );
   if (
     suggestedName &&
     callbacks.getUsedNames().has(suggestedName) &&
