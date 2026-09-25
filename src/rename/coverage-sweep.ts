@@ -28,6 +28,7 @@ import { generate } from "../babel-utils.js";
 import { debug } from "../debug.js";
 import { recordPromptDump, type DumpSpanAnchor } from "../dump/artifacts.js";
 import type { LLMProvider } from "../llm/types.js";
+import { ownEntry } from "../shared/own-entry.js";
 import { createConcurrencyLimiter } from "../utils/concurrency.js";
 import { carriedNames } from "./carried-names.js";
 import { MAX_CODE_LINES } from "./code-window.js";
@@ -204,7 +205,7 @@ function applyGroupResponse(
   let named = 0;
   let skipped = 0;
   for (const target of group.targets) {
-    const newName = renames[target.name];
+    const newName = ownEntry(renames, target.name);
     if (!newName || newName === target.name || isBunToken(newName)) {
       // A suggestion that still fails the floor (stem echo like
       // h06Result → h06CommandResult) would re-flag and re-roll every
