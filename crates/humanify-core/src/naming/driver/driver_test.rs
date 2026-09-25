@@ -115,6 +115,35 @@ fn library_names_sanitize_as_the_ts_does() {
     assert_eq!(sanitize_library_name("React"), "react");
 }
 
+/// The pipeline reports WHICH invariant failed (plugin.ts: a parse
+/// failure, else the structural signature, else the free-name/binding
+/// measure) — the CLI's `ERROR:` blocks and the exit code read it.
+#[test]
+fn the_verdict_names_the_failed_invariant() {
+    use crate::naming::driver::validate::{Verdict, baseline_of, verdict};
+    let fresh = "var a = 1;\nconsole.log(a, x);\n";
+    let b = baseline_of(fresh).expect("fresh parses");
+    assert!(matches!(
+        verdict("var count = 1;\nconsole.log(count, x);\n", &b),
+        Verdict::Valid
+    ));
+    assert!(matches!(
+        verdict("var a = 1;\nconsole.log(a, x;\n", &b),
+        Verdict::ParseFailed
+    ));
+    assert!(matches!(
+        verdict("var a = 2;\nconsole.log(a, x);\n", &b),
+        Verdict::Structural
+    ));
+    // A capture changes the free-name set; the structural signature is
+    // preferred when both fire (plugin.ts `structuralFailure ?? ...`).
+    let captured = verdict("var x = 1;\nconsole.log(x, x);\n", &b);
+    assert!(
+        matches!(captured, Verdict::Structural | Verdict::Semantic { .. }),
+        "{captured:?}"
+    );
+}
+
 /// Finding #34, fixed TS-first: an `export { x } from "m"` local names a
 /// binding of ANOTHER module, so a correct rename that gives a local binding
 /// the same name is still a pure rename (the nanoid fixture's first version).

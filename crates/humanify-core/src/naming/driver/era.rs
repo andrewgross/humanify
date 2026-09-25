@@ -39,6 +39,7 @@ use crate::naming::waves::render::{
 };
 use crate::prior::MatchStage;
 use crate::rename::eligibility::Eligibility;
+use crate::rename::transfer::carry::{MatcherCarry, PriorCarry, build_prior_match_map};
 use crate::rename::transfer::rows::Rows;
 use crate::rename::transfer::{PreFreeze, PriorCounts, TransferStats, pre_transfer_states};
 use crate::rename::validated::{RenameClaimStats, RenameState};
@@ -113,6 +114,17 @@ pub struct NamingEra {
     pub function_count: usize,
     /// sessionId → the function's structural hash (the report's).
     pub fn_hashes: Vec<(String, String)>,
+    /// What the match carried for the split (`renameResult.priorCarry`):
+    /// the prior's top-level statement texts and the binding-identity map,
+    /// built once every naming-era pass has run (None without a prior).
+    pub prior_carry: Option<PriorCarry>,
+}
+
+/// The match's carry before the names settle: the matcher's texts and
+/// (module row, matched prior name) per binding rename.
+struct PendingCarry {
+    matcher: MatcherCarry,
+    matched: Vec<(usize, String)>,
 }
 
 /// The naming graph's read-only inputs over the fresh text.
@@ -174,6 +186,10 @@ pub fn prior_era<P: NameProvider>(
     };
     let (outcome, _twins) = crate::rename::transfer::apply_prior_version_with(stage, &freeze)?;
     let close = close_contexts(stage, &outcome.fn_close_prior)?;
+    let pending = PendingCarry {
+        matcher: outcome.carry.clone(),
+        matched: outcome.matched_module_bindings.clone(),
+    };
     let prior = PriorStats {
         statement_twin: outcome.stats_twin.clone(),
         exact_match: outcome.stats_exact.clone(),
@@ -203,7 +219,7 @@ pub fn prior_era<P: NameProvider>(
         &naming,
         start,
         library,
-        Some(prior),
+        Some((prior, pending)),
         opts,
         provider,
     ))
@@ -265,10 +281,14 @@ fn run_era<P: NameProvider>(
     naming: &Naming<'_, '_>,
     start: WaveStart,
     library: Vec<(usize, String)>,
-    prior: Option<PriorStats>,
+    prior: Option<(PriorStats, PendingCarry)>,
     opts: &EraOptions<'_>,
     provider: &P,
 ) -> NamingEra {
+    let (prior, pending) = match prior {
+        Some((stats, pending)) => (Some(stats), Some(pending)),
+        None => (None, None),
+    };
     let semantic = naming.semantic;
     let graph = naming.graph;
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
@@ -338,6 +358,7 @@ fn run_era<P: NameProvider>(
         prior,
         function_count: graph.functions.len(),
         fn_hashes,
+        prior_carry: None,
     };
     if !opts.stop_after_waves {
         if opts.naming_floor {
@@ -364,6 +385,19 @@ fn run_era<P: NameProvider>(
             });
             era.pre_sweep = sweep;
         }
+        // Every naming-era pass has run: the matched module bindings'
+        // declarations carry their final (pre-reconcile) names — plugin.ts
+        // builds `priorCarry.matchMap` here, before the AST is released.
+        era.prior_carry = pending.map(|p| PriorCarry {
+            match_map: build_prior_match_map(p.matched.iter().map(|(row, prior)| {
+                let b = &graph.module_bindings[*row];
+                (
+                    state.name_of_symbol(b.symbol).unwrap_or(b.name.as_str()),
+                    prior.as_str(),
+                )
+            })),
+            matcher: p.matcher,
+        });
         let privates = private_rename_edits(semantic.source_text(), &start.private);
         era.generated = Some(render_program_with(semantic, &state, &privates));
     }

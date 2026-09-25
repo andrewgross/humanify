@@ -418,6 +418,46 @@ the pairs, is what localized it: one epoch vs two.
 Lesson: a field recorded "for debugging" is still output; when it reads an
 object the TS has two copies of, port the copy model, not the field.
 
+## 25. A replay gate's "zero misses" meets the requests the oracle also failed
+
+M3's first end-to-end run was byte-identical on every file of all four
+pairs — and every pair logged one request the cache could not answer. It
+was the fossil mint namer's single all-mints prompt (759K–1.2M chars),
+which the model refused with a 400 context-length error during the oracle
+cut (finding #39). An error is never cached, so that request is a miss in
+EVERY replay, forever; "0 misses" was unattainable by construction, and a
+gate demanding it would have had to exclude the pair or the check. The
+check that holds is set equality: every request the Rust could not replay
+must be byte-identical (system + user prompt) to a request that ERRORED in
+the oracle's `-vv` log, and the TS's errored set must equal the Rust's
+(`m3/miss-audit.py`). The endpoint is a dead port, so a Rust-only miss can
+never be answered by a model and silently repair itself.
+
+Lesson: when a cache is the replay mechanism, audit what it could not
+answer against what the oracle could not get answered — do not count to
+zero.
+
+## 26. Prove a wiring gate with plants at the handoffs, and prove each plant fires
+
+The per-stage gates were all green, so M3's gate had to show it can see a
+WIRING mistake — a value handed from one stage to the next wrongly. Five
+one-line plants went red on 85→86: the split fed the GENERATED text
+instead of the shipped one (the hash injection's bijection check refused
+it before any tree was written), the finish handed no runnable list
+(2,597 files differ), two adjacent statements swapped files at the
+placement handoff (5 files: the three sources, the ledger, the stage
+hashes), the prior carry not handed on (ONLY `prior-match-map.json`
+differs — the `-vv` debug file, which the WP5.4 gate had excluded), and the
+close-match contexts dropped before the waves (1,369 Rust-only unanswered
+prompts). Two subtler plants — ONE function's transferred-name record, ONE
+close context — left the tree and every prompt identical: the waves never
+re-read those records. They are kept as controls, not counted as proof.
+
+Lesson: an exclusion list is where a wiring bug hides (the carry plant is
+visible in exactly one excluded-by-precedent file), and a plant that
+changes nothing proves nothing — count its effect before citing it
+(lesson 17's rule, applied to the plants themselves).
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -425,5 +465,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/). The doc grows at each
 arc's handback.

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use humanify_core::libdetect::{MixedFileDetection, detect_libraries, select_library_detector};
 use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer, VendorNamingStats};
 use humanify_core::profiling::Profiler;
+use humanify_core::unpack::gate::{TsFactoryHash, inject_ts_hashes};
 use humanify_core::unpack::webcrack::WebcrackShim;
 use humanify_core::unpack::{UnpackAdapter, UnpackedFile, bun, run_adapter};
 use humanify_model::llm::NameProvider;
@@ -50,12 +51,14 @@ pub struct Unpacked {
 /// gets the vendor namer over `provider` and the prior release's vendor
 /// names + manifest order (discovered from `--prior-version`, as the TS
 /// does); the others take the bundle as-is.
+#[allow(clippy::too_many_arguments)]
 pub fn unpack_bundle(
     code: &str,
     out_dir: &Path,
     adapter: UnpackAdapter,
     provider: &dyn NameProvider,
     prior_version: Option<&Path>,
+    ts_factory_hashes: Option<&[TsFactoryHash]>,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Unpacked, String> {
@@ -72,6 +75,16 @@ pub fn unpack_bundle(
     let mut namer = ProviderVendorNamer::new(provider);
     let span = profiler.pipeline_span("unpack");
     let files = if adapter == UnpackAdapter::Bun {
+        // `--inject-ts-hashes` (the blessed structuralSignature exemption,
+        // lesson 16): the TS factory hashes replace the Rust's at the one
+        // seam, after the bijection is proven.
+        let injected = std::cell::Cell::new(None);
+        let hook = |c: &mut humanify_core::modules::BunModuleClassification| {
+            if let Some(rows) = ts_factory_hashes {
+                injected.set(Some(inject_ts_hashes(c, rows)?));
+            }
+            Ok(())
+        };
         let outcome = bun::unpack_bun(
             code,
             out_dir,
@@ -80,9 +93,15 @@ pub fn unpack_bundle(
                 prior_vendor_names,
                 prior_manifest_factories: prior_version
                     .and_then(bun::load_prior_manifest_factories_from),
-                classification_hook: None,
+                classification_hook: Some(&hook),
             },
         )?;
+        if let Some(r) = injected.get() {
+            verbose().log(&format!(
+                "TS hash bytes injected (unpack): {} factories / {} classes (bijection)",
+                r.factories, r.classes
+            ));
+        }
         log_name_sources(&outcome);
         outcome.result.files
     } else {

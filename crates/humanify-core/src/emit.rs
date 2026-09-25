@@ -32,4 +32,5 @@ pub mod emit_dump;
 pub mod load_order;
 pub mod paths;
 pub mod review;
+pub mod stable_split;
 pub mod substitutions;

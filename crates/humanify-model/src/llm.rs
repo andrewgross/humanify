@@ -415,6 +415,14 @@ pub trait NameProvider {
     fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>>;
 }
 
+/// A borrowed provider is a provider — the pipeline holds `&dyn
+/// NameProvider` and hands it to the generic stage drivers.
+impl<T: NameProvider + ?Sized> NameProvider for &T {
+    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+        (**self).run_wave(calls)
+    }
+}
+
 /// Endpoint configuration (types.ts `LLMConfig`), resolved by the CLI.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LlmConfig {

@@ -1,9 +1,11 @@
 //! The pipeline driver runs the PORTED stages in the TS order
 //! (src/commands/unified.ts → src/unminify.ts): detect, select the unpack
 //! adapter, unpack (the Bun adapter names vendor files inside it, stage 5),
-//! detect libraries, then per processed file format → graph → match → name.
-//! A run stops at the first unported stage with the NOT-YET block and exit
-//! 3 — after the ported stages have written their part of the tree.
+//! detect libraries, then per processed file format → name (graph, match,
+//! transfer, waves, passes), then the split → emit → finish. The formatter
+//! (stage 6) is the one unported stage: without `--beautified-input` a run
+//! stops there with the NOT-YET block and exit 3 — after the stages before
+//! it have written their part of the tree.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -102,9 +104,74 @@ fn a_bun_run_writes_the_vendor_tree_then_stops_at_format() {
     assert!(err.contains("Processing file 1/1"), "{err}");
 }
 
+/// A wrapper IIFE the stable split accepts: one expression statement whose
+/// function declares at least 50 bindings (the wrapper threshold).
+fn wrapped() -> String {
+    let mut s = String::from("(function () {\n");
+    for i in 0..60 {
+        s.push_str(&format!("  var value{i} = {i};\n"));
+    }
+    s.push_str("  function greet(n) {\n    console.log(\"Hello, \" + n + value0);\n  }\n");
+    s.push_str("  greet(\"world\");\n})();\n");
+    s
+}
+
 #[test]
-fn a_run_with_the_formatted_text_reaches_naming() {
-    let s = Scratch::new("bun-naming");
+fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
+    // M3: naming → split → emit → finish in ONE invocation, every stage
+    // handing its value to the next in process (the LLM is a dead port:
+    // every name and file name falls back, and the run still completes).
+    let s = Scratch::new("e2e-split");
+    let wrapped = wrapped();
+    let input = s.write("bundle.js", &wrapped);
+    let formatted = s.write("formatted.js", &wrapped);
+    let out = s.out().display().to_string();
+    let o = run(
+        &s.0,
+        &[
+            &input,
+            "--api-key",
+            "k",
+            "--split",
+            "-o",
+            &out,
+            "--beautified-input",
+            &formatted,
+        ],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(err.contains("Split complete: written to"), "{err}");
+    for f in [
+        ".humanify/split-ledger.json",
+        ".humanify/humanified.js",
+        ".humanify/stage-hashes.json",
+        ".humanify/placement-stats.json",
+        "run.cjs",
+        "package.json",
+        "index.js",
+    ] {
+        assert!(s.out().join(f).is_file(), "{f} written\n{err}");
+    }
+    let ledger: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(s.out().join(".humanify/split-ledger.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(ledger["version"], 1);
+    assert_eq!(ledger["order"].as_array().unwrap().len(), 62);
+    // The passthrough copy of the input was consumed by the tree: the
+    // entry index.js is the runnable emit's, not the input's bytes.
+    assert_ne!(
+        std::fs::read_to_string(s.out().join("index.js")).unwrap(),
+        wrapped
+    );
+}
+
+#[test]
+fn the_formatted_text_is_one_files_text() {
+    // `--beautified-input` carries ONE file; a run that reaches the
+    // per-file stages with more fails loud instead of naming the wrong text.
+    let s = Scratch::new("bun-many");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let formatted = s.write("formatted.js", PLAIN);
     let out = s.out().display().to_string();
@@ -114,6 +181,7 @@ fn a_run_with_the_formatted_text_reaches_naming() {
             &input,
             "--api-key",
             "k",
+            "--no-skip-libraries",
             "-o",
             &out,
             "--beautified-input",
@@ -121,12 +189,11 @@ fn a_run_with_the_formatted_text_reaches_naming() {
         ],
     );
     let err = stderr(&o);
-    assert_eq!(o.status.code(), Some(3), "{err}");
+    assert_eq!(o.status.code(), Some(1), "{err}");
     assert!(
-        err.contains("ERROR: stage 9 (name identifiers) is NOT YET PORTED"),
+        err.contains("--beautified-input holds one file's formatted text"),
         "{err}"
     );
-    assert!(s.out().join("vendor/_bun-modules.json").is_file());
 }
 
 #[test]

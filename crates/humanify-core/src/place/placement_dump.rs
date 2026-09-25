@@ -27,9 +27,10 @@ use super::assign::cluster::{ClusterNamers, DEFAULT_CLUSTER_CONFIG, assign_clust
 use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
 use super::assign::namer::{SplitNamer, TreeReviser};
 use super::input::{SplitInput, split_input, top_level_statement_texts};
+use super::ledger::FossilLedgerModule;
 use super::ledger::{StableSplitLedger, read_ledger};
 use super::tiers::{
-    PlacementSwitches, PriorCarry, TierInput, assign_with_prior, placement_summary,
+    PlacementSwitches, PriorCarry, TierInput, TierStats, assign_with_prior, placement_summary,
 };
 use super::trail::{PlacementTrail, TrailEntry};
 
@@ -57,6 +58,9 @@ pub struct PlacementGate<'a> {
     /// binding-identity carry; the TS debug-writes it as
     /// `.humanify/prior-match-map.json`).
     pub match_map: Option<PathBuf>,
+    /// The carry handed over in-process (the pipeline's: the naming
+    /// stage's `PriorCarry`); wins over `prior_text` / `match_map`.
+    pub carry: Option<PriorCarry>,
     pub switches: PlacementSwitches,
     /// The mint namer (fossil) / file+folder namer (cluster) — a
     /// replay-only cache client in the gate.
@@ -149,7 +153,11 @@ pub fn dump_placement(
         gate.prior_ledger.as_deref().map(read_ledger).transpose()?;
     let mut trail = PlacementTrail::default();
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
-    let (assignment, summary) = assign_regime(
+    let Placed {
+        assignment,
+        summary,
+        ..
+    } = assign_regime(
         &input,
         &shipped,
         gate,
@@ -177,6 +185,21 @@ pub fn dump_placement(
     Ok(report)
 }
 
+/// What one placement regime decided.
+#[derive(Debug, Default)]
+pub struct Placed {
+    /// The file per wrapper statement, bundle order.
+    pub assignment: Vec<String>,
+    /// The regime's summary line (the run log's).
+    pub summary: String,
+    /// The fossil regime's `fossilModules` (the next hop's match targets).
+    pub fossil_modules: Option<Vec<FossilLedgerModule>>,
+    /// The prior-carried tiers' counters (`StableSplitStats`' transfer
+    /// half); all zero for the fossil and fresh regimes
+    /// (`zeroTransferStats`).
+    pub tier_stats: TierStats,
+}
+
 /// Run one `stableSplitFromCode` placement regime over the split input:
 /// the per-statement file assignment and the regime's summary line. With
 /// `out_dir`, the fossil regime also writes its `fossil-modules.json`.
@@ -187,8 +210,10 @@ pub fn assign_regime(
     prior: Option<&StableSplitLedger>,
     trail: &mut PlacementTrail,
     out_dir: Option<&Path>,
-) -> Result<(Vec<String>, String), String> {
+) -> Result<Placed, String> {
     let summary;
+    let mut fossil_modules = None;
+    let mut tier_stats = TierStats::default();
     let assignment = match gate.regime {
         Regime::Fossil => {
             let assigned = assign_fossil(
@@ -220,6 +245,7 @@ pub fn assign_regime(
                 )
                 .map_err(|e| format!("write fossil modules: {e}"))?;
             }
+            fossil_modules = Some(assigned.fossil_modules);
             assigned.assignment
         }
         Regime::Cluster => {
@@ -250,7 +276,10 @@ pub fn assign_regime(
         }
         Regime::Tiers => {
             let prior = prior.ok_or("the tiers regime needs --prior-ledger")?;
-            let carry = read_carry(gate.prior_text.as_deref(), gate.match_map.as_deref())?;
+            let carry = match gate.carry {
+                Some(c) => Some(c),
+                None => read_carry(gate.prior_text.as_deref(), gate.match_map.as_deref())?,
+            };
             let (assignment, stats) = assign_with_prior(
                 &TierInput {
                     body: &input.body,
@@ -269,10 +298,16 @@ pub fn assign_regime(
                 input.body.len(),
                 placement_summary(&stats)
             );
+            tier_stats = stats;
             assignment
         }
     };
-    Ok((assignment, summary))
+    Ok(Placed {
+        assignment,
+        summary,
+        fossil_modules,
+        tier_stats,
+    })
 }
 
 /// The tiers' `PriorCarry` from the prior text + the match-map JSON (a

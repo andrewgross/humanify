@@ -29,6 +29,9 @@ use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use humanify_core::naming::driver::{
+    NamingConfig, NamingHooks, NamingInput, NamingOutcome, run_naming,
+};
 use humanify_core::unpack::select_unpack_adapter;
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
@@ -89,6 +92,8 @@ pub struct CommandOptions {
     pub dump_artifacts: Option<String>,
     /// Rust-only (surface::RUST_ONLY_OPTIONS).
     pub beautified_input: Option<String>,
+    /// Rust-only (surface::RUST_ONLY_OPTIONS): the blessed hash-byte injection.
+    pub inject_ts_hashes: Option<String>,
 }
 
 impl CommandOptions {
@@ -131,6 +136,7 @@ impl CommandOptions {
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
             beautified_input: s("beautifiedInput"),
+            inject_ts_hashes: s("injectTsHashes"),
         }
     }
 
@@ -505,10 +511,103 @@ fn pipeline_body(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Ended, Crash> {
     let bundled_code = read_utf8(input)?;
+    let (config, adapter, fossil_split) = detect_stage(&bundled_code, opts, switches, profiler)?;
+    let prior = load_prior_version_code(opts, renderer)?;
 
-    // Stages 1-2: detect, then select the unpack adapter.
+    // armRecorders: the diagnostics/dump recorders arrive with the stages
+    // that feed them.
+
+    // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
+    // then library detection picks the files the per-file stages process.
+    let out_dir = opts.output_dir.as_deref().unwrap_or("output");
+    let prior_path = opts
+        .prior_version
+        .as_deref()
+        .filter(|p| !p.is_empty())
+        .map(Path::new);
+    let ts_hashes = load_ts_hashes(opts)?;
+    let unpacked = unpack_bundle(
+        &bundled_code,
+        Path::new(out_dir),
+        adapter,
+        provider,
+        prior_path,
+        ts_hashes.as_ref().map(|h| h.factories.as_slice()),
+        profiler,
+        renderer,
+    )?;
+    let files_to_process = if settings.skip_libraries {
+        filter_libraries(unpacked.files, adapter, profiler, renderer)?.files_to_process
+    } else {
+        unpacked.files
+    };
+
+    // Stages 6-9 per file.
+    let mut failures = Failures::default();
+    let naming = NamingRun {
+        opts,
+        config: naming_config(settings, &config, opts, switches),
+        prior: prior.as_deref(),
+        provider,
+    };
+    let last = match naming.run(&files_to_process, &mut failures, renderer)? {
+        Named::Last(last) => last.map(|b| *b),
+        Named::Stop(ended) => return Ok(ended),
+    };
+    renderer.message(&format!(
+        "Done! You can find your unminified code in {out_dir}"
+    ));
+    report_vendor_naming(&unpacked.vendor_naming, renderer);
+    failures.preserve(Path::new(out_dir), renderer);
+
+    // Stages 10-12: the split, emit and finish (crate::split_stage).
+    if opts.split
+        && let Some((outcome, source)) = &last
+        && let Some(code) = &outcome.code
+    {
+        let split = crate::split_stage::SplitStageInput {
+            output_dir: Path::new(out_dir),
+            input_file: Path::new(input),
+            processed_source: Some(source),
+            prior_version: prior_path,
+            split_ledger: opts.split_ledger.as_deref(),
+            split_pure: opts.split_pure,
+            fossil: fossil_split,
+            switches,
+            ts_partitions: ts_hashes.as_ref().map(|h| &h.partitions),
+            provider,
+        };
+        let span = profiler.pipeline_span("split");
+        let ended =
+            crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
+        span.end(Some(humanify_model::profiling::JsObject::new().with(
+            "stable",
+            matches!(ended, crate::split_stage::SplitEnded::Complete),
+        )));
+    }
+    if let (Some(dest), Some((outcome, _))) = (&opts.stats_json, &last) {
+        write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
+    }
+    Ok(Ended::Done(failures.close(renderer)))
+}
+
+/// Stages 1-2: detect, build the pipeline config, select the unpack
+/// adapter, decide the fossil split (once, from the adapter's capability).
+fn detect_stage(
+    bundled_code: &str,
+    opts: &CommandOptions,
+    switches: &SwitchState,
+    profiler: &humanify_core::profiling::Profiler,
+) -> Result<
+    (
+        humanify_model::pipeline::PipelineConfig,
+        humanify_core::unpack::UnpackAdapter,
+        bool,
+    ),
+    Crash,
+> {
     let span = profiler.pipeline_span("detection");
-    let detection = humanify_core::detect::detect_bundle(&bundled_code);
+    let detection = humanify_core::detect::detect_bundle(bundled_code);
     let config = build_pipeline_config(
         &detection,
         parse_enum::<BundlerType>(&opts.bundler),
@@ -540,96 +639,275 @@ fn pipeline_body(
             .collect();
         verbose().debug(&format!("Detection signals: {}", signals.join(", ")));
     }
-
-    let prior = load_prior_version_code(opts, renderer)?;
-
-    // armRecorders: the diagnostics/dump recorders arrive with the stages
-    // that feed them.
-
-    // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
-    // then library detection picks the files the per-file stages process.
-    let out_dir = opts.output_dir.as_deref().unwrap_or("output");
-    let prior_path = opts
-        .prior_version
-        .as_deref()
-        .filter(|p| !p.is_empty())
-        .map(Path::new);
-    let unpacked = unpack_bundle(
-        &bundled_code,
-        Path::new(out_dir),
-        adapter,
-        provider,
-        prior_path,
-        profiler,
-        renderer,
-    )?;
-    let files_to_process = if settings.skip_libraries {
-        filter_libraries(unpacked.files, adapter, profiler, renderer)?.files_to_process
-    } else {
-        unpacked.files
-    };
-
-    // The per-file stages (processFile): format, graph, match, name.
-    let minifier_name = enum_name(config.minifier_type);
-    let total = files_to_process.len();
-    for (i, file) in files_to_process.iter().enumerate() {
-        renderer.message(&format!("Processing file {}/{total}", i + 1));
-        let code = read_utf8(&file.path.display().to_string())?;
-        if humanify_model::js::trim(&code).is_empty() {
-            verbose().log(&format!("Skipping empty file {}", file.path.display()));
-            continue;
-        }
-        // Stage 6 is not ported; its output (the formatted text) can be
-        // supplied by the TS (`--beautified-input`).
-        let Some(formatted_path) = &opts.beautified_input else {
-            return Ok(Ended::NotYet(stages::FORMAT));
-        };
-        let formatted = read_utf8(formatted_path)?;
-        graph_and_match(&formatted, prior.as_deref(), &bundler_name, &minifier_name)?;
-        return Ok(Ended::NotYet(stages::NAMING));
-    }
-    renderer.message(&format!(
-        "Done! You can find your unminified code in {out_dir}"
-    ));
-    // Nothing reached the per-file stages, so the run's tail has nothing
-    // to split, write or report beyond the vendor namer's tally.
-    report_vendor_naming(&unpacked.vendor_naming, renderer);
-    Ok(Ended::Done(0))
+    Ok((config, adapter, fossil_split))
 }
 
-/// Stages 7-8 over one file's formatted text.
-fn graph_and_match(
-    formatted: &str,
-    prior: Option<&str>,
-    bundler_name: &str,
-    minifier_name: &str,
-) -> Result<(), Crash> {
-    match prior {
-        None => {
-            let g = stages::build_graph(formatted, Some(bundler_name), Some(minifier_name))?;
+/// How the per-file loop ended.
+enum Named {
+    /// Every file named; the last one's outcome (what the split reads)
+    /// and its path.
+    Last(Option<Box<(NamingOutcome, std::path::PathBuf)>>),
+    /// An unported stage stopped the run.
+    Stop(Ended),
+}
+
+/// Stages 6-9 per processed file (unminify's plugin loop): the formatted
+/// text, then the naming stage (graph, match, transfer, waves, floor,
+/// generate, the post-generate passes) — core::naming::driver::run_naming,
+/// the one owner.
+struct NamingRun<'a> {
+    opts: &'a CommandOptions,
+    config: NamingConfig,
+    prior: Option<&'a str>,
+    provider: &'a dyn NameProvider,
+}
+
+impl NamingRun<'_> {
+    fn run(
+        &self,
+        files: &[humanify_core::unpack::UnpackedFile],
+        failures: &mut Failures,
+        renderer: &mut dyn ProgressRenderer,
+    ) -> Result<Named, Crash> {
+        let total = files.len();
+        let mut last = None;
+        for (i, file) in files.iter().enumerate() {
+            renderer.message(&format!("Processing file {}/{total}", i + 1));
+            let path = file.path.display().to_string();
+            let code = read_utf8(&path)?;
+            if humanify_model::js::trim(&code).is_empty() {
+                verbose().log(&format!("Skipping empty file {path}"));
+                continue;
+            }
+            // Stage 6 is not ported; its output (the formatted text) is
+            // supplied by the TS (`--beautified-input`) — ONE file's text.
+            let Some(formatted_path) = &self.opts.beautified_input else {
+                return Ok(Named::Stop(Ended::NotYet(stages::FORMAT)));
+            };
+            if total > 1 {
+                return Err(Crash(format!(
+                    "--beautified-input holds one file's formatted text, but {total} files reached the per-file stages"
+                )));
+            }
+            let formatted = read_utf8(formatted_path)?;
+            let outcome = self.name_one(&formatted, renderer)?;
+            if !self.opts.split
+                && let Some(code) = &outcome.code
+            {
+                // skipFileWrite is off without --split: the file is rewritten.
+                std::fs::write(&file.path, code)
+                    .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
+            }
+            failures.record(&outcome, &path, &formatted);
+            last = Some(Box::new((outcome, file.path.clone())));
+        }
+        Ok(Named::Last(last))
+    }
+
+    fn name_one(
+        &self,
+        formatted: &str,
+        renderer: &mut dyn ProgressRenderer,
+    ) -> Result<NamingOutcome, Crash> {
+        let outcome = run_naming(
+            &NamingInput {
+                fresh: formatted,
+                prior: self.prior,
+                library: None,
+            },
+            &self.config,
+            &NamingHooks::default(),
+            &self.provider,
+        )?;
+        if let Some(text) = &outcome.coverage_text {
+            renderer.message(text);
+        }
+        if outcome.misses > 0 || outcome.errors > 0 {
             verbose().log(&format!(
-                "Graph: {} function(s), {} module binding(s)",
-                g.functions, g.module_bindings
+                "Naming: {} cache miss(es), {} provider error(s)",
+                outcome.misses, outcome.errors
             ));
         }
-        Some(prior_code) => {
-            let m = stages::match_prior(
-                formatted,
-                prior_code,
-                Some(bundler_name),
-                Some(minifier_name),
-            )?;
-            verbose().log(&format!(
-                "Prior matching: {} matched, {} ambiguous, {} unmatched of {} prior function(s); {} binding match(es)",
-                m.matched,
-                m.ambiguous,
-                m.unmatched,
-                m.prior_functions,
-                m.binding_matched.map_or("no".to_string(), |b| b.to_string())
-            ));
+        Ok(outcome)
+    }
+}
+
+/// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
+/// namer's tally (only when it was asked anything) + the selection record.
+fn write_stats_json(
+    dest: &str,
+    outcome: &NamingOutcome,
+    vendor: &humanify_core::modules::vendor_names::VendorNamingStats,
+    config: &humanify_model::pipeline::PipelineConfig,
+    renderer: &mut dyn ProgressRenderer,
+) -> Result<(), Crash> {
+    if outcome.coverage.is_none() {
+        return Ok(());
+    }
+    let mut stats = outcome.eval_stats();
+    if vendor.named + vendor.declined + vendor.echoed + vendor.batches_failed > 0 {
+        stats.vendor_naming = Some(humanify_model::stats::VendorNamingStats {
+            named: vendor.named as f64,
+            declined: vendor.declined as f64,
+            echoed: vendor.echoed as f64,
+            batches_failed: vendor.batches_failed as f64,
+        });
+    }
+    stats.selection = Some(crate::pipeline_config::pipeline_selection_record(config));
+    crate::writers::write_eval_stats(Path::new(dest), &stats)
+        .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
+    renderer.message(&format!("Eval stats written to {dest}"));
+    Ok(())
+}
+
+/// The per-file failures the closing reports read (unified.ts
+/// `parseFailures`, `semanticFailures`, `totalInternalErrors`).
+#[derive(Default)]
+struct Failures {
+    parse: Vec<(String, crate::output_validation::OutputParseFailure)>,
+    semantic: Vec<(String, crate::output_validation::OutputSemanticFailure)>,
+    preserved: Vec<crate::failed_output::FailedOutputFile>,
+    internal_errors: usize,
+}
+
+/// `checkStructuralInvariant`'s headline. The TS appends the first
+/// diverging token window (describeStructuralDivergence over Babel's token
+/// streams); the Rust has no such streams, so the suffix is omitted — a
+/// declared text difference on a path that already fails the run.
+const STRUCTURAL_FAILURE: &str = "Rename changed program structure beyond identifier names \
+(structural signature mismatch): the output is not a pure rename of the input — a statement, \
+literal, operator, or property access differs.";
+
+impl Failures {
+    /// `preserveFailedOutput` — BEFORE the split, which consumes and
+    /// deletes the processed source (the only window a rejected file
+    /// still exists).
+    fn preserve(&self, out_dir: &Path, renderer: &mut dyn ProgressRenderer) {
+        if self.preserved.is_empty() {
+            return;
+        }
+        crate::failed_output::preserve_failed_output(out_dir, &self.preserved);
+        renderer.message(&format!(
+            "Preserved {} rejected file(s) for inspection under {}/",
+            self.preserved.len(),
+            crate::report::FAILED_OUTPUT_DIR
+        ));
+    }
+
+    /// The closing reports (parse, semantic, internal errors), in order;
+    /// each marks the run failed when it fires — the output was written
+    /// for inspection either way. Returns the exit code.
+    fn close(&self, renderer: &mut dyn ProgressRenderer) -> i32 {
+        let mut code = 0;
+        for report in [
+            crate::report::report_parse_failures(&self.parse),
+            crate::report::report_semantic_failures(&self.semantic),
+            crate::report::report_internal_errors(self.internal_errors),
+        ] {
+            for m in &report.messages {
+                renderer.message(m);
+            }
+            if report.fails_run {
+                code = 1;
+            }
+        }
+        code
+    }
+
+    fn record(&mut self, outcome: &NamingOutcome, file: &str, original: &str) {
+        use crate::output_validation::{
+            FreeNameMeasure, OutputSemanticFailure, compare_semantics, parse_failure_of,
+        };
+        use humanify_core::naming::driver::validate::Verdict;
+        self.internal_errors += outcome.processor.failed;
+        let generated = outcome.generated.as_deref().unwrap_or_default();
+        let semantic = match &outcome.verdict {
+            None | Some(Verdict::Valid) => None,
+            Some(Verdict::ParseFailed) => {
+                if let Some(f) = parse_failure_of(generated) {
+                    self.parse.push((file.to_string(), f));
+                }
+                None
+            }
+            Some(Verdict::Structural) => Some(OutputSemanticFailure {
+                message: STRUCTURAL_FAILURE.to_string(),
+                ..OutputSemanticFailure::default()
+            }),
+            Some(Verdict::Semantic {
+                free_before,
+                free_after,
+                bindings_before,
+                bindings_after,
+            }) => compare_semantics(
+                &FreeNameMeasure {
+                    free_names: free_before.clone(),
+                    total_binding_count: *bindings_before as u64,
+                },
+                &FreeNameMeasure {
+                    free_names: free_after.clone(),
+                    total_binding_count: *bindings_after as u64,
+                },
+            ),
+        };
+        if let Some(f) = semantic {
+            self.semantic.push((file.to_string(), f));
+            self.preserved.push(crate::failed_output::FailedOutputFile {
+                file_path: file.to_string(),
+                original_code: original.to_string(),
+                validated_code: Some(generated.to_string()),
+            });
         }
     }
-    Ok(())
+}
+
+/// `--inject-ts-hashes <dir>`: the TS dump's factory hashes (modules.json)
+/// and statementHash partition (partitions.json) — the blessed exemption.
+struct TsHashBytes {
+    factories: Vec<humanify_core::unpack::gate::TsFactoryHash>,
+    partitions: humanify_model::dump::PartitionsFile,
+}
+
+fn load_ts_hashes(opts: &CommandOptions) -> Result<Option<TsHashBytes>, Crash> {
+    let Some(dir) = opts.inject_ts_hashes.as_deref() else {
+        return Ok(None);
+    };
+    let dir = Path::new(dir);
+    let factories = humanify_core::unpack::gate::read_ts_factory_hashes(&dir.join("modules.json"))?;
+    let path = dir.join("partitions.json");
+    let text = read_utf8(&path.display().to_string())?;
+    let partitions =
+        serde_json::from_str(&text).map_err(|e| Crash(format!("{}: {e}", path.display())))?;
+    Ok(Some(TsHashBytes {
+        factories,
+        partitions,
+    }))
+}
+
+/// The plugin options the naming stage decides by (createRenamePlugin's).
+fn naming_config(
+    settings: &Settings,
+    config: &humanify_model::pipeline::PipelineConfig,
+    opts: &CommandOptions,
+    switches: &SwitchState,
+) -> NamingConfig {
+    NamingConfig {
+        bundler: Some(enum_name(config.bundler_type)),
+        minifier: Some(enum_name(config.minifier_type)),
+        skip_libraries: settings.skip_libraries,
+        reconcile_prior_diff: settings.levers.reconcile_prior_diff,
+        naming_floor: settings.levers.naming_floor,
+        naming_floor_sweep: settings.levers.naming_floor_sweep,
+        source_map: false,
+        emit_rename_ledger: opts.rename_ledger.is_some(),
+        family_permute_disabled: switches.switch_on(Switch::FamilyPermute),
+        params: CacheKeyParams {
+            model: settings.model.clone(),
+            // The TS passes a literal 0 (unified.ts buildProvider).
+            temperature: Some(0.0),
+            max_tokens: settings.max_tokens.map(|t| t as u64),
+            reasoning_effort: settings.reasoning_effort.map(str::to_string),
+        },
+    }
 }
 
 /// `loadPriorVersionCode`: an empty prior is an error, never a silent
