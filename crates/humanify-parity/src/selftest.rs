@@ -29,6 +29,17 @@ fn base_dump() -> serde_json::Value {
             "flags": {},
             "texts": { "fresh": "aaa", "prior": null, "minified": null }
         },
+        "passes.json": {
+            "schemaVersion": 1,
+            "passes": [
+                { "pass": "generate", "textSha": "aa" },
+                { "pass": "reconcile", "priorTooDissimilar": false,
+                  "renames": [{ "fromName": "a", "toName": "alpha", "votes": 2,
+                                "kind": "descriptive", "declLine": 3, "applied": true }],
+                  "skipped": [], "textSha": "bb" },
+                { "pass": "census", "census": { "total": 1, "names": ["q"] }, "textSha": "cc" }
+            ]
+        },
         "functions.json": {
             "schemaVersion": 1,
             "functions": [
@@ -397,6 +408,28 @@ fn planted_cases() -> Vec<PlantedCase> {
             expected: 1,
             mutate: |v| {
                 v["modules.json"]["unpack"]["helperVar"] = json!("e");
+            },
+        },
+        PlantedCase {
+            // WP4.4: one reconcile tier choice flipped.
+            name: "passes-reconcile-tier-flipped",
+            expected: 1,
+            mutate: |v| {
+                v["passes.json"]["passes"][1]["renames"][0]["kind"] = json!("asymmetric");
+            },
+        },
+        PlantedCase {
+            name: "passes-pass-missing",
+            expected: 1,
+            mutate: |v| {
+                v["passes.json"]["passes"].as_array_mut().unwrap().pop();
+            },
+        },
+        PlantedCase {
+            name: "passes-file-missing-one-side",
+            expected: 1,
+            mutate: |v| {
+                v.as_object_mut().unwrap().remove("passes.json");
             },
         },
         PlantedCase {

@@ -108,3 +108,44 @@ pub fn is_decorated_descriptive(name: &str) -> bool {
 pub fn is_below_floor_name(name: &str) -> bool {
     is_bun_token(name) && !is_decorated_descriptive(name)
 }
+
+/// `isWordlessMintShape`: no 3-letter lowercase word run and not a
+/// CONSTANT_CASE constant — the reconcile's coarse mint metric (flags
+/// `iIn`, which `is_bun_token` cannot see; does NOT flag the half-mint
+/// `do7Function`, which has a word run).
+pub fn is_wordless_mint_shape(name: &str) -> bool {
+    if is_constant_case(name) {
+        return false;
+    }
+    !name
+        .as_bytes()
+        .windows(3)
+        .any(|w| w.iter().all(u8::is_ascii_lowercase))
+}
+
+/// `isHalfMintHead`: a short mint stem wearing a capitalized word tail
+/// (`do7Function`, `T7Class`, `sm6Factory`, `h06Result`, `j3lResult`) —
+/// `/^(?:[A-Za-z][0-9]{1,2}|[A-Za-z]{2}[0-9]|[A-Za-z][0-9][a-z])[A-Z][a-z]/`
+/// behind the `isBunToken` gate.
+pub fn is_half_mint_head(name: &str) -> bool {
+    if !is_bun_token(name) {
+        return false;
+    }
+    let b = name.as_bytes();
+    let alpha = |i: usize| b.get(i).is_some_and(u8::is_ascii_alphabetic);
+    let digit = |i: usize| b.get(i).is_some_and(u8::is_ascii_digit);
+    let lower = |i: usize| b.get(i).is_some_and(u8::is_ascii_lowercase);
+    let upper = |i: usize| b.get(i).is_some_and(u8::is_ascii_uppercase);
+    let tail_at = |i: usize| upper(i) && lower(i + 1);
+    if !alpha(0) {
+        return false;
+    }
+    let heads = [
+        digit(1),             // [A-Za-z][0-9]
+        digit(1) && digit(2), // [A-Za-z][0-9]{2}
+        alpha(1) && digit(2), // [A-Za-z]{2}[0-9]
+        digit(1) && lower(2), // [A-Za-z][0-9][a-z]
+    ];
+    let lens = [2usize, 3, 3, 3];
+    heads.iter().zip(lens).any(|(&ok, len)| ok && tail_at(len))
+}

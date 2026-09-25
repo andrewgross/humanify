@@ -320,6 +320,41 @@ order — `Object.keys` of the babel node, i.e. the PARSED field order
 blessed may still carry an ORDER nobody gated; a new consumer that shows
 it must re-derive it from the TS's own walk.
 
+## 20. A rename nobody records is invisible to every row gate
+
+The statement twins rewrite PRIVATE names (`#f` → `#A`) by mutating the
+PrivateName nodes: not a scope binding, so no validated rename, no trail
+row, no names.json row. Phase 3's transfers gate, WP4.3's names gate and
+every row compare since were blind to it by construction — the Rust
+carried the sets (`TransferOutcome::private_renames`, "the render applies
+them") and nothing rendered them. The first gate that compared a TEXT the
+naming era produced (WP4.5's `generated.js` sha) went red on its first run
+on three lines of 2.1.86 (`#f`/`#A`), with all 109,974 trail rows IDENTICAL
+(render fix + red test `private_rename_sets_apply_in_order`).
+
+Lesson: for every stage, list the writes that bypass the recorder (here:
+private names, uniquify/identity renames, library prefix) and gate at
+least one artifact that CONTAINS them — a byte compare of the stage's
+output text is the cheapest such artifact.
+
+## 21. The TS's own unit tests are the regime generator — record them
+
+The four oracle pairs exercise none of the reconcile's mixed-hunk or
+import-alias options, no decoration-retry apply, no pre-generate sweep, no
+carried-name exemption, no ESM. The passes' TS suites exercise all of
+them. Instead of hand-copying fixtures, WP4.5 instrumented a SCRATCH tree
+of the oracle commit (`test/parity/wp445-harvest-hooks.py`: each ported
+function renamed to `__inner` behind a wrapper that records inputs,
+outputs, the trail rows written and the LLM requests/responses of every
+TOP-LEVEL call) and ran the unmodified suites: 183 tests still pass (the
+hooks are inert), 474 distinct calls recorded, replayed by the Rust tests.
+The first replay found a render form no CJS bundle can contain (a renamed
+shorthand `export { x }` prints `local as x`).
+
+Lesson: when a pass fires rarely at scale, its unit tests are the densest
+map of its regimes — record what the real TS does on them rather than
+re-deriving expectations by hand.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -329,5 +364,5 @@ module docs), 7 (oracle-dc1a80d's cuts + the handback note
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
 matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/). The doc grows at each
 
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17-18 (/work/rust-port/gates/wp4.3/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17-18 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/). The doc grows at each
 arc's handback.

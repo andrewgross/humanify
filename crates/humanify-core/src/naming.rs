@@ -24,8 +24,10 @@
 pub mod code_window;
 pub mod context;
 pub mod js_record;
+pub mod passes;
 pub mod prompt_gate;
 pub mod prompts;
+pub mod reconcile;
 pub mod snap;
 pub mod validation;
 pub mod waves;
