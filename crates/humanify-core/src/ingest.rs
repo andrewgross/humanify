@@ -147,19 +147,44 @@ impl<'a> Ingest<'a> {
         Ingest::parse_as(allocator, text, source_type)
     }
 
+    /// Babel `transform()`'s parse: no `sourceType` given, so Babel's
+    /// default `"module"` (strict mode) — the stage-6 beautify's parse
+    /// quirk (17-formatter-swap §1.1), NOT the pipeline's `"unambiguous"`.
+    ///
+    /// Babel's parser also raises the early errors oxc leaves to its
+    /// semantic checker (legacy octal and `with` in strict mode, an export
+    /// of an undeclared name, a redeclaration), and a Babel throw fails the
+    /// TS stage — so this parse runs the checker and reports them too.
+    pub fn parse_module(allocator: &'a Allocator, text: &'a str) -> Ingest<'a> {
+        Ingest::parse_checked(allocator, text, SourceType::mjs(), true)
+    }
+
     /// Parse + build semantic with an explicit source type.
     fn parse_as(allocator: &'a Allocator, text: &'a str, source_type: SourceType) -> Ingest<'a> {
+        Ingest::parse_checked(allocator, text, source_type, false)
+    }
+
+    fn parse_checked(
+        allocator: &'a Allocator,
+        text: &'a str,
+        source_type: SourceType,
+        check_syntax: bool,
+    ) -> Ingest<'a> {
         let ret = Parser::new(allocator, text, source_type).parse();
 
-        let errors: Vec<String> = ret.diagnostics.iter().map(|e| format!("{e}")).collect();
+        let mut errors: Vec<String> = ret.diagnostics.iter().map(|e| format!("{e}")).collect();
 
         // Move the program into the arena; the semantic build borrows from
         // there, so everything hangs off 'a.
         let program: &'a oxc_ast::ast::Program<'a> = allocator.alloc(ret.program);
-        let semantic = SemanticBuilder::new()
+        let built = SemanticBuilder::new()
             .with_build_nodes(true)
-            .build(program)
-            .semantic;
+            .with_check_syntax_error(check_syntax)
+            .build(program);
+        if check_syntax {
+            errors.extend(built.diagnostics.iter().map(|e| format!("{e}")));
+        }
+        let semantic = built.semantic;
 
         Ingest {
             text,

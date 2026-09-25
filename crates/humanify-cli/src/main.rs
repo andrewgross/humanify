@@ -407,6 +407,39 @@ enum Command {
         #[arg(long, default_value_t = false)]
         desugar: bool,
     },
+    /// WP5.6's native formatter (`core::format`): the stage-6 beautify of
+    /// one file — Babel's `transform()` with the four stage-6 plugins and
+    /// `@babel/generator` (retainLines off, comments off), byte for byte.
+    /// Gates G1/G2 (docs/rust-port/17-formatter-swap.md §4) compare it with
+    /// test/parity/format-probe.ts.
+    Format {
+        /// The file to format (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// Write here instead of stdout.
+        #[arg(short = 'o', long)]
+        out: Option<String>,
+        /// Print only (`transformWithPlugins(code, [])`): the G1 leg.
+        #[arg(long, default_value_t = false)]
+        no_transforms: bool,
+        /// Plant a perturbation (gate red runs): `drop:<visitor>` (a
+        /// visitor's node type or plugin name), `requeue-reversed`,
+        /// `rust-number-format`.
+        #[arg(long)]
+        plant: Option<String>,
+    },
+    /// WP5.6's golden check: every case of a goldens file (the
+    /// test/parity/format-probe.ts `snippets` shape — the committed
+    /// format-goldens.json, or a fuzz corpus) formatted both ways and
+    /// compared with the TS's bytes / errors. Exit 1 on any difference.
+    FormatCheck {
+        goldens: String,
+        /// Print at most this many differing cases.
+        #[arg(long, default_value_t = 10)]
+        show: usize,
+        /// Plant a perturbation (as `format --plant`) on the stage-6 legs.
+        #[arg(long)]
+        plant: Option<String>,
+    },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
     /// rebuild every module-level prompt, code window and naming context
@@ -719,6 +752,17 @@ fn main() {
             report,
             disable,
         }) => post_split_reconcile_verb(&tree, &prior_version, report.as_deref(), &disable),
+        Some(Command::Format {
+            input,
+            out,
+            no_transforms,
+            plant,
+        }) => format_verb(&input, out.as_deref(), no_transforms, plant.as_deref()),
+        Some(Command::FormatCheck {
+            goldens,
+            show,
+            plant,
+        }) => format_check_verb(&goldens, show, plant.as_deref()),
         Some(Command::RetainLines { tree, out, desugar }) => {
             retain_lines_verb(&tree, &out, desugar)
         }
@@ -1338,6 +1382,113 @@ fn post_split_reconcile_verb(tree: &str, prior_version: &str, report: Option<&st
             eprintln!("ERROR: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+/// `humanify format`: the native formatter on one file.
+fn format_verb(input: &str, out: Option<&str>, no_transforms: bool, plant: Option<&str>) {
+    use humanify_core::format::{FormatOptions, Plant, Plugins, format};
+    let bytes = match std::fs::read(input) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("ERROR: cannot read {input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let code = String::from_utf8_lossy(&bytes);
+    let plant = match plant.map(Plant::parse) {
+        None => None,
+        Some(Ok(p)) => Some(p),
+        Some(Err(e)) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
+    let opts = FormatOptions {
+        plugins: if no_transforms {
+            Plugins::NONE
+        } else {
+            Plugins::STAGE6
+        },
+        plant,
+    };
+    let text = match format(&code, &opts) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("ERROR: {input}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let written = match out {
+        Some(path) => std::fs::write(path, text.as_bytes()),
+        None => {
+            use std::io::Write;
+            std::io::stdout().write_all(text.as_bytes())
+        }
+    };
+    if let Err(e) = written {
+        eprintln!("ERROR: write: {e}");
+        std::process::exit(1);
+    }
+}
+
+/// `humanify format-check`: a goldens file against the formatter.
+fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
+    use humanify_core::format::{FormatOptions, Plant, Plugins, format};
+    let plant = match plant.map(Plant::parse) {
+        None => None,
+        Some(Ok(p)) => Some(p),
+        Some(Err(e)) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(2);
+        }
+    };
+    let rows: Vec<serde_json::Value> = match std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("ERROR: {path}: {e}");
+            std::process::exit(2);
+        }
+    };
+    let (mut same, mut differ) = (0usize, 0usize);
+    for row in &rows {
+        let name = row["name"].as_str().unwrap_or("?");
+        let code = row["code"].as_str().unwrap_or("");
+        for (leg, plugins) in [("none", Plugins::NONE), ("full", Plugins::STAGE6)] {
+            let want = &row[leg];
+            let plant = if plugins.is_empty() { None } else { plant };
+            let got = format(code, &FormatOptions { plugins, plant });
+            let ok = match (want.get("text").and_then(serde_json::Value::as_str), &got) {
+                (Some(w), Ok(g)) => w == g,
+                (None, Err(_)) => true,
+                _ => false,
+            };
+            if ok {
+                same += 1;
+                continue;
+            }
+            differ += 1;
+            if differ <= show {
+                println!(
+                    "== {name} [{leg}]\n-- code\n{code}\n-- ts\n{}\n-- rust\n{}",
+                    want,
+                    match got {
+                        Ok(t) => t,
+                        Err(e) => format!("ERROR {e}"),
+                    }
+                );
+            }
+        }
+    }
+    println!(
+        "format-check: {} legs, identical {same}, differing {differ}",
+        same + differ
+    );
+    if differ > 0 {
+        std::process::exit(1);
     }
 }
 

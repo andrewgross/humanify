@@ -1,0 +1,606 @@
+[
+  {
+    "name": "beautifier/declaration",
+    "code": "var a, b = 1"
+  },
+  {
+    "name": "beautifier/declaration full",
+    "code": "var a = 1, b = 2, c = 3"
+  },
+  {
+    "name": "beautifier/declaration empty",
+    "code": "var a, b, c"
+  },
+  {
+    "name": "beautifier/declaration in for",
+    "code": "for (var a = 1, b = 2;;);"
+  },
+  {
+    "name": "beautifier/conditional",
+    "code": "a ? b : c"
+  },
+  {
+    "name": "beautifier/conditional return",
+    "code": "() => { return a ? b : c }"
+  },
+  {
+    "name": "beautifier/conditional assign",
+    "code": "a = b ? c : d"
+  },
+  {
+    "name": "beautifier/conditional deep",
+    "code": "a(b ? c : d)"
+  },
+  {
+    "name": "beautifier/for stmt",
+    "code": "for (;;);"
+  },
+  {
+    "name": "beautifier/for block",
+    "code": "for (;;) {}"
+  },
+  {
+    "name": "beautifier/seq",
+    "code": "a, b, c"
+  },
+  {
+    "name": "beautifier/seq return",
+    "code": "() => { return a, b, c }"
+  },
+  {
+    "name": "beautifier/seq deep",
+    "code": "a((b, c, d))"
+  },
+  {
+    "name": "beautifier/logical and",
+    "code": "a && b"
+  },
+  {
+    "name": "beautifier/logical or",
+    "code": "a || b"
+  },
+  {
+    "name": "beautifier/logical deep",
+    "code": "if (a && b);"
+  },
+  {
+    "name": "beautifier/unary true",
+    "code": "!0"
+  },
+  {
+    "name": "beautifier/unary false",
+    "code": "!1"
+  },
+  {
+    "name": "beautifier/unary undefined",
+    "code": "void 0"
+  },
+  {
+    "name": "beautifier/unary void",
+    "code": "void x()"
+  },
+  {
+    "name": "beautifier/unary void return",
+    "code": "() => { return void x() }"
+  },
+  {
+    "name": "beautifier/unary void deep",
+    "code": "a(void b())"
+  },
+  {
+    "name": "beautifier/if block",
+    "code": "if (x) {}"
+  },
+  {
+    "name": "beautifier/if else block",
+    "code": "if (x) {} else {}"
+  },
+  {
+    "name": "beautifier/if else logical",
+    "code": "if (x); else a && b"
+  },
+  {
+    "name": "beautifier/if else conditional",
+    "code": "if (x); else a ? b : c"
+  },
+  {
+    "name": "beautifier/if else conditional assign",
+    "code": "if (x); else a = b ? c : d"
+  },
+  {
+    "name": "beautifier/if else conditional assign complex",
+    "code": "if (x); else a().v = b ? c : d"
+  },
+  {
+    "name": "beautifier/template literal",
+    "code": "\"a\".concat(b).concat(c)"
+  },
+  {
+    "name": "beautifier/template literal with tail",
+    "code": "\"a\".concat(b).concat(\"c\")"
+  },
+  {
+    "name": "beautifier/template literal with string",
+    "code": "\"a\".concat(\"b\").concat(\"c\")"
+  },
+  {
+    "name": "beautifier/#3-1",
+    "code": "({ a: async function() { await 0; } })"
+  },
+  {
+    "name": "beautifier/#3-2",
+    "code": "new ({ a: function() {} }).a()"
+  },
+  {
+    "name": "beautifier/#3-3",
+    "code": "export var a, b = 1;"
+  },
+  {
+    "name": "beautifier/#3-4",
+    "code": "for (let i = 0, j; i < 3; i++);"
+  },
+  {
+    "name": "beautifier/#3-5",
+    "code": "let undefined = 1; console.log(void 0);"
+  },
+  {
+    "name": "beautifier/#3-6",
+    "code": "a().b = c() ? d() : e(); // a, c, d"
+  },
+  {
+    "name": "babel-test/for update sequence",
+    "code": "for (let i = 0; i < n; i++, j += 2) { foo(i); }"
+  },
+  {
+    "name": "babel-test/statement sequence",
+    "code": "a(), b();"
+  },
+  {
+    "name": "babel-test/for single update",
+    "code": "for (let i = 0; i < n; i++) { foo(i); }"
+  },
+  {
+    "name": "f42/nullish statement",
+    "code": "H._zod ?? (H._zod = {});"
+  },
+  {
+    "name": "f42/nullish chain",
+    "code": "a ?? b ?? c;"
+  },
+  {
+    "name": "f42/concat raw is cooked",
+    "code": "\"a\\nb\\\\c\".concat(x);"
+  },
+  {
+    "name": "f42/concat backtick in string",
+    "code": "\"a`b${c}\".concat(x);"
+  },
+  {
+    "name": "f42/template concat doubled tail",
+    "code": "`x${y}z`.concat(\"!\");"
+  },
+  {
+    "name": "f42/template concat empty cooked",
+    "code": "`${y}`.concat(\"!\");"
+  },
+  {
+    "name": "f42/void number unguarded",
+    "code": "function f(undefined) { return void 0; }"
+  },
+  {
+    "name": "f42/void string guarded",
+    "code": "function f(undefined) { g(void 'x'); }"
+  },
+  {
+    "name": "f42/void string unguarded",
+    "code": "function f() { g(void 'x'); }"
+  },
+  {
+    "name": "f42/void template",
+    "code": "g(void `a${b()}`);"
+  },
+  {
+    "name": "engine/labeled var split",
+    "code": "lbl: var a = 1, b = 2;"
+  },
+  {
+    "name": "engine/if consequent var split",
+    "code": "if (x) var a = 1, b = 2; else var c, d = 3;"
+  },
+  {
+    "name": "engine/while body var split",
+    "code": "while (x) var a = 1, b = 2;"
+  },
+  {
+    "name": "engine/with-less do body",
+    "code": "do var a = 1, b = 2; while (x);"
+  },
+  {
+    "name": "engine/for-init var hoist",
+    "code": "for (var a = 1, b = 2, c; c < 3; c++) f(a, b);"
+  },
+  {
+    "name": "engine/labeled for-init var hoist",
+    "code": "lbl: for (var a, b = 0; b < 1; b++) continue lbl;"
+  },
+  {
+    "name": "engine/nested for-init hoist",
+    "code": "if (x) for (var a, b;;) break;"
+  },
+  {
+    "name": "engine/while test sequence",
+    "code": "while (a(), b) c();"
+  },
+  {
+    "name": "engine/if test sequence",
+    "code": "if ((a, b)) c; else d;"
+  },
+  {
+    "name": "engine/switch sequence",
+    "code": "switch ((a, b)) { case 1: c(), d(); }"
+  },
+  {
+    "name": "engine/throw sequence",
+    "code": "function f() { throw a(), b(); }"
+  },
+  {
+    "name": "engine/return sequence in if",
+    "code": "function f() { if (x) return a(), b(); else return c(), d; }"
+  },
+  {
+    "name": "engine/logical then sequence",
+    "code": "a && (b, c);"
+  },
+  {
+    "name": "engine/sequence then logical",
+    "code": "(p, q) && r;"
+  },
+  {
+    "name": "engine/logical chain and",
+    "code": "a && b && c;"
+  },
+  {
+    "name": "engine/logical chain or",
+    "code": "a || b || c;"
+  },
+  {
+    "name": "engine/logical nested",
+    "code": "a && (b || c);"
+  },
+  {
+    "name": "engine/conditional nested",
+    "code": "a ? b ? c : d : e;"
+  },
+  {
+    "name": "engine/conditional sequence branches",
+    "code": "x ? (a, b) : (c, d);"
+  },
+  {
+    "name": "engine/conditional logical branches",
+    "code": "x ? a && b : c || d;"
+  },
+  {
+    "name": "engine/assign conditional ops",
+    "code": "v += a ? b : c; w.y = a ? b : c;"
+  },
+  {
+    "name": "engine/return conditional nested",
+    "code": "function f() { return a ? b : c ? d : e; }"
+  },
+  {
+    "name": "engine/else-if chains",
+    "code": "if (a) b; else if (c) d; else e;"
+  },
+  {
+    "name": "engine/else assign conditional",
+    "code": "if (a) x = b ? c : d; else y = e ? f : g;"
+  },
+  {
+    "name": "engine/void in if test",
+    "code": "if (void a()) b();"
+  },
+  {
+    "name": "engine/void statement",
+    "code": "void a(), void b();"
+  },
+  {
+    "name": "engine/void in throw",
+    "code": "function f() { throw void a(); }"
+  },
+  {
+    "name": "engine/void in return seq",
+    "code": "function f() { return void a(), b; }"
+  },
+  {
+    "name": "engine/void in for update",
+    "code": "for (;; void a()) b();"
+  },
+  {
+    "name": "engine/for body sequence",
+    "code": "for (;;) a(), b();"
+  },
+  {
+    "name": "engine/for all heads",
+    "code": "for (a, b; c, d; e, f) g();"
+  },
+  {
+    "name": "engine/for-in body",
+    "code": "for (k in o) a(), b();"
+  },
+  {
+    "name": "engine/for-of body",
+    "code": "for (const v of o) a && b;"
+  },
+  {
+    "name": "engine/arrow bodies",
+    "code": "const f = () => (a, b); const g = () => a && b; const h = () => void a();"
+  },
+  {
+    "name": "engine/export default sequence",
+    "code": "export default (a(), b);"
+  },
+  {
+    "name": "engine/export let split",
+    "code": "export let a, b = 1, c = 2;"
+  },
+  {
+    "name": "engine/export const inits",
+    "code": "export const a = 1, b = 2;"
+  },
+  {
+    "name": "engine/deep sequence in arrow block",
+    "code": "const f = () => { a(), b(); return c ? d : e; };"
+  },
+  {
+    "name": "engine/class method bodies",
+    "code": "class A { m() { a && b(); return x ? y : z; } static { c(), d(); } }"
+  },
+  {
+    "name": "engine/object method bodies",
+    "code": "const o = { m() { var a, b = 1; }, get g() { return a, b; } };"
+  },
+  {
+    "name": "engine/try catch finally",
+    "code": "try { a(), b(); } catch (e) { c && d(); } finally { var x, y = 1; }"
+  },
+  {
+    "name": "engine/switch cases",
+    "code": "switch (x) { case 1: a(), b(); break; default: c ? d() : e(); }"
+  },
+  {
+    "name": "engine/labeled statement bodies",
+    "code": "a: b(), c();"
+  },
+  {
+    "name": "engine/do while",
+    "code": "do a(), b(); while (c);"
+  },
+  {
+    "name": "engine/let undefined block",
+    "code": "{ let undefined = 1; void 'a'; void b(); } void 'c';"
+  },
+  {
+    "name": "engine/catch undefined",
+    "code": "try {} catch (undefined) { void 'a'; void b(); }"
+  },
+  {
+    "name": "engine/fn expr named undefined",
+    "code": "(function undefined() { void 'a'; })();"
+  },
+  {
+    "name": "engine/var undefined hoisted",
+    "code": "function f() { if (x) { var undefined; } void 'a'; }"
+  },
+  {
+    "name": "engine/crawl reparents a requeued path",
+    "code": "while (x) a, `u`.concat(y) ?? z;"
+  },
+  {
+    "name": "engine/crawl in if branch",
+    "code": "if (x) a(), b ? c() : d(); else e(), f && g();"
+  },
+  {
+    "name": "plugin/numbers",
+    "code": "a(5e3, 1e21, 1e-7, 0xe1, 0xff, 0XE1, 1E3, .5e1, 1e400, 5e-324, 0e0, 12e2);"
+  },
+  {
+    "name": "plugin/numbers separators",
+    "code": "a(1_0e3, 1_000, 0xe_1);"
+  },
+  {
+    "name": "plugin/number member",
+    "code": "a = 5e3.toString(); b = 1e3[0];"
+  },
+  {
+    "name": "plugin/comparisons",
+    "code": "a(5 < x, 5 <= x, 5 > x, 5 >= x, null == x, null != x, 'a' === x, 1 !== x);"
+  },
+  {
+    "name": "plugin/comparisons literal both",
+    "code": "a('a' == 'b', 1 < 2, x == 1, `t` === y, /r/ == z, 1n < x, true == x, 1 in x, 1 + x);"
+  },
+  {
+    "name": "plugin/not numbers",
+    "code": "a(!0, !1, !2, !0.0, !-1, !0x0);"
+  },
+  {
+    "name": "plugin/void",
+    "code": "a(void 0, void 1, void 'x', void null, void x);"
+  },
+  {
+    "name": "printer/esm imports",
+    "code": "import d, { a, b as c } from \"m\"; import * as ns from \"n\"; import \"side\"; import {} from \"empty\"; import { \"str\" as s } from \"o\";"
+  },
+  {
+    "name": "printer/esm exports",
+    "code": "export { a, b as c }; export * from \"m\"; export * as ns from \"n\"; export { x as default, y } from \"o\"; export {} from \"p\"; export function f() {} export class K {}"
+  },
+  {
+    "name": "printer/esm default",
+    "code": "export default function () {}"
+  },
+  {
+    "name": "printer/esm default class",
+    "code": "export default class {}"
+  },
+  {
+    "name": "printer/esm default expr",
+    "code": "export default a + b;"
+  },
+  {
+    "name": "printer/import attributes",
+    "code": "import j from \"./x.json\" with { type: \"json\" }; export { k } from \"./y.json\" with { type: \"json\" };"
+  },
+  {
+    "name": "printer/directives",
+    "code": "\"use strict\"; function f() { \"use asm\"; return 1; }"
+  },
+  {
+    "name": "printer/directive only",
+    "code": "\"use strict\";"
+  },
+  {
+    "name": "printer/empty program",
+    "code": ""
+  },
+  {
+    "name": "printer/hashbang",
+    "code": "#!/usr/bin/env node\na();"
+  },
+  {
+    "name": "printer/classes",
+    "code": "class A extends B { #p = 1; static s; get g() { return this.#p; } set g(v) {} static async *m() { yield* x; } accessor z = 2; [k]() {} }"
+  },
+  {
+    "name": "printer/arrows",
+    "code": "a(x => x, (x) => x, (x, y) => x, async x => x, ({ a }) => a, ([b]) => b, (c = 1) => c, (...d) => d, () => ({}));"
+  },
+  {
+    "name": "printer/objects",
+    "code": "a({}, { a }, { a: 1, b }, { [k]: 1, 'q': 2, 3: 4 }, { ...s }, { m() {}, get x() { return 1; } });"
+  },
+  {
+    "name": "printer/templates",
+    "code": "a(`x`, `a${b}c${d}e`, tag`t${x}`, `multi\nline`);"
+  },
+  {
+    "name": "printer/optional",
+    "code": "a?.b?.[c]?.(d); (a?.b)(); new (a?.b)();"
+  },
+  {
+    "name": "printer/parens",
+    "code": "a = (b, c); (function () {})(); (class {}); ({}).x; (a || b) && c; a ?? (b || c); (-a) ** 2; (await x)?.y;"
+  },
+  {
+    "name": "printer/in in for",
+    "code": "for (var i = (a in b); ;); for (const k in (a, b));"
+  },
+  {
+    "name": "printer/regex bigint",
+    "code": "a(/re/g, 10n, 0x1Fn, /[/]/);"
+  },
+  {
+    "name": "printer/strings",
+    "code": "a('single', \"double\", 'q\"uote', 'esc\\n');"
+  },
+  {
+    "name": "printer/new",
+    "code": "new A; new A(); new (a())(); new (a.b()); new a.b.C();"
+  },
+  {
+    "name": "printer/labels",
+    "code": "outer: for (;;) { inner: for (;;) { continue outer; break inner; } }"
+  },
+  {
+    "name": "printer/getter setter static",
+    "code": "class A { static get x() { return 1; } static set x(v) {} static #y() {} }"
+  },
+  {
+    "name": "printer/async await",
+    "code": "async function f() { await a; for await (const x of y) {} } const g = async () => { await b; };"
+  },
+  {
+    "name": "printer/generators",
+    "code": "function* g() { yield; yield a; yield* b; }"
+  },
+  {
+    "name": "printer/meta",
+    "code": "function f() { new.target; } import.meta.url;"
+  },
+  {
+    "name": "printer/dynamic import",
+    "code": "import(\"m\").then(x => x); import(\"n\", { with: { type: \"json\" } });"
+  },
+  {
+    "name": "printer/update",
+    "code": "a++; --b; c = d++ + ++e; f = g - -h; i = j + +k;"
+  },
+  {
+    "name": "printer/let edge",
+    "code": "(let[0] = 1);"
+  },
+  {
+    "name": "printer/in operator for-init",
+    "code": "for (var x = function () { return a in b; }; ;) break;"
+  },
+  {
+    "name": "printer/long var list",
+    "code": "var a = 1, b = function () { return c; }, d;"
+  },
+  {
+    "name": "comments/paren leading block",
+    "code": "x = (/* c */ a + b) * 2;"
+  },
+  {
+    "name": "comments/return newline comment",
+    "code": "function f() { return (// c\n a); }"
+  },
+  {
+    "name": "comments/return block newline",
+    "code": "function f() { return /* c\n */ a; }"
+  },
+  {
+    "name": "comments/arrow param comment",
+    "code": "a((/* c */ x) => x, (x /* d */) => x);"
+  },
+  {
+    "name": "comments/if branch leading",
+    "code": "if (a) /* c */ b(); else /* d */ c();"
+  },
+  {
+    "name": "comments/if block leading",
+    "code": "if (a) /* c */ { b(); }"
+  },
+  {
+    "name": "comments/statement banners",
+    "code": "/*! banner */ var a = 1, b = 2; /*! two */ a && b;"
+  },
+  {
+    "name": "comments/line comments",
+    "code": "// head\nvar a = 1; // tail\nb();"
+  },
+  {
+    "name": "comments/sequence with comments",
+    "code": "/* s */ a(), /* t */ b();"
+  },
+  {
+    "name": "error/octal literal",
+    "code": "a = 010;"
+  },
+  {
+    "name": "error/with statement",
+    "code": "with (a) b;"
+  },
+  {
+    "name": "error/syntax",
+    "code": "a = ;"
+  },
+  {
+    "name": "error/labeled var in do body",
+    "code": "do lbl: var a = 1, b = 2; while (x);"
+  },
+  {
+    "name": "error/labeled var in if body",
+    "code": "if (x) lbl: var a = 1, b = 2;"
+  }
+]

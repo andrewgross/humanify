@@ -276,3 +276,25 @@ fn from_entries_matches_insert_order() {
     let keys: Vec<&str> = o.entries().iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["2", "10", "b", "a"]);
 }
+
+/// Exact ties at the shortest digit: ECMA-262 picks the EVEN digit (V8:
+/// `String(1658206780088562.25)` is "1658206780088562.2"); Rust's `{:e}`
+/// picks the upper one. 235,115 of 3.5 M sampled doubles differed before
+/// the owner moved to `dragonbox_ecma` (finding #47).
+#[test]
+fn number_to_string_breaks_exact_ties_to_even_like_v8() {
+    let cases = [
+        (1658206780088562.0 + 0.25, "1658206780088562.2"),
+        (-1052730259603333.0 - 0.25, "-1052730259603333.2"),
+        (233115890514796.0 + 0.125, "233115890514796.12"),
+        (271821092707313.0 + 0.625, "271821092707313.62"),
+        (1e21, "1e+21"),
+        (1e-7, "1e-7"),
+        (5e-324, "5e-324"),
+        (123456789012345680000.0, "123456789012345680000"),
+        (-0.0, "0"),
+    ];
+    for (x, want) in cases {
+        assert_eq!(number_to_string(x), want, "{x:e}");
+    }
+}

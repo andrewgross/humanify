@@ -6,8 +6,8 @@
 
 use oxc_allocator::Allocator;
 
-use super::ast::{Kind, Node};
-use super::convert::Converter;
+use crate::format::ast::{Kind, NodeId, Tree};
+use crate::format::convert::Converter;
 use crate::ingest::Ingest;
 
 /// `helpers.usingCtx` (minVersion 7.23.9).
@@ -16,15 +16,18 @@ pub const USING_CTX_SOURCE: &str = r#"function _usingCtx(){var r="function"==typ
 /// `helpers.setFunctionName` (minVersion 7.23.6).
 pub const SET_FUNCTION_NAME_SOURCE: &str = r#"function setFunctionName(e,t,n){"symbol"==typeof t&&(t=(t=t.description)?"["+t+"]":"");try{Object.defineProperty(e,"name",{configurable:!0,value:n?n+" "+t:t})}catch(e){}return e}"#;
 
-fn strip_locs(node: &mut Node) {
-    node.loc = None;
-    for (child, _) in super::transform::children_mut(node) {
-        strip_locs(child);
+/// Babel's template strips every position: no `loc`, no span.
+fn strip_locs(tree: &mut Tree, node: NodeId) {
+    let n = tree.node_mut(node);
+    n.loc = None;
+    n.span = None;
+    for child in tree.children(node) {
+        strip_locs(tree, child);
     }
 }
 
-/// The helper's declaration node, named `uid`.
-pub fn helper_declaration(name: &str, uid: &str) -> Result<Node, String> {
+/// The helper's declaration node, named `uid`, added to `tree`.
+pub fn helper_declaration(tree: &mut Tree, name: &str, uid: &str) -> Result<NodeId, String> {
     let source = match name {
         "usingCtx" => USING_CTX_SOURCE,
         "setFunctionName" => SET_FUNCTION_NAME_SOURCE,
@@ -35,16 +38,20 @@ pub fn helper_declaration(name: &str, uid: &str) -> Result<Node, String> {
     if !ingest.errors.is_empty() {
         return Err(format!("helper {name} does not parse"));
     }
-    let program = Converter::new(source).program(ingest.program)?;
-    let Kind::Program { mut body, .. } = program.kind else {
+    let mut converter = Converter::with_tree(source, std::mem::take(tree));
+    let program = converter.program(ingest.program);
+    *tree = converter.tree;
+    let program = program?;
+    let Kind::Program { body, .. } = tree.kind(program) else {
         return Err("helper: not a program".into());
     };
-    let mut decl = body.pop().ok_or("helper: empty")?;
-    strip_locs(&mut decl);
-    let Kind::FunctionDeclaration(f) = &mut decl.kind else {
+    let decl = *body.last().ok_or("helper: empty")?;
+    strip_locs(tree, decl);
+    let id = tree.ident(uid);
+    let Kind::FunctionDeclaration(f) = tree.kind_mut(decl) else {
         return Err("helper: not a function declaration".into());
     };
-    f.id = Some(Box::new(Node::ident(uid)));
-    decl.compact = true;
+    f.id = Some(id);
+    tree.node_mut(decl).compact = true;
     Ok(decl)
 }

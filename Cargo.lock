@@ -519,6 +519,7 @@ dependencies = [
 name = "humanify-model"
 version = "0.0.0"
 dependencies = [
+ "dragonbox_ecma",
  "serde",
  "serde_json",
  "sha2",
