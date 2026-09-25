@@ -364,6 +364,17 @@ enum Command {
         #[arg(long, default_value = "")]
         disable: String,
     },
+    /// WP5.4's generator gate: for every .js/.cjs of a tree (the desugar's
+    /// walk), print it as Babel's retainLines generator would (default) or
+    /// run the `using` desugar (--desugar), mirroring
+    /// test/parity/wp54-generator-probe.ts's layout. (Migration
+    /// scaffolding — deleted at phase 6.)
+    RetainLines {
+        tree: String,
+        out: String,
+        #[arg(long, default_value_t = false)]
+        desugar: bool,
+    },
     /// WP4.2's prompt gate: rebuild every prompt of an oracle pair from its
     /// typed request and require the TS's bytes; with --capture, also
     /// rebuild every module-level prompt, code window and naming context
@@ -664,6 +675,9 @@ fn main() {
             dump_keys,
         }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
         Some(Command::PromptGate { dump, capture }) => run_prompt_gate(&dump, capture.as_deref()),
+        Some(Command::RetainLines { tree, out, desugar }) => {
+            retain_lines_verb(&tree, &out, desugar)
+        }
         Some(Command::Finish {
             tree,
             runnable,
@@ -1192,6 +1206,55 @@ fn emit_verb(args: EmitArgs) {
         eprintln!("ERROR: {e}");
         std::process::exit(1);
     }
+}
+
+/// `humanify retain-lines`: the generator gate's Rust side.
+fn retain_lines_verb(tree: &str, out: &str, desugar: bool) {
+    use humanify_core::finish::scaffold::js_files_under;
+    use humanify_core::finish::using::{desugar_using, print_retaining_lines};
+    use std::path::Path;
+
+    let root = Path::new(tree);
+    let mut files = match js_files_under(root) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    };
+    files.sort();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut written = 0usize;
+    for abs in files {
+        let rel = abs
+            .strip_prefix(root)
+            .unwrap_or(&abs)
+            .to_string_lossy()
+            .into_owned();
+        let bytes = std::fs::read(&abs).unwrap_or_default();
+        let code = String::from_utf8_lossy(&bytes).into_owned();
+        let result = if desugar {
+            desugar_using(&code)
+        } else {
+            print_retaining_lines(&code).map(Some)
+        };
+        match result {
+            Ok(None) => {}
+            Ok(Some(text)) => {
+                let dest = Path::new(out).join(&rel);
+                if let Some(dir) = dest.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if std::fs::write(&dest, text).is_ok() {
+                    written += 1;
+                }
+            }
+            Err(e) => skipped.push(format!("{rel}\t{e}")),
+        }
+    }
+    let _ = std::fs::create_dir_all(out);
+    let _ = std::fs::write(Path::new(out).join(".skipped"), skipped.join("\n"));
+    println!("written {written}, skipped {}", skipped.len());
 }
 
 /// `humanify finish`, failing loud (exit 1) on a stage-setup error.
