@@ -30,8 +30,8 @@ use oxc_semantic::Semantic;
 use oxc_span::Span;
 
 use super::batch::{
-    DEFAULT_LANE_THRESHOLD, Lane, LaneCall, LaneEffect, LaneEnv, Transform, compute_lane_count,
-    split_by_position,
+    DEFAULT_LANE_THRESHOLD, Lane, LaneCall, LaneEffect, LaneEnv, LaneReport, Transform,
+    compute_lane_count, split_by_position,
 };
 use super::generate::TextView;
 use super::graph_ext::{NamingGraph, NodeRef};
@@ -46,6 +46,10 @@ use crate::naming::prompts::{
     build_batch_rename_retry_body, build_module_level_rename_body,
     build_module_level_rename_prompt, build_module_level_retry_prefix, render_system_prompt,
     render_user_prompt,
+};
+use crate::naming::report::{
+    ContentionEvent, IdentifierOutcome, Outcomes, ProcessorReport, RenameReport, ReportStrategy,
+    ReportType, Status,
 };
 use crate::naming::snap::{build_prior_stem_index, snap_suggestion_to_prior, snap_to_known_prior};
 use crate::naming::validation::resolve_conflict;
@@ -93,6 +97,10 @@ pub struct WaveInputs<'a, 's> {
     /// `options.bundlerType === "esbuild"` (module groups of 15).
     pub esbuild: bool,
     pub params: CacheKeyParams,
+    /// ONE scope epoch: no prior version, so `clearBabelCacheAfterPriorMatch`
+    /// never ran — every traversal reuses the graph build's cached paths
+    /// and scopes (no fresh-era re-crawl; a context reads the live names).
+    pub single_epoch: bool,
     /// A planted order bug (gate scaffolding: proves the gate SEES order).
     pub plant: Option<Plant>,
 }
@@ -145,6 +153,29 @@ pub struct WaveOutcome {
     pub misses: usize,
     pub errors: usize,
     pub waves: u64,
+    /// The processor's reports and counters (coverage + diagnostics).
+    pub processor: ProcessorReport,
+}
+
+impl WaveOutcome {
+    /// `graph.nodes.size === 0`: the plugin never builds a processor.
+    pub fn idle(
+        state: RenameState,
+        fn_state: Vec<Lifecycle>,
+        binding_state: Vec<Lifecycle>,
+    ) -> WaveOutcome {
+        WaveOutcome {
+            state,
+            fn_state,
+            binding_state,
+            dispatches: Vec::new(),
+            names: Vec::new(),
+            misses: 0,
+            errors: 0,
+            waves: 0,
+            processor: ProcessorReport::default(),
+        }
+    }
 }
 
 /// The per-node wave bookkeeping (`WaveNodeCtx`).
@@ -158,6 +189,9 @@ struct NodeCtx {
     order: HashMap<(u8, String), usize>,
     /// Applied renames (the llm-done names map).
     names: JsRecord,
+    /// `fn.renameReport` / `ctx.report`: the node's report, patched by
+    /// the barrier and the retries until it settles.
+    report: Option<RenameReport>,
 }
 
 #[derive(Clone)]
@@ -203,6 +237,8 @@ struct Entry {
     binding: Option<BindingInfo>,
     target: ApplyTarget,
     live: Live,
+    /// A retry entry's previous (collided) suggestion.
+    prev_name: Option<String>,
 }
 
 /// A barrier rejection seeding a retry.
@@ -227,11 +263,11 @@ struct RetrySeed {
     winners: JsRecord,
 }
 
-/// A deferred lifecycle settlement.
+/// A deferred lifecycle settlement (with the node's wave context).
 enum Settle {
-    FnDone(usize),
+    FnDone(usize, usize),
     FnSkipped(usize, &'static str),
-    Module(Vec<usize>),
+    Module(Vec<usize>, usize),
 }
 
 /// A context's `usedIdentifiers` Set: build-time order + membership (the
@@ -304,6 +340,13 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     graph_era: HashMap<BScopeId, JsSet>,
     /// The fresh-era scopes by span (start, end, id), sorted.
     fresh_scopes: Vec<(u32, u32, BScopeId)>,
+    /// Every non-program scope by span (start, end, id), sorted — for the
+    /// reference-duplication model of the two epochs (see [`Run::ref_count`]).
+    all_scopes: Vec<(u32, u32, BScopeId)>,
+    /// Scope → the function whose traversal first gave it a fresh-era copy.
+    fresh_root: HashMap<BScopeId, usize>,
+    /// Scope → its child scopes.
+    children: HashMap<BScopeId, Vec<BScopeId>>,
     wave: u64,
     // dump
     dispatches: Vec<DispatchRecord>,
@@ -311,6 +354,10 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     names: Vec<NameRecord>,
     misses: usize,
     errors: usize,
+    // reports
+    processor: ProcessorReport,
+    /// Function row → its wave context (a function is dispatched once).
+    fn_ctx: HashMap<usize, usize>,
 }
 
 /// Run the LLM naming waves over the transfer stage's state
@@ -327,8 +374,9 @@ pub fn run_waves<P: NameProvider>(
     // The prior-match cache clear: every scope the waves reach through a
     // NEW path (all but the graph functions' retained `fn.path.scope`s and
     // the program) is a fresh crawl — registration order, current names.
+    // Without a prior there was no clear: ONE epoch, nothing is fresh-era.
     let retained: HashSet<BScopeId> = inp.rows.fns.iter().map(|f| f.scope).collect();
-    let fresh_era = |s: BScopeId| s != program_scope && !retained.contains(&s);
+    let fresh_era = |s: BScopeId| !inp.single_epoch && s != program_scope && !retained.contains(&s);
     // The RETAINED (graph-era) tables of those scopes, as the clear left
     // them: a function's context walks `fn.path.scope.parent` — graph-era
     // objects — and a rename made through a fresh-era scope object never
@@ -355,6 +403,25 @@ pub fn run_waves<P: NameProvider>(
         })
         .collect();
     fresh_scopes.sort_unstable();
+    let mut all_scopes: Vec<(u32, u32, BScopeId)> = if inp.single_epoch {
+        Vec::new()
+    } else {
+        (0..n_scopes)
+            .map(|i| BScopeId(i as u32))
+            .filter(|&sid| sid != program_scope)
+            .map(|sid| {
+                let span = state.view().scope(sid).span;
+                (span.start, span.end, sid)
+            })
+            .collect()
+    };
+    all_scopes.sort_unstable();
+    let mut children: HashMap<BScopeId, Vec<BScopeId>> = HashMap::new();
+    for &(_, _, sid) in &all_scopes {
+        if let Some(p) = state.view().scope(sid).parent {
+            children.entry(p).or_default().push(sid);
+        }
+    }
     if inp.plant != Some(Plant::NoRecrawl) {
         state.recrawl_order(fresh_era);
     }
@@ -382,15 +449,31 @@ pub fn run_waves<P: NameProvider>(
         program_scope,
         graph_era,
         fresh_scopes,
+        all_scopes,
+        fresh_root: HashMap::new(),
+        children,
         wave: 0,
         dispatches: Vec::new(),
         rounds: HashMap::new(),
         names: Vec::new(),
         misses: 0,
         errors: 0,
+        processor: ProcessorReport::default(),
+        fn_ctx: HashMap::new(),
     };
     run.used = run.module_used_names();
     run.wave_loop();
+    // `processUnified`'s tail: after the module reports (pushed at
+    // settle), every function's report in graph node order.
+    let mut processor = std::mem::take(&mut run.processor);
+    for node in &inp.ng.order {
+        if let NodeRef::Fn(f) = *node
+            && let Some(&ctx) = run.fn_ctx.get(&f)
+            && let Some(report) = run.ctxs[ctx].report.take()
+        {
+            processor.reports.push(report);
+        }
+    }
     WaveOutcome {
         state: run.state,
         fn_state: run.fn_state,
@@ -400,6 +483,7 @@ pub fn run_waves<P: NameProvider>(
         misses: run.misses,
         errors: run.errors,
         waves: run.wave,
+        processor,
     }
 }
 
@@ -503,7 +587,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         for key in due {
             let record = self.settle.remove(&key).expect("due");
             match record {
-                Settle::FnDone(f) => {
+                Settle::FnDone(f, ctx) => {
+                    if let Some(r) = self.ctxs[ctx].report.as_mut() {
+                        r.fixup_renamed_count();
+                    }
                     let who = self.inp.graph.functions[f].session_id.clone();
                     self.fn_state[f].mark_llm_done(&who);
                 }
@@ -511,7 +598,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     let who = self.inp.graph.functions[f].session_id.clone();
                     self.fn_state[f].mark_skipped(reason, &who);
                 }
-                Settle::Module(batch) => {
+                Settle::Module(batch, ctx) => {
+                    if let Some(mut r) = self.ctxs[ctx].report.take() {
+                        r.fixup_renamed_count();
+                        self.processor.reports.push(r);
+                    }
                     for j in batch {
                         if self.binding_state[j].is_pending() {
                             let who = self.inp.graph.module_bindings[j].session_id.clone();
@@ -546,12 +637,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let mut waiters: Vec<(usize, usize, Vec<BindingInfo>)> = Vec::new();
         for &f in &fn_nodes {
             let ctx = self.new_ctx(ng.node_of_fn[f], CtxKind::Fn(f));
+            self.fn_ctx.insert(f, ctx);
             // The task's traversal: a fresh path for every node under
             // the function, so every fresh-era scope inside it is
             // (re)crawled NOW — registration order, current names.
             if self.inp.plant != Some(Plant::NoRecrawl) {
                 self.recrawl_inside(self.inp.graph.functions[f].span);
             }
+            self.mark_fresh_roots(f);
             let row = &self.inp.rows.fns[f];
             let all = collect_owned_binding_infos(&self.state, row);
             match self.select_llm_bindings(f, &all) {
@@ -569,7 +662,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             let ctx = self.new_ctx(ng.node_of_mb[group[0]], CtxKind::Module(group.clone()));
             self.start_module(ctx, group.clone(), &mut lanes);
             self.settle
-                .insert(ng.node_of_mb[group[0]], Settle::Module(group));
+                .insert(ng.node_of_mb[group[0]], Settle::Module(group, ctx));
         }
         let retries: Vec<RetryRun> = seeds
             .into_iter()
@@ -587,7 +680,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 self.start_fn_phase(f, ctx, 1, shadowed, &mut lanes);
             }
             self.settle
-                .insert(self.ctxs[ctx].node_index, Settle::FnDone(f));
+                .insert(self.ctxs[ctx].node_index, Settle::FnDone(f, ctx));
         }
         // ---- round B -----------------------------------------------------
         self.drive_round(lanes, Vec::new());
@@ -603,8 +696,83 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             binding_map: HashMap::new(),
             order: HashMap::new(),
             names: JsRecord::default(),
+            report: None,
         });
         self.ctxs.len() - 1
+    }
+
+    /// The function task's traversal gives every scope strictly inside it
+    /// that no earlier traversal reached a fresh-era copy rooted HERE (the
+    /// path cache is keyed by parent node: the first traversal's paths win).
+    fn mark_fresh_roots(&mut self, f: usize) {
+        if self.inp.single_epoch {
+            return;
+        }
+        let span = self.inp.graph.functions[f].span;
+        let own = self.inp.rows.fns[f].scope;
+        let lo = self.all_scopes.partition_point(|s| s.0 < span.start);
+        for &(_, end, sid) in self.all_scopes[lo..].iter().take_while(|s| s.0 < span.end) {
+            if end <= span.end && sid != own {
+                self.fresh_root.entry(sid).or_insert(f);
+            }
+        }
+    }
+
+    /// `referencePaths.length + constantViolations.length` of the binding
+    /// `scope.getBinding(old)` resolves, as the TS reads it. A binding of a
+    /// RETAINED scope (a function's own, the program) is a graph-era Binding
+    /// object; every fresh-era crawl whose scope chain reaches it registers
+    /// the references in its subtree AGAIN through new path objects
+    /// (`Binding.reference` dedupes by path, not node). So each reference
+    /// or violation sitting in a fresh-era scope whose traversal root lies
+    /// at or below the binding's scope counts twice.
+    fn ref_count(&self, b: BindingId) -> u32 {
+        let view = self.state.view();
+        let bb = view.binding(b);
+        let base = (bb.refs.len() + bb.violations.len()) as u32;
+        let owner = bb.owner;
+        let retained =
+            owner == self.program_scope || self.inp.rows.fn_by_scope.contains_key(&owner);
+        if self.inp.single_epoch || !retained {
+            return base;
+        }
+        let reaches = |root: usize| {
+            let mut cur = Some(self.inp.rows.fns[root].scope);
+            while let Some(s) = cur {
+                if s == owner {
+                    return true;
+                }
+                cur = view.scope(s).parent;
+            }
+            false
+        };
+        // The crawl that covers a site is by BLOCK: a switch discriminant
+        // (semantically the parent scope's) sits inside the switch's block,
+        // so the switch scope's fresh crawl registers it too.
+        let covering_root = |site: &crate::rename::validated::scopes::Site| {
+            self.fresh_root.get(&site.scope).copied().or_else(|| {
+                self.children.get(&site.scope).and_then(|kids| {
+                    kids.iter()
+                        .filter(|&&c| {
+                            let sp = view.scope(c).span;
+                            sp.start <= site.span.start && site.span.end <= sp.end
+                        })
+                        .find_map(|c| self.fresh_root.get(c).copied())
+                })
+            })
+        };
+        // A re-crawl re-registering the binding's OWN declaration skips it
+        // (`registerBinding`: `local.identifier === id` continues).
+        let own_declaration = |site: &crate::rename::validated::scopes::Site| {
+            site.span.start <= bb.id_span.start && bb.id_span.end <= site.span.end
+        };
+        let extra = bb
+            .refs
+            .iter()
+            .chain(bb.violations.iter().filter(|v| !own_declaration(v)))
+            .filter(|site| covering_root(site).is_some_and(reaches))
+            .count() as u32;
+        base + extra
     }
 
     /// Re-crawl every fresh-era scope inside `span`.
@@ -621,11 +789,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     /// `selectLlmBindings`.
     fn select_llm_bindings(
-        &self,
+        &mut self,
         f: usize,
         all: &[BindingInfo],
     ) -> Result<Vec<BindingInfo>, &'static str> {
         if all.is_empty() {
+            self.processor.skip_reasons.zero_bindings += 1;
             return Err("zero-bindings");
         }
         let transferred = &self.inp.transferred[f];
@@ -634,7 +803,9 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             .filter(|b| self.is_eligible(&b.name) && !transferred.contains(&b.name))
             .cloned()
             .collect();
+        self.processor.skipped_by_skip_list += all.len() - bindings.len();
         if bindings.is_empty() {
+            self.processor.skip_reasons.all_preserved += 1;
             return Err("all-preserved");
         }
         Ok(bindings)
@@ -1319,6 +1490,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 binding: item.binding.clone(),
                 target: item.target.clone(),
                 live,
+                prev_name: Some(item.prev_name.clone()),
             });
         }
     }
@@ -1365,20 +1537,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// call per active lane per turn (a lane's sequence is independent of
     /// the others: its reads are frozen for the round).
     fn drive_round(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
-        // Retries: one call each.
-        if !retries.is_empty() {
-            let requests: Vec<BatchRenameRequest> =
-                retries.iter().map(|r| self.retry_request(r)).collect();
-            let targets: Vec<(usize, String)> = retries
-                .iter()
-                .map(|r| (r.seed.ctx, r.function_id.clone()))
-                .collect();
-            let results = self.dispatch(requests, &targets);
-            for (r, res) in retries.iter().zip(results) {
-                let renames = res.map(|(r, _)| r).unwrap_or_default();
-                self.collect_retry_entries(r, &renames);
-            }
-        }
+        self.run_retries(retries);
         loop {
             let mut active: Vec<(usize, LaneCall)> = Vec::new();
             for (i, lr) in lanes.iter_mut().enumerate() {
@@ -1394,6 +1553,9 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             for (i, lr) in lanes.iter_mut().enumerate() {
                 if !lr.lane.is_finished() && !calling.contains(&i) {
                     self.finish_lane(lr);
+                    // Contention events land as the lanes finish.
+                    let events = std::mem::take(&mut lr.lane.report.contention);
+                    self.processor.contention.extend(events);
                 }
             }
             if active.is_empty() {
@@ -1418,8 +1580,151 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 self.feed_lane(&mut lanes[i], res);
             }
         }
-        for lr in lanes {
+        self.collect_lanes(lanes);
+    }
+
+    /// `processBatch`: one report per (node, phase) over its lanes, in
+    /// lane order, attached before the barrier patches it; then each
+    /// lane's effects become barrier entries.
+    fn collect_lanes(&mut self, lanes: Vec<LaneRun>) {
+        let mut group: Option<(usize, u8, usize, Vec<LaneReport>)> = None;
+        for mut lr in lanes {
+            let lane_report = std::mem::take(&mut lr.lane.report);
+            let key = (lr.ctx, lr.phase, lr.strategy);
+            match &mut group {
+                Some((c, p, s, reps)) if (*c, *p, *s) == key => reps.push(lane_report),
+                _ => {
+                    if let Some((c, _, s, reps)) = group.take() {
+                        self.attach_report(c, s, reps);
+                    }
+                    group = Some((key.0, key.1, key.2, vec![lane_report]));
+                }
+            }
             self.collect_lane_effects(lr);
+        }
+        if let Some((c, _, s, reps)) = group {
+            self.attach_report(c, s, reps);
+        }
+    }
+
+    /// The barrier retries of a round: one call each.
+    fn run_retries(&mut self, retries: Vec<RetryRun>) {
+        if !retries.is_empty() {
+            let requests: Vec<BatchRenameRequest> =
+                retries.iter().map(|r| self.retry_request(r)).collect();
+            let targets: Vec<(usize, String)> = retries
+                .iter()
+                .map(|r| (r.seed.ctx, r.function_id.clone()))
+                .collect();
+            let results = self.dispatch(requests, &targets);
+            for (r, res) in retries.iter().zip(results) {
+                let renames = match res {
+                    Ok((renames, finish)) => {
+                        if let Some(report) = self.ctxs[r.seed.ctx].report.as_mut() {
+                            report.bump_retry_call(finish);
+                        }
+                        renames
+                    }
+                    Err(()) => Renames::default(),
+                };
+                self.collect_retry_entries(r, &renames);
+            }
+        }
+    }
+
+    /// `processBatch`'s report over one phase's lanes, then
+    /// `fn.renameReport = merge(...)` / `ctx.report = report`.
+    fn attach_report(&mut self, ctx: usize, strategy: usize, lanes: Vec<LaneReport>) {
+        let (ty, target_id, identifiers, hash) = match &self.strategies[strategy] {
+            Strategy::Fn { f, bindings, .. } => {
+                let row = &self.inp.graph.functions[*f];
+                (
+                    ReportType::Function,
+                    row.session_id.clone(),
+                    bindings.len(),
+                    Some(row.structural_hash.clone()),
+                )
+            }
+            Strategy::Module { batch, .. } => (
+                ReportType::ModuleBinding,
+                self.module_function_id(batch),
+                batch.len(),
+                None,
+            ),
+        };
+        let mut outcomes = Outcomes::default();
+        let mut finish_reasons = Vec::new();
+        let mut remaining: HashSet<String> = HashSet::new();
+        let mut calls = 0u64;
+        for lane in lanes {
+            outcomes.assign(lane.outcomes);
+            calls += lane.finish_reasons.len() as u64;
+            finish_reasons.extend(lane.finish_reasons);
+            remaining.extend(lane.remaining);
+        }
+        let report = RenameReport {
+            ty,
+            strategy: ReportStrategy::Llm,
+            target_id,
+            total_identifiers: identifiers,
+            renamed_count: identifiers - remaining.len(),
+            outcomes,
+            total_llm_calls: Some(calls),
+            finish_reasons,
+            structural_hash: hash.clone(),
+        };
+        let slot = &mut self.ctxs[ctx].report;
+        match (slot.as_mut(), ty) {
+            (Some(existing), ReportType::Function) => {
+                existing.merge(report);
+                existing.structural_hash = hash;
+            }
+            _ => *slot = Some(report),
+        }
+    }
+
+    /// `recordWaveRejectionOutcome`: a barrier-rejected entry reads as a
+    /// duplicate until its retry overwrites it (keyed by the OLD name —
+    /// a shadowed-pass `name#2` entry's rejection lands on `name`).
+    fn record_rejection_outcome(&mut self, ctx: usize, old: &str, new: &str) {
+        if let Some(r) = self.ctxs[ctx].report.as_mut() {
+            r.outcomes.set(
+                old,
+                IdentifierOutcome {
+                    status: Status::Duplicate {
+                        conflicted_with: new.to_string(),
+                        attempts: 1,
+                        suggestion: Some(new.to_string()),
+                    },
+                    trail: None,
+                },
+            );
+        }
+    }
+
+    /// `recordWaveRetryOutcome`.
+    fn record_retry_outcome(&mut self, ctx: usize, id: &str, final_name: &str) {
+        if let Some(r) = self.ctxs[ctx].report.as_mut() {
+            let round = r.total_llm_calls.unwrap_or(1);
+            r.outcomes
+                .set(id, IdentifierOutcome::renamed(final_name, round, None));
+        }
+    }
+
+    /// `recordWaveRetryGiveUp`'s outcome half.
+    fn record_retry_give_up(&mut self, ctx: usize, id: &str, prev: &str) {
+        if let Some(r) = self.ctxs[ctx].report.as_mut() {
+            r.outcomes.set(
+                id,
+                IdentifierOutcome {
+                    status: Status::Duplicate {
+                        conflicted_with: prev.to_string(),
+                        attempts: 2,
+                        suggestion: Some(prev.to_string()),
+                    },
+                    trail: None,
+                },
+            );
         }
     }
 
@@ -1531,6 +1836,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 binding,
                 target,
                 live,
+                prev_name: None,
             });
         }
     }
@@ -1571,7 +1877,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             .run_wave(calls)
             .into_iter()
             .map(|r| match r {
-                Ok(resp) => Ok((resp.renames, resp.finish_reason)),
+                Ok(resp) => {
+                    self.processor.completed_calls += 1;
+                    Ok((resp.renames, resp.finish_reason))
+                }
                 Err(e) => {
                     if e.kind == LlmErrorKind::CacheMiss {
                         self.misses += 1;
@@ -1645,19 +1954,32 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             let applied = !taken && self.apply(&entry, &entry.new.clone());
             if applied {
                 self.winners.insert(entry.new.clone(), entry.old.clone());
+                if entry.suffix_on_reject {
+                    self.record_retry_outcome(entry.ctx, &entry.old, &entry.new);
+                }
                 continue;
             }
             if entry.suffix_on_reject {
                 let variant = resolve_conflict(&entry.new, |n| self.live_has(entry.live, n));
                 let ok = variant != entry.new && self.apply(&entry, &variant);
                 if ok {
+                    self.processor.contention.push(ContentionEvent {
+                        requested: entry.new.clone(),
+                        resolved_to: variant.clone(),
+                        old_name: entry.old.clone(),
+                        site: "wave",
+                    });
+                    self.record_retry_outcome(entry.ctx, &entry.old, &variant);
                     self.winners.insert(variant, entry.old.clone());
                 } else {
                     // Terminal give-up: identity bookkeeping.
                     self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
+                    let prev = entry.prev_name.clone().unwrap_or_default();
+                    self.record_retry_give_up(entry.ctx, &entry.old, &prev);
                 }
                 continue;
             }
+            self.record_rejection_outcome(entry.ctx, &entry.old, &entry.new);
             let winner_old = self.winners.get(&entry.new).cloned();
             rejections.push(Rejection { entry, winner_old });
         }
@@ -1756,6 +2078,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// binding `scope.getBinding(old)` resolves (captured BEFORE).
     fn llm_rename(&mut self, scope: BScopeId, old: &str, new: &str) -> bool {
         let trail_binding = self.state.get_binding(scope, old);
+        // Both captured BEFORE the rename: the count the guards saw
+        // (`referencePaths + constantViolations`) and the scope's block.
+        let ref_count = trail_binding.map(|b| self.ref_count(b));
+        let scope_block = self.state.view().scope(scope).span;
         let attempt = self.state.attempt_validated_rename(
             RenameRequest {
                 scope,
@@ -1771,9 +2097,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             } else {
                 Outcome::Rejected
             };
-            let mut row = Attempt::new(Tier::Llm, outcome).proposed(new);
+            let mut row = Attempt::new(Tier::Llm, outcome)
+                .proposed(new)
+                .scope_block(scope_block);
             if let Some(reason) = attempt.reason {
                 row = row.reason(reason.as_str());
+            }
+            if let Some(n) = ref_count {
+                row = row.ref_count(n);
             }
             self.state.record(b, old, row, false);
         }

@@ -131,6 +131,22 @@ enum Command {
         #[arg(long)]
         plant: Option<String>,
     },
+    /// WP4.6's gate (phase 4 step 2): the whole naming stage through the
+    /// driver (`humanify_core::naming::driver`) on a TS dump's texts, warm
+    /// replay — names.json, transfers.json, prompts/cache-keys, stats.json,
+    /// diag.json, coverage.txt and the texts. (Migration scaffolding —
+    /// deleted at phase 6.)
+    Naming {
+        ts_dump: String,
+        out_dir: String,
+        /// The cache to replay (a SCRATCH COPY of the standing cache).
+        #[arg(long)]
+        llm_cache: String,
+        /// Plant a bug (gate red runs): reconcile-flip-tier |
+        /// permute-reverse | barrier-reverse | no-recrawl | no-retries.
+        #[arg(long)]
+        plant: Option<String>,
+    },
     /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
     /// per scope and per binding (UTF-16 spans), byte-comparable with
     /// `test/parity/wp31-scope-bundle-probe.mjs` on the same text.
@@ -501,6 +517,12 @@ fn main() {
             ts_inputs,
             plant,
         }) => run_passes_verb(&ts_dump, &out_dir, &llm_cache, ts_inputs, plant.as_deref()),
+        Some(Command::Naming {
+            ts_dump,
+            out_dir,
+            llm_cache,
+            plant,
+        }) => run_naming_verb(&ts_dump, &out_dir, &llm_cache, plant.as_deref()),
         Some(Command::Transfers { ts_dump, out_dir }) => {
             match humanify_core::rename::transfer::dump::dump_transfers(
                 std::path::Path::new(&ts_dump),
@@ -849,6 +871,39 @@ fn run_passes_verb(
         |params| humanify_llm::LlmClient::replay_only(&replay_dir, params),
     ) {
         Ok(s) => println!("passes: {s:?} -> {out_dir}"),
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn run_naming_verb(ts_dump: &str, out_dir: &str, llm_cache: &str, plant: Option<&str>) {
+    use humanify_core::naming::driver::NamingHooks;
+    use humanify_core::naming::passes::family_permute::PermutePlant;
+    use humanify_core::naming::reconcile::ReconcilePlant;
+    use humanify_core::naming::waves::processor::Plant;
+    let mut hooks = NamingHooks::default();
+    match plant {
+        None => {}
+        Some("reconcile-flip-tier") => hooks.reconcile_plant = Some(ReconcilePlant::FlipTier),
+        Some("permute-reverse") => hooks.permute_plant = Some(PermutePlant::TieBreakReversed),
+        Some("barrier-reverse") => hooks.wave_plant = Some(Plant::BarrierReversed),
+        Some("no-recrawl") => hooks.wave_plant = Some(Plant::NoRecrawl),
+        Some("no-retries") => hooks.wave_plant = Some(Plant::NoRetries),
+        Some(other) => {
+            eprintln!("ERROR: unknown --plant {other}");
+            std::process::exit(2);
+        }
+    }
+    let replay_dir = std::path::PathBuf::from(llm_cache);
+    match humanify_core::naming::driver::dump::dump_naming(
+        std::path::Path::new(ts_dump),
+        std::path::Path::new(out_dir),
+        &hooks,
+        |params| humanify_llm::LlmClient::replay_only(&replay_dir, params),
+    ) {
+        Ok(s) => println!("naming: {s:?} -> {out_dir}"),
         Err(e) => {
             eprintln!("ERROR: {e}");
             std::process::exit(1);

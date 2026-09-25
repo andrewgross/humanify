@@ -20,6 +20,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use humanify_model::llm::{RenameFailures, Renames};
 
 use super::jsset::JsRecord;
+use crate::naming::report::{
+    AttemptResult, ContentionEvent, IdentifierOutcome, Outcomes, RoundAttempt, Status,
+};
 use crate::naming::validation::{resolve_conflict, sanitize_identifier};
 use crate::rename::validated::target::is_valid_rename_target;
 
@@ -64,13 +67,38 @@ enum FailureReason {
     Unchanged,
 }
 
-/// `IdentifierAttemptState` (the decision fields).
+/// `IdentifierAttemptState` (the decision fields + the round trail the
+/// report carries).
 #[derive(Clone, Debug, Default)]
 struct IdState {
     attempts: u32,
     free_retries: u32,
     last_suggestion: Option<String>,
     last_failure: Option<FailureReason>,
+    trail: Option<Vec<RoundAttempt>>,
+}
+
+impl IdState {
+    /// `recordAttempt`: the round is the attempt's position.
+    fn record(&mut self, proposed: Option<&str>, result: AttemptResult) {
+        let trail = self.trail.get_or_insert_with(Vec::new);
+        trail.push(RoundAttempt {
+            round: trail.len() as u64 + 1,
+            proposed: proposed.map(str::to_string),
+            result,
+        });
+    }
+}
+
+/// What a finished lane reports (`runBatchRenameLoop`'s result).
+#[derive(Clone, Debug, Default)]
+pub struct LaneReport {
+    pub outcomes: Outcomes,
+    pub finish_reasons: Vec<Option<String>>,
+    /// The identifiers still unrenamed after the resolution tail.
+    pub remaining: Vec<String>,
+    /// `resolveRemaining`'s collision decorations (contention events).
+    pub contention: Vec<ContentionEvent>,
 }
 
 /// What a lane collects for the barrier.
@@ -149,6 +177,10 @@ pub struct Lane {
     identity: bool,
     pub effects: Vec<LaneEffect>,
     finished: bool,
+    /// `totalLLMCalls` during the loop: every window call ATTEMPTED (a
+    /// provider throw counts) — the straggler's round reads it.
+    attempted_calls: u64,
+    pub report: LaneReport,
 }
 
 impl Lane {
@@ -174,6 +206,8 @@ impl Lane {
             identity,
             effects: Vec::new(),
             finished: false,
+            attempted_calls: 0,
+            report: LaneReport::default(),
         }
     }
 
@@ -286,12 +320,15 @@ impl Lane {
         env: &LaneEnv<'_>,
     ) {
         let batch = pending.batch;
+        self.attempted_calls += 1;
         let Ok((raw, finish)) = response else {
             self.exhausted.extend(batch);
             self.stage = Stage::NextWindow;
             return;
         };
         self.calls += 1;
+        // `callNum`: this call's 1-based position among the answered ones.
+        let round = self.report.finish_reasons.len() as u64 + 1;
         let renames = match env.transform {
             Some(t) => transform(&raw, t),
             None => raw,
@@ -299,8 +336,9 @@ impl Lane {
         if finish.as_deref() == Some("length") && self.adaptive > 2 {
             self.adaptive = 2.max(self.adaptive / 2);
         }
+        self.report.finish_reasons.push(finish);
         let mut v = self.validate(&renames, &batch, env);
-        let (applied, late) = self.apply_valid(&v, env);
+        let (applied, late) = self.apply_valid(&v, env, round);
         v.duplicates.extend(late);
         let (next, exhausted) = self.classify(&batch, &v, &renames, &pending.claimed_before, env);
         self.exhausted.extend(exhausted);
@@ -323,12 +361,16 @@ impl Lane {
         if let Stage::Straggler { next, .. } = &mut self.stage {
             *next += pending.batch.len().max(1);
         }
-        let Ok((renames, _finish)) = response else {
+        // `callNum = priorLLMCalls + finishReasons.length + 1`: the window
+        // calls are counted TWICE (attempted, then answered) — the TS's.
+        let round = self.attempted_calls + self.report.finish_reasons.len() as u64 + 1;
+        let Ok((renames, finish)) = response else {
             return;
         };
         self.calls += 1;
+        self.report.finish_reasons.push(finish);
         let v = self.validate(&renames, &pending.batch, env);
-        self.apply_valid(&v, env);
+        self.apply_valid(&v, env, round);
         for name in &pending.batch {
             if let Some(s) = renames.get(name).filter(|s| !s.is_empty())
                 && let Some(state) = self.states.get_mut(name)
@@ -376,7 +418,12 @@ impl Lane {
     }
 
     /// `applyValidRenames`: the check-and-claim.
-    fn apply_valid(&mut self, v: &Validation, env: &LaneEnv<'_>) -> (usize, Vec<String>) {
+    fn apply_valid(
+        &mut self,
+        v: &Validation,
+        env: &LaneEnv<'_>,
+        round: u64,
+    ) -> (usize, Vec<String>) {
         let mut applied = 0;
         let mut late = Vec::new();
         for (old, new) in &v.valid {
@@ -385,6 +432,13 @@ impl Lane {
                 continue;
             }
             self.claim(old, new);
+            let trail = self.states.get_mut(old).and_then(|s| {
+                s.record(Some(new), AttemptResult::Applied);
+                s.trail.clone()
+            });
+            self.report
+                .outcomes
+                .set(old, IdentifierOutcome::renamed(new, round, trail));
             applied += 1;
         }
         (applied, late)
@@ -436,6 +490,16 @@ impl Lane {
             if let Some(s) = suggestion {
                 state.last_suggestion = Some(s.to_string());
             }
+            let result = if dup.contains(name.as_str()) {
+                AttemptResult::Duplicate
+            } else if inv.contains(name.as_str()) {
+                AttemptResult::Invalid
+            } else if unch.contains(name.as_str()) {
+                AttemptResult::Unchanged
+            } else {
+                AttemptResult::Missing
+            };
+            state.record(renames.get(name), result);
             if !is_free {
                 state.last_failure = Some(if dup.contains(name.as_str()) {
                     FailureReason::Duplicate
@@ -484,6 +548,8 @@ impl Lane {
             .collect();
         let snapshot = self.claimed.clone();
         let snap_used = |n: &str| (env.used)(n) || snapshot.contains(n);
+        // `resolveOneRemaining`'s round: the answered calls + 1.
+        let round = self.report.finish_reasons.len() as u64 + 1;
         let mut left: Vec<String> = Vec::new();
         for name in &remaining {
             let Some(suggested) = prev.get(name) else {
@@ -497,6 +563,9 @@ impl Lane {
             let scope_rejected = (env.would_reject)(name, suggested);
             if !snap_used(suggested) && !scope_rejected {
                 self.claim(name, suggested);
+                self.report
+                    .outcomes
+                    .set(name, IdentifierOutcome::renamed(suggested, round, None));
                 continue;
             }
             let resolved = resolve_conflict(suggested, snap_used);
@@ -504,14 +573,62 @@ impl Lane {
                 left.push(name.clone());
                 continue;
             }
-            self.claim(name, &resolved);
-        }
-        if self.identity {
-            for name in left {
-                self.effects.push(LaneEffect::Identity { name });
+            // Scope-unsafe repairs are not contention (nobody HOLDS the
+            // name); only a genuine collision counts.
+            if !scope_rejected {
+                self.report.contention.push(ContentionEvent {
+                    requested: suggested.clone(),
+                    resolved_to: resolved.clone(),
+                    old_name: name.clone(),
+                    site: "remaining",
+                });
             }
+            self.claim(name, &resolved);
+            self.report
+                .outcomes
+                .set(name, IdentifierOutcome::renamed(&resolved, round, None));
         }
+        let last_finish = self.report.finish_reasons.last().cloned().flatten();
+        for name in &left {
+            if self.identity {
+                self.effects
+                    .push(LaneEffect::Identity { name: name.clone() });
+            }
+            let outcome = unrenamed_outcome(&self.states[name], last_finish.clone());
+            self.report.outcomes.set(name, outcome);
+        }
+        self.report.remaining = left;
         self.finished = true;
+    }
+}
+
+/// `buildUnrenamedOutcome`: by the last failure; `attempts` counts one
+/// more when any free retry happened.
+fn unrenamed_outcome(state: &IdState, last_finish: Option<String>) -> IdentifierOutcome {
+    let attempts = u64::from(state.attempts) + u64::from(state.free_retries > 0);
+    let suggestion = state.last_suggestion.clone();
+    let status = match state.last_failure {
+        Some(FailureReason::Duplicate) => Status::Duplicate {
+            conflicted_with: suggestion.clone().unwrap_or_else(|| "unknown".to_string()),
+            attempts,
+            suggestion,
+        },
+        Some(FailureReason::Invalid) => Status::Invalid {
+            attempts,
+            suggestion,
+        },
+        Some(FailureReason::Unchanged) => Status::Unchanged {
+            attempts,
+            suggestion,
+        },
+        _ => Status::Missing {
+            attempts,
+            last_finish_reason: last_finish,
+        },
+    };
+    IdentifierOutcome {
+        status,
+        trail: state.trail.clone(),
     }
 }
 

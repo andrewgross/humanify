@@ -325,13 +325,15 @@ impl<'a, 's> StageSide<'a, 's> {
 }
 
 /// Parse one side's text (`name` — `input.js` / `prior.js` — names the
-/// source; its extension is the source type).
+/// source in errors). Babel's `sourceType: "unambiguous"`, as the TS
+/// `parseSourceAst` parses both sides: an ESM text (`import.meta`) that a
+/// script parse rejects is a module (the zustand fixture's regime).
 pub fn parse_side<'a>(
     allocator: &'a Allocator,
     text: &'a str,
     name: &str,
 ) -> Result<Ingest<'a>, String> {
-    let ingest = Ingest::parse(allocator, text, name);
+    let ingest = Ingest::parse_unambiguous(allocator, text);
     if let Some(first) = ingest.errors.first() {
         return Err(format!(
             "oxc failed to parse {name}: {} diagnostic(s) — {first}",
