@@ -40,6 +40,7 @@
 import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import {
+  identifierTokenAt,
   parseSourceAst,
   renameSubstitutionText,
   traverse
@@ -118,8 +119,6 @@ export interface PostSplitReconcileResult {
   stats: PostSplitReconcileStats;
 }
 
-const IDENT_AT = /^[A-Za-z_$][\w$]*/;
-
 /**
  * Identifier positions whose name in the reconciled AST differs from the token
  * standing at that loc in the original text — exactly what the rename rewrote.
@@ -134,12 +133,12 @@ function collectSubstitutions(ast: t.File, lines: string[]): Substitution[] {
       if (!loc) return;
       const text = lines[loc.start.line - 1];
       if (text === undefined) return;
-      const match = IDENT_AT.exec(text.slice(loc.start.column));
-      if (!match || match[0] === p.node.name) return;
+      const token = identifierTokenAt(text, loc.start.column);
+      if (token === null || token === p.node.name) return;
       subs.push({
         line: loc.start.line,
         col: loc.start.column,
-        from: match[0],
+        from: token,
         // Shorthand-aware: `{ count }` renamed to `tally` must become
         // `{ count: tally }`, never rewrite the key.
         to: renameSubstitutionText(p, p.node.name)

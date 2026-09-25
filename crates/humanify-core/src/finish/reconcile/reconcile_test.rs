@@ -109,15 +109,12 @@ fn the_kill_switch_does_nothing() {
     assert!(result.changed.is_empty());
 }
 
-/// A TS quirk reproduced for parity (reported to the structure owner):
-/// `collectSubstitutions` reads the token at each identifier's `loc` with
-/// the ASCII-only `IDENT_AT`, so in a file with ANY reconcile rename a
-/// non-ASCII identifier `café` reads as `caf` and is "substituted" to
-/// `café` — shipping `caféé`. The rewrite is still a consistent rename of
-/// one binding, so the re-parse guard accepts it. Real output of the TS
-/// (`postSplitReconcile`, 2026-09-25).
+/// Finding #28, fixed TS-first 2026-09-25: the old-token read at each
+/// identifier's loc was ASCII-only, so in a file with ANY reconcile rename
+/// `café` read as `caf` and was "substituted" to `caféé`. The read is now
+/// the ECMAScript IdentifierName grammar (`identifierTokenAt`).
 #[test]
-fn a_non_ascii_identifier_is_mangled_exactly_like_the_ts() {
+fn a_non_ascii_identifier_is_left_intact() {
     let fresh =
         "function f(a) {\n  const Xq = a + 1;\n  return Xq;\n}\nvar café = 1;\nuse(café);\n";
     let prior =
@@ -140,7 +137,7 @@ fn a_non_ascii_identifier_is_mangled_exactly_like_the_ts() {
         result.changed,
         vec![(
             "a.js".to_string(),
-            "function f(a) {\n  const total = a + 1;\n  return total;\n}\nvar caféé = 1;\nuse(caféé);\n"
+            "function f(a) {\n  const total = a + 1;\n  return total;\n}\nvar café = 1;\nuse(café);\n"
                 .to_string()
         )]
     );

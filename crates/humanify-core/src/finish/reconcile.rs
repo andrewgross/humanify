@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{BindingPattern, ForStatementLeft, Program, Statement};
 use oxc_span::GetSpan;
+use oxc_syntax::identifier::{is_identifier_part, is_identifier_start};
 
 use humanify_model::js::{JsObject, JsValue, cmp_utf16};
 
@@ -219,17 +220,17 @@ fn count_stale(ledger: &JsObject, file: &str, renames: &[PostSplitRename]) -> us
 // One file
 // ---------------------------------------------------------------------------
 
-/// `IDENT_AT.exec(line.slice(col))` over UTF-16 columns.
+/// `identifierTokenAt(line, col)`: the ECMAScript IdentifierName standing
+/// at UTF-16 column `col` (ID_Start/`$`/`_`, then ID_Continue/`$`/ZWNJ/ZWJ).
+/// Not ASCII-only — that read mangled `café` into `caféé` (finding #28).
 pub(crate) fn ident_at(line: &str, col: usize) -> Option<String> {
     let units: Vec<u16> = line.encode_utf16().collect();
-    let rest = units.get(col..)?;
-    let is_start = |u: u16| u < 128 && ((u as u8).is_ascii_alphabetic() || u == 95 || u == 36);
-    let is_cont = |u: u16| u < 128 && ((u as u8).is_ascii_alphanumeric() || u == 95 || u == 36);
-    if !rest.first().is_some_and(|&u| is_start(u)) {
-        return None;
-    }
-    let len = rest.iter().take_while(|&&u| is_cont(u)).count();
-    Some(String::from_utf16_lossy(&rest[..len]))
+    let rest = String::from_utf16_lossy(units.get(col..)?);
+    let mut chars = rest.chars();
+    let first = chars.next().filter(|&c| is_identifier_start(c))?;
+    let mut token = String::from(first);
+    token.extend(chars.take_while(|&c| is_identifier_part(c)));
+    Some(token)
 }
 
 /// `renameSubstitutionText(path, newName)`.

@@ -72,6 +72,26 @@ describe("carryRenamesIntoBundle", () => {
     assert.match(out.code, /return resultValue \+ 2/);
   });
 
+  it("carries a rename of a non-ASCII binding", () => {
+    // The token read at each loc was ASCII-only, so `café` read as `caf`,
+    // mismatched the binding name, and the whole carry abstained.
+    const bundle = `(function () {
+function first() {
+  var café = compute();
+  return café + 1;
+}
+})();`;
+    const out = carryRenamesIntoBundle(bundle, ledgerOf(["a.js"], [0]), [
+      rename("a.js", "café", "resultValue", { bodyOrdinal: 0, nameOrdinal: 0 })
+    ]);
+    assert.strictEqual(out.carried, 1, JSON.stringify([...out.abstained]));
+    assert.ok(out.code);
+    assert.match(
+      out.code,
+      /var resultValue = compute\(\);\s*return resultValue \+ 1/
+    );
+  });
+
   it("follows the EMITTED order, not bundle order", () => {
     // The emit permuted the file's statements, so the file's 0th emitted
     // statement is bundle statement 1. A carry that ignored emitIndexes would

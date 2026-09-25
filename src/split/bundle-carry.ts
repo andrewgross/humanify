@@ -38,6 +38,7 @@ import {
 } from "../output-validation.js";
 import type { Binding } from "@babel/traverse";
 import {
+  identifierTokenAt,
   renameSubstitutionText,
   violationWriteTargetPaths
 } from "../babel-utils.js";
@@ -53,8 +54,6 @@ export interface BundleCarryResult {
   /** Renames the bundle could not be given, with a reason each. */
   abstained: Map<string, number>;
 }
-
-const IDENT_AT = /^[A-Za-z_$][\w$]*/;
 
 /** Which slot of the ledger holds each file's j-th emitted statement. */
 function slotsByFile(ledger: StableSplitLedger): Map<string, number[]> {
@@ -226,8 +225,8 @@ function occurrencesOf(
     if (!loc) return null;
     const text = lines[loc.start.line - 1];
     if (text === undefined) return null;
-    const match = IDENT_AT.exec(text.slice(loc.start.column));
-    if (!match || match[0] !== fromName) return null;
+    const token = identifierTokenAt(text, loc.start.column);
+    if (token !== fromName) return null;
     subs.push({
       line: loc.start.line,
       col: loc.start.column,

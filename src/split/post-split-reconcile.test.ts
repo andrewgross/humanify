@@ -70,6 +70,21 @@ describe("postSplitReconcile", () => {
     assert.strictEqual(out.shipped.get("a.js"), PRIOR_LOCAL);
   });
 
+  it("leaves a non-ASCII identifier intact when another name in the file is renamed", () => {
+    // The old-token read at each identifier's loc was ASCII-only: `café` read
+    // as `caf`, differed from the AST's `café`, and was "substituted" back as
+    // `caféé` — a consistent rename of one binding, so the reparse guard let
+    // it ship (finding #28).
+    const prior = `function f(a) {\n  const total = a + 1;\n  return total;\n}\nvar café = 1;\nuse(café);`;
+    const fresh = `function f(a) {\n  const Xq = a + 1;\n  return Xq;\n}\nvar café = 1;\nuse(café);`;
+    const out = run(
+      new Map([["a.js", fresh]]),
+      new Map([["a.js", prior]]),
+      ledgerOf(["a.js"], ["a.js", "a.js", "a.js"], ["f", "café", null])
+    );
+    assert.strictEqual(out.shipped.get("a.js"), prior);
+  });
+
   it("rewrites the text without re-generating: only the renamed tokens move", () => {
     // Deliberately odd spacing the babel generator would normalize away. A
     // re-generate would reflow it and churn the whole file; the textual

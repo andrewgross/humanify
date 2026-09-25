@@ -185,6 +185,21 @@ export function renameSubstitutionText(
   return key === null ? newName : `${key}: ${newName}`;
 }
 
+/** An IdentifierName at the start of a string: ID_Start/`$`/`_`, then
+ * ID_Continue/`$`/ZWNJ/ZWJ — the ECMAScript grammar, not ASCII. */
+const IDENTIFIER_TOKEN = /^[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*/u;
+
+/**
+ * The identifier token standing at `column` (UTF-16 units, Babel's loc
+ * column) of `line`, or null. Text-substitution consumers read the OLD name
+ * back out of the source with this; an ASCII-only read truncated `café` to
+ * `caf`, which post-split reconcile then "substituted" into `caféé`
+ * (finding #28). One definition backs every consumer.
+ */
+export function identifierTokenAt(line: string, column: number): string | null {
+  return IDENTIFIER_TOKEN.exec(line.slice(column))?.[0] ?? null;
+}
+
 /** The property key name when `path` is the VALUE of a shorthand object
  * property (directly, or as the left of its default-value pattern). */
 function shorthandKeyName(path: NodePath): string | null {
