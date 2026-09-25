@@ -132,3 +132,37 @@ describe("getProximateUsedNames", () => {
     assert.ok(!result.has("a"), "should still exclude eligible names");
   });
 });
+
+/**
+ * 16-findings-queue #22 (finding #12's class, found by the Rust port,
+ * WP3.3): `scopeBindings[name]` fell through to Object.prototype, so a used
+ * name like `toString` (the LLM assigns such names) that is NOT bound in
+ * this scope read the built-in function — truthy, no loc, no references —
+ * and was EXCLUDED from the proximate used names, where a genuinely absent
+ * name is included ("include if binding not found, to be safe").
+ */
+describe("getProximateUsedNames reads only own scope bindings", () => {
+  it("includes an unbound toString like any other unbound name", () => {
+    const scopeBindings: Record<
+      string,
+      { identifier: { loc: { start: { line: number } } } }
+    > = {};
+    for (let i = 0; i < 200; i++) {
+      scopeBindings[`far${i}`] = {
+        identifier: { loc: { start: { line: 9000 + i } } }
+      };
+    }
+    const result = getProximateUsedNames(
+      new Set(["toString", "someUnboundName"]),
+      [50],
+      scopeBindings,
+      200,
+      (name: string) => name.length === 1
+    );
+    assert.ok(result.has("someUnboundName"), "an unbound name is included");
+    assert.ok(
+      result.has("toString"),
+      "an unbound toString must be included too"
+    );
+  });
+});

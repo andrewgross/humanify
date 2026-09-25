@@ -3,6 +3,7 @@
  * bindings, prompts only carry the preserved names declared or referenced
  * near the batch's lines, plus well-known globals.
  */
+import { ownEntry } from "../shared/own-entry.js";
 import type { IsEligibleFn } from "./rename-eligibility.js";
 
 /** Looser binding type for proximity windowing (only needs loc info, not path). */
@@ -129,7 +130,7 @@ export function getProximateUsedNames(
     if (
       isNameInProximityWindow(
         name,
-        scopeBindings[name],
+        ownEntry(scopeBindings, name),
         minLine,
         maxLine,
         result.has(name)
