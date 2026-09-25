@@ -2066,7 +2066,7 @@ fn ordered_child_keys<'m>(
 /// in babel too. Chain-neutral wrappers pass through: oxc keeps
 /// ParenthesizedExpression on a paren-terminated chain and can wrap a
 /// nested chain in its own ChainExpression.
-fn chain_link(node: &Value) -> bool {
+pub(crate) fn chain_link(node: &Value) -> bool {
     let Some(map) = node.as_object() else {
         return false;
     };
