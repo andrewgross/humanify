@@ -22,7 +22,7 @@
 //! - literals per key family: blurred (volatile semver/ISO/hex-digest
 //!   classes, string length markers, numeric magnitudes) or verbatim;
 //! - single-statement blocks at bare-statement positions unwrap;
-//! - class-private names get per-class order-keyed slots or stay verbatim.
+//! - class-private names stay verbatim (`P=#name`; the TS default mode).
 //!
 //! One walk produces hash + placeholder mapping; slot ordinals are assigned
 //! by first occurrence in the walk, so structurally identical functions get
@@ -142,7 +142,6 @@ fn canonical_serialize_inner(
         mapping: Vec::new(),
         counter: 0,
         preserve_literals: policy == LiteralPolicy::Verbatim,
-        private_slots: None,
         blind_privates,
         parts: String::with_capacity(4096),
     };
@@ -161,7 +160,6 @@ struct State<'a> {
     mapping: Vec<(String, Option<SymbolId>, String)>,
     counter: u32,
     preserve_literals: bool,
-    private_slots: Option<HashMap<String, String>>,
     blind_privates: bool,
     parts: String,
 }
@@ -243,12 +241,6 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         return;
     }
 
-    // Per-class private-slot numbering: a fresh map per class.
-    let outer_private_slots = state.private_slots.take();
-    if node_type == "ClassExpression" || node_type == "ClassDeclaration" {
-        state.private_slots = Some(HashMap::new());
-    }
-
     state.parts.push_str(&node_type);
     state.parts.push('{');
     // serde_json's Map is a BTreeMap: keys iterate alphabetically — a fixed
@@ -266,8 +258,6 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         state.parts.push(';');
     }
     state.parts.push('}');
-
-    state.private_slots = outer_private_slots;
 }
 
 /// The identifier-role rules (structural-hash.ts:554-590) over the ESTree
@@ -562,22 +552,19 @@ fn unwrappable_block<'a>(
     Some(only)
 }
 
-/// Private-name tokens (structural-hash.ts:841-864): verbatim unless the
-/// walk runs under a class's slot numbering.
-fn private_name_token(name: &str, state: &mut State<'_>) -> String {
+/// Private-name tokens (structural-hash.ts:841-864): VERBATIM — the TS
+/// default. The TS's `privateNamesAsSlots` mode (per-class order-keyed
+/// `P=$n`) has one caller, `computeRenameInvariantSignature`
+/// (output-validation.ts), which is not a hash this serializer produces;
+/// the per-class slot map this function used to consult was clobbered by
+/// every non-class child before a private token could read it (removed
+/// 2026-09-25 — it never changed a byte). Under `blind_privates` (the twin
+/// gate's masked stream) every private token reads `P=#`.
+fn private_name_token(name: &str, state: &State<'_>) -> String {
     if state.blind_privates {
         return "P=#".to_string();
     }
-    match &mut state.private_slots {
-        None => format!("P=#{name}"),
-        Some(slots) => {
-            let size = slots.len();
-            let slot = slots
-                .entry(name.to_string())
-                .or_insert_with(|| format!("P=${}", size + 1));
-            slot.clone()
-        }
-    }
+    format!("P=#{name}")
 }
 
 /// The stream's string escaping: JSON-safe, matching Node's `JSON.stringify`

@@ -428,64 +428,13 @@ fn write_matches_dump(
         None => Value::Null,
     };
 
-    // ── the twins (WP2.3): the gates over the matches-derived states ─────
+    // ── the twins (WP2.3): gated over the SETTLED states and the full
+    // binding-rename list — the transfer stage's own derivation (one owner;
+    // this dump used to re-derive them and missed the close half of the
+    // fn-var transfers and every freeze, posture close-out 2026-09-25) ──
     let prior_gate_side = stage.prior.gate_side();
     let fresh_gate_side = stage.fresh.gate_side();
-    // The cascade's results, as the twins read them (the WP2.4 derivation —
-    // the gates test's exact shape).
-    let fn_matches: HashMap<String, String> = function_result.matches.to_hash_map();
-    // The cascades' matches are SESSION-ID keyed ("module:<name>",
-    // "input.js:L:C"); the gate tests binding NAMES — convert through the
-    // graphs' session-id registries (the raw ids here were the original
-    // parity bug — every claimed-test read false and every bucket ref-key
-    // lookup missed).
-    let (claimed, identity_pairs) = stage
-        .binding_result
-        .map(|r| {
-            crate::twins::gates::binding_cascade_name_inputs(
-                &prior_gate_side,
-                &fresh_gate_side,
-                &r.matches,
-                &fn_matches,
-            )
-        })
-        .unwrap_or_default();
-    // The matched fresh ids as a set: one membership test per row (a
-    // `values().any` scan per row was quadratic in the function count).
-    let matched_fresh: std::collections::HashSet<&String> = fn_matches.values().collect();
-    let fn_states: HashMap<String, crate::twins::gates::RowState> = stage
-        .fresh
-        .graph
-        .functions
-        .iter()
-        .map(|f| {
-            let state = if matched_fresh.contains(&f.session_id) {
-                crate::twins::gates::RowState::ExactMatched
-            } else {
-                crate::twins::gates::RowState::Pending
-            };
-            (f.session_id.clone(), state)
-        })
-        .collect();
-    let binding_states: HashMap<String, crate::twins::gates::RowState> = stage
-        .fresh
-        .graph
-        .module_bindings
-        .iter()
-        .map(|b| (b.session_id.clone(), crate::twins::gates::RowState::Pending))
-        .collect();
-    let twin_inputs = crate::twins::gates::TwinInputs {
-        fn_matches: &fn_matches,
-        claimed_old_names: &claimed,
-        binding_identity_pairs: &identity_pairs,
-        fn_states: &fn_states,
-        binding_states: &binding_states,
-    };
-    let twin_output = crate::twins::gates::compute_gated_statement_twins(
-        &prior_gate_side,
-        &fresh_gate_side,
-        &twin_inputs,
-    )?;
+    let twin_output = crate::rename::transfer::statement_twins(stage)?;
 
     fs::write(
         out_dir.join("meta.json"),

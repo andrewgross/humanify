@@ -4,10 +4,16 @@
 //! `prior-version.ts` (applyExactMatches' state marking, the statement
 //! twins computed over the settled states).
 //!
-//! Library freezing reads comment regions; the four oracle dumps record
-//! none (`regions.json`), and the driver's library stage (WPB.3) supplies
-//! them for real runs — until the naming driver lands (WP4.3) there is no
-//! caller with regions, so the freeze is not wired here.
+//! The settle step ([`settle`]) is the ONE owner of what the statement
+//! twins read: the M1 matches dump calls [`statement_twins`], the transfer
+//! run [`apply_prior_version`], both through it.
+//!
+//! Library freezing reads comment regions, which no caller of this stage
+//! has yet (the driver's library stage, WPB.3, will supply them). The
+//! regime is constructed and diverges (twins::gates' posture note), but no
+//! oracle can gate it until findings #32 (the TS classifies beautified
+//! offsets against raw-text regions) and #33 (the TS dump writer throws on
+//! a mixed file) are fixed TS-first — so the freeze is not wired here.
 
 use std::collections::{HashMap, HashSet};
 
@@ -26,39 +32,21 @@ pub(super) fn apply_prior_version(
     stage: &MatchStage<'_, '_>,
 ) -> Result<(TransferOutcome, TwinGateOutput), String> {
     let fresh_semantic = stage.fresh.ingest.semantic();
-    let prior_semantic = stage.prior.ingest.semantic();
-    let fresh_state = RenameState::new(fresh_semantic, Anchor::Fresh);
-    let prior_state = RenameState::new(prior_semantic, Anchor::Fresh);
     let fresh_rows = SideRows::build(
         stage.fresh.graph,
         fresh_semantic,
         stage.fresh.tables,
         stage.fresh.json,
     );
-    let prior_rows = SideRows::build(
-        stage.prior.graph,
-        prior_semantic,
-        stage.prior.tables,
-        stage.prior.json,
-    );
-    let evidence = collect_evidence(stage, &fresh_rows, &prior_rows, &fresh_state, &prior_state)?;
-    drop(prior_state);
-    let rows = Rows::build(stage.fresh.graph, fresh_semantic, fresh_state.view());
-    let (mut fn_state, binding_state) = pre_transfer_states(stage);
-
-    // applyExactMatches: a frozen function keeps its freeze; only pending
-    // exact matches settle as "transferred".
-    let graph = stage.fresh.graph;
-    for (f, pairs) in &evidence.exact {
-        if fn_state[*f].is_pending() {
-            fn_state[*f].mark_transferred(
-                pairs.clone().unwrap_or_default(),
-                &graph.functions[*f].session_id,
-            );
-        }
-    }
-
+    let Settled {
+        evidence,
+        fresh_state,
+        fn_state,
+        binding_state,
+    } = settle(stage, &fresh_rows)?;
     let twin_output = gate_twins(stage, &evidence, &fn_state, &binding_state)?;
+    let rows = Rows::build(stage.fresh.graph, fresh_semantic, fresh_state.view());
+    let graph = stage.fresh.graph;
     let n_fns = graph.functions.len();
     let n_bindings = graph.module_bindings.len();
     let run = TransferRun {
@@ -120,6 +108,74 @@ pub(super) fn apply_prior_version(
     outcome.matched_module_bindings = matched_module_bindings;
     outcome.carry = carry;
     Ok((outcome, twin_output))
+}
+
+/// The statement twins alone, gated over exactly the inputs
+/// [`apply_prior_version`] gates them over — the M1 matches dump's
+/// `twin-gates.json` reads this, so the dump and the transfer run cannot
+/// answer "what do the twins see" differently (they did until 2026-09-25:
+/// the dump re-derived the inputs, missing the close half of the fn-var
+/// transfers and every freeze).
+pub(super) fn statement_twins(stage: &MatchStage<'_, '_>) -> Result<TwinGateOutput, String> {
+    let fresh_rows = SideRows::build(
+        stage.fresh.graph,
+        stage.fresh.ingest.semantic(),
+        stage.fresh.tables,
+        stage.fresh.json,
+    );
+    let settled = settle(stage, &fresh_rows)?;
+    gate_twins(
+        stage,
+        &settled.evidence,
+        &settled.fn_state,
+        &settled.binding_state,
+    )
+}
+
+/// What `matchPriorVersion` has settled when the statement twins run
+/// (prior-version.ts :360-431): the transfer evidence — the binding
+/// cascade's renames with the fn-var renames appended, exact THEN
+/// corroborated close (the TS `moduleBindingRenames` ALIASES
+/// `bindingCascade.renames`, so the push lands in the array the twins
+/// read) — and the fresh rows' lifecycle states: the plugin's freezes,
+/// then applyExactMatches' `transferred` marks on still-pending matches.
+struct Settled {
+    evidence: TransferEvidence,
+    fresh_state: RenameState,
+    fn_state: Vec<Lifecycle>,
+    binding_state: Vec<Lifecycle>,
+}
+
+fn settle(stage: &MatchStage<'_, '_>, fresh_rows: &SideRows<'_, '_>) -> Result<Settled, String> {
+    let fresh_state = RenameState::new(stage.fresh.ingest.semantic(), Anchor::Fresh);
+    let prior_semantic = stage.prior.ingest.semantic();
+    let prior_state = RenameState::new(prior_semantic, Anchor::Fresh);
+    let prior_rows = SideRows::build(
+        stage.prior.graph,
+        prior_semantic,
+        stage.prior.tables,
+        stage.prior.json,
+    );
+    let evidence = collect_evidence(stage, fresh_rows, &prior_rows, &fresh_state, &prior_state)?;
+    drop(prior_state);
+    let (mut fn_state, binding_state) = pre_transfer_states(stage);
+    // applyExactMatches: a frozen function keeps its freeze; only pending
+    // exact matches settle as "transferred".
+    let graph = stage.fresh.graph;
+    for (f, pairs) in &evidence.exact {
+        if fn_state[*f].is_pending() {
+            fn_state[*f].mark_transferred(
+                pairs.clone().unwrap_or_default(),
+                &graph.functions[*f].session_id,
+            );
+        }
+    }
+    Ok(Settled {
+        evidence,
+        fresh_state,
+        fn_state,
+        binding_state,
+    })
 }
 
 /// The plugin's freezes before the transfer stage: functions on a

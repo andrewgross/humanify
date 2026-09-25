@@ -4,12 +4,12 @@
 //! reproducible at this layer).
 //!
 //! Two harnesses:
-//! - [`with_twin_sides`] — the REAL cascade/alternation runs, and the
-//!   [`TwinInputs`] are DERIVED from its results exactly the way WP2.4's
-//!   orchestration will derive them (fn_matches, the inverted binding
-//!   pairs, claimed names, the lifecycle states). The fixtures are built to
-//!   defeat the function matcher but not the statement tier (the TS file
-//!   header's design).
+//! - [`with_twin_sides`] — the REAL match stage runs (`match_prior_version`)
+//!   and the [`TwinInputs`] come from their one owner,
+//!   `rename::transfer::statement_twins` (the settled lifecycle states +
+//!   the full binding-rename list the transfer stage gates over). The
+//!   fixtures are built to defeat the function matcher but not the
+//!   statement tier (the TS file header's design).
 //! - [`with_direct_sides`] — the TS `computeStatementTwinTransfers` direct
 //!   tests: the cascade results are SUPPLIED by hand (empty matches, chosen
 //!   claims), every row Pending. This is the only way to exercise the
@@ -23,19 +23,15 @@ use std::collections::{HashMap, HashSet};
 use oxc_allocator::Allocator;
 
 use super::{
-    GateSide, RowState, TwinInputs, TwinOutcome, binding_cascade_name_inputs,
-    compute_gated_statement_twins, gate_dump,
+    GateSide, RowState, TwinInputs, TwinOutcome, compute_gated_statement_twins, gate_dump,
 };
 use crate::graph::{GraphFunction, UnifiedGraph, build_unified_graph};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
-use crate::matching::alternation::{
-    GraphSide, alternate_function_and_binding_matching, prepare_binding_matching,
-};
-use crate::matching::build_fingerprint_index;
-use crate::matching::cascade::{MatchOptions, match_functions};
-use crate::matching::statement_context::StatementContexts;
+use crate::matching::alternation::GraphSide;
 use crate::modules::wrapper::find_wrapper_function;
+use crate::prior::{PriorMatchInput, match_prior_version};
+use crate::rename::transfer::statement_twins;
 use crate::twins::gates::TwinGateOutput;
 use crate::twins::{FRESH_ANCHOR, PRIOR_ANCHOR, statement_inventory_with_values};
 
@@ -246,155 +242,45 @@ struct TwinSides<'a> {
     fn_matches: &'a HashMap<String, String>,
 }
 
-/// Both sides parsed, the REAL cascade/alternation run, the twin inputs
-/// derived from its results the way WP2.4's orchestration will derive them,
-/// and the gate computed. The closure runs inside the scope that owns both
-/// arenas.
-fn with_twin_sides<'a>(prior_code: &'a str, fresh_code: &'a str, run: impl FnOnce(TwinSides<'_>)) {
-    let prior_allocator = Allocator::default();
-    let fresh_allocator = Allocator::default();
-    let prior_ingest = Ingest::parse(&prior_allocator, prior_code, "prior.js");
-    let fresh_ingest = Ingest::parse(&fresh_allocator, fresh_code, "fresh.js");
-    assert!(
-        prior_ingest.errors.is_empty(),
-        "prior must parse: {:?}",
-        prior_ingest.errors
-    );
-    assert!(
-        fresh_ingest.errors.is_empty(),
-        "fresh must parse: {:?}",
-        fresh_ingest.errors
-    );
-    let prior_tables = SymbolTables::build(prior_ingest.semantic());
-    let fresh_tables = SymbolTables::build(fresh_ingest.semantic());
-    let prior_graph = build_unified_graph(
-        prior_ingest.semantic(),
-        prior_ingest.program,
-        "prior.js",
-        &[],
-        None,
-        None,
-    );
-    let fresh_graph = build_unified_graph(
-        fresh_ingest.semantic(),
-        fresh_ingest.program,
-        "fresh.js",
-        &[],
-        None,
-        None,
-    );
-    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
-    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
-    let (prior_inventory, prior_values) =
-        statement_inventory_with_values(prior_code, PRIOR_ANCHOR, Some(&prior_graph))
-            .expect("prior inventory");
-    let (fresh_inventory, fresh_values) =
-        statement_inventory_with_values(fresh_code, FRESH_ANCHOR, Some(&fresh_graph))
-            .expect("fresh inventory");
-
-    let prior_ctx = StatementContexts::build(
-        &prior_graph,
-        prior_ingest.semantic(),
-        &prior_tables,
-        prior_ingest.program,
-        prior_code,
-    );
-    let fresh_ctx = StatementContexts::build(
-        &fresh_graph,
-        fresh_ingest.semantic(),
-        &fresh_tables,
-        fresh_ingest.program,
-        fresh_code,
-    );
-    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
-    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
-    let initial = match_functions(
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        MatchOptions {
-            enable_propagation: true,
-            ..MatchOptions::default()
-        },
-    );
-    let outcome = alternate_function_and_binding_matching(
-        initial,
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        &prior_side,
-        &fresh_side,
-        setup.as_ref(),
-    );
-
-    // The cascade's results, as the twins read them (WP2.4's derivation).
-    // The matches are SESSION-ID keyed; the gate tests binding NAMES —
-    // convert through the graphs' session-id registries, same as the
-    // harness (the raw ids here were the original parity bug).
-    let fn_matches: HashMap<String, String> = outcome.function_result.matches.to_hash_map();
-    let prior_wrapper = find_wrapper_function(prior_ingest.program, prior_ingest.semantic());
-    let fresh_wrapper = find_wrapper_function(fresh_ingest.program, fresh_ingest.semantic());
-    let prior_gate = GateSide::build(
-        &prior_graph,
-        prior_ingest.semantic(),
-        &prior_tables,
-        &prior_inventory,
-        &prior_values,
-        &prior_side,
-        prior_wrapper.as_ref().map(|w| w.span),
-    );
-    let fresh_gate = GateSide::build(
-        &fresh_graph,
-        fresh_ingest.semantic(),
-        &fresh_tables,
-        &fresh_inventory,
-        &fresh_values,
-        &fresh_side,
-        fresh_wrapper.as_ref().map(|w| w.span),
-    );
-    let (claimed, identity_pairs) = outcome
-        .binding_result
-        .as_ref()
-        .map(|r| binding_cascade_name_inputs(&prior_gate, &fresh_gate, &r.matches, &fn_matches))
-        .unwrap_or_default();
-    // A fresh fn is ExactMatched iff its session id is a fn-match VALUE;
-    // everything else is Pending. All module bindings Pending.
-    let fn_states: HashMap<String, RowState> = fresh_graph
-        .functions
-        .iter()
-        .map(|f| {
-            let state = if fn_matches.values().any(|v| v == &f.session_id) {
-                RowState::ExactMatched
-            } else {
-                RowState::Pending
-            };
-            (f.session_id.clone(), state)
-        })
-        .collect();
-    let binding_states: HashMap<String, RowState> = fresh_graph
-        .module_bindings
-        .iter()
-        .map(|b| (b.session_id.clone(), RowState::Pending))
-        .collect();
-    let input = TwinInputs {
-        fn_matches: &fn_matches,
-        claimed_old_names: &claimed,
-        binding_identity_pairs: &identity_pairs,
-        fn_states: &fn_states,
-        binding_states: &binding_states,
+/// The REAL match stage over both texts (`match_prior_version` — the flow
+/// the dumps run), then the twins through their one owner
+/// (`rename::transfer::statement_twins`: the settled states + the full
+/// binding-rename list, exactly what the transfer stage gates over). The
+/// closure runs inside the scope that owns both arenas. `claimed` is the
+/// binding cascade's matched fresh names.
+fn with_twin_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(TwinSides<'_>)) {
+    let input = PriorMatchInput {
+        fresh: fresh_code,
+        prior: prior_code,
+        bundler: None,
+        minifier: None,
+        visit_optional_calls: false,
     };
-    let output = compute_gated_statement_twins(&prior_gate, &fresh_gate, &input)
-        .expect("the gate run must not hit a fossil anomaly");
-    run(TwinSides {
-        fresh_graph: &fresh_graph,
-        fresh_text: fresh_code,
-        output: &output,
-        claimed: &claimed,
-        fn_matches: &fn_matches,
-    });
+    match_prior_version(input, |stage| {
+        let output = statement_twins(stage)?;
+        let fn_matches: HashMap<String, String> = stage.function_result.matches.to_hash_map();
+        let matched_ids: HashSet<&String> = stage
+            .binding_result
+            .map(|r| r.matches.values().collect())
+            .unwrap_or_default();
+        let claimed: HashSet<String> = stage
+            .fresh
+            .graph
+            .module_bindings
+            .iter()
+            .filter(|b| matched_ids.contains(&b.session_id))
+            .map(|b| b.name.clone())
+            .collect();
+        run(TwinSides {
+            fresh_graph: stage.fresh.graph,
+            fresh_text: fresh_code,
+            output: &output,
+            claimed: &claimed,
+            fn_matches: &fn_matches,
+        });
+        Ok(())
+    })
+    .expect("the match stage and the twins must run");
 }
 
 /// The direct variant (TS `computeStatementTwinTransfers` tests): the
@@ -628,12 +514,12 @@ fn vetoes_a_same_shaped_twin_whose_callee_identity_differs() {
         // unmatched-callee ambiguity.
         assert_eq!(
             sides.fn_matches.get("prior.js:1:0").map(String::as_str),
-            Some("fresh.js:1:0"),
+            Some("input.js:1:0"),
             "execAlpha→g1"
         );
         assert_eq!(
             sides.fn_matches.get("prior.js:2:0").map(String::as_str),
-            Some("fresh.js:2:0"),
+            Some("input.js:2:0"),
             "execBeta→g2"
         );
         let m = pair_map(sides.output);
@@ -1055,6 +941,166 @@ fn wrapper_body_heads_bridge_and_the_arrow_locals_carry_the_owner_session() {
             x1.owner_fn_session.as_deref(),
             None,
             "a wrapper-body head is module level — no owner fn session"
+        );
+    });
+}
+
+// ---------------------------------------------------------------------------
+// The twins' inputs as the TS reads them AT TWINS TIME (the three regimes
+// built for the posture close-out, 2026-09-25 — each one's expected rows
+// are the frozen-f7a707d TS dump of the same pair, /work/twins-posture)
+// ---------------------------------------------------------------------------
+
+/// Two CLOSE-matched (corroborated by alignment) var-declarator inits whose
+/// holders feed two same-shaped statements. The ONLY identity the bucket
+/// statements' ref keys can read is the corroborated close match's var
+/// pair (`a`→computeTotal, `e`→computeCount): the TS appends it to
+/// `bindingCascade.renames` (the SAME array `moduleBindingRenames` aliases)
+/// before the twins run.
+const PRIOR_CLOSE_VAR: &str = "\
+var computeTotal = function (items) {
+  let sum = 0;
+  for (const item of items) {
+    sum += item.price;
+  }
+  console.log(\"total computed\");
+  return sum;
+};
+var computeCount = function (list) {
+  let count = 0;
+  for (const entry of list) {
+    if (entry.active) count++;
+  }
+  console.log(\"count computed\");
+  return count;
+};
+var totalHandler = register(\"aa\", computeTotal, 1);
+var countHandler = register(\"aa\", computeCount, 1);
+console.log(totalHandler, countHandler);
+";
+const FRESH_CLOSE_VAR: &str = "\
+var a = function (b) {
+  let c = 0;
+  for (const d of b) {
+    c += d.price * 2;
+  }
+  console.log(\"total computed\");
+  return c;
+};
+var e = function (f) {
+  let g = 0;
+  for (const h of f) {
+    if (h.active && h.visible) g++;
+  }
+  console.log(\"count computed\");
+  return g;
+};
+var i = register(\"aa\", a, 1);
+var j = register(\"aa\", e, 1);
+console.log(i, j);
+";
+
+#[test]
+fn a_corroborated_close_matchs_var_pair_keys_the_bucket_tier() {
+    with_twin_sides(PRIOR_CLOSE_VAR, FRESH_CLOSE_VAR, |sides| {
+        // TS: bucketTwins 2 (both register statements keyed by
+        // bind:computeTotal / bind:computeCount), uniqueTwins 1.
+        assert_eq!(sides.output.stats.bucket_twins, 2);
+        assert_eq!(sides.output.stats.unique_twins, 1);
+        assert!(
+            sides
+                .output
+                .gated
+                .iter()
+                .all(|g| g.outcome == TwinOutcome::NoCandidacy),
+            "the handlers are cascade-claimed — no candidacy"
+        );
+    });
+}
+
+/// Two eval-tainted functions the cascade CROSS-pairs relative to the bucket
+/// tier's statement pairing (the reorder: `wrap(t, …)` first in fresh,
+/// `wrap(one, …)` first in prior). Every fn on an eval site's scope chain is
+/// frozen (markEvalWithTaintPreDone) BEFORE applyExactMatches, which then
+/// leaves it frozen — so arm 3 (cross-paired exact match) cannot fire.
+const PRIOR_EVAL_CROSS: &str = "\
+var one = 1;
+var two = 100;
+wrap(one, function (source) {
+  return eval(source);
+});
+wrap(two, function (source) {
+  return eval(source);
+});
+console.log(one, two);
+";
+const FRESH_EVAL_CROSS: &str = "\
+var o = 1;
+var t = 100;
+wrap(t, function (s) {
+  return eval(s);
+});
+wrap(o, function (s) {
+  return eval(s);
+});
+console.log(o, t);
+";
+
+#[test]
+fn a_frozen_cross_paired_function_gives_no_candidacy() {
+    with_twin_sides(PRIOR_EVAL_CROSS, FRESH_EVAL_CROSS, |sides| {
+        assert_eq!(sides.output.stats.bucket_twins, 2);
+        assert!(
+            sides
+                .output
+                .gated
+                .iter()
+                .all(|g| g.outcome == TwinOutcome::NoCandidacy),
+            "eval-tainted fns are frozen, not exact-matched: {:?}",
+            sides
+                .output
+                .gated
+                .iter()
+                .map(|g| g.outcome)
+                .collect::<Vec<_>>()
+        );
+        assert!(sides.output.pairs.is_empty());
+    });
+}
+
+/// An eval site anywhere freezes every module binding (the module scope
+/// ends every scope chain) and the tainted fn itself: the declarator
+/// statement's twin has nothing pending to bridge.
+const PRIOR_EVAL_BINDING: &str = "\
+var runSource = function (source) {
+  return eval(source);
+};
+var limit = 100;
+console.log(runSource, limit);
+";
+const FRESH_EVAL_BINDING: &str = "\
+var k = function (s) {
+  return eval(s);
+};
+var l = 100;
+console.log(k, l);
+";
+
+#[test]
+fn an_eval_tainted_module_freezes_the_twins_bindings() {
+    with_twin_sides(PRIOR_EVAL_BINDING, FRESH_EVAL_BINDING, |sides| {
+        assert_eq!(sides.output.stats.unique_twins, 3);
+        assert!(
+            sides
+                .output
+                .gated
+                .iter()
+                .all(|g| g.outcome == TwinOutcome::NoCandidacy)
+        );
+        assert!(
+            sides.output.pairs.is_empty(),
+            "no rename inside an eval-tainted scope, got {:?}",
+            pair_map(sides.output)
         );
     });
 }
