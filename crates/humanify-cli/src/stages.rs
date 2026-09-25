@@ -2,11 +2,15 @@
 //! docs/pipeline-stages.md, and the NOT-YET stubs for the rest.
 //!
 //! Ported and wired: 1 detect, 2 select unpack adapter (pipeline_config),
-//! 7 build the function graph, 8 match against the prior (both cascades,
-//! the tail tiers, and the same-program assertion). Stages 3-6 (unpack,
-//! library detection, vendor naming, format) and 9-12 (naming, placement,
-//! split, emit) are NOT-YET: the run stops there with an `ERROR:` block and
-//! [`EXIT_NOT_YET`] — never a silent skip, never a partial tree.
+//! 3 unpack (humanify_core::unpack's registry: bun, the webcrack shim,
+//! passthrough), 4 library detection (humanify_core::libdetect), 5 vendor
+//! naming (inside the Bun adapter: the deterministic cascade, then the LLM
+//! pass over the fallback names), 7 build the function graph, 8 match
+//! against the prior (both cascades, the tail tiers, and the same-program
+//! assertion). Stages 6 (format) and 9-12 (naming, placement, split, emit)
+//! are NOT-YET: the run stops there with an `ERROR:` block and
+//! [`EXIT_NOT_YET`] — never a silent skip. What stages 3-5 wrote (the
+//! unpacked tree) stays on disk; nothing downstream of the stop is written.
 //!
 //! Stages 7-8 need the FORMATTED text (stage 6's output). Until the
 //! formatter is ported the binary takes it from the TS via the Rust-only
@@ -45,10 +49,10 @@ pub struct Stage {
     pub owner: &'static str,
 }
 
-pub const UNPACK: Stage = Stage {
-    number: 3,
-    name: "unpack the bundle",
-    owner: "WPB.2",
+pub const FORMAT: Stage = Stage {
+    number: 6,
+    name: "format",
+    owner: "phase 5a (the TS formatter's output is ingested meanwhile: --beautified-input)",
 };
 pub const NAMING: Stage = Stage {
     number: 9,
@@ -57,23 +61,8 @@ pub const NAMING: Stage = Stage {
 };
 
 /// Every stage the Rust driver cannot run yet, in pipeline order.
-pub const NOT_YET: [Stage; 8] = [
-    UNPACK,
-    Stage {
-        number: 4,
-        name: "detect libraries",
-        owner: "WPB.3",
-    },
-    Stage {
-        number: 5,
-        name: "name vendor files",
-        owner: "WPB.2",
-    },
-    Stage {
-        number: 6,
-        name: "format",
-        owner: "phase 5a (the TS formatter's output is ingested meanwhile)",
-    },
+pub const NOT_YET: [Stage; 5] = [
+    FORMAT,
     NAMING,
     Stage {
         number: 10,
@@ -100,7 +89,7 @@ pub fn not_yet_block(stage: Stage) -> String {
         .map(|s| format!("{} {}", s.number, s.name))
         .collect();
     format!(
-        "ERROR: stage {} ({}) is NOT YET PORTED to Rust (owner: {}) — no output was written; this run is marked failed.\n  not yet ported: {}\n  run the TS pipeline (npx tsx src/index.ts) for a complete run",
+        "ERROR: stage {} ({}) is NOT YET PORTED to Rust (owner: {}) — the output holds only what the stages before it wrote; this run is marked failed.\n  not yet ported: {}\n  run the TS pipeline (npx tsx src/index.ts) for a complete run",
         stage.number,
         stage.name,
         stage.owner,

@@ -498,19 +498,10 @@ fn main() {
     }
 }
 
-/// The webcrack shim command for a `scripts/webcrack-shim.ts` path: `npx
-/// tsx <script> <out>`, run from the repo root (the script's grandparent,
-/// where node_modules resolves).
+/// The webcrack shim for a `--webcrack-shim <script>` flag (the one owner:
+/// `humanify_cli::unminify::webcrack_shim`).
 fn webcrack_shim(script: &str) -> humanify_core::unpack::webcrack::WebcrackShim {
-    let script = std::path::Path::new(script);
-    humanify_core::unpack::webcrack::WebcrackShim {
-        program: "npx".to_string(),
-        args: vec!["tsx".to_string(), script.display().to_string()],
-        cwd: script
-            .parent()
-            .and_then(std::path::Path::parent)
-            .map(std::path::Path::to_path_buf),
-    }
+    humanify_cli::unminify::webcrack_shim(std::path::Path::new(script))
 }
 
 /// `humanify libdetect`: the verdict as the TS probe's JSON.
