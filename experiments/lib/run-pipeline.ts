@@ -29,6 +29,11 @@ import { execFileSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  type BinRecord,
+  pipelineCommandOf,
+  sha256File
+} from "./pipeline-bin.js";
+import {
   type RunManifest,
   manifestWarnings,
   type ProcSample,
@@ -59,8 +64,16 @@ interface RunConfig {
   prior: string;
   outputDir: string;
   repo: string;
-  /** Full argv for the pipeline, after `tsx src/index.ts`. */
+  /** The pipeline's flags, after the command head (`npx tsx src/index.ts`,
+   *  or the binary). */
   args: string[];
+  /** The argv head to spawn — written by `run.sh --bin` only. Absent means
+   *  the TS program, byte-identical to every run before the flag. */
+  command?: string[];
+  /** The binary's build record (pipeline-bin.ts), with `command`. */
+  bin?: BinRecord;
+  /** TS stand-ins the binary run leans on (`--ts-beautify-adapter`). */
+  adapters?: string[];
   stdoutPath: string;
   endpoint: string;
   model: string;
@@ -169,6 +182,23 @@ function bunVersion(cwd: string): string {
   return home ? sh(path.join(home, ".bun/bin/bun"), ["--version"], cwd) : "";
 }
 
+function pipelineRecord(
+  cfg: RunConfig,
+  launchedSha: string | undefined
+): RunManifest["pipeline"] {
+  return {
+    kind: cfg.bin ? "rust-bin" : "ts",
+    command: pipelineCommandOf(cfg),
+    adapters: cfg.adapters ?? [],
+    bin: cfg.bin && {
+      sha256: launchedSha ?? "",
+      buildSha256: cfg.bin.sha256,
+      commit: cfg.bin.commit,
+      dirty: cfg.bin.dirty
+    }
+  };
+}
+
 async function main(): Promise<void> {
   const cfgPath = process.argv[2];
   if (!cfgPath) {
@@ -182,18 +212,19 @@ async function main(): Promise<void> {
   const entriesBefore = countFiles(cfg.cacheDir);
 
   const out = fs.openSync(cfg.stdoutPath, "w");
-  const child = spawn(
-    "npx",
-    ["tsx", path.join(cfg.repo, "src/index.ts"), ...cfg.args],
-    {
-      cwd: cfg.repo,
-      stdio: ["ignore", out, out],
-      env: {
-        ...process.env,
-        NODE_OPTIONS: `--max-old-space-size=${cfg.heapMb}`
-      }
+  const [cmd, ...head] = pipelineCommandOf(cfg);
+  // Hashed BEFORE the spawn: the file launched, not whatever is there later.
+  const launchedSha = cfg.bin ? sha256File(cmd) : undefined;
+  const child = spawn(cmd, [...head, ...cfg.args], {
+    cwd: cfg.repo,
+    stdio: ["ignore", out, out],
+    // Inert for a binary (not a Node process) — kept identical so the TS
+    // launch is unchanged; run.sh says so in the run log.
+    env: {
+      ...process.env,
+      NODE_OPTIONS: `--max-old-space-size=${cfg.heapMb}`
     }
-  );
+  });
 
   // Sample the child's high-water mark while it is alive; after it exits,
   // /proc/<pid>/status no longer exists and the number is unrecoverable.
@@ -274,6 +305,7 @@ async function main(): Promise<void> {
         written: entriesAfter - entriesBefore
       }
     },
+    pipeline: pipelineRecord(cfg, launchedSha),
     placement,
     outcome: {
       exitCode,

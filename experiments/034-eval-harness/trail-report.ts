@@ -76,6 +76,15 @@ function buildFunnelRows(trails: TrailEntry[]): FunnelRow[] {
 }
 
 function main() {
+  // Said by name, not as an ENOENT stack: the Rust binary accepts
+  // --diagnostics but does not write it yet, and run.sh must be able to tell
+  // "no trail" from "the report broke" (exit 3 vs 1).
+  if (!fs.existsSync(process.argv[2] ?? "")) {
+    console.error(
+      `NO DIAGNOSTICS TRAIL at ${process.argv[2]} — nothing to report on (the pipeline did not write --diagnostics).`
+    );
+    process.exit(3);
+  }
   const diag = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
   const [, , , htmlOut, freshPath, priorPath, freshLedger, priorLedger] =
     process.argv;

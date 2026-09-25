@@ -139,14 +139,57 @@ const SCORE_FLAGS: Record<string, "bool" | "value"> = {
   "--no-self-hop": "bool",
   "--inputs-base": "value",
   "--priors-base": "value",
-  "--workdir": "value"
+  "--workdir": "value",
+  // WP5.6f: score with a Rust binary (run.sh builds it, records its sha and
+  // build commit, and refuses one not built from the label's commit).
+  "--bin": "value",
+  "--ts-beautify-adapter": "bool",
+  "--warm-self-hop": "bool"
 };
+
+/**
+ * Refuse a label already holding cards from the OTHER pipeline (TS vs a Rust
+ * binary). summarize totals every card in the directory, so a mixed label
+ * reads as one run of one pipeline — the mixed-commit failure, one axis over.
+ * Labels from before `pipeline.json` existed were all TS.
+ */
+function guardPipeline(
+  label: string,
+  wantsBin: boolean,
+  force: boolean
+): string | null {
+  const dir = path.join(RESULTS, label);
+  if (!fs.existsSync(path.join(dir, "commit.txt"))) return null;
+  let recorded = "ts";
+  try {
+    recorded =
+      JSON.parse(fs.readFileSync(path.join(dir, "pipeline.json"), "utf8"))
+        ?.pipeline?.kind ?? "ts";
+  } catch {
+    /* no pipeline.json: a pre-2026-09-25 label, scored by the TS program */
+  }
+  const requested = wantsBin ? "rust-bin" : "ts";
+  if (recorded === requested) return null;
+  const name = (k: string) =>
+    k === "rust-bin" ? "a Rust binary" : "the TS program";
+  if (force) {
+    console.log(
+      `!! MIXED PIPELINES in label '${label}' (${name(recorded)} + ${name(requested)}) — forced.`
+    );
+    return null;
+  }
+  return (
+    `label '${label}' holds cards scored by ${name(recorded)}; this run would add cards from ${name(requested)}.\n` +
+    `The summary would total them as one run of one pipeline.\n` +
+    `Pick a new label, or pass --force-mixed if mixing is deliberate.`
+  );
+}
 
 const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] ...",
+      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify [--ts-beautify-adapter]] [--warm-self-hop] ...",
     description:
       "Cold scored run over the eval pairs; cards + summary under results/<label>. " +
       "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, preflight on.",
@@ -165,7 +208,10 @@ const VERBS: Verb[] = [
         console.error("usage: eval score <label> [flags]");
         return 2;
       }
-      const err = guardLabel(label, parsed.flags["--force-mixed"] === true);
+      const force = parsed.flags["--force-mixed"] === true;
+      const err =
+        guardLabel(label, force) ??
+        guardPipeline(label, typeof parsed.flags["--bin"] === "string", force);
       if (err) {
         console.error(err);
         return 2;
@@ -180,9 +226,10 @@ const VERBS: Verb[] = [
           "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than fresh bases; not comparable to the standing reference."
         );
       }
+      // --force-mixed passes through too: run.sh needs it to accept a --bin
+      // built from another commit (pipeline-bin.ts).
       const passthrough: string[] = [];
       for (const [k, v] of Object.entries(parsed.flags)) {
-        if (k === "--force-mixed") continue; // dispatcher-only
         passthrough.push(k);
         if (v !== true) passthrough.push(v);
       }

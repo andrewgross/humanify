@@ -20,6 +20,23 @@
 #   --no-vendor            skip the vendor churn analysis
 #   --inputs-base <dir>    override pairs.json inputsBase
 #   --priors-base <dir>    override pairs.json priorsBase
+#   --bin <path>           score with a Rust binary instead of
+#                          `npx tsx src/index.ts`, at ALL THREE launch sites
+#                          (rebase, scored leg, self-hop). The harness BUILDS
+#                          it first (`cargo build --release --locked` in the
+#                          cargo workspace owning <path>) and REFUSES a binary
+#                          whose build commit is not this label's commit
+#                          (experiments/lib/pipeline-bin.ts). Implies
+#                          --warm-self-hop. --heap-mb is INERT for it.
+#   --force-mixed          accept a --bin built from another/unknown commit or
+#                          a dirty tree (recorded, and warned on per pair)
+#   --ts-beautify-adapter  TEMPORARY (deleted by WP5.6d): hand each binary
+#                          launch the TS stage-6 text via --beautified-input
+#                          (experiments/lib/ts-beautify.ts). Needs --bin.
+#   --warm-self-hop        after the cold self-hop, replay a scratch COPY of
+#                          the cache that leg filled and require byte identity
+#                          with 0 writes (the 5b self-hop gate, 00-control §3).
+#                          The cold leg then records into a fresh cache dir.
 #
 # <model-label> names this run (a branch, a commit, an idea — e.g.
 # "main-4117212" or "fix-close-match"). Results land in results/<model-label>/;
@@ -48,6 +65,10 @@ RUN_BOOT_PROMPT=1
 RUN_SELF_HOP=1
 INPUTS_OVERRIDE=""
 PRIORS_OVERRIDE=""
+BIN=""
+FORCE_MIXED=0
+TS_BEAUTIFY=0
+WARM_SELF_HOP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workdir)        WORK="$2"; shift ;;
@@ -63,7 +84,11 @@ while [[ $# -gt 0 ]]; do
     --no-self-hop)    RUN_SELF_HOP=0 ;;
     --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
     --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
-    --*)              echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
+    --bin)            BIN="$2"; shift ;;
+    --force-mixed)    FORCE_MIXED=1 ;;
+    --ts-beautify-adapter) TS_BEAUTIFY=1 ;;
+    --warm-self-hop)  WARM_SELF_HOP=1 ;;
+    --*)            echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
     *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
                       MODEL="$1" ;;
   esac
@@ -76,9 +101,52 @@ done
 # biggest pair, not the smallest; pairs run sequentially so this is a ceiling,
 # not a reservation.
 EVAL_HEAP="$HEAP_MB"
+if [[ "$TS_BEAUTIFY" == "1" && -z "$BIN" ]]; then
+  echo "run.sh: --ts-beautify-adapter feeds the Rust binary; it needs --bin" >&2
+  exit 2
+fi
 # Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
+
+# WHAT RUNS THE PIPELINE — one array, used at all three launch sites (rebase,
+# scored leg via run-pipeline.ts, self-hop). Without --bin it is exactly the
+# command every committed reference was scored by (run-launch.test.ts holds
+# the launches byte-identical to the pre---bin golden).
+LABEL_COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || true)
+ADAPTERS_JSON="[]"
+if [[ -n "$BIN" ]]; then
+  # Build it HERE, so the label's commit is the binary's commit by
+  # construction — or refuse (exit 2) before anything launches.
+  echo "=== --bin: building and recording $BIN ==="
+  FORCE_ARGS=()
+  [[ "$FORCE_MIXED" == "1" ]] && FORCE_ARGS=(--force-mixed)
+  BIN_JSON=$(npx tsx "$REPO/experiments/lib/pipeline-bin.ts" "$BIN" "$LABEL_COMMIT" \
+    ${FORCE_ARGS[@]+"${FORCE_ARGS[@]}"})
+  BIN_RC=$?
+  if [[ $BIN_RC -eq 2 ]]; then exit 2; fi
+  if [[ $BIN_RC -ne 0 || -z "$BIN_JSON" ]]; then
+    echo "FATAL: could not build/record --bin $BIN (exit $BIN_RC)" >&2
+    exit 1
+  fi
+  BIN=$(jq -r .path <<< "$BIN_JSON")
+  PIPE_CMD=("$BIN")
+  WARM_SELF_HOP=1
+  [[ "$TS_BEAUTIFY" == "1" ]] && ADAPTERS_JSON='["ts-beautify"]'
+  echo "PIPELINE: Rust binary $BIN"
+  echo "  sha256 $(jq -r .sha256 <<< "$BIN_JSON"), built from $(jq -r '.commit | if . == "" then "an UNKNOWN commit" else .[0:12] end' <<< "$BIN_JSON")$(jq -r 'if .dirty then " (DIRTY tree)" else "" end' <<< "$BIN_JSON")"
+  echo "HEAP: --heap-mb / NODE_OPTIONS are INERT for the Rust binary (it is not a Node process);"
+  echo "  the recorded heapMb is not a limit on it, and no heap-headroom warning applies."
+  if [[ "$TS_BEAUTIFY" == "1" ]]; then
+    echo "TS ADAPTER: stage 6 (the formatter) runs in TS (experiments/lib/ts-beautify.ts) and is"
+    echo "  handed to the binary as --beautified-input — this run does not measure a Rust formatter."
+  fi
+  RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" --argjson adapters "$ADAPTERS_JSON" \
+    '{command:[$bin], bin:$rec, adapters:$adapters}')
+else
+  PIPE_CMD=(npx tsx "$REPO/src/index.ts")
+  RUNCFG_EXTRA='{}'
+fi
 
 # Validate the fingerprint matcher against real npm packages BEFORE spending an
 # hour on four claude-code pairs. ~5s, no LLM. It asserts the expected outcome
@@ -87,6 +155,10 @@ source "$REPO/experiments/lib/boot-gate.sh"
 # Hard gate: an outcome-set change means the matcher differs from the record —
 # scoring an hour of pairs on top of that is measuring an unknown matcher.
 # --skip-preflight remains the documented skip.
+if [[ -n "$BIN" ]]; then
+  echo "MATCHER PREFLIGHT: this tests the TS matcher (test/e2e/harness), NOT the binary"
+  echo "  under --bin — a pass says nothing about the Rust matcher that scores these pairs."
+fi
 if [[ "$SKIP_PREFLIGHT" == "1" ]]; then
   "$REPO/experiments/lib/matcher-preflight.sh" --skip
   PREFLIGHT_STATUS=0
@@ -118,8 +190,39 @@ RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 # Written where the label lives, so a summary read weeks later carries how far
 # the matcher was actually checked (rule 9: the reader gets the newer file).
-printf '{"preflight":{"verdict":"%s","status":%s}}\n' \
-  "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
+if [[ -n "$BIN" ]]; then
+  printf '{"preflight":{"verdict":"%s","status":%s,"covers":"ts-matcher"}}\n' \
+    "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
+  jq -cn --argjson bin "$BIN_JSON" --argjson adapters "$ADAPTERS_JSON" \
+    '{pipeline:{kind:"rust-bin", bin:$bin, adapters:$adapters}}' > "$RESULTS/pipeline.json"
+else
+  printf '{"preflight":{"verdict":"%s","status":%s}}\n' \
+    "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
+  printf '{"pipeline":{"kind":"ts","adapters":[]}}\n' > "$RESULTS/pipeline.json"
+fi
+
+# --ts-beautify-adapter (TEMPORARY, WP5.6d deletes it): the TS stage-6 text
+# for one input, computed once per version per run, as the binary's
+# --beautified-input. Sets BEAUTIFY_ARGS; empty without the adapter, so the
+# TS launches are unchanged.
+BEAUTIFIED=" "
+beautify_for() {
+  local version="$1" input="$2"
+  local out="$WORK/$MODEL/$version.beautified.js"
+  BEAUTIFY_ARGS=()
+  [[ "$TS_BEAUTIFY" == "1" ]] || return 0
+  if [[ "$BEAUTIFIED" != *" $version "* ]]; then
+    mkdir -p "$WORK/$MODEL"
+    rm -f "$out"
+    if ! NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx \
+        "$REPO/experiments/lib/ts-beautify.ts" "$input" "$out"; then
+      echo "  TS BEAUTIFY ADAPTER FAILED for $version — the binary will stop at stage 6"
+      return 0
+    fi
+    BEAUTIFIED="$BEAUTIFIED$version "
+  fi
+  BEAUTIFY_ARGS=(--beautified-input "$out")
+}
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
@@ -183,6 +286,11 @@ for i in $(seq 0 $((npairs - 1))); do
 
   if [[ ! -f "$INPUT" ]]; then echo "SKIP $PAIR (no input $INPUT)"; continue; fi
   if [[ ! -f "$PRIOR" ]]; then echo "SKIP $PAIR (no prior $PRIOR)"; continue; fi
+  # The self-hop re-runs the LAST pair this sweep attempted. It used to read
+  # the loop variables after the loop — pairs.json's last TO even when
+  # `--pairs` had skipped it — so a subset run silently self-hopped nothing.
+  LAST_TO="$TO"
+  LAST_INPUT="$INPUT"
 
   # Fresh base (the DEFAULT): re-humanify v-1 with the CURRENT pipeline
   # (inheriting its own archive names) so the pair's diff reflects naming/real
@@ -195,11 +303,13 @@ for i in $(seq 0 $((npairs - 1))); do
       REBASE="$WORK/$MODEL/${FROM}-rebased"
       echo "=== $PAIR: rebasing prior (re-humanify $FROM, current pipeline) ==="
       rm -rf "$REBASE"
-      NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT_FROM" \
+      beautify_for "$FROM" "$INPUT_FROM"
+      NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" "${PIPE_CMD[@]}" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
         --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
+        ${BEAUTIFY_ARGS[@]+"${BEAUTIFY_ARGS[@]}"} \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
         PRIOR="$REBASE/.humanify/humanified.js"
@@ -225,12 +335,14 @@ for i in $(seq 0 $((npairs - 1))); do
   # run config lands here BEFORE the pipeline starts, so make it first.
   mkdir -p "$WORK/$MODEL"
   RUN_CFG="$WORK/$MODEL/$TO.runcfg.json"
+  beautify_for "$TO" "$INPUT"
   ARGS_JSON=$(printf '%s\n' "$INPUT" --split \
     --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
-    --diagnostics "$WORK/$MODEL/$TO.diag.json" | jq -R . | jq -s .)
+    --diagnostics "$WORK/$MODEL/$TO.diag.json" \
+    ${BEAUTIFY_ARGS[@]+"${BEAUTIFY_ARGS[@]}"} | jq -R . | jq -s .)
   jq -n \
     --arg pair "$PAIR" --arg version "$TO" --arg runLabel "$MODEL" \
     --arg resultsDir "$RESULTS" --arg input "$INPUT" --arg prior "$PRIOR" \
@@ -239,7 +351,7 @@ for i in $(seq 0 $((npairs - 1))); do
     --arg model "$MODELNAME" --arg effort "$EFFORT" \
     --argjson concurrency "$CONC" --argjson heapMb "$EVAL_HEAP" \
     --arg cacheDir "$LLM_CACHE_DIR" \
-    --argjson args "$ARGS_JSON" \
+    --argjson args "$ARGS_JSON" --argjson extra "$RUNCFG_EXTRA" \
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
       "$OUT/.humanify/split-ledger.json" "$STATS" | jq -R . | jq -s .)" \
     '{"pair":$pair,"version":$version,"label":$runLabel,"resultsDir":$resultsDir,
@@ -247,7 +359,8 @@ for i in $(seq 0 $((npairs - 1))); do
       "args":$args,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
       "model":$model,"reasoningEffort":$effort,"concurrency":$concurrency,
       "heapMb":$heapMb,"artifacts":$artifacts}
-     + (if $cacheDir == "" then {} else {"cacheDir":$cacheDir} end)' \
+     + (if $cacheDir == "" then {} else {"cacheDir":$cacheDir} end)
+     + $extra' \
     > "$RUN_CFG"
   npx tsx "$REPO/experiments/lib/run-pipeline.ts" "$RUN_CFG"
   PIPELINE_RC=$?
@@ -310,11 +423,26 @@ for i in $(seq 0 $((npairs - 1))); do
 
   # Human-readable evidence page (identifier + diff ledgers, funnel):
   # small HTML committed with the results; the big diag JSON stays in WORK.
-  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/trail-report.ts" \
-    "$WORK/$MODEL/$TO.diag.json" "$RESULTS/$TO-report.html" \
-    "$OUT/.humanify/humanified.js" "$PRIOR" \
-    "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
-    > /dev/null 2>&1 || echo "REPORT PAGE FAILED for $PAIR"
+  # A MISSING trail is said out loud, not folded into "REPORT PAGE FAILED":
+  # the binary accepts --diagnostics but does not write it yet (its writer is
+  # being ported on rust/unified-leftovers), and a generic failure line would
+  # hide which of the two happened.
+  DIAG="$WORK/$MODEL/$TO.diag.json"
+  if [[ ! -f "$DIAG" ]]; then
+    echo "NO DIAGNOSTICS TRAIL for $PAIR at $DIAG — report page NOT written."
+    if [[ -n "$BIN" ]]; then
+      echo "  Expected for now: the binary accepts --diagnostics but does not write it"
+      echo "  (unified.rs; the writer is being ported). Every KPI above is unaffected."
+    else
+      echo "  The TS pipeline always writes it — see $RESULTS/$TO.stdout."
+    fi
+  else
+    NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/trail-report.ts" \
+      "$DIAG" "$RESULTS/$TO-report.html" \
+      "$OUT/.humanify/humanified.js" "$PRIOR" \
+      "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
+      > /dev/null 2>&1 || echo "REPORT PAGE FAILED for $PAIR"
+  fi
 
   # Boot gate: an output that does not RUN is invalid no matter what the
   # noise KPIs say. `--version` must echo the version; the live `-p`
@@ -353,27 +481,108 @@ for i in $(seq 0 $((npairs - 1))); do
   fi
 done
 
-# Self-hop idempotence invariant (--no-self-hop skips): re-humanify the last
-# pair's TO version using its own fresh output as --prior-version. Same
-# code on both sides means every statement is a hash-twin and every
-# function exact-matches, so the pipeline must reproduce its output
-# BYTE-IDENTICALLY (bundle and split ledger). Any diff line is
-# nondeterminism or a phase-ordering bug — measured 2026-07-23: 99.98%
-# of bindings settle mechanically, the ~5 LLM-residue draws are pinned by
-# the shared cache (the main leg populates it, so the invariant is
-# stable even from a cold cache). Violations are logged loudly but never
-# abort the sweep.
-if [[ "$RUN_SELF_HOP" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]]; then
+# Self-hop (--no-self-hop skips): re-humanify the last attempted pair's TO
+# version using its own fresh output as --prior-version. Same code on both
+# sides means every statement is a hash-twin and every function exact-matches.
+#
+# TWO HALVES since 2026-09-25 (the 5b self-hop gate, 00-control §3), because
+# "self-hop = 0" was never true COLD: every cold self-hop on record differs
+# (96 / 92 / 114 / 180 ln — LLM re-rolls on the residue that reaches the
+# model; self-hop-reference.json).
+#   COLD  — the leg as it always ran. Its bundle diff count is judged against
+#           the reference range by the summary (invariants.ts coldRangeVerdict).
+#   WARM  — (--warm-self-hop, implied by --bin) the same leg again, replaying
+#           a scratch COPY of the cache the cold leg filled. With the model
+#           held fixed it must reproduce the cold leg's tree byte for byte and
+#           write 0 cache entries: determinism, rule 10's permitted use.
+# Violations are logged loudly but never abort the sweep.
+TO="${LAST_TO:-}"
+INPUT="${LAST_INPUT:-}"
+
+# Run one self-hop leg: <out> <stdout> <cache args...>. Returns its exit code.
+self_hop_leg() {
+  local out="$1" log="$2"
+  shift 2
+  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" "${PIPE_CMD[@]}" "$INPUT" \
+    --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+    --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
+    "${@+"$@"}" \
+    --prior-version "$SELF_BASE/.humanify/humanified.js" \
+    ${BEAUTIFY_ARGS[@]+"${BEAUTIFY_ARGS[@]}"} \
+    > "$log" 2>&1
+}
+
+count_files() { find "$1" -type f 2>/dev/null | wc -l | tr -d ' '; }
+
+# The warm leg: sets WARM_JSON. Compares the WHOLE tree against the cold
+# leg's, minus the diagnostics-only sidecars neutrality.sh also excludes.
+warm_self_hop() {
+  local cache="$WORK/$MODEL/${TO}-selfhop-warm-cache"
+  local out="$WORK/$MODEL/${TO}-selfhop-warm"
+  echo "=== warm self-hop: replaying a copy of the cold leg's cache ==="
+  rm -rf "$cache" "$out"
+  cp -r "$SELF_CACHE" "$cache"
+  local before after rc files lines identical ok
+  before=$(count_files "$cache")
+  self_hop_leg "$out" "$RESULTS/$TO-selfhop-warm.stdout" --llm-cache "$cache"
+  rc=$?
+  after=$(count_files "$cache")
+  if [[ ! -f "$out/.humanify/humanified.js" ]]; then
+    WARM_JSON='{"ran":false,"identical":false,"diffFiles":-1,"diffLines":-1,"cacheWrites":-1,"coldExit":'"$SELF_RC"',"warmExit":'"$rc"',"ok":false}'
+    echo "!! WARM SELF-HOP DID NOT RUN for $TO (see $RESULTS/$TO-selfhop-warm.stdout)"
+    return
+  fi
+  local ex=(--exclude=placement-stats.json --exclude=stage-hashes.json)
+  files=$(diff -rq "${ex[@]}" "$SELF_OUT" "$out" 2>/dev/null | wc -l | tr -d ' ')
+  lines=$(diff -rN "${ex[@]}" "$SELF_OUT" "$out" 2>/dev/null | grep -cE '^[<>]')
+  identical=false; [[ "$files" == "0" ]] && identical=true
+  ok=false
+  [[ "$identical" == "true" && $((after - before)) -eq 0 && "$rc" == "$SELF_RC" ]] && ok=true
+  WARM_JSON=$(jq -cn --argjson identical "$identical" --argjson files "$files" \
+    --argjson lines "$lines" --argjson writes "$((after - before))" \
+    --argjson coldExit "$SELF_RC" --argjson warmExit "$rc" --argjson ok "$ok" \
+    '{ran:true, identical:$identical, diffFiles:$files, diffLines:$lines,
+      cacheWrites:$writes, coldExit:$coldExit, warmExit:$warmExit, ok:$ok}')
+  if [[ "$ok" == "true" ]]; then
+    echo "WARM SELF-HOP: OK — byte-identical tree, 0 cache writes, exit $rc (cold leg filled $COLD_WRITES entries)"
+  else
+    echo "!! WARM SELF-HOP FAILED for $TO: $files file(s) / $lines ln differ, $((after - before)) cache write(s), exit $SELF_RC vs $rc"
+    echo "   (must be 0 / 0 / 0 / equal — nondeterminism with the model held fixed)"
+  fi
+}
+
+if [[ "$RUN_SELF_HOP" == "1" && -n "$TO" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]]; then
   SELF_BASE="$WORK/$MODEL/$TO"
   SELF_OUT="$WORK/$MODEL/${TO}-selfhop"
   echo "=== self-hop invariant: $TO vs its own output ==="
   rm -rf "$SELF_OUT"
-  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$REPO/src/index.ts" "$INPUT" \
-    --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
-    --reasoning-effort "$EFFORT" -c "$CONC" -o "$SELF_OUT" \
-    "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
-    --prior-version "$SELF_BASE/.humanify/humanified.js" \
-    > "$RESULTS/$TO-selfhop.stdout" 2>&1
+  # What cache the COLD leg runs with (recorded; the summary refuses to judge
+  # a leg that was not cold). The warm leg needs the answers the cold leg got,
+  # so with --warm-self-hop the cold leg records into a FRESH dir — still
+  # cold: it starts empty, every prompt is live.
+  SELF_CACHE_ARGS=(${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"})
+  COLD_CACHE="none"
+  [[ -n "$LLM_CACHE_DIR" ]] && COLD_CACHE="seeded"
+  if [[ "$WARM_SELF_HOP" == "1" ]]; then
+    SELF_CACHE="$WORK/$MODEL/${TO}-selfhop-cache"
+    rm -rf "$SELF_CACHE"
+    if [[ -n "$LLM_CACHE_DIR" ]]; then
+      cp -r "$LLM_CACHE_DIR" "$SELF_CACHE"
+      echo "  cold self-hop leg SEEDED from --llm-cache: it is NOT cold; its count will not be judged"
+    else
+      mkdir -p "$SELF_CACHE"
+      COLD_CACHE="fresh"
+    fi
+    SELF_CACHE_ARGS=(--llm-cache "$SELF_CACHE")
+  fi
+  beautify_for "$TO" "$INPUT"
+  COLD_BEFORE=0
+  [[ "$WARM_SELF_HOP" == "1" ]] && COLD_BEFORE=$(count_files "$SELF_CACHE")
+  self_hop_leg "$SELF_OUT" "$RESULTS/$TO-selfhop.stdout" \
+    ${SELF_CACHE_ARGS[@]+"${SELF_CACHE_ARGS[@]}"}
+  SELF_RC=$?
+  COLD_WRITES=0
+  [[ "$WARM_SELF_HOP" == "1" ]] && COLD_WRITES=$(( $(count_files "$SELF_CACHE") - COLD_BEFORE ))
   # DID IT RUN, before asking whether it MATCHED. `cmp -s` is non-zero for a
   # MISSING file just as it is for a different one, and `diff` against a
   # missing file prints its error to stderr and counts zero lines — so a
@@ -402,15 +611,21 @@ if [[ "$RUN_SELF_HOP" == "1" && -f "$WORK/$MODEL/$TO/.humanify/humanified.js" ]]
   if ! cmp -s "$SELF_BASE/.humanify/split-ledger.json" "$SELF_OUT/.humanify/split-ledger.json"; then
     SELF_OK=false
   fi
-  # Per version, not a fixed filename: with several pairs the old path meant
-  # only the last one survived.
-  printf '{"selfHop":{"version":"%s","ran":true,"identical":%s,"diffLines":%s}}\n' \
-    "$TO" "$SELF_OK" "$SELF_DIFF" > "$RESULTS/$TO-self-hop.json"
   if [[ "$SELF_OK" == "true" ]]; then
     echo "SELF-HOP INVARIANT: OK — byte-identical bundle and ledger"
   else
-    echo "SELF-HOP INVARIANT VIOLATED: $SELF_DIFF diff lines (see $RESULTS/$TO-selfhop.stdout)"
+    echo "COLD SELF-HOP: $SELF_DIFF bundle diff lines (cache: $COLD_CACHE; see $RESULTS/$TO-selfhop.stdout)"
+    echo "  reference range on record: $(jq -r '[.coldDiffLines[]] | "\(min)-\(max) ln over \(length) cold runs"' "$HERE/self-hop-reference.json") on $(jq -r .version "$HERE/self-hop-reference.json") — judged in the summary"
   fi
+  WARM_JSON="null"
+  [[ "$WARM_SELF_HOP" == "1" ]] && warm_self_hop
+  # Per version, not a fixed filename: with several pairs the old path meant
+  # only the last one survived.
+  jq -cn --arg v "$TO" --argjson identical "$SELF_OK" --argjson diff "$SELF_DIFF" \
+    --arg coldCache "$COLD_CACHE" --argjson warm "$WARM_JSON" \
+    '{selfHop:({version:$v, ran:true, identical:$identical, diffLines:$diff,
+      coldCache:$coldCache} + (if $warm == null then {} else {warm:$warm} end))}' \
+    > "$RESULTS/$TO-self-hop.json"
   fi
 fi
 
