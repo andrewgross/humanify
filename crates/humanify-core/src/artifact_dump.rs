@@ -163,7 +163,7 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
     write_modules(&w, inp, graph_site.as_ref())?;
     if let Some(m) = capture.and_then(|c| c.matches.as_ref()) {
         write_twin_gates(&w, &m.twin_gates)?;
-        w.json("twins.json", &m.twins)?;
+        write_twins(&w, &m.twins)?;
     }
     write_partitions(&w, inp)?;
     write_matches(&w, inp)?;
@@ -387,6 +387,63 @@ fn write_modules(w: &Writer<'_>, inp: &DumpInputs<'_>, graph: Option<&Site>) -> 
     }))
     .map_err(|e| format!("modules rows: {e}"))?;
     w.json("modules.json", &modules)
+}
+
+/// twins.json in the TS writer's key order: `{schemaVersion, inventories:
+/// {prior, fresh}, uniqueTier: {uniqueTwins, pairs: [{prior, fresh,
+/// hash}]}}`, each inventory `{statements, distinctHashes, uniqueHashes,
+/// maxBucket, bucketHistogram}` (its integer keys ascending, as a JS
+/// object enumerates them).
+fn write_twins(w: &Writer<'_>, twins: &Value) -> Result<(), String> {
+    let v = JsValue::parse(&twins.to_string())?;
+    let get = |o: &JsValue, k: &str| -> JsValue {
+        o.as_object()
+            .and_then(|o| o.get(k))
+            .cloned()
+            .unwrap_or(JsValue::Null)
+    };
+    let pick = |o: &JsValue, keys: &[&str]| -> JsValue {
+        let mut out = JsObject::new();
+        for k in keys {
+            out.insert(*k, get(o, k));
+        }
+        JsValue::Object(out)
+    };
+    let inventories = get(&v, "inventories");
+    let inventory_keys = [
+        "statements",
+        "distinctHashes",
+        "uniqueHashes",
+        "maxBucket",
+        "bucketHistogram",
+    ];
+    let mut inv = JsObject::new();
+    for side in ["prior", "fresh"] {
+        inv.insert(side, pick(&get(&inventories, side), &inventory_keys));
+    }
+    let tier = get(&v, "uniqueTier");
+    let pairs = match get(&tier, "pairs") {
+        JsValue::Array(items) => items
+            .iter()
+            .map(|p| {
+                let mut o = JsObject::new();
+                for k in ["prior", "fresh"] {
+                    o.insert(k, pick(&get(p, k), &["text", "start", "end"]));
+                }
+                o.insert("hash", get(p, "hash"));
+                JsValue::Object(o)
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let mut unique = JsObject::new();
+    unique.insert("uniqueTwins", get(&tier, "uniqueTwins"));
+    unique.insert("pairs", JsValue::Array(pairs));
+    let mut out = JsObject::new();
+    out.insert("schemaVersion", JsValue::Number(DUMP_SCHEMA_VERSION as f64));
+    out.insert("inventories", JsValue::Object(inv));
+    out.insert("uniqueTier", JsValue::Object(unique));
+    w.text("twins.json", &stringify(&JsValue::Object(out)))
 }
 
 /// twin-gates.json in the TS writer's key order: the stats bag in its
@@ -630,6 +687,7 @@ pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (S
     let mut prompts = String::new();
     let mut keys = String::new();
     let mut rounds: HashMap<String, u64> = HashMap::new();
+    let num = |n: f64| JsValue::Number(n);
     for (seq, d) in dispatches.iter().enumerate() {
         let (function_id, site, request, system, user, cache_key) = match d {
             Dispatch::Naming(r) => (
@@ -661,142 +719,146 @@ pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (S
                 cache_key_of(&call.request, params),
             ),
         };
-        let round = rounds.entry(function_id.to_string()).or_insert(0);
-        *round += 1;
-        let mut row = serde_json::Map::new();
-        row.insert("seq".into(), json!(seq));
-        row.insert("functionId".into(), json!(function_id));
-        row.insert("site".into(), json!(site));
+        let counted = rounds.entry(function_id.to_string()).or_insert(0);
+        *counted += 1;
+        // The waves count their own rounds (the processor's counter).
         let round = match d {
-            // The waves count their own rounds (the processor's counter).
             Dispatch::Naming(r) => r.round,
-            _ => *round,
+            _ => *counted,
         };
-        row.insert("round".into(), json!(round));
-        if let Dispatch::Naming(r) = d {
-            row.insert("wave".into(), json!(r.wave));
-        }
-        row.insert("isRetry".into(), json!(request.is_retry == Some(true)));
-        row.insert("cacheKey".into(), json!(cache_key));
-        row.insert("systemPrompt".into(), json!(system));
-        row.insert("userPrompt".into(), json!(user));
-        row.insert("identifiers".into(), json!(request.identifiers));
-        let targets: Vec<Value> = match d {
+        let target = |sid: &str, start: u32, end: u32, text: &str| {
+            let mut t = JsObject::new();
+            t.insert("sessionId", JsValue::str(sid));
+            t.insert("start", num(f64::from(start)));
+            t.insert("end", num(f64::from(end)));
+            t.insert("text", JsValue::str(text));
+            JsValue::Object(t)
+        };
+        let targets: Vec<JsValue> = match d {
             Dispatch::Naming(r) => r
                 .targets
                 .iter()
-                .map(|(sid, s)| json!({"sessionId": sid, "start": s.start, "end": s.end, "text": "fresh"}))
+                .map(|(sid, s)| target(sid, s.start, s.end, "fresh"))
                 .collect(),
             Dispatch::Sweep(a, s) => s
                 .targets
                 .iter()
-                .map(|(name, sp)| {
-                    json!({"sessionId": name, "start": sp.start, "end": sp.end, "text": a.as_str()})
-                })
+                .map(|(name, sp)| target(name, sp.start, sp.end, a.as_str()))
                 .collect(),
             Dispatch::Plain { .. } => Vec::new(),
         };
-        row.insert("targets".into(), Value::Array(targets));
-        if let Dispatch::Sweep(a, _) = d {
-            row.insert("targetsText".into(), json!(a.as_str()));
+        let mut row = JsObject::new();
+        row.insert("seq", num(seq as f64));
+        row.insert("functionId", JsValue::str(function_id));
+        row.insert("site", JsValue::str(site));
+        row.insert("round", num(round as f64));
+        if let Dispatch::Naming(r) = d {
+            row.insert("wave", num(r.wave as f64));
         }
-        prompts.push_str(&Value::Object(row).to_string());
+        row.insert("isRetry", JsValue::Bool(request.is_retry == Some(true)));
+        row.insert("cacheKey", JsValue::str(cache_key.as_str()));
+        row.insert("systemPrompt", JsValue::str(system));
+        row.insert("userPrompt", JsValue::str(user));
+        row.insert("identifiers", JsValue::str_array(&request.identifiers));
+        row.insert("targets", JsValue::Array(targets));
+        if let Dispatch::Sweep(a, _) = d {
+            row.insert("targetsText", JsValue::str(a.as_str()));
+        }
+        prompts.push_str(&stringify(&JsValue::Object(row)));
         prompts.push('\n');
-        let key = json!({
-            "seq": seq,
-            "params": params_json(params),
-            "request": request_material(request),
-            "cacheKey": cache_key,
-        });
-        keys.push_str(&key.to_string());
+        let mut key = JsObject::new();
+        key.insert("seq", num(seq as f64));
+        key.insert("params", params_json(params));
+        key.insert("request", request_material(request));
+        key.insert("cacheKey", JsValue::str(cache_key.as_str()));
+        keys.push_str(&stringify(&JsValue::Object(key)));
         keys.push('\n');
+    }
+    // `${lines.join("\n")}\n`: no rows is one newline.
+    if dispatches.is_empty() {
+        return ("\n".to_string(), "\n".to_string());
     }
     (prompts, keys)
 }
 
-fn str_map(m: &StrMap) -> Value {
-    Value::Object(
-        m.0.iter()
-            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-            .collect(),
-    )
-}
-
 /// `cacheKeyMaterialRow`'s request: the typed request flattened, Sets in
 /// their actual order, the callee `snippet` DROPPED (the oracle dump's
-/// shape — 16-findings #7), undefined fields absent.
-fn request_material(r: &BatchRenameRequest) -> Value {
-    let mut o = serde_json::Map::new();
-    o.insert("code".into(), json!(r.code));
-    o.insert("identifiers".into(), json!(r.identifiers));
-    o.insert("usedNames".into(), json!(r.used_names));
+/// shape — 16-findings #7), undefined fields absent; the TS object's keys
+/// in its literal order.
+fn request_material(r: &BatchRenameRequest) -> JsValue {
+    let mut o = JsObject::new();
+    o.insert("code", JsValue::str(r.code.as_str()));
+    o.insert("identifiers", JsValue::str_array(&r.identifiers));
+    o.insert("usedNames", JsValue::str_array(&r.used_names));
     o.insert(
-        "calleeSignatures".into(),
-        Value::Array(
+        "calleeSignatures",
+        JsValue::Array(
             r.callee_signatures
                 .iter()
-                .map(|c| json!({"name": c.name, "params": c.params}))
+                .map(|c| {
+                    let mut s = JsObject::new();
+                    s.insert("name", JsValue::str(c.name.as_str()));
+                    s.insert("params", JsValue::str_array(&c.params));
+                    JsValue::Object(s)
+                })
                 .collect(),
         ),
     );
-    o.insert("callsites".into(), json!(r.callsites));
-    if let Some(v) = &r.context_vars {
-        o.insert("contextVars".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_version_code {
-        o.insert("priorVersionCode".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_version_names {
-        o.insert("priorVersionNames".into(), json!(v));
-    }
-    if let Some(v) = &r.prior_name_hints {
-        o.insert("priorNameHints".into(), str_map(v));
-    }
-    if let Some(v) = &r.already_renamed {
-        o.insert("alreadyRenamed".into(), str_map(v));
-    }
-    if let Some(v) = r.is_retry {
-        o.insert("isRetry".into(), json!(v));
-    }
-    if let Some(v) = &r.previous_attempt {
-        o.insert("previousAttempt".into(), str_map(v));
-    }
-    if let Some(f) = &r.failures {
-        o.insert(
-            "failures".into(),
-            json!({
-                "duplicates": f.duplicates,
-                "invalid": f.invalid,
-                "missing": f.missing,
-                "unchanged": f.unchanged,
-            }),
-        );
-    }
-    if let Some(v) = &r.prompt_body {
-        o.insert("promptBody".into(), json!(v));
-    }
-    if let Some(v) = &r.user_prompt {
-        o.insert("userPrompt".into(), json!(v));
-    }
-    if let Some(v) = &r.system_prompt {
-        o.insert("systemPrompt".into(), json!(v));
-    }
-    Value::Object(o)
+    o.insert("callsites", JsValue::str_array(&r.callsites));
+    o.insert_opt(
+        "contextVars",
+        r.context_vars.as_deref().map(JsValue::str_array),
+    );
+    o.insert_opt(
+        "priorVersionCode",
+        r.prior_version_code.as_deref().map(JsValue::str),
+    );
+    o.insert_opt(
+        "priorVersionNames",
+        r.prior_version_names.as_deref().map(JsValue::str_array),
+    );
+    o.insert_opt(
+        "priorNameHints",
+        r.prior_name_hints.as_ref().map(StrMap::to_js),
+    );
+    o.insert_opt(
+        "alreadyRenamed",
+        r.already_renamed.as_ref().map(StrMap::to_js),
+    );
+    o.insert_opt("isRetry", r.is_retry.map(JsValue::Bool));
+    o.insert_opt(
+        "previousAttempt",
+        r.previous_attempt.as_ref().map(StrMap::to_js),
+    );
+    o.insert_opt(
+        "failures",
+        r.failures.as_ref().map(|f| {
+            let mut x = JsObject::new();
+            x.insert("duplicates", JsValue::str_array(&f.duplicates));
+            x.insert("invalid", JsValue::str_array(&f.invalid));
+            x.insert("missing", JsValue::str_array(&f.missing));
+            x.insert("unchanged", JsValue::str_array(&f.unchanged));
+            JsValue::Object(x)
+        }),
+    );
+    o.insert_opt("promptBody", r.prompt_body.as_deref().map(JsValue::str));
+    o.insert_opt("userPrompt", r.user_prompt.as_deref().map(JsValue::str));
+    o.insert_opt("systemPrompt", r.system_prompt.as_deref().map(JsValue::str));
+    JsValue::Object(o)
 }
 
-fn params_json(p: &CacheKeyParams) -> Value {
-    let mut o = serde_json::Map::new();
-    o.insert("model".into(), json!(p.model));
-    if let Some(t) = p.temperature {
-        o.insert("temperature".into(), json!(t as i64));
-    }
-    if let Some(m) = p.max_tokens {
-        o.insert("maxTokens".into(), json!(m));
-    }
-    if let Some(e) = &p.reasoning_effort {
-        o.insert("reasoningEffort".into(), json!(e));
-    }
-    Value::Object(o)
+/// `{ ...params }` (CacheKeyParams: model, temperature, maxTokens,
+/// reasoningEffort; undefined absent).
+fn params_json(p: &CacheKeyParams) -> JsValue {
+    let mut o = JsObject::new();
+    o.insert("model", JsValue::str(p.model.as_str()));
+    o.insert_opt("temperature", p.temperature.map(JsValue::Number));
+    o.insert_opt("maxTokens", p.max_tokens.map(|m| JsValue::Number(m as f64)));
+    o.insert_opt(
+        "reasoningEffort",
+        p.reasoning_effort.as_deref().map(JsValue::str),
+    );
+    JsValue::Object(o)
 }
 
 /// tree-manifest.json (`treeManifest`): every file of the written tree,
@@ -883,3 +945,6 @@ fn write_regions(w: &Writer<'_>, inp: &DumpInputs<'_>, graph: Option<&Site>) -> 
     );
     w.text("regions.json", &stringify(&regions))
 }
+
+#[cfg(test)]
+mod artifact_dump_test;
