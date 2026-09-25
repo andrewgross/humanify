@@ -200,7 +200,10 @@ const body = wrapper?.functionPath.node.body;
 if (!body || !t.isBlockStatement(body)) throw new Error("no wrapper body");
 
 fs.mkdirSync(path.join(out, "text"), { recursive: true });
-fs.copyFileSync(metaPath, path.join(out, "meta.json"));
+// Content, not the file: copyFileSync carries the oracle's read-only mode,
+// so a re-run into the same <out> died here with EACCES — before
+// placement.json was written, leaving the previous run's rows to be compared.
+fs.writeFileSync(path.join(out, "meta.json"), fs.readFileSync(metaPath));
 fs.writeFileSync(path.join(out, "text", "shipped.js"), code);
 // The fresh grouping records no trail: its rows are the assignment itself
 // (the ledger's `order` is the per-statement file, bundle order).
