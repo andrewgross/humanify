@@ -9,17 +9,16 @@
 //! with `using` are regenerated (a token prefilter, then a parse-level
 //! check), so every other file stays byte-identical.
 //!
-//! The port reproduces those OUTPUT BYTES: [`convert`] builds Babel's AST
-//! from oxc's, [`transform`] is the plugin, [`printer`] is the generator
-//! (retainLines, no comments). What it cannot reproduce faithfully it
+//! The port reproduces those OUTPUT BYTES through `core::format` (one
+//! owner of Babel's AST, converter and generator): `format::convert`
+//! builds Babel's AST from oxc's, [`transform`] is the plugin,
+//! `format::printer` in `Mode::RetainLines` is the generator (no
+//! comments). What it cannot reproduce faithfully it
 //! refuses loudly — comments (Babel's attachment is not ported), a helper
 //! global shadowed at program scope, an input already spelling a
 //! generated uid — the way a Babel throw fails the TS stage.
 
-pub mod ast;
-pub mod convert;
 pub mod helpers;
-pub mod printer;
 pub mod transform;
 
 use std::path::Path;
@@ -30,6 +29,8 @@ use oxc_ast::ast::VariableDeclarationKind;
 
 use super::relink::parse_or_err;
 use super::scaffold::{js_files_under, read_utf8};
+use crate::format::convert::Converter;
+use crate::format::printer::{Mode, Printer};
 use crate::ingest::Ingest;
 use crate::rename::validated::scopes::BabelScopes;
 
@@ -108,8 +109,12 @@ pub fn print_retaining_lines(code: &str) -> Result<String, String> {
     if !ingest.program.comments.is_empty() {
         return Err("comments are not ported".into());
     }
-    let program = convert::Converter::new(code).program(ingest.program)?;
-    Ok(printer::Printer::new().generate(&program))
+    if ingest.program.source_type.is_module() {
+        return Err("module source (not a desugar input)".into());
+    }
+    let mut converter = Converter::new(code);
+    let program = converter.program(ingest.program)?;
+    Ok(Printer::new(&converter.tree, Mode::RetainLines).generate(program))
 }
 
 /// `desugarUsing(code)`: the transformed text, or None when there is
@@ -124,9 +129,16 @@ pub fn desugar_using(code: &str) -> Result<Option<String>, String> {
         return Ok(None);
     }
     refuse(&ingest, code)?;
-    let mut program = convert::Converter::new(code).program(ingest.program)?;
-    transform::transform_program(&mut program)?;
-    Ok(Some(printer::Printer::new().generate(&program)))
+    if ingest.program.source_type.is_module() {
+        return Err("module source (not a desugar input)".into());
+    }
+    let mut converter = Converter::new(code);
+    let program = converter.program(ingest.program)?;
+    let mut tree = converter.tree;
+    transform::transform_program(&mut tree, program)?;
+    Ok(Some(
+        Printer::new(&tree, Mode::RetainLines).generate(program),
+    ))
 }
 
 /// `desugarUsingInTree(outputDir)`: the number of files rewritten.

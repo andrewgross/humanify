@@ -1,18 +1,44 @@
 //! `@babel/generator` 7.29.7 (`printer.ts`, `buffer.ts`, `generators/*`,
-//! `node/parentheses.ts`) for the one configuration the `using` desugar
-//! prints with: `retainLines: true`, `compact: false`, no source maps, no
-//! `preserveFormat`, no auxiliary comments — and no comments at all (the
-//! desugar refuses a file that has any, see `super::desugar_using`).
+//! `node/parentheses.ts`) for the two configurations the pipeline prints
+//! with, both `compact: false`, no source maps, no `preserveFormat`, no
+//! auxiliary comments, `comments: false`:
 //!
-//! Under `retainLines`, `newline()` is a no-op: every line break comes from
-//! catching the buffer up to a node's `loc` line (at its start, and at the
-//! end for `}` / `)`), or from the newlines inside a multi-line token.
-//! Nodes without `loc` (the transform's) therefore print on the current
-//! line. The token state machine — the last-char codes (-1 after an
-//! append, -2 after an integer, -3 after a word), the queued space /
-//! semicolon, the token context — is the generator's, byte for byte.
+//! - [`Mode::Beautify`] — stage 6 (`transformWithPlugins`, `retainLines:
+//!   false`): `newline()` is real, so every statement of a `printSequence`
+//!   and every property of an object literal lands on its own line, and a
+//!   single-identifier arrow parameter prints without parentheses. With
+//!   comments off there is never a blank line (the only `newline(2)` comes
+//!   from a PRINTED comment's line offset), except inside template text.
+//! - [`Mode::RetainLines`] — the `using` desugar (`retainLines: true`):
+//!   `newline()` is a no-op; every line break comes from catching the
+//!   buffer up to a node's `loc` line (at its start, and at the end for `}`
+//!   / `)`), or from the newlines inside a multi-line token.
+//!
+//! The token state machine — the last-char codes (-1 after an append, -2
+//! after an integer, -3 after a word), the queued space / semicolon, the
+//! token context — is the generator's, byte for byte.
+//!
+//! Comments are never printed (`shouldPrintComment` is false for every
+//! comment without `@license` / `@preserve`, and `format` refuses those),
+//! but ATTACHED comments still steer the output exactly where the
+//! generator reads them without printing: a parenthesized expression with
+//! a leading block comment keeps its parentheses; a newline-carrying
+//! comment at a no-line-terminator position forces `(`…`)`; an arrow's lone
+//! parameter with comments keeps its parentheses; an if-branch with
+//! leading comments is printed one indent deeper
+//! (`printAndIndentOnComments`).
 
-use super::ast::{Binary, Call, Class, Field, Func, Kind, Loc, Member, Method, Node};
+use super::ast::{Binary, Call, Class, Func, Kind, Loc, Member, Method, NodeId, Prop, Quasi, Tree};
+use super::jsesc::jsesc_double;
+
+/// The configuration a [`Printer`] runs in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// `retainLines: false` (stage 6).
+    Beautify,
+    /// `retainLines: true` (the `using` desugar).
+    RetainLines,
+}
 
 const F_CONCISE: u32 = 4;
 const F_RETAIN_LINES: u32 = 8;
@@ -114,6 +140,16 @@ impl Buffer {
             self.last
         }
     }
+
+    /// `getNewlineCount()`.
+    fn newline_count(&self) -> u32 {
+        u32::from(self.queued == 0 && self.last == 10)
+    }
+
+    /// `hasContent()`.
+    fn has_content(&self) -> bool {
+        self.last != 0
+    }
 }
 
 type Sep = fn(&mut Printer, bool);
@@ -127,7 +163,7 @@ fn comma_separator(p: &mut Printer, last: bool) {
 
 fn comma_separator_with_newline(p: &mut Printer, _last: bool) {
     p.token_char(b',');
-    p.newline();
+    p.newline(1);
 }
 
 /// `PRECEDENCE` (node/parentheses.ts).
@@ -149,49 +185,82 @@ fn precedence(op: &str) -> Option<u32> {
     })
 }
 
-fn ptr(n: &Node) -> *const Node {
-    n as *const Node
+/// `commentIsNewline(c)`.
+fn comment_is_newline(tree: &Tree, c: u32) -> bool {
+    let c = &tree.comments[c as usize];
+    !c.block || c.value.contains(['\n', '\r', '\u{2028}', '\u{2029}'])
 }
 
-fn is(a: &Node, b: &Node) -> bool {
-    std::ptr::eq(a, b)
+/// One `print(node, …)` call's arguments beyond the node.
+#[derive(Clone, Copy, Default)]
+struct PrintOpts {
+    parent: Option<NodeId>,
+    nlta: bool,
+    reset_tc: bool,
 }
 
-pub struct Printer {
+pub struct Printer<'t> {
+    tree: &'t Tree,
     buf: Buffer,
     indent: usize,
     flags: u32,
     token_context: u32,
     no_line_terminator: bool,
     /// `_noLineTerminatorAfterNode` (identity only).
-    nltan: Option<*const Node>,
+    nltan: Option<NodeId>,
+    /// Plant (gate red runs): synthesized numbers through Rust's `{}`.
+    rust_numbers: bool,
 }
 
-impl Printer {
-    pub fn new() -> Printer {
+impl<'t> Printer<'t> {
+    pub fn new(tree: &'t Tree, mode: Mode) -> Printer<'t> {
         Printer {
+            tree,
             buf: Buffer::new(),
             indent: 0,
-            flags: F_RETAIN_LINES,
+            flags: match mode {
+                Mode::Beautify => 0,
+                Mode::RetainLines => F_RETAIN_LINES,
+            },
             token_context: 0,
             no_line_terminator: false,
             nltan: None,
+            rust_numbers: false,
         }
     }
 
-    /// `generate(file)`: print the Program and take the buffer.
-    pub fn generate(mut self, program: &Node) -> String {
+    /// Plant: print a synthesized number with Rust's `{}` instead of JS
+    /// `Number::toString`.
+    pub fn plant_rust_numbers(&mut self) {
+        self.rust_numbers = true;
+    }
+
+    fn retain_lines(&self) -> bool {
+        self.flags & F_RETAIN_LINES != 0
+    }
+
+    fn kind(&self, id: NodeId) -> &'t Kind {
+        self.tree.kind(id)
+    }
+
+    /// `generate(file)`: print the Program (under a File root, its
+    /// interpreter first) and take the buffer.
+    pub fn generate(mut self, root: NodeId) -> String {
+        let program = match self.kind(root) {
+            Kind::File { program } => *program,
+            _ => root,
+        };
         if let Kind::Program {
             interpreter: Some(value),
             ..
-        } = &program.kind
+        } = self.kind(program)
         {
-            // InterpreterDirective (line 1): `#!…` then a hard newline.
+            // InterpreterDirective: `#!…` then a hard newline.
             self.catch_up(1);
             self.token(&format!("#!{value}"), false, false);
             self.hard_newline();
         }
-        self.print(program, None, false, false);
+        self.print(program, PrintOpts::default());
         self.buf.get()
     }
 
@@ -220,13 +289,13 @@ impl Printer {
         self.no_line_terminator = false;
     }
 
-    fn right_brace(&mut self, node: &Node) {
-        self.catch_up_end(node.loc);
+    fn right_brace(&mut self, node: NodeId) {
+        self.catch_up_end(self.tree.node(node).loc);
         self.token_char(b'}');
     }
 
-    fn right_parens(&mut self, node: &Node) {
-        self.catch_up_end(node.loc);
+    fn right_parens(&mut self, node: NodeId) {
+        self.catch_up_end(self.tree.node(node).loc);
         self.token_char(b')');
     }
 
@@ -299,8 +368,28 @@ impl Printer {
         self.no_line_terminator = false;
     }
 
-    /// `newline()`: a no-op under `retainLines`.
-    fn newline(&mut self) {}
+    /// `newline(i)`: a no-op under `retainLines`; otherwise at most one
+    /// line break past the ones already at the end of the buffer.
+    fn newline(&mut self, i: u32) {
+        self.newline_with(i, self.flags);
+    }
+
+    fn newline_with(&mut self, i: u32, flags: u32) {
+        if i == 0 {
+            return;
+        }
+        if flags & (F_RETAIN_LINES | 2) != 0 {
+            return;
+        }
+        if flags & F_CONCISE != 0 {
+            self.space();
+            return;
+        }
+        let i = i.min(2).saturating_sub(self.buf.newline_count());
+        for _ in 0..i {
+            self.hard_newline();
+        }
+    }
 
     fn ends_with(&self, c: i32) -> bool {
         self.buf.last_char(true) == c
@@ -337,7 +426,11 @@ impl Printer {
         }
     }
 
+    /// `catchUp(line)`: only under `retainLines`.
     fn catch_up(&mut self, line: u32) {
+        if !self.retain_lines() {
+            return;
+        }
         let current = self.buf.line;
         for _ in current..line {
             self.hard_newline();
@@ -350,7 +443,7 @@ impl Printer {
         }
     }
 
-    fn enter_delimited(&mut self) -> Option<*const Node> {
+    fn enter_delimited(&mut self) -> Option<NodeId> {
         let old = self.nltan;
         if old.is_some() {
             self.nltan = None;
@@ -360,14 +453,20 @@ impl Printer {
 
     // -- print / printJoin -------------------------------------------------------
 
-    fn print_opt(&mut self, node: Option<&Node>, parent: &Node) {
+    fn print_opt(&mut self, node: Option<NodeId>, parent: NodeId) {
         if let Some(n) = node {
-            self.print(n, Some(parent), false, false);
+            self.p(n, parent);
         }
     }
 
-    fn p(&mut self, node: &Node, parent: &Node) {
-        self.print(node, Some(parent), false, false);
+    fn p(&mut self, node: NodeId, parent: NodeId) {
+        self.print(
+            node,
+            PrintOpts {
+                parent: Some(parent),
+                ..PrintOpts::default()
+            },
+        );
     }
 
     /// `resetTokenContext`: leave a for-head's accumulating context for
@@ -385,20 +484,59 @@ impl Printer {
         }
     }
 
+    /// The leading comments' effect on parentheses when nothing else asks
+    /// for them: a parenthesized node whose first leading comment is a
+    /// block keeps its parentheses, except in the four parent positions
+    /// that are delimited already.
+    fn leading_comment_parens(&self, node: NodeId, parent: Option<NodeId>) -> bool {
+        let n = self.tree.node(node);
+        if !n.parenthesized {
+            return false;
+        }
+        let Some(first) = n.comments.as_ref().and_then(|c| c.leading.first()) else {
+            return false;
+        };
+        if !self.tree.comments[*first as usize].block {
+            return false;
+        }
+        let Some(parent) = parent else {
+            return true;
+        };
+        match self.kind(parent) {
+            Kind::ExpressionStatement { .. }
+            | Kind::VariableDeclarator { .. }
+            | Kind::AssignmentExpression(_)
+            | Kind::ReturnStatement { .. } => false,
+            Kind::CallExpression(c) | Kind::OptionalCallExpression(c) | Kind::NewExpression(c) => {
+                c.callee == node
+            }
+            _ => true,
+        }
+    }
+
     /// Whether `node` prints inside parentheses, and whether they are the
-    /// retainLines kind (a no-line-terminator position whose node starts on
-    /// a later line: `return (\n  …)`).
-    fn parens_for(&self, node: &Node, parent: Option<&Node>, flags: u32) -> (bool, bool) {
+    /// indented kind (a no-line-terminator position whose node would start
+    /// on a later line — `retainLines` — or carries a newline comment).
+    fn parens_for(&self, node: NodeId, parent: Option<NodeId>, flags: u32) -> (bool, bool) {
         let needed = parent.is_some_and(|p| {
-            parent_needs_parens(node, p) || needs_parens(node, p, self.token_context)
+            parent_needs_parens(self.tree, node, p)
+                || needs_parens(self.tree, node, p, self.token_context)
         });
-        if needed {
+        if needed || self.leading_comment_parens(node, parent) {
             return (true, false);
         }
-        let later_line = self.no_line_terminator
-            && flags & F_RETAIN_LINES != 0
-            && node.loc.is_some_and(|l| l.start > self.buf.line);
-        (later_line, later_line)
+        if !self.no_line_terminator {
+            return (false, false);
+        }
+        let n = self.tree.node(node);
+        let newline_comment = n
+            .comments
+            .as_ref()
+            .is_some_and(|c| c.leading.iter().any(|&c| comment_is_newline(self.tree, c)));
+        let later_line =
+            flags & F_RETAIN_LINES != 0 && n.loc.is_some_and(|l| l.start > self.buf.line);
+        let indented = newline_comment || later_line;
+        (indented, indented)
     }
 
     /// Open the parentheses; the token context to restore afterwards.
@@ -414,30 +552,51 @@ impl Printer {
         old_tc
     }
 
-    fn print(&mut self, node: &Node, parent: Option<&Node>, nlta: bool, reset_tc: bool) {
+    fn trailing_newline_comment(&self, node: NodeId) -> bool {
+        self.tree
+            .node(node)
+            .comments
+            .as_ref()
+            .is_some_and(|c| c.trailing.iter().any(|&c| comment_is_newline(self.tree, c)))
+    }
+
+    fn print(&mut self, node: NodeId, opts: PrintOpts) {
+        let PrintOpts {
+            parent,
+            nlta,
+            reset_tc,
+        } = opts;
         let flags = self.flags;
-        if node.compact {
+        if self.tree.node(node).compact {
             self.flags |= F_CONCISE;
         }
         let mut old_tc = self.reset_token_context(reset_tc);
-        let (should_parens, indent_parenthesized) = self.parens_for(node, parent, flags);
+        let (mut should_parens, indent_parenthesized) = self.parens_for(node, parent, flags);
         // `undefined` / a saved value (restored only when non-null).
-        let mut saved_nltan: Option<Option<*const Node>> = None;
+        let mut saved_nltan: Option<Option<NodeId>> = None;
         let mut nlta = nlta;
+        if !should_parens {
+            nlta = nlta
+                || parent
+                    .is_some_and(|p| self.nltan == Some(p) && self.tree.is_last_child(p, node));
+            if nlta {
+                if self.trailing_newline_comment(node) {
+                    if self.kind(node).is_expression() {
+                        should_parens = true;
+                    }
+                } else {
+                    saved_nltan = Some(self.nltan);
+                    self.nltan = Some(node);
+                }
+            }
+        }
         if should_parens {
             old_tc = self.open_parens(indent_parenthesized, reset_tc, old_tc);
             saved_nltan = Some(self.nltan);
             self.nltan = None;
-        } else {
-            nlta =
-                nlta || parent.is_some_and(|p| self.nltan == Some(ptr(p)) && p.is_last_child(node));
-            if nlta {
-                saved_nltan = Some(self.nltan);
-                self.nltan = Some(ptr(node));
-            }
         }
-        if !matches!(node.kind, Kind::Program { .. })
-            && let Some(loc) = node.loc
+        if !matches!(self.kind(node), Kind::Program { .. })
+            && let Some(loc) = self.tree.node(node).loc
         {
             self.catch_up(loc.start);
         }
@@ -445,7 +604,7 @@ impl Printer {
         if should_parens {
             if indent_parenthesized {
                 self.dedent_with(self.flags);
-                self.newline();
+                self.newline(1);
             }
             self.token_char(b')');
             self.no_line_terminator = nlta;
@@ -461,11 +620,14 @@ impl Printer {
         }
     }
 
+    /// `printJoin(nodes, statement, indent, separator,
+    /// printTrailingSeparator, resetTokenContext)`.
     #[allow(clippy::too_many_arguments)]
     fn print_join(
         &mut self,
-        nodes: &[Node],
-        parent: &Node,
+        nodes: &[NodeId],
+        parent: NodeId,
+        statement: bool,
         indent: Option<bool>,
         separator: Option<Sep>,
         print_trailing_separator: bool,
@@ -478,7 +640,7 @@ impl Printer {
         let mut indent = indent;
         if indent.is_none()
             && flags & F_RETAIN_LINES != 0
-            && let Some(loc) = nodes[0].loc
+            && let Some(loc) = self.tree.node(nodes[0]).loc
             && loc.start != self.buf.line
         {
             indent = Some(true);
@@ -488,8 +650,21 @@ impl Printer {
             self.indent_with(flags);
         }
         let len = nodes.len();
-        for (i, node) in nodes.iter().enumerate() {
-            self.print(node, Some(parent), false, reset_tc);
+        for (i, &node) in nodes.iter().enumerate() {
+            if node.is_none() {
+                continue;
+            }
+            if statement && i == 0 && self.buf.has_content() {
+                self.newline_with(1, flags);
+            }
+            self.print(
+                node,
+                PrintOpts {
+                    parent: Some(parent),
+                    nlta: false,
+                    reset_tc,
+                },
+            );
             if let Some(sep) = separator {
                 if i < len - 1 {
                     sep(self, false);
@@ -497,38 +672,63 @@ impl Printer {
                     sep(self, true);
                 }
             }
+            if statement {
+                self.newline_with(1, flags);
+            }
         }
         if indent {
             self.dedent_with(flags);
         }
     }
 
-    fn print_sequence(&mut self, nodes: &[Node], parent: &Node, indent: bool) {
-        self.print_join(nodes, parent, Some(indent), None, false, false);
+    /// `printSequence(nodes, indent)`: statements, one per line.
+    fn print_sequence(&mut self, nodes: &[NodeId], parent: NodeId, indent: bool, reset_tc: bool) {
+        self.print_join(nodes, parent, true, Some(indent), None, false, reset_tc);
     }
 
-    fn print_list(&mut self, items: &[Node], parent: &Node, indent: Option<bool>, reset_tc: bool) {
+    /// `printList(items)` with the default comma separator.
+    fn print_list(&mut self, items: &[NodeId], parent: NodeId, reset_tc: bool) {
         self.print_join(
             items,
             parent,
-            indent,
+            false,
+            None,
             Some(comma_separator),
             false,
             reset_tc,
         );
     }
 
-    fn print_block(&mut self, body: &Node, parent: &Node) {
-        if !matches!(body.kind, Kind::EmptyStatement) {
+    fn print_block(&mut self, body: NodeId, parent: NodeId) {
+        if !matches!(self.kind(body), Kind::EmptyStatement) {
             self.space();
         }
         self.p(body, parent);
     }
 
+    /// `printAndIndentOnComments(node)`.
+    fn print_and_indent_on_comments(&mut self, node: NodeId, parent: NodeId) {
+        let indent = self
+            .tree
+            .node(node)
+            .comments
+            .as_ref()
+            .is_some_and(|c| !c.leading.is_empty());
+        if indent {
+            self.indent_with(self.flags);
+        }
+        self.p(node, parent);
+        if indent {
+            self.dedent_with(self.flags);
+        }
+    }
+
     // -- the node printers (generators/*) ---------------------------------------
 
-    fn print_method(&mut self, node: &Node, parent: Option<&Node>) {
-        match &node.kind {
+    fn print_method(&mut self, node: NodeId, parent: Option<NodeId>) {
+        let kind = self.kind(node);
+        match kind {
+            Kind::File { program } => self.p(*program, node),
             Kind::Program { .. }
             | Kind::Directive { .. }
             | Kind::DirectiveLiteral { .. }
@@ -542,17 +742,17 @@ impl Printer {
             | Kind::ThrowStatement { .. }
             | Kind::BreakStatement { .. }
             | Kind::ContinueStatement { .. }
-            | Kind::LabeledStatement { .. } => self.print_statement(node, parent),
+            | Kind::LabeledStatement { .. } => self.print_statement(node),
             Kind::IfStatement { .. }
             | Kind::SwitchStatement { .. }
             | Kind::SwitchCase { .. }
             | Kind::TryStatement { .. }
             | Kind::CatchClause { .. }
             | Kind::WhileStatement { .. }
-            | Kind::DoWhileStatement { .. } => self.print_control(node, parent),
+            | Kind::DoWhileStatement { .. } => self.print_control(node),
             Kind::ForStatement { .. }
             | Kind::ForInStatement { .. }
-            | Kind::ForOfStatement { .. } => self.print_loop(node, parent),
+            | Kind::ForOfStatement { .. } => self.print_loop(node),
             Kind::FunctionDeclaration { .. }
             | Kind::FunctionExpression { .. }
             | Kind::ArrowFunctionExpression { .. }
@@ -579,21 +779,21 @@ impl Printer {
             | Kind::TaggedTemplateExpression { .. }
             | Kind::ThisExpression
             | Kind::Super
-            | Kind::Import => self.print_atom(node, parent),
+            | Kind::Import => self.print_atom(node),
             Kind::ArrayExpression { .. }
             | Kind::ArrayPattern { .. }
             | Kind::ObjectExpression { .. }
             | Kind::ObjectPattern { .. }
             | Kind::ObjectProperty { .. }
             | Kind::SpreadElement { .. }
-            | Kind::RestElement { .. } => self.print_collection(node, parent),
+            | Kind::RestElement { .. } => self.print_collection(node),
             Kind::UnaryExpression { .. }
             | Kind::UpdateExpression { .. }
             | Kind::BinaryExpression { .. }
             | Kind::LogicalExpression { .. }
             | Kind::AssignmentExpression { .. }
             | Kind::AssignmentPattern { .. }
-            | Kind::ConditionalExpression { .. } => self.print_operator(node, parent),
+            | Kind::ConditionalExpression { .. } => self.print_operator(node),
             Kind::CallExpression { .. }
             | Kind::OptionalCallExpression { .. }
             | Kind::NewExpression { .. }
@@ -602,34 +802,61 @@ impl Printer {
             | Kind::SequenceExpression { .. }
             | Kind::YieldExpression { .. }
             | Kind::AwaitExpression { .. }
-            | Kind::MetaProperty { .. } => self.print_access(node, parent),
+            | Kind::MetaProperty { .. } => self.print_access(node),
+            Kind::ImportDeclaration { .. }
+            | Kind::ImportSpecifier { .. }
+            | Kind::ImportDefaultSpecifier { .. }
+            | Kind::ImportNamespaceSpecifier { .. }
+            | Kind::ImportAttribute { .. }
+            | Kind::ExportNamedDeclaration { .. }
+            | Kind::ExportDefaultDeclaration { .. }
+            | Kind::ExportAllDeclaration { .. }
+            | Kind::ExportSpecifier { .. }
+            | Kind::ExportNamespaceSpecifier { .. } => self.print_module(node),
         }
     }
 
-    fn print_statement(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    /// `Program` / `BlockStatement`'s directives + body.
+    fn directives_and_body(
+        &mut self,
+        node: NodeId,
+        directives: &[NodeId],
+        body: &[NodeId],
+        block: bool,
+    ) {
+        if !directives.is_empty() {
+            let newline = if body.is_empty() { 1 } else { 2 };
+            self.print_sequence(directives, node, block, block);
+            let last = *directives.last().expect("non-empty");
+            let has_trailing = self
+                .tree
+                .node(last)
+                .comments
+                .as_ref()
+                .is_some_and(|c| !c.trailing.is_empty());
+            if !has_trailing {
+                self.newline(newline);
+            }
+        }
+        // BlockStatement's printSequence resets a for-head's token context
+        // (`printSequence(body, true, true)`); Program's does not.
+        self.print_sequence(body, node, block, block);
+    }
+
+    fn print_statement(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::Program {
                 directives, body, ..
-            } => {
-                if !directives.is_empty() {
-                    self.print_sequence(directives, node, false);
-                    self.newline();
-                }
-                self.print_sequence(body, node, false);
-            }
+            } => self.directives_and_body(node, directives, body, false),
             Kind::Directive { value } => {
-                self.p(value, node);
+                self.p(*value, node);
                 self.semicolon(false);
             }
             Kind::DirectiveLiteral { raw } => self.token(raw, false, false),
             Kind::BlockStatement { directives, body } => {
                 self.token_char(b'{');
                 let old = self.enter_delimited();
-                if !directives.is_empty() {
-                    self.print_sequence(directives, node, true);
-                    self.newline();
-                }
-                self.print_sequence(body, node, true);
+                self.directives_and_body(node, directives, body, true);
                 self.nltan = old;
                 self.right_brace(node);
             }
@@ -640,14 +867,14 @@ impl Printer {
                 if body.is_empty() {
                     self.token_char(b'}');
                 } else {
-                    self.newline();
-                    self.print_sequence(body, node, true);
+                    self.newline(1);
+                    self.print_sequence(body, node, true, false);
                     self.right_brace(node);
                 }
             }
             Kind::ExpressionStatement { expression } => {
                 self.token_context |= TC_EXPRESSION_STATEMENT;
-                self.p(expression, node);
+                self.p(*expression, node);
                 self.semicolon(false);
             }
             Kind::EmptyStatement => self.semicolon(true),
@@ -659,43 +886,43 @@ impl Printer {
                 self.word("with");
                 self.space();
                 self.token_char(b'(');
-                self.p(object, node);
+                self.p(*object, node);
                 self.token_char(b')');
-                self.print_block(body, node);
+                self.print_block(*body, node);
             }
             Kind::ReturnStatement { argument } => {
                 self.word("return");
-                self.after_keyword(argument.as_deref(), node);
+                self.after_keyword(*argument, node);
             }
             Kind::ThrowStatement { argument } => {
                 self.word("throw");
-                self.after_keyword(Some(argument), node);
+                self.after_keyword(Some(*argument), node);
             }
             Kind::BreakStatement { label } => {
                 self.word("break");
-                self.after_keyword(label.as_deref(), node);
+                self.after_keyword(*label, node);
             }
             Kind::ContinueStatement { label } => {
                 self.word("continue");
-                self.after_keyword(label.as_deref(), node);
+                self.after_keyword(*label, node);
             }
             Kind::LabeledStatement { label, body } => {
-                self.p(label, node);
+                self.p(*label, node);
                 self.token_char(b':');
                 self.space();
-                self.p(body, node);
+                self.p(*body, node);
             }
             _ => unreachable!("dispatched by print_method"),
         }
     }
 
-    fn print_control(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    fn print_control(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::IfStatement {
                 test,
                 consequent,
                 alternate,
-            } => self.if_statement(node, test, consequent, alternate.as_deref()),
+            } => self.if_statement(node, *test, *consequent, *alternate),
             Kind::SwitchStatement {
                 discriminant,
                 cases,
@@ -703,11 +930,11 @@ impl Printer {
                 self.word("switch");
                 self.space();
                 self.token_char(b'(');
-                self.p(discriminant, node);
+                self.p(*discriminant, node);
                 self.token_char(b')');
                 self.space();
                 self.token_char(b'{');
-                self.print_sequence(cases, node, true);
+                self.print_sequence(cases, node, true, false);
                 self.right_brace(node);
             }
             Kind::SwitchCase { test, consequent } => {
@@ -715,7 +942,7 @@ impl Printer {
                     Some(t) => {
                         self.word("case");
                         self.space();
-                        self.p(t, node);
+                        self.p(*t, node);
                         self.token_char(b':');
                     }
                     None => {
@@ -724,8 +951,8 @@ impl Printer {
                     }
                 }
                 if !consequent.is_empty() {
-                    self.newline();
-                    self.print_sequence(consequent, node, true);
+                    self.newline(1);
+                    self.print_sequence(consequent, node, true, false);
                 }
             }
             Kind::TryStatement {
@@ -735,14 +962,14 @@ impl Printer {
             } => {
                 self.word("try");
                 self.space();
-                self.p(block, node);
+                self.p(*block, node);
                 self.space();
-                self.print_opt(handler.as_deref(), node);
+                self.print_opt(*handler, node);
                 if let Some(f) = finalizer {
                     self.space();
                     self.word("finally");
                     self.space();
-                    self.p(f, node);
+                    self.p(*f, node);
                 }
             }
             Kind::CatchClause { param, body } => {
@@ -750,29 +977,29 @@ impl Printer {
                 self.space();
                 if let Some(param) = param {
                     self.token_char(b'(');
-                    self.p(param, node);
+                    self.p(*param, node);
                     self.token_char(b')');
                     self.space();
                 }
-                self.p(body, node);
+                self.p(*body, node);
             }
             Kind::WhileStatement { test, body } => {
                 self.word("while");
                 self.space();
                 self.token_char(b'(');
-                self.p(test, node);
+                self.p(*test, node);
                 self.token_char(b')');
-                self.print_block(body, node);
+                self.print_block(*body, node);
             }
             Kind::DoWhileStatement { body, test } => {
                 self.word("do");
                 self.space();
-                self.p(body, node);
+                self.p(*body, node);
                 self.space();
                 self.word("while");
                 self.space();
                 self.token_char(b'(');
-                self.p(test, node);
+                self.p(*test, node);
                 self.token_char(b')');
                 self.semicolon(false);
             }
@@ -780,8 +1007,8 @@ impl Printer {
         }
     }
 
-    fn print_loop(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    fn print_loop(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::ForStatement {
                 init,
                 test,
@@ -792,34 +1019,34 @@ impl Printer {
                 self.space();
                 self.token_char(b'(');
                 self.token_context |= TC_FOR_INIT_HEAD | TC_ACCUMULATE;
-                self.print_opt(init.as_deref(), node);
+                self.print_opt(*init, node);
                 self.token_context = 0;
                 self.token_char(b';');
                 if let Some(t) = test {
                     self.space();
-                    self.p(t, node);
+                    self.p(*t, node);
                 }
                 self.token_char(b';');
                 if let Some(u) = update {
                     self.space();
-                    self.p(u, node);
+                    self.p(*u, node);
                 }
                 self.token_char(b')');
-                self.print_block(body, node);
+                self.print_block(*body, node);
             }
             Kind::ForInStatement { left, right, body } => {
                 self.word("for");
                 self.space();
                 self.token_char(b'(');
                 self.token_context |= TC_FOR_IN_HEAD | TC_ACCUMULATE;
-                self.p(left, node);
+                self.p(*left, node);
                 self.token_context = 0;
                 self.space();
                 self.word("in");
                 self.space();
-                self.p(right, node);
+                self.p(*right, node);
                 self.token_char(b')');
-                self.print_block(body, node);
+                self.print_block(*body, node);
             }
             Kind::ForOfStatement {
                 is_await,
@@ -835,49 +1062,36 @@ impl Printer {
                 }
                 self.token_char(b'(');
                 self.token_context |= TC_FOR_OF_HEAD;
-                self.p(left, node);
+                self.p(*left, node);
                 self.space();
                 self.word("of");
                 self.space();
-                self.p(right, node);
+                self.p(*right, node);
                 self.token_char(b')');
-                self.print_block(body, node);
+                self.print_block(*body, node);
             }
             _ => unreachable!("dispatched by print_method"),
         }
     }
 
-    fn print_declaration(&mut self, node: &Node, parent: Option<&Node>) {
-        match &node.kind {
+    fn print_declaration(&mut self, node: NodeId, parent: Option<NodeId>) {
+        match self.kind(node) {
             Kind::FunctionDeclaration(f) | Kind::FunctionExpression(f) => {
                 self.function_head(f, node);
                 self.space();
-                self.p(&f.body, node);
+                self.p(f.body, node);
             }
-            Kind::ArrowFunctionExpression(f) => {
-                if f.is_async {
-                    self.word_nlt("async", true);
-                    self.space();
-                }
-                // `_shouldPrintArrowParamsParens` is true under retainLines.
-                self.params(&f.params, node);
-                self.no_line_terminator = true;
-                self.space();
-                self.token("=>", false, false);
-                self.space();
-                self.token_context |= TC_ARROW_BODY;
-                self.p(&f.body, node);
-            }
+            Kind::ArrowFunctionExpression(f) => self.arrow(f, node),
             Kind::VariableDeclaration { kind, declarations } => {
                 self.variable_declaration(node, kind, declarations, parent)
             }
             Kind::VariableDeclarator { id, init } => {
-                self.p(id, node);
+                self.p(*id, node);
                 if let Some(init) = init {
                     self.space();
                     self.token_char(b'=');
                     self.space();
-                    self.p(init, node);
+                    self.p(*init, node);
                 }
             }
             Kind::ClassDeclaration(c) | Kind::ClassExpression(c) => self.class(c, node),
@@ -887,16 +1101,16 @@ impl Printer {
                     self.token_char(b'}');
                 } else {
                     let old = self.enter_delimited();
-                    self.print_join(body, node, Some(true), None, true, true);
+                    self.print_join(body, node, true, Some(true), None, true, true);
                     self.nltan = old;
                     if !self.ends_with(10) {
-                        self.newline();
+                        self.newline(1);
                     }
                     self.right_brace(node);
                 }
             }
             Kind::ClassMethod(m) | Kind::ClassPrivateMethod(m) => {
-                if let Some(l) = m.key.loc {
+                if let Some(l) = self.tree.node(m.key).loc {
                     self.catch_up(l.end);
                 }
                 if m.is_static {
@@ -905,16 +1119,16 @@ impl Printer {
                 }
                 self.method_head(m, node);
                 self.space();
-                self.p(&m.func.body, node);
+                self.p(m.func.body, node);
             }
             Kind::ObjectMethod(m) => {
                 self.method_head(m, node);
                 self.space();
-                self.p(&m.func.body, node);
+                self.p(m.func.body, node);
             }
             Kind::ClassProperty(fd) => {
                 if !fd.is_static
-                    && let Some(l) = fd.key.loc
+                    && let Some(l) = self.tree.node(fd.key).loc
                 {
                     self.catch_up(l.end);
                 }
@@ -922,7 +1136,7 @@ impl Printer {
             }
             Kind::ClassPrivateProperty(fd) => self.field(fd, node, false),
             Kind::ClassAccessorProperty(fd) => {
-                if let Some(l) = fd.key.loc {
+                if let Some(l) = self.tree.node(fd.key).loc {
                     self.catch_up(l.end);
                 }
                 self.field(fd, node, true);
@@ -931,12 +1145,28 @@ impl Printer {
         }
     }
 
-    fn print_atom(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    fn template(&mut self, node: NodeId, quasis: &[Quasi], expressions: &[NodeId]) {
+        let mut part = String::from("`");
+        for i in 0..quasis.len().saturating_sub(1) {
+            part.push_str(&quasis[i].raw);
+            part.push_str("${");
+            self.token(&part, true, false);
+            self.p(expressions[i], node);
+            part = String::from("}");
+        }
+        if let Some(last) = quasis.last() {
+            part.push_str(&last.raw);
+        }
+        part.push('`');
+        self.token(&part, true, false);
+    }
+
+    fn print_atom(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::Identifier { name } => self.word(name),
             Kind::PrivateName { id } => {
                 self.token_char(b'#');
-                self.p(id, node);
+                self.p(*id, node);
             }
             Kind::StringLiteral { value, raw } => match raw {
                 Some(raw) => self.token(raw, false, false),
@@ -946,9 +1176,11 @@ impl Printer {
                 }
             },
             Kind::NumericLiteral { value, raw } => {
-                let s = raw
-                    .clone()
-                    .unwrap_or_else(|| humanify_model::js::number_to_string(*value));
+                let s = match raw {
+                    Some(r) => r.clone(),
+                    None if self.rust_numbers => format!("{value}"),
+                    None => humanify_model::js::number_to_string(*value),
+                };
                 self.number(&s, *value);
             }
             Kind::BigIntLiteral { raw } => self.word(raw),
@@ -958,24 +1190,10 @@ impl Printer {
             Kind::TemplateLiteral {
                 quasis,
                 expressions,
-            } => {
-                let mut part = String::from("`");
-                for i in 0..quasis.len().saturating_sub(1) {
-                    part.push_str(&quasis[i]);
-                    part.push_str("${");
-                    self.token(&part, true, false);
-                    self.p(&expressions[i], node);
-                    part = String::from("}");
-                }
-                if let Some(last) = quasis.last() {
-                    part.push_str(last);
-                }
-                part.push('`');
-                self.token(&part, true, false);
-            }
+            } => self.template(node, quasis, expressions),
             Kind::TaggedTemplateExpression { tag, quasi } => {
-                self.p(tag, node);
-                self.p(quasi, node);
+                self.p(*tag, node);
+                self.p(*quasi, node);
             }
             Kind::ThisExpression => self.word("this"),
             Kind::Super => self.word("super"),
@@ -984,24 +1202,30 @@ impl Printer {
         }
     }
 
-    fn print_collection(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    fn print_collection(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::ArrayExpression { elements } | Kind::ArrayPattern { elements } => {
                 self.token_char(b'[');
                 let old = self.enter_delimited();
                 let len = elements.len();
-                for (i, el) in elements.iter().enumerate() {
-                    match el {
-                        Some(el) => {
-                            if i > 0 {
-                                self.space();
-                            }
-                            self.print(el, Some(node), false, true);
-                            if i < len - 1 {
-                                self.token_char(b',');
-                            }
-                        }
-                        None => self.token_char(b','),
+                for (i, &el) in elements.iter().enumerate() {
+                    if el.is_none() {
+                        self.token_char(b',');
+                        continue;
+                    }
+                    if i > 0 {
+                        self.space();
+                    }
+                    self.print(
+                        el,
+                        PrintOpts {
+                            parent: Some(node),
+                            nlta: false,
+                            reset_tc: true,
+                        },
+                    );
+                    if i < len - 1 {
+                        self.token_char(b',');
                     }
                 }
                 self.nltan = old;
@@ -1015,6 +1239,7 @@ impl Printer {
                     self.print_join(
                         properties,
                         node,
+                        true,
                         Some(true),
                         Some(comma_separator),
                         false,
@@ -1030,41 +1255,50 @@ impl Printer {
                 value,
                 computed,
                 shorthand,
-            } => {
-                if *computed {
-                    self.token_char(b'[');
-                    self.p(key, node);
-                    self.token_char(b']');
-                } else {
-                    if let (Kind::AssignmentPattern { left, .. }, Some(k)) =
-                        (&value.kind, key.identifier_name())
-                        && left.identifier_name() == Some(k)
-                    {
-                        self.p(value, node);
-                        return;
-                    }
-                    self.p(key, node);
-                    if *shorthand
-                        && let (Some(k), Some(v)) = (key.identifier_name(), value.identifier_name())
-                        && k == v
-                    {
-                        return;
-                    }
-                }
-                self.token_char(b':');
-                self.space();
-                self.p(value, node);
-            }
+            } => self.object_property(node, *key, *value, *computed, *shorthand),
             Kind::SpreadElement { argument } | Kind::RestElement { argument } => {
                 self.token("...", false, false);
-                self.p(argument, node);
+                self.p(*argument, node);
             }
             _ => unreachable!("dispatched by print_method"),
         }
     }
 
-    fn print_operator(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    fn object_property(
+        &mut self,
+        node: NodeId,
+        key: NodeId,
+        value: NodeId,
+        computed: bool,
+        shorthand: bool,
+    ) {
+        if computed {
+            self.token_char(b'[');
+            self.p(key, node);
+            self.token_char(b']');
+        } else {
+            let key_name = self.kind(key).identifier_name();
+            if let (Kind::AssignmentPattern { left, .. }, Some(k)) = (self.kind(value), key_name)
+                && self.kind(*left).identifier_name() == Some(k)
+            {
+                self.p(value, node);
+                return;
+            }
+            self.p(key, node);
+            if shorthand
+                && let (Some(k), Some(v)) = (key_name, self.kind(value).identifier_name())
+                && k == v
+            {
+                return;
+            }
+        }
+        self.token_char(b':');
+        self.space();
+        self.p(value, node);
+    }
+
+    fn print_operator(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::UnaryExpression { operator, argument } => {
                 let first = operator.as_bytes()[0];
                 if first.is_ascii_lowercase() {
@@ -1073,7 +1307,7 @@ impl Printer {
                 } else {
                     self.token_char(first);
                 }
-                self.p(argument, node);
+                self.p(*argument, node);
             }
             Kind::UpdateExpression {
                 operator,
@@ -1082,14 +1316,21 @@ impl Printer {
             } => {
                 if *prefix {
                     self.token(operator, false, true);
-                    self.p(argument, node);
+                    self.p(*argument, node);
                 } else {
-                    self.print(argument, Some(node), true, false);
+                    self.print(
+                        *argument,
+                        PrintOpts {
+                            parent: Some(node),
+                            nlta: true,
+                            reset_tc: false,
+                        },
+                    );
                     self.token(operator, false, true);
                 }
             }
             Kind::BinaryExpression(bx) => {
-                self.p(&bx.left, node);
+                self.p(bx.left, node);
                 self.space();
                 if bx.operator.starts_with('i') {
                     self.word(bx.operator);
@@ -1098,49 +1339,49 @@ impl Printer {
                     self.buf.last = i32::from(*bx.operator.as_bytes().last().expect("operator"));
                 }
                 self.space();
-                self.p(&bx.right, node);
+                self.p(bx.right, node);
             }
             Kind::LogicalExpression(bx) | Kind::AssignmentExpression(bx) => {
-                self.p(&bx.left, node);
+                self.p(bx.left, node);
                 self.space();
                 self.token(bx.operator, false, true);
                 self.space();
-                self.p(&bx.right, node);
+                self.p(bx.right, node);
             }
             Kind::AssignmentPattern { left, right } => {
-                self.p(left, node);
+                self.p(*left, node);
                 self.space();
                 self.token_char(b'=');
                 self.space();
-                self.p(right, node);
+                self.p(*right, node);
             }
             Kind::ConditionalExpression {
                 test,
                 consequent,
                 alternate,
             } => {
-                self.p(test, node);
+                self.p(*test, node);
                 self.space();
                 self.token_char(b'?');
                 self.space();
-                self.p(consequent, node);
+                self.p(*consequent, node);
                 self.space();
                 self.token_char(b':');
                 self.space();
-                self.p(alternate, node);
+                self.p(*alternate, node);
             }
             _ => unreachable!("dispatched by print_method"),
         }
     }
 
-    fn print_access(&mut self, node: &Node, _parent: Option<&Node>) {
-        match &node.kind {
+    fn print_access(&mut self, node: NodeId) {
+        match self.kind(node) {
             Kind::CallExpression(c) => {
-                self.p(&c.callee, node);
+                self.p(c.callee, node);
                 self.call_arguments(c, node);
             }
             Kind::OptionalCallExpression(c) => {
-                self.p(&c.callee, node);
+                self.p(c.callee, node);
                 if c.optional {
                     self.token("?.", false, false);
                 }
@@ -1149,13 +1390,13 @@ impl Printer {
             Kind::NewExpression(c) => {
                 self.word("new");
                 self.space();
-                self.p(&c.callee, node);
+                self.p(c.callee, node);
                 self.call_arguments(c, node);
             }
             Kind::MemberExpression(m) => self.member(m, node, false),
             Kind::OptionalMemberExpression(m) => self.member(m, node, true),
             Kind::SequenceExpression { expressions } => {
-                self.print_list(expressions, node, None, false);
+                self.print_list(expressions, node, false);
             }
             Kind::YieldExpression { argument, delegate } => {
                 if *delegate {
@@ -1163,12 +1404,12 @@ impl Printer {
                     self.token_char(b'*');
                     if let Some(a) = argument {
                         self.space();
-                        self.p(a, node);
+                        self.p(*a, node);
                     }
                 } else if let Some(a) = argument {
                     self.word_nlt("yield", true);
                     self.space();
-                    self.p(a, node);
+                    self.p(*a, node);
                 } else {
                     self.word("yield");
                 }
@@ -1176,18 +1417,218 @@ impl Printer {
             Kind::AwaitExpression { argument } => {
                 self.word("await");
                 self.space();
-                self.p(argument, node);
+                self.p(*argument, node);
             }
             Kind::MetaProperty { meta, property } => {
-                self.p(meta, node);
+                self.p(*meta, node);
                 self.token_char(b'.');
-                self.p(property, node);
+                self.p(*property, node);
             }
             _ => unreachable!("dispatched by print_method"),
         }
     }
 
-    fn after_keyword(&mut self, arg: Option<&Node>, parent: &Node) {
+    fn print_module(&mut self, node: NodeId) {
+        match self.kind(node) {
+            Kind::ImportDeclaration {
+                specifiers,
+                source,
+                attributes,
+                phase,
+            } => self.import_declaration(node, specifiers, *source, attributes, *phase),
+            Kind::ImportSpecifier { imported, local } => {
+                self.p(*imported, node);
+                if self.kind(*local).identifier_name() != self.kind(*imported).identifier_name() {
+                    self.space();
+                    self.word("as");
+                    self.space();
+                    self.p(*local, node);
+                }
+            }
+            Kind::ImportDefaultSpecifier { local } => self.p(*local, node),
+            Kind::ImportNamespaceSpecifier { local } => {
+                self.token_char(b'*');
+                self.space();
+                self.word("as");
+                self.space();
+                self.p(*local, node);
+            }
+            Kind::ImportAttribute { key, value } => {
+                self.p(*key, node);
+                self.token_char(b':');
+                self.space();
+                self.p(*value, node);
+            }
+            Kind::ExportNamedDeclaration {
+                declaration,
+                specifiers,
+                source,
+                attributes,
+            } => self.export_named(node, *declaration, specifiers, *source, attributes),
+            Kind::ExportDefaultDeclaration { declaration } => {
+                self.word("export");
+                self.space();
+                self.word("default");
+                self.space();
+                self.token_context |= TC_EXPORT_DEFAULT;
+                self.p(*declaration, node);
+                if !self.kind(*declaration).is_statement() {
+                    self.semicolon(false);
+                }
+            }
+            Kind::ExportAllDeclaration { source, attributes } => {
+                self.word("export");
+                self.space();
+                self.token_char(b'*');
+                self.space();
+                self.word("from");
+                self.space();
+                self.module_source(node, *source, attributes, false);
+                self.semicolon(false);
+            }
+            Kind::ExportSpecifier { local, exported } => {
+                self.p(*local, node);
+                if self.kind(*local).identifier_name() != self.kind(*exported).identifier_name() {
+                    self.space();
+                    self.word("as");
+                    self.space();
+                    self.p(*exported, node);
+                }
+            }
+            Kind::ExportNamespaceSpecifier { exported } => {
+                self.token_char(b'*');
+                self.space();
+                self.word("as");
+                self.space();
+                self.p(*exported, node);
+            }
+            _ => unreachable!("dispatched by print_method"),
+        }
+    }
+
+    /// A module source, then its `with { … }` attributes when it has any.
+    fn module_source(&mut self, node: NodeId, source: NodeId, attributes: &[NodeId], _brace: bool) {
+        if attributes.is_empty() {
+            self.p(source, node);
+            return;
+        }
+        self.print(
+            source,
+            PrintOpts {
+                parent: Some(node),
+                nlta: true,
+                reset_tc: false,
+            },
+        );
+        self.space();
+        self.word("with");
+        self.space();
+        self.token("{", false, false);
+        self.space();
+        self.print_list(attributes, node, false);
+        self.space();
+        self.token("}", false, false);
+    }
+
+    fn import_declaration(
+        &mut self,
+        node: NodeId,
+        specifiers: &[NodeId],
+        source: NodeId,
+        attributes: &[NodeId],
+        phase: Option<&'static str>,
+    ) {
+        self.word("import");
+        self.space();
+        if let Some(phase) = phase {
+            self.word(phase);
+            self.space();
+        }
+        let has_specifiers = !specifiers.is_empty();
+        let mut rest = specifiers;
+        while let Some((&first, tail)) = rest.split_first() {
+            if !matches!(
+                self.kind(first),
+                Kind::ImportDefaultSpecifier { .. } | Kind::ImportNamespaceSpecifier { .. }
+            ) {
+                break;
+            }
+            self.p(first, node);
+            rest = tail;
+            if !rest.is_empty() {
+                self.token_char(b',');
+                self.space();
+            }
+        }
+        let has_brace = !rest.is_empty();
+        if has_brace {
+            self.token_char(b'{');
+            self.space();
+            self.print_list(rest, node, false);
+            self.space();
+            self.token_char(b'}');
+        }
+        if has_specifiers {
+            self.space();
+            self.word("from");
+            self.space();
+        }
+        self.module_source(node, source, attributes, has_brace);
+        self.semicolon(false);
+    }
+
+    fn export_named(
+        &mut self,
+        node: NodeId,
+        declaration: Option<NodeId>,
+        specifiers: &[NodeId],
+        source: Option<NodeId>,
+        attributes: &[NodeId],
+    ) {
+        self.word("export");
+        self.space();
+        if let Some(declar) = declaration {
+            self.p(declar, node);
+            if !self.kind(declar).is_statement() {
+                self.semicolon(false);
+            }
+            return;
+        }
+        let mut rest = specifiers;
+        let mut has_special = false;
+        while let Some((&first, tail)) = rest.split_first() {
+            if !matches!(self.kind(first), Kind::ExportNamespaceSpecifier { .. }) {
+                break;
+            }
+            has_special = true;
+            self.p(first, node);
+            rest = tail;
+            if !rest.is_empty() {
+                self.token_char(b',');
+                self.space();
+            }
+        }
+        let mut has_brace = false;
+        if !rest.is_empty() || !has_special {
+            has_brace = true;
+            self.token_char(b'{');
+            if !rest.is_empty() {
+                self.space();
+                self.print_list(rest, node, false);
+                self.space();
+            }
+            self.token_char(b'}');
+        }
+        if let Some(source) = source {
+            self.space();
+            self.word("from");
+            self.space();
+            self.module_source(node, source, attributes, has_brace);
+        }
+        self.semicolon(false);
+    }
+
+    fn after_keyword(&mut self, arg: Option<NodeId>, parent: NodeId) {
         if let Some(arg) = arg {
             self.space();
             // printTerminatorless
@@ -1199,10 +1640,10 @@ impl Printer {
 
     fn if_statement(
         &mut self,
-        node: &Node,
-        test: &Node,
-        consequent: &Node,
-        alternate: Option<&Node>,
+        node: NodeId,
+        test: NodeId,
+        consequent: NodeId,
+        alternate: Option<NodeId>,
     ) {
         self.word("if");
         self.space();
@@ -1211,16 +1652,19 @@ impl Printer {
         self.token_char(b')');
         self.space();
         let needs_block = alternate.is_some()
-            && matches!(last_statement(consequent).kind, Kind::IfStatement { .. });
+            && matches!(
+                self.kind(last_statement(self.tree, consequent)),
+                Kind::IfStatement { .. }
+            );
         if needs_block {
             self.token_char(b'{');
-            self.newline();
+            self.newline(1);
             self.indent_with(self.flags);
         }
-        self.p(consequent, node);
+        self.print_and_indent_on_comments(consequent, node);
         if needs_block {
             self.dedent_with(self.flags);
-            self.newline();
+            self.newline(1);
             self.token_char(b'}');
         }
         if let Some(alt) = alternate {
@@ -1229,16 +1673,16 @@ impl Printer {
             }
             self.word("else");
             self.space();
-            self.p(alt, node);
+            self.print_and_indent_on_comments(alt, node);
         }
     }
 
     fn variable_declaration(
         &mut self,
-        node: &Node,
+        node: NodeId,
         kind: &str,
-        declarations: &[Node],
-        parent: Option<&Node>,
+        declarations: &[NodeId],
+        parent: Option<NodeId>,
     ) {
         match kind {
             "await using" => {
@@ -1252,7 +1696,7 @@ impl Printer {
         self.space();
         let parent_is_for = parent.is_some_and(|p| {
             matches!(
-                p.kind,
+                self.kind(p),
                 Kind::ForStatement { .. }
                     | Kind::ForInStatement { .. }
                     | Kind::ForOfStatement { .. }
@@ -1261,10 +1705,11 @@ impl Printer {
         let has_inits = !parent_is_for
             && declarations
                 .iter()
-                .any(|d| matches!(d.kind, Kind::VariableDeclarator { init: Some(_), .. }));
+                .any(|&d| matches!(self.kind(d), Kind::VariableDeclarator { init: Some(_), .. }));
         self.print_join(
             declarations,
             node,
+            false,
             Some(declarations.len() > 1),
             Some(if has_inits {
                 comma_separator_with_newline
@@ -1275,10 +1720,10 @@ impl Printer {
             false,
         );
         if let Some(p) = parent {
-            match &p.kind {
-                Kind::ForStatement { init: Some(i), .. } if is(i, node) => return,
+            match self.kind(p) {
+                Kind::ForStatement { init: Some(i), .. } if *i == node => return,
                 Kind::ForInStatement { left, .. } | Kind::ForOfStatement { left, .. }
-                    if is(left, node) =>
+                    if *left == node =>
                 {
                     return;
                 }
@@ -1288,12 +1733,20 @@ impl Printer {
         self.semicolon(false);
     }
 
-    fn params(&mut self, params: &[Node], node: &Node) {
+    /// `_parameters(params, ")")` after the `(`.
+    fn params(&mut self, params: &[NodeId], node: NodeId) {
         self.token_char(b'(');
         let old = self.enter_delimited();
         let len = params.len();
-        for (i, p) in params.iter().enumerate() {
-            self.print(p, Some(node), false, true);
+        for (i, &p) in params.iter().enumerate() {
+            self.print(
+                p,
+                PrintOpts {
+                    parent: Some(node),
+                    nlta: false,
+                    reset_tc: true,
+                },
+            );
             if i < len - 1 {
                 self.token_char(b',');
                 self.space();
@@ -1303,7 +1756,50 @@ impl Printer {
         self.nltan = old;
     }
 
-    fn function_head(&mut self, f: &Func, node: &Node) {
+    /// `_shouldPrintArrowParamsParens`.
+    fn arrow_params_need_parens(&self, f: &Func) -> bool {
+        if f.params.len() != 1 {
+            return true;
+        }
+        let first = f.params[0];
+        let has_comments = self
+            .tree
+            .node(first)
+            .comments
+            .as_ref()
+            .is_some_and(|c| !c.leading.is_empty() || !c.trailing.is_empty());
+        if !matches!(self.kind(first), Kind::Identifier { .. }) || has_comments {
+            return true;
+        }
+        self.retain_lines()
+    }
+
+    fn arrow(&mut self, f: &Func, node: NodeId) {
+        if f.is_async {
+            self.word_nlt("async", true);
+            self.space();
+        }
+        if self.arrow_params_need_parens(f) {
+            self.params(&f.params, node);
+            self.no_line_terminator = true;
+        } else {
+            self.print(
+                f.params[0],
+                PrintOpts {
+                    parent: Some(node),
+                    nlta: true,
+                    reset_tc: false,
+                },
+            );
+        }
+        self.space();
+        self.token("=>", false, false);
+        self.space();
+        self.token_context |= TC_ARROW_BODY;
+        self.p(f.body, node);
+    }
+
+    fn function_head(&mut self, f: &Func, node: NodeId) {
         if f.is_async {
             self.word("async");
             self.space();
@@ -1313,12 +1809,12 @@ impl Printer {
             self.token_char(b'*');
         }
         self.space();
-        self.print_opt(f.id.as_deref(), node);
+        self.print_opt(f.id, node);
         self.params(&f.params, node);
         self.no_line_terminator = false;
     }
 
-    fn method_head(&mut self, m: &Method, node: &Node) {
+    fn method_head(&mut self, m: &Method, node: NodeId) {
         if m.kind == "get" || m.kind == "set" {
             self.word(m.kind);
             self.space();
@@ -1332,16 +1828,16 @@ impl Printer {
         }
         if m.computed {
             self.token_char(b'[');
-            self.p(&m.key, node);
+            self.p(m.key, node);
             self.token_char(b']');
         } else {
-            self.p(&m.key, node);
+            self.p(m.key, node);
         }
         self.params(&m.func.params, node);
         self.no_line_terminator = false;
     }
 
-    fn field(&mut self, fd: &Field, node: &Node, accessor: bool) {
+    fn field(&mut self, fd: &Prop, node: NodeId, accessor: bool) {
         if fd.is_static {
             self.word("static");
             self.space();
@@ -1352,12 +1848,12 @@ impl Printer {
         }
         if fd.computed {
             self.token_char(b'[');
-            self.p(&fd.key, node);
+            self.p(fd.key, node);
             self.token_char(b']');
         } else {
-            self.p(&fd.key, node);
+            self.p(fd.key, node);
         }
-        if let Some(v) = &fd.value {
+        if let Some(v) = fd.value {
             self.space();
             self.token_char(b'=');
             self.space();
@@ -1366,34 +1862,34 @@ impl Printer {
         self.semicolon(false);
     }
 
-    fn class(&mut self, c: &Class, node: &Node) {
+    fn class(&mut self, c: &Class, node: NodeId) {
         self.word("class");
-        if let Some(id) = &c.id {
+        if let Some(id) = c.id {
             self.space();
             self.p(id, node);
         }
-        if let Some(sc) = &c.super_class {
+        if let Some(sc) = c.super_class {
             self.space();
             self.word("extends");
             self.space();
             self.p(sc, node);
         }
         self.space();
-        self.p(&c.body, node);
+        self.p(c.body, node);
     }
 
-    fn call_arguments(&mut self, c: &Call, node: &Node) {
+    fn call_arguments(&mut self, c: &Call, node: NodeId) {
         self.token_char(b'(');
         let old = self.enter_delimited();
-        self.print_list(&c.arguments, node, None, true);
+        self.print_list(&c.arguments, node, true);
         self.nltan = old;
         self.right_parens(node);
     }
 
-    fn member(&mut self, m: &Member, node: &Node, optional_type: bool) {
-        self.p(&m.object, node);
+    fn member(&mut self, m: &Member, node: NodeId, optional_type: bool) {
+        self.p(m.object, node);
         let mut computed = m.computed;
-        if matches!(m.property.kind, Kind::NumericLiteral { .. }) {
+        if matches!(self.kind(m.property), Kind::NumericLiteral { .. }) {
             computed = true;
         }
         if optional_type {
@@ -1402,116 +1898,93 @@ impl Printer {
             }
             if computed {
                 self.token_char(b'[');
-                self.p(&m.property, node);
+                self.p(m.property, node);
                 self.token_char(b']');
             } else {
                 if !m.optional {
                     self.token_char(b'.');
                 }
-                self.p(&m.property, node);
+                self.p(m.property, node);
             }
         } else if computed {
             let old = self.enter_delimited();
             self.token_char(b'[');
-            self.print(&m.property, Some(node), false, true);
+            self.print(
+                m.property,
+                PrintOpts {
+                    parent: Some(node),
+                    nlta: false,
+                    reset_tc: true,
+                },
+            );
             self.token_char(b']');
             self.nltan = old;
         } else {
             self.token_char(b'.');
-            self.p(&m.property, node);
+            self.p(m.property, node);
         }
-    }
-}
-
-impl Default for Printer {
-    fn default() -> Self {
-        Printer::new()
     }
 }
 
 /// `getLastStatement` (statements.ts): follow `.body` while it is a
 /// statement node.
-fn last_statement(stmt: &Node) -> &Node {
-    let body = match &stmt.kind {
+fn last_statement(tree: &Tree, stmt: NodeId) -> NodeId {
+    let body = match tree.kind(stmt) {
         Kind::WithStatement { body, .. }
         | Kind::LabeledStatement { body, .. }
         | Kind::WhileStatement { body, .. }
         | Kind::DoWhileStatement { body, .. }
         | Kind::ForStatement { body, .. }
         | Kind::ForInStatement { body, .. }
-        | Kind::ForOfStatement { body, .. } => body,
+        | Kind::ForOfStatement { body, .. } => *body,
         _ => return stmt,
     };
-    if body.is_statement() {
-        last_statement(body)
+    if tree.kind(body).is_statement() {
+        last_statement(tree, body)
     } else {
         stmt
     }
 }
 
-/// `jsesc(value, { quotes: "double", wrap: true })` for the transform's
-/// synthesized names (the only raw-less strings it prints).
-fn jsesc_double(value: &str) -> String {
-    let mut out = String::from("\"");
-    for c in value.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            ' '..='~' => out.push(c),
-            _ => {
-                let mut units = [0u16; 2];
-                for u in c.encode_utf16(&mut units) {
-                    out.push_str(&format!("\\u{:04X}", u));
-                }
-            }
-        }
-    }
-    out.push('"');
-    out
-}
-
 // -- parentheses (node/index.ts + node/parentheses.ts) ---------------------------
 
-fn is_or_has_call_expression(node: &Node) -> bool {
-    match &node.kind {
+fn is_or_has_call_expression(tree: &Tree, node: NodeId) -> bool {
+    match tree.kind(node) {
         Kind::CallExpression(_) => true,
-        Kind::MemberExpression(m) => is_or_has_call_expression(&m.object),
+        Kind::MemberExpression(m) => is_or_has_call_expression(tree, m.object),
         _ => false,
     }
 }
 
 /// `parentNeedsParens`.
-fn parent_needs_parens(node: &Node, parent: &Node) -> bool {
-    matches!(&parent.kind, Kind::NewExpression(c) if is(&c.callee, node))
-        && is_or_has_call_expression(node)
+fn parent_needs_parens(tree: &Tree, node: NodeId, parent: NodeId) -> bool {
+    matches!(tree.kind(parent), Kind::NewExpression(c) if c.callee == node)
+        && is_or_has_call_expression(tree, node)
 }
 
-fn is_class_extends_clause(node: &Node, parent: &Node) -> bool {
-    matches!(&parent.kind, Kind::ClassDeclaration(c) | Kind::ClassExpression(c)
-        if c.super_class.as_deref().is_some_and(|s| is(s, node)))
+fn is_class_extends_clause(tree: &Tree, node: NodeId, parent: NodeId) -> bool {
+    matches!(tree.kind(parent), Kind::ClassDeclaration(c) | Kind::ClassExpression(c)
+        if c.super_class == Some(node))
 }
 
-fn has_postfix_part(node: &Node, parent: &Node) -> bool {
-    match &parent.kind {
-        Kind::MemberExpression(m) | Kind::OptionalMemberExpression(m) => is(&m.object, node),
+fn has_postfix_part(tree: &Tree, node: NodeId, parent: NodeId) -> bool {
+    match tree.kind(parent) {
+        Kind::MemberExpression(m) | Kind::OptionalMemberExpression(m) => m.object == node,
         Kind::CallExpression(c) | Kind::OptionalCallExpression(c) | Kind::NewExpression(c) => {
-            is(&c.callee, node)
+            c.callee == node
         }
-        Kind::TaggedTemplateExpression { tag, .. } => is(tag, node),
+        Kind::TaggedTemplateExpression { tag, .. } => *tag == node,
         _ => false,
     }
 }
 
-fn binary_like(node: &Node, parent: &Node, op: &str, logical: bool) -> bool {
-    if is_class_extends_clause(node, parent) {
+fn binary_like(tree: &Tree, node: NodeId, parent: NodeId, op: &str, logical: bool) -> bool {
+    if is_class_extends_clause(tree, node, parent) {
         return true;
     }
-    if has_postfix_part(node, parent)
+    if has_postfix_part(tree, node, parent)
         || matches!(
-            parent.kind,
+            tree.kind(parent),
             Kind::UnaryExpression { .. }
                 | Kind::SpreadElement { .. }
                 | Kind::AwaitExpression { .. }
@@ -1519,7 +1992,7 @@ fn binary_like(node: &Node, parent: &Node, op: &str, logical: bool) -> bool {
     {
         return true;
     }
-    let (parent_pos, parent_binary) = match &parent.kind {
+    let (parent_pos, parent_binary): (Option<u32>, Option<&Binary>) = match tree.kind(parent) {
         Kind::BinaryExpression(b) => (precedence(b.operator), Some(b)),
         Kind::LogicalExpression(b) => (precedence(b.operator), None),
         _ => (None, None),
@@ -1532,15 +2005,15 @@ fn binary_like(node: &Node, parent: &Node, op: &str, logical: bool) -> bool {
         if parent_pos == node_pos
             && let Some(pb) = parent_binary
             && (if node_pos == 11 {
-                is(&pb.left, node)
+                pb.left == node
             } else {
-                is(&pb.right, node)
+                pb.right == node
             })
         {
             return true;
         }
         if logical
-            && matches!(parent.kind, Kind::LogicalExpression(_))
+            && matches!(tree.kind(parent), Kind::LogicalExpression(_))
             && ((node_pos == 1 && parent_pos != 1) || (parent_pos == 1 && node_pos != 1))
         {
             return true;
@@ -1549,23 +2022,23 @@ fn binary_like(node: &Node, parent: &Node, op: &str, logical: bool) -> bool {
     false
 }
 
-fn unary_like(node: &Node, parent: &Node) -> bool {
-    has_postfix_part(node, parent)
-        || matches!(&parent.kind, Kind::BinaryExpression(b) if b.operator == "**" && is(&b.left, node))
-        || is_class_extends_clause(node, parent)
+fn unary_like(tree: &Tree, node: NodeId, parent: NodeId) -> bool {
+    has_postfix_part(tree, node, parent)
+        || matches!(tree.kind(parent), Kind::BinaryExpression(b) if b.operator == "**" && b.left == node)
+        || is_class_extends_clause(tree, node, parent)
 }
 
-fn conditional_like(node: &Node, parent: &Node) -> bool {
-    match &parent.kind {
+fn conditional_like(tree: &Tree, node: NodeId, parent: NodeId) -> bool {
+    match tree.kind(parent) {
         Kind::UnaryExpression { .. }
         | Kind::SpreadElement { .. }
         | Kind::BinaryExpression(_)
         | Kind::LogicalExpression(_)
         | Kind::AwaitExpression { .. } => return true,
-        Kind::ConditionalExpression { test, .. } if is(test, node) => return true,
+        Kind::ConditionalExpression { test, .. } if *test == node => return true,
         _ => {}
     }
-    unary_like(node, parent)
+    unary_like(tree, node, parent)
 }
 
 fn needs_paren_before_expression_brace(tc: u32) -> bool {
@@ -1573,75 +2046,77 @@ fn needs_paren_before_expression_brace(tc: u32) -> bool {
 }
 
 /// The per-type `needsParens` table.
-fn needs_parens(node: &Node, parent: &Node, tc: u32) -> bool {
-    match &node.kind {
+fn needs_parens(tree: &Tree, node: NodeId, parent: NodeId, tc: u32) -> bool {
+    match tree.kind(node) {
         Kind::UpdateExpression { .. } => {
-            has_postfix_part(node, parent) || is_class_extends_clause(node, parent)
+            has_postfix_part(tree, node, parent) || is_class_extends_clause(tree, node, parent)
         }
         Kind::ObjectExpression { .. } => needs_paren_before_expression_brace(tc),
         Kind::BinaryExpression(b) => {
-            binary_like(node, parent, b.operator, false)
+            binary_like(tree, node, parent, b.operator, false)
                 || (tc & TC_ACCUMULATE != 0 && b.operator == "in")
         }
-        Kind::LogicalExpression(b) => binary_like(node, parent, b.operator, true),
-        Kind::SequenceExpression { .. } => sequence_needs_parens(node, parent),
+        Kind::LogicalExpression(b) => binary_like(tree, node, parent, b.operator, true),
+        Kind::SequenceExpression { .. } => sequence_needs_parens(tree, node, parent),
         Kind::YieldExpression { .. } | Kind::AwaitExpression { .. } => {
             matches!(
-                parent.kind,
+                tree.kind(parent),
                 Kind::BinaryExpression(_)
                     | Kind::LogicalExpression(_)
                     | Kind::UnaryExpression { .. }
                     | Kind::SpreadElement { .. }
-            ) || has_postfix_part(node, parent)
-                || (matches!(parent.kind, Kind::AwaitExpression { .. })
-                    && matches!(node.kind, Kind::YieldExpression { .. }))
-                || matches!(&parent.kind, Kind::ConditionalExpression { test, .. } if is(test, node))
-                || is_class_extends_clause(node, parent)
+            ) || has_postfix_part(tree, node, parent)
+                || (matches!(tree.kind(parent), Kind::AwaitExpression { .. })
+                    && matches!(tree.kind(node), Kind::YieldExpression { .. }))
+                || matches!(tree.kind(parent), Kind::ConditionalExpression { test, .. } if *test == node)
+                || is_class_extends_clause(tree, node, parent)
         }
         Kind::ClassExpression(_) | Kind::FunctionExpression(_) => {
             tc & (TC_EXPRESSION_STATEMENT | TC_EXPORT_DEFAULT) != 0
         }
-        Kind::UnaryExpression { .. } | Kind::SpreadElement { .. } => unary_like(node, parent),
+        Kind::UnaryExpression { .. } | Kind::SpreadElement { .. } => unary_like(tree, node, parent),
         Kind::ConditionalExpression { .. } | Kind::ArrowFunctionExpression(_) => {
-            conditional_like(node, parent)
+            conditional_like(tree, node, parent)
         }
-        Kind::OptionalMemberExpression(_) | Kind::OptionalCallExpression(_) => match &parent.kind {
-            Kind::CallExpression(c) => is(&c.callee, node),
-            Kind::MemberExpression(m) => is(&m.object, node),
-            _ => false,
-        },
+        Kind::OptionalMemberExpression(_) | Kind::OptionalCallExpression(_) => {
+            match tree.kind(parent) {
+                Kind::CallExpression(c) => c.callee == node,
+                Kind::MemberExpression(m) => m.object == node,
+                _ => false,
+            }
+        }
         Kind::AssignmentExpression(b) => {
             if needs_paren_before_expression_brace(tc)
-                && matches!(b.left.kind, Kind::ObjectPattern { .. })
+                && matches!(tree.kind(b.left), Kind::ObjectPattern { .. })
             {
                 return true;
             }
-            conditional_like(node, parent)
+            conditional_like(tree, node, parent)
         }
-        Kind::Identifier { name } => identifier_needs_parens(node, name, parent, tc),
+        Kind::Identifier { name } => identifier_needs_parens(tree, node, name, parent, tc),
         _ => false,
     }
 }
 
-fn sequence_needs_parens(node: &Node, parent: &Node) -> bool {
-    match &parent.kind {
+fn sequence_needs_parens(tree: &Tree, node: NodeId, parent: NodeId) -> bool {
+    match tree.kind(parent) {
         Kind::SequenceExpression { .. } | Kind::TemplateLiteral { .. } => return false,
-        Kind::MemberExpression(m) | Kind::OptionalMemberExpression(m) if is(&m.property, node) => {
+        Kind::MemberExpression(m) | Kind::OptionalMemberExpression(m) if m.property == node => {
             return false;
         }
-        Kind::ClassDeclaration(_) => return true,
-        Kind::ForOfStatement { right, .. } => return is(right, node),
+        Kind::ClassDeclaration(_) | Kind::ExportDefaultDeclaration { .. } => return true,
+        Kind::ForOfStatement { right, .. } => return *right == node,
         _ => {}
     }
-    !parent.is_statement()
+    !tree.kind(parent).is_statement()
 }
 
-fn identifier_needs_parens(node: &Node, name: &str, parent: &Node, tc: u32) -> bool {
-    if let Kind::AssignmentExpression(Binary { left, right, .. }) = &parent.kind
-        && node.parenthesized
-        && is(left, node)
+fn identifier_needs_parens(tree: &Tree, node: NodeId, name: &str, parent: NodeId, tc: u32) -> bool {
+    if let Kind::AssignmentExpression(Binary { left, right, .. }) = tree.kind(parent)
+        && tree.node(node).parenthesized
+        && *left == node
     {
-        let anonymous = match &right.kind {
+        let anonymous = match tree.kind(*right) {
             Kind::FunctionExpression(f) => f.id.is_none(),
             Kind::ClassExpression(c) => c.id.is_none(),
             _ => false,
@@ -1652,13 +2127,13 @@ fn identifier_needs_parens(node: &Node, name: &str, parent: &Node, tc: u32) -> b
     }
     let head = TC_EXPRESSION_STATEMENT | TC_FOR_INIT_HEAD | TC_FOR_IN_HEAD;
     let member_parent = matches!(
-        parent.kind,
+        tree.kind(parent),
         Kind::MemberExpression(_) | Kind::OptionalMemberExpression(_)
     );
     if (tc & TC_FOR_OF_HEAD != 0 || member_parent && tc & head != 0) && name == "let" {
-        let followed_by_bracket = match &parent.kind {
-            Kind::MemberExpression(m) => is(&m.object, node) && m.computed,
-            Kind::OptionalMemberExpression(m) => is(&m.object, node) && m.computed && !m.optional,
+        let followed_by_bracket = match tree.kind(parent) {
+            Kind::MemberExpression(m) => m.object == node && m.computed,
+            Kind::OptionalMemberExpression(m) => m.object == node && m.computed && !m.optional,
             _ => false,
         };
         if followed_by_bracket && tc & head != 0 {
@@ -1666,6 +2141,6 @@ fn identifier_needs_parens(node: &Node, name: &str, parent: &Node, tc: u32) -> b
         }
         return tc & TC_FOR_OF_HEAD != 0;
     }
-    matches!(&parent.kind, Kind::ForOfStatement { left, is_await, .. }
-        if is(left, node) && name == "async" && !is_await)
+    matches!(tree.kind(parent), Kind::ForOfStatement { left, is_await, .. }
+        if *left == node && name == "async" && !is_await)
 }
