@@ -166,6 +166,9 @@ pub struct NamingOutcome {
     pub coverage_text: Option<String>,
     pub claims: crate::rename::validated::RenameClaimStats,
     pub output_valid: bool,
+    /// Which invariant the generated text failed (None when stopped
+    /// before generate) — the CLI's `ERROR:` blocks read it.
+    pub verdict: Option<validate::Verdict>,
     pub fn_hashes: Vec<(String, String)>,
     /// `renameResult.priorCarry` — the split's tiers regime and the `-vv`
     /// `prior-match-map.json` read it (None without a prior).
@@ -247,6 +250,7 @@ pub fn run_naming<P: NameProvider>(
         coverage_text: None,
         claims: Default::default(),
         output_valid: true,
+        verdict: None,
         fn_hashes,
         prior_carry,
     };
@@ -256,8 +260,13 @@ pub fn run_naming<P: NameProvider>(
     };
     // `captureSemanticBaseline` + the invariant checks on the generated
     // text: the post-generate passes need a valid output.
-    out.output_valid =
-        validate::baseline_of(input.fresh).is_some_and(|b| validate::output_valid(&generated, &b));
+    let verdict = match validate::baseline_of(input.fresh) {
+        Some(b) => validate::verdict(&generated, &b),
+        // The fresh text itself does not parse: nothing can be validated.
+        None => validate::Verdict::ParseFailed,
+    };
+    out.output_valid = verdict == validate::Verdict::Valid;
+    out.verdict = Some(verdict);
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
     let over = |p: PostPass| hooks.pass_input.and_then(|f| f(p));
     let trail = std::mem::take(&mut out.trail);

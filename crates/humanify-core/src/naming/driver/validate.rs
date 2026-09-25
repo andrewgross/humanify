@@ -63,12 +63,45 @@ pub fn baseline_of(fresh: &str) -> Option<Baseline> {
     measure(fresh)
 }
 
+/// Which invariant the generated text failed (plugin.ts: `parseFailure`,
+/// else `structuralFailure ?? outputSemanticFailure`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Verdict {
+    Valid,
+    /// The output does not parse.
+    ParseFailed,
+    /// The structural signature differs (a pure rename keeps it).
+    Structural,
+    /// The free-name set or the binding count moved (capture, left-behind
+    /// reference, split/merged declaration): both sides' measures.
+    Semantic {
+        free_before: Vec<String>,
+        free_after: Vec<String>,
+        bindings_before: usize,
+        bindings_after: usize,
+    },
+}
+
+/// The verdict on the generated text against the fresh baseline.
+pub fn verdict(generated: &str, baseline: &Baseline) -> Verdict {
+    let Some(after) = measure(generated) else {
+        return Verdict::ParseFailed;
+    };
+    if after.signature != baseline.signature {
+        return Verdict::Structural;
+    }
+    if after.free_names != baseline.free_names || after.binding_count != baseline.binding_count {
+        return Verdict::Semantic {
+            free_before: baseline.free_names.iter().cloned().collect(),
+            free_after: after.free_names.iter().cloned().collect(),
+            bindings_before: baseline.binding_count,
+            bindings_after: after.binding_count,
+        };
+    }
+    Verdict::Valid
+}
+
 /// `!parseFailure && !semanticFailure` for the generated text.
 pub fn output_valid(generated: &str, baseline: &Baseline) -> bool {
-    let Some(after) = measure(generated) else {
-        return false;
-    };
-    after.free_names == baseline.free_names
-        && after.binding_count == baseline.binding_count
-        && after.signature == baseline.signature
+    verdict(generated, baseline) == Verdict::Valid
 }
