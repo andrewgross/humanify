@@ -31,7 +31,16 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 /// stage 10) are substituted for the Rust's, each only after a proven
 /// bijection between the two partitions. Migration-only: the hash BYTES
 /// differ by design, and a TS-written prior carries the TS's.
-pub const RUST_ONLY_OPTIONS: &[&str] = &["--beautified-input <path>", "--inject-ts-hashes <dir>"];
+///
+/// `--ts-library-functions <path>` — a TS dump's `regions.json`: the
+/// library freeze's classification (findings #32/#33), which needs raw
+/// function starts a binary ingesting the TS-beautified text does not
+/// have (crate::library_freeze). Deleted at 5b with `--beautified-input`.
+pub const RUST_ONLY_OPTIONS: &[&str] = &[
+    "--beautified-input <path>",
+    "--inject-ts-hashes <dir>",
+    "--ts-library-functions <path>",
+];
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -274,6 +283,11 @@ pub fn program() -> CliCommand {
             RUST_ONLY_OPTIONS[1],
             "Rust-only migration scaffolding: substitute a TS dump's hash bytes \
              (modules.json, partitions.json) after proving each bijection",
+        )))
+        .add_option(hidden(CliOption::new(
+            RUST_ONLY_OPTIONS[2],
+            "Rust-only migration scaffolding: consume a TS dump's regions.json \
+             library classification (the text is TS-beautified: no raw starts)",
         )))
         .subcommand(env_reads_command())
 }

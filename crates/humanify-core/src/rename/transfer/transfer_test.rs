@@ -87,7 +87,7 @@ fn synthetic_pairs_match_the_ts_probe() {
             visit_optional_calls: false,
         };
         let rows = match_prior_version(input, |stage| {
-            let (outcome, _) = apply_prior_version(stage)?;
+            let (outcome, _) = apply_prior_version(stage, &Default::default())?;
             Ok(outcome.rename.trail().transfer_rows())
         })
         .unwrap_or_else(|e| panic!("{name}: {e}"));

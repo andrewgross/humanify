@@ -15,6 +15,7 @@ use std::path::Path;
 
 use serde_json::json;
 
+use crate::libdetect::function_carry::LibraryClassification;
 use crate::matching::matches_dump::read_dump_texts;
 use crate::prior::{PriorMatchInput, match_prior_version};
 use crate::twins::gates::gate_dump;
@@ -30,6 +31,9 @@ pub struct TransferDumpSummary {
 pub fn dump_transfers(ts_dump_dir: &Path, out_dir: &Path) -> Result<TransferDumpSummary, String> {
     let (meta, fresh, prior) = read_dump_texts(ts_dump_dir)?;
     let flags = &meta["flags"];
+    // The library freeze the TS applied (regions.json libraryFunctions).
+    let library = LibraryClassification::from_dump_dir(ts_dump_dir)?;
+    let skip_libraries = flags["skipLibraries"].as_bool().unwrap_or(true);
     let input = PriorMatchInput {
         fresh: &fresh,
         prior: &prior,
@@ -38,7 +42,8 @@ pub fn dump_transfers(ts_dump_dir: &Path, out_dir: &Path) -> Result<TransferDump
         visit_optional_calls: false,
     };
     match_prior_version(input, |stage| {
-        let (outcome, twin_output) = super::apply_prior_version(stage)?;
+        let freeze = super::library_freeze(stage, library.as_ref(), skip_libraries)?;
+        let (outcome, twin_output) = super::apply_prior_version(stage, &freeze)?;
         fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
         let write = |file: &str, value: &serde_json::Value| {
             fs::write(out_dir.join(file), serde_json::to_string(value).unwrap())

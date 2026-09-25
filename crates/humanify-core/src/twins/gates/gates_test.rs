@@ -249,6 +249,18 @@ struct TwinSides<'a> {
 /// closure runs inside the scope that owns both arenas. `claimed` is the
 /// binding cascade's matched fresh names.
 fn with_twin_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(TwinSides<'_>)) {
+    with_twin_sides_classified(prior_code, fresh_code, None, run);
+}
+
+/// [`with_twin_sides`] under a library classification: the freeze goes
+/// through its one owner (`rename::transfer::library_freeze`), as the
+/// driver and the dump verbs apply it.
+fn with_twin_sides_classified(
+    prior_code: &str,
+    fresh_code: &str,
+    library: Option<&crate::libdetect::function_carry::LibraryClassification>,
+    run: impl FnOnce(TwinSides<'_>),
+) {
     let input = PriorMatchInput {
         fresh: fresh_code,
         prior: prior_code,
@@ -257,7 +269,8 @@ fn with_twin_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(TwinSide
         visit_optional_calls: false,
     };
     match_prior_version(input, |stage| {
-        let output = statement_twins(stage)?;
+        let freeze = crate::rename::transfer::library_freeze(stage, library, true)?;
+        let output = statement_twins(stage, &freeze)?;
         let fn_matches: HashMap<String, String> = stage.function_result.matches.to_hash_map();
         let matched_ids: HashSet<&String> = stage
             .binding_result
@@ -1102,5 +1115,71 @@ fn an_eval_tainted_module_freezes_the_twins_bindings() {
             "no rename inside an eval-tainted scope, got {:?}",
             pair_map(sides.output)
         );
+    });
+}
+
+/// A LIBRARY-frozen function (findings #32/#33, the library-min regime):
+/// the declarator statement still bridges its module binding, but the
+/// frozen arrow's locals abstain — a settled owner transfers nothing. The
+/// TS (fixed, 730eb99) dump of /work/lf/cases/library-min: `bridged
+/// slots=1 pairs=1` per library declarator; before the freeze was wired
+/// the Rust bridged all three slots.
+const PRIOR_LIBRARY: &str = "\
+var loadAlphaService = alphaRetries => {
+  var alphaEndpoint = 111;
+  return alphaEndpoint + alphaRetries;
+};
+var loadBetaService = betaRetries => {
+  var betaEndpoint = 222;
+  return betaEndpoint + betaRetries;
+};
+console.log(loadAlphaService, loadBetaService);
+";
+const FRESH_LIBRARY: &str = "\
+var x1 = r1 => {
+  var e1 = 111;
+  return e1 + r1;
+};
+var x2 = r2 => {
+  var e2 = 222;
+  return e2 + r2;
+};
+console.log(x1, x2);
+";
+
+#[test]
+fn a_library_frozen_function_bridges_its_binding_but_not_its_locals() {
+    use crate::libdetect::function_carry::{LibraryClassification, LibraryFunctionKey};
+    let arrow = |param: &str, line: u32| {
+        let start = FRESH_LIBRARY.find(&format!("{param} =>")).unwrap();
+        let end = start + FRESH_LIBRARY[start..].find("};").unwrap() + 1;
+        LibraryFunctionKey {
+            span: oxc_span::Span::new(start as u32, end as u32),
+            session_id: format!("input.js:{line}:9"),
+            library: "tinylib".into(),
+        }
+    };
+    let library = LibraryClassification::Consumed(vec![arrow("r1", 1), arrow("r2", 5)]);
+    let mut unfrozen = HashMap::new();
+    with_twin_sides(PRIOR_LIBRARY, FRESH_LIBRARY, |sides| {
+        unfrozen = pair_map(sides.output);
+    });
+    assert!(
+        unfrozen.contains_key("r1") && unfrozen.contains_key("e1"),
+        "without the freeze the locals bridge: {unfrozen:?}"
+    );
+    with_twin_sides_classified(PRIOR_LIBRARY, FRESH_LIBRARY, Some(&library), |sides| {
+        let pairs = pair_map(sides.output);
+        assert_eq!(
+            pairs.get("x1").map(String::as_str),
+            Some("loadAlphaService")
+        );
+        assert_eq!(pairs.get("x2").map(String::as_str), Some("loadBetaService"));
+        for local in ["r1", "e1", "r2", "e2"] {
+            assert!(
+                !pairs.contains_key(local),
+                "{local} is in a frozen function: {pairs:?}"
+            );
+        }
     });
 }

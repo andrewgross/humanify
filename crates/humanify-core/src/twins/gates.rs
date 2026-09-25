@@ -50,15 +50,18 @@
 //!    dump sorts. Outcome-neutral.
 //!  - the LIBRARY freeze (plugin.ts `detectAndMarkLibraries`: functions in
 //!    a banner comment region, only for a non-wrapper input under
-//!    `skipLibraries`) is NOT applied — the transfer stage has no comment
-//!    regions. The regime fires (/work/twins-posture/cases/library-min: a
-//!    frozen library arrow's locals bridge in the Rust, abstain in the TS),
-//!    but no oracle can gate it yet: the TS dump writer throws on every
-//!    mixed file (findings queue #33), and the TS classification compares
-//!    raw-text region offsets with beautified-text function offsets (#32).
-//!    Wire it with the driver once both are fixed TS-first. Unreachable on
-//!    the bundled pairs (a wrapper disables library detection). The wrapper
-//!    and eval-taint freezes ARE applied (the settle step).
+//!    `skipLibraries`) IS applied since 2026-09-25 (findings #32/#33 fixed
+//!    TS-first, wired on rust/library-freeze): the settle step reads it
+//!    from `rename::transfer::library_freeze`, whose classification is
+//!    `libdetect::function_carry::LibraryClassification` — the naming
+//!    driver, the M1 matches dump and the phase-3 transfers dump all pass
+//!    the same freeze. A frozen library fn is Settled: its declarator still
+//!    bridges the module binding, its locals abstain
+//!    (`a_library_frozen_function_bridges_its_binding_but_not_its_locals`;
+//!    gate /work/rust-port/gates/library-freeze/lf-gate.sh, twins IDENTICAL
+//!    on the 7 prior regimes). Unreachable on the bundled pairs (a wrapper
+//!    disables library detection). The wrapper and eval-taint freezes are
+//!    applied in the same step.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 

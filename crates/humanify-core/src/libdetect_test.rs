@@ -8,10 +8,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::detect::js_text::utf16_offset;
+use crate::libdetect::function_carry::library_at_offset;
 use crate::libdetect::{
-    CommentRegion, DetectedBy, LibraryDetector, classify_functions_by_region, detect_libraries,
-    extract_library_name_from_path, find_comment_regions, is_library_path, normalize_library_name,
-    relative_posix, select_library_detector,
+    CommentRegion, DetectedBy, LibraryDetector, detect_libraries, extract_library_name_from_path,
+    find_comment_regions, is_library_path, normalize_library_name, relative_posix,
+    select_library_detector,
 };
 use crate::unpack::UnpackedFile;
 
@@ -173,56 +174,46 @@ fn region(name: &str, start: usize, end: Option<usize>) -> CommentRegion {
     }
 }
 
+// ---- comment-regions.test.ts: libraryAtOffset (#32 replaced
+// classifyFunctionsByRegion — the rename pass classifies through the
+// ordinal carry, never with a beautified offset) ---------------------------
+
 #[test]
-fn classify_without_regions_is_empty() {
-    assert!(classify_functions_by_region([("fn1", Some(0))], &[]).is_empty());
+fn library_at_offset_without_regions_is_none() {
+    assert_eq!(library_at_offset(&[], 0), None);
 }
 
 #[test]
-fn classify_inside_and_outside_a_region() {
+fn library_at_offset_inside_and_outside_a_region() {
     let regions = [region("react", 0, Some(100))];
-    let r = classify_functions_by_region([("fn1", Some(50)), ("fn2", Some(150))], &regions);
-    assert_eq!(r, vec![("fn1", "react".to_string())]);
+    assert_eq!(library_at_offset(&regions, 50), Some("react"));
+    assert_eq!(library_at_offset(&regions, 150), None);
 }
 
 #[test]
-fn classify_in_the_open_last_region() {
+fn library_at_offset_last_region_runs_to_eof() {
     let regions = [region("react", 100, None)];
-    let r = classify_functions_by_region([("fn1", Some(50)), ("fn2", Some(200))], &regions);
-    assert_eq!(r, vec![("fn2", "react".to_string())]);
+    assert_eq!(library_at_offset(&regions, 50), None);
+    assert_eq!(library_at_offset(&regions, 200), Some("react"));
 }
 
 #[test]
-fn classify_across_regions() {
+fn library_at_offset_across_regions_and_app_gaps() {
     let regions = [
         region("react", 0, Some(100)),
         region("lodash", 200, Some(300)),
     ];
-    let r = classify_functions_by_region(
-        [
-            ("app1", Some(150)),
-            ("react1", Some(50)),
-            ("lodash1", Some(250)),
-            ("app2", Some(350)),
-        ],
-        &regions,
-    );
-    assert_eq!(
-        r,
-        vec![
-            ("react1", "react".to_string()),
-            ("lodash1", "lodash".to_string())
-        ]
-    );
+    assert_eq!(library_at_offset(&regions, 150), None);
+    assert_eq!(library_at_offset(&regions, 50), Some("react"));
+    assert_eq!(library_at_offset(&regions, 250), Some("lodash"));
+    assert_eq!(library_at_offset(&regions, 350), None);
 }
 
 #[test]
-fn classify_boundaries_and_null_starts() {
+fn library_at_offset_start_inclusive_end_exclusive() {
     let regions = [region("react", 0, Some(100))];
-    let r = classify_functions_by_region([("fn1", Some(0)), ("fn2", Some(100))], &regions);
-    assert_eq!(r, vec![("fn1", "react".to_string())]);
-    let open = [region("react", 0, None)];
-    assert!(classify_functions_by_region([("fn1", None)], &open).is_empty());
+    assert_eq!(library_at_offset(&regions, 0), Some("react"));
+    assert_eq!(library_at_offset(&regions, 100), None);
 }
 
 // ---- adapters/default.test.ts ----------------------------------------------

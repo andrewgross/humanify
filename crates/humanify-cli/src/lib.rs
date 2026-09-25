@@ -8,6 +8,7 @@ pub mod env;
 pub mod env_reads;
 pub mod failed_output;
 pub mod kill_switches;
+pub mod library_freeze;
 pub mod log;
 pub mod output_validation;
 pub mod pipeline_config;

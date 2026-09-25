@@ -90,6 +90,24 @@ static VISITOR_KEYS: &[(&str, &[&str])] = &[
     ("ClassPrivateMethod", &["key", "params", "body"]),
     ("PrivateName", &["id"]),
     ("StaticBlock", &["body"]),
+    // Added 2026-09-25 for the library carry, which walks whole programs
+    // (function_carry.rs): the root and the module declarations. A Program
+    // in ESTree holds its directives in `body` (in order, first), where
+    // babel splits them out — the same sequence either way.
+    ("Program", &["directives", "body"]),
+    (
+        "ExportNamedDeclaration",
+        &["declaration", "specifiers", "source", "attributes"],
+    ),
+    ("ExportDefaultDeclaration", &["declaration"]),
+    ("ExportAllDeclaration", &["source", "attributes"]),
+    ("ImportDeclaration", &["specifiers", "source", "attributes"]),
+    ("ExportSpecifier", &["local", "exported"]),
+    ("ExportNamespaceSpecifier", &["exported"]),
+    ("ImportSpecifier", &["imported", "local"]),
+    ("ImportDefaultSpecifier", &["local"]),
+    ("ImportNamespaceSpecifier", &["local"]),
+    ("ImportAttribute", &["key", "value"]),
 ];
 
 fn visitor_keys(babel_type: &str) -> &'static [&'static str] {
@@ -97,6 +115,11 @@ fn visitor_keys(babel_type: &str) -> &'static [&'static str] {
         .iter()
         .find(|(t, _)| *t == babel_type)
         .map_or(&[], |(_, keys)| keys)
+}
+
+fn node_span(v: &Value) -> Option<(u32, u32)> {
+    let at = |k: &str| v.get(k)?.as_u64().and_then(|n| u32::try_from(n).ok());
+    Some((at("start")?, at("end")?))
 }
 
 fn node_type(v: &Value) -> &str {
@@ -331,6 +354,10 @@ pub struct Visited<'a> {
     pub identifier: Option<&'a str>,
     /// A StringLiteral/NumericLiteral's `moduleTokens` literal token.
     pub literal: Option<&'a str>,
+    /// The babel node's (start, end) — the ESTree node's own; for a
+    /// method, the Property / MethodDefinition babel lays flat. None for a
+    /// synthesized leaf.
+    pub span: Option<(u32, u32)>,
 }
 
 /// One pending visit: a node (or a synthesized leaf) with its parent and
@@ -362,6 +389,7 @@ pub fn walk(root: &Value, mut visit: impl FnMut(Visited)) {
                 grand: &grand,
                 identifier: name,
                 literal: None,
+                span: None,
             }),
             Visit::Node(node, in_chain, parent, grand) => match babel_of(node, in_chain) {
                 Err((inner, chain)) => stack.push(Visit::Node(inner, chain, parent, grand)),
@@ -375,6 +403,7 @@ pub fn walk(root: &Value, mut visit: impl FnMut(Visited)) {
                         grand: &grand,
                         identifier,
                         literal: b.literal.as_deref(),
+                        span: node_span(node),
                     });
                     schedule(&mut stack, b.children, &b.babel_type, &parent);
                 }

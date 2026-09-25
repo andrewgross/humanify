@@ -8,13 +8,12 @@
 //! twins read: the M1 matches dump calls [`statement_twins`], the transfer
 //! run [`apply_prior_version`], both through it.
 //!
-//! Library freezing reads comment regions, which no stage classifies yet:
-//! the naming driver passes [`PreFreeze::library`] from its library HOOK
-//! (`naming::driver::library::LibraryHook`, None today). The regime is
-//! constructed and diverges (twins::gates' posture note), but no oracle can
-//! gate it until findings #32 (the TS classifies beautified offsets against
-//! raw-text regions) and #33 (the TS dump writer throws on a mixed file)
-//! are fixed TS-first.
+//! The library freeze ([`library_freeze`]) reads the file's
+//! classification from its one owner, `libdetect::function_carry`
+//! (`LibraryClassification`: the TS's `regions.json` `libraryFunctions`
+//! while the text is TS-beautified, the Rust beautify's ordinal carry at
+//! 5b). Every caller of the settle step — the naming driver, the M1
+//! matches dump, the phase-3 transfers dump — passes the same freeze.
 
 use std::collections::{HashMap, HashSet};
 
@@ -30,11 +29,31 @@ use super::rows::Rows;
 use super::{TransferOutcome, TransferRun, TwinTransfers, run_transfer_pipeline};
 
 /// The plugin's freezes that are not the transfer stage's own decisions:
-/// the library functions (`markLibraryFunctionsPreDone`, fn rows in
-/// classification order) — frozen after eval-with taint and the wrapper.
+/// the library functions (`markLibraryFunctionsPreDone`: fn row + library,
+/// graph row order) — frozen after eval-with taint and the wrapper, and
+/// the library-prefix pass's input.
 #[derive(Clone, Debug, Default)]
 pub struct PreFreeze {
-    pub library: Vec<usize>,
+    pub library: Vec<(usize, String)>,
+}
+
+/// `detectAndMarkLibraries` over a match stage's fresh side: the file's
+/// classification (None = no banner regions), consulted only when
+/// `skipLibraries` is on and no wrapper IIFE was found.
+pub fn library_freeze(
+    stage: &MatchStage<'_, '_>,
+    source: Option<&crate::libdetect::function_carry::LibraryClassification>,
+    skip_libraries: bool,
+) -> Result<PreFreeze, String> {
+    Ok(PreFreeze {
+        library: crate::libdetect::function_carry::classify_library_functions(
+            stage.fresh.json,
+            stage.fresh.graph,
+            stage.fresh.wrapper.is_some(),
+            skip_libraries,
+            source,
+        )?,
+    })
 }
 
 pub(super) fn apply_prior_version(
@@ -135,14 +154,17 @@ pub(super) fn apply_prior_version(
 /// answer "what do the twins see" differently (they did until 2026-09-25:
 /// the dump re-derived the inputs, missing the close half of the fn-var
 /// transfers and every freeze).
-pub(super) fn statement_twins(stage: &MatchStage<'_, '_>) -> Result<TwinGateOutput, String> {
+pub(super) fn statement_twins(
+    stage: &MatchStage<'_, '_>,
+    freeze: &PreFreeze,
+) -> Result<TwinGateOutput, String> {
     let fresh_rows = SideRows::build(
         stage.fresh.graph,
         stage.fresh.ingest.semantic(),
         stage.fresh.tables,
         stage.fresh.json,
     );
-    let settled = settle(stage, &fresh_rows, &PreFreeze::default())?;
+    let settled = settle(stage, &fresh_rows, freeze)?;
     gate_twins(
         stage,
         &settled.evidence,
@@ -243,7 +265,7 @@ pub fn pre_transfer_states(
         fn_state[i].mark_skipped("wrapper-iife", &graph.functions[i].session_id);
     }
     // A library function already frozen by eval-taint keeps that reason.
-    for &i in &freeze.library {
+    for &(i, _) in &freeze.library {
         if fn_state[i].is_pending() {
             fn_state[i].mark_skipped("library", &graph.functions[i].session_id);
         }
