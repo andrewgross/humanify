@@ -1,0 +1,1118 @@
+[
+  {
+    "name": "noop",
+    "kebab": "noop",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "noop"
+  },
+  {
+    "name": "noOp",
+    "kebab": "no-op",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "no-op"
+  },
+  {
+    "name": "no_op",
+    "kebab": "no-op",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "no-op"
+  },
+  {
+    "name": "no-ops",
+    "kebab": "no-ops",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "no-ops"
+  },
+  {
+    "name": "noopFunction36",
+    "kebab": "noop-function36",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "noop-function36"
+  },
+  {
+    "name": "noxop",
+    "kebab": "noxop",
+    "accept": "noxop",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "noxop"
+  },
+  {
+    "name": "nop",
+    "kebab": "nop",
+    "accept": "nop",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "nop"
+  },
+  {
+    "name": "doNothing",
+    "kebab": "do-nothing",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "do-nothing"
+  },
+  {
+    "name": "doNothing24",
+    "kebab": "do-nothing24",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "do-nothing24"
+  },
+  {
+    "name": "doNothingX-",
+    "kebab": "do-nothing-x",
+    "accept": "doNothingX-",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "do-nothing-x"
+  },
+  {
+    "name": "silentNoop",
+    "kebab": "silent-noop",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "silent-noop"
+  },
+  {
+    "name": "silent_noops2",
+    "kebab": "silent-noops2",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "silent-noops2"
+  },
+  {
+    "name": "emptyFunction",
+    "kebab": "empty-function",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "empty-function"
+  },
+  {
+    "name": "emptyFunctions3",
+    "kebab": "empty-functions3",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "empty-functions3"
+  },
+  {
+    "name": "emptyCallback12",
+    "kebab": "empty-callback12",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "empty-callback12"
+  },
+  {
+    "name": "emptyHandlers",
+    "kebab": "empty-handlers",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "empty-handlers"
+  },
+  {
+    "name": "emptyOperationX",
+    "kebab": "empty-operation-x",
+    "accept": "emptyOperationX",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "empty-operation-x"
+  },
+  {
+    "name": "idleOperation",
+    "kebab": "idle-operation",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "idle-operation"
+  },
+  {
+    "name": "idle-operation7",
+    "kebab": "idle-operation7",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "idle-operation7"
+  },
+  {
+    "name": "initializeModule",
+    "kebab": "initialize-module",
+    "accept": "initializeModule",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "initialize-module"
+  },
+  {
+    "name": "initializeModule12",
+    "kebab": "initialize-module12",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "initialize-module12"
+  },
+  {
+    "name": "placeholder",
+    "kebab": "placeholder",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "placeholder"
+  },
+  {
+    "name": "placeholderValue",
+    "kebab": "placeholder-value",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "placeholder-value"
+  },
+  {
+    "name": "_",
+    "kebab": "",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "module"
+  },
+  {
+    "name": "__",
+    "kebab": "",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "module"
+  },
+  {
+    "name": "_12",
+    "kebab": "12",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "12"
+  },
+  {
+    "name": "__a",
+    "kebab": "a",
+    "accept": "A",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "a"
+  },
+  {
+    "name": "reactLib48",
+    "kebab": "react-lib48",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "react-lib48"
+  },
+  {
+    "name": "reactLib",
+    "kebab": "react-lib",
+    "accept": "reactLib",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "react-lib"
+  },
+  {
+    "name": "userVal",
+    "kebab": "user-val",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "user-val"
+  },
+  {
+    "name": "userVal12",
+    "kebab": "user-val12",
+    "accept": null,
+    "badStem": true,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "user-val12"
+  },
+  {
+    "name": "val",
+    "kebab": "val",
+    "accept": "val",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "val"
+  },
+  {
+    "name": "Val2",
+    "kebab": "val2",
+    "accept": "Val2",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "val2"
+  },
+  {
+    "name": "xVal",
+    "kebab": "x-val",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "x-val"
+  },
+  {
+    "name": "x-Val",
+    "kebab": "x-val",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "x-val"
+  },
+  {
+    "name": "appInitializer17",
+    "kebab": "app-initializer17",
+    "accept": null,
+    "badStem": false,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "app-initializer17"
+  },
+  {
+    "name": "app254Initializer",
+    "kebab": "app254-initializer",
+    "accept": null,
+    "badStem": false,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "app254-initializer"
+  },
+  {
+    "name": "float64Error",
+    "kebab": "float64-error",
+    "accept": "float64Error",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "float64-error"
+  },
+  {
+    "name": "sha256Hasher",
+    "kebab": "sha256-hasher",
+    "accept": "sha256Hasher",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "sha256-hasher"
+  },
+  {
+    "name": "base64Encode",
+    "kebab": "base64-encode",
+    "accept": "base64Encode",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "base64-encode"
+  },
+  {
+    "name": "v8",
+    "kebab": "v8",
+    "accept": "v8",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "v8"
+  },
+  {
+    "name": "a1b22",
+    "kebab": "a1b22",
+    "accept": null,
+    "badStem": false,
+    "minted": true,
+    "stopword": true,
+    "stemOf": "a1b22"
+  },
+  {
+    "name": "andTaskPipeline",
+    "kebab": "and-task-pipeline",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "and-task-pipeline"
+  },
+  {
+    "name": "theTaskRunner",
+    "kebab": "the-task-runner",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "the-task-runner"
+  },
+  {
+    "name": "inputHandler",
+    "kebab": "input-handler",
+    "accept": "inputHandler",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "input-handler"
+  },
+  {
+    "name": "themeEngine",
+    "kebab": "theme-engine",
+    "accept": "themeEngine",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "theme-engine"
+  },
+  {
+    "name": "andrewConfig",
+    "kebab": "andrew-config",
+    "accept": "andrewConfig",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "andrew-config"
+  },
+  {
+    "name": "a",
+    "kebab": "a",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "a"
+  },
+  {
+    "name": "an",
+    "kebab": "an",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "an"
+  },
+  {
+    "name": "aB",
+    "kebab": "a-b",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "a-b"
+  },
+  {
+    "name": "anB",
+    "kebab": "an-b",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "an-b"
+  },
+  {
+    "name": "anxiety",
+    "kebab": "anxiety",
+    "accept": "anxiety",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "anxiety"
+  },
+  {
+    "name": "or",
+    "kebab": "or",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "or"
+  },
+  {
+    "name": "orange",
+    "kebab": "orange",
+    "accept": "orange",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "orange"
+  },
+  {
+    "name": "or2",
+    "kebab": "or2",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "or2"
+  },
+  {
+    "name": "and",
+    "kebab": "and",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "and"
+  },
+  {
+    "name": "butX",
+    "kebab": "but-x",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "but-x"
+  },
+  {
+    "name": "nor",
+    "kebab": "nor",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "nor"
+  },
+  {
+    "name": "isReverseDirection",
+    "kebab": "is-reverse-direction",
+    "accept": "isReverseDirection",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "is-reverse-direction"
+  },
+  {
+    "name": "ABCDef",
+    "kebab": "abc-def",
+    "accept": "ABCDef",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "abcdef"
+  },
+  {
+    "name": "XMLHttpRequest",
+    "kebab": "xml-http-request",
+    "accept": "XMLHttpRequest",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "xmlhttp-request"
+  },
+  {
+    "name": "getHTTPResponseCode",
+    "kebab": "get-http-response-code",
+    "accept": "getHTTPResponseCode",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "get-httpresponse-code"
+  },
+  {
+    "name": "fooBar",
+    "kebab": "foo-bar",
+    "accept": "fooBar",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "foo-bar"
+  },
+  {
+    "name": "FooBar",
+    "kebab": "foo-bar",
+    "accept": "FooBar",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "foo-bar"
+  },
+  {
+    "name": "foo_bar",
+    "kebab": "foo-bar",
+    "accept": "fooBar",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "foo-bar"
+  },
+  {
+    "name": "foo-bar",
+    "kebab": "foo-bar",
+    "accept": "fooBar",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "foo-bar"
+  },
+  {
+    "name": "foo--bar",
+    "kebab": "foo-bar",
+    "accept": "fooBar",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "foo-bar"
+  },
+  {
+    "name": "__proto__",
+    "kebab": "proto",
+    "accept": "Proto__",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "proto"
+  },
+  {
+    "name": "$x",
+    "kebab": "x",
+    "accept": "$x",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "x"
+  },
+  {
+    "name": "_$private",
+    "kebab": "private",
+    "accept": "_$private",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "private"
+  },
+  {
+    "name": "a1B",
+    "kebab": "a1-b",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "a1-b"
+  },
+  {
+    "name": "aBC",
+    "kebab": "a-bc",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "a-bc"
+  },
+  {
+    "name": "aBcD",
+    "kebab": "a-bc-d",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "a-bc-d"
+  },
+  {
+    "name": "HTML5Parser",
+    "kebab": "html5-parser",
+    "accept": "HTML5Parser",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "html5-parser"
+  },
+  {
+    "name": "é",
+    "kebab": "",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "é"
+  },
+  {
+    "name": "caféLatte",
+    "kebab": "caf-latte",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "cafélatte"
+  },
+  {
+    "name": "ÉcoleNormale",
+    "kebab": "cole-normale",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "école-normale"
+  },
+  {
+    "name": "x_y_z",
+    "kebab": "x-y-z",
+    "accept": "xYZ",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "x-y-z"
+  },
+  {
+    "name": "-lead",
+    "kebab": "lead",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "lead"
+  },
+  {
+    "name": "trail-",
+    "kebab": "trail",
+    "accept": "trail-",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "trail"
+  },
+  {
+    "name": "utils",
+    "kebab": "utils",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "utils"
+  },
+  {
+    "name": "Utils",
+    "kebab": "utils",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "utils"
+  },
+  {
+    "name": "src",
+    "kebab": "src",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "src"
+  },
+  {
+    "name": "index",
+    "kebab": "index",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "index"
+  },
+  {
+    "name": "sharedState",
+    "kebab": "shared-state",
+    "accept": "sharedState",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "shared-state"
+  },
+  {
+    "name": "react-lib-48",
+    "kebab": "react-lib-48",
+    "accept": null,
+    "badStem": false,
+    "minted": true,
+    "stopword": false,
+    "stemOf": "react-lib-48"
+  },
+  {
+    "name": "retry-scheduler",
+    "kebab": "retry-scheduler",
+    "accept": "retryScheduler",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "retry-scheduler"
+  },
+  {
+    "name": "Retry_Scheduler",
+    "kebab": "retry-scheduler",
+    "accept": "RetryScheduler",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "retry-scheduler"
+  },
+  {
+    "name": "a-",
+    "kebab": "a",
+    "accept": "a-",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "a"
+  },
+  {
+    "name": "ab",
+    "kebab": "ab",
+    "accept": "ab",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "ab"
+  },
+  {
+    "name": "a",
+    "kebab": "a",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": true,
+    "stemOf": "a"
+  },
+  {
+    "name": "1abc",
+    "kebab": "1abc",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "1abc"
+  },
+  {
+    "name": "$ab",
+    "kebab": "ab",
+    "accept": "$ab",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "ab"
+  },
+  {
+    "name": "ab$",
+    "kebab": "ab",
+    "accept": "ab$",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "ab"
+  },
+  {
+    "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kebab": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "accept": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+    "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "kebab": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+    "name": "helpers",
+    "kebab": "helpers",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "helpers"
+  },
+  {
+    "name": "diff-view",
+    "kebab": "diff-view",
+    "accept": "diffView",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "diff-view"
+  },
+  {
+    "name": "token-bucket-",
+    "kebab": "token-bucket",
+    "accept": "tokenBucket-",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "token-bucket"
+  },
+  {
+    "name": "x__",
+    "kebab": "x",
+    "accept": "x__",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "x"
+  },
+  {
+    "name": "__x__",
+    "kebab": "x",
+    "accept": "X__",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "x"
+  },
+  {
+    "name": "m$n",
+    "kebab": "m-n",
+    "accept": "m$n",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "m-n"
+  },
+  {
+    "name": "mÜller",
+    "kebab": "m-ller",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "müller"
+  },
+  {
+    "name": "straße",
+    "kebab": "stra-e",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "straße"
+  },
+  {
+    "name": "İstanbul",
+    "kebab": "i-stanbul",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "i̇stanbul"
+  },
+  {
+    "name": "ǅemal",
+    "kebab": "emal",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "ǆemal"
+  },
+  {
+    "name": "ONE",
+    "kebab": "one",
+    "accept": "ONE",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "one"
+  },
+  {
+    "name": "oneTWOThree",
+    "kebab": "one-two-three",
+    "accept": "oneTWOThree",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "one-twothree"
+  },
+  {
+    "name": "one2Three",
+    "kebab": "one2-three",
+    "accept": "one2Three",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "one2-three"
+  },
+  {
+    "name": "fetch-API-data",
+    "kebab": "fetch-api-data",
+    "accept": "fetchAPIData",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "fetch-api-data"
+  },
+  {
+    "name": "userID",
+    "kebab": "user-id",
+    "accept": "userID",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "user-id"
+  },
+  {
+    "name": "IDs",
+    "kebab": "i-ds",
+    "accept": "IDs",
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "ids"
+  },
+  {
+    "name": "a_1",
+    "kebab": "a-1",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "a-1"
+  },
+  {
+    "name": "noop-handler",
+    "kebab": "noop-handler",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "noop-handler"
+  },
+  {
+    "name": "emptycallbacks",
+    "kebab": "emptycallbacks",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "emptycallbacks"
+  },
+  {
+    "name": "EMPTYFUNCTION",
+    "kebab": "emptyfunction",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "emptyfunction"
+  },
+  {
+    "name": "NOOP",
+    "kebab": "noop",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "noop"
+  },
+  {
+    "name": "PLACEHOLDER",
+    "kebab": "placeholder",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "placeholder"
+  },
+  {
+    "name": "ReactLib7",
+    "kebab": "react-lib7",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "react-lib7"
+  },
+  {
+    "name": "INITIALIZEMODULE9",
+    "kebab": "initializemodule9",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "initializemodule9"
+  },
+  {
+    "name": "idle_operation",
+    "kebab": "idle-operation",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "idle-operation"
+  },
+  {
+    "name": "silent-noop",
+    "kebab": "silent-noop",
+    "accept": null,
+    "badStem": true,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "silent-noop"
+  },
+  {
+    "name": "ſilentNoop",
+    "kebab": "ilent-noop",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "ſilent-noop"
+  },
+  {
+    "name": "Key",
+    "kebab": "key",
+    "accept": null,
+    "badStem": false,
+    "minted": false,
+    "stopword": false,
+    "stemOf": "key"
+  }
+]

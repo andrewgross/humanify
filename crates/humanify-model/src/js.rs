@@ -669,6 +669,36 @@ pub fn number_to_string(x: f64) -> String {
     format!("{sign}{body}")
 }
 
+/// The value of a JS numeric literal from its SOURCE spelling (`raw`) —
+/// what Babel's `NumericLiteral.value` holds. Read the raw text, never a
+/// JSON-parsed `value`: serde_json's default float parser is up to 1 ulp
+/// off (lesson 8; the 2.1.216 FLT_MAX literal `340282346638528860000…`
+/// parsed one ulp high). Handles `_` separators, hex/octal/binary radix
+/// prefixes, and sloppy-mode legacy octal (`017` = 15, `019` = 19).
+/// `None` for a BigInt (`…n`) or anything that is not a numeric literal.
+pub fn numeric_literal_value(raw: &str) -> Option<f64> {
+    let s: String = raw.chars().filter(|c| *c != '_').collect();
+    if s.ends_with('n') {
+        return None;
+    }
+    let radix = |digits: &str, r: u32| u128::from_str_radix(digits, r).ok().map(|v| v as f64);
+    let lower = s.to_ascii_lowercase();
+    if let Some(d) = lower.strip_prefix("0x") {
+        return radix(d, 16);
+    }
+    if let Some(d) = lower.strip_prefix("0o") {
+        return radix(d, 8);
+    }
+    if let Some(d) = lower.strip_prefix("0b") {
+        return radix(d, 2);
+    }
+    let legacy = s.len() > 1 && s.starts_with('0') && s.bytes().all(|b| b.is_ascii_digit());
+    if legacy && s.bytes().all(|b| (b'0'..=b'7').contains(&b)) {
+        return radix(&s, 8);
+    }
+    s.parse::<f64>().ok()
+}
+
 /// `Number.prototype.toFixed(digits)` for finite |x| < 1e21: the integer n
 /// minimizing |n / 10^f - x| over the EXACT binary value of x, the larger n
 /// on a tie (half-up for positives) — Rust's `{:.N}` ties to even, which

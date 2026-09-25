@@ -1,0 +1,222 @@
+{
+  "params": {
+    "model": "openai/gpt-oss-20b",
+    "temperature": 0,
+    "reasoningEffort": "low"
+  },
+  "rows": [
+    {
+      "kind": "namer",
+      "requests": [
+        {
+          "kind": "file",
+          "mechanicalStem": "handleMessageVal",
+          "siblings": ["createTeammateTag", "index"],
+          "bindings": [
+            "function handleMessage (12 refs)",
+            "var messageQueue (3 refs)"
+          ]
+        }
+      ],
+      "request": {
+        "code": "Name 1 entries in a decompiled CLI tool repository.\n\n### handleMessageVal (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\nReply with JSON {\"handleMessageVal\": \"<name>\"} — one specific name per entry.",
+        "identifiers": ["handleMessageVal"],
+        "usedNames": ["createTeammateTag", "index"],
+        "systemPrompt": "You name source files and folders in a decompiled JavaScript CLI tool, the way an experienced engineer would organize a real repository.\nName the CONCEPT — what the code is about — from the evidence (the strings it uses, the APIs it calls, its declarations). Do NOT just echo the loudest function name.\nRules:\n- Use a NOUN or noun phrase, 1-3 words. Good: retry-scheduler, hostname-resolver, token-bucket, message-queue, diff-view, auth-flow.\n- A FOLDER is a domain bucket: a plain noun (auth, transcript, tools, permissions). Never a verb phrase (get-display-name), never a conjunction (foo-and-bar — that means it should be two folders), never a decoration suffix (Manager, Suite, Engine, Group, Handler).\n- Never start a name with a conjunction, article, or preposition (and, or, the, a, with, for). Never a bare verb.\n- Avoid generic names (utils, helpers, core, common, misc, index) and numeric suffixes (initializer17).\n- Siblings must be DISTINCT; a folder name must not repeat one member.\nReturn a single kebab-case basename per entry, no extension, no path.",
+        "userPrompt": "Name 1 entries in a decompiled CLI tool repository.\n\n### handleMessageVal (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\nReply with JSON {\"handleMessageVal\": \"<name>\"} — one specific name per entry."
+      },
+      "cacheKey": "5b68bf319d8406409a68a82f7b51ddc62f3f6521de338dac4efd555d46b8a824",
+      "answers": {
+        "handleMessageVal": "proposal0Name"
+      },
+      "result": ["proposal0Name"]
+    },
+    {
+      "kind": "namer",
+      "requests": [
+        {
+          "kind": "file",
+          "mechanicalStem": "handleMessageVal",
+          "siblings": ["createTeammateTag", "index"],
+          "bindings": [
+            "function handleMessage (12 refs)",
+            "var messageQueue (3 refs)"
+          ]
+        },
+        {
+          "kind": "folder",
+          "mechanicalStem": "rgbString",
+          "siblings": ["persistToDisk", "index"],
+          "bindings": [
+            "function rgbString (8 refs)",
+            "function hslToRgb (5 refs)"
+          ],
+          "members": ["rgbString", "hslToRgb", "parseColor"]
+        }
+      ],
+      "request": {
+        "code": "Name 2 entries in a decompiled CLI tool repository.\n\n### handleMessageVal (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\n### rgbString (folder)\nMost-referenced declarations:\n  - function rgbString (8 refs)\n  - function hslToRgb (5 refs)\nFiles it contains: rgbString, hslToRgb, parseColor\nName the whole group, not one member.\nSibling folders (pick a DISTINCT name): persistToDisk, index\n\nReply with JSON {\"handleMessageVal\": \"<name>\", \"rgbString\": \"<name>\"} — one specific name per entry.",
+        "identifiers": ["handleMessageVal", "rgbString"],
+        "usedNames": ["createTeammateTag", "index", "persistToDisk"],
+        "systemPrompt": "You name source files and folders in a decompiled JavaScript CLI tool, the way an experienced engineer would organize a real repository.\nName the CONCEPT — what the code is about — from the evidence (the strings it uses, the APIs it calls, its declarations). Do NOT just echo the loudest function name.\nRules:\n- Use a NOUN or noun phrase, 1-3 words. Good: retry-scheduler, hostname-resolver, token-bucket, message-queue, diff-view, auth-flow.\n- A FOLDER is a domain bucket: a plain noun (auth, transcript, tools, permissions). Never a verb phrase (get-display-name), never a conjunction (foo-and-bar — that means it should be two folders), never a decoration suffix (Manager, Suite, Engine, Group, Handler).\n- Never start a name with a conjunction, article, or preposition (and, or, the, a, with, for). Never a bare verb.\n- Avoid generic names (utils, helpers, core, common, misc, index) and numeric suffixes (initializer17).\n- Siblings must be DISTINCT; a folder name must not repeat one member.\nReturn a single kebab-case basename per entry, no extension, no path.",
+        "userPrompt": "Name 2 entries in a decompiled CLI tool repository.\n\n### handleMessageVal (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\n### rgbString (folder)\nMost-referenced declarations:\n  - function rgbString (8 refs)\n  - function hslToRgb (5 refs)\nFiles it contains: rgbString, hslToRgb, parseColor\nName the whole group, not one member.\nSibling folders (pick a DISTINCT name): persistToDisk, index\n\nReply with JSON {\"handleMessageVal\": \"<name>\", \"rgbString\": \"<name>\"} — one specific name per entry."
+      },
+      "cacheKey": "0f65d3aff89c2d22ee7ed7f13935fe05d327ecf208012951ed71b5039dc17de8",
+      "answers": {
+        "handleMessageVal": "proposal0Name",
+        "rgbString": "rgbString"
+      },
+      "result": ["proposal0Name", null]
+    },
+    {
+      "kind": "namer",
+      "requests": [
+        {
+          "kind": "file",
+          "mechanicalStem": "handleMessageVal",
+          "siblings": ["createTeammateTag", "index"],
+          "bindings": [
+            "function handleMessage (12 refs)",
+            "var messageQueue (3 refs)"
+          ]
+        },
+        {
+          "kind": "file",
+          "mechanicalStem": "handleMessageVal",
+          "siblings": [],
+          "bindings": [
+            "function handleMessage (12 refs)",
+            "var messageQueue (3 refs)"
+          ]
+        },
+        {
+          "kind": "file",
+          "mechanicalStem": "HandleMessageVal",
+          "siblings": ["createTeammateTag", "index"],
+          "bindings": [
+            "function handleMessage (12 refs)",
+            "var messageQueue (3 refs)"
+          ]
+        }
+      ],
+      "request": {
+        "code": "Name 3 entries in a decompiled CLI tool repository.\n\n### handleMessageVal (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\n### handleMessageVal-2 (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\n\n### HandleMessageVal-3 (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\nReply with JSON {\"handleMessageVal\": \"<name>\", \"handleMessageVal-2\": \"<name>\", \"HandleMessageVal-3\": \"<name>\"} — one specific name per entry.",
+        "identifiers": [
+          "handleMessageVal",
+          "handleMessageVal-2",
+          "HandleMessageVal-3"
+        ],
+        "usedNames": ["createTeammateTag", "index"],
+        "systemPrompt": "You name source files and folders in a decompiled JavaScript CLI tool, the way an experienced engineer would organize a real repository.\nName the CONCEPT — what the code is about — from the evidence (the strings it uses, the APIs it calls, its declarations). Do NOT just echo the loudest function name.\nRules:\n- Use a NOUN or noun phrase, 1-3 words. Good: retry-scheduler, hostname-resolver, token-bucket, message-queue, diff-view, auth-flow.\n- A FOLDER is a domain bucket: a plain noun (auth, transcript, tools, permissions). Never a verb phrase (get-display-name), never a conjunction (foo-and-bar — that means it should be two folders), never a decoration suffix (Manager, Suite, Engine, Group, Handler).\n- Never start a name with a conjunction, article, or preposition (and, or, the, a, with, for). Never a bare verb.\n- Avoid generic names (utils, helpers, core, common, misc, index) and numeric suffixes (initializer17).\n- Siblings must be DISTINCT; a folder name must not repeat one member.\nReturn a single kebab-case basename per entry, no extension, no path.",
+        "userPrompt": "Name 3 entries in a decompiled CLI tool repository.\n\n### handleMessageVal (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\n### handleMessageVal-2 (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\n\n### HandleMessageVal-3 (file)\nMost-referenced declarations:\n  - function handleMessage (12 refs)\n  - var messageQueue (3 refs)\nSibling files (pick a DISTINCT name): createTeammateTag, index\n\nReply with JSON {\"handleMessageVal\": \"<name>\", \"handleMessageVal-2\": \"<name>\", \"HandleMessageVal-3\": \"<name>\"} — one specific name per entry."
+      },
+      "cacheKey": "82f7d9ff8187f79974bfa834c4a2a743fa41f9620e816fe1499d65879285efa9",
+      "answers": {
+        "handleMessageVal": "proposal0Name",
+        "handleMessageVal-2": "handleMessageVal-2",
+        "HandleMessageVal-3": ""
+      },
+      "result": ["proposal0Name", null, null]
+    },
+    {
+      "kind": "namer",
+      "requests": [
+        {
+          "kind": "folder",
+          "mechanicalStem": "rgbString",
+          "siblings": ["persistToDisk", "index"],
+          "bindings": [
+            "function rgbString (8 refs)",
+            "function hslToRgb (5 refs)"
+          ],
+          "members": ["rgbString", "hslToRgb", "parseColor"],
+          "level": "top"
+        },
+        {
+          "kind": "folder",
+          "mechanicalStem": "rgbString",
+          "siblings": ["persistToDisk", "index"],
+          "bindings": [
+            "function rgbString (8 refs)",
+            "function hslToRgb (5 refs)"
+          ],
+          "members": [],
+          "level": "sub"
+        }
+      ],
+      "request": {
+        "code": "Name 2 entries in a decompiled CLI tool repository.\n\n### rgbString (folder)\nMost-referenced declarations:\n  - function rgbString (8 refs)\n  - function hslToRgb (5 refs)\nFiles it contains: rgbString, hslToRgb, parseColor\nName the whole group, not one member.\nThis is a TOP-LEVEL source folder: prefer a short plain domain noun (like auth, permissions, transcript, tools) — no decorated suffixes such as Suite, Engine, Hub, or Manager.\nSibling folders (pick a DISTINCT name): persistToDisk, index\n\n### rgbString-2 (folder)\nMost-referenced declarations:\n  - function rgbString (8 refs)\n  - function hslToRgb (5 refs)\nSibling folders (pick a DISTINCT name): persistToDisk, index\n\nReply with JSON {\"rgbString\": \"<name>\", \"rgbString-2\": \"<name>\"} — one specific name per entry.",
+        "identifiers": ["rgbString", "rgbString-2"],
+        "usedNames": ["persistToDisk", "index"],
+        "systemPrompt": "You name source files and folders in a decompiled JavaScript CLI tool, the way an experienced engineer would organize a real repository.\nName the CONCEPT — what the code is about — from the evidence (the strings it uses, the APIs it calls, its declarations). Do NOT just echo the loudest function name.\nRules:\n- Use a NOUN or noun phrase, 1-3 words. Good: retry-scheduler, hostname-resolver, token-bucket, message-queue, diff-view, auth-flow.\n- A FOLDER is a domain bucket: a plain noun (auth, transcript, tools, permissions). Never a verb phrase (get-display-name), never a conjunction (foo-and-bar — that means it should be two folders), never a decoration suffix (Manager, Suite, Engine, Group, Handler).\n- Never start a name with a conjunction, article, or preposition (and, or, the, a, with, for). Never a bare verb.\n- Avoid generic names (utils, helpers, core, common, misc, index) and numeric suffixes (initializer17).\n- Siblings must be DISTINCT; a folder name must not repeat one member.\nReturn a single kebab-case basename per entry, no extension, no path.",
+        "userPrompt": "Name 2 entries in a decompiled CLI tool repository.\n\n### rgbString (folder)\nMost-referenced declarations:\n  - function rgbString (8 refs)\n  - function hslToRgb (5 refs)\nFiles it contains: rgbString, hslToRgb, parseColor\nName the whole group, not one member.\nThis is a TOP-LEVEL source folder: prefer a short plain domain noun (like auth, permissions, transcript, tools) — no decorated suffixes such as Suite, Engine, Hub, or Manager.\nSibling folders (pick a DISTINCT name): persistToDisk, index\n\n### rgbString-2 (folder)\nMost-referenced declarations:\n  - function rgbString (8 refs)\n  - function hslToRgb (5 refs)\nSibling folders (pick a DISTINCT name): persistToDisk, index\n\nReply with JSON {\"rgbString\": \"<name>\", \"rgbString-2\": \"<name>\"} — one specific name per entry."
+      },
+      "cacheKey": "a0666ab531cf2c2ea1bd8e19d7beee82376d35bf1ac1011d3a42cd2431a669d3",
+      "answers": {
+        "rgbString": "proposal0Name",
+        "rgbString-2": "rgbString-2"
+      },
+      "result": ["proposal0Name", null]
+    },
+    {
+      "kind": "namer",
+      "requests": [
+        {
+          "kind": "file",
+          "mechanicalStem": "handlerVal",
+          "siblings": [],
+          "bindings": [],
+          "evidence": "strings: \"exponential jitter retry\"; calls: Math.floor"
+        },
+        {
+          "kind": "file",
+          "mechanicalStem": "empty-ev",
+          "siblings": ["a", "b", "a"],
+          "bindings": ["x"],
+          "evidence": ""
+        }
+      ],
+      "request": {
+        "code": "Name 2 entries in a decompiled CLI tool repository.\n\n### handlerVal (file)\nWhat it does (from its code): strings: \"exponential jitter retry\"; calls: Math.floor\nMost-referenced declarations:\n\n### empty-ev (file)\nMost-referenced declarations:\n  - x\nSibling files (pick a DISTINCT name): a, b, a\n\nReply with JSON {\"handlerVal\": \"<name>\", \"empty-ev\": \"<name>\"} — one specific name per entry.",
+        "identifiers": ["handlerVal", "empty-ev"],
+        "usedNames": ["a", "b"],
+        "systemPrompt": "You name source files and folders in a decompiled JavaScript CLI tool, the way an experienced engineer would organize a real repository.\nName the CONCEPT — what the code is about — from the evidence (the strings it uses, the APIs it calls, its declarations). Do NOT just echo the loudest function name.\nRules:\n- Use a NOUN or noun phrase, 1-3 words. Good: retry-scheduler, hostname-resolver, token-bucket, message-queue, diff-view, auth-flow.\n- A FOLDER is a domain bucket: a plain noun (auth, transcript, tools, permissions). Never a verb phrase (get-display-name), never a conjunction (foo-and-bar — that means it should be two folders), never a decoration suffix (Manager, Suite, Engine, Group, Handler).\n- Never start a name with a conjunction, article, or preposition (and, or, the, a, with, for). Never a bare verb.\n- Avoid generic names (utils, helpers, core, common, misc, index) and numeric suffixes (initializer17).\n- Siblings must be DISTINCT; a folder name must not repeat one member.\nReturn a single kebab-case basename per entry, no extension, no path.",
+        "userPrompt": "Name 2 entries in a decompiled CLI tool repository.\n\n### handlerVal (file)\nWhat it does (from its code): strings: \"exponential jitter retry\"; calls: Math.floor\nMost-referenced declarations:\n\n### empty-ev (file)\nMost-referenced declarations:\n  - x\nSibling files (pick a DISTINCT name): a, b, a\n\nReply with JSON {\"handlerVal\": \"<name>\", \"empty-ev\": \"<name>\"} — one specific name per entry."
+      },
+      "cacheKey": "50124ebf653aa3598a39272d56787c49bd715613cd9e39927ce511a4413a239b",
+      "answers": {
+        "handlerVal": "proposal0Name",
+        "empty-ev": "empty-ev"
+      },
+      "result": ["proposal0Name", null]
+    },
+    {
+      "kind": "reviser",
+      "folders": [
+        {
+          "name": "auth",
+          "members": ["login", "logout", "session"]
+        },
+        {
+          "name": "conn",
+          "members": ["socket", "pool"]
+        },
+        {
+          "name": "same",
+          "members": []
+        }
+      ],
+      "request": {
+        "code": "Review these 3 top-level folders of a decompiled CLI repo.\n\n- auth/  (files: login, logout, session)\n- conn/  (files: socket, pool)\n- same/  (files: )\n\nReply with JSON mapping ONLY the folders you would rename to their better name, e.g. {\"oldName\": \"betterName\"}. Omit folders that are already good.",
+        "identifiers": ["auth", "conn", "same"],
+        "usedNames": [],
+        "systemPrompt": "You are reviewing the top-level folders of a decompiled JavaScript CLI repository, now that every folder's files are named. Make the set read like a human's src/: each folder a short domain noun (1-2 words), all DISTINCT, no near-synonyms, no outliers. Only propose a change when it is a real improvement. Same rules as before: kebab-case nouns, never a verb phrase, conjunction, or Manager/Suite/Engine decoration.",
+        "userPrompt": "Review these 3 top-level folders of a decompiled CLI repo.\n\n- auth/  (files: login, logout, session)\n- conn/  (files: socket, pool)\n- same/  (files: )\n\nReply with JSON mapping ONLY the folders you would rename to their better name, e.g. {\"oldName\": \"betterName\"}. Omit folders that are already good."
+      },
+      "cacheKey": "043e83d0982160468244799dc18f62bef59daab6b4874dbac0a05e9b569bb1eb",
+      "result": {
+        "auth": "authFlow"
+      }
+    }
+  ]
+}

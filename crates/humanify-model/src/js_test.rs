@@ -184,3 +184,30 @@ fn js_whitespace_equals_the_probed_set() {
     assert_eq!(crate::js::trim("\u{feff} a b\u{85}\n"), "a b\u{85}");
     assert_eq!(crate::js::utf16_len("a😀é"), 4);
 }
+
+/// A numeric literal's value from its source spelling — bit-exact where
+/// serde_json's default float parser is not (the 2.1.216 FLT_MAX literal),
+/// every radix, separators, sloppy legacy octal, and no BigInt.
+#[test]
+fn numeric_literal_value_reads_the_source_spelling_exactly() {
+    use crate::js::numeric_literal_value as v;
+    assert_eq!(
+        v("340282346638528860000000000000000000000").map(f64::to_bits),
+        Some(3.402_823_466_385_288_6e38_f64.to_bits())
+    );
+    assert_eq!(
+        v("0x1fffffffffffff1"),
+        Some(0x1ff_ffff_ffff_fff1_u64 as f64)
+    );
+    assert_eq!(v("0XFF"), Some(255.0));
+    assert_eq!(v("0o777"), Some(511.0));
+    assert_eq!(v("0b101"), Some(5.0));
+    assert_eq!(v("1_000_000"), Some(1e6));
+    assert_eq!(v(".5e1"), Some(5.0));
+    assert_eq!(v("5."), Some(5.0));
+    assert_eq!(v("017"), Some(15.0), "legacy octal");
+    assert_eq!(v("019"), Some(19.0), "an 8/9 digit makes it decimal");
+    assert_eq!(v("00"), Some(0.0));
+    assert_eq!(v("5e-324"), Some(5e-324));
+    assert_eq!(v("12n"), None, "a BigInt is not a Number");
+}
