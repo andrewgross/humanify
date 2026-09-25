@@ -963,7 +963,7 @@ export class RenameProcessor {
     totalLLMCalls += finishReasons.length - totalLLMCalls;
 
     const remaining = new Set(
-      identifierNames.filter((name) => !outcomes[name])
+      identifierNames.filter((name) => !ownEntry(outcomes, name))
     );
 
     if (callbacks.resolveRemaining) {
@@ -1253,7 +1253,7 @@ export class RenameProcessor {
   ): Promise<void> {
     if (retryExhausted.length === 0) return;
     const stragglers = retryExhausted.filter(
-      (name) => !outcomes[name] && !idState.get(name)?.lastSuggestion
+      (name) => !ownEntry(outcomes, name) && !idState.get(name)?.lastSuggestion
     );
     if (stragglers.length === 0) return;
 
@@ -3313,7 +3313,7 @@ function pickRetryCandidate(
   renames: Record<string, string>,
   retryContext: WaveRetryContext | undefined
 ): string {
-  const raw = renames[item.id];
+  const raw = ownEntry(renames, item.id);
   const transformed =
     raw !== undefined
       ? (retryContext?.cb.transformSuggestion?.(item.id, raw) ?? raw)

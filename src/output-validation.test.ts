@@ -164,6 +164,23 @@ describe("checkStructuralInvariant (rename-only guarantee)", () => {
     assert.strictEqual(checkStructuralInvariant(ast, baseline), undefined);
   });
 
+  it("still fails when a re-export's local itself changes", async () => {
+    const { traverse } = await import("./babel-utils.js");
+    const { checkStructuralInvariant } = await import("./output-validation.js");
+    const ast = parse(`export { urlAlphabet } from "./url.js";`);
+    const baseline = captureSemanticBaseline(ast);
+    traverse(ast, {
+      ExportSpecifier(path) {
+        const local = path.node.local;
+        if (local.type === "Identifier") local.name = "otherName";
+      }
+    });
+    assert.ok(
+      checkStructuralInvariant(ast, baseline),
+      "re-exporting a different name is a real change"
+    );
+  });
+
   it("fails when a numeric literal changes", async () => {
     const { traverse } = await import("./babel-utils.js");
     const { checkStructuralInvariant } = await import("./output-validation.js");
@@ -228,6 +245,26 @@ describe("validateOutput capture gate (fresh re-parse)", () => {
       "a capture must be detected on the fresh re-parse"
     );
     assert.match(semanticFailure.message, /resolve|structure/i);
+  });
+
+  it("passes a rename that gives a binding the name of a re-export's local (finding #34)", () => {
+    // `export { urlAlphabet } from "m"` names a binding of ANOTHER module;
+    // its local is not a reference here. Resolving it by name made it
+    // verbatim before and a slot after the LLM renamed the import's local
+    // to `urlAlphabet` — a correct run of the nanoid fixture exited 1.
+    const source = [
+      'import { urlAlphabet as a } from "./url.js";',
+      'export { urlAlphabet } from "./url.js";',
+      "export const f = () => a;"
+    ].join("\n");
+    const renamed = [
+      'import { urlAlphabet } from "./url.js";',
+      'export { urlAlphabet } from "./url.js";',
+      "export const f = () => urlAlphabet;"
+    ].join("\n");
+    const result = validateOutput(renamed, baselineOf(source));
+    assert.strictEqual(result.parseFailure, undefined);
+    assert.strictEqual(result.semanticFailure, undefined);
   });
 
   it("passes a pure rename of the same input", () => {

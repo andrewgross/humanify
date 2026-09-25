@@ -634,6 +634,42 @@ interface SerializeState {
   privateNamesAsSlots?: boolean;
   /** private name → its slot, first occurrence wins. */
   privateSlots?: Map<string, string>;
+  /**
+   * When set, the local of an `export { x } from "m"` specifier serializes
+   * verbatim: it names a binding of ANOTHER module, not a reference here.
+   * Resolved by name it read verbatim before a rename and as a slot after
+   * one that gave a local binding the same name (finding #34). Off by
+   * default for the same reason as `privateNamesAsSlots` — the matching
+   * surface shares this serializer.
+   */
+  reExportLocalsVerbatim?: boolean;
+  /** True while serializing inside an `export … from` declaration. */
+  inReExport?: boolean;
+}
+
+/** The serialization the PURE-RENAME INVARIANT uses — one definition for the
+ * check and the diagnostic that explains it (they must never disagree). */
+export const RENAME_INVARIANT_SERIALIZATION = {
+  preserveLiterals: true,
+  privateNamesAsSlots: true,
+  reExportLocalsVerbatim: true
+} as const;
+
+interface SerializeOptions {
+  preserveLiterals?: boolean;
+  privateNamesAsSlots?: boolean;
+  reExportLocalsVerbatim?: boolean;
+}
+
+/** The local of a specifier under `export … from` (see reExportLocalsVerbatim). */
+function isReExportLocal(
+  parent: t.Node | null,
+  key: string,
+  state: SerializeState
+): boolean {
+  return (
+    state.inReExport === true && t.isExportSpecifier(parent) && key === "local"
+  );
 }
 
 function serializeIdentifier(
@@ -643,7 +679,7 @@ function serializeIdentifier(
   state: SerializeState
 ): void {
   const role = identifierRole(parent, key);
-  if (role === "verbatim") {
+  if (role === "verbatim" || isReExportLocal(parent, key, state)) {
     state.parts.push(`I=${node.name}`);
     return;
   }
@@ -820,6 +856,15 @@ function serializeNode(
     state.privateSlots = new Map();
   }
 
+  const outerInReExport = state.inReExport;
+  if (
+    state.reExportLocalsVerbatim &&
+    t.isExportNamedDeclaration(node) &&
+    node.source
+  ) {
+    state.inReExport = true;
+  }
+
   state.parts.push(`${node.type}{`);
   for (const k of Object.keys(node)) {
     if (SERIALIZE_SKIP_KEYS.has(k)) continue;
@@ -833,6 +878,7 @@ function serializeNode(
 
   // Restore, so a nested class does not leak its numbering to the enclosing one.
   state.privateSlots = outerPrivateSlots;
+  state.inReExport = outerInReExport;
 }
 
 /**
@@ -898,7 +944,7 @@ function serializeValue(
 function hashAndMapPath(
   rootPath: NodePath,
   preserveLiterals: boolean,
-  options?: { privateNamesAsSlots?: boolean }
+  options?: SerializeOptions
 ): {
   hash: string;
   mapping: Map<string, string>;
@@ -915,7 +961,8 @@ function hashAndMapPath(
     mapping: new Map(),
     counter: 0,
     preserveLiterals,
-    privateNamesAsSlots: options?.privateNamesAsSlots
+    privateNamesAsSlots: options?.privateNamesAsSlots,
+    reExportLocalsVerbatim: options?.reExportLocalsVerbatim
   };
   serializeValue(rootPath.node, null, "root", state);
   const hash = createHash("sha256")
@@ -1015,7 +1062,7 @@ export function computeDeclarationBindingHash(path: NodePath): string {
  */
 export function serializePathTokens(
   path: NodePath,
-  options?: { preserveLiterals?: boolean; privateNamesAsSlots?: boolean }
+  options?: SerializeOptions
 ): string[] {
   const bindingCache = analysisCacheForPath(path).bindingByIdentifier;
   collectIdentifierBindings(path, bindingCache);
@@ -1028,7 +1075,8 @@ export function serializePathTokens(
     mapping: new Map(),
     counter: 0,
     preserveLiterals: options?.preserveLiterals ?? false,
-    privateNamesAsSlots: options?.privateNamesAsSlots
+    privateNamesAsSlots: options?.privateNamesAsSlots,
+    reExportLocalsVerbatim: options?.reExportLocalsVerbatim
   };
   serializeValue(path.node, null, "root", state);
   return state.parts;
@@ -1066,7 +1114,11 @@ export function computeStructuralSignature(path: NodePath): string {
  * failed on 2 of the 4 eval pairs from exp058 onward.
  */
 export function computeRenameInvariantSignature(path: NodePath): string {
-  return hashAndMapPath(path, true, { privateNamesAsSlots: true }).hash;
+  return hashAndMapPath(
+    path,
+    RENAME_INVARIANT_SERIALIZATION.preserveLiterals,
+    RENAME_INVARIANT_SERIALIZATION
+  ).hash;
 }
 
 // ---------------------------------------------------------------------------

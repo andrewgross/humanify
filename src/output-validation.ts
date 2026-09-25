@@ -2,6 +2,7 @@ import type { Scope } from "@babel/traverse";
 import type * as t from "@babel/types";
 import {
   computeRenameInvariantSignature,
+  RENAME_INVARIANT_SERIALIZATION,
   serializePathTokens
 } from "./analysis/structural-hash.js";
 import { parseSourceAst, traverse } from "./babel-utils.js";
@@ -383,10 +384,7 @@ function programTokens(ast: t.Node | null): string[] | undefined {
       // with both a legitimate private rename and a real structural change
       // would have the private rename reported as the cause — a red herring
       // pointing at the one thing that is fine.
-      tokens = serializePathTokens(path, {
-        preserveLiterals: true,
-        privateNamesAsSlots: true
-      });
+      tokens = serializePathTokens(path, RENAME_INVARIANT_SERIALIZATION);
       path.stop();
     }
   });

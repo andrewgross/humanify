@@ -17,6 +17,11 @@
 //!
 //! The messages (the CLI's `ERROR:` blocks) are WPB.4's; this answers only
 //! the gating question.
+//!
+//! An `export { x } from "m"` specifier local names a binding of ANOTHER
+//! module; the serializer reads it verbatim, never as a slot. The TS once
+//! resolved it by name, failing a correct rename that gave a local binding
+//! the same name (finding #34, fixed TS-first 2026-09-25).
 
 use std::collections::BTreeSet;
 
@@ -31,13 +36,6 @@ pub struct Baseline {
     signature: String,
     free_names: BTreeSet<String>,
     binding_count: usize,
-    /// Per `export { x } from "..."` specifier local: does a program-scope
-    /// binding of that NAME exist? The TS serializer resolves every
-    /// Identifier by name (`scope.getBinding`), so such a local — not a
-    /// reference at all — reads as a slot once a rename gives some
-    /// program-scope binding its name: a pure rename then FAILS the TS
-    /// invariant (the nanoid fixture; reproduced, see 16-findings).
-    reexport_bound: Vec<bool>,
 }
 
 /// The three measurements of one text, or None when it does not parse.
@@ -53,24 +51,10 @@ fn measure(text: &str) -> Option<Baseline> {
     let tables = SymbolTables::build(semantic);
     let signature =
         canonical_serialize_privates_blinded(&json, &tables, LiteralPolicy::Verbatim).hash;
-    let program = scopes.program_scope();
-    let program_names: BTreeSet<&str> = scopes.initial_maps[program.0 as usize]
-        .iter()
-        .map(|(n, _)| n.as_str())
-        .collect();
-    let mut reexport_bound = Vec::new();
-    for node in semantic.nodes().iter() {
-        if let oxc_ast::AstKind::ExportFromDeclaration(e) = node.kind() {
-            for sp in &e.specifiers {
-                reexport_bound.push(program_names.contains(sp.local.name().as_str()));
-            }
-        }
-    }
     Some(Baseline {
         signature,
         free_names: scopes.globals.clone(),
         binding_count: scopes.bindings.len(),
-        reexport_bound,
     })
 }
 
@@ -87,5 +71,4 @@ pub fn output_valid(generated: &str, baseline: &Baseline) -> bool {
     after.free_names == baseline.free_names
         && after.binding_count == baseline.binding_count
         && after.signature == baseline.signature
-        && after.reexport_bound == baseline.reexport_bound
 }

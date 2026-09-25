@@ -114,3 +114,18 @@ fn library_names_sanitize_as_the_ts_does() {
     assert_eq!(sanitize_library_name("3d-lib"), "_3d_lib");
     assert_eq!(sanitize_library_name("React"), "react");
 }
+
+/// Finding #34, fixed TS-first: an `export { x } from "m"` local names a
+/// binding of ANOTHER module, so a correct rename that gives a local binding
+/// the same name is still a pure rename (the nanoid fixture's first version).
+#[test]
+fn a_rename_onto_a_reexport_local_name_is_valid() {
+    use crate::naming::driver::validate::{baseline_of, output_valid};
+    let fresh = "import { urlAlphabet as a } from \"./url.js\";\nexport { urlAlphabet } from \"./url.js\";\nexport const f = () => a;\n";
+    let renamed = "import { urlAlphabet } from \"./url.js\";\nexport { urlAlphabet } from \"./url.js\";\nexport const f = () => urlAlphabet;\n";
+    let baseline = baseline_of(fresh).expect("fresh parses");
+    assert!(output_valid(renamed, &baseline));
+    // A real change to the re-export itself still fails.
+    let changed = "import { urlAlphabet as a } from \"./url.js\";\nexport { otherName } from \"./url.js\";\nexport const f = () => a;\n";
+    assert!(!output_valid(changed, &baseline));
+}
