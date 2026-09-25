@@ -5,6 +5,7 @@
 
 pub mod babel_view;
 pub mod detect;
+pub mod emit;
 pub mod graph;
 pub mod hash;
 pub mod ingest;

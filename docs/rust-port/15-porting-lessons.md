@@ -264,6 +264,28 @@ a shorter window on non-ASCII text, and a panic when the byte offset fell
 inside a multi-byte char (red tests `factory_helper_lookback_*`). Every
 JS `slice`/window length is UTF-16 units.
 
+## 17. An IDENTICAL on the oracle pairs can be an identity it never tested
+
+WP5.3's emit gate went IDENTICAL on all four pairs on its first run —
+and on every one of them the emission alignment moved ZERO slots: the
+`exp050-cold` priors carry the pre-fossil layout, so no fresh fossil file
+shares a name with a prior file and every file emits in bundle order. The
+augmentation relocation (the 2.1.172 boot fix) never fired either: a
+planted "skip relocation" passed all four pairs. The gate as run could not
+see the two most intricate paths it was named for. What made it a real
+gate: two extra prior regimes on the same shipped texts (each pair's OWN
+output ledger, and ANOTHER pair's fossil ledger — the latter moves 210 to
+1,388 slots per pair through the aligner and the load-order scheduler),
+the per-statement load-order facts dumped by both sides and compared at
+scale, and 42 real-TS emits of the unit fixtures (the only place the
+relocation runs) replayed byte for byte. Planted perturbations were then
+checked against the regime that can see them.
+
+Lesson: after a first-run IDENTICAL, count how often the ported decision
+actually CHANGED something on the gate's inputs (moved slots, relocated
+statements, declined emits). Zero means the gate proves the identity
+function; find or build the input that makes the path fire.
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -271,5 +293,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/). The doc grows at each
 arc's handback.
