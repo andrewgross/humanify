@@ -222,6 +222,25 @@ pub fn finish_split_output(
     Ok(input.runnable.is_some() && manifest.is_some())
 }
 
+/// The finishing stage in the TS order (tryStableSplit after the commit):
+/// [`finish_split_output`], then — only when it succeeded — the post-split
+/// reconcile + bundle carry. Returns whether a Bun re-link ran; an Err is
+/// the TS's "Post-split step failed" (the tree stays on disk). The ONE
+/// owner of this order: the pipeline and the `finish` verb both call it.
+pub fn finish_stage(
+    input: &FinishInput<'_>,
+    report: &mut FinishReport,
+) -> Result<(bool, Option<ReconcileReport>), String> {
+    let relinked = finish_split_output(input, report)?;
+    let reconciled = reconcile_post_split(
+        input.output_dir,
+        input.prior_version,
+        input.switches,
+        report,
+    )?;
+    Ok((relinked, reconciled))
+}
+
 // ---------------------------------------------------------------------------
 // The post-split reconcile + bundle carry (`reconcilePostSplit`,
 // `carryIntoBundle`)

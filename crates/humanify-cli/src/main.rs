@@ -1412,9 +1412,7 @@ fn run_finish(
     input: &str,
     disable: &str,
 ) -> Result<(), String> {
-    use humanify_core::finish::driver::{
-        FinishInput, FinishReport, FinishSwitches, finish_split_output,
-    };
+    use humanify_core::finish::driver::{FinishInput, FinishReport, FinishSwitches, finish_stage};
     use std::path::Path;
 
     let mut switches = FinishSwitches::default();
@@ -1445,14 +1443,7 @@ fn run_finish(
         switches,
     };
     let mut report = FinishReport::default();
-    let result = finish_split_output(&finish_input, &mut report).and_then(|_| {
-        humanify_core::finish::driver::reconcile_post_split(
-            finish_input.output_dir,
-            finish_input.prior_version,
-            finish_input.switches,
-            &mut report,
-        )
-    });
+    let result = finish_stage(&finish_input, &mut report);
     for m in &report.messages {
         println!("{m}");
     }

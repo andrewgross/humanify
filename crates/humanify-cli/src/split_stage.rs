@@ -15,9 +15,7 @@ use std::path::Path;
 
 use humanify_core::emit::align::AlignSwitches;
 use humanify_core::emit::stable_split::{SplitOptions, SplitOutcome, stable_split};
-use humanify_core::finish::driver::{
-    FinishInput, FinishReport, FinishSwitches, finish_split_output, reconcile_post_split,
-};
+use humanify_core::finish::driver::{FinishInput, FinishReport, FinishSwitches, finish_stage};
 use humanify_core::place::assign::namer::{
     ProviderSplitNamer, ProviderTreeReviser, SplitNamer, TreeReviser,
 };
@@ -284,14 +282,11 @@ fn commit_and_finish(
         switches: finish_switches,
     };
     let mut report = FinishReport::default();
-    let finished = finish_split_output(&finish_input, &mut report);
-    let relinked = *finished.as_ref().unwrap_or(&false);
-    let reconciled = finished
-        .and_then(|_| reconcile_post_split(out, input.prior_version, finish_switches, &mut report));
+    let finished = finish_stage(&finish_input, &mut report);
     for m in &report.messages {
         renderer.message(m);
     }
-    reconciled.map_err(after)?;
+    let (relinked, _) = finished.map_err(after)?;
     let stats = &outcome.stats;
     let by_tier = CountMap(
         PLACEMENT_TIERS
