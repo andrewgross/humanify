@@ -63,14 +63,6 @@ pub struct SplitSections {
     pub shipped: String,
 }
 
-/// A library comment region of the processed file (`CommentRegion`):
-/// banner offset, the next banner's (None = to EOF), the library.
-pub struct DumpRegion {
-    pub start: usize,
-    pub end: Option<usize>,
-    pub library: String,
-}
-
 /// What the writer reads.
 pub struct DumpInputs<'a> {
     pub dir: &'a Path,
@@ -90,7 +82,9 @@ pub struct DumpInputs<'a> {
     pub params: &'a CacheKeyParams,
     /// The blessed TS factory-hash injection (the unpack stage's).
     pub ts_factories: Option<&'a [crate::unpack::gate::TsFactoryHash]>,
-    pub comment_regions: &'a [DumpRegion],
+    /// The processed file's library comment regions (its mixed-file
+    /// detection), MINIFIED-text byte offsets.
+    pub comment_regions: &'a [crate::libdetect::CommentRegion],
 }
 
 fn sha256_hex(text: &str) -> String {
@@ -767,30 +761,12 @@ fn tree_manifest(root: &Path) -> Result<String, String> {
     Ok(stringify(&JsValue::Object(o)))
 }
 
-/// regions.json (`writeRegions`): the processed file's library comment
-/// regions (an open end stays `null`), the functions the library stage
-/// froze (none: the Rust library classification hook is not wired — the
-/// library lane owns it and this key's rows), the graph-time Bun
-/// classification's factories (none on a real Bun bundle). Each list
-/// sorted by span start.
+/// regions.json (`writeRegions`): the library stage's owner
+/// ([`crate::libdetect::function_carry::regions_json`]) over the processed
+/// file's comment regions, the functions the library freeze froze, and
+/// the graph-time Bun classification's factories (none on a real Bun
+/// bundle: the beautifier splits the helper's marker).
 fn write_regions(w: &Writer<'_>, inp: &DumpInputs<'_>, graph: Option<&Site>) -> Result<(), String> {
-    let mut regions: Vec<&DumpRegion> = inp.comment_regions.iter().collect();
-    regions.sort_by_key(|r| r.start);
-    let comment_regions: Vec<JsValue> = regions
-        .iter()
-        .map(|r| {
-            let mut span = JsObject::new();
-            span.insert("start", JsValue::Number(r.start as f64));
-            span.insert(
-                "end",
-                r.end.map_or(JsValue::Null, |e| JsValue::Number(e as f64)),
-            );
-            let mut o = JsObject::new();
-            o.insert("span", JsValue::Object(span));
-            o.insert("library", JsValue::str(r.library.as_str()));
-            JsValue::Object(o)
-        })
-        .collect();
     let banners: Vec<JsValue> = graph
         .map(|(c, _)| {
             let mut factories: Vec<&crate::modules::FactoryRecord> = c.factories.iter().collect();
@@ -810,10 +786,10 @@ fn write_regions(w: &Writer<'_>, inp: &DumpInputs<'_>, graph: Option<&Site>) -> 
                 .collect()
         })
         .unwrap_or_default();
-    let mut o = JsObject::new();
-    o.insert("schemaVersion", JsValue::Number(DUMP_SCHEMA_VERSION as f64));
-    o.insert("commentRegions", JsValue::Array(comment_regions));
-    o.insert("libraryFunctions", JsValue::Array(Vec::new()));
-    o.insert("bannerClassifications", JsValue::Array(banners));
-    w.text("regions.json", &stringify(&JsValue::Object(o)))
+    let regions = crate::libdetect::function_carry::regions_json(
+        inp.comment_regions,
+        &inp.outcome.library_functions,
+        banners,
+    );
+    w.text("regions.json", &stringify(&regions))
 }

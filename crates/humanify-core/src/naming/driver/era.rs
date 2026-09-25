@@ -419,14 +419,7 @@ pub fn fresh_era<P: NameProvider>(
     };
     let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
-    let mut era = run_era(
-        &naming,
-        start,
-        freeze.library,
-        None,
-        opts,
-        provider,
-    );
+    let mut era = run_era(&naming, start, freeze.library, None, opts, provider);
     era.capture = capture;
     Ok(era)
 }

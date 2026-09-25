@@ -599,15 +599,10 @@ fn pipeline_body(
             write_stats_json(dest, outcome, &unpacked.vendor_naming, &config, renderer)?;
         }
         if let Some(dir) = &opts.dump_artifacts {
-            let regions: Vec<humanify_core::artifact_dump::DumpRegion> = mixed_files
+            let regions: Vec<humanify_core::libdetect::CommentRegion> = mixed_files
                 .iter()
                 .filter(|(p, _)| p == path)
-                .flat_map(|(_, m)| &m.regions)
-                .map(|r| humanify_core::artifact_dump::DumpRegion {
-                    start: r.start,
-                    end: r.end,
-                    library: r.library_name.clone(),
-                })
+                .flat_map(|(_, m)| m.regions.iter().cloned())
                 .collect();
             reports.write_dump(
                 &DumpContext {
@@ -653,7 +648,7 @@ struct DumpContext<'a> {
     flags: humanify_model::js::JsValue,
     params: &'a humanify_model::llm::CacheKeyParams,
     ts_factories: Option<&'a [humanify_core::unpack::gate::TsFactoryHash]>,
-    regions: &'a [humanify_core::artifact_dump::DumpRegion],
+    regions: &'a [humanify_core::libdetect::CommentRegion],
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
