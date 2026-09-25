@@ -55,7 +55,7 @@ use crate::rename::transfer::owned::{
     BindingInfo, collect_owned_binding_infos, collect_shadowed_block_bindings,
 };
 use crate::rename::transfer::rows::Rows;
-use crate::rename::validated::scopes::{BScopeId, BindingId, SiteType};
+use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::target::is_valid_rename_target;
 use crate::rename::validated::{RejectionReason, RenameRequest, RenameState, TrailSpec};
 use crate::rename::votes::proximity::{ProximityBinding, get_proximate_used_names};
@@ -93,6 +93,20 @@ pub struct WaveInputs<'a, 's> {
     /// `options.bundlerType === "esbuild"` (module groups of 15).
     pub esbuild: bool,
     pub params: CacheKeyParams,
+    /// A planted order bug (gate scaffolding: proves the gate SEES order).
+    pub plant: Option<Plant>,
+}
+
+/// The gate's planted reds: each breaks one ORDER the TS decides by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Plant {
+    /// Apply barrier entries in REVERSED (node, phase, binding, seq)
+    /// order — the last claimant wins.
+    BarrierReversed,
+    /// Keep the transfer stage's table orders (no fresh-era re-crawl).
+    NoRecrawl,
+    /// Drop the barrier's retry seeds.
+    NoRetries,
 }
 
 /// One recorded dispatch (a prompts.jsonl row + its cache-key material).
@@ -285,6 +299,11 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     entry_seq: usize,
     target_scope: BScopeId,
     program_scope: BScopeId,
+    /// The graph-era tables of the fresh-era scopes (read by the context
+    /// chain; written only by renames made through graph-era objects).
+    graph_era: HashMap<BScopeId, JsSet>,
+    /// The fresh-era scopes by span (start, end, id), sorted.
+    fresh_scopes: Vec<(u32, u32, BScopeId)>,
     wave: u64,
     // dump
     dispatches: Vec<DispatchRecord>,
@@ -309,7 +328,36 @@ pub fn run_waves<P: NameProvider>(
     // NEW path (all but the graph functions' retained `fn.path.scope`s and
     // the program) is a fresh crawl — registration order, current names.
     let retained: HashSet<BScopeId> = inp.rows.fns.iter().map(|f| f.scope).collect();
-    state.recrawl_order(|s| s != program_scope && !retained.contains(&s));
+    let fresh_era = |s: BScopeId| s != program_scope && !retained.contains(&s);
+    // The RETAINED (graph-era) tables of those scopes, as the clear left
+    // them: a function's context walks `fn.path.scope.parent` — graph-era
+    // objects — and a rename made through a fresh-era scope object never
+    // reaches them (the TS's two scope epochs, exp059).
+    let n_scopes = state.view().scopes.len();
+    let graph_era: HashMap<BScopeId, JsSet> = (0..n_scopes)
+        .map(|i| BScopeId(i as u32))
+        .filter(|&sid| fresh_era(sid))
+        .map(|sid| {
+            let names = state.bindings_in(sid).into_iter().map(|(n, _)| n);
+            let mut set = JsSet::new();
+            for n in names {
+                set.add(n);
+            }
+            (sid, set)
+        })
+        .collect();
+    let mut fresh_scopes: Vec<(u32, u32, BScopeId)> = (0..n_scopes)
+        .map(|i| BScopeId(i as u32))
+        .filter(|&sid| fresh_era(sid))
+        .map(|sid| {
+            let span = state.view().scope(sid).span;
+            (span.start, span.end, sid)
+        })
+        .collect();
+    fresh_scopes.sort_unstable();
+    if inp.plant != Some(Plant::NoRecrawl) {
+        state.recrawl_order(fresh_era);
+    }
     let target_scope = inp
         .rows
         .modules
@@ -332,6 +380,8 @@ pub fn run_waves<P: NameProvider>(
         entry_seq: 0,
         target_scope,
         program_scope,
+        graph_era,
+        fresh_scopes,
         wave: 0,
         dispatches: Vec::new(),
         rounds: HashMap::new(),
@@ -405,6 +455,9 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             let member_set: HashSet<usize> = members.iter().copied().collect();
             pending.retain(|p| !member_set.contains(p));
             seeds = self.wave_step(&members, seeds);
+            if self.inp.plant == Some(Plant::NoRetries) {
+                seeds.clear();
+            }
             self.settle_nodes(&seeds);
             self.wave += 1;
         }
@@ -493,6 +546,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let mut waiters: Vec<(usize, usize, Vec<BindingInfo>)> = Vec::new();
         for &f in &fn_nodes {
             let ctx = self.new_ctx(ng.node_of_fn[f], CtxKind::Fn(f));
+            // The task's traversal: a fresh path for every node under
+            // the function, so every fresh-era scope inside it is
+            // (re)crawled NOW — registration order, current names.
+            if self.inp.plant != Some(Plant::NoRecrawl) {
+                self.recrawl_inside(self.inp.graph.functions[f].span);
+            }
             let row = &self.inp.rows.fns[f];
             let all = collect_owned_binding_infos(&self.state, row);
             match self.select_llm_bindings(f, &all) {
@@ -546,6 +605,18 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             names: JsRecord::default(),
         });
         self.ctxs.len() - 1
+    }
+
+    /// Re-crawl every fresh-era scope inside `span`.
+    fn recrawl_inside(&mut self, span: Span) {
+        let lo = self.fresh_scopes.partition_point(|s| s.0 < span.start);
+        let scopes: Vec<BScopeId> = self.fresh_scopes[lo..]
+            .iter()
+            .take_while(|s| s.0 < span.end)
+            .filter(|s| s.1 <= span.end)
+            .map(|s| s.2)
+            .collect();
+        self.state.recrawl_scopes(&scopes);
     }
 
     /// `selectLlmBindings`.
@@ -677,13 +748,15 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             if s == self.program_scope {
                 break;
             }
-            scope_chain.push(
-                self.state
+            scope_chain.push(match self.graph_era.get(&s) {
+                Some(era) => era.to_vec(),
+                None => self
+                    .state
                     .bindings_in(s)
                     .into_iter()
                     .map(|(n, _)| n)
                     .collect(),
-            );
+            });
             cur = view.scope(s).parent;
         }
         let program_bindings = self
@@ -1543,14 +1616,25 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// `applyWaveBarrier` over every collected entry.
     fn barrier(&mut self) -> Vec<Rejection> {
         let mut entries = std::mem::take(&mut self.entries);
-        entries.sort_by(|a, b| {
-            (a.node_index, a.phase, a.binding_index, a.seq).cmp(&(
-                b.node_index,
-                b.phase,
-                b.binding_index,
-                b.seq,
-            ))
-        });
+        if self.inp.plant == Some(Plant::BarrierReversed) {
+            entries.sort_by(|a, b| {
+                (b.node_index, b.phase, b.binding_index, b.seq).cmp(&(
+                    a.node_index,
+                    a.phase,
+                    a.binding_index,
+                    a.seq,
+                ))
+            });
+        } else {
+            entries.sort_by(|a, b| {
+                (a.node_index, a.phase, a.binding_index, a.seq).cmp(&(
+                    b.node_index,
+                    b.phase,
+                    b.binding_index,
+                    b.seq,
+                ))
+            });
+        }
         let mut rejections = Vec::new();
         for entry in entries {
             if entry.identity {
@@ -1622,6 +1706,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 let s = &mut self.sets[*set];
                 s.members.remove(&entry.old);
                 s.members.insert(name.to_string());
+                // A function declaration's own name renames through
+                // `fnPath.parentPath.scope` — a graph-era object.
+                if self.is_own_name(f, b.binding)
+                    && let Some(era) = self.graph_era.get_mut(&b.scope)
+                {
+                    era.delete(&entry.old);
+                    era.add(name);
+                }
                 self.ctxs[entry.ctx].names.set(&entry.old, name);
                 if b.scope == self.target_scope || b.scope == self.program_scope {
                     self.used.delete(&entry.old);
@@ -1650,6 +1742,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 true
             }
         }
+    }
+
+    /// The binding is function row `f`'s own declaration name.
+    fn is_own_name(&self, f: usize, b: BindingId) -> bool {
+        self.inp.rows.fns[f]
+            .id_symbol
+            .and_then(|sym| self.state.view().binding_of_symbol(sym))
+            == Some(b)
     }
 
     /// `applyLlmRename`: validated rename + the `llm` trail row on the
@@ -1758,7 +1858,5 @@ pub fn build_retry_used_names(windowed: &[String], prev: &JsRecord) -> Vec<Strin
     out
 }
 
-#[allow(dead_code)]
-fn is_identifier_site(t: SiteType) -> bool {
-    t == SiteType::Identifier
-}
+#[cfg(test)]
+mod processor_test;

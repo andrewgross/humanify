@@ -106,6 +106,10 @@ enum Command {
         /// code/body text the probe writes.
         #[arg(long, value_delimiter = ',')]
         probe_only: Vec<String>,
+        /// Plant an order bug (gate red runs): barrier-reverse | no-recrawl
+        /// | no-retries.
+        #[arg(long)]
+        plant: Option<String>,
     },
     /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
     /// per scope and per binding (UTF-16 spans), byte-comparable with
@@ -349,7 +353,15 @@ fn main() {
             llm_cache,
             probe_graph,
             probe_only,
-        }) => run_waves_verb(&ts_dump, &out_dir, llm_cache, probe_graph, probe_only),
+            plant,
+        }) => run_waves_verb(
+            &ts_dump,
+            &out_dir,
+            llm_cache,
+            probe_graph,
+            probe_only,
+            plant,
+        ),
         Some(Command::Transfers { ts_dump, out_dir }) => {
             match humanify_core::rename::transfer::dump::dump_transfers(
                 std::path::Path::new(&ts_dump),
@@ -554,7 +566,19 @@ fn run_waves_verb(
     llm_cache: Option<String>,
     probe_graph: bool,
     probe_only: Vec<String>,
+    plant: Option<String>,
 ) {
+    use humanify_core::naming::waves::processor::Plant;
+    let plant = match plant.as_deref() {
+        None => None,
+        Some("barrier-reverse") => Some(Plant::BarrierReversed),
+        Some("no-recrawl") => Some(Plant::NoRecrawl),
+        Some("no-retries") => Some(Plant::NoRetries),
+        Some(other) => {
+            eprintln!("ERROR: unknown --plant {other}");
+            std::process::exit(2);
+        }
+    };
     let cache = llm_cache.map(std::path::PathBuf::from);
     if cache.is_none() && !probe_graph {
         eprintln!("ERROR: --llm-cache is required (the waves replay; no live calls)");
@@ -564,6 +588,7 @@ fn run_waves_verb(
         probe_graph,
         probe_only,
         llm_cache: cache.clone(),
+        plant,
     };
     let replay_dir = cache.unwrap_or_default();
     match humanify_core::naming::waves::dump::dump_waves(

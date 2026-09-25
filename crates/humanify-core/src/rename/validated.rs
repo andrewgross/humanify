@@ -337,11 +337,18 @@ impl RenameState {
     /// at the end of those tables; renames after it move names to the end
     /// again.
     pub fn recrawl_order(&mut self, recrawled: impl Fn(BScopeId) -> bool) {
-        for (i, entries) in self.view.initial_maps.iter().enumerate() {
-            let sid = BScopeId(i as u32);
-            if !recrawled(sid) {
-                continue;
-            }
+        let scopes: Vec<BScopeId> = (0..self.view.initial_maps.len())
+            .map(|i| BScopeId(i as u32))
+            .filter(|&s| recrawled(s))
+            .collect();
+        self.recrawl_scopes(&scopes);
+    }
+
+    /// [`RenameState::recrawl_order`] over an explicit scope list.
+    pub fn recrawl_scopes(&mut self, scopes: &[BScopeId]) {
+        for &sid in scopes {
+            let i = sid.0 as usize;
+            let entries = &self.view.initial_maps[i];
             let map = &mut self.maps[i];
             for (order, (_, b)) in entries.iter().enumerate() {
                 let current = self.names[b.0 as usize]

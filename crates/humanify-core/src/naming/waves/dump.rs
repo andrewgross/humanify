@@ -41,6 +41,8 @@ pub struct WavesDumpOptions {
     pub probe_only: Vec<String>,
     /// The cache the waves replay (opened read-only).
     pub llm_cache: Option<std::path::PathBuf>,
+    /// A planted order bug (the gate's red runs).
+    pub plant: Option<super::processor::Plant>,
 }
 
 /// What the dump reports.
@@ -136,6 +138,7 @@ pub fn dump_waves<P: NameProvider>(
             suggested: &outcome.binding_suggested,
             esbuild: bundler == Some("esbuild"),
             params: params.clone(),
+            plant: options.plant,
         };
         let client = provider(params.clone());
         let waves = run_waves(
@@ -478,6 +481,14 @@ fn write_dump(
     }
     fs::write(out_dir.join("prompts.jsonl"), prompts).map_err(|e| format!("prompts: {e}"))?;
     fs::write(out_dir.join("cache-keys.jsonl"), keys).map_err(|e| format!("keys: {e}"))?;
+
+    // transfers.json at the wave boundary (bisection: the llm attempts).
+    let rows = waves.state.trail().transfer_rows();
+    fs::write(
+        out_dir.join("transfers-waves.json"),
+        json!({"schemaVersion": 1, "transfers": rows}).to_string(),
+    )
+    .map_err(|e| format!("transfers: {e}"))?;
 
     // names.json: trail rows, then recorded rows (the recorded row wins).
     let mut by_span: BTreeMap<(u32, u32), Value> = BTreeMap::new();
