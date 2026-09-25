@@ -15,20 +15,23 @@
 //! needs, both reduced to the same (fresh span → library) join onto the
 //! graph's function rows:
 //!
-//! - [`LibraryClassification::Consumed`] — phases 1–5a: the Rust ingests
-//!   the TS-beautified text (`--beautified-input`) and has no raw starts,
-//!   so it consumes the TS's classification, `regions.json`'s
-//!   `libraryFunctions` (fresh span in UTF-8 bytes, sessionId, library),
-//!   joined by the function node's fresh span (the sessionId cross-checked).
-//! - [`LibraryClassification::Carried`] — phase 5b, when the Rust owns
-//!   beautify: [`carry_function_libraries`] classifies the beautify
-//!   transform's OUTPUT tree (its function nodes still carry raw spans) by
-//!   raw start, per ordinal of ONE shared pre-order walk
-//!   ([`functions_in_tree_order`]); [`resolve_function_libraries`] replays
+//! - [`LibraryClassification::Carried`] — the pipeline (since WP5.6d, the
+//!   Rust owns stage 6): [`carry_format_tree`] classifies the native
+//!   formatter's OUTPUT tree (its function nodes still carry raw spans) by
+//!   raw start, per ordinal of ONE shared pre-order walk (the JSON twin,
+//!   [`carry_function_libraries`] / [`functions_in_tree_order`], walks an
+//!   ESTree tree in the same order); [`resolve_function_libraries`] replays
 //!   the walk over the re-parsed printed text and fails loud on a count or
 //!   per-ordinal type mismatch. The ordinal is taken over the OUTPUT tree,
 //!   never the raw one: flipComparisons reorders functions (the `reorder`
 //!   vector in test/parity/library-carry.json).
+//! - [`LibraryClassification::Consumed`] — the dump verbs (`naming`,
+//!   `matches`, `transfers`) replaying a TS dump, which has no raw text:
+//!   the TS's classification, `regions.json`'s `libraryFunctions` (fresh
+//!   span in UTF-8 bytes, sessionId, library), joined by the function
+//!   node's fresh span (the sessionId cross-checked). The pipeline's
+//!   `--ts-library-functions` consumed it too through phase 5a (deleted at
+//!   WP5.6d).
 //!
 //! The walk is babel's `Function` alias set (FunctionDeclaration,
 //! FunctionExpression, ArrowFunctionExpression, ObjectMethod, ClassMethod,
@@ -46,6 +49,7 @@ use oxc_span::Span;
 use serde_json::Value;
 
 use super::CommentRegion;
+use crate::format::ast::{NodeId as FormatNodeId, Tree as FormatTree};
 use crate::graph::UnifiedGraph;
 use crate::place::babel_walk::walk;
 
@@ -115,18 +119,58 @@ pub fn carry_function_libraries(
     transformed: &Value,
     regions: &[CommentRegion],
 ) -> Result<FunctionLibraryCarry, String> {
-    let mut carry = FunctionLibraryCarry::default();
-    for f in functions_in_tree_order(transformed) {
-        if f.span.start == f.span.end {
-            return Err(format!(
-                "library carry: a {} in the beautified tree has no raw start — beautify synthesized a function, so raw offsets no longer identify it",
-                f.babel_type
-            ));
+    let fns = functions_in_tree_order(transformed);
+    carry_in_walk_order(
+        fns.iter().map(|f| {
+            let start = (f.span.start != f.span.end).then_some(f.span.start);
+            (f.babel_type.as_str(), start)
+        }),
+        regions,
+    )
+}
+
+/// `carryFunctionLibraries` over the NATIVE stage 6's output tree
+/// ([`crate::format`], WP5.6c): the same pre-order walk (children in
+/// `VISITOR_KEYS` order, from the `File` root — the TS's `file.ast`), each
+/// function classified by its RAW start ([`crate::format::ast::Node::span`], the
+/// converter's offset into the unformatted text; None = a synthesized
+/// node, which fails loud as the TS's missing `start` does). A node the
+/// transforms SHARE between two parents is visited once per parent, as
+/// the TS's object-graph walk visits it — and as the printed text holds it.
+pub fn carry_format_tree(
+    tree: &FormatTree,
+    root: FormatNodeId,
+    regions: &[CommentRegion],
+) -> Result<FunctionLibraryCarry, String> {
+    let mut fns: Vec<(&str, Option<u32>)> = Vec::new();
+    let mut stack = vec![root];
+    while let Some(id) = stack.pop() {
+        let node = tree.node(id);
+        if node.kind.is_function() {
+            fns.push((node.kind.type_name(), node.span.map(|(start, _)| start)));
         }
+        stack.extend(tree.children(id).into_iter().rev());
+    }
+    carry_in_walk_order(fns, regions)
+}
+
+/// The carry's one rule over a walk: per function (babel type, raw start)
+/// in walk order, its library by raw start.
+fn carry_in_walk_order<'a>(
+    fns: impl IntoIterator<Item = (&'a str, Option<u32>)>,
+    regions: &[CommentRegion],
+) -> Result<FunctionLibraryCarry, String> {
+    let mut carry = FunctionLibraryCarry::default();
+    for (babel_type, start) in fns {
+        let Some(start) = start else {
+            return Err(format!(
+                "library carry: a {babel_type} in the beautified tree has no raw start — beautify synthesized a function, so raw offsets no longer identify it"
+            ));
+        };
         carry
             .libraries
-            .push(library_at_offset(regions, f.span.start as usize).map(str::to_string));
-        carry.types.push(f.babel_type);
+            .push(library_at_offset(regions, start as usize).map(str::to_string));
+        carry.types.push(babel_type.to_string());
     }
     Ok(carry)
 }
@@ -174,13 +218,13 @@ pub struct LibraryFunctionKey {
 /// naming driver, the transfer stage's freeze and the dump verbs consult.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LibraryClassification {
-    /// The TS's classification (phases 1–5a, `--beautified-input`).
+    /// A TS dump's classification (the dump verbs).
     Consumed(Vec<LibraryFunctionKey>),
-    /// The Rust beautify's ordinal carry (phase 5b).
+    /// The native stage 6's ordinal carry (the pipeline, WP5.6c/d).
     Carried(FunctionLibraryCarry),
     /// The file has banner regions but no classification reached the
-    /// naming stage — consulting it fails loud (the TS throws the same:
-    /// raw offsets cannot classify beautified functions).
+    /// naming stage (a pre-#33 TS dump) — consulting it fails loud (the TS
+    /// throws the same: raw offsets cannot classify beautified functions).
     Missing,
 }
 
@@ -250,7 +294,7 @@ impl LibraryClassification {
     ) -> Result<Vec<(usize, String)>, String> {
         let keyed: Vec<(Span, Option<&str>, String)> = match self {
             Self::Missing => {
-                return Err("library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32); pass the TS dump's regions.json (--ts-library-functions) while the text is TS-beautified".into());
+                return Err("library regions reached the naming stage without a function classification — raw offsets cannot classify beautified functions (#32); a TS dump written before #33 (regions.json without libraryFunctions) cannot be replayed".into());
             }
             Self::Consumed(keys) => keys
                 .iter()

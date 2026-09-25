@@ -19,9 +19,13 @@
 //!    they ask);
 //! 4. print with `retainLines: false`, `comments: false` ([`printer`]).
 //!
-//! Not wired into the pipeline yet (WP5.6d); the library carry (WP5.6c)
-//! reads function RAW starts from [`ast::Node::span`] — the extension
-//! point is left in place, unused here.
+//! Stage 6 of the pipeline ([`format_file`], one call per processed file
+//! — WP5.6d). When the file has banner regions it also records the library
+//! carry (WP5.6c, finding #32): step 3's OUTPUT tree still holds the raw
+//! parse's function nodes with their raw spans ([`ast::Node::span`]), and
+//! [`crate::libdetect::function_carry::carry_format_tree`] classifies them
+//! per walk ordinal before the printer runs — the TS's
+//! `libraryCarryPlugin.post`.
 
 pub mod ast;
 pub mod beautify;
@@ -36,6 +40,8 @@ pub mod traverse;
 use oxc_allocator::Allocator;
 
 use crate::ingest::Ingest;
+use crate::libdetect::CommentRegion;
+use crate::libdetect::function_carry::{FunctionLibraryCarry, carry_format_tree};
 
 pub use beautify::Plugins;
 
@@ -96,9 +102,23 @@ impl Default for FormatOptions {
     }
 }
 
-/// `transformWithPlugins(code, plugins)` with the stage-6 settings: the
-/// formatted text, or the error a Babel throw would be.
-pub fn format(code: &str, opts: &FormatOptions) -> Result<String, String> {
+/// Stage 6's output for one file: the formatted text and, when the file
+/// has banner regions, the library carry (finding #32).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Formatted {
+    pub text: String,
+    pub library_carry: Option<FunctionLibraryCarry>,
+}
+
+/// Stage 6 for one processed file (`createBabelPlugin()(code, context)`):
+/// the formatted text, plus — when `regions` (the file's banner regions,
+/// offsets into `code`) is non-empty — the library carry the TS's
+/// `libraryCarryPlugin.post` records on the transform's OUTPUT tree.
+pub fn format_file(
+    code: &str,
+    opts: &FormatOptions,
+    regions: &[CommentRegion],
+) -> Result<Formatted, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_module(&allocator, code);
     if let Some(e) = ingest.errors.first() {
@@ -124,11 +144,27 @@ pub fn format(code: &str, opts: &FormatOptions) -> Result<String, String> {
         let undefined_scopes = scope::undefined_binding_scopes(&tree, &ingest)?;
         beautify::run(&mut tree, root, plugins, &undefined_scopes, opts.plant)?;
     }
+    // `libraryCarryPlugin.post`: after every visitor, before the printer,
+    // on the transformed tree whose function nodes keep their raw spans.
+    let library_carry = if regions.is_empty() {
+        None
+    } else {
+        Some(carry_format_tree(&tree, root, regions)?)
+    };
     let mut printer = printer::Printer::new(&tree, printer::Mode::Beautify);
     if opts.plant == Some(Plant::RustNumberFormat) {
         printer.plant_rust_numbers();
     }
-    Ok(printer.generate(root))
+    Ok(Formatted {
+        text: printer.generate(root),
+        library_carry,
+    })
+}
+
+/// `transformWithPlugins(code, plugins)` with the stage-6 settings: the
+/// formatted text, or the error a Babel throw would be.
+pub fn format(code: &str, opts: &FormatOptions) -> Result<String, String> {
+    format_file(code, opts, &[]).map(|f| f.text)
 }
 
 #[cfg(test)]

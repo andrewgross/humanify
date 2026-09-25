@@ -19,28 +19,19 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 /// Hidden from help, and named here so the surface gate reports them
 /// instead of passing over them.
 ///
-/// `--beautified-input <path>` — 00-control §3 (2026-09-19): through phase
-/// 5a the binary ingests the TS-beautified text, because the formatter
-/// (stage 6) is not ported. With it, the driver runs every stage after the
-/// format over that text; without it, stage 6 is NOT-YET.
-///
 /// `--inject-ts-hashes <dir>` — the blessed structuralSignature exemption
 /// (00-control §3, lesson 16): a TS `--dump-artifacts` dir whose
 /// `modules.json` factory hashes (vendor names, stage 3) and
 /// `partitions.json` statementHash bytes (placement + the split ledger,
 /// stage 10) are substituted for the Rust's, each only after a proven
 /// bijection between the two partitions. Migration-only: the hash BYTES
-/// differ by design, and a TS-written prior carries the TS's.
+/// differ by design, and a TS-written prior carries the TS's. Deleted at
+/// 5b-2 (WP5.6e).
 ///
-/// `--ts-library-functions <path>` — a TS dump's `regions.json`: the
-/// library freeze's classification (findings #32/#33), which needs raw
-/// function starts a binary ingesting the TS-beautified text does not
-/// have (crate::library_freeze). Deleted at 5b with `--beautified-input`.
-pub const RUST_ONLY_OPTIONS: &[&str] = &[
-    "--beautified-input <path>",
-    "--inject-ts-hashes <dir>",
-    "--ts-library-functions <path>",
-];
+/// (`--beautified-input` and `--ts-library-functions`, the TS stage-6 text
+/// and the TS library classification, were deleted at WP5.6d: the binary
+/// formats natively and carries the classification itself.)
+pub const RUST_ONLY_OPTIONS: &[&str] = &["--inject-ts-hashes <dir>"];
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -276,18 +267,8 @@ pub fn program() -> CliCommand {
         )
         .add_option(hidden(CliOption::new(
             RUST_ONLY_OPTIONS[0],
-            "Rust-only migration scaffolding: ingest this TS-beautified text \
-             (stage 6, the formatter, is not ported)",
-        )))
-        .add_option(hidden(CliOption::new(
-            RUST_ONLY_OPTIONS[1],
             "Rust-only migration scaffolding: substitute a TS dump's hash bytes \
              (modules.json, partitions.json) after proving each bijection",
-        )))
-        .add_option(hidden(CliOption::new(
-            RUST_ONLY_OPTIONS[2],
-            "Rust-only migration scaffolding: consume a TS dump's regions.json \
-             library classification (the text is TS-beautified: no raw starts)",
         )))
         .subcommand(env_reads_command())
 }

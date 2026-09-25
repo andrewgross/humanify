@@ -72,8 +72,6 @@ interface RunConfig {
   command?: string[];
   /** The binary's build record (pipeline-bin.ts), with `command`. */
   bin?: BinRecord;
-  /** TS stand-ins the binary run leans on (`--ts-beautify-adapter`). */
-  adapters?: string[];
   stdoutPath: string;
   endpoint: string;
   model: string;
@@ -189,7 +187,6 @@ function pipelineRecord(
   return {
     kind: cfg.bin ? "rust-bin" : "ts",
     command: pipelineCommandOf(cfg),
-    adapters: cfg.adapters ?? [],
     bin: cfg.bin && {
       sha256: launchedSha ?? "",
       buildSha256: cfg.bin.sha256,

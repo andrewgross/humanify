@@ -147,6 +147,13 @@ enum Command {
         /// no-deferral | permute-first | two-epochs.
         #[arg(long)]
         plant: Option<String>,
+        /// WP5.6c's G3: classify library functions by the NATIVE stage 6's
+        /// carry over the dump's text/minified.js (whose native format
+        /// must equal text/fresh.js) instead of consuming the TS's
+        /// regions.json — the written regions.json then compares the
+        /// carried classification with the TS's.
+        #[arg(long, default_value_t = false)]
+        native_carry: bool,
     },
     /// WP3.1's bundle-scale check of the Babel scope view: one JSON line
     /// per scope and per binding (UTF-16 spans), byte-comparable with
@@ -556,7 +563,14 @@ fn main() {
             out_dir,
             llm_cache,
             plant,
-        }) => run_naming_verb(&ts_dump, &out_dir, &llm_cache, plant.as_deref()),
+            native_carry,
+        }) => run_naming_verb(
+            &ts_dump,
+            &out_dir,
+            &llm_cache,
+            plant.as_deref(),
+            native_carry,
+        ),
         Some(Command::Transfers { ts_dump, out_dir }) => {
             match humanify_core::rename::transfer::dump::dump_transfers(
                 std::path::Path::new(&ts_dump),
@@ -923,7 +937,14 @@ fn run_passes_verb(
     }
 }
 
-fn run_naming_verb(ts_dump: &str, out_dir: &str, llm_cache: &str, plant: Option<&str>) {
+fn run_naming_verb(
+    ts_dump: &str,
+    out_dir: &str,
+    llm_cache: &str,
+    plant: Option<&str>,
+    native_carry: bool,
+) {
+    use humanify_core::naming::driver::dump::LibrarySource;
     use humanify_core::naming::driver::{DriverPlant, NamingHooks};
     use humanify_core::naming::passes::family_permute::PermutePlant;
     use humanify_core::naming::reconcile::ReconcilePlant;
@@ -948,6 +969,11 @@ fn run_naming_verb(ts_dump: &str, out_dir: &str, llm_cache: &str, plant: Option<
     match humanify_core::naming::driver::dump::dump_naming(
         std::path::Path::new(ts_dump),
         std::path::Path::new(out_dir),
+        if native_carry {
+            LibrarySource::NativeCarry
+        } else {
+            LibrarySource::TsDump
+        },
         &hooks,
         |params| humanify_llm::LlmClient::replay_only(&replay_dir, params),
     ) {

@@ -64,7 +64,6 @@ case "$*" in
     cp "$cfg" "$RECORDER_ROOT/runcfg-$(jq -r .version "$cfg").json"
     jq -r '.artifacts[]' "$cfg" | while read -r p; do mkdir -p "$(dirname "$p")"; echo x > "$p"; done
     ;;
-  *ts-beautify.ts*) out="${"$"}{@: -1}"; echo "formatted" > "$out" ;;
   *src/index.ts*) write_tree "$@" ;;
 esac
 exit 0
@@ -245,32 +244,22 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
   });
 
-  it("--ts-beautify-adapter without --bin is refused upfront", () => {
-    const h = runHarness(["--ts-beautify-adapter"]);
-    assert.strictEqual(h.status, 2, h.stdout);
-  });
-
-  it("--ts-beautify-adapter hands every binary launch its TS stage-6 text", () => {
+  it("--ts-beautify-adapter is gone (WP5.6d): run.sh refuses it as an unknown flag", () => {
     const h = runHarness([
       "--bin",
       "<TMP>/shims/humanify",
       "--force-mixed",
       "--ts-beautify-adapter"
     ]);
+    assert.strictEqual(h.status, 2, h.stdout);
+    assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
+  });
+
+  it("no binary launch carries a TS stage-6 text: the binary formats natively", () => {
+    const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
     assert.strictEqual(h.status, 0, h.stdout);
-    for (const l of h.launches
-      .split("\n")
-      .filter((l) => l.startsWith("humanify "))) {
-      assert.match(
-        l,
-        /--beautified-input <TMP>\/work\/<LABEL>\/[\d.]+\.beautified\.js/
-      );
-    }
-    assert.match(
-      h.launches,
-      /"--beautified-input",\s*"<TMP>\/work\/<LABEL>\/2\.1\.86\.beautified\.js"/
-    );
-    assert.match(h.results, /"adapters":\["ts-beautify"\]/);
+    assert.doesNotMatch(h.launches, /--beautified-input|beautified\.js/);
+    assert.doesNotMatch(h.results, /"adapters"/);
   });
 
   it("a missing diagnostics trail is a LOUD notice, not a swallowed failure", () => {

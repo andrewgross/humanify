@@ -251,14 +251,12 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
 
 describe("manifest warnings — a run scored by the Rust binary (--bin)", () => {
   function binRun(
-    bin: Partial<NonNullable<RunManifest["pipeline"]>["bin"]> = {},
-    adapters: string[] = []
+    bin: Partial<NonNullable<RunManifest["pipeline"]>["bin"]> = {}
   ): RunManifest {
     return base({
       pipeline: {
         kind: "rust-bin",
         command: ["/r/target/release/humanify"],
-        adapters,
         bin: {
           sha256: "aa",
           buildSha256: "aa",
@@ -301,14 +299,6 @@ describe("manifest warnings — a run scored by the Rust binary (--bin)", () => 
     const w = manifestWarnings(binRun({ sha256: "bb" }));
     assert.ok(
       w.some((l) => /changed on disk/.test(l)),
-      String(w)
-    );
-  });
-
-  it("flags every TS adapter the binary run leaned on, by name", () => {
-    const w = manifestWarnings(binRun({}, ["ts-beautify"]));
-    assert.ok(
-      w.some((l) => /ts-beautify/.test(l)),
       String(w)
     );
   });

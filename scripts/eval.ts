@@ -143,7 +143,6 @@ const SCORE_FLAGS: Record<string, "bool" | "value"> = {
   // WP5.6f: score with a Rust binary (run.sh builds it, records its sha and
   // build commit, and refuses one not built from the label's commit).
   "--bin": "value",
-  "--ts-beautify-adapter": "bool",
   "--warm-self-hop": "bool"
 };
 
@@ -189,7 +188,7 @@ const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify [--ts-beautify-adapter]] [--warm-self-hop] ...",
+      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--warm-self-hop] ...",
     description:
       "Cold scored run over the eval pairs; cards + summary under results/<label>. " +
       "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, preflight on.",
