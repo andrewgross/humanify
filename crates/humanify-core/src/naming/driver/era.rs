@@ -21,8 +21,11 @@ use humanify_model::llm::{CacheKeyParams, NameProvider, StrMap};
 use oxc_allocator::Allocator;
 use serde_json::Value;
 
-use super::library::{LibraryOutcome, classify_library_functions, run_library_prefix_pass};
+use super::library::{LibraryOutcome, run_library_prefix_pass};
 use crate::graph::UnifiedGraph;
+use crate::libdetect::function_carry::{
+    LibraryClassification, LibraryFunctionKey, classify_library_functions, library_function_rows,
+};
 use crate::matching::cascade::ResolutionStats;
 use crate::modules::soundness::collect_eval_with_taint;
 use crate::naming::passes::floor_passes::{derive_expression_inner_names, retry_decorated_names};
@@ -55,9 +58,10 @@ pub struct EraOptions<'o> {
     pub naming_floor: bool,
     /// `namingFloorSweep && !isSweepDeferred`: the sweep runs pre-generate.
     pub pre_generate_sweep: bool,
-    /// `skipLibraries` (default true) and the library stage's hook.
+    /// `skipLibraries` (default true) and the file's library
+    /// classification (None = no banner regions).
     pub skip_libraries: bool,
-    pub library: Option<super::library::LibraryHook<'o>>,
+    pub library: Option<&'o LibraryClassification>,
     pub wave_plant: Option<Plant>,
     /// Stop after the waves (the `waves` verb's wave-boundary dump).
     pub stop_after_waves: bool,
@@ -107,6 +111,8 @@ pub struct NamingEra {
     pub waves: WaveRecords,
     pub processor: ProcessorReport,
     pub library: LibraryOutcome,
+    /// The library freeze as applied (regions.json `libraryFunctions`).
+    pub library_functions: Vec<LibraryFunctionKey>,
     pub floor: Option<FloorCounts>,
     /// The pre-generate coverage sweep (fresh-anchored), when it ran.
     pub pre_sweep: Option<SweepResult>,
@@ -173,18 +179,8 @@ pub fn prior_era<P: NameProvider>(
 ) -> Result<NamingEra, String> {
     let semantic = stage.fresh.ingest.semantic();
     let graph = stage.fresh.graph;
-    let wrapper = stage.fresh.wrapper.map(|w| w.span);
-    let library = classify_library_functions(
-        stage.fresh.ingest.text,
-        graph,
-        wrapper.is_some(),
-        opts.skip_libraries,
-        opts.library,
-    );
-    let freeze = PreFreeze {
-        library: library.iter().map(|(f, _)| *f).collect(),
-    };
-    let (outcome, _twins) = crate::rename::transfer::apply_prior_version_with(stage, &freeze)?;
+    let freeze = crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
+    let (outcome, _twins) = crate::rename::transfer::apply_prior_version(stage, &freeze)?;
     let close = close_contexts(stage, &outcome.fn_close_prior)?;
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),
@@ -218,7 +214,7 @@ pub fn prior_era<P: NameProvider>(
     Ok(run_era(
         &naming,
         start,
-        library,
+        freeze.library,
         Some((prior, pending)),
         opts,
         provider,
@@ -248,15 +244,14 @@ pub fn fresh_era<P: NameProvider>(
     let graph = &parts.graph;
     let wrapper =
         crate::modules::wrapper::find_wrapper_function(ingest.program, semantic).map(|w| w.span);
-    let library = classify_library_functions(
-        fresh,
-        graph,
-        wrapper.is_some(),
-        opts.skip_libraries,
-        opts.library,
-    );
     let freeze = PreFreeze {
-        library: library.iter().map(|(f, _)| *f).collect(),
+        library: classify_library_functions(
+            &json,
+            graph,
+            wrapper.is_some(),
+            opts.skip_libraries,
+            opts.library,
+        )?,
     };
     let (fn_state, binding_state) = pre_transfer_states(graph, semantic, wrapper, &freeze);
     let n_fns = graph.functions.len();
@@ -273,7 +268,14 @@ pub fn fresh_era<P: NameProvider>(
         single_epoch: !opts.two_epochs_without_prior,
     };
     let naming = Naming::build(semantic, graph);
-    Ok(run_era(&naming, start, library, None, opts, provider))
+    Ok(run_era(
+        &naming,
+        start,
+        freeze.library,
+        None,
+        opts,
+        provider,
+    ))
 }
 
 /// The shared body: waves, library prefix, floor, generate.
@@ -345,6 +347,7 @@ fn run_era<P: NameProvider>(
         errors,
         waves,
     };
+    let library_functions = library_function_rows(&library, graph);
     let library = run_library_prefix_pass(&mut state, &rows, graph, &library, &eligible);
     let mut era = NamingEra {
         generated: None,
@@ -353,6 +356,7 @@ fn run_era<P: NameProvider>(
         waves: records,
         processor,
         library,
+        library_functions,
         floor: None,
         pre_sweep: None,
         prior,

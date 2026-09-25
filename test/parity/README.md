@@ -33,3 +33,13 @@ verdicts; the Rust test named beside it replays the same inputs.
 
 Regenerate with `npx tsx test/parity/<probe> > test/parity/<frozen>` (the
 scope probe runs under plain `node`).
+
+## Library-freeze carry (#32) — 2026-09-25
+
+`library-carry-probe.ts` runs the REAL TS beautify with the function carry
+armed over synthetic snippets plus the gate regimes' raw texts
+(`library-carry-inputs.json`, copied from /work/lf/cases) and freezes the regions,
+the carry, the walk over the re-parsed text, the resolved library functions
+and the raw-tree walk into `library-carry.json`; the Rust tests are
+`libdetect::function_carry::function_carry_test`. Regenerate with
+`npx tsx test/parity/library-carry-probe.ts > test/parity/library-carry.json`.

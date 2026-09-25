@@ -458,6 +458,30 @@ visible in exactly one excluded-by-precedent file), and a plant that
 changes nothing proves nothing — count its effect before citing it
 (lesson 17's rule, applied to the plants themselves).
 
+## 27. A reused walk table is only as wide as its first consumer's regime
+
+The library carry needed babel's pre-order `Function` walk over WHOLE
+programs, and `place::babel_walk` already owned the ESTree→babel shape
+question — but its `VISITOR_KEYS` table had been cut for the split's
+walks over CJS statement bodies: no `Program`, no import/export
+declarations. An unknown type answers "no children", silently: the walk
+stopped at the root, and an `export default function` hid its function.
+Nothing on the four pairs or the split's gates could see it. Vectors
+frozen from the REAL TS beautify (test/parity/library-carry.json — ESM,
+methods, classes, a transform that reorders functions) caught it on the
+first run, and a planted removal of one key re-proved the red. The same
+vectors carry the port's second proof: a carry over the RAW parse matches
+the TS output-tree carry on every vector except the one flipComparisons
+reorders — the reason the 5b lane must carry on the transform's output
+tree, recorded as a test rather than a comment.
+
+Lesson: when a new consumer reuses a shared table-driven walk, generate
+vectors in the NEW consumer's regime from the TS; "no children" is a
+truncation, not an answer. And when a classification needs data the
+ingesting leg cannot have (raw starts vs beautified text), consume it and
+check what can be checked (the binary proves the TS's banner regions equal
+its own before joining a single span).
+
 ---
 
 Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
@@ -465,5 +489,5 @@ Provenance: lessons 1, 3, 6 (gate logs /work/rust-port/gates/wp1.5/),
 module docs), 7 (oracle-dc1a80d's cuts + the handback note
 /work/rust-port/handback/wp1.3-1.5-2026-09-20.md), 8/9 (the WP2.2 port
 report + probes under test/parity/), 11-14 (b53b3a8/dd0570a/a7cfac3, the
-matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/). The doc grows at each
+matches.close gate's three debugging rounds), 15 (/work/rust-port/gates/wpb1/ and wpb5/), 16 (/work/rust-port/gates/wpb2/), 17 (/work/rust-port/gates/wp5.3/), 18-19 (/work/rust-port/gates/wp4.3/), 20-21 (/work/rust-port/gates/wp4.45/), 22 (/work/rust-port/gates/wp5.4/), 23-24 (/work/rust-port/gates/wp4.6/), 25-26 (/work/rust-port/gates/m3/), 27 (/work/rust-port/gates/library-freeze/). The doc grows at each
 arc's handback.

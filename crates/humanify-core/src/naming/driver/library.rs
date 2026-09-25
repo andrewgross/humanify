@@ -5,8 +5,11 @@
 //! library function is renamed `<sanitized library>_<name>` through
 //! validated rename — deterministic, no LLM.
 //!
-//! The classification itself is a HOOK ([`LibraryHook`]): consulted only
-//! when `skipLibraries` is on and the graph found no wrapper IIFE.
+//! The classification itself (which functions are library code) is owned
+//! by `crate::libdetect::function_carry` (`LibraryClassification`): the
+//! freeze reads it through `rename::transfer::library_freeze` (with a
+//! prior) or `classify_library_functions` (a first version) — consulted
+//! only when `skipLibraries` is on and the graph found no wrapper IIFE.
 
 use oxc_span::Span;
 
@@ -53,28 +56,6 @@ pub fn sanitize_library_name(name: &str) -> String {
         out.insert(0, '_');
     }
     out
-}
-
-/// The library stage's classification hook (`markLibraryFunctionsPreDone`'s
-/// input): (fn row, library name) for every library function of the file,
-/// given the fresh text and its graph. NOT PORTED YET — the TS's
-/// comment-region classification has open bugs (16-findings #32/#33, fixed
-/// TS-first first); the stage that owns it wires this hook. The driver
-/// consults it only when `skipLibraries` is on and there is no wrapper.
-pub type LibraryHook<'h> = &'h dyn Fn(&str, &UnifiedGraph) -> Vec<(usize, String)>;
-
-/// `detectAndMarkLibraries`: the hook's classification, or none.
-pub fn classify_library_functions(
-    fresh: &str,
-    graph: &UnifiedGraph,
-    has_wrapper: bool,
-    skip_libraries: bool,
-    hook: Option<LibraryHook<'_>>,
-) -> Vec<(usize, String)> {
-    match hook {
-        Some(classify) if skip_libraries && !has_wrapper => classify(fresh, graph),
-        _ => Vec::new(),
-    }
 }
 
 /// `runLibraryPrefixPass` over the classified functions.

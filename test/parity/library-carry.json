@@ -1,0 +1,1909 @@
+{
+ "mid-sequence": {
+  "raw": "var a=function(app){return app},b=(0,/*! tinylib v1.2.3 */function(lib){return lib});",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 37,
+    "end": null
+   }
+  ],
+  "beautified": "var a = function (app) {\n  return app;\n};\nvar b = (0, function (lib) {\n  return lib;\n});",
+  "carry": {
+   "libraries": [
+    null,
+    "tinylib"
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 8,
+    "end": 40
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 54,
+    "end": 86
+   }
+  ],
+  "resolved": [
+   {
+    "start": 54,
+    "end": 86,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 6,
+    "end": 31,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 58,
+    "end": 83,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "reorder": {
+  "raw": "`${function(early){return early}}`===f(/*! tinylib v1.2.3 */function(late){return late});",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 39,
+    "end": null
+   }
+  ],
+  "beautified": "f(function (late) {\n  return late;\n}) === `${function (early) {\n  return early;\n}}`;",
+  "carry": {
+   "libraries": [
+    "tinylib",
+    null
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 2,
+    "end": 36
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 45,
+    "end": 81
+   }
+  ],
+  "resolved": [
+   {
+    "start": 2,
+    "end": 36,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 3,
+    "end": 32,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 60,
+    "end": 87,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "conditional-logical": {
+  "raw": "x?function(p1){}:function(p2){};y&&function(p3){return function(p4){}};/*! tinylib v1.2.3 */z||function(p5){};",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 71,
+    "end": null
+   }
+  ],
+  "beautified": "if (x) {\n  (function (p1) {});\n} else {\n  (function (p2) {});\n}\nif (y) {\n  (function (p3) {\n    return function (p4) {};\n  });\n}\nif (!z) {\n  (function (p5) {});\n}",
+  "carry": {
+   "libraries": [
+    null,
+    null,
+    null,
+    null,
+    "tinylib"
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 12,
+    "end": 28
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 43,
+    "end": 59
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 76,
+    "end": 124
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 103,
+    "end": 119
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 142,
+    "end": 158
+   }
+  ],
+  "resolved": [
+   {
+    "start": 142,
+    "end": 158,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 2,
+    "end": 16,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 17,
+    "end": 31,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 35,
+    "end": 70,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 55,
+    "end": 69,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 95,
+    "end": 109,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "two-banners": {
+  "raw": "var app=function(a){return a};/*! alpha v1.0.0 */var al=function(b){return function(c){return b+c}};/*! beta v2.0.0 */var be=(d)=>d*2;console.log(app,al,be);",
+  "regions": [
+   {
+    "library": "alpha",
+    "start": 30,
+    "end": 100
+   },
+   {
+    "library": "beta",
+    "start": 100,
+    "end": null
+   }
+  ],
+  "beautified": "var app = function (a) {\n  return a;\n};\nvar al = function (b) {\n  return function (c) {\n    return b + c;\n  };\n};\nvar be = d => d * 2;\nconsole.log(app, al, be);",
+  "carry": {
+   "libraries": [
+    null,
+    "alpha",
+    "alpha",
+    "beta"
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression",
+    "ArrowFunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 10,
+    "end": 38
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 49,
+    "end": 112
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 73,
+    "end": 109
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 123,
+    "end": 133
+   }
+  ],
+  "resolved": [
+   {
+    "start": 49,
+    "end": 112,
+    "library": "alpha"
+   },
+   {
+    "start": 73,
+    "end": 109,
+    "library": "alpha"
+   },
+   {
+    "start": 123,
+    "end": 133,
+    "library": "beta"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 8,
+    "end": 29,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 56,
+    "end": 99,
+    "library": "alpha"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 75,
+    "end": 98,
+    "library": "alpha"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 125,
+    "end": 133,
+    "library": "beta"
+   }
+  ]
+ },
+ "methods-and-classes": {
+  "raw": "var o={m(a){return a},get g(){return 1},set s(v){},[function(k){return k}()]:1,\"q\":function(w){}};/*! tinylib v1.2.3 */class C{constructor(x){}#p(y){}static st(z){}get gg(){return 2}f=(u)=>u;static{(function(sb){})()}}var o2={n(){}};",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 98,
+    "end": null
+   }
+  ],
+  "beautified": "var o = {\n  m(a) {\n    return a;\n  },\n  get g() {\n    return 1;\n  },\n  set s(v) {},\n  [function (k) {\n    return k;\n  }()]: 1,\n  \"q\": function (w) {}\n};\nclass C {\n  constructor(x) {}\n  #p(y) {}\n  static st(z) {}\n  get gg() {\n    return 2;\n  }\n  f = u => u;\n  static {\n    (function (sb) {})();\n  }\n}\nvar o2 = {\n  n() {}\n};",
+  "carry": {
+   "libraries": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "ObjectMethod",
+    "ObjectMethod",
+    "ObjectMethod",
+    "FunctionExpression",
+    "FunctionExpression",
+    "ClassMethod",
+    "ClassPrivateMethod",
+    "ClassMethod",
+    "ClassMethod",
+    "ArrowFunctionExpression",
+    "FunctionExpression",
+    "ObjectMethod"
+   ]
+  },
+  "walk": [
+   {
+    "type": "ObjectMethod",
+    "start": 12,
+    "end": 36
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 40,
+    "end": 67
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 71,
+    "end": 82
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 87,
+    "end": 119
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 134,
+    "end": 149
+   },
+   {
+    "type": "ClassMethod",
+    "start": 165,
+    "end": 182
+   },
+   {
+    "type": "ClassPrivateMethod",
+    "start": 185,
+    "end": 193
+   },
+   {
+    "type": "ClassMethod",
+    "start": 196,
+    "end": 211
+   },
+   {
+    "type": "ClassMethod",
+    "start": 214,
+    "end": 242
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 249,
+    "end": 255
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 273,
+    "end": 289
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 313,
+    "end": 319
+   }
+  ],
+  "resolved": [
+   {
+    "start": 165,
+    "end": 182,
+    "library": "tinylib"
+   },
+   {
+    "start": 185,
+    "end": 193,
+    "library": "tinylib"
+   },
+   {
+    "start": 196,
+    "end": 211,
+    "library": "tinylib"
+   },
+   {
+    "start": 214,
+    "end": 242,
+    "library": "tinylib"
+   },
+   {
+    "start": 249,
+    "end": 255,
+    "library": "tinylib"
+   },
+   {
+    "start": 273,
+    "end": 289,
+    "library": "tinylib"
+   },
+   {
+    "start": 313,
+    "end": 319,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "ObjectMethod",
+    "start": 7,
+    "end": 21,
+    "library": null
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 22,
+    "end": 39,
+    "library": null
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 40,
+    "end": 50,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 52,
+    "end": 73,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 83,
+    "end": 96,
+    "library": null
+   },
+   {
+    "type": "ClassMethod",
+    "start": 127,
+    "end": 143,
+    "library": "tinylib"
+   },
+   {
+    "type": "ClassPrivateMethod",
+    "start": 143,
+    "end": 150,
+    "library": "tinylib"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 150,
+    "end": 164,
+    "library": "tinylib"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 164,
+    "end": 182,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 184,
+    "end": 190,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 199,
+    "end": 213,
+    "library": "tinylib"
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 226,
+    "end": 231,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "esm-exports": {
+  "raw": "export default function(ed){return ed};/*! tinylib v1.2.3 */export const ex=(e1)=>e1;export function ef(e2){return function(e3){}};export{ex as ey};",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 39,
+    "end": null
+   }
+  ],
+  "beautified": "export default function (ed) {\n  return ed;\n}\n;\nexport const ex = e1 => e1;\nexport function ef(e2) {\n  return function (e3) {};\n}\n;\nexport { ex as ey };",
+  "carry": {
+   "libraries": [
+    null,
+    "tinylib",
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "FunctionDeclaration",
+    "ArrowFunctionExpression",
+    "FunctionDeclaration",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 15,
+    "end": 45
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 66,
+    "end": 74
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 83,
+    "end": 129
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 110,
+    "end": 126
+   }
+  ],
+  "resolved": [
+   {
+    "start": 66,
+    "end": 74,
+    "library": "tinylib"
+   },
+   {
+    "start": 83,
+    "end": 129,
+    "library": "tinylib"
+   },
+   {
+    "start": 110,
+    "end": 126,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 15,
+    "end": 38,
+    "library": null
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 76,
+    "end": 84,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 92,
+    "end": 130,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 115,
+    "end": 129,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "nesting-and-params": {
+  "raw": "function outer(a=function(d1){},{b}={b:()=>1}){return[1,2].map(function(e){return e})}/*! tinylib v1.2.3 */async function*g(){yield async()=>{}};new F(function(n1){});tag`${()=>2}`;label:do{(function(l1){})()}while(0);for(const f of[()=>1]){}",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 86,
+    "end": null
+   }
+  ],
+  "beautified": "function outer(a = function (d1) {}, {\n  b\n} = {\n  b: () => 1\n}) {\n  return [1, 2].map(function (e) {\n    return e;\n  });\n}\nasync function* g() {\n  yield async () => {};\n}\n;\nnew F(function (n1) {});\ntag`${() => 2}`;\nlabel: do {\n  (function (l1) {})();\n} while (0);\nfor (const f of [() => 1]) {}",
+  "carry": {
+   "libraries": [
+    null,
+    null,
+    null,
+    null,
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "FunctionExpression",
+    "FunctionDeclaration",
+    "ArrowFunctionExpression",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "FunctionExpression",
+    "ArrowFunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 0,
+    "end": 123
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 19,
+    "end": 35
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 54,
+    "end": 61
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 87,
+    "end": 119
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 124,
+    "end": 171
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 154,
+    "end": 168
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 180,
+    "end": 196
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 205,
+    "end": 212
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 231,
+    "end": 247
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 282,
+    "end": 289
+   }
+  ],
+  "resolved": [
+   {
+    "start": 124,
+    "end": 171,
+    "library": "tinylib"
+   },
+   {
+    "start": 154,
+    "end": 168,
+    "library": "tinylib"
+   },
+   {
+    "start": 180,
+    "end": 196,
+    "library": "tinylib"
+   },
+   {
+    "start": 205,
+    "end": 212,
+    "library": "tinylib"
+   },
+   {
+    "start": 231,
+    "end": 247,
+    "library": "tinylib"
+   },
+   {
+    "start": 282,
+    "end": 289,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 0,
+    "end": 86,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 17,
+    "end": 31,
+    "library": null
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 39,
+    "end": 44,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 63,
+    "end": 84,
+    "library": null
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 107,
+    "end": 144,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 132,
+    "end": 143,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 151,
+    "end": 165,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 173,
+    "end": 178,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 191,
+    "end": 205,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 233,
+    "end": 238,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "non-ascii": {
+  "raw": "var s=\"é漢字😀\";var app=function(a){return s+a};/*! tinylib v1.2.3 */var lib=function(z){return \"ü\"+z};",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 53,
+    "end": null
+   }
+  ],
+  "beautified": "var s = \"é漢字😀\";\nvar app = function (a) {\n  return s + a;\n};\nvar lib = function (z) {\n  return \"ü\" + z;\n};",
+  "carry": {
+   "libraries": [
+    null,
+    "tinylib"
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 34,
+    "end": 66
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 78,
+    "end": 113
+   }
+  ],
+  "resolved": [
+   {
+    "start": 78,
+    "end": 113,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 29,
+    "end": 52,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 82,
+    "end": 108,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "regime:library-eval.js": {
+  "raw": "var t=\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";console.log(t);var a=function(n){return n+1};/*! tinylib v1.2.3 */var b=function(z){var k=1;return eval(\"z+k\")};var c=function(y){var w=y*2;return w};console.log(a,b,c);",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 1154,
+    "end": null
+   }
+  ],
+  "beautified": "var t = \"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nconsole.log(t);\nvar a = function (n) {\n  return n + 1;\n};\nvar b = function (z) {\n  var k = 1;\n  return eval(\"z+k\");\n};\nvar c = function (y) {\n  var w = y * 2;\n  return w;\n};\nconsole.log(a, b, c);",
+  "carry": {
+   "libraries": [
+    null,
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 1136,
+    "end": 1168
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1178,
+    "end": 1229
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1239,
+    "end": 1284
+   }
+  ],
+  "resolved": [
+   {
+    "start": 1178,
+    "end": 1229,
+    "library": "tinylib"
+   },
+   {
+    "start": 1239,
+    "end": 1284,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 1130,
+    "end": 1153,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1181,
+    "end": 1220,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1227,
+    "end": 1258,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "regime:library-freeze.js": {
+  "raw": "// padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. padding line for the header scan window. \nvar appCounter = 5;\nconsole.log(appCounter);\n/*! tinylib v1.2.3 */\nvar x1 = (r1) => {\n  var e1 = 111;\n  return e1 + r1;\n};\nvar x2 = (r2) => {\n  var e2 = 222;\n  return e2 + r2;\n};\nvar x3 = (r3) => {\n  var e3 = 333;\n  return e3 + r3;\n};\nconsole.log(x1, x2, x3);\n",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 1279,
+    "end": null
+   }
+  ],
+  "beautified": "var appCounter = 5;\nconsole.log(appCounter);\nvar x1 = r1 => {\n  var e1 = 111;\n  return e1 + r1;\n};\nvar x2 = r2 => {\n  var e2 = 222;\n  return e2 + r2;\n};\nvar x3 = r3 => {\n  var e3 = 333;\n  return e3 + r3;\n};\nconsole.log(x1, x2, x3);",
+  "carry": {
+   "libraries": [
+    "tinylib",
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "ArrowFunctionExpression",
+    "ArrowFunctionExpression",
+    "ArrowFunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 54,
+    "end": 97
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 108,
+    "end": 151
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 162,
+    "end": 205
+   }
+  ],
+  "resolved": [
+   {
+    "start": 54,
+    "end": 97,
+    "library": "tinylib"
+   },
+   {
+    "start": 108,
+    "end": 151,
+    "library": "tinylib"
+   },
+   {
+    "start": 162,
+    "end": 205,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1310,
+    "end": 1355,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1366,
+    "end": 1411,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1422,
+    "end": 1467,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "regime:library-min.js": {
+  "raw": "var t=\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";console.log(t);var a0=0;var a1=1;var a2=2;var a3=3;var a4=4;var a5=5;var a6=6;var a7=7;var a8=8;var a9=9;var a10=10;var a11=11;var a12=12;var a13=13;var a14=14;var a15=15;var a16=16;var a17=17;var a18=18;var a19=19;/*! tinylib v1.2.3 */var x1=r1=>{var e1=111;return e1+r1};var x2=r2=>{var e2=222;return e2+r2};var x3=r3=>{var e3=333;return e3+r3};console.log(x1,x2,x3);\n",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 1324,
+    "end": null
+   }
+  ],
+  "beautified": "var t = \"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nconsole.log(t);\nvar a0 = 0;\nvar a1 = 1;\nvar a2 = 2;\nvar a3 = 3;\nvar a4 = 4;\nvar a5 = 5;\nvar a6 = 6;\nvar a7 = 7;\nvar a8 = 8;\nvar a9 = 9;\nvar a10 = 10;\nvar a11 = 11;\nvar a12 = 12;\nvar a13 = 13;\nvar a14 = 14;\nvar a15 = 15;\nvar a16 = 16;\nvar a17 = 17;\nvar a18 = 18;\nvar a19 = 19;\nvar x1 = r1 => {\n  var e1 = 111;\n  return e1 + r1;\n};\nvar x2 = r2 => {\n  var e2 = 222;\n  return e2 + r2;\n};\nvar x3 = r3 => {\n  var e3 = 333;\n  return e3 + r3;\n};\nconsole.log(x1, x2, x3);",
+  "carry": {
+   "libraries": [
+    "tinylib",
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "ArrowFunctionExpression",
+    "ArrowFunctionExpression",
+    "ArrowFunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1397,
+    "end": 1440
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1451,
+    "end": 1494
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1505,
+    "end": 1548
+   }
+  ],
+  "resolved": [
+   {
+    "start": 1397,
+    "end": 1440,
+    "library": "tinylib"
+   },
+   {
+    "start": 1451,
+    "end": 1494,
+    "library": "tinylib"
+   },
+   {
+    "start": 1505,
+    "end": 1548,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1352,
+    "end": 1381,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1389,
+    "end": 1418,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1426,
+    "end": 1455,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "regime:library-misclass.js": {
+  "raw": "var t=\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";console.log(t);var a0=0;var a1=1;var a2=2;var a3=3;var a4=4;var a5=5;var a6=6;var a7=7;var a8=8;var a9=9;var a10=10;var a11=11;var a12=12;var a13=13;var a14=14;var a15=15;var a16=16;var a17=17;var a18=18;var a19=19;var appFn=function(n){return n+1};console.log(appFn(2));/*! tinylib v1.2.3 */var libFn=function(z){return z*2};console.log(libFn(3));\n",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 1380,
+    "end": null
+   }
+  ],
+  "beautified": "var t = \"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nconsole.log(t);\nvar a0 = 0;\nvar a1 = 1;\nvar a2 = 2;\nvar a3 = 3;\nvar a4 = 4;\nvar a5 = 5;\nvar a6 = 6;\nvar a7 = 7;\nvar a8 = 8;\nvar a9 = 9;\nvar a10 = 10;\nvar a11 = 11;\nvar a12 = 12;\nvar a13 = 13;\nvar a14 = 14;\nvar a15 = 15;\nvar a16 = 16;\nvar a17 = 17;\nvar a18 = 18;\nvar a19 = 19;\nvar appFn = function (n) {\n  return n + 1;\n};\nconsole.log(appFn(2));\nvar libFn = function (z) {\n  return z * 2;\n};\nconsole.log(libFn(3));",
+  "carry": {
+   "libraries": [
+    null,
+    "tinylib"
+   ],
+   "types": [
+    "FunctionExpression",
+    "FunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionExpression",
+    "start": 1400,
+    "end": 1432
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1469,
+    "end": 1501
+   }
+  ],
+  "resolved": [
+   {
+    "start": 1469,
+    "end": 1501,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionExpression",
+    "start": 1334,
+    "end": 1357,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1411,
+    "end": 1434,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "regime:rollup-esm2.js": {
+  "raw": "const bannerText=\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";console.log(bannerText);function a(n){return n+1}/*! tinylib v1.2.3 */export default function(z){return z*2}export const computeValue=(y)=>a(y)+1;export function makeAdder(w){return function(v){return v+w}}const helpers={m(q){return q}};export{helpers};",
+  "regions": [
+   {
+    "library": "tinylib",
+    "start": 1169,
+    "end": null
+   }
+  ],
+  "beautified": "const bannerText = \"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nconsole.log(bannerText);\nfunction a(n) {\n  return n + 1;\n}\nexport default function (z) {\n  return z * 2;\n}\nexport const computeValue = y => a(y) + 1;\nexport function makeAdder(w) {\n  return function (v) {\n    return v + w;\n  };\n}\nconst helpers = {\n  m(q) {\n    return q;\n  }\n};\nexport { helpers };",
+  "carry": {
+   "libraries": [
+    null,
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib",
+    "tinylib"
+   ],
+   "types": [
+    "FunctionDeclaration",
+    "FunctionDeclaration",
+    "ArrowFunctionExpression",
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "ObjectMethod"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 1148,
+    "end": 1181
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1197,
+    "end": 1229
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1258,
+    "end": 1271
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1280,
+    "end": 1352
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1313,
+    "end": 1349
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 1373,
+    "end": 1397
+   }
+  ],
+  "resolved": [
+   {
+    "start": 1197,
+    "end": 1229,
+    "library": "tinylib"
+   },
+   {
+    "start": 1258,
+    "end": 1271,
+    "library": "tinylib"
+   },
+   {
+    "start": 1280,
+    "end": 1352,
+    "library": "tinylib"
+   },
+   {
+    "start": 1313,
+    "end": 1349,
+    "library": "tinylib"
+   },
+   {
+    "start": 1373,
+    "end": 1397,
+    "library": "tinylib"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 1144,
+    "end": 1169,
+    "library": null
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1205,
+    "end": 1228,
+    "library": "tinylib"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1254,
+    "end": 1265,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1273,
+    "end": 1326,
+    "library": "tinylib"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1302,
+    "end": 1325,
+    "library": "tinylib"
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 1341,
+    "end": 1355,
+    "library": "tinylib"
+   }
+  ]
+ },
+ "regime:rollup-min-v1.js": {
+  "raw": "var banner_text=\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";var cfg={debug:false,retries:3};function a1(t){return t.trim().toLowerCase()}var a2=function(e,n){return e.map(function(r){return r*n})};const a3=(o)=>Object.keys(o).length;var a4=function(s){return a1(s)+cfg.retries};/*! lodash-lite v4.1.0 */function c1(r,s){var o=[];for(var i=0;i<r.length;i+=s){o.push(r.slice(i,i+s))}return o}var c2=function(r){return r.filter(function(v){return !!v})};var c3={k:function(o){return Object.keys(o)},v(o){return Object.values(o)}};/*! @scope/tiny-emitter v2.0.1 */class E1{constructor(){this.h={}}on(e,f){(this.h[e]=this.h[e]||[]).push(f);return this}emit(e,...a){(this.h[e]||[]).forEach(function(f){f.apply(null,a)})}}const e2=()=>new E1();/*! date-fmt v0.3.0 */function p1(n){return n<10?\"0\"+n:\"\"+n}const p2=d=>p1(d.getHours())+\":\"+p1(d.getMinutes());const p3=d=>p2(d)+\":\"+p1(d.getSeconds());console.log(banner_text.length,cfg,a1,a2,a3,a4,c1,c2,c3,e2,p2,p3);",
+  "regions": [
+   {
+    "library": "lodash-lite",
+    "start": 1337,
+    "end": 1586
+   },
+   {
+    "library": "scope/tiny-emitter",
+    "start": 1586,
+    "end": 1796
+   },
+   {
+    "library": "date-fmt",
+    "start": 1796,
+    "end": null
+   }
+  ],
+  "beautified": "var banner_text = \"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nvar cfg = {\n  debug: false,\n  retries: 3\n};\nfunction a1(t) {\n  return t.trim().toLowerCase();\n}\nvar a2 = function (e, n) {\n  return e.map(function (r) {\n    return r * n;\n  });\n};\nconst a3 = o => Object.keys(o).length;\nvar a4 = function (s) {\n  return a1(s) + cfg.retries;\n};\nfunction c1(r, s) {\n  var o = [];\n  for (var i = 0; i < r.length; i += s) {\n    o.push(r.slice(i, i + s));\n  }\n  return o;\n}\nvar c2 = function (r) {\n  return r.filter(function (v) {\n    return !!v;\n  });\n};\nvar c3 = {\n  k: function (o) {\n    return Object.keys(o);\n  },\n  v(o) {\n    return Object.values(o);\n  }\n};\nclass E1 {\n  constructor() {\n    this.h = {};\n  }\n  on(e, f) {\n    (this.h[e] = this.h[e] || []).push(f);\n    return this;\n  }\n  emit(e, ...a) {\n    (this.h[e] || []).forEach(function (f) {\n      f.apply(null, a);\n    });\n  }\n}\nconst e2 = () => new E1();\nfunction p1(n) {\n  if (n < 10) {\n    return \"0\" + n;\n  } else {\n    return \"\" + n;\n  }\n}\nconst p2 = d => p1(d.getHours()) + \":\" + p1(d.getMinutes());\nconst p3 = d => p2(d) + \":\" + p1(d.getSeconds());\nconsole.log(banner_text.length, cfg, a1, a2, a3, a4, c1, c2, c3, e2, p2, p3);",
+  "carry": {
+   "libraries": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    "lodash-lite",
+    "lodash-lite",
+    "lodash-lite",
+    "lodash-lite",
+    "lodash-lite",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "date-fmt",
+    "date-fmt",
+    "date-fmt"
+   ],
+   "types": [
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "FunctionExpression",
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression",
+    "ObjectMethod",
+    "ClassMethod",
+    "ClassMethod",
+    "ClassMethod",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "FunctionDeclaration",
+    "ArrowFunctionExpression",
+    "ArrowFunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 1166,
+    "end": 1217
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1227,
+    "end": 1300
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1260,
+    "end": 1296
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1313,
+    "end": 1339
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1350,
+    "end": 1396
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1398,
+    "end": 1522
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1532,
+    "end": 1603
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1565,
+    "end": 1599
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1621,
+    "end": 1666
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 1670,
+    "end": 1709
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1726,
+    "end": 1762
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1765,
+    "end": 1839
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1842,
+    "end": 1938
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1888,
+    "end": 1932
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1952,
+    "end": 1966
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1968,
+    "end": 2056
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 2068,
+    "end": 2116
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 2129,
+    "end": 2166
+   }
+  ],
+  "resolved": [
+   {
+    "start": 1398,
+    "end": 1522,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1532,
+    "end": 1603,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1565,
+    "end": 1599,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1621,
+    "end": 1666,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1670,
+    "end": 1709,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1726,
+    "end": 1762,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1765,
+    "end": 1839,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1842,
+    "end": 1938,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1888,
+    "end": 1932,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1952,
+    "end": 1966,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1968,
+    "end": 2056,
+    "library": "date-fmt"
+   },
+   {
+    "start": 2068,
+    "end": 2116,
+    "library": "date-fmt"
+   },
+   {
+    "start": 2129,
+    "end": 2166,
+    "library": "date-fmt"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 1151,
+    "end": 1196,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1203,
+    "end": 1255,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1230,
+    "end": 1253,
+    "library": null
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1265,
+    "end": 1291,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1299,
+    "end": 1336,
+    "library": null
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1362,
+    "end": 1449,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1456,
+    "end": 1509,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1484,
+    "end": 1507,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1520,
+    "end": 1554,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 1555,
+    "end": 1584,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1628,
+    "end": 1652,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1652,
+    "end": 1706,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1706,
+    "end": 1773,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1743,
+    "end": 1771,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1783,
+    "end": 1795,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1818,
+    "end": 1856,
+    "library": "date-fmt"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1865,
+    "end": 1907,
+    "library": "date-fmt"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1917,
+    "end": 1948,
+    "library": "date-fmt"
+   }
+  ]
+ },
+ "regime:rollup-pretty-v1.js": {
+  "raw": "// app entry (scope-hoisted bundle)\nvar banner_text=\"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nvar cfg={debug:false,retries:3};\nfunction a1(t){return t.trim().toLowerCase()}\nvar a2=function(e,n){return e.map(function(r){return r*n})};\nconst a3=(o)=>Object.keys(o).length;\nvar a4=function(s){return a1(s)+cfg.retries};\n\n/*! lodash-lite v4.1.0 */\n// ---- vendored module ----\nfunction c1(r,s){var o=[];for(var i=0;i<r.length;i+=s){o.push(r.slice(i,i+s))}return o}\nvar c2=function(r){return r.filter(function(v){return !!v})};\nvar c3={k:function(o){return Object.keys(o)},v(o){return Object.values(o)}};\n\n/*! @scope/tiny-emitter v2.0.1 */\n// ---- vendored module ----\nclass E1{constructor(){this.h={}}on(e,f){(this.h[e]=this.h[e]||[]).push(f);return this}emit(e,...a){(this.h[e]||[]).forEach(function(f){f.apply(null,a)})}}\nconst e2=()=>new E1();\n\n/*! date-fmt v0.3.0 */\n// ---- vendored module ----\nfunction p1(n){return n<10?\"0\"+n:\"\"+n}\nconst p2=d=>p1(d.getHours())+\":\"+p1(d.getMinutes());\nconst p3=d=>p2(d)+\":\"+p1(d.getSeconds());\nconsole.log(banner_text.length,cfg,a1,a2,a3,a4,c1,c2,c3,e2,p2,p3);\n",
+  "regions": [
+   {
+    "library": "lodash-lite",
+    "start": 1380,
+    "end": 1663
+   },
+   {
+    "library": "scope/tiny-emitter",
+    "start": 1663,
+    "end": 1906
+   },
+   {
+    "library": "date-fmt",
+    "start": 1906,
+    "end": null
+   }
+  ],
+  "beautified": "var banner_text = \"qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq\";\nvar cfg = {\n  debug: false,\n  retries: 3\n};\nfunction a1(t) {\n  return t.trim().toLowerCase();\n}\nvar a2 = function (e, n) {\n  return e.map(function (r) {\n    return r * n;\n  });\n};\nconst a3 = o => Object.keys(o).length;\nvar a4 = function (s) {\n  return a1(s) + cfg.retries;\n};\nfunction c1(r, s) {\n  var o = [];\n  for (var i = 0; i < r.length; i += s) {\n    o.push(r.slice(i, i + s));\n  }\n  return o;\n}\nvar c2 = function (r) {\n  return r.filter(function (v) {\n    return !!v;\n  });\n};\nvar c3 = {\n  k: function (o) {\n    return Object.keys(o);\n  },\n  v(o) {\n    return Object.values(o);\n  }\n};\nclass E1 {\n  constructor() {\n    this.h = {};\n  }\n  on(e, f) {\n    (this.h[e] = this.h[e] || []).push(f);\n    return this;\n  }\n  emit(e, ...a) {\n    (this.h[e] || []).forEach(function (f) {\n      f.apply(null, a);\n    });\n  }\n}\nconst e2 = () => new E1();\nfunction p1(n) {\n  if (n < 10) {\n    return \"0\" + n;\n  } else {\n    return \"\" + n;\n  }\n}\nconst p2 = d => p1(d.getHours()) + \":\" + p1(d.getMinutes());\nconst p3 = d => p2(d) + \":\" + p1(d.getSeconds());\nconsole.log(banner_text.length, cfg, a1, a2, a3, a4, c1, c2, c3, e2, p2, p3);",
+  "carry": {
+   "libraries": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    "lodash-lite",
+    "lodash-lite",
+    "lodash-lite",
+    "lodash-lite",
+    "lodash-lite",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "scope/tiny-emitter",
+    "date-fmt",
+    "date-fmt",
+    "date-fmt"
+   ],
+   "types": [
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "FunctionExpression",
+    "FunctionDeclaration",
+    "FunctionExpression",
+    "FunctionExpression",
+    "FunctionExpression",
+    "ObjectMethod",
+    "ClassMethod",
+    "ClassMethod",
+    "ClassMethod",
+    "FunctionExpression",
+    "ArrowFunctionExpression",
+    "FunctionDeclaration",
+    "ArrowFunctionExpression",
+    "ArrowFunctionExpression"
+   ]
+  },
+  "walk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 1166,
+    "end": 1217
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1227,
+    "end": 1300
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1260,
+    "end": 1296
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1313,
+    "end": 1339
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1350,
+    "end": 1396
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1398,
+    "end": 1522
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1532,
+    "end": 1603
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1565,
+    "end": 1599
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1621,
+    "end": 1666
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 1670,
+    "end": 1709
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1726,
+    "end": 1762
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1765,
+    "end": 1839
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1842,
+    "end": 1938
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1888,
+    "end": 1932
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1952,
+    "end": 1966
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1968,
+    "end": 2056
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 2068,
+    "end": 2116
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 2129,
+    "end": 2166
+   }
+  ],
+  "resolved": [
+   {
+    "start": 1398,
+    "end": 1522,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1532,
+    "end": 1603,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1565,
+    "end": 1599,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1621,
+    "end": 1666,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1670,
+    "end": 1709,
+    "library": "lodash-lite"
+   },
+   {
+    "start": 1726,
+    "end": 1762,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1765,
+    "end": 1839,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1842,
+    "end": 1938,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1888,
+    "end": 1932,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1952,
+    "end": 1966,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "start": 1968,
+    "end": 2056,
+    "library": "date-fmt"
+   },
+   {
+    "start": 2068,
+    "end": 2116,
+    "library": "date-fmt"
+   },
+   {
+    "start": 2129,
+    "end": 2166,
+    "library": "date-fmt"
+   }
+  ],
+  "rawWalk": [
+   {
+    "type": "FunctionDeclaration",
+    "start": 1189,
+    "end": 1234,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1242,
+    "end": 1294,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1269,
+    "end": 1292,
+    "library": null
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1305,
+    "end": 1331,
+    "library": null
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1340,
+    "end": 1377,
+    "library": null
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1435,
+    "end": 1522,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1530,
+    "end": 1583,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1558,
+    "end": 1581,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1595,
+    "end": 1629,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "ObjectMethod",
+    "start": 1630,
+    "end": 1659,
+    "library": "lodash-lite"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1735,
+    "end": 1759,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1759,
+    "end": 1813,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "ClassMethod",
+    "start": 1813,
+    "end": 1880,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "FunctionExpression",
+    "start": 1850,
+    "end": 1878,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 1891,
+    "end": 1903,
+    "library": "scope/tiny-emitter"
+   },
+   {
+    "type": "FunctionDeclaration",
+    "start": 1958,
+    "end": 1996,
+    "library": "date-fmt"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 2006,
+    "end": 2048,
+    "library": "date-fmt"
+   },
+   {
+    "type": "ArrowFunctionExpression",
+    "start": 2059,
+    "end": 2090,
+    "library": "date-fmt"
+   }
+  ]
+ }
+}

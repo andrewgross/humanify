@@ -19,6 +19,7 @@ use serde_json::{Value, json};
 use super::library::RecordedName;
 use super::{NamingConfig, NamingHooks, NamingInput, NamingOutcome, run_naming};
 use crate::babel_view::BabelLines;
+use crate::libdetect::function_carry::{LibraryClassification, regions_json};
 use crate::naming::passes::sweep::SweepDispatch;
 use crate::naming::report::diagnostics::{
     AnchorTexts, DiagnosticsInputs, build_diagnostics_report,
@@ -33,8 +34,10 @@ pub struct DumpRun {
     pub fresh: String,
     pub prior: Option<String>,
     pub minified: Option<String>,
-    /// regions.json's comment regions (byte spans of the minified text).
-    pub regions: Vec<(String, i64, i64)>,
+    /// The library freeze the TS applied (regions.json `libraryFunctions`,
+    /// the classification the Rust consumes while the text is
+    /// TS-beautified).
+    pub library: Option<LibraryClassification>,
 }
 
 /// Read `meta.json`, the texts and `regions.json` (prior absent = a
@@ -45,31 +48,12 @@ pub fn read_dump_run(dir: &Path) -> Result<DumpRun, String> {
     let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
     let text = |name: &str| fs::read_to_string(dir.join("text").join(name)).ok();
     let fresh = text("fresh.js").ok_or("text/fresh.js missing")?;
-    let regions = fs::read_to_string(dir.join("regions.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .map(|v| {
-            v["commentRegions"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default()
-                .iter()
-                .map(|r| {
-                    (
-                        r["libraryName"].as_str().unwrap_or_default().to_string(),
-                        r["span"]["start"].as_i64().unwrap_or(-1),
-                        r["span"]["end"].as_i64().unwrap_or(-1),
-                    )
-                })
-                .collect()
-        })
-        .unwrap_or_default();
     Ok(DumpRun {
         prior: text("prior.js"),
         minified: text("minified.js"),
         fresh,
         meta,
-        regions,
+        library: LibraryClassification::from_dump_dir(dir)?,
     })
 }
 
@@ -101,15 +85,33 @@ pub fn run_dump<P: NameProvider>(
     let run = read_dump_run(dir)?;
     let config = naming_config_of(&run.meta);
     let client = provider(config.params.clone());
-    // regions.json is read but not classified: the library stage's
-    // classification is not ported yet (the driver's LibraryHook).
     let input = NamingInput {
         fresh: &run.fresh,
         prior: run.prior.as_deref(),
-        library: None,
+        library: run.library.as_ref(),
     };
     let outcome = run_naming(&input, &config, hooks, &client)?;
     Ok((run, outcome))
+}
+
+/// The comment regions library detection (stage 4, run only under
+/// `skipLibraries`) hands the naming stage for a single-file input: the
+/// default detector's layer 3 — none when the detector selected for the
+/// text's unpack adapter is Bun's (it never yields mixed files) or the
+/// header layer already made the whole file a library.
+fn mixed_file_regions(minified: &str) -> Vec<crate::libdetect::CommentRegion> {
+    use crate::libdetect::{LibraryDetector, find_comment_regions, select_library_detector};
+    let adapter = crate::unpack::select_adapter(&crate::detect::detect_bundle(minified), None);
+    if select_library_detector(adapter.name()) != LibraryDetector::Default {
+        return Vec::new();
+    }
+    let regions = find_comment_regions(minified);
+    let header = crate::detect::js_text::js_prefix(minified, 1024);
+    if find_comment_regions(header).is_empty() {
+        regions
+    } else {
+        Vec::new()
+    }
 }
 
 /// What the `naming` verb reports.
@@ -183,6 +185,23 @@ pub fn dump_naming<P: NameProvider>(
         &json!({"schemaVersion": 1, "names": names}).to_string(),
     )?;
     write("stats.json", &out.eval_stats().to_file_text())?;
+    // regions.json: the Rust's own banner regions over the minified text
+    // and the library freeze as the naming stage applied it (the Rust
+    // records no Bun banner classification).
+    let comment_regions = run
+        .minified
+        .as_deref()
+        .filter(|_| naming_config_of(&run.meta).skip_libraries)
+        .map(mixed_file_regions)
+        .unwrap_or_default();
+    write(
+        "regions.json",
+        &humanify_model::js::stringify(&regions_json(
+            &comment_regions,
+            &out.library_functions,
+            Vec::new(),
+        )),
+    )?;
     write(
         "outcome.json",
         &json!({"outputValid": out.output_valid}).to_string(),

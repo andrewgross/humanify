@@ -94,6 +94,9 @@ pub struct CommandOptions {
     pub beautified_input: Option<String>,
     /// Rust-only (surface::RUST_ONLY_OPTIONS): the blessed hash-byte injection.
     pub inject_ts_hashes: Option<String>,
+    /// Rust-only (surface::RUST_ONLY_OPTIONS): the TS's library
+    /// classification (crate::library_freeze).
+    pub ts_library_functions: Option<String>,
 }
 
 impl CommandOptions {
@@ -137,6 +140,7 @@ impl CommandOptions {
             dump_artifacts: s("dumpArtifacts"),
             beautified_input: s("beautifiedInput"),
             inject_ts_hashes: s("injectTsHashes"),
+            ts_library_functions: s("tsLibraryFunctions"),
         }
     }
 
@@ -536,10 +540,11 @@ fn pipeline_body(
         profiler,
         renderer,
     )?;
-    let files_to_process = if settings.skip_libraries {
-        filter_libraries(unpacked.files, adapter, profiler, renderer)?.files_to_process
+    let (files_to_process, mixed_files) = if settings.skip_libraries {
+        let filtered = filter_libraries(unpacked.files, adapter, profiler, renderer)?;
+        (filtered.files_to_process, filtered.mixed_files)
     } else {
-        unpacked.files
+        (unpacked.files, Vec::new())
     };
 
     // Stages 6-9 per file.
@@ -549,6 +554,7 @@ fn pipeline_body(
         config: naming_config(settings, &config, opts, switches),
         prior: prior.as_deref(),
         provider,
+        mixed_files: &mixed_files,
     };
     let last = match naming.run(&files_to_process, &mut failures, renderer)? {
         Named::Last(last) => last.map(|b| *b),
@@ -660,6 +666,11 @@ struct NamingRun<'a> {
     config: NamingConfig,
     prior: Option<&'a str>,
     provider: &'a dyn NameProvider,
+    /// Stage 4's mixed files (their banner regions): the library freeze.
+    mixed_files: &'a [(
+        std::path::PathBuf,
+        humanify_core::libdetect::MixedFileDetection,
+    )],
 }
 
 impl NamingRun<'_> {
@@ -690,7 +701,12 @@ impl NamingRun<'_> {
                 )));
             }
             let formatted = read_utf8(formatted_path)?;
-            let outcome = self.name_one(&formatted, renderer)?;
+            let library = crate::library_freeze::library_classification(
+                self.opts.ts_library_functions.as_deref(),
+                &file.path,
+                self.mixed_files,
+            )?;
+            let outcome = self.name_one(&formatted, library.as_ref(), renderer)?;
             if !self.opts.split
                 && let Some(code) = &outcome.code
             {
@@ -707,13 +723,14 @@ impl NamingRun<'_> {
     fn name_one(
         &self,
         formatted: &str,
+        library: Option<&humanify_core::libdetect::function_carry::LibraryClassification>,
         renderer: &mut dyn ProgressRenderer,
     ) -> Result<NamingOutcome, Crash> {
         let outcome = run_naming(
             &NamingInput {
                 fresh: formatted,
                 prior: self.prior,
-                library: None,
+                library,
             },
             &self.config,
             &NamingHooks::default(),

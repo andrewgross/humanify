@@ -17,6 +17,8 @@
 //! code units. `CommentRegion` carries bytes; a writer that must reproduce
 //! the TS JSON converts with `js_text::utf16_offset`.
 
+pub mod function_carry;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -324,45 +326,6 @@ pub fn find_comment_regions(code: &str) -> Vec<CommentRegion> {
             end: starts.get(i + 1).copied(),
         })
         .collect()
-}
-
-/// `classifyFunctionsByRegion`: each function (key, start offset — None
-/// skips it) inside a region → that region's library name, in input order
-/// (a repeated key keeps its first position, last value — the TS Map).
-/// Regions are sorted by start; a function before every region, or at/after
-/// a bounded region's end, is app code.
-pub fn classify_functions_by_region<K: Clone + PartialEq>(
-    functions: impl IntoIterator<Item = (K, Option<usize>)>,
-    regions: &[CommentRegion],
-) -> Vec<(K, String)> {
-    let mut out: Vec<(K, String)> = Vec::new();
-    if regions.is_empty() {
-        return out;
-    }
-    for (key, start) in functions {
-        let Some(start) = start else { continue };
-        let Some(i) = find_region(regions, start) else {
-            continue;
-        };
-        let name = regions[i].library_name.clone();
-        match out.iter_mut().find(|(k, _)| *k == key) {
-            Some(slot) => slot.1 = name,
-            None => out.push((key, name)),
-        }
-    }
-    out
-}
-
-/// `findRegion`: the last region starting at or before `offset`, if
-/// `offset` is inside it.
-fn find_region(regions: &[CommentRegion], offset: usize) -> Option<usize> {
-    let i = regions
-        .partition_point(|r| r.start <= offset)
-        .checked_sub(1)?;
-    match regions[i].end {
-        Some(end) if offset >= end => None,
-        _ => Some(i),
-    }
 }
 
 // ---------------------------------------------------------------------------

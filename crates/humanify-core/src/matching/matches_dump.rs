@@ -360,6 +360,11 @@ pub fn dump_matches_opts(
 ) -> Result<usize, String> {
     let (meta, fresh, prior) = read_dump_texts(ts_dump_dir)?;
     let flags = &meta["flags"];
+    // The library freeze the TS applied (regions.json libraryFunctions):
+    // the twins read the settled states, a frozen owner abstains.
+    let library =
+        crate::libdetect::function_carry::LibraryClassification::from_dump_dir(ts_dump_dir)?;
+    let skip_libraries = flags["skipLibraries"].as_bool().unwrap_or(true);
     let input = crate::prior::PriorMatchInput {
         fresh: &fresh,
         prior: &prior,
@@ -367,7 +372,11 @@ pub fn dump_matches_opts(
         minifier: flags["minifier"].as_str(),
         visit_optional_calls,
     };
-    crate::prior::match_prior_version(input, |stage| write_matches_dump(stage, &meta, out_dir))
+    crate::prior::match_prior_version(input, |stage| {
+        let freeze =
+            crate::rename::transfer::library_freeze(stage, library.as_ref(), skip_libraries)?;
+        write_matches_dump(stage, &meta, &freeze, out_dir)
+    })
 }
 
 /// A TS dump's meta.json and its two texts (fresh, prior).
@@ -387,6 +396,7 @@ pub fn read_dump_texts(ts_dump_dir: &Path) -> Result<(Value, String, String), St
 fn write_matches_dump(
     stage: &crate::prior::MatchStage<'_, '_>,
     meta: &Value,
+    freeze: &crate::rename::transfer::PreFreeze,
     out_dir: &Path,
 ) -> Result<usize, String> {
     let function_result = stage.function_result;
@@ -434,7 +444,7 @@ fn write_matches_dump(
     // fn-var transfers and every freeze, posture close-out 2026-09-25) ──
     let prior_gate_side = stage.prior.gate_side();
     let fresh_gate_side = stage.fresh.gate_side();
-    let twin_output = crate::rename::transfer::statement_twins(stage)?;
+    let twin_output = crate::rename::transfer::statement_twins(stage, freeze)?;
 
     fs::write(
         out_dir.join("meta.json"),

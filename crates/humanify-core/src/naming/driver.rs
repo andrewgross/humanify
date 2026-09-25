@@ -94,8 +94,9 @@ pub struct NamingInput<'t> {
     pub fresh: &'t str,
     /// The prior version's humanified text.
     pub prior: Option<&'t str>,
-    /// The library stage's classification hook (None: no library stage).
-    pub library: Option<library::LibraryHook<'t>>,
+    /// The file's library classification (None: no banner regions) —
+    /// `libdetect::function_carry`, the one owner.
+    pub library: Option<&'t crate::libdetect::function_carry::LibraryClassification>,
 }
 
 /// Which post-generate pass a text override feeds.
@@ -162,6 +163,8 @@ pub struct NamingOutcome {
     pub reports: Vec<RenameReport>,
     pub processor: ProcessorReport,
     pub library_names: Vec<RecordedName>,
+    /// The library freeze as applied (regions.json `libraryFunctions`).
+    pub library_functions: Vec<crate::libdetect::function_carry::LibraryFunctionKey>,
     pub coverage: Option<CoverageSummary>,
     pub coverage_text: Option<String>,
     pub claims: crate::rename::validated::RenameClaimStats,
@@ -219,6 +222,7 @@ pub fn run_naming<P: NameProvider>(
         waves,
         processor,
         library,
+        library_functions,
         floor,
         pre_sweep,
         prior,
@@ -246,6 +250,7 @@ pub fn run_naming<P: NameProvider>(
         reports,
         processor,
         library_names: library.names.clone(),
+        library_functions,
         coverage: None,
         coverage_text: None,
         claims: Default::default(),

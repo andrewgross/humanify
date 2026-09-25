@@ -331,8 +331,9 @@ pub fn run_transfer_pipeline(
 /// outcome and the twins' gate output (the dump's `twin-gates.json`).
 pub fn apply_prior_version(
     stage: &crate::prior::MatchStage<'_, '_>,
+    freeze: &PreFreeze,
 ) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
-    stage::apply_prior_version(stage, &PreFreeze::default())
+    stage::apply_prior_version(stage, freeze)
 }
 
 /// The statement twins over the settled states alone — the SAME inputs
@@ -340,15 +341,9 @@ pub fn apply_prior_version(
 /// dump reads this rather than re-deriving the inputs).
 pub fn statement_twins(
     stage: &crate::prior::MatchStage<'_, '_>,
-) -> Result<crate::twins::gates::TwinGateOutput, String> {
-    stage::statement_twins(stage)
-}
-/// [`apply_prior_version`] with the naming driver's library freeze.
-pub fn apply_prior_version_with(
-    stage: &crate::prior::MatchStage<'_, '_>,
     freeze: &PreFreeze,
-) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
-    stage::apply_prior_version(stage, freeze)
+) -> Result<crate::twins::gates::TwinGateOutput, String> {
+    stage::statement_twins(stage, freeze)
 }
 
-pub use stage::{PreFreeze, pre_transfer_states};
+pub use stage::{PreFreeze, library_freeze, pre_transfer_states};
