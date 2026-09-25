@@ -12,7 +12,9 @@
 //! - a shorthand in an assignment pattern (`({ a } = y)`) is babel's
 //!   `ObjectProperty` with a KEY identifier and a VALUE identifier at the
 //!   same position; oxc's `AssignmentTargetPropertyIdentifier` has only the
-//!   value, so the key twin is synthesized here.
+//!   value, so the key twin is synthesized here;
+//! - `import.meta` / `new.target` are babel's `MetaProperty` of two
+//!   Identifiers; oxc's `ImportMeta` / `NewTarget` carry none.
 //!
 //! A position resolves as an occurrence only through the binding's own
 //! bookkeeping (declaration identifier, identifier reference paths,
@@ -23,7 +25,9 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
-use oxc_semantic::Semantic;
+use oxc_ast::ast::{BindingPattern, PropertyKey};
+use oxc_semantic::{AstNodes, NodeId, Semantic};
+use oxc_span::GetSpan;
 
 use super::hunks::PositionCandidate;
 use crate::babel_view::BabelLines;
@@ -32,93 +36,148 @@ use crate::rename::validated::scopes::{BScopeId, BindingId, SiteType};
 
 /// How a Babel `Identifier` node relates to scope bookkeeping.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum SiteKind {
+pub enum SiteKind {
     /// An oxc `IdentifierReference` — may be a reference or a write.
     Reference,
     /// An oxc `BindingIdentifier` — a declaration (or a redeclaring write).
     Binding,
-    /// Property keys, member properties, labels, private names, key twins.
+    /// Property keys, member properties, labels, private names, meta
+    /// property words, key twins.
     Other,
 }
 
-/// One Babel `Identifier` node.
+/// One Babel `Identifier` node — the ONE view of "which Identifier nodes
+/// would a TS `traverse(ast, { Identifier })` visit, and where"
+/// (docs/responsibility.md); the diff reconcile, the post-split text
+/// rewrite and the bundle carry all read it.
 #[derive(Clone, Copy, Debug)]
-struct IdentSite<'a> {
+pub struct IdentSite<'a> {
     /// Byte offset where babel's Identifier starts.
-    start: u32,
-    name: &'a str,
-    kind: SiteKind,
-    scope: BScopeId,
+    pub start: u32,
+    pub name: &'a str,
+    pub kind: SiteKind,
+    pub scope: BScopeId,
+    /// The oxc node (None for a synthesized key twin).
+    pub node: Option<NodeId>,
+}
+
+impl IdentSite<'_> {
+    /// `scope.getBinding` can make it an occurrence (a reference or binding
+    /// identifier); keys, member properties, labels, private names never.
+    pub fn resolvable(&self) -> bool {
+        self.kind != SiteKind::Other
+    }
 }
 
 /// Every Babel `Identifier` node of the program, in source order (babel's
 /// traversal order for identifiers; a twin pair keeps key-first order).
-fn identifier_sites<'a>(semantic: &'a Semantic<'_>, state: &RenameState) -> Vec<IdentSite<'a>> {
+/// Babel's `MetaProperty` holds two Identifiers (`import`/`meta`,
+/// `new`/`target`); oxc's `ImportMeta`/`NewTarget` hold none.
+pub fn identifier_sites<'a>(semantic: &'a Semantic<'_>, state: &RenameState) -> Vec<IdentSite<'a>> {
     let view = state.view();
     let mut out: Vec<(u8, IdentSite<'a>)> = Vec::new();
     for node in semantic.nodes().iter() {
-        let scope = || view.scope_of_node(node.id());
-        let (rank, site) = match node.kind() {
+        let id = node.id();
+        let site = |start: u32, name: &'a str, kind: SiteKind, node: Option<NodeId>| IdentSite {
+            start,
+            name,
+            kind,
+            scope: view.scope_of_node(id),
+            node,
+        };
+        let (rank, s) = match node.kind() {
             AstKind::IdentifierReference(r) => (
                 1,
-                IdentSite {
-                    start: r.span.start,
-                    name: r.name.as_str(),
-                    kind: SiteKind::Reference,
-                    scope: scope(),
-                },
+                site(r.span.start, r.name.as_str(), SiteKind::Reference, Some(id)),
             ),
             AstKind::BindingIdentifier(b) => (
                 1,
-                IdentSite {
-                    start: b.span.start,
-                    name: b.name.as_str(),
-                    kind: SiteKind::Binding,
-                    scope: scope(),
-                },
+                site(b.span.start, b.name.as_str(), SiteKind::Binding, Some(id)),
             ),
             AstKind::IdentifierName(n) => (
                 0,
-                IdentSite {
-                    start: n.span.start,
-                    name: n.name.as_str(),
-                    kind: SiteKind::Other,
-                    scope: scope(),
-                },
+                site(n.span.start, n.name.as_str(), SiteKind::Other, Some(id)),
             ),
             AstKind::LabelIdentifier(l) => (
                 0,
-                IdentSite {
-                    start: l.span.start,
-                    name: l.name.as_str(),
-                    kind: SiteKind::Other,
-                    scope: scope(),
-                },
+                site(l.span.start, l.name.as_str(), SiteKind::Other, Some(id)),
             ),
             AstKind::PrivateIdentifier(p) => (
                 0,
-                IdentSite {
-                    start: p.span.start + 1,
-                    name: p.name.as_str(),
-                    kind: SiteKind::Other,
-                    scope: scope(),
-                },
+                site(p.span.start + 1, p.name.as_str(), SiteKind::Other, Some(id)),
             ),
+            // The key twin Babel holds and oxc does not.
             AstKind::AssignmentTargetPropertyIdentifier(p) => (
                 0,
-                IdentSite {
-                    start: p.binding.span.start,
-                    name: p.binding.name.as_str(),
-                    kind: SiteKind::Other,
-                    scope: scope(),
-                },
+                site(
+                    p.binding.span.start,
+                    p.binding.name.as_str(),
+                    SiteKind::Other,
+                    None,
+                ),
             ),
+            AstKind::ImportMeta(m) => {
+                out.push((0, site(m.span.start, "import", SiteKind::Other, Some(id))));
+                (0, site(m.span.end - 4, "meta", SiteKind::Other, Some(id)))
+            }
+            AstKind::NewTarget(m) => {
+                out.push((0, site(m.span.start, "new", SiteKind::Other, Some(id))));
+                (0, site(m.span.end - 6, "target", SiteKind::Other, Some(id)))
+            }
             _ => continue,
         };
-        out.push((rank, site));
+        out.push((rank, s));
     }
     out.sort_by_key(|(rank, s)| (s.start, *rank));
     out.into_iter().map(|(_, s)| s).collect()
+}
+
+fn parent(nodes: &AstNodes<'_>, id: NodeId) -> Option<NodeId> {
+    let p = nodes.parent_id(id);
+    (p != id).then_some(p)
+}
+
+fn key_name(key: &PropertyKey<'_>) -> Option<String> {
+    match key {
+        PropertyKey::StaticIdentifier(id) => Some(id.name.to_string()),
+        _ => None,
+    }
+}
+
+/// `shorthandKeyName(path)`: the shorthand property's key name when the
+/// site is the VALUE of a shorthand property (directly, or as a defaulted
+/// pattern's left) — `renameSubstitutionText`'s `key: newName` expansion.
+pub fn shorthand_key(semantic: &Semantic<'_>, site: &IdentSite<'_>) -> Option<String> {
+    if !site.resolvable() {
+        return None;
+    }
+    let nodes = semantic.nodes();
+    let id = site.node?;
+    let span = nodes.kind(id).span();
+    let p = parent(nodes, id)?;
+    match nodes.kind(p) {
+        AstKind::ObjectProperty(prop) if prop.shorthand && prop.value.span() == span => {
+            key_name(&prop.key)
+        }
+        AstKind::AssignmentTargetPropertyIdentifier(prop) => Some(prop.binding.name.to_string()),
+        AstKind::BindingProperty(prop)
+            if prop.shorthand && matches!(prop.value, BindingPattern::BindingIdentifier(_)) =>
+        {
+            key_name(&prop.key)
+        }
+        AstKind::AssignmentPattern(ap) if ap.left.span() == span => {
+            let g = parent(nodes, p)?;
+            match nodes.kind(g) {
+                AstKind::BindingProperty(prop)
+                    if prop.shorthand && prop.value.span() == ap.span =>
+                {
+                    key_name(&prop.key)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 /// `collectIdentifierNames`: every Identifier name in the program.

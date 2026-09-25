@@ -364,6 +364,21 @@ enum Command {
         #[arg(long, default_value = "")]
         disable: String,
     },
+    /// WP5.4's reconcile regimes: the post-split reconcile + bundle carry
+    /// alone over a tree on disk (in place), as `reconcilePostSplit` runs
+    /// after the finish. (Migration scaffolding — deleted at phase 6.)
+    PostSplitReconcile {
+        tree: String,
+        /// `--prior-version`: the prior release's humanified.js.
+        #[arg(long)]
+        prior_version: String,
+        /// Write the stage's JSON report here (the TS probe's shape).
+        #[arg(long)]
+        report: Option<String>,
+        /// `post-split-reconcile` to disable the pass.
+        #[arg(long, default_value = "")]
+        disable: String,
+    },
     /// WP5.4's generator gate: for every .js/.cjs of a tree (the desugar's
     /// walk), print it as Babel's retainLines generator would (default) or
     /// run the `using` desugar (--desugar), mirroring
@@ -675,6 +690,12 @@ fn main() {
             dump_keys,
         }) => run_llm_replay_gate(&requests, &ts_replay, &cache, dump_keys.as_deref()),
         Some(Command::PromptGate { dump, capture }) => run_prompt_gate(&dump, capture.as_deref()),
+        Some(Command::PostSplitReconcile {
+            tree,
+            prior_version,
+            report,
+            disable,
+        }) => post_split_reconcile_verb(&tree, &prior_version, report.as_deref(), &disable),
         Some(Command::RetainLines { tree, out, desugar }) => {
             retain_lines_verb(&tree, &out, desugar)
         }
@@ -1208,6 +1229,59 @@ fn emit_verb(args: EmitArgs) {
     }
 }
 
+/// `humanify post-split-reconcile`: the reconcile stage alone.
+fn post_split_reconcile_verb(tree: &str, prior_version: &str, report: Option<&str>, disable: &str) {
+    use humanify_core::finish::driver::{
+        FinishReport, FinishSwitches, reconcile_post_split, reconcile_report_json,
+    };
+    use std::path::Path;
+
+    let switches = FinishSwitches {
+        vendor_inherit_disabled: false,
+        post_split_reconcile_disabled: disable
+            .split(',')
+            .any(|d| d.trim() == "post-split-reconcile"),
+    };
+    let mut messages = FinishReport::default();
+    let result = reconcile_post_split(
+        Path::new(tree),
+        Some(Path::new(prior_version)),
+        switches,
+        &mut messages,
+    );
+    for m in &messages.messages {
+        println!("{m}");
+    }
+    match result {
+        Ok(Some(r)) => {
+            let s = &r.result.stats;
+            println!(
+                "considered {}, changed {}, renames {}, discarded {}, corpusGated {}{}",
+                s.considered,
+                s.changed,
+                r.result.renames.len(),
+                s.discarded,
+                s.corpus_gated,
+                r.carry
+                    .as_ref()
+                    .map(|c| format!(", carried {}", c.carried))
+                    .unwrap_or_default()
+            );
+            if let Some(path) = report
+                && let Err(e) = std::fs::write(path, reconcile_report_json(&r))
+            {
+                eprintln!("ERROR: {path}: {e}");
+                std::process::exit(1);
+            }
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 /// `humanify retain-lines`: the generator gate's Rust side.
 fn retain_lines_verb(tree: &str, out: &str, desugar: bool) {
     use humanify_core::finish::scaffold::js_files_under;
@@ -1312,7 +1386,14 @@ fn run_finish(
         switches,
     };
     let mut report = FinishReport::default();
-    let result = finish_split_output(&finish_input, &mut report);
+    let result = finish_split_output(&finish_input, &mut report).and_then(|_| {
+        humanify_core::finish::driver::reconcile_post_split(
+            finish_input.output_dir,
+            finish_input.prior_version,
+            finish_input.switches,
+            &mut report,
+        )
+    });
     for m in &report.messages {
         println!("{m}");
     }

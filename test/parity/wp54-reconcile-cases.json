@@ -1,0 +1,362 @@
+[
+  {
+    "name": "getTempDirPath: body drift + arg-count change",
+    "preset": "descriptive",
+    "prior": "function getTempDirectory() {\n  return joinPath(tmpRoot());\n}\nfunction setup(sessionId) {\n  let sessionDebugLogPath;\n  sessionDebugLogPath = pathLib14.join(getTempDirectory(), \"claude\", `d${sessionId}.log`);\n  return sessionDebugLogPath;\n}\n",
+    "next": "function getTempDirPath() {\n  return joinPath(tmpRoot(), \"claude\");\n}\nfunction setup(sessionId) {\n  let sessionDebugLogPath;\n  sessionDebugLogPath = pathLib14.join(getTempDirPath(), `d${sessionId}.log`);\n  return sessionDebugLogPath;\n}\n",
+    "renames": [],
+    "skipped": [],
+    "hunks": {
+      "changed": 2,
+      "noise": 0,
+      "genuine": 2,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "property position taints; the binding still reconciles",
+    "preset": "descriptive",
+    "prior": "function f() {\n  var currentStatus = init();\n  console.log(\"a\");\n  track(obj.currentStatus);\n  console.log(\"b\");\n  return currentStatus;\n}\n",
+    "next": "function f() {\n  var status = init();\n  console.log(\"a\");\n  track(obj.status);\n  console.log(\"b\");\n  return status;\n}\n",
+    "renames": [
+      {
+        "fromName": "status",
+        "toName": "currentStatus",
+        "votes": 2,
+        "kind": "descriptive",
+        "declLine": 2,
+        "applied": true
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 3,
+      "noise": 2,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 1,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "free identifier taints",
+    "preset": "descriptive",
+    "prior": "state = globalRegistryOld;\n",
+    "next": "state = globalRegistryNew;\n",
+    "renames": [],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 0,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 1,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "destructuring shorthand taints",
+    "preset": "post",
+    "prior": "function f(opts) {\n  const { sessionReconnectTimestamp } = opts;\n  return sessionReconnectTimestamp;\n}\n",
+    "next": "function f(opts) {\n  const { sessionStartTime } = opts;\n  return sessionStartTime;\n}\n",
+    "renames": [],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 0,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 1,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "asymmetric: a minified fresh name snaps back",
+    "preset": "descriptive",
+    "prior": "function load(config) {\n  const parsedValue = parse(config);\n  return parsedValue.items;\n}\n",
+    "next": "function load(config) {\n  const aB = parse(config);\n  return aB.items;\n}\n",
+    "renames": [
+      {
+        "fromName": "aB",
+        "toName": "parsedValue",
+        "votes": 2,
+        "kind": "asymmetric",
+        "declLine": 2,
+        "applied": true
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 1,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "reroll and downgrade are refused",
+    "preset": "post",
+    "prior": "function f() {\n  const Xq = a();\n  const Zz = b();\n  return Xq + Zz;\n}\n",
+    "next": "function f() {\n  const Wp = a();\n  const niceName = b();\n  return Wp + niceName;\n}\n",
+    "renames": [],
+    "skipped": [
+      {
+        "fromName": "Wp",
+        "toName": "Xq",
+        "reason": "reroll",
+        "votes": 2
+      },
+      {
+        "fromName": "niceName",
+        "toName": "Zz",
+        "reason": "name-downgrade",
+        "votes": 2
+      }
+    ],
+    "hunks": {
+      "changed": 1,
+      "noise": 1,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "disagreement across occurrences",
+    "preset": "post",
+    "prior": "function f() {\n  const alpha = a();\n  g(alpha);\n  h(beta);\n}\n",
+    "next": "function f() {\n  const qq = a();\n  g(qq);\n  h(qq);\n}\n",
+    "renames": [],
+    "skipped": [
+      {
+        "fromName": "qq",
+        "toName": "alpha|beta",
+        "reason": "disagreement",
+        "votes": 3
+      }
+    ],
+    "hunks": {
+      "changed": 1,
+      "noise": 1,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "consumer tier: a changed leaf inherits from two caller witnesses",
+    "preset": "post",
+    "prior": "function loadConfig(path) {\n  const parsed = readFile(path);\n  return parsed.settings;\n}\nfunction readerOne(ctx) {\n  if (ctx.ready) {\n    return loadConfig(ctx.path);\n  }\n  return null;\n}\nfunction readerTwo(list) {\n  return list.map((entry) => loadConfig(entry));\n}\n",
+    "next": "async function fetchConfigData(path) {\n  const parsed = await readFile(path);\n  return parsed.settings;\n}\nfunction readerOne(ctx) {\n  if (ctx.ready) {\n    return fetchConfigData(ctx.path);\n  }\n  return null;\n}\nfunction readerTwo(list) {\n  return list.map((entry) => fetchConfigData(entry));\n}\n",
+    "renames": [
+      {
+        "fromName": "fetchConfigData",
+        "toName": "loadConfig",
+        "votes": 2,
+        "kind": "consumer",
+        "declLine": 1,
+        "applied": true
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 3,
+      "noise": 2,
+      "genuine": 1,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "mixed hunk: a name-only pair beside a genuine edit",
+    "preset": "mixed",
+    "prior": "function f() {\n  let limit = readLimit(1);\n  let runningTotal = compute(limit);\n  emit(runningTotal);\n}\n",
+    "next": "function f() {\n  let limit = readLimit(2);\n  let currentTotal = compute(limit);\n  emit(currentTotal);\n}\n",
+    "renames": [
+      {
+        "fromName": "currentTotal",
+        "toName": "runningTotal",
+        "votes": 2,
+        "kind": "descriptive",
+        "declLine": 3,
+        "applied": true
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 0,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 1
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "chain: a rename blocked by a collision applies after the blocker moves",
+    "preset": "post",
+    "prior": "function f() {\n  const readTemplate = a();\n  const loadTemplate = b();\n  return [readTemplate, loadTemplate];\n}\n",
+    "next": "function f() {\n  const fetchNotes = a();\n  const readTemplate = b();\n  return [fetchNotes, readTemplate];\n}\n",
+    "renames": [
+      {
+        "fromName": "readTemplate",
+        "toName": "loadTemplate",
+        "votes": 2,
+        "kind": "descriptive",
+        "declLine": 3,
+        "applied": true
+      },
+      {
+        "fromName": "fetchNotes",
+        "toName": "readTemplate",
+        "votes": 2,
+        "kind": "descriptive",
+        "declLine": 2,
+        "applied": true
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 1,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "require-declared binding refused under skipImportDeclarations",
+    "preset": "post",
+    "prior": "const moduleAlpha = require(\"./alpha.js\");\nfunction f() {\n  return moduleAlpha.run();\n}\n",
+    "next": "const moduleBeta = require(\"./beta.js\");\nfunction f() {\n  return moduleBeta.run();\n}\n",
+    "renames": [],
+    "skipped": [
+      {
+        "fromName": "moduleBeta",
+        "toName": "moduleAlpha",
+        "reason": "import-declaration",
+        "votes": 1
+      }
+    ],
+    "hunks": {
+      "changed": 2,
+      "noise": 1,
+      "genuine": 1,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "eval freezes module-level bindings",
+    "preset": "post",
+    "prior": "var configValue = 1;\neval(code);\nuse(configValue);\n",
+    "next": "var aZ = 1;\neval(code);\nuse(aZ);\n",
+    "renames": [],
+    "skipped": [
+      {
+        "fromName": "aZ",
+        "toName": "configValue",
+        "reason": "eval-taint-frozen",
+        "votes": 2
+      }
+    ],
+    "hunks": {
+      "changed": 2,
+      "noise": 2,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "oversized hunk",
+    "preset": "descriptive",
+    "prior": "function f() {\n  var priorName0Val = load0();\n  var priorName1Val = load1();\n  var priorName2Val = load2();\n  var priorName3Val = load3();\n  var priorName4Val = load4();\n  var priorName5Val = load5();\n  var priorName6Val = load6();\n  var priorName7Val = load7();\n  var priorName8Val = load8();\n  var priorName9Val = load9();\n  var priorName10Val = load10();\n  var priorName11Val = load11();\n}\n",
+    "next": "function f() {\n  var newName0Val = load0();\n  var newName1Val = load1();\n  var newName2Val = load2();\n  var newName3Val = load3();\n  var newName4Val = load4();\n  var newName5Val = load5();\n  var newName6Val = load6();\n  var newName7Val = load7();\n  var newName8Val = load8();\n  var newName9Val = load9();\n  var newName10Val = load10();\n  var newName11Val = load11();\n}\n",
+    "renames": [],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 0,
+      "genuine": 0,
+      "oversized": 1,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "skeleton votes across an unbalanced hunk",
+    "preset": "post",
+    "prior": "function f(opts) {\n  const resolvedPath = compute(opts);\n  log(resolvedPath);\n  store(resolvedPath);\n  return resolvedPath;\n}\n",
+    "next": "function f(opts) {\n  const tq = compute(opts);\n  log(tq);\n  extra(opts);\n  store(tq);\n  return tq;\n}\n",
+    "renames": [
+      {
+        "fromName": "tq",
+        "toName": "resolvedPath",
+        "votes": 2,
+        "kind": "last-resort",
+        "declLine": 2,
+        "applied": true
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 0,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 1
+    },
+    "priorTooDissimilar": false
+  },
+  {
+    "name": "dry run predicts without applying",
+    "preset": "dry",
+    "prior": "function g() {\n  const counterValue = 0;\n  return counterValue;\n}\n",
+    "next": "function g() {\n  const cV = 0;\n  return cV;\n}\n",
+    "renames": [
+      {
+        "fromName": "cV",
+        "toName": "counterValue",
+        "votes": 2,
+        "kind": "asymmetric",
+        "declLine": 2,
+        "applied": false
+      }
+    ],
+    "skipped": [],
+    "hunks": {
+      "changed": 1,
+      "noise": 1,
+      "genuine": 0,
+      "oversized": 0,
+      "tainted": 0,
+      "mixed": 0
+    },
+    "priorTooDissimilar": false
+  }
+]

@@ -106,6 +106,20 @@ impl JsObject {
         self.entries.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut JsValue> {
+        self.entries
+            .iter_mut()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v)
+    }
+
+    /// `delete obj[key]`: the other entries keep their order (a later
+    /// re-insert of the key appends, as in JS).
+    pub fn remove(&mut self, key: &str) -> Option<JsValue> {
+        let pos = self.entries.iter().position(|(k, _)| k == key)?;
+        Some(self.entries.remove(pos).1)
+    }
+
     pub fn entries(&self) -> &[(String, JsValue)] {
         &self.entries
     }

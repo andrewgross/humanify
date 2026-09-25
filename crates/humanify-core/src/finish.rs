@@ -20,7 +20,9 @@
 //! - [`carry`] — the reconcile's inner-local renames into the bundle;
 //! - [`driver`] — the stage in the TS's order over a tree on disk.
 
+pub mod carry;
 pub mod driver;
+pub mod reconcile;
 pub mod relink;
 pub mod scaffold;
 pub mod using;

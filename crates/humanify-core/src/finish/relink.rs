@@ -30,7 +30,8 @@ use crate::emit::paths::compute_relative_import_path;
 use crate::graph::is_babel_assignment_target;
 use crate::ingest::Ingest;
 use crate::place::layout::METADATA_DIR;
-use crate::rename::validated::scopes::BabelScopes;
+use crate::rename::validated::RenameState;
+use crate::trail::Anchor;
 
 /// The shared factory-helper runtime's path (a generated shim that lives
 /// with the metadata, like `_bundle.js`).
@@ -82,7 +83,7 @@ pub(crate) fn parse_or_err<'a>(
 fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<(String, usize)> {
     let semantic = ingest.semantic();
     let nodes = semantic.nodes();
-    let scopes = BabelScopes::build(semantic);
+    let state = RenameState::new(semantic, Anchor::Generated);
     let mut refs = Vec::new();
     for node in nodes.iter() {
         let AstKind::IdentifierReference(ident) = node.kind() else {
@@ -97,8 +98,8 @@ fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<(String, usi
         if is_babel_assignment_target(nodes, node.id()) {
             continue;
         }
-        if scopes
-            .get_binding(scopes.scope_of_node(node.id()), name)
+        if state
+            .get_binding(state.view().scope_of_node(node.id()), name)
             .is_some()
         {
             continue; // shadowed by a local binding

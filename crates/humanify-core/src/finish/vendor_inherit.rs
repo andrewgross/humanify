@@ -38,7 +38,7 @@ pub struct VendorInheritStats {
 
 /// The rename-invariant, literal-preserving signature of a whole file, or
 /// None when it does not parse.
-fn file_signature(code: &str) -> Option<String> {
+pub(crate) fn file_signature(code: &str) -> Option<String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     if !ingest.errors.is_empty() {

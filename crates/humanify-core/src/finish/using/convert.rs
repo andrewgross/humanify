@@ -20,58 +20,15 @@ use oxc_ast::ast::{
 };
 use oxc_span::{GetSpan, Span};
 
+use crate::babel_view::BabelLines;
+
 use super::ast::{Binary, Call, Class, Field, Func, Kind, Loc, Member, Method, Node, P};
 
 type R<T> = Result<T, String>;
 
-/// Babel's line numbering over one text.
-pub struct Lines {
-    /// Byte offset where each line starts (line 1 at index 0).
-    starts: Vec<usize>,
-}
-
-impl Lines {
-    pub fn new(text: &str) -> Lines {
-        let bytes = text.as_bytes();
-        let mut starts = vec![0];
-        let mut i = 0;
-        while i < bytes.len() {
-            match bytes[i] {
-                b'\r' => {
-                    i += if bytes.get(i + 1) == Some(&b'\n') {
-                        2
-                    } else {
-                        1
-                    };
-                    starts.push(i);
-                }
-                b'\n' => {
-                    i += 1;
-                    starts.push(i);
-                }
-                // U+2028 / U+2029: E2 80 A8 / E2 80 A9.
-                0xE2 if bytes.get(i + 1) == Some(&0x80)
-                    && matches!(bytes.get(i + 2), Some(0xA8 | 0xA9)) =>
-                {
-                    i += 3;
-                    starts.push(i);
-                }
-                _ => i += 1,
-            }
-        }
-        Lines { starts }
-    }
-
-    /// The 1-based line holding byte `pos`.
-    pub fn line_of(&self, pos: u32) -> u32 {
-        let pos = pos as usize;
-        (self.starts.partition_point(|&s| s <= pos)) as u32
-    }
-}
-
 pub struct Converter<'t> {
     text: &'t str,
-    lines: Lines,
+    lines: BabelLines<'t>,
 }
 
 fn b(n: Node) -> P {
@@ -82,14 +39,14 @@ impl<'t> Converter<'t> {
     pub fn new(text: &'t str) -> Converter<'t> {
         Converter {
             text,
-            lines: Lines::new(text),
+            lines: BabelLines::new(text),
         }
     }
 
     fn loc(&self, span: Span) -> Option<Loc> {
         Some(Loc {
-            start: self.lines.line_of(span.start),
-            end: self.lines.line_of(span.end),
+            start: self.lines.line(span.start) as u32,
+            end: self.lines.line(span.end) as u32,
         })
     }
 
