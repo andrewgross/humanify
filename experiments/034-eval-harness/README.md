@@ -280,8 +280,15 @@ npm run eval -- score rust-<sha>-a --bin target/release/humanify --ts-beautify-a
   `partitions.json` statementHash family is computed over the SHIPPED (renamed)
   text, so it is a function of a whole TS run, not of the input. Harness
   binary runs therefore use the binary's OWN hash bytes, which is the 5b-2
-  posture. A TS-written archive prior (the rebase leg's base) carries TS hash
-  bytes, so hash-keyed placement cannot match against it: the smoke logged
-  `inherited 0/19966`. Every later leg (scored, self-hop) sees a
-  binary-written prior and is self-consistent. WP5.6e (`hashVersion` 2)
-  makes that refusal loud instead of a silent mis-join.
+  posture.
+- **An adapter run's tree does NOT boot (plumbing smoke, 2026-09-25).** The
+  adapter's text comes from the TS unpack, so its references to vendored
+  factories are TS hash names (`lib_<TS hash8>()`). Without injection, the
+  binary names the vendor files by its OWN hashes. The `--version` half of
+  the boot gate passes. The prompt half dies on
+  `ReferenceError: lib_d5d62f65 is not defined`. Placement also inherited
+  0 statements on both legs (`inherited 0/19810` rebase, `0/19966` scored).
+  So an adapter run proves the PLUMBING only. It is not a scoreable tree, and
+  WP5.6g cannot run on it. The fix is WP5.6d (a native stage 6, so the text
+  and the vendor files come from ONE hash owner) plus WP5.6e (`hashVersion`
+  2, so a TS-era prior is refused loudly instead of silently mis-joined).

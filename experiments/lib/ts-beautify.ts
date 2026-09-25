@@ -23,6 +23,12 @@
  * producible here: its `partitions.json` statementHash family is computed
  * over the SHIPPED (renamed, split-input) text, i.e. it is a function of the
  * whole TS run. See the eval README's "Rust binary" section.
+ *
+ * CONSEQUENCE (plumbing smoke, 2026-09-25): this text refers to vendored
+ * factories by their TS hash names, while the binary without injection
+ * names the vendor files by its own hashes. The tree does not boot
+ * (`lib_<hash8> is not defined`). An adapter run proves plumbing, not a
+ * scoreable tree; WP5.6d (native stage 6) removes the split ownership.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
