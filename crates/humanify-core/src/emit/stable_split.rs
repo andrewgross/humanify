@@ -391,3 +391,6 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     outcome.facts = facts;
     Ok(outcome)
 }
+
+#[cfg(test)]
+mod stable_split_test;

@@ -442,6 +442,7 @@ fn run_era<P: NameProvider>(
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
+    let single_epoch = start.single_epoch;
     let inputs = WaveInputs {
         semantic,
         graph,
@@ -558,13 +559,24 @@ fn run_era<P: NameProvider>(
         let generated = render_program_with(semantic, &state, &privates);
         // The ledger's base stage: the AST as the naming era left it (every
         // pass before `generate` — the floor and the pre-generate sweep
-        // included), over the fresh text. The TS walks it AFTER the
-        // generated text's validation parse, which clears Babel's scope
-        // cache on a full bundle: the walk then re-crawls every scope.
+        // included), over the fresh text. Which scope OBJECTS the TS walk
+        // (`traverse(ast)`) sees decides the entry order:
+        // - after the generated text's validation parse cleared Babel's
+        //   cache (a full bundle), every scope is a fresh crawl;
+        // - with a prior, the prior-match clear left the program scope and
+        //   the graph functions' retained `fn.path.scope`s out of the new
+        //   cache: the walk crawls them fresh (registration order, current
+        //   names), while the scopes the waves reached through new paths
+        //   keep their post-clear tables (the waves' model).
         era.ledger = opts.rename_ledger.then(|| {
             use crate::rename::validated::ledger::{build_rename_ledger, parse_clears_scope_cache};
             if parse_clears_scope_cache(&generated) {
                 state.recrawl_order(|_| true);
+            } else if !single_epoch {
+                let program = state.view().program_scope();
+                let retained: std::collections::HashSet<_> =
+                    rows.fns.iter().map(|f| f.scope).collect();
+                state.recrawl_order(|s| s == program || retained.contains(&s));
             }
             build_rename_ledger(semantic.source_text(), &state)
         });

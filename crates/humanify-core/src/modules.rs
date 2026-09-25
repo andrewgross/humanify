@@ -1025,8 +1025,13 @@ pub mod modules_dump {
         )>,
         String,
     > {
+        // No factory helper, no classification — and no parse (an ESM text
+        // is not a Bun bundle; the scan is the classifier's own first step).
+        if super::identify_bun_cjs_factory(text).is_none() {
+            return Ok(None);
+        }
         let allocator = Allocator::default();
-        let ingest = Ingest::parse(&allocator, text, "input.js");
+        let ingest = Ingest::parse_unambiguous(&allocator, text);
         if !ingest.errors.is_empty() {
             return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
         }
