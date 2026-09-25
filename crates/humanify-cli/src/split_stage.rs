@@ -174,7 +174,7 @@ fn split_dump(
         .collect();
     SplitSections {
         statement_family: outcome.spans.iter().copied().zip(hashes).collect(),
-        placement: trail.to_placement_file(),
+        placement: trail.placement_json(),
         shipped: code.to_string(),
         emit: humanify_core::emit::emit_dump::layout_rows(&outcome.layout, &outcome.spans, |p| {
             aliases.get(p).map(|a| a.to_string())

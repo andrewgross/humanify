@@ -157,12 +157,9 @@ impl PlacementTrail {
     pub fn diagnostics_report(&self, shipped: &str) -> humanify_model::js::JsValue {
         use humanify_model::js::{JsObject, JsValue, Utf16Offsets};
         let offsets = Utf16Offsets::new(shipped);
-        let num = |n: f64| JsValue::Number(n);
-        let strs =
-            |v: &[String]| JsValue::Array(v.iter().map(|s| JsValue::str(s.as_str())).collect());
         let mut tiers = JsObject::new();
         for (t, n) in &self.tiers {
-            tiers.insert(t.clone(), num(*n as f64));
+            tiers.insert(t.clone(), JsValue::Number(*n as f64));
         }
         let trails = self
             .rows
@@ -170,53 +167,60 @@ impl PlacementTrail {
             .zip(&self.dissent_order)
             .map(|(r, dissent)| {
                 let mut o = JsObject::new();
-                o.insert("index", num(r.index as f64));
+                o.insert("index", JsValue::Number(r.index as f64));
                 if r.key.start >= 0 {
                     let mut span = JsObject::new();
-                    span.insert("start", num(f64::from(offsets.at(r.key.start as u32))));
-                    span.insert("end", num(f64::from(offsets.at(r.key.end as u32))));
+                    span.insert(
+                        "start",
+                        JsValue::Number(f64::from(offsets.at(r.key.start as u32))),
+                    );
+                    span.insert(
+                        "end",
+                        JsValue::Number(f64::from(offsets.at(r.key.end as u32))),
+                    );
                     o.insert("span", JsValue::Object(span));
                 }
-                o.insert("names", strs(&r.names));
-                o.insert("placedBy", JsValue::str(r.placed_by.as_str()));
-                o.insert("file", JsValue::str(r.file.as_str()));
-                o.insert_opt("priorFile", r.prior_file.as_deref().map(JsValue::str));
-                o.insert_opt(
-                    "priorFileFrom",
-                    r.prior_file_from.as_deref().map(JsValue::str),
-                );
-                o.insert_opt("hashMiss", r.hash_miss.as_deref().map(JsValue::str));
-                if let Some(d) = dissent {
-                    let mut alt = JsObject::new();
-                    for (tier, file) in d {
-                        alt.insert(tier.clone(), JsValue::str(file.as_str()));
-                    }
-                    o.insert("alternatives", JsValue::Object(alt));
-                }
-                let mut evidence = JsObject::new();
-                for key in ["votes", "allSame", "anchor"] {
-                    match r.evidence.get(key) {
-                        Some(serde_json::Value::Array(items)) => {
-                            let items: Vec<String> = items
-                                .iter()
-                                .filter_map(|v| v.as_str().map(str::to_string))
-                                .collect();
-                            evidence.insert(key, strs(&items));
-                        }
-                        Some(serde_json::Value::String(s)) => {
-                            evidence.insert(key, JsValue::str(s.as_str()));
-                        }
-                        _ => {}
-                    }
-                }
-                o.insert("evidence", JsValue::Object(evidence));
-                o.insert_opt("nameCount", r.name_count.map(|n| num(n as f64)));
+                o.insert("names", str_list(&r.names));
+                insert_placed(&mut o, r, dissent.as_deref());
+                o.insert_opt("nameCount", r.name_count.map(|n| JsValue::Number(n as f64)));
                 JsValue::Object(o)
             })
             .collect();
         let mut out = JsObject::new();
         out.insert("tiers", JsValue::Object(tiers));
         out.insert("trails", JsValue::Array(trails));
+        JsValue::Object(out)
+    }
+
+    /// The dump's `placement.json` as `writePlacement` writes it: rows
+    /// sorted by span key (stable), each `{key, index, names, nameCount?,
+    /// placedBy, file, priorFile?, priorFileFrom?, hashMiss?, alternatives?,
+    /// evidence}` — the writer's literal order, the alternatives in the
+    /// tiers' order and the evidence in the record site's.
+    pub fn placement_json(&self) -> humanify_model::js::JsValue {
+        use humanify_model::js::{JsObject, JsValue};
+        let mut order: Vec<usize> = (0..self.rows.len()).collect();
+        order.sort_by_key(|&i| (self.rows[i].key.start, self.rows[i].key.end));
+        let placements = order
+            .into_iter()
+            .map(|i| {
+                let r = &self.rows[i];
+                let mut key = JsObject::new();
+                key.insert("text", JsValue::str(r.key.text.as_str()));
+                key.insert("start", JsValue::Number(r.key.start as f64));
+                key.insert("end", JsValue::Number(r.key.end as f64));
+                let mut o = JsObject::new();
+                o.insert("key", JsValue::Object(key));
+                o.insert("index", JsValue::Number(r.index as f64));
+                o.insert("names", str_list(&r.names));
+                o.insert_opt("nameCount", r.name_count.map(|n| JsValue::Number(n as f64)));
+                insert_placed(&mut o, r, self.dissent_order[i].as_deref());
+                JsValue::Object(o)
+            })
+            .collect();
+        let mut out = JsObject::new();
+        out.insert("schemaVersion", JsValue::Number(1.0));
+        out.insert("placements", JsValue::Array(placements));
         JsValue::Object(out)
     }
 
@@ -230,6 +234,54 @@ impl PlacementTrail {
             placements,
         }
     }
+}
+
+fn str_list(v: &[String]) -> humanify_model::js::JsValue {
+    use humanify_model::js::JsValue;
+    JsValue::Array(v.iter().map(|s| JsValue::str(s.as_str())).collect())
+}
+
+/// A row's decision fields in the recorded order: `placedBy, file,
+/// priorFile?, priorFileFrom?, hashMiss?, alternatives?` (the dissenting
+/// tiers, their order), then `evidence` (`votes, allSame, anchor`).
+fn insert_placed(
+    o: &mut humanify_model::js::JsObject,
+    r: &PlacementRow,
+    dissent: Option<&[(String, String)]>,
+) {
+    use humanify_model::js::{JsObject, JsValue};
+    o.insert("placedBy", JsValue::str(r.placed_by.as_str()));
+    o.insert("file", JsValue::str(r.file.as_str()));
+    o.insert_opt("priorFile", r.prior_file.as_deref().map(JsValue::str));
+    o.insert_opt(
+        "priorFileFrom",
+        r.prior_file_from.as_deref().map(JsValue::str),
+    );
+    o.insert_opt("hashMiss", r.hash_miss.as_deref().map(JsValue::str));
+    if let Some(d) = dissent {
+        let mut alt = JsObject::new();
+        for (tier, file) in d {
+            alt.insert(tier.clone(), JsValue::str(file.as_str()));
+        }
+        o.insert("alternatives", JsValue::Object(alt));
+    }
+    let mut evidence = JsObject::new();
+    for key in ["votes", "allSame", "anchor"] {
+        match r.evidence.get(key) {
+            Some(serde_json::Value::Array(items)) => {
+                let items: Vec<String> = items
+                    .iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect();
+                evidence.insert(key, str_list(&items));
+            }
+            Some(serde_json::Value::String(s)) => {
+                evidence.insert(key, JsValue::str(s.as_str()));
+            }
+            _ => {}
+        }
+    }
+    o.insert("evidence", JsValue::Object(evidence));
 }
 
 #[cfg(test)]

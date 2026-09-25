@@ -216,3 +216,47 @@ fn the_diagnostics_report_is_the_ts_recorder_json() {
     );
     assert_eq!(stringify(&trail.diagnostics_report(shipped)), expected);
 }
+
+/// The dump's `placement.json` is `writePlacement`'s JSON: rows sorted by
+/// span, keys in the writer's order (`key` first, `nameCount` after
+/// `names`), `alternatives` in the tiers' order and `evidence` in the
+/// record site's (`votes`, `allSame`, `anchor`) — not sorted maps.
+#[test]
+fn the_placement_file_is_the_ts_writer_json() {
+    use humanify_model::js::stringify;
+    let mut trail = PlacementTrail::default();
+    trail.record(TrailEntry {
+        index: 1,
+        span: Some((12, 22)),
+        names: strings(&["b"]),
+        placed_by: "novote".into(),
+        file: "src/b.js".into(),
+        alternatives: Some(vec![
+            ("name".into(), "src/z.js".into()),
+            ("allsame".into(), "src/a.js".into()),
+        ]),
+        evidence: PlacementEvidence {
+            votes: Some(strings(&["src/z.js"])),
+            all_same: Some(Vec::new()),
+            anchor: None,
+        },
+        ..TrailEntry::default()
+    });
+    trail.record(TrailEntry {
+        index: 0,
+        span: Some((0, 10)),
+        names: strings(&["a"]),
+        placed_by: "hash".into(),
+        file: "src/a.js".into(),
+        ..TrailEntry::default()
+    });
+    assert_eq!(
+        stringify(&trail.placement_json()),
+        concat!(
+            r#"{"schemaVersion":1,"placements":["#,
+            r#"{"key":{"text":"shipped","start":0,"end":10},"index":0,"names":["a"],"placedBy":"hash","file":"src/a.js","evidence":{}},"#,
+            r#"{"key":{"text":"shipped","start":12,"end":22},"index":1,"names":["b"],"placedBy":"novote","file":"src/b.js","#,
+            r#""alternatives":{"name":"src/z.js","allsame":"src/a.js"},"evidence":{"votes":["src/z.js"],"allSame":[]}}]}"#
+        )
+    );
+}

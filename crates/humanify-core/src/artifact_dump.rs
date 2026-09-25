@@ -57,8 +57,8 @@ pub struct SplitSections {
     /// The split namers' calls in dispatch order, with their functionId
     /// (`split-namer` / `tree-reviser`).
     pub prompts: Vec<(&'static str, LlmCall)>,
-    /// placement.json.
-    pub placement: humanify_model::dump::PlacementFile,
+    /// placement.json (`PlacementTrail::placement_json`).
+    pub placement: JsValue,
     /// The split's input (the shipped text).
     pub shipped: String,
 }
@@ -218,14 +218,11 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
     }))
     .map_err(|e| format!("names rows: {e}"))?;
     w.json("names.json", &names)?;
-    let empty_placement = humanify_model::dump::PlacementFile {
-        schema_version: DUMP_SCHEMA_VERSION,
-        placements: Vec::new(),
+    let placement = match inp.split {
+        Some(s) => stringify(&s.placement),
+        None => stringify(&crate::place::trail::PlacementTrail::default().placement_json()),
     };
-    w.json(
-        "placement.json",
-        inp.split.map_or(&empty_placement, |s| &s.placement),
-    )?;
+    w.text("placement.json", &placement)?;
     let empty_emit = EmitLayoutFile {
         schema_version: DUMP_SCHEMA_VERSION,
         files: Vec::new(),
