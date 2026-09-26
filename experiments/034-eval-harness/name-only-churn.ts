@@ -42,7 +42,7 @@ const KEYWORDS = new Set(
  */
 const TOKEN = /(\.\s*)?([A-Za-z_$][A-Za-z0-9_$]*)(\s*:)?/g;
 
-function maskIdentifiers(line: string): string {
+export function maskIdentifiers(line: string): string {
   return line
     .replace(TOKEN, (all, dot, name, colon) =>
       dot || colon || KEYWORDS.has(name) ? all : `${dot ?? ""}X${colon ?? ""}`
