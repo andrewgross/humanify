@@ -45,7 +45,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use oxc_semantic::{NodeId, Semantic, SymbolId};
+use oxc_semantic::{Semantic, SymbolId};
 
 use crate::modules::soundness::{EvalWithTaint, is_binding_eval_taint_frozen};
 use crate::rename::floor::is_below_floor_name;
@@ -72,6 +72,8 @@ pub enum RejectionReason {
     TargetFreeName,
     ShadowsChild,
     StaleBinding,
+    /// The binding's own name IS a module export name (finding #55).
+    ExportedName,
 }
 
 impl RejectionReason {
@@ -86,6 +88,7 @@ impl RejectionReason {
             RejectionReason::TargetFreeName => "target-free-name",
             RejectionReason::ShadowsChild => "shadows-child",
             RejectionReason::StaleBinding => "stale-binding",
+            RejectionReason::ExportedName => "exported-name",
         }
     }
 }
@@ -137,28 +140,12 @@ pub struct ClaimGuards {
     pub shadows_child: u64,
 }
 
-/// How an applied rename reaches the emitted text (the render's input).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum RenameMode {
-    /// `fastRenameBinding`: every occurrence renamed in place.
-    InPlace,
-    /// The binding is export-involved and not an export declaration's own
-    /// id: the TS falls back to Babel's `scope.rename`, which renames the
-    /// same occurrences and, for a binding declared in `export var/let/const`,
-    /// SPLITS the declaration (`const b = 1; export { b as a }`) the first
-    /// time — after which the binding is no longer export-involved and later
-    /// renames take the in-place path (leaving the synthesized specifier's
-    /// local behind — the TS emit carries that; see the WP3.1 report).
-    BabelRenamer { splits_export: bool },
-}
-
 /// One applied rename, in apply order.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct AppliedRename {
     pub binding: BindingId,
     pub old_name: String,
     pub new_name: String,
-    pub mode: RenameMode,
 }
 
 /// A validated rename request — the TS call shape
@@ -237,9 +224,6 @@ pub struct RenameState {
     /// Babel's `scope.bindings`, current names: name → (order, binding).
     maps: Vec<BTreeMap<String, (u64, BindingId)>>,
     next_order: u64,
-    /// Export declarations Babel's renamer has split (their bindings are no
-    /// longer under an export declaration).
-    split_exports: BTreeSet<NodeId>,
     /// `carriedNames`: bindings whose APPLIED name is below the floor.
     carried: BTreeSet<BindingId>,
     claims: RenameClaimStats,
@@ -280,7 +264,6 @@ impl RenameState {
             anchor,
             maps,
             next_order,
-            split_exports: BTreeSet::new(),
             carried: BTreeSet::new(),
             claims: trail.claims,
             applied: Vec::new(),
@@ -426,14 +409,11 @@ impl RenameState {
     // -- export involvement --------------------------------------------------
 
     /// `isExportInvolved`: the binding's path sits under an export
-    /// declaration (not yet split by Babel's renamer), or one of its
-    /// reference paths is an export specifier's local.
+    /// declaration, or one of its reference paths is an export specifier's
+    /// local.
     pub fn is_export_involved(&self, binding: BindingId) -> bool {
         let b = self.view.binding(binding);
-        let under_export = b
-            .export_ancestor
-            .is_some_and(|node| !self.split_exports.contains(&node));
-        under_export || b.specifier_referenced
+        b.export_ancestor.is_some() || b.specifier_referenced
     }
 
     /// `isExportDeclarationId`.
@@ -469,8 +449,15 @@ impl RenameState {
         if !is_valid_rename_target(new_name) {
             return Some(RejectionReason::InvalidTarget);
         }
-        if self.binding_in(scope, old_name).is_none() {
+        let Some(binding) = self.binding_in(scope, old_name) else {
             return Some(RejectionReason::NoBinding);
+        };
+        // An export name is the module's API (finding #55): the binding a
+        // named export DECLARES keeps its name. Specifier locals and
+        // `export default function f` stay renameable — their external name
+        // is printed separately and does not change.
+        if self.view.binding(binding).exports_own_name {
+            return Some(RejectionReason::ExportedName);
         }
         if self.binding_in(scope, new_name).is_some() {
             return Some(RejectionReason::TargetInScope);
@@ -599,12 +586,17 @@ impl RenameState {
         let binding = self
             .binding_in(scope, old_name)
             .expect("the no-binding rule passed");
-        let mode = if self.fast_rename_allowed(binding) {
-            self.rebind(scope, old_name, new_name, binding);
-            RenameMode::InPlace
+        // `fastRenameBinding` updates `scope`'s map; for an export-involved
+        // binding the TS falls back to Babel's `scope.rename`, which updates
+        // `binding.scope`'s. (Babel's renamer also SPLITS an
+        // `export var/let/const` — unreachable here: those bindings are
+        // export names, refused above, which is what closes #16.)
+        let map_scope = if self.fast_rename_allowed(binding) {
+            scope
         } else {
-            self.babel_renamer(binding, old_name, new_name)
+            self.view.binding(binding).owner
         };
+        self.rebind(map_scope, old_name, new_name, binding);
         self.post_check(scope, old_name, new_name);
         self.claims.claims_recorded += 1;
         // exp066 provenance rule: a below-floor name deliberately APPLIED is
@@ -614,7 +606,7 @@ impl RenameState {
         {
             self.carried.insert(carried);
         }
-        self.log_applied(binding, old_name, new_name, mode);
+        self.log_applied(binding, old_name, new_name);
         RenameAttempt::applied()
     }
 
@@ -657,8 +649,14 @@ impl RenameState {
         if !is_valid_rename_target(new_name) {
             return RenameAttempt::rejected(RejectionReason::InvalidTarget);
         }
-        if self.name_of(owner) != new_name || self.binding_in(scope, old_name).is_none() {
+        let Some(binding) = self
+            .binding_in(scope, old_name)
+            .filter(|_| self.name_of(owner) == new_name)
+        else {
             return RenameAttempt::rejected(RejectionReason::NoBinding);
+        };
+        if self.view.binding(binding).exports_own_name {
+            return RenameAttempt::rejected(RejectionReason::ExportedName);
         }
         if self.binding_in(scope, new_name).is_some() {
             return RenameAttempt::rejected(RejectionReason::TargetInScope);
@@ -669,9 +667,6 @@ impl RenameState {
         if self.would_rename_shadow_in_child_scope(scope, old_name, new_name) {
             return RenameAttempt::rejected(RejectionReason::ShadowsChild);
         }
-        let binding = self
-            .binding_in(scope, old_name)
-            .expect("the no-binding rule passed");
         if !self.fast_rename_allowed(binding) {
             // An export-involved inner id: the TS refuses the fallback.
             return RenameAttempt::rejected(RejectionReason::TargetInScope);
@@ -679,7 +674,7 @@ impl RenameState {
         self.rebind(scope, old_name, new_name, binding);
         self.post_check(scope, old_name, new_name);
         self.claims.claims_recorded += 1;
-        self.log_applied(binding, old_name, new_name, RenameMode::InPlace);
+        self.log_applied(binding, old_name, new_name);
         RenameAttempt::applied()
     }
 
@@ -706,25 +701,6 @@ impl RenameState {
         self.names[binding.0 as usize] = Some(new_name.to_string());
     }
 
-    /// Babel's `scope.rename` for an export-involved binding: the renamer
-    /// updates `binding.scope`'s map and, the first time a binding declared
-    /// in `export var/let/const` is renamed, splits that declaration (every
-    /// binding it declares then leaves the export).
-    fn babel_renamer(&mut self, binding: BindingId, old_name: &str, new_name: &str) -> RenameMode {
-        let b = self.view.binding(binding);
-        let owner = b.owner;
-        let split_node = b
-            .export_ancestor
-            .filter(|node| b.declared_in_export_var && !self.split_exports.contains(node));
-        if let Some(node) = split_node {
-            self.split_exports.insert(node);
-        }
-        self.rebind(owner, old_name, new_name, binding);
-        RenameMode::BabelRenamer {
-            splits_export: split_node.is_some(),
-        }
-    }
-
     /// The post-rename spot check: the binding must now live under the new
     /// name in `scope`, and nothing under the old. A split binding here is
     /// a bug minutes before the output parse gate — fail loud, as the TS
@@ -739,12 +715,11 @@ impl RenameState {
         );
     }
 
-    fn log_applied(&mut self, binding: BindingId, old: &str, new: &str, mode: RenameMode) {
+    fn log_applied(&mut self, binding: BindingId, old: &str, new: &str) {
         self.applied.push(AppliedRename {
             binding,
             old_name: old.to_string(),
             new_name: new.to_string(),
-            mode,
         });
     }
 

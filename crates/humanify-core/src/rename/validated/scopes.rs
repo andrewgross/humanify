@@ -262,11 +262,13 @@ pub struct BabelBinding {
     /// `isExportDeclarationId`: `binding.path` IS an export declaration's
     /// own declaration (`export function f(){}`, `export default class C{}`).
     pub export_declaration_id: bool,
-    /// Babel's renamer would SPLIT the export declaration when renaming this
-    /// binding (`export const a = 1` → `const b = 1; export { b as a }`):
-    /// the binding is declared by a `VariableDeclaration` directly under an
-    /// export declaration.
-    pub declared_in_export_var: bool,
+    /// The binding's own name IS a module export name, so renaming it would
+    /// change the module's API (finding #55): the id of `export function` /
+    /// `export class`, or a binding declared by `export var/let/const`
+    /// (destructured too). NOT `export default function f` (exported as
+    /// `default`) and NOT a specifier's local (`export { a as b }` keeps
+    /// `b` when `a` is renamed).
+    pub exports_own_name: bool,
     /// The span of `binding.path` when it is a `VariableDeclarator` WITH an
     /// initializer — the write the capture guard must see when the
     /// declaration sits inside the renamed scope (16-findings-queue #15).
@@ -626,7 +628,7 @@ impl<'s, 'a> Builder<'s, 'a> {
             export_ancestor,
             specifier_referenced: false,
             export_declaration_id: self.is_export_declaration_id(event.path_node),
-            declared_in_export_var: self.is_declared_in_export_var(event.path_node),
+            exports_own_name: self.exports_own_name(event.path_node),
             initialized_declarator_span: self.initialized_declarator_span(event.path_node),
         });
         if matches!(event.kind, BindingKind::Var | BindingKind::Hoisted)
@@ -815,8 +817,6 @@ impl<'s, 'a> Builder<'s, 'a> {
         })
     }
 
-    /// The Renamer's `maybeConvertFromExportDeclaration` fires: the binding
-    /// is declared by a VariableDeclaration directly under `export`.
     /// `binding.path` is a `VariableDeclarator` with an initializer: its
     /// span (else None).
     fn initialized_declarator_span(&self, path_node: NodeId) -> Option<Span> {
@@ -826,15 +826,22 @@ impl<'s, 'a> Builder<'s, 'a> {
         }
     }
 
-    fn is_declared_in_export_var(&self, path_node: NodeId) -> bool {
-        if !matches!(self.nodes.kind(path_node), AstKind::VariableDeclarator(_)) {
-            return false;
+    /// [`BabelBinding::exports_own_name`]: the binding path is a function or
+    /// class directly under a NAMED export declaration, or a declarator of
+    /// a `VariableDeclaration` directly under one.
+    fn exports_own_name(&self, path_node: NodeId) -> bool {
+        let under_named_export =
+            |n: NodeId| matches!(self.nodes.kind(n), AstKind::ExportDeclaration(_));
+        match self.nodes.kind(path_node) {
+            AstKind::Function(_) | AstKind::Class(_) => {
+                self.parent(path_node).is_some_and(under_named_export)
+            }
+            AstKind::VariableDeclarator(_) => self
+                .parent(path_node)
+                .and_then(|declaration| self.parent(declaration))
+                .is_some_and(under_named_export),
+            _ => false,
         }
-        let Some(declaration) = self.parent(path_node) else {
-            return false;
-        };
-        self.parent(declaration)
-            .is_some_and(|p| matches!(self.nodes.kind(p), AstKind::ExportDeclaration(_)))
     }
 
     // -- resolution ----------------------------------------------------------

@@ -83,19 +83,64 @@ fn an_aliased_specifier_renamed_to_its_other_side_prints_shorthand() {
     );
 }
 
-/// zustand: babel's renamer SPLITS an `export const` the first time one of
-/// its bindings is renamed — the declaration loses `export` and a
-/// specifier list (the names at that moment, the renamed local updated)
-/// follows it.
+/// Attempt `<name>Renamed` for every program-scope binding, twice (a
+/// second pass renames the already-renamed names again, as a later naming
+/// pass or a prior carry would), then render. Rejections are ignored.
+fn rename_every_binding_and_render(code: &str) -> String {
+    use crate::naming::waves::render::render_program;
+    use crate::rename::validated::test_support::with_semantic;
+    use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
+    use crate::trail::Anchor;
+    with_semantic(code, true, |semantic| {
+        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let program = state.view().program_scope();
+        for pass in ["Renamed", "Again"] {
+            for (old, _) in state.bindings_in(program) {
+                let new = format!("{old}{pass}");
+                let _ = state.attempt_validated_rename(
+                    RenameRequest {
+                        scope: program,
+                        old_name: &old,
+                        new_name: &new,
+                        expected: None,
+                    },
+                    TrailSpec::Untrailed { why: "test" },
+                );
+            }
+        }
+        render_program(semantic, &state)
+    })
+}
+
+/// Finding #55: renaming every binding of a module that uses every export
+/// form leaves every export NAME as it was — declarations keep their ids,
+/// specifiers keep their external names, re-exports bind nothing — and the
+/// multi-declarator `export const` (#16's zustand shape) is never split,
+/// so no specifier is left pointing at a dead name.
 #[test]
-fn renaming_an_export_const_binding_splits_the_declaration() {
-    let out = rename_and_render(
-        "export const a = 1, b = 2;\nuse(a, b);\n",
-        &[("a", "first")],
-    );
+fn renaming_every_binding_keeps_every_export_name() {
+    let code = "import { sep as a } from \"node:path\";\n\
+                export { basename } from \"node:path\";\n\
+                export * as posix from \"node:path\";\n\
+                export function createStore(e) {\n  return e;\n}\n\
+                export class Counter {}\n\
+                export const version = 1, limit = 3;\n\
+                const o = e => e + a;\n\
+                function i(e) {\n  return [e, limit];\n}\n\
+                export { o as join, i };\n\
+                export default function s(e) {\n  return createStore(e ?? version);\n}\n";
     assert_eq!(
-        out,
-        "const first = 1, b = 2;\nexport { first as a, b };\nuse(first, b);\n"
+        rename_every_binding_and_render(code),
+        "import { sep as aRenamedAgain } from \"node:path\";\n\
+         export { basename } from \"node:path\";\n\
+         export * as posix from \"node:path\";\n\
+         export function createStore(e) {\n  return e;\n}\n\
+         export class Counter {}\n\
+         export const version = 1, limit = 3;\n\
+         const oRenamedAgain = e => e + aRenamedAgain;\n\
+         function iRenamedAgain(e) {\n  return [e, limit];\n}\n\
+         export { oRenamedAgain as join, iRenamedAgain as i };\n\
+         export default function sRenamedAgain(e) {\n  return createStore(e ?? version);\n}\n"
     );
 }
 

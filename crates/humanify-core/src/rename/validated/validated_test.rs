@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::test_support::with_semantic;
 use crate::rename::validated::{
-    RejectionReason, RenameAttempt, RenameMode, RenameRequest, RenameState, TrailSpec,
+    RejectionReason, RenameAttempt, RenameRequest, RenameState, TrailSpec,
 };
 use crate::trail::{Anchor, Outcome, Tier};
 
@@ -161,6 +161,18 @@ fn final_names(state: &RenameState) -> Value {
     )
 }
 
+/// The probe scenarios where the Rust DELIBERATELY differs from the TS
+/// since finding #55 (post-cutover): the TS renamed a named export's own
+/// binding (`export function mitt` in place — the module's API changed;
+/// `export const a` by splitting the declaration — #16's dead-name class).
+/// The Rust refuses both (`exported-name`); the unit tests at the end of
+/// this file hold the new behavior, every other scenario still replays.
+const DIVERGES_FROM_THE_TS_55: &[&str] = &[
+    "vr: preserves the external name when renaming an exported binding",
+    "vr: keeps the named export declaration form when renaming its id",
+    "x: export var restructure — the Babel renamer path, then the fast path",
+];
+
 /// Every TS test case of validated-rename.test.ts and scope-era.test.ts,
 /// plus the extra predicate probes: each verdict and every binding's final
 /// name, exactly as the real TS functions produced them.
@@ -171,7 +183,16 @@ fn rename_scenarios_match_the_ts_probe() {
     let scenarios = probe["scenarios"].as_array().expect("scenarios");
     assert!(scenarios.len() >= 59, "the scenario set shrank");
     let mut failures = Vec::new();
+    for label in DIVERGES_FROM_THE_TS_55 {
+        assert!(
+            scenarios.iter().any(|s| s["label"] == *label),
+            "stale divergence label {label}"
+        );
+    }
     for scenario in scenarios {
+        if DIVERGES_FROM_THE_TS_55.contains(&scenario["label"].as_str().unwrap_or("")) {
+            continue;
+        }
         let spec = scenario;
         assert!(scenario["error"].is_null(), "TS threw: {scenario}");
         let module = spec["sourceType"].as_str().unwrap_or("module") == "module";
@@ -396,32 +417,6 @@ fn a_rename_moves_the_name_to_the_end_of_the_map_order() {
     });
 }
 
-/// The apply log carries the mode the render needs: in place, or Babel's
-/// renamer (splitting `export const` the first time).
-#[test]
-fn the_apply_log_records_the_render_mode() {
-    program_state(
-        "export const a = 1, b = 2; export function f(p) { return p; }",
-        |state| {
-            let p = state.view().program_scope();
-            assert!(attempt(state, p, "a", "first").applied);
-            assert!(attempt(state, p, "b", "second").applied);
-            assert!(attempt(state, p, "f", "fn1").applied);
-            let modes: Vec<RenameMode> = state.applied_renames().iter().map(|a| a.mode).collect();
-            assert_eq!(
-                modes,
-                [
-                    RenameMode::BabelRenamer {
-                        splits_export: true
-                    },
-                    RenameMode::InPlace,
-                    RenameMode::InPlace,
-                ]
-            );
-        },
-    );
-}
-
 /// The overlay is the only name source: `finish` hands the render every
 /// renamed symbol with its final name.
 #[test]
@@ -575,4 +570,122 @@ fn program_globals_keep_babels_insertion_order() {
             ["later", "use", "zeta", "alpha"]
         );
     });
+}
+
+// ---------------------------------------------------------------------------
+// Finding #55: an export name is the module's API — it never changes
+// ---------------------------------------------------------------------------
+
+/// Attempt `old -> new` in the program scope.
+fn program_attempt(code: &str, old: &str, new: &str) -> RenameAttempt {
+    program_state(code, |state| {
+        let p = state.view().program_scope();
+        attempt(state, p, old, new)
+    })
+}
+
+fn assert_exported_name_refused(code: &str, old: &str) {
+    let got = program_attempt(code, old, "renamedLocal");
+    assert_eq!(
+        got,
+        RenameAttempt {
+            applied: false,
+            reason: Some(RejectionReason::ExportedName)
+        },
+        "{old} in {code:?}"
+    );
+}
+
+/// `export function f` / `export class C`: the id IS the export name.
+#[test]
+fn an_exported_function_or_class_declaration_keeps_its_name() {
+    assert_exported_name_refused(
+        "export function createStore(e) { return e; }",
+        "createStore",
+    );
+    assert_exported_name_refused("export class Counter {}", "Counter");
+    assert_exported_name_refused("export async function* gen() {}", "gen");
+}
+
+/// `export var/let/const`, single, multi-declarator (#16's zustand shape)
+/// and destructured: every declared binding IS an export name.
+#[test]
+fn an_exported_variable_keeps_its_name() {
+    assert_exported_name_refused("export const a = 1;", "a");
+    assert_exported_name_refused("export let m = 1; m = 2;", "m");
+    assert_exported_name_refused("export var v;", "v");
+    assert_exported_name_refused("export const a = 1, b = 2;", "a");
+    assert_exported_name_refused("export const a = 1, b = 2;", "b");
+    let destructured = "export const { x, y: z } = o, [w] = p;";
+    assert_exported_name_refused(destructured, "x");
+    assert_exported_name_refused(destructured, "z");
+    assert_exported_name_refused(destructured, "w");
+}
+
+/// The scope that binds `name` (the one binding of that crawl name).
+fn scope_binding(state: &RenameState, name: &str) -> BScopeId {
+    let owners: Vec<BScopeId> = state
+        .view()
+        .bindings
+        .iter()
+        .filter(|b| b.name == name)
+        .map(|b| b.owner)
+        .collect();
+    assert_eq!(owners.len(), 1, "one binding named {name}");
+    owners[0]
+}
+
+/// The export's OWN bindings only: a param, a local, a nested function of
+/// an exported declaration are ordinary bindings.
+#[test]
+fn bindings_inside_an_exported_declaration_stay_renameable() {
+    program_state(
+        "export function f(p) { const q = p; function g() {} return g(q); }\n\
+         export const h = (r) => { let s = r; return s; };\n\
+         export class K { m(t) { return t; } }",
+        |state| {
+            for old in ["p", "q", "g", "r", "s", "t"] {
+                let scope = scope_binding(state, old);
+                let got = attempt(state, scope, old, &format!("{old}Renamed"));
+                assert!(got.applied, "{old}: {:?}", got.reason);
+            }
+        },
+    );
+}
+
+/// `export default function f` / `class C`: the external name is
+/// `default`, so the local id may be renamed.
+#[test]
+fn an_export_default_declaration_id_is_renameable() {
+    assert!(program_attempt("export default function f(e) { return e; }", "f", "make").applied);
+    assert!(program_attempt("export default class C {}", "C", "Store").applied);
+}
+
+/// A specifier's local (`export { a }`, `export { a as b }`) may be
+/// renamed: the specifier keeps the external name (the render's forms).
+#[test]
+fn a_specifier_local_is_renameable() {
+    assert!(program_attempt("const a = 1; export { a };", "a", "count").applied);
+    assert!(program_attempt("const a = 1; export { a as b };", "a", "count").applied);
+}
+
+/// A re-export binds nothing locally: there is nothing to rename.
+#[test]
+fn a_reexport_binds_no_local() {
+    let no_binding = RenameAttempt {
+        applied: false,
+        reason: Some(RejectionReason::NoBinding),
+    };
+    assert_eq!(
+        program_attempt("export { x } from \"m\";", "x", "y"),
+        no_binding
+    );
+    assert_eq!(
+        program_attempt("export { x as z } from \"m\";", "z", "y"),
+        no_binding
+    );
+    assert_eq!(
+        program_attempt("export * as ns from \"m\";", "ns", "y"),
+        no_binding
+    );
 }

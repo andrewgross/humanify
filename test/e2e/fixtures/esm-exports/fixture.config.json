@@ -1,0 +1,13 @@
+{
+  "package": "esm-exports",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "Every ESM export form (findings #55, #16): export function/class/const/let, a multi-declarator export const, export default function, aliased and shorthand specifiers, a re-export, a namespace re-export"
+    }
+  ]
+}
