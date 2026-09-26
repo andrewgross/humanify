@@ -225,50 +225,184 @@ pub fn tree_reviser_call(folders: &[FolderSummary]) -> LlmCall {
     }
 }
 
-/// `createSplitNamer` over a [`NameProvider`]. Every dispatched call is
-/// kept (`dispatched`) so a gate can compare its bytes with the oracle's.
-pub struct ProviderSplitNamer<'p> {
-    provider: &'p dyn NameProvider,
-    pub dispatched: Vec<LlmCall>,
-    /// Batches whose provider call failed (all entries fell back).
-    pub failed_batches: usize,
+/// The model context assumed when none is configured (`--context-tokens`):
+/// gpt-oss-20b's, the measurement default.
+pub const DEFAULT_CONTEXT_TOKENS: u64 = 32_768;
+
+/// Conservative prompt-bytes per token. Finding #39's refused prompts ran
+/// ~3.9 bytes/token (759K chars → 195,758 tokens); 3 over-counts tokens.
+const BYTES_PER_TOKEN: usize = 3;
+/// Share of the computed prompt room actually used (chat-template overhead,
+/// tokenizer variance).
+const HEADROOM_PERCENT: usize = 75;
+/// Completion tokens reserved per entry (the `"key": "name"` answer plus
+/// its share of the model's reasoning).
+const COMPLETION_TOKENS_PER_ENTRY: u64 = 60;
+
+/// How big one split-namer prompt may get (finding #39): the namer used to
+/// send every request in ONE prompt, and a fossil hop's thousands of fresh
+/// mints made that prompt 759K-1.2M chars — refused by the model every run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SplitNamerBudget {
+    /// Upper bound on a user prompt's length in bytes.
+    pub max_prompt_chars: usize,
+    /// Upper bound on entries per call (the completion must answer them).
+    pub max_entries: usize,
 }
 
-impl<'p> ProviderSplitNamer<'p> {
-    pub fn new(provider: &'p dyn NameProvider) -> Self {
-        ProviderSplitNamer {
-            provider,
-            dispatched: Vec::new(),
-            failed_batches: 0,
+impl SplitNamerBudget {
+    /// The budget for a model with `context_tokens` of context, of which
+    /// `completion_tokens` (`max_tokens`) are reserved for the answer.
+    pub fn for_model(context_tokens: u64, completion_tokens: u64) -> Self {
+        let system_tokens = SPLIT_NAMER_SYSTEM_PROMPT.len().div_ceil(BYTES_PER_TOKEN) as u64;
+        let prompt_tokens = context_tokens
+            .saturating_sub(completion_tokens)
+            .saturating_sub(system_tokens);
+        let max_prompt_chars = usize::try_from(prompt_tokens)
+            .unwrap_or(usize::MAX / BYTES_PER_TOKEN)
+            .saturating_mul(HEADROOM_PERCENT)
+            / 100
+            * BYTES_PER_TOKEN;
+        let max_entries = usize::try_from(completion_tokens / COMPLETION_TOKENS_PER_ENTRY)
+            .unwrap_or(usize::MAX)
+            .max(1);
+        SplitNamerBudget {
+            max_prompt_chars,
+            max_entries,
         }
     }
 }
 
+impl Default for SplitNamerBudget {
+    fn default() -> Self {
+        SplitNamerBudget::for_model(
+            DEFAULT_CONTEXT_TOKENS,
+            humanify_model::llm::DEFAULT_MAX_TOKENS,
+        )
+    }
+}
+
+/// The prompt's fixed frame (the `Name N entries…` header and the reply
+/// line's text), over-counted.
+const PROMPT_FRAME_BYTES: usize = 160;
+/// A uniquified key's suffix (`-NN`), counted once in the brief header and
+/// once in the reply template, over-counted.
+const KEY_SUFFIX_SLACK: usize = 8;
+
+/// One entry's bytes in a batch prompt: its brief (with its blank line)
+/// plus its `"key": "<name>", ` reply fragment.
+fn entry_bytes(request: &SplitNameRequest) -> usize {
+    let key = &request.mechanical_stem;
+    let brief: usize = render_entry(key, request).iter().map(|l| l.len() + 1).sum();
+    brief + 1 + key.len() + "\"\": \"<name>\", ".len() + 2 * KEY_SUFFIX_SLACK
+}
+
+/// The batch boundaries for `requests` under `budget`: contiguous ranges in
+/// request order, greedily filled, each under both caps. A pure function of
+/// the requests, so the same input always yields the same prompts (cache
+/// hits replay). An entry too large on its own is still sent, alone.
+pub fn split_namer_batches(
+    requests: &[SplitNameRequest],
+    budget: &SplitNamerBudget,
+) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut bytes = PROMPT_FRAME_BYTES;
+    for (i, request) in requests.iter().enumerate() {
+        let cost = entry_bytes(request);
+        let filled = i - start;
+        if filled > 0
+            && (filled >= budget.max_entries
+                || bytes.saturating_add(cost) > budget.max_prompt_chars)
+        {
+            out.push(start..i);
+            start = i;
+            bytes = PROMPT_FRAME_BYTES;
+        }
+        bytes = bytes.saturating_add(cost);
+    }
+    if start < requests.len() {
+        out.push(start..requests.len());
+    }
+    out
+}
+
+/// `createSplitNamer` over a [`NameProvider`]. Every dispatched call is
+/// kept (`dispatched`) so a gate can compare its bytes with the oracle's.
+pub struct ProviderSplitNamer<'p> {
+    provider: &'p dyn NameProvider,
+    budget: SplitNamerBudget,
+    pub dispatched: Vec<LlmCall>,
+    /// Batches whose provider call failed (all their entries fell back).
+    pub failed_batches: usize,
+    /// Entries the provider answered with a usable proposal.
+    pub proposals: usize,
+}
+
+impl<'p> ProviderSplitNamer<'p> {
+    pub fn new(provider: &'p dyn NameProvider) -> Self {
+        ProviderSplitNamer::with_budget(provider, SplitNamerBudget::default())
+    }
+
+    pub fn with_budget(provider: &'p dyn NameProvider, budget: SplitNamerBudget) -> Self {
+        ProviderSplitNamer {
+            provider,
+            budget,
+            dispatched: Vec::new(),
+            failed_batches: 0,
+            proposals: 0,
+        }
+    }
+}
+
+/// One batch's answers mapped onto its requests.
+fn batch_proposals(
+    requests: &[SplitNameRequest],
+    keys: &[String],
+    response: &humanify_model::llm::BatchRenameResponse,
+) -> Vec<Option<String>> {
+    requests
+        .iter()
+        .zip(keys)
+        .map(|(request, key)| {
+            // `!proposed || proposed === mechanicalStem || === key`
+            response
+                .renames
+                .get(key)
+                .filter(|p| !p.is_empty() && *p != request.mechanical_stem && p != key)
+                .map(str::to_string)
+        })
+        .collect()
+}
+
 impl SplitNamer for ProviderSplitNamer<'_> {
+    /// Batches the requests by [`split_namer_batches`] and dispatches every
+    /// batch in ONE wave (the provider's rate limiter bounds concurrency).
+    /// A failed batch falls back to the stems alone.
     fn name(&mut self, requests: &[SplitNameRequest]) -> Vec<Option<String>> {
-        if requests.is_empty() {
+        let batches = split_namer_batches(requests, &self.budget);
+        let (calls, keys): (Vec<LlmCall>, Vec<Vec<String>>) = batches
+            .iter()
+            .map(|r| split_namer_call(&requests[r.clone()]))
+            .unzip();
+        if calls.is_empty() {
             return Vec::new();
         }
-        let (call, keys) = split_namer_call(requests);
-        self.dispatched.push(call.clone());
-        match self.provider.run_wave(vec![call]).pop() {
-            Some(Ok(response)) => requests
-                .iter()
-                .zip(&keys)
-                .map(|(request, key)| {
-                    // `!proposed || proposed === mechanicalStem || === key`
-                    response
-                        .renames
-                        .get(key)
-                        .filter(|p| !p.is_empty() && *p != request.mechanical_stem && p != key)
-                        .map(str::to_string)
-                })
-                .collect(),
-            _ => {
-                self.failed_batches += 1;
-                requests.iter().map(|_| None).collect()
+        self.dispatched.extend(calls.iter().cloned());
+        let mut results = self.provider.run_wave(calls).into_iter();
+        let mut out = Vec::with_capacity(requests.len());
+        for (range, keys) in batches.into_iter().zip(&keys) {
+            let batch = &requests[range];
+            match results.next() {
+                Some(Ok(response)) => out.extend(batch_proposals(batch, keys, &response)),
+                _ => {
+                    self.failed_batches += 1;
+                    out.extend(batch.iter().map(|_| None));
+                }
             }
         }
+        self.proposals += out.iter().flatten().count();
+        out
     }
 }
 
@@ -310,5 +444,7 @@ impl TreeReviser for ProviderTreeReviser<'_> {
     }
 }
 
+#[cfg(test)]
+mod namer_stub_test;
 #[cfg(test)]
 mod namer_test;

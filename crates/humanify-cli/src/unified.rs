@@ -23,6 +23,7 @@
 //!
 //! Every stage runs natively (stage 6, the formatter, since WP5.6d).
 
+use humanify_core::place::assign::namer::{DEFAULT_CONTEXT_TOKENS, SplitNamerBudget};
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -78,6 +79,7 @@ pub struct CommandOptions {
     pub disable: Option<String>,
     pub probe: Option<String>,
     pub max_tokens: Option<String>,
+    pub context_tokens: Option<String>,
     pub module_concurrency: Option<String>,
     pub llm_cache: Option<String>,
     pub ambiguity_probe: Option<String>,
@@ -119,6 +121,7 @@ impl CommandOptions {
             disable: s("disable"),
             probe: s("probe"),
             max_tokens: s("maxTokens"),
+            context_tokens: s("contextTokens"),
             module_concurrency: s("moduleConcurrency"),
             llm_cache: s("llmCache"),
             ambiguity_probe: s("ambiguityProbe"),
@@ -145,6 +148,7 @@ impl CommandOptions {
             llm_cache: self.llm_cache.clone(),
             reasoning_effort: self.reasoning_effort.clone(),
             max_tokens: self.max_tokens.clone(),
+            context_tokens: self.context_tokens.clone(),
             module_concurrency: self.module_concurrency.clone(),
             skip_libraries: self.skip_libraries,
             naming_floor: self.naming_floor,
@@ -435,6 +439,19 @@ fn run_pipeline(
     )
 }
 
+/// The split namer's prompt budget: `--context-tokens` (else the default
+/// model context) less the `--max-tokens` completion reserve (finding #39).
+fn split_namer_budget(settings: &Settings) -> SplitNamerBudget {
+    SplitNamerBudget::for_model(
+        settings
+            .context_tokens
+            .map_or(DEFAULT_CONTEXT_TOKENS, |t| t as u64),
+        settings
+            .max_tokens
+            .map_or(humanify_model::llm::DEFAULT_MAX_TOKENS, |t| t as u64),
+    )
+}
+
 /// `buildProvider`: cache OUTERMOST (hits bypass the limiter and the debug
 /// wrapper), then the rate limiter sized over both lanes, the debug
 /// wrapper, the HTTP client. A miss goes to the endpoint and a non-empty
@@ -563,6 +580,7 @@ fn pipeline_body(
             fossil: fossil_split,
             switches,
             provider,
+            namer_budget: split_namer_budget(settings),
         };
         let span = profiler.pipeline_span("split");
         let records =

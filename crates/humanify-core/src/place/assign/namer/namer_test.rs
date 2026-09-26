@@ -4,7 +4,7 @@
 
 use super::{
     FolderSummary, NameKind, NameLevel, ProviderSplitNamer, ProviderTreeReviser, SplitNameRequest,
-    SplitNamer, TreeReviser,
+    SplitNamer, SplitNamerBudget, TreeReviser, split_namer_batches,
 };
 use humanify_model::llm::{
     BatchRenameResponse, CacheKeyParams, LlmCall, LlmError, LlmErrorKind, NameProvider, Renames,
@@ -197,4 +197,167 @@ fn a_provider_failure_is_all_none_and_an_empty_batch_calls_nothing() {
             }])
             .is_empty()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Finding #39: the namer batches by a size budget derived from the model's
+// context, so a fossil hop's thousands of fresh mints never become ONE
+// prompt the model refuses (400 context length).
+// ---------------------------------------------------------------------------
+
+/// A fossil-mint-shaped request: 12 declarations, 20 siblings.
+fn mint(i: usize) -> SplitNameRequest {
+    SplitNameRequest {
+        kind: NameKind::File,
+        mechanical_stem: format!("module{}", i % 37),
+        siblings: (0..20).map(|s| format!("sibling-file-{s}")).collect(),
+        bindings: (0..12).map(|b| format!("declaredBinding{i}x{b}")).collect(),
+        members: None,
+        level: None,
+        evidence: None,
+    }
+}
+
+/// Answers every key of every prompt with `named-<key>`.
+struct EchoProvider {
+    calls: RefCell<Vec<LlmCall>>,
+}
+
+impl NameProvider for EchoProvider {
+    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+        self.calls.borrow_mut().extend(calls.iter().cloned());
+        calls
+            .iter()
+            .map(|c| {
+                Ok(BatchRenameResponse {
+                    renames: Renames::from_entries(
+                        c.request
+                            .identifiers
+                            .iter()
+                            .map(|k| (k.clone(), Some(format!("named-{k}")))),
+                    ),
+                    ..BatchRenameResponse::default()
+                })
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn the_budget_is_derived_from_the_model_context() {
+    let small = SplitNamerBudget::for_model(32_768, 6_000);
+    let large = SplitNamerBudget::for_model(131_072, 6_000);
+    // Room for the completion and the system prompt, with headroom: the
+    // prompt stays under the context even at 2.5 bytes/token (#39's
+    // refused prompts measured ~3.9).
+    assert!(small.max_prompt_chars > 20_000, "{small:?}");
+    assert!(small.max_prompt_chars * 2 / 5 < 32_768 - 6_000, "{small:?}");
+    assert!(
+        large.max_prompt_chars > 3 * small.max_prompt_chars,
+        "{large:?}"
+    );
+    // A context smaller than the completion reserve still makes progress:
+    // one entry per call, never zero.
+    let tiny = SplitNamerBudget::for_model(1_000, 6_000);
+    assert!(tiny.max_entries >= 1);
+    assert_eq!(
+        split_namer_batches(&[mint(0), mint(1)], &tiny),
+        vec![0..1, 1..2]
+    );
+}
+
+#[test]
+fn a_large_mint_set_is_many_bounded_requests_with_deterministic_boundaries() {
+    let requests: Vec<SplitNameRequest> = (0..4_000).map(mint).collect();
+    let budget = SplitNamerBudget::for_model(32_768, 6_000);
+    let run = || {
+        let provider = EchoProvider {
+            calls: RefCell::new(Vec::new()),
+        };
+        let mut namer = ProviderSplitNamer::with_budget(&provider, budget);
+        let names = namer.name(&requests);
+        let prompts: Vec<String> = provider
+            .calls
+            .borrow()
+            .iter()
+            .map(|c| c.user_prompt.clone())
+            .collect();
+        (names, prompts, namer.dispatched.len())
+    };
+    let (names, prompts, dispatched) = run();
+    assert!(prompts.len() > 10, "{} prompts", prompts.len());
+    assert_eq!(dispatched, prompts.len());
+    for p in &prompts {
+        assert!(
+            p.len() <= budget.max_prompt_chars,
+            "{} > {}",
+            p.len(),
+            budget.max_prompt_chars
+        );
+    }
+    // Every request answered, in request order, from its own batch.
+    assert_eq!(names.len(), requests.len());
+    assert!(names.iter().all(Option::is_some));
+    assert_eq!(names[0].as_deref(), Some("named-module0"));
+    // Same input, same prompts: stable boundaries, so cache hits replay.
+    let (names2, prompts2, _) = run();
+    assert_eq!(prompts, prompts2);
+    assert_eq!(names, names2);
+    // The boundaries are the pure function's: contiguous, covering, capped.
+    let ranges = split_namer_batches(&requests, &budget);
+    assert_eq!(ranges.len(), prompts.len());
+    assert_eq!(ranges.first().unwrap().start, 0);
+    assert_eq!(ranges.last().unwrap().end, requests.len());
+    assert!(ranges.windows(2).all(|w| w[0].end == w[1].start));
+    assert!(ranges.iter().all(|r| r.len() <= budget.max_entries));
+}
+
+#[test]
+fn a_scope_that_fits_is_still_exactly_one_call() {
+    let requests: Vec<SplitNameRequest> = (0..5).map(mint).collect();
+    assert_eq!(
+        split_namer_batches(&requests, &SplitNamerBudget::default()),
+        vec![0..5]
+    );
+}
+
+/// Fails the SECOND call of each wave only.
+struct SecondFails;
+
+impl NameProvider for SecondFails {
+    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+        calls
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                if i == 1 {
+                    return Err(LlmError::new(LlmErrorKind::CacheMiss, "down"));
+                }
+                Ok(BatchRenameResponse {
+                    renames: Renames::from_entries(
+                        c.request
+                            .identifiers
+                            .iter()
+                            .map(|k| (k.clone(), Some(format!("n-{k}")))),
+                    ),
+                    ..BatchRenameResponse::default()
+                })
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn one_failed_batch_falls_back_alone() {
+    let requests: Vec<SplitNameRequest> = (0..30).map(mint).collect();
+    let budget = SplitNamerBudget {
+        max_prompt_chars: usize::MAX,
+        max_entries: 10,
+    };
+    let mut namer = ProviderSplitNamer::with_budget(&SecondFails, budget);
+    let names = namer.name(&requests);
+    assert_eq!(namer.failed_batches, 1);
+    assert!(names[..10].iter().all(Option::is_some));
+    assert!(names[10..20].iter().all(Option::is_none));
+    assert!(names[20..].iter().all(Option::is_some));
 }

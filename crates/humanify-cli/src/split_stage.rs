@@ -18,7 +18,7 @@ use humanify_core::emit::align::AlignSwitches;
 use humanify_core::emit::stable_split::{SplitOptions, SplitOutcome, stable_split};
 use humanify_core::finish::driver::{FinishInput, FinishReport, FinishSwitches, finish_stage};
 use humanify_core::place::assign::namer::{
-    ProviderSplitNamer, ProviderTreeReviser, SplitNamer, TreeReviser,
+    ProviderSplitNamer, ProviderTreeReviser, SplitNamer, SplitNamerBudget, TreeReviser,
 };
 use humanify_core::place::layout::find_split_ledger_path;
 use humanify_core::place::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
@@ -54,6 +54,8 @@ pub struct SplitStageInput<'a> {
     pub fossil: bool,
     pub switches: &'a SwitchState,
     pub provider: &'a dyn NameProvider,
+    /// How big one split-namer prompt may get (`--context-tokens`, `--max-tokens`).
+    pub namer_budget: SplitNamerBudget,
 }
 
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
@@ -250,7 +252,7 @@ fn split_before_commit(
     let prior = load_prior_split_ledger(input, renderer)?;
     // Fresh release: LLM-named folders/files; warm fossil hops: LLM-named
     // fresh module mints; inherited layout is never renamed.
-    let mut namer = ProviderSplitNamer::new(input.provider);
+    let mut namer = ProviderSplitNamer::with_budget(input.provider, input.namer_budget);
     let mut reviser = ProviderTreeReviser::new(input.provider);
     let regime = if input.fossil {
         Regime::Fossil
@@ -288,6 +290,7 @@ fn split_before_commit(
             trail: Some(trail),
         },
     )?;
+    report_namer(&namer, renderer);
     if let Some(reason) = &outcome.declined {
         renderer.message(&format!(
             "Runnable emit declined: {reason} — writing byte-exact review tree instead"
@@ -302,6 +305,20 @@ fn split_before_commit(
         .chain(reviser.dispatched.into_iter().map(|c| ("tree-reviser", c)))
         .collect();
     Ok((outcome, prior.is_some(), prompts))
+}
+
+/// The split namer's batch outcome (finding #39: its failures used to be
+/// debug-log only, which hid that it had never named a fossil mint).
+fn report_namer(namer: &ProviderSplitNamer<'_>, renderer: &mut dyn ProgressRenderer) {
+    if namer.dispatched.is_empty() {
+        return;
+    }
+    renderer.message(&format!(
+        "Split naming: {} prompts, {} failed, {} names proposed",
+        namer.dispatched.len(),
+        namer.failed_batches,
+        namer.proposals
+    ));
 }
 
 /// The split namers' calls with their functionId, dispatch order.
