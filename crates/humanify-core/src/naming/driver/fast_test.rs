@@ -163,3 +163,46 @@ fn a_fast_run_is_byte_identical_to_itself() {
     let b = run(&fresh, true, &LifoProvider::default());
     assert_eq!(fingerprint(&a), fingerprint(&b));
 }
+
+/// With a prior: the prior match, the close contexts (mapped on the pool
+/// under `--fast`) and the speculative reconcile beside the verdict must
+/// ship the parity bytes too.
+#[test]
+fn with_a_prior_fast_ships_the_parity_bytes() {
+    let fresh = fixture();
+    // The prior release: humanified names, one function body different
+    // (a close match), one extra statement.
+    let prior = fixture()
+        .replace(
+            "function g(x, y) {\n  var z = x * y;",
+            "function combine(left, right) {\n  var product = left * right + 0;",
+        )
+        .replace("return h(z) + m0;", "return h(product) + m0;")
+        .replace(
+            "var r = g(p, m1);\n  var s = g(r, m2);",
+            "var r = combine(p, m1);\n  var s = combine(r, m2);",
+        )
+        .replace("console.log(f(4));", "console.log(f(4));\nconsole.log(1);");
+    let run_with = |fast: bool| {
+        run_naming(
+            &NamingInput {
+                fresh: &fresh,
+                prior: Some(&prior),
+                library: None,
+            },
+            &config(fast),
+            &LifoProvider::default(),
+        )
+        .expect("the stage runs")
+    };
+    let parity = run_with(false);
+    let fast = run_with(true);
+    assert!(parity.reconcile.is_some(), "the reconcile ran");
+    let counts = parity.prior.as_ref().expect("a prior run").counts;
+    assert!(counts.close_match_count > 0, "a close match: {counts:?}");
+    assert_eq!(fingerprint(&fast), fingerprint(&parity));
+    assert_eq!(
+        fast.reconcile.as_ref().map(|r| &r.code),
+        parity.reconcile.as_ref().map(|r| &r.code)
+    );
+}

@@ -274,7 +274,7 @@ pub fn prior_era<P: NameProvider>(
         ..capture_graph(graph, &outcome.rename)
     });
     let ph = crate::profiling::phase("era:close-contexts");
-    let close = close_contexts(stage, &outcome.fn_close_prior)?;
+    let close = close_contexts(stage, &outcome.fn_close_prior, opts.fast)?;
     drop(ph);
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),
@@ -606,6 +606,7 @@ fn run_era<P: NameProvider>(
 fn close_contexts(
     stage: &crate::prior::MatchStage<'_, '_>,
     close_prior: &[Option<String>],
+    fast: bool,
 ) -> Result<Vec<Option<CloseContext>>, String> {
     let prior_semantic = stage.prior.ingest.semantic();
     let prior_view = TextView::build(prior_semantic);
@@ -626,54 +627,61 @@ fn close_contexts(
         }
     }
     let fresh_graph = stage.fresh.graph;
-    close_prior
-        .iter()
-        .enumerate()
-        .map(|(f, prior_id)| {
-            let Some(prior_id) = prior_id else {
-                return Ok(None);
-            };
-            let span = *stage
-                .prior
-                .spans
-                .get(prior_id)
-                .ok_or_else(|| format!("close prior {prior_id} has no span"))?;
-            let prior_code = prior_view.pretty(span, &[], true);
-            let prior_names = match prior_fn_by_span.get(&(span.start, span.end)) {
-                Some(&pi) => collect_prior_names(
-                    &ident_index,
-                    fn_json.get(&(span.start, span.end)).copied(),
-                    &stage.prior.graph.functions[pi].placeholder_bindings,
-                ),
-                None => Vec::new(),
-            };
-            let fs = fresh_graph.functions[f].span;
-            let row = pairs.get(&(i64::from(fs.start), i64::from(fs.end)));
-            let hints = row
-                .map(|r| {
-                    r.hints
-                        .iter()
-                        .map(|h| (h.new_name.clone(), h.prior_name.clone()))
-                        .collect::<Vec<_>>()
-                })
-                .filter(|h| !h.is_empty())
-                .map(StrMap);
-            let snaps = row
-                .map(|r| {
-                    r.snaps
-                        .iter()
-                        .map(|h| (h.new_name.clone(), h.prior_name.clone()))
-                        .collect::<Vec<_>>()
-                })
-                .filter(|h| !h.is_empty());
-            Ok(Some(CloseContext {
-                prior_code,
-                prior_names,
-                hints,
-                snaps,
-            }))
-        })
-        .collect()
+    let prior_spans = stage.prior.spans;
+    let prior_graph = stage.prior.graph;
+    // One function's context: a pure read of plain data (the text view,
+    // the identifier index, the JSON, the graphs), so `--fast` maps it on
+    // the pool — results in input order, the first error first.
+    let one = |(f, prior_id): (usize, &Option<String>)| {
+        let Some(prior_id) = prior_id else {
+            return Ok(None);
+        };
+        let span = *prior_spans
+            .get(prior_id)
+            .ok_or_else(|| format!("close prior {prior_id} has no span"))?;
+        let prior_code = prior_view.pretty(span, &[], true);
+        let prior_names = match prior_fn_by_span.get(&(span.start, span.end)) {
+            Some(&pi) => collect_prior_names(
+                &ident_index,
+                fn_json.get(&(span.start, span.end)).copied(),
+                &prior_graph.functions[pi].placeholder_bindings,
+            ),
+            None => Vec::new(),
+        };
+        let fs = fresh_graph.functions[f].span;
+        let row = pairs.get(&(i64::from(fs.start), i64::from(fs.end)));
+        let hints = row
+            .map(|r| {
+                r.hints
+                    .iter()
+                    .map(|h| (h.new_name.clone(), h.prior_name.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|h| !h.is_empty())
+            .map(StrMap);
+        let snaps = row
+            .map(|r| {
+                r.snaps
+                    .iter()
+                    .map(|h| (h.new_name.clone(), h.prior_name.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|h| !h.is_empty());
+        Ok(Some(CloseContext {
+            prior_code,
+            prior_names,
+            hints,
+            snaps,
+        }))
+    };
+    if fast {
+        let items: Vec<(usize, &Option<String>)> = close_prior.iter().enumerate().collect();
+        crate::par::map_ordered(&items, |&item| one(item))
+            .into_iter()
+            .collect()
+    } else {
+        close_prior.iter().enumerate().map(one).collect()
+    }
 }
 
 /// Every identifier occurrence of a text, (start, symbol's declaration
