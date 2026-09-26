@@ -396,9 +396,11 @@ pub fn run_deferred_sweep<P: NameProvider>(
         ));
     }
     let semantic = ingest.semantic();
+    let ph = crate::profiling::phase("sweep:names");
     let taint = collect_eval_with_taint(semantic);
     let mut state = RenameState::with_trail(semantic, anchor, trail);
     let sweep = sweep_minted_names(semantic, &mut state, eligible, &taint, provider, params);
+    drop(ph);
     let code = (sweep.named > 0).then(|| render_program(semantic, &state));
     let ledger = (ledger && code.is_some()).then(|| {
         let rendered = program_edits(semantic, &state, &[]);

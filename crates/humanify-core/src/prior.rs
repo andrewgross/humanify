@@ -69,6 +69,10 @@ pub struct PriorMatchInput<'t> {
     pub prior: &'t str,
     pub bundler: Option<&'t str>,
     pub minifier: Option<&'t str>,
+    /// `--fast`: build the prior side's graph on a thread of its own
+    /// (from its own parse of the same text — the AST is not `Send`),
+    /// beside the fresh side's. Byte-identical: a parse is deterministic.
+    pub fast: bool,
 }
 
 /// One side of the match stage, all borrowed from [`with_match_stage`]'s
@@ -125,6 +129,7 @@ pub fn match_prior_version<T>(
         prior,
         bundler,
         minifier,
+        fast,
     } = input;
 
     // ── both sides: parse, then each side's program JSON ONCE ───────────
@@ -134,37 +139,70 @@ pub fn match_prior_version<T>(
     use crate::profiling::phase;
     let ph = phase("prior:parse+json");
     let fresh_allocator = Allocator::default();
-    let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
     let prior_allocator = Allocator::default();
-    let prior_ingest = parse_side(&prior_allocator, prior, "prior.js")?;
-    let (fresh_json, prior_json) = program_jsons(&fresh_ingest, &prior_ingest);
-    drop(ph);
-    let ph = phase("prior:graph-fresh");
-
-    // ── the fresh side (the pipeline's own eligibility) ─────────────────
+    let fresh_eligibility = Eligibility::SkipSet { bundler, minifier };
+    let (fresh_ingest, prior_ingest, fresh_json, prior_json, fresh_parts, prior_parts) = if fast {
+        drop(ph);
+        let _ph = phase("prior:sides-parallel");
+        // The prior side's graph on its own thread, from its own parse;
+        // this thread builds the fresh side, then parses the prior again
+        // for the AST the later stages walk.
+        let (prior_side, fresh_side) = crate::par::beside(
+            || prior_side_owned(prior),
+            || -> Result<_, String> {
+                let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
+                let fresh_json = crate::ingest::program_estree_json(fresh_ingest.program);
+                let fresh_parts =
+                    build_side_parts(&fresh_ingest, &fresh_json, "input.js", fresh_eligibility);
+                let prior_ingest = parse_side(&prior_allocator, prior, "prior.js")?;
+                Ok((fresh_ingest, fresh_json, fresh_parts, prior_ingest))
+            },
+        );
+        let (prior_json, prior_parts) = prior_side?;
+        let (fresh_ingest, fresh_json, fresh_parts, prior_ingest) = fresh_side?;
+        (
+            fresh_ingest,
+            prior_ingest,
+            fresh_json,
+            prior_json,
+            fresh_parts,
+            prior_parts,
+        )
+    } else {
+        let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
+        let prior_ingest = parse_side(&prior_allocator, prior, "prior.js")?;
+        let (fresh_json, prior_json) = program_jsons(&fresh_ingest, &prior_ingest);
+        drop(ph);
+        let ph = phase("prior:graph-fresh");
+        // ── the fresh side (the pipeline's own eligibility) ─────────────
+        let fresh_parts =
+            build_side_parts(&fresh_ingest, &fresh_json, "input.js", fresh_eligibility);
+        drop(ph);
+        // ── the prior side (ALL bindings eligible — prior-version.ts:284-288)
+        let _ph = phase("prior:graph-prior");
+        let prior_parts =
+            build_side_parts(&prior_ingest, &prior_json, "prior.js", Eligibility::All);
+        (
+            fresh_ingest,
+            prior_ingest,
+            fresh_json,
+            prior_json,
+            fresh_parts,
+            prior_parts,
+        )
+    };
     let SideParts {
         tables: fresh_tables,
         graph: fresh_graph,
         ctx: fresh_ctx,
         spans: fresh_spans,
-    } = build_side_parts(
-        &fresh_ingest,
-        &fresh_json,
-        "input.js",
-        Eligibility::SkipSet { bundler, minifier },
-    );
-
-    // ── the prior side (ALL bindings eligible — prior-version.ts:284-288) ─
+    } = fresh_parts;
     let SideParts {
         tables: prior_tables,
         graph: prior_graph,
         ctx: prior_ctx,
         spans: prior_spans,
-    } = {
-        drop(ph);
-        let _ph = phase("prior:graph-prior");
-        build_side_parts(&prior_ingest, &prior_json, "prior.js", Eligibility::All)
-    };
+    } = prior_parts;
     let ph = phase("prior:index");
 
     // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
@@ -178,16 +216,19 @@ pub fn match_prior_version<T>(
     let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
     drop(ph);
     let ph = phase("prior:match-cascade");
-    let initial = match_functions(
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        MatchOptions {
-            enable_propagation: true,
-            ..MatchOptions::default()
-        },
-    );
+    let initial = {
+        let _ph = phase("match:functions");
+        match_functions(
+            &prior_index,
+            &fresh_index,
+            &prior_ctx,
+            &fresh_ctx,
+            MatchOptions {
+                enable_propagation: true,
+                ..MatchOptions::default()
+            },
+        )
+    };
     let outcome = alternation::alternate_function_and_binding_matching(
         initial,
         &prior_index,
@@ -359,6 +400,16 @@ pub(crate) fn program_jsons(fresh: &Ingest<'_>, prior: &Ingest<'_>) -> (Value, V
         || crate::ingest::parse_estree_json(&fresh_text),
         || crate::ingest::parse_estree_json(&prior_text),
     )
+}
+
+/// The prior side's program JSON and built parts from a parse of its own
+/// (everything returned is plain data: the parse dies here).
+fn prior_side_owned(prior: &str) -> Result<(Value, SideParts), String> {
+    let allocator = Allocator::default();
+    let ingest = parse_side(&allocator, prior, "prior.js")?;
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All);
+    Ok((json, parts))
 }
 
 /// One side's built state: the tables, graph, statement contexts and

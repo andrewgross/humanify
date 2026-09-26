@@ -44,6 +44,36 @@ fn the_fast_flag_parses() {
     assert!(root.help_information(&[]).contains("--fast"));
 }
 
+fn parse_opts(argv: &[&str]) -> crate::commander::OptionValues {
+    let argv: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
+    match program().parse(&argv) {
+        ParseOutcome::Action { opts, .. } => opts,
+        other => panic!("{argv:?} did not parse: {other:?}"),
+    }
+}
+
+/// `--fast [mode]`: bare is the byte-identical tier, `relaxed` the tier
+/// allowed to change decisions (docs/rust-port/20-fast-mode.md).
+#[test]
+fn the_fast_tier_is_an_optional_value() {
+    use crate::unified::{CommandOptions, FastTier};
+    let tier = |argv: &[&str]| CommandOptions::from_values(&parse_opts(argv)).fast_tier();
+    assert_eq!(tier(&["in.js"]), Ok(FastTier::Off));
+    assert_eq!(tier(&["in.js", "--fast"]), Ok(FastTier::Exact));
+    assert_eq!(tier(&["in.js", "--fast", "exact"]), Ok(FastTier::Exact));
+    let relaxed = FastTier::parse("relaxed");
+    assert!(matches!(relaxed, Ok(FastTier::Relaxed(_))));
+    assert_eq!(tier(&["in.js", "--fast", "relaxed"]), relaxed);
+    assert_eq!(tier(&["in.js", "--fast=relaxed"]), relaxed);
+    assert!(tier(&["in.js", "--fast", "bogus"]).is_err());
+}
+
+#[test]
+fn the_llm_latency_simulation_takes_a_path() {
+    let opts = parse_opts(&["in.js", "--simulate-llm-latency", "sim.json"]);
+    assert_eq!(opts.str("simulateLlmLatency"), Some("sim.json"));
+}
+
 fn command_by_name<'a>(
     root: &'a crate::commander::CliCommand,
     name: &str,

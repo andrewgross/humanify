@@ -40,6 +40,7 @@ use super::jsset::{JsRecord, JsSet};
 use super::nodes::FnNode;
 use super::render::{FnPrinter, Occurrences};
 use super::used_set::{NameLayer, UsedSet};
+use crate::fast::Lever;
 use crate::graph::UnifiedGraph;
 use crate::naming::code_window::{FunctionCodeSelection, cap_context_code, select_function_code};
 use crate::naming::context::{ContextView, DeclView, ParentBinding, build_context};
@@ -106,9 +107,10 @@ pub struct WaveInputs<'a, 's> {
     /// `--batch-size` / `--max-retries` / `--max-free-retries` /
     /// `--lane-threshold`.
     pub tunables: WaveTunables,
-    /// `--fast`: pipeline each round's LLM calls (a lane's follow-up starts
-    /// as soon as ITS answer lands, not when the round's slowest does).
-    pub fast: bool,
+    /// `--fast [tier]`: any tier pipelines each round's LLM calls (a lane's
+    /// follow-up starts as soon as ITS answer lands, not when the round's
+    /// slowest does).
+    pub fast: crate::fast::FastTier,
 }
 
 /// One recorded dispatch (a prompts.jsonl row + its cache-key material).
@@ -381,6 +383,9 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     processor: ProcessorReport,
     /// Function row → its wave context (a function is dispatched once).
     fn_ctx: HashMap<usize, usize>,
+    /// `--fast relaxed:defer-shadowed`: the previous wave's round-B lanes,
+    /// riding with this wave's round A.
+    deferred: Vec<LaneRun>,
 }
 
 /// Run the LLM naming waves over the transfer stage's state
@@ -462,6 +467,7 @@ pub fn run_waves<P: NameProvider>(
         errors: 0,
         processor: ProcessorReport::default(),
         fn_ctx: HashMap::new(),
+        deferred: Vec::new(),
     };
     run.used = run.module_used_names();
     run.wave_loop();
@@ -547,7 +553,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let mut done: Vec<bool> = (0..n).map(|i| self.node_settled(i)).collect();
         let mut pending: Vec<usize> = (0..n).filter(|&i| !done[i]).collect();
         let mut seeds: Vec<RetrySeed> = Vec::new();
-        while !pending.is_empty() || !seeds.is_empty() {
+        while !pending.is_empty() || !seeds.is_empty() || !self.deferred.is_empty() {
             let members = self.wave_members(&pending, &done);
             for &m in &members {
                 done[m] = true;
@@ -590,7 +596,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     /// `settleWaveNodes`: nodes whose work fully resolved, in node order.
     fn settle_nodes(&mut self, live: &[RetrySeed]) {
-        let held: HashSet<usize> = live.iter().map(|s| self.ctxs[s.ctx].node_index).collect();
+        // A node settles once ALL its work is done: no live retry seed and
+        // no deferred shadowed pass.
+        let held: HashSet<usize> = live
+            .iter()
+            .map(|s| s.ctx)
+            .chain(self.deferred.iter().map(|l| l.ctx))
+            .map(|ctx| self.ctxs[ctx].node_index)
+            .collect();
         let due: Vec<usize> = self
             .settle
             .keys()
@@ -642,9 +655,13 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
         }
         let groups = self.group_by_proximity(&mb_nodes);
+        let setup_phase = crate::profiling::phase("waves:setup");
 
         // ---- round A ----------------------------------------------------
-        let mut lanes: Vec<LaneRun> = Vec::new();
+        // (`defer-shadowed`: the previous wave's round-B lanes first — they
+        // are earlier nodes, and their requests read the same state they
+        // would have read in their own round.)
+        let mut lanes: Vec<LaneRun> = std::mem::take(&mut self.deferred);
         // Functions with a main pass: (fn, ctx, all bindings) — the gate
         // waiters, in node order.
         let mut waiters: Vec<(usize, usize, Vec<BindingInfo>)> = Vec::new();
@@ -654,9 +671,13 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             // The task's traversal: a fresh path for every node under
             // the function, so every fresh-era scope inside it is
             // (re)crawled NOW — registration order, current names.
+            let ph = crate::profiling::phase("setup:recrawl");
             self.recrawl_inside(self.inp.graph.functions[f].span);
+            drop(ph);
             let row = &self.inp.rows.fns[f];
+            let ph = crate::profiling::phase("setup:owned-bindings");
             let all = collect_owned_binding_infos(&self.state, row);
+            drop(ph);
             match self.select_llm_bindings(f, &all) {
                 Err(reason) => {
                     self.settle
@@ -678,10 +699,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             .into_iter()
             .map(|seed| self.start_retry(seed))
             .collect();
+        drop(setup_phase);
         self.drive_round(lanes, retries);
         let mut rejections = self.barrier();
 
         // ---- the gate release: shadowed bindings, in node order ---------
+        let gate_phase = crate::profiling::phase("waves:gate-release");
         let mut lanes: Vec<LaneRun> = Vec::new();
         waiters.sort_by_key(|(_, ctx, _)| self.ctxs[*ctx].node_index);
         for (f, ctx, all) in waiters {
@@ -692,9 +715,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             self.settle
                 .insert(self.ctxs[ctx].node_index, Settle::FnDone(f, ctx));
         }
+        drop(gate_phase);
         // ---- round B -----------------------------------------------------
-        self.drive_round(lanes, Vec::new());
-        rejections.extend(self.barrier());
+        if self.inp.fast.lever(Lever::DeferShadowed) {
+            self.deferred = lanes;
+        } else {
+            self.drive_round(lanes, Vec::new());
+            rejections.extend(self.barrier());
+        }
         self.build_retry_seeds(rejections)
     }
 
@@ -807,7 +835,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         });
         let strategy = self.strategies.len() - 1;
         let session = self.inp.graph.functions[f].session_id.clone();
-        let n_lanes = compute_lane_count(names.len(), self.inp.tunables.lane_threshold);
+        let batch = self.inp.tunables.batch_size.max(1);
+        let n_lanes = if self.inp.fast.lever(Lever::WindowLanes) && names.len() > batch {
+            names.len().div_ceil(batch)
+        } else {
+            compute_lane_count(names.len(), self.inp.tunables.lane_threshold)
+        };
         if n_lanes > 0 {
             for (i, lane) in split_by_position(&names, n_lanes).into_iter().enumerate() {
                 lanes.push(LaneRun {
@@ -832,7 +865,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// `buildContext(fn)` at the current state, plus its used-identifiers
     /// Set registered for barrier-time reads.
     fn build_context(&mut self, f: usize) -> (FnContext, usize) {
+        let ph = crate::profiling::phase("setup:context-view");
         let view = self.context_view(f);
+        drop(ph);
+        let _ph = crate::profiling::phase("setup:build-context");
         let eligible = self.inp.eligible;
         let ctx = build_context(&view, &self.inp.ng.fn_call_sites[f], |n: &str| {
             eligible.is_eligible(n)
@@ -1495,7 +1531,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// call per active lane per turn (a lane's sequence is independent of
     /// the others: its reads are frozen for the round).
     fn drive_round(&mut self, lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
-        if self.inp.fast {
+        if self.inp.fast.on() {
             self.drive_round_pipelined(lanes, retries);
         } else {
             self.drive_round_turns(lanes, retries);

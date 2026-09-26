@@ -3,107 +3,114 @@ Usage: humanify [options] [command] <input>
 Unminify JavaScript using an OpenAI-compatible API
 
 Arguments:
-  input                       The input minified JavaScript file
+  input                          The input minified JavaScript file
 
 Options:
-  -V, --version               output the version number
-  --endpoint <url>            OpenAI-compatible API endpoint (default:
-                              "https://api.openai.com/v1")
-  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY
-                              env vars)
-  -m, --model <model>         Model identifier (default: "gpt-4o-mini")
-  -o, --output-dir <output>   Output directory (default: "output")
-  -v, --verbose               Increase verbosity (-v for info, -vv for debug)
-  -c, --concurrency <n>       Max concurrent function-lane LLM requests.
-                              Module-lane size is set separately via
-                              --module-concurrency; the global in-flight cap is
-                              their sum. (default: "50")
-  --module-concurrency <n>    Max concurrent module-lane LLM requests (default
-                              derived from -c)
-  --max-tokens <n>            Per-request completion token budget
-  --context-tokens <n>        Model context window in tokens; sizes the batched
-                              split-naming prompts (default: 32768)
-  --disable <passes>          Comma-separated pass switches to turn OFF for
-                              ablation (unknown names are fatal and list the
-                              valid set)
-  --probe <probes>            Comma-separated instrumentation probes to turn ON
-                              (unknown names are fatal and list the valid set)
-  --retries <n>               Number of retry attempts for failed API calls
-                              (default: "3")
-  --timeout <ms>              LLM request timeout in milliseconds (default:
-                              "300000")
-  --llm-cache <dir>           Cache LLM responses on disk keyed by request
-                              content. Repeated prompts become deterministic
-                              across sessions and reruns are nearly free — the
-                              serving-drift countermeasure the 034 eval README
-                              describes.
-  --reasoning-effort <level>  Reasoning effort for reasoning models: low,
-                              medium, or high (no env fallback; default:
-                              server-side default). 'low' is ~8x faster on
-                              gpt-oss at equal name quality; only set it for
-                              reasoning models — non-reasoning models (e.g.
-                              gpt-4o-mini) reject it.
-  --skip-libraries            Skip library code instead of processing it with
-                              the LLM (default: true)
-  --no-skip-libraries         Process library code with the LLM
-  --log-file <path>           Write debug logs to file (implies -vv)
-  --diagnostics <path>        Write detailed rename diagnostics to JSON file
-  --stats-json <path>         Write the deterministic match/rename breakdown as
-                              compact JSON (coverage + transfer stats +
-                              prior-match counts) for the eval harness
-  --dump-artifacts <dir>      Write the span-keyed decision-record dump to this
-                              directory (instrumentation). Inert by
-                              construction: the run's decisions are unchanged
-                              (proven by neutrality).
-  --bundler <type>            Force bundler type (webpack, browserify, rollup,
-                              esbuild, parcel, bun)
-  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,
-                              none)
-  --batch-size <n>            Identifiers per LLM batch (default: 10)
-  --max-retries <n>           Per-identifier LLM call limit, initial + retries
-                              (default: 2; further conflicts resolve by
-                              suffixing)
-  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)
-  --lane-threshold <n>        Min bindings to enable parallel lanes (default:
-                              25)
-  --split                     Split output into a multi-file tree (src/ +
-                              vendor/ + run scaffold), emitted as a runnable
-                              CommonJS module graph by default
-  --prior-version <path>      Path to a prior humanified file for cross-version
-                              rename reuse
-  --reconcile-prior-diff      After generation, snap rename-noise diff hunks
-                              back to the prior version's names (default with
-                              --prior-version)
-  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass
-  --naming-floor              Close minted-token coverage gaps deterministically
-                              (class/function-expression inner-id derivation +
-                              decoration retry; default on)
-  --no-naming-floor           Disable the deterministic naming floor
-  --naming-floor-sweep        LLM-name the minted survivors the naming floor
-                              cannot derive (params/decls/vars; default on).
-                              Prior-aware with a prior version: prior names
-                              transfer deterministically and the LLM names only
-                              the residue
-  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors
-  --split-ledger <path>       Prior split ledger for cross-release
-                              file-assignment inheritance (default:
-                              auto-discovered next to --prior-version)
-  --split-pure                Emit the byte-exact review tree instead of the
-                              runnable CommonJS module graph (the --split
-                              default). Requires --split
-  --rename-ledger <dir>       Write a replayable rename ledger (every rename
-                              keyed by byte position) + source snapshot + a
-                              standalone apply.mjs, so the LLM-rename output can
-                              be reproduced without re-running the model
-  --fast                      Post-parity performance mode: pipelined LLM
-                              dispatch and parallel stages. Deterministic (same
-                              input + same answers = same bytes), but not
-                              byte-equal to the default parity-faithful path
-  --profile <path>            Write performance profile to JSON file (Chrome
-                              Trace Event format, viewable at chrome://tracing
-                              or ui.perfetto.dev)
-  -h, --help                  display help for command
+  -V, --version                  output the version number
+  --endpoint <url>               OpenAI-compatible API endpoint (default:
+                                 "https://api.openai.com/v1")
+  --api-key <key>                API key (flag > HUMANIFY_API_KEY >
+                                 OPENAI_API_KEY env vars)
+  -m, --model <model>            Model identifier (default: "gpt-4o-mini")
+  -o, --output-dir <output>      Output directory (default: "output")
+  -v, --verbose                  Increase verbosity (-v for info, -vv for debug)
+  -c, --concurrency <n>          Max concurrent function-lane LLM requests.
+                                 Module-lane size is set separately via
+                                 --module-concurrency; the global in-flight cap
+                                 is their sum. (default: "50")
+  --module-concurrency <n>       Max concurrent module-lane LLM requests
+                                 (default derived from -c)
+  --max-tokens <n>               Per-request completion token budget
+  --context-tokens <n>           Model context window in tokens; sizes the
+                                 batched split-naming prompts (default: 32768)
+  --disable <passes>             Comma-separated pass switches to turn OFF for
+                                 ablation (unknown names are fatal and list the
+                                 valid set)
+  --probe <probes>               Comma-separated instrumentation probes to turn
+                                 ON (unknown names are fatal and list the valid
+                                 set)
+  --retries <n>                  Number of retry attempts for failed API calls
+                                 (default: "3")
+  --timeout <ms>                 LLM request timeout in milliseconds (default:
+                                 "300000")
+  --llm-cache <dir>              Cache LLM responses on disk keyed by request
+                                 content. Repeated prompts become deterministic
+                                 across sessions and reruns are nearly free —
+                                 the serving-drift countermeasure the 034 eval
+                                 README describes.
+  --reasoning-effort <level>     Reasoning effort for reasoning models: low,
+                                 medium, or high (no env fallback; default:
+                                 server-side default). 'low' is ~8x faster on
+                                 gpt-oss at equal name quality; only set it for
+                                 reasoning models — non-reasoning models (e.g.
+                                 gpt-4o-mini) reject it.
+  --skip-libraries               Skip library code instead of processing it with
+                                 the LLM (default: true)
+  --no-skip-libraries            Process library code with the LLM
+  --log-file <path>              Write debug logs to file (implies -vv)
+  --diagnostics <path>           Write detailed rename diagnostics to JSON file
+  --stats-json <path>            Write the deterministic match/rename breakdown
+                                 as compact JSON (coverage + transfer stats +
+                                 prior-match counts) for the eval harness
+  --dump-artifacts <dir>         Write the span-keyed decision-record dump to
+                                 this directory (instrumentation). Inert by
+                                 construction: the run's decisions are unchanged
+                                 (proven by neutrality).
+  --bundler <type>               Force bundler type (webpack, browserify,
+                                 rollup, esbuild, parcel, bun)
+  --minifier <type>              Force minifier type (terser, esbuild, swc, bun,
+                                 none)
+  --batch-size <n>               Identifiers per LLM batch (default: 10)
+  --max-retries <n>              Per-identifier LLM call limit, initial +
+                                 retries (default: 2; further conflicts resolve
+                                 by suffixing)
+  --max-free-retries <n>         Cross-lane collision retry limit (default: 100)
+  --lane-threshold <n>           Min bindings to enable parallel lanes (default:
+                                 25)
+  --split                        Split output into a multi-file tree (src/ +
+                                 vendor/ + run scaffold), emitted as a runnable
+                                 CommonJS module graph by default
+  --prior-version <path>         Path to a prior humanified file for
+                                 cross-version rename reuse
+  --reconcile-prior-diff         After generation, snap rename-noise diff hunks
+                                 back to the prior version's names (default with
+                                 --prior-version)
+  --no-reconcile-prior-diff      Disable the prior-diff reconcile pass
+  --naming-floor                 Close minted-token coverage gaps
+                                 deterministically (class/function-expression
+                                 inner-id derivation + decoration retry; default
+                                 on)
+  --no-naming-floor              Disable the deterministic naming floor
+  --naming-floor-sweep           LLM-name the minted survivors the naming floor
+                                 cannot derive (params/decls/vars; default on).
+                                 Prior-aware with a prior version: prior names
+                                 transfer deterministically and the LLM names
+                                 only the residue
+  --no-naming-floor-sweep        Disable the LLM sweep of minted survivors
+  --split-ledger <path>          Prior split ledger for cross-release
+                                 file-assignment inheritance (default:
+                                 auto-discovered next to --prior-version)
+  --split-pure                   Emit the byte-exact review tree instead of the
+                                 runnable CommonJS module graph (the --split
+                                 default). Requires --split
+  --rename-ledger <dir>          Write a replayable rename ledger (every rename
+                                 keyed by byte position) + source snapshot + a
+                                 standalone apply.mjs, so the LLM-rename output
+                                 can be reproduced without re-running the model
+  --fast [tier]                  Post-parity performance tiers, both
+                                 deterministic (same input + same answers = same
+                                 bytes). `exact` (the default when bare) ships
+                                 the default path's bytes; `relaxed` may change
+                                 decisions (judged by the eval)
+  --simulate-llm-latency <path>  Instrument: price this run's LLM schedule with
+                                 cold per-call latencies on a virtual clock and
+                                 write the simulated LLM wall time to <path>
+                                 (JSON)
+  --profile <path>               Write performance profile to JSON file (Chrome
+                                 Trace Event format, viewable at
+                                 chrome://tracing or ui.perfetto.dev)
+  -h, --help                     display help for command
 
 Commands:
-  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env
-                              reads in a file or tree
+  env-reads [options] <path>     Inventory process.env / Bun.env /
+                                 import.meta.env reads in a file or tree

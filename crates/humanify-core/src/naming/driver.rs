@@ -38,7 +38,9 @@ use humanify_model::stats::{
 
 use crate::naming::passes::census::MintedCensus;
 use crate::naming::passes::census_of_text;
-use crate::naming::passes::family_permute::{FamilyPermuteOutcome, run_family_permute};
+use crate::naming::passes::family_permute::{
+    FamilyPermuteOutcome, PriorMembers, run_family_permute, run_family_permute_with,
+};
 use crate::naming::passes::sweep::{SweepResult, run_deferred_sweep};
 use crate::naming::reconcile::ReconcileResult;
 use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
@@ -79,10 +81,8 @@ pub struct NamingConfig {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`.
     pub shingle_probe: bool,
-    /// `--fast`: the post-parity performance mode (docs/rust-port/20-fast-mode.md).
-    /// Every change it gates is deterministic; it may move output once
-    /// relative to the parity-faithful path, never between two runs.
-    pub fast: bool,
+    /// `--fast [tier]` (docs/rust-port/20-fast-mode.md, `crate::fast`).
+    pub fast: crate::fast::FastTier,
 }
 
 impl NamingConfig {
@@ -190,18 +190,33 @@ pub fn run_naming<P: NameProvider>(
                 prior,
                 bundler: opts.bundler,
                 minifier: opts.minifier,
+                fast: config.fast.on(),
             },
             |stage| era::prior_era(stage, &opts, provider),
         ),
         None => era::fresh_era(input.fresh, &opts, provider),
     };
-    // `captureSemanticBaseline` reads only the fresh text: `--fast`
-    // measures it on a thread of its own while the era runs.
-    let (baseline, era) = if config.fast {
-        crate::par::beside(|| Some(validate::baseline_of(input.fresh)), run_era)
+    // `captureSemanticBaseline` reads only the fresh text, and the family
+    // permute's prior index only the prior text: `--fast` builds both on
+    // a thread of their own while the era runs.
+    let permute_may_run = !config.family_permute_disabled
+        && config.reconcile_prior_diff
+        && !config.source_map
+        && !config.emit_rename_ledger;
+    let ((baseline, mut prior_members), era) = if config.fast.on() {
+        crate::par::beside(
+            || {
+                let prior_members = input
+                    .prior
+                    .filter(|_| permute_may_run)
+                    .map(PriorMembers::of);
+                (Some(validate::baseline_of(input.fresh)), prior_members)
+            },
+            run_era,
+        )
     } else {
         let era = run_era();
-        (None, era)
+        ((None, None), era)
     };
     let era = era?;
     let NamingEra {
@@ -286,7 +301,7 @@ pub fn run_naming<P: NameProvider>(
         // `--fast`: the verdict (a re-parse of the generated text) runs
         // beside a SPECULATIVE reconcile on a copy of the trail; an
         // invalid output discards the speculation — the parity outcome.
-        Some(prior) if config.fast => {
+        Some(prior) if config.fast.on() => {
             let (verdict, (spec_trail, spec)) = crate::par::beside(
                 || verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh))),
                 || reconcile(prior, trail.clone()),
@@ -402,7 +417,11 @@ pub fn run_naming<P: NameProvider>(
         && let Some(prior) = input.prior
     {
         let text = resolved;
-        if let Ok(p) = run_family_permute(&text, prior, &eligible) {
+        let permuted = match prior_members.take() {
+            Some(members) => run_family_permute_with(&text, members, &eligible),
+            None => run_family_permute(&text, prior, &eligible),
+        };
+        if let Ok(p) = permuted {
             add_claims(&mut out.claims, &p.claims);
             shipped = p.code.clone().unwrap_or(text);
             out.permute = Some(p);

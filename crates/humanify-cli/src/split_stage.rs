@@ -251,7 +251,9 @@ fn split_before_commit(
     trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(SplitOutcome, bool, NamerCalls), String> {
+    let ph = humanify_core::profiling::phase("split:load-prior-ledger");
     let prior = load_prior_split_ledger(input, renderer)?;
+    drop(ph);
     // Fresh release: LLM-named folders/files; warm fossil hops: LLM-named
     // fresh module mints; inherited layout is never renamed.
     let mut namer = ProviderSplitNamer::with_budget(input.provider, input.namer_budget);
