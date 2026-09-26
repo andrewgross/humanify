@@ -62,15 +62,13 @@ use crate::matching::statement_context::StatementContexts;
 
 /// The texts and flags the match stage runs on: the FORMATTED fresh text,
 /// the prior version's code, the detected bundler/minifier (the fresh
-/// side's rename-eligibility skip set), and the optional-call sizing flag
-/// (off in the pipeline — the babel blind spot is reproduced).
+/// side's rename-eligibility skip set).
 #[derive(Clone, Copy)]
 pub struct PriorMatchInput<'t> {
     pub fresh: &'t str,
     pub prior: &'t str,
     pub bundler: Option<&'t str>,
     pub minifier: Option<&'t str>,
-    pub visit_optional_calls: bool,
 }
 
 /// One side of the match stage, all borrowed from [`with_match_stage`]'s
@@ -127,7 +125,6 @@ pub fn match_prior_version<T>(
         prior,
         bundler,
         minifier,
-        visit_optional_calls,
     } = input;
 
     // ── both sides: parse, then each side's program JSON ONCE ───────────
@@ -151,7 +148,6 @@ pub fn match_prior_version<T>(
         &fresh_json,
         "input.js",
         Eligibility::SkipSet { bundler, minifier },
-        visit_optional_calls,
     );
 
     // ── the prior side (ALL bindings eligible — prior-version.ts:284-288) ─
@@ -160,13 +156,7 @@ pub fn match_prior_version<T>(
         graph: prior_graph,
         ctx: prior_ctx,
         spans: prior_spans,
-    } = build_side_parts(
-        &prior_ingest,
-        &prior_json,
-        "prior.js",
-        Eligibility::All,
-        visit_optional_calls,
-    );
+    } = build_side_parts(&prior_ingest, &prior_json, "prior.js", Eligibility::All);
 
     // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
     // The initial function cascade (propagation on), the alternation with
@@ -372,7 +362,6 @@ pub(crate) fn build_side_parts(
     program_json: &Value,
     file_name: &str,
     eligibility: Eligibility<'_>,
-    visit_optional_calls: bool,
 ) -> SideParts {
     let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
     let tables = SymbolTables::build(ingest.semantic());
@@ -392,7 +381,6 @@ pub(crate) fn build_side_parts(
         file_name,
         &factories,
         eligibility,
-        visit_optional_calls,
     );
     let ctx = StatementContexts::build_with_json(
         &graph,

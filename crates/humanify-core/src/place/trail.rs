@@ -11,7 +11,7 @@
 //! the bulky `evidence` kept only where it explains something
 //! (`keepsEvidence`), else `{}`.
 
-use humanify_model::dump::{PlacementFile, PlacementRow, SpanKey};
+use humanify_model::dump::{PlacementRow, SpanKey};
 use serde_json::{Map, Value};
 
 /// Names beyond this are noise in a trail (`MAX_NAMES`).
@@ -222,17 +222,6 @@ impl PlacementTrail {
         out.insert("schemaVersion", JsValue::Number(1.0));
         out.insert("placements", JsValue::Array(placements));
         JsValue::Object(out)
-    }
-
-    /// The dump's `placement.json` (`writePlacement`): rows sorted by span
-    /// key (`spanKeyOrder`: start, then end).
-    pub fn to_placement_file(&self) -> PlacementFile {
-        let mut placements = self.rows.clone();
-        placements.sort_by_key(|r| (r.key.start, r.key.end));
-        PlacementFile {
-            schema_version: humanify_model::dump::DUMP_SCHEMA_VERSION,
-            placements,
-        }
     }
 }
 

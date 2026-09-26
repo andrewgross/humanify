@@ -1,32 +1,17 @@
-//! The WP5.1/5.2 gate's Rust-side dump: run placement on a TS dump's
-//! SHIPPED text (the split's input — `artifactDump.texts.shipped =
-//! renameResult.code`) against the prior release's split ledger, and write
-//! a `placement.json` the differ compares (`compare --sections placement`).
-//! Independent of naming parity by construction: the shipped text already
-//! carries the TS's settled names. Migration scaffolding — deleted at
-//! phase 6 with the TS core.
-//!
-//! Statement-hash BYTES are the Rust's own (WP5.6e ended the TS-byte
-//! injection): a TS-written prior ledger is re-keyed from `--prior-text`
-//! when one is given ([`super::ledger::rederive_ts_era_hashes`]) and
-//! refused otherwise, and a declaration-less module's `module-<hash8>`
-//! stem is the Rust's bytes — so this verb no longer reproduces a TS
-//! dump's placement where either reaches the output.
+//! The placement regime dispatch (`stableSplitFromCode`'s branch choice):
+//! [`assign_regime`] runs the fossil / prior-tiers / fresh-cluster
+//! placement for the split stage ([`crate::emit::stable_split`]).
 
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use humanify_model::dump::PromptRecord;
-use humanify_model::llm::{CacheKeyParams, LlmCall, cache_key_of};
-use serde_json::Value;
-
 use super::assign::cluster::{ClusterNamers, DEFAULT_CLUSTER_CONFIG, assign_clustered};
 use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
 use super::assign::namer::{SplitNamer, TreeReviser};
-use super::input::{SplitInput, split_input, top_level_statement_texts};
+use super::input::{SplitInput, top_level_statement_texts};
 use super::ledger::FossilLedgerModule;
-use super::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
+use super::ledger::StableSplitLedger;
 use super::tiers::{
     PlacementSwitches, PriorCarry, TierInput, TierStats, assign_with_prior, placement_summary,
 };
@@ -43,7 +28,7 @@ pub enum Regime {
     Cluster,
 }
 
-/// What the verb was asked to do.
+/// What placement is asked to do.
 pub struct PlacementGate<'a> {
     pub regime: Regime,
     /// The prior release's `split-ledger.json` (the oracle run's
@@ -67,77 +52,9 @@ pub struct PlacementGate<'a> {
     pub reviser: Option<&'a mut dyn TreeReviser>,
 }
 
-/// What the verb did.
-#[derive(Debug, Default)]
-pub struct PlacementReport {
-    pub rows: usize,
-    pub files: usize,
-    /// The prior ledger's hash verdict (`PriorHashes::describe`), when a
-    /// prior ledger was given.
-    pub prior_hashes: Option<String>,
-    /// The regime's own summary (the run log's line).
-    pub summary: String,
-}
-
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
-}
-
-/// Run placement over a TS dump and write `<out>/meta.json` +
-/// `<out>/placement.json`.
-pub fn dump_placement(
-    ts_dump_dir: &Path,
-    out_dir: &Path,
-    gate: PlacementGate,
-) -> Result<PlacementReport, String> {
-    let meta: Value = read_json(&ts_dump_dir.join("meta.json"))?;
-    let shipped = fs::read_to_string(ts_dump_dir.join("text").join("shipped.js"))
-        .map_err(|e| format!("shipped text: {e}"))?;
-    let input = split_input(&shipped)?;
-    let mut report = PlacementReport::default();
-    let mut prior: Option<StableSplitLedger> =
-        gate.prior_ledger.as_deref().map(read_ledger).transpose()?;
-    if let Some(ledger) = prior.as_mut() {
-        let prior_text = gate
-            .prior_text
-            .as_deref()
-            .map(|p| fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display())))
-            .transpose()?;
-        report.prior_hashes = Some(settle_prior_hashes(ledger, prior_text.as_deref()).describe());
-    }
-    let mut trail = PlacementTrail::default();
-    fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
-    let Placed {
-        assignment,
-        summary,
-        ..
-    } = assign_regime(
-        &input,
-        &shipped,
-        gate,
-        prior.as_ref(),
-        &mut trail,
-        Some(out_dir),
-    )?;
-    report.summary = summary;
-    let file = trail.to_placement_file();
-    report.rows = file.placements.len();
-    let mut files: Vec<&str> = assignment.iter().map(String::as_str).collect();
-    files.sort_unstable();
-    files.dedup();
-    report.files = files.len();
-    fs::write(
-        out_dir.join("meta.json"),
-        serde_json::to_string(&meta).expect("json"),
-    )
-    .map_err(|e| format!("write meta: {e}"))?;
-    fs::write(
-        out_dir.join("placement.json"),
-        serde_json::to_string(&file).expect("json"),
-    )
-    .map_err(|e| format!("write placement: {e}"))?;
-    Ok(report)
 }
 
 /// What one placement regime decided.
@@ -284,48 +201,4 @@ fn read_carry(
         statement_texts,
         match_map,
     }))
-}
-
-/// Compare the namer calls the Rust dispatched with the TS dump's
-/// `prompts.jsonl` rows for `function_id` (in dispatch order): system
-/// prompt, user prompt, identifiers and the cache key must be the TS's
-/// bytes. Returns one line per divergence.
-pub fn check_dispatched_prompts(
-    dispatched: &[LlmCall],
-    prompts_jsonl: &Path,
-    function_id: &str,
-    params: &CacheKeyParams,
-) -> Result<Vec<String>, String> {
-    let text = fs::read_to_string(prompts_jsonl).map_err(|e| format!("prompts.jsonl: {e}"))?;
-    let mut expected: Vec<PromptRecord> = Vec::new();
-    for line in text.lines().filter(|l| l.contains(function_id)) {
-        let row: PromptRecord =
-            serde_json::from_str(line).map_err(|e| format!("prompts.jsonl row: {e}"))?;
-        if row.function_id == function_id {
-            expected.push(row);
-        }
-    }
-    let mut out = Vec::new();
-    if expected.len() != dispatched.len() {
-        out.push(format!(
-            "{function_id}: {} TS dispatch(es), {} Rust",
-            expected.len(),
-            dispatched.len()
-        ));
-    }
-    for (k, (ts, rust)) in expected.iter().zip(dispatched).enumerate() {
-        let key = cache_key_of(&rust.request, params);
-        let checks = [
-            ("systemPrompt", ts.system_prompt == rust.system_prompt),
-            ("userPrompt", ts.user_prompt == rust.user_prompt),
-            ("identifiers", ts.identifiers == rust.request.identifiers),
-            ("cacheKey", ts.cache_key == key),
-        ];
-        for (field, ok) in checks {
-            if !ok {
-                out.push(format!("{function_id} dispatch {k}: {field} differs"));
-            }
-        }
-    }
-    Ok(out)
 }

@@ -160,6 +160,7 @@ pub fn stable_stem(record: &FactoryRecord) -> String {
 /// Derive the on-disk file name for every classified factory, in bundle
 /// order — `FileNameChooser` over every record (the AST path, where every
 /// classified factory is extracted).
+#[cfg(test)]
 pub fn choose_file_names(factories: &[FactoryRecord]) -> Vec<NameLookup> {
     let mut chooser = FileNameChooser::new(factories.iter());
     factories

@@ -62,16 +62,6 @@ pub struct ReconcileOptions {
     pub last_resort_tier: bool,
     pub skip_import_declarations: bool,
     pub skeleton_vote_tier: bool,
-    /// A planted bug for the gate's red runs (never set in the pipeline).
-    pub plant: Option<ReconcilePlant>,
-}
-
-/// A planted bug (the gate's red runs).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum ReconcilePlant {
-    /// Route the FIRST descriptive survivor as asymmetric — one wrong tier
-    /// choice (its trail tier and its rename kind).
-    FlipTier,
 }
 
 impl Default for ReconcileOptions {
@@ -87,7 +77,6 @@ impl Default for ReconcileOptions {
             last_resort_tier: false,
             skip_import_declarations: false,
             skeleton_vote_tier: false,
-            plant: None,
         }
     }
 }
@@ -268,8 +257,6 @@ struct Ctx<'a, 's> {
     new_name_census: HashSet<String>,
     eligible: &'a Eligibility,
     opts: &'a ReconcileOptions,
-    /// The FlipTier plant fired already.
-    flipped: std::cell::Cell<bool>,
 }
 
 fn skip_of(g: &Group, to_name: &str, reason: &str) -> Gate {
@@ -338,18 +325,11 @@ impl Ctx<'_, '_> {
         if is_half_mint_head(&to_name) && !is_wordless_mint_shape(&g.from_name) {
             return skip_of(g, &to_name, "half-mint-restore");
         }
-        let mut kind = if is_wordless_mint_shape(&g.from_name) {
+        let kind = if is_wordless_mint_shape(&g.from_name) {
             RenameKind::Asymmetric
         } else {
             RenameKind::Descriptive
         };
-        if self.opts.plant == Some(ReconcilePlant::FlipTier)
-            && kind == RenameKind::Descriptive
-            && !self.flipped.get()
-        {
-            self.flipped.set(true);
-            kind = RenameKind::Asymmetric;
-        }
         if kind == RenameKind::Descriptive && !self.opts.descriptive_tier {
             return skip_of(g, &to_name, "descriptive-tier-disabled");
         }
@@ -751,7 +731,6 @@ pub fn reconcile_diff_noise(
         new_name_census,
         eligible,
         opts,
-        flipped: std::cell::Cell::new(false),
     };
     let mut from_name_groups: HashMap<String, usize> = HashMap::new();
     for g in &groups {

@@ -245,40 +245,6 @@ fn consumed_classification_joins_by_fresh_span() {
     );
 }
 
-/// regions.json: libraryFunctions consumed; a pre-#33 dump with regions
-/// and no key is Missing; no regions and no key is nothing.
-#[test]
-fn from_regions_json_reads_the_new_schema() {
-    let v: Value = serde_json::from_str(
-        r#"{"schemaVersion":1,"commentRegions":[{"span":{"start":8,"end":null},"library":"tinylib"}],"libraryFunctions":[{"key":{"text":"fresh","start":22,"end":40},"sessionId":"input.js:2:10","library":"tinylib"}],"bannerClassifications":[]}"#,
-    )
-    .unwrap();
-    assert_eq!(
-        LibraryClassification::from_regions_json(&v).unwrap(),
-        Some(LibraryClassification::Consumed(vec![LibraryFunctionKey {
-            span: Span::new(22, 40),
-            session_id: "input.js:2:10".into(),
-            library: "tinylib".into(),
-        }]))
-    );
-    let old: Value = serde_json::from_str(
-        r#"{"schemaVersion":1,"commentRegions":[{"span":{"start":8,"end":null},"library":"tinylib"}],"bannerClassifications":[]}"#,
-    )
-    .unwrap();
-    assert_eq!(
-        LibraryClassification::from_regions_json(&old).unwrap(),
-        Some(LibraryClassification::Missing)
-    );
-    let empty: Value = serde_json::from_str(
-        r#"{"schemaVersion":1,"commentRegions":[],"bannerClassifications":[]}"#,
-    )
-    .unwrap();
-    assert_eq!(
-        LibraryClassification::from_regions_json(&empty).unwrap(),
-        None
-    );
-}
-
 /// regions.json is written in the TS's key order and bytes (write.test.ts:
 /// an open-ended region is `end: null`).
 #[test]

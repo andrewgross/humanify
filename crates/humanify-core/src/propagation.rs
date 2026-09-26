@@ -66,82 +66,6 @@ use crate::graph::UnifiedGraph;
 use crate::matching::{FingerprintIndex, IndexNode};
 
 // ---------------------------------------------------------------------------
-// WP2.1 diagnostics: the propagation trace (migration scaffolding —
-// deleted at phase 6)
-// ---------------------------------------------------------------------------
-
-/// The propagation trace (migration scaffolding — deleted at phase 6).
-/// When CONFIGURED it logs the propagation loop's per-iteration dynamics to
-/// stderr: iteration boundaries, resolutions, narrowing writes,
-/// contradictions, plus the alternation rounds and the cascade's
-/// demote/revoke steps. A watch list (prefix match on the old session id)
-/// narrows the PER-ENTRY lines to those ids; without one every entry's
-/// narrowing prints.
-///
-/// The environment is read by the CLI ([`humanify_cli::env`], the ONE
-/// reader) which calls [`configure`] — core modules receive
-/// environment-derived values as CONFIG, never by reading `std::env`
-/// themselves (02 §2; clippy `disallowed_methods` is the static layer).
-pub mod trace {
-    use std::sync::OnceLock;
-
-    #[derive(Default)]
-    struct Config {
-        enabled: bool,
-        watch: Option<Vec<String>>,
-    }
-
-    static CONFIG: OnceLock<Config> = OnceLock::new();
-
-    fn config() -> &'static Config {
-        CONFIG.get_or_init(Config::default)
-    }
-
-    /// Installs the trace configuration. The FIRST call wins; later calls
-    /// are ignored (the CLI reads the env once at startup).
-    pub fn configure(enabled: bool, watch: Option<Vec<String>>) {
-        let _ = CONFIG.set(Config { enabled, watch });
-    }
-
-    pub fn enabled() -> bool {
-        config().enabled
-    }
-
-    /// The watch prefixes, or `None` when unset (every entry prints).
-    fn watch() -> Option<&'static Vec<String>> {
-        config().watch.as_ref()
-    }
-
-    /// Whether a watch list is set (the PROP-start positions print only
-    /// then — without one the watch filter prints every entry anyway).
-    pub fn watch_present() -> bool {
-        watch().is_some()
-    }
-
-    /// Whether per-entry lines for `old_id` should print.
-    pub fn wants(old_id: &str) -> bool {
-        match watch() {
-            None => true,
-            Some(ids) => ids.iter().any(|prefix| old_id.starts_with(prefix)),
-        }
-    }
-
-    /// A global (not per-entry) trace line.
-    pub fn line(args: std::fmt::Arguments<'_>) {
-        if enabled() {
-            eprintln!("{args}");
-        }
-    }
-
-    /// A per-entry trace line, printed only when the id passes the watch.
-    pub fn entry_line(old_id: &str, args: std::fmt::Arguments<'_>) {
-        if enabled() && wants(old_id) {
-            eprintln!("{args}");
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Types (propagation.ts :17-29, types.ts PropagationRungCounts :693)
 // ---------------------------------------------------------------------------
 
@@ -413,33 +337,11 @@ pub fn propagate(
     };
 
     let max_iterations = options.max_iterations.unwrap_or(DEFAULT_MAX_ITERATIONS);
-    trace::line(format_args!(
-        "PROP start live={} maxIters={}",
-        state.ambiguous.len(),
-        max_iterations
-    ));
-    if trace::enabled() && trace::watch_present() {
-        for (pos, entry) in state.ambiguous.snapshot().into_iter().enumerate() {
-            if trace::wants(&entry.old_id) {
-                trace::line(format_args!(
-                    "PROP watch pos={} {} cand={}",
-                    pos,
-                    entry.old_id,
-                    entry.candidates.len()
-                ));
-            }
-        }
-    }
     let mut total_resolved = 0;
     for i in 0..max_iterations {
-        let newly_resolved = run_one_iteration(&mut state, i);
+        let newly_resolved = run_one_iteration(&mut state);
         total_resolved += newly_resolved;
         if newly_resolved == 0 {
-            trace::line(format_args!(
-                "PROP end at iter {} resolved {}",
-                i + 1,
-                total_resolved
-            ));
             return PropagationOutcome {
                 resolved: total_resolved,
                 iterations: i + 1,
@@ -447,10 +349,6 @@ pub fn propagate(
             };
         }
     }
-    trace::line(format_args!(
-        "PROP cap {} resolved {}",
-        max_iterations, total_resolved
-    ));
     PropagationOutcome {
         resolved: total_resolved,
         iterations: max_iterations,
@@ -497,13 +395,8 @@ struct PropagationState<'a> {
 /// TS `runOneIteration` (:116): one pass over the ambiguous entries in
 /// insertion order; resolutions claim their new id for the rest of the
 /// pass (injectivity), narrowed pools are written back in place.
-fn run_one_iteration(state: &mut PropagationState<'_>, iteration: usize) -> usize {
+fn run_one_iteration(state: &mut PropagationState<'_>) -> usize {
     let mut newly_resolved = 0;
-    trace::line(format_args!(
-        "ITER {} begin live={}",
-        iteration,
-        state.ambiguous.len()
-    ));
     // TS :118 — the snapshot is the iteration order; entries deleted by an
     // earlier resolution are skipped by the `has` guard (:121).
     for entry in state.ambiguous.snapshot() {
@@ -518,7 +411,7 @@ fn run_one_iteration(state: &mut PropagationState<'_>, iteration: usize) -> usiz
             evidence: state.external_ref_evidence,
         };
         let narrowing = narrow_candidates(&ctx, &entry.old_id, &entry.candidates);
-        let (action, new_id) = if narrowing.pool.len() == 1 && narrowing.evidenced {
+        if narrowing.pool.len() == 1 && narrowing.evidenced {
             let new_id = narrowing.pool[0].clone();
             state.matches.insert(entry.old_id.clone(), new_id.clone());
             state.claimed_new.insert(new_id.clone());
@@ -527,41 +420,13 @@ fn run_one_iteration(state: &mut PropagationState<'_>, iteration: usize) -> usiz
                 state.by_rung.record(rung);
             }
             newly_resolved += 1;
-            ("resolved", Some(new_id))
         } else if narrowing.pool.len() > 1 && narrowing.pool.len() < entry.candidates.len() {
             // TS :135-137 — an open pool that SHRANK is written back.
             state
                 .ambiguous
                 .update(&entry.old_id, narrowing.pool.clone());
-            ("written", None)
-        } else {
-            ("kept", None)
-        };
-        trace::entry_line(
-            &entry.old_id,
-            format_args!(
-                "NARROW iter={} {} cand={} pool={} ev={} rung={:?} act={}{}",
-                iteration,
-                entry.old_id,
-                entry.candidates.len(),
-                narrowing.pool.len(),
-                narrowing.evidenced,
-                narrowing.rung,
-                action,
-                new_id.map(|id| format!(" -> {id}")).unwrap_or_default(),
-            ),
-        );
-        if narrowing.pool.is_empty() {
-            trace::entry_line(
-                &entry.old_id,
-                format_args!(
-                    "CONTRA iter={} {} cand={} (empty pool — entry keeps its candidates)",
-                    iteration,
-                    entry.old_id,
-                    entry.candidates.len()
-                ),
-            );
         }
+        if narrowing.pool.is_empty() {}
     }
     newly_resolved
 }

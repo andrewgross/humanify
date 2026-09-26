@@ -35,7 +35,7 @@ use crate::naming::waves::generate::TextView;
 use crate::naming::waves::graph_ext::{NamingGraph, build_naming_graph};
 use crate::naming::waves::nodes::FnNode;
 use crate::naming::waves::processor::{
-    CloseContext, DispatchRecord, NameRecord, Plant, WaveInputs, WaveOutcome, run_waves,
+    CloseContext, DispatchRecord, NameRecord, WaveInputs, WaveOutcome, run_waves,
 };
 use crate::naming::waves::render::{
     FnPrinter, Occurrences, private_rename_edits, render_program_with,
@@ -62,11 +62,6 @@ pub struct EraOptions<'o> {
     /// classification (None = no banner regions).
     pub skip_libraries: bool,
     pub library: Option<&'o LibraryClassification>,
-    pub wave_plant: Option<Plant>,
-    /// Stop after the waves (the `waves` verb's wave-boundary dump).
-    pub stop_after_waves: bool,
-    /// Gate plant: a first version modelled with two scope epochs.
-    pub two_epochs_without_prior: bool,
     /// `emitRenameLedger`: derive the ledger's base stage from the
     /// naming-era renames before `generate`.
     pub rename_ledger: bool,
@@ -388,7 +383,6 @@ pub fn fresh_era<P: NameProvider>(
             bundler: opts.bundler,
             minifier: opts.minifier,
         },
-        false,
     );
     let semantic = ingest.semantic();
     let graph = &parts.graph;
@@ -415,7 +409,7 @@ pub fn fresh_era<P: NameProvider>(
         close: vec![None; n_fns],
         suggested: vec![None; n_bindings],
         private: Vec::new(),
-        single_epoch: !opts.two_epochs_without_prior,
+        single_epoch: true,
     };
     let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
@@ -459,7 +453,6 @@ fn run_era<P: NameProvider>(
         esbuild: opts.bundler == Some("esbuild"),
         params: opts.params.clone(),
         single_epoch: start.single_epoch,
-        plant: opts.wave_plant,
         tunables: opts.tunables,
     };
     let fn_hashes: Vec<(String, String)> = graph
@@ -517,71 +510,68 @@ fn run_era<P: NameProvider>(
         capture: None,
         probe_lines: Vec::new(),
     };
-    if !opts.stop_after_waves {
-        if opts.naming_floor {
-            let taint = collect_eval_with_taint(semantic);
-            let derivation = derive_expression_inner_names(semantic, &mut state, &eligible, &taint);
-            let decoration = retry_decorated_names(semantic, &mut state, &eligible, &taint);
-            let sweep = opts.pre_generate_sweep.then(|| {
-                sweep_minted_names(
-                    semantic,
-                    &mut state,
-                    &eligible,
-                    &taint,
-                    provider,
-                    opts.params,
-                )
-            });
-            era.floor = Some(FloorCounts {
-                derived: derivation.derived,
-                undecorated: decoration.undecorated,
-                swept: sweep.as_ref().map_or(0, |s| s.named),
-                skipped: derivation.skipped.len()
-                    + decoration.skipped
-                    + sweep.as_ref().map_or(0, |s| s.skipped),
-            });
-            era.pre_sweep = sweep;
-        }
-        // Every naming-era pass has run: the matched module bindings'
-        // declarations carry their final (pre-reconcile) names — plugin.ts
-        // builds `priorCarry.matchMap` here, before the AST is released.
-        era.prior_carry = pending.map(|p| PriorCarry {
-            match_map: build_prior_match_map(p.matched.iter().map(|(row, prior)| {
-                let b = &graph.module_bindings[*row];
-                (
-                    state.name_of_symbol(b.symbol).unwrap_or(b.name.as_str()),
-                    prior.as_str(),
-                )
-            })),
-            matcher: p.matcher,
+    if opts.naming_floor {
+        let taint = collect_eval_with_taint(semantic);
+        let derivation = derive_expression_inner_names(semantic, &mut state, &eligible, &taint);
+        let decoration = retry_decorated_names(semantic, &mut state, &eligible, &taint);
+        let sweep = opts.pre_generate_sweep.then(|| {
+            sweep_minted_names(
+                semantic,
+                &mut state,
+                &eligible,
+                &taint,
+                provider,
+                opts.params,
+            )
         });
-        let privates = private_rename_edits(semantic.source_text(), &start.private);
-        let generated = render_program_with(semantic, &state, &privates);
-        // The ledger's base stage: the AST as the naming era left it (every
-        // pass before `generate` — the floor and the pre-generate sweep
-        // included), over the fresh text. Which scope OBJECTS the TS walk
-        // (`traverse(ast)`) sees decides the entry order:
-        // - after the generated text's validation parse cleared Babel's
-        //   cache (a full bundle), every scope is a fresh crawl;
-        // - with a prior, the prior-match clear left the program scope and
-        //   the graph functions' retained `fn.path.scope`s out of the new
-        //   cache: the walk crawls them fresh (registration order, current
-        //   names), while the scopes the waves reached through new paths
-        //   keep their post-clear tables (the waves' model).
-        era.ledger = opts.rename_ledger.then(|| {
-            use crate::rename::validated::ledger::{build_rename_ledger, parse_clears_scope_cache};
-            if parse_clears_scope_cache(&generated) {
-                state.recrawl_order(|_| true);
-            } else if !single_epoch {
-                let program = state.view().program_scope();
-                let retained: std::collections::HashSet<_> =
-                    rows.fns.iter().map(|f| f.scope).collect();
-                state.recrawl_order(|s| s == program || retained.contains(&s));
-            }
-            build_rename_ledger(semantic.source_text(), &state)
+        era.floor = Some(FloorCounts {
+            derived: derivation.derived,
+            undecorated: decoration.undecorated,
+            swept: sweep.as_ref().map_or(0, |s| s.named),
+            skipped: derivation.skipped.len()
+                + decoration.skipped
+                + sweep.as_ref().map_or(0, |s| s.skipped),
         });
-        era.generated = Some(generated);
+        era.pre_sweep = sweep;
     }
+    // Every naming-era pass has run: the matched module bindings'
+    // declarations carry their final (pre-reconcile) names — plugin.ts
+    // builds `priorCarry.matchMap` here, before the AST is released.
+    era.prior_carry = pending.map(|p| PriorCarry {
+        match_map: build_prior_match_map(p.matched.iter().map(|(row, prior)| {
+            let b = &graph.module_bindings[*row];
+            (
+                state.name_of_symbol(b.symbol).unwrap_or(b.name.as_str()),
+                prior.as_str(),
+            )
+        })),
+        matcher: p.matcher,
+    });
+    let privates = private_rename_edits(semantic.source_text(), &start.private);
+    let generated = render_program_with(semantic, &state, &privates);
+    // The ledger's base stage: the AST as the naming era left it (every
+    // pass before `generate` — the floor and the pre-generate sweep
+    // included), over the fresh text. Which scope OBJECTS the TS walk
+    // (`traverse(ast)`) sees decides the entry order:
+    // - after the generated text's validation parse cleared Babel's
+    //   cache (a full bundle), every scope is a fresh crawl;
+    // - with a prior, the prior-match clear left the program scope and
+    //   the graph functions' retained `fn.path.scope`s out of the new
+    //   cache: the walk crawls them fresh (registration order, current
+    //   names), while the scopes the waves reached through new paths
+    //   keep their post-clear tables (the waves' model).
+    era.ledger = opts.rename_ledger.then(|| {
+        use crate::rename::validated::ledger::{build_rename_ledger, parse_clears_scope_cache};
+        if parse_clears_scope_cache(&generated) {
+            state.recrawl_order(|_| true);
+        } else if !single_epoch {
+            let program = state.view().program_scope();
+            let retained: std::collections::HashSet<_> = rows.fns.iter().map(|f| f.scope).collect();
+            state.recrawl_order(|s| s == program || retained.contains(&s));
+        }
+        build_rename_ledger(semantic.source_text(), &state)
+    });
+    era.generated = Some(generated);
     era.claims = state.claim_stats();
     era.trail = state.finish().trail;
     era

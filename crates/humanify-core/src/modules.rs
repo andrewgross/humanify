@@ -37,7 +37,6 @@ use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
 pub mod known_globals;
 pub mod soundness;
 pub mod vendor_content;
-pub mod vendor_dump;
 pub mod vendor_names;
 pub mod wrapper;
 
@@ -889,13 +888,9 @@ pub fn parse_banner(raw: &str) -> BannerInfo {
     }
 }
 
-/// The WP1.5 gate's dump: rebuild the TS modules.json's rows from a TS
-/// dump's fresh text (the graph's classification anchors the text the
-/// graph was built on). Migration scaffolding — deleted at phase 6 with
-/// the TS core (02 §9).
+/// modules.json's rows in the `--dump-artifacts` catalog: the Bun
+/// classification per site (helper var, wrapper, factory rows).
 pub mod modules_dump {
-    use std::fs;
-    use std::path::Path;
 
     use oxc_allocator::Allocator;
     use serde_json::{Value, json};
@@ -903,49 +898,6 @@ pub mod modules_dump {
     use super::{classify_bun_modules, wrapper::find_wrapper_function};
     use crate::hash::serialize::SymbolTables;
     use crate::ingest::Ingest;
-
-    pub fn dump_modules(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
-        let meta_text = fs::read_to_string(ts_dump_dir.join("meta.json"))
-            .map_err(|e| format!("meta.json: {e}"))?;
-        let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
-
-        // The classification runs TWICE in the TS pipeline: unpack-time on
-        // the MINIFIED text (the vendor-naming one) and graph-time on the
-        // FRESH text (the factory-body-skip one). Both are computed here the
-        // same way; on real Bun bundles the graph site is None (the
-        // beautifier splits the `{exports:{}}` marker across lines — ported
-        // behavior, not an accident).
-        let unpack = classify_text(ts_dump_dir, "minified.js")?;
-        let graph = classify_text(ts_dump_dir, "fresh.js")?;
-        if unpack.is_none() && graph.is_none() {
-            // The TS writer emits no modules.json when neither site fired —
-            // mirror the absence (a non-Bun input has no classification).
-            return Ok(0);
-        }
-        let row_count = unpack
-            .as_ref()
-            .map(|(_, _, n)| *n)
-            .or_else(|| graph.as_ref().map(|(_, _, n)| *n))
-            .unwrap_or(0);
-
-        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
-        fs::write(
-            out_dir.join("meta.json"),
-            serde_json::to_string(&meta).unwrap(),
-        )
-        .map_err(|e| format!("write meta: {e}"))?;
-        fs::write(
-            out_dir.join("modules.json"),
-            serde_json::to_string(&json!({
-                "schemaVersion": 1,
-                "unpack": site_json(unpack.as_ref().map(|(d, w, _)| (d, w.as_ref())), "minified"),
-                "graph": site_json(graph.as_ref().map(|(d, w, _)| (d, w.as_ref())), "fresh"),
-            }))
-            .unwrap(),
-        )
-        .map_err(|e| format!("write modules: {e}"))?;
-        Ok(row_count)
-    }
 
     /// One classification site's modules.json object (`recordBunModules`):
     /// helper var, wrapper, factory rows sorted by span — Null without a
@@ -1008,29 +960,6 @@ pub mod modules_dump {
             "wrapper": wrapper_json,
             "factories": rows,
         })
-    }
-
-    /// Classify one dump text (by file name) — None when no helper scan hit
-    /// (a real Bun bundle's FRESH text, or a non-Bun input).
-    fn classify_text(
-        ts_dump_dir: &Path,
-        file: &str,
-    ) -> Result<
-        Option<(
-            super::BunModuleClassification,
-            Option<super::wrapper::WrapperFunction>,
-            usize,
-        )>,
-        String,
-    > {
-        let text = fs::read_to_string(ts_dump_dir.join("text").join(file))
-            .map_err(|e| format!("{file}: {e}"))?;
-        Ok(classify_site(&text)
-            .map_err(|e| format!("{file}: {e}"))?
-            .map(|(c, w)| {
-                let n = c.factories.len();
-                (c, w, n)
-            }))
     }
 
     /// One classification site over a text: the Bun CJS classification and

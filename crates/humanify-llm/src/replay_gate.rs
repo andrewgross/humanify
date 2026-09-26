@@ -1,6 +1,7 @@
 //! WP4.1's replay gate (10-work-breakdown WP4.1: "the Rust client replays
-//! a TS-written cache entry byte-for-byte"), as a library the CLI's
-//! `llm-replay-gate` subcommand and the committed fixture test both run.
+//! a TS-written cache entry byte-for-byte"), kept as a unit-test golden
+//! since the cutover: the committed fixture (test/parity/wp41-replay/)
+//! replayed through the live key derivation and cache. Test-only.
 //!
 //! Inputs, per pair:
 //! - `requests`: the FULL typed request of every TS dispatch

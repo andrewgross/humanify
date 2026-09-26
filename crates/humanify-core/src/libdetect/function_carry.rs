@@ -25,13 +25,11 @@
 //!   per-ordinal type mismatch. The ordinal is taken over the OUTPUT tree,
 //!   never the raw one: flipComparisons reorders functions (the `reorder`
 //!   vector in test/parity/library-carry.json).
-//! - [`LibraryClassification::Consumed`] — the dump verbs (`naming`,
-//!   `matches`, `transfers`) replaying a TS dump, which has no raw text:
-//!   the TS's classification, `regions.json`'s `libraryFunctions` (fresh
-//!   span in UTF-8 bytes, sessionId, library), joined by the function
-//!   node's fresh span (the sessionId cross-checked). The pipeline's
-//!   `--ts-library-functions` consumed it too through phase 5a (deleted at
-//!   WP5.6d).
+//! - [`LibraryClassification::Consumed`] — a classification given as
+//!   keys (fresh span in UTF-8 bytes, sessionId, library), joined by the
+//!   function node's fresh span (the sessionId cross-checked). The TS-dump
+//!   verbs that read it from `regions.json` were deleted at the cutover;
+//!   the unit tests drive the join through it.
 //!
 //! The walk is babel's `Function` alias set (FunctionDeclaration,
 //! FunctionExpression, ArrowFunctionExpression, ObjectMethod, ClassMethod,
@@ -215,75 +213,20 @@ pub struct LibraryFunctionKey {
 }
 
 /// Where a file's library classification comes from — the ONE owner the
-/// naming driver, the transfer stage's freeze and the dump verbs consult.
+/// naming driver and the transfer stage's freeze consult.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LibraryClassification {
-    /// A TS dump's classification (the dump verbs).
+    /// A classification given as keys (the unit tests' join driver).
     Consumed(Vec<LibraryFunctionKey>),
     /// The native stage 6's ordinal carry (the pipeline, WP5.6c/d).
     Carried(FunctionLibraryCarry),
     /// The file has banner regions but no classification reached the
-    /// naming stage (a pre-#33 TS dump) — consulting it fails loud (the TS
-    /// throws the same: raw offsets cannot classify beautified functions).
+    /// naming stage — consulting it fails loud (raw offsets cannot
+    /// classify beautified functions, #32).
     Missing,
 }
 
 impl LibraryClassification {
-    /// A TS dump's `regions.json`: `libraryFunctions` when present; a
-    /// pre-#33 dump (no key) with comment regions is [`Self::Missing`];
-    /// no regions at all is None.
-    pub fn from_regions_json(regions: &Value) -> Result<Option<Self>, String> {
-        if let Some(rows) = regions.get("libraryFunctions") {
-            let rows = rows
-                .as_array()
-                .ok_or("regions.json: libraryFunctions is not an array")?;
-            return rows
-                .iter()
-                .map(|r| {
-                    let n = |k: &str| {
-                        r["key"][k]
-                            .as_u64()
-                            .and_then(|v| u32::try_from(v).ok())
-                            .ok_or_else(|| format!("regions.json: libraryFunctions key.{k}"))
-                    };
-                    let s = |k: &str| {
-                        r[k].as_str()
-                            .map(str::to_string)
-                            .ok_or_else(|| format!("regions.json: libraryFunctions {k}"))
-                    };
-                    if r["key"]["text"].as_str() != Some("fresh") {
-                        return Err(
-                            "regions.json: a libraryFunctions key is not fresh-anchored".into()
-                        );
-                    }
-                    Ok(LibraryFunctionKey {
-                        span: Span::new(n("start")?, n("end")?),
-                        session_id: s("sessionId")?,
-                        library: s("library")?,
-                    })
-                })
-                .collect::<Result<Vec<_>, String>>()
-                .map(|keys| Some(Self::Consumed(keys)));
-        }
-        let has_regions = regions
-            .get("commentRegions")
-            .and_then(Value::as_array)
-            .is_some_and(|r| !r.is_empty());
-        Ok(has_regions.then_some(Self::Missing))
-    }
-
-    /// Read `<dir>/regions.json` ([`Self::from_regions_json`]); an absent
-    /// file classifies nothing.
-    pub fn from_dump_dir(dir: &std::path::Path) -> Result<Option<Self>, String> {
-        let path = dir.join("regions.json");
-        let Ok(text) = std::fs::read_to_string(&path) else {
-            return Ok(None);
-        };
-        let v: Value =
-            serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
-        Self::from_regions_json(&v)
-    }
-
     /// The (graph function row, library) of every library function, in
     /// graph row order (`collectAllFunctions` order — the prefix pass's).
     /// `fresh` is the fresh program's ESTree JSON (read by the carry).

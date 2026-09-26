@@ -12,13 +12,8 @@ fn call_sites(text: &str) -> Vec<(String, Vec<String>)> {
     let allocator = Allocator::default();
     let ingest = crate::prior::parse_side(&allocator, text, "input.js").expect("parses");
     let json = crate::ingest::program_estree_json(ingest.program);
-    let parts = crate::prior::build_side_parts(
-        &ingest,
-        &json,
-        "input.js",
-        crate::graph::Eligibility::All,
-        false,
-    );
+    let parts =
+        crate::prior::build_side_parts(&ingest, &json, "input.js", crate::graph::Eligibility::All);
     let view = TextView::build(ingest.semantic());
     let ng = build_naming_graph(ingest.semantic(), &parts.graph, &view);
     parts
@@ -213,7 +208,6 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
                 library: None,
             },
             &ledger_config(),
-            &super::NamingHooks::default(),
             &SuffixProvider,
         )
         .expect("the stage runs");
@@ -241,7 +235,6 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
             library: None,
         },
         &config,
-        &super::NamingHooks::default(),
         &SuffixProvider,
     )
     .expect("the stage runs");

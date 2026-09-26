@@ -354,7 +354,6 @@ fn reconcile_options(o: &Value) -> ReconcileOptions {
         last_resort_tier: flag("lastResortTier"),
         skip_import_declarations: flag("skipImportDeclarations"),
         skeleton_vote_tier: flag("skeletonVoteTier"),
-        plant: None,
     }
 }
 
@@ -409,14 +408,8 @@ fn reconcile_step_matches_the_ts() {
         let text = row["text"].as_str().unwrap();
         let prior = row["prior"].as_str().unwrap();
         let eligible = eligibility_for(&row, &[text, prior]);
-        let out = run_prior_diff_reconciliation(
-            text,
-            prior,
-            &eligible,
-            StrategyTrail::enabled(),
-            None,
-            None,
-        );
+        let out =
+            run_prior_diff_reconciliation(text, prior, &eligible, StrategyTrail::enabled(), None);
         let ours = match &out {
             Err(_) => Value::Null,
             Ok(o) => {
@@ -637,7 +630,7 @@ fn family_permute_matches_the_ts() {
         let text = row["text"].as_str().unwrap();
         let prior = row["prior"].as_str().unwrap();
         let eligible = eligibility_for(&row, &[text, prior]);
-        let ours = match run_family_permute(text, prior, &eligible, None) {
+        let ours = match run_family_permute(text, prior, &eligible) {
             Err(_) => Value::Null,
             Ok(p) => json!({
                 "applied": p.applied,

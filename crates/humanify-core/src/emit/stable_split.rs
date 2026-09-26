@@ -2,9 +2,7 @@
 //! (src/split/stable-split.ts) + `tryEmitRunnableCjs` (unified.ts): ONE
 //! owner of the order parse → statement hashes → placement regime →
 //! emission alignment → review tree → ledger → runnable emit. The
-//! pipeline (`humanify <input> --split`) and the WP5.3 gate verb
-//! (`humanify emit`, [`super::emit_dump`]) both call [`stable_split`];
-//! neither keeps its own copy.
+//! pipeline (`humanify <input> --split`) calls [`stable_split`].
 //!
 //! The statement hashes are the Rust's own (`hash::statement_hash`,
 //! `hashVersion` [`STATEMENT_HASH_VERSION`]); the TS-byte injection that

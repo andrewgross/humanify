@@ -34,7 +34,6 @@
 //! rejected and who lands through the retry pass.
 
 pub mod carry;
-pub mod dump;
 pub mod evidence;
 pub mod lifecycle;
 pub mod owned;

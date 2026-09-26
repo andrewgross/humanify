@@ -71,17 +71,6 @@ pub fn assign_bucket(
     prior: &[BucketMember],
     is_eligible: &dyn Fn(&str) -> bool,
 ) -> Vec<ContextAssignment> {
-    assign_bucket_ordered(fresh, prior, is_eligible, false)
-}
-
-/// [`assign_bucket`] with the fresh-index tie-break optionally REVERSED
-/// (the gate's planted reorder; never set in the pipeline).
-fn assign_bucket_ordered(
-    fresh: &[BucketMember],
-    prior: &[BucketMember],
-    is_eligible: &dyn Fn(&str) -> bool,
-    reversed_ties: bool,
-) -> Vec<ContextAssignment> {
     let fresh_ctx: Vec<HashSet<&str>> = fresh
         .iter()
         .map(|m| m.contexts.iter().map(String::as_str).collect())
@@ -119,14 +108,7 @@ fn assign_bucket_ordered(
             }
         }
     }
-    candidates.sort_by(|a, b| {
-        let fresh_order = if reversed_ties {
-            b.0.cmp(&a.0)
-        } else {
-            a.0.cmp(&b.0)
-        };
-        b.2.cmp(&a.2).then(fresh_order).then(a.1.cmp(&b.1))
-    });
+    candidates.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)).then(a.1.cmp(&b.1)));
     let mut used_fresh = HashSet::new();
     let mut used_prior = HashSet::new();
     let mut out = Vec::new();
@@ -351,18 +333,10 @@ struct PlannedMove {
     mv: AppliedMove,
 }
 
-/// A planted order bug (the gate's red runs).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PermutePlant {
-    /// Take equal-support candidates in DESCENDING fresh-index order.
-    TieBreakReversed,
-}
-
 fn plan_bucket_moves(
     fresh: &[(String, Vec<MemberInfo>)],
     prior: &HashMap<String, Vec<MemberInfo>>,
     eligible: &Eligibility,
-    plant: Option<PermutePlant>,
 ) -> (Vec<PlannedMove>, usize) {
     let mut to_apply = Vec::new();
     let mut buckets = 0;
@@ -374,11 +348,10 @@ fn plan_bucket_moves(
         if prior_members.len() < 2 {
             continue;
         }
-        let moves = assign_bucket_ordered(
+        let moves = assign_bucket(
             &by_decl_order(fresh_members),
             &by_decl_order(prior_members),
             &is_eligible,
-            plant == Some(PermutePlant::TieBreakReversed),
         );
         if moves.is_empty() {
             continue;
@@ -528,7 +501,6 @@ pub fn run_family_permute(
     code: &str,
     prior_text: &str,
     eligible: &Eligibility,
-    plant: Option<PermutePlant>,
 ) -> Result<FamilyPermuteOutcome, String> {
     let prior = prior_by_hash(prior_text)?;
     let allocator = Allocator::default();
@@ -539,7 +511,7 @@ pub fn run_family_permute(
     let semantic = ingest.semantic();
     let mut state = RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default());
     let fresh = by_hash(collect_members(semantic, &state)?);
-    let (to_apply, buckets) = plan_bucket_moves(&fresh, &prior, eligible, plant);
+    let (to_apply, buckets) = plan_bucket_moves(&fresh, &prior, eligible);
     if to_apply.is_empty() {
         return Ok(FamilyPermuteOutcome {
             buckets,

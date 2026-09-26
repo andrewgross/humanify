@@ -671,11 +671,6 @@ pub fn alternate_function_and_binding_matching(
         if function_result.ambiguous.is_empty() {
             break;
         }
-        crate::propagation::trace::line(format_args!(
-            "ALT round enter matches={} ambig={}",
-            function_result.matches.len(),
-            function_result.ambiguous.len()
-        ));
         let evidence = build_external_ref_evidence(
             &function_result.ambiguous,
             prior,
@@ -687,10 +682,6 @@ pub fn alternate_function_and_binding_matching(
             &function_result.matches,
         );
         let Some(evidence) = evidence else {
-            crate::propagation::trace::line(format_args!(
-                "ALT round no-evidence break (matches={})",
-                function_result.matches.len()
-            ));
             break;
         };
         last_evidence = Some(evidence.clone());
@@ -706,12 +697,6 @@ pub fn alternate_function_and_binding_matching(
             },
         );
         let kept = next.matches.len() > function_result.matches.len();
-        crate::propagation::trace::line(format_args!(
-            "ALT round next_matches={} prev_matches={} {}",
-            next.matches.len(),
-            function_result.matches.len(),
-            if kept { "KEPT" } else { "BREAK-no-growth" }
-        ));
         if !kept {
             break;
         }
