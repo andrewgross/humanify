@@ -98,12 +98,22 @@ function guardLabel(label: string, force: boolean): string | null {
  * flags caused two recorded incidents: an archive-prior reference run and a
  * cold neutrality verdict, both launched by omission).
  */
+type FlagKind = "bool" | "value" | "repeat";
+
 function parseFlags(
   args: string[],
-  spec: Record<string, "bool" | "value">
-): { positional: string[]; flags: Record<string, string | true> } | string {
+  spec: Record<string, FlagKind>
+):
+  | {
+      positional: string[];
+      flags: Record<string, string | true>;
+      /** Every flag as given, in order (a "repeat" flag once per use). */
+      given: string[];
+    }
+  | string {
   const positional: string[] = [];
   const flags: Record<string, string | true> = {};
+  const given: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (!a.startsWith("--")) {
@@ -116,16 +126,22 @@ function parseFlags(
     }
     if (kind === "bool") {
       flags[a] = true;
-    } else {
-      const v = args[++i];
-      if (v === undefined || v.startsWith("--")) return `${a} needs a value`;
-      flags[a] = v;
+      given.push(a);
+      continue;
     }
+    const v = args[++i];
+    // A "repeat" flag's value is an argv for ANOTHER program, so it may
+    // itself start with "--" (`--pipeline-arg --fast`).
+    if (v === undefined || (kind === "value" && v.startsWith("--"))) {
+      return `${a} needs a value`;
+    }
+    flags[a] = v;
+    given.push(a, v);
   }
-  return { positional, flags };
+  return { positional, flags, given };
 }
 
-const SCORE_FLAGS: Record<string, "bool" | "value"> = {
+const SCORE_FLAGS: Record<string, FlagKind> = {
   "--force-mixed": "bool",
   "--archive-prior": "bool",
   "--pairs": "value",
@@ -143,8 +159,32 @@ const SCORE_FLAGS: Record<string, "bool" | "value"> = {
   // run.sh builds it, records its sha and build commit, and refuses one not
   // built from the label's commit. There is no other pipeline since the
   // cutover (docs/rust-port/19-cutover.md).
-  "--bin": "value"
+  "--bin": "value",
+  // One argument appended to EVERY pipeline launch (rebase, scored leg,
+  // both self-hop legs); repeatable, order kept — e.g. `--pipeline-arg
+  // --fast`. Recorded in the label's pipeline.json.
+  "--pipeline-arg": "repeat"
 };
+
+/**
+ * `eval score`'s arguments: the label, and the flags handed to run.sh in
+ * the order given. Every flag is validated here, before anything runs.
+ */
+export function scoreArgs(
+  args: string[]
+): { label: string; force: boolean; passthrough: string[] } | string {
+  const parsed = parseFlags(args, SCORE_FLAGS);
+  if (typeof parsed === "string") return parsed;
+  const label = parsed.positional[0];
+  if (!label || parsed.positional.length > 1) {
+    return "usage: eval score <label> [flags]";
+  }
+  return {
+    label,
+    force: parsed.flags["--force-mixed"] === true,
+    passthrough: parsed.given
+  };
+}
 
 /**
  * Refuse a label already holding cards from the OTHER pipeline — a
@@ -185,7 +225,7 @@ const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] ...",
+      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--pipeline-arg <arg>]... ...",
     description:
       "Cold scored run of the Rust binary over the eval pairs (the harness builds target/release/humanify unless --bin names another); cards + summary under results/<label>. " +
       "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, cold + warm self-hop.",
@@ -194,39 +234,30 @@ const VERBS: Verb[] = [
     cannotProve:
       "any delta inside the measured noise-bands.json floor — it will still print a sign",
     run(args) {
-      const parsed = parseFlags(args, SCORE_FLAGS);
+      const parsed = scoreArgs(args);
       if (typeof parsed === "string") {
         console.error(`eval score: ${parsed}`);
         return 2;
       }
-      const label = parsed.positional[0];
-      if (!label || parsed.positional.length > 1) {
-        console.error("usage: eval score <label> [flags]");
-        return 2;
-      }
-      const force = parsed.flags["--force-mixed"] === true;
+      const { label, force, passthrough } = parsed;
       const err = guardLabel(label, force) ?? guardPipeline(label, force);
       if (err) {
         console.error(err);
         return 2;
       }
-      if (parsed.flags["--pairs"]) {
+      const pairsAt = passthrough.indexOf("--pairs");
+      if (pairsAt >= 0) {
         console.log(
-          `PARTIAL: --pairs ${parsed.flags["--pairs"]} — this label will not cover the full pair set.`
+          `PARTIAL: --pairs ${passthrough[pairsAt + 1]} — this label will not cover the full pair set.`
         );
       }
-      if (parsed.flags["--archive-prior"]) {
+      if (passthrough.includes("--archive-prior")) {
         console.log(
           "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than fresh bases; not comparable to the standing reference."
         );
       }
       // --force-mixed passes through too: run.sh needs it to accept a binary
       // built from another commit (pipeline-bin.ts).
-      const passthrough: string[] = [];
-      for (const [k, v] of Object.entries(parsed.flags)) {
-        passthrough.push(k);
-        if (v !== true) passthrough.push(v);
-      }
       return sh("bash", [
         path.join(REPO, "experiments/034-eval-harness/run.sh"),
         label,
@@ -387,4 +418,9 @@ function main(): void {
   process.exit(verb.run(args));
 }
 
-main();
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(import.meta.filename)
+) {
+  main();
+}
