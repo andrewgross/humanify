@@ -34,6 +34,7 @@ pub struct SettingsInput {
     pub llm_cache: Option<String>,
     pub reasoning_effort: Option<String>,
     pub max_tokens: Option<String>,
+    pub context_tokens: Option<String>,
     pub module_concurrency: Option<String>,
     pub skip_libraries: Option<bool>,
     pub naming_floor: Option<bool>,
@@ -60,6 +61,8 @@ pub struct Settings {
     pub api_key: String,
     pub timeout: f64,
     pub max_tokens: Option<f64>,
+    /// `--context-tokens`: the model context window (sizes the split namer).
+    pub context_tokens: Option<f64>,
     pub reasoning_effort: Option<&'static str>,
     pub llm_cache_dir: Option<String>,
     pub concurrency: f64,
@@ -136,6 +139,7 @@ pub fn resolve_settings_with(
 
     let timeout = num(&opts.timeout)?.unwrap_or(DEFAULT_LLM_TIMEOUT_MS as f64);
     let max_tokens = num(&opts.max_tokens)?;
+    let context_tokens = num(&opts.context_tokens)?;
     let reasoning_effort = parse_reasoning_effort(opts.reasoning_effort.as_deref())?;
     let concurrency = num(&opts.concurrency)?.unwrap_or(0.0);
     let module_concurrency = num(&opts.module_concurrency)?;
@@ -151,6 +155,7 @@ pub fn resolve_settings_with(
         api_key,
         timeout,
         max_tokens,
+        context_tokens,
         reasoning_effort,
         llm_cache_dir: opts.llm_cache.clone(),
         concurrency,

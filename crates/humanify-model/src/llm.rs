@@ -446,6 +446,9 @@ pub struct LlmConfig {
 /// The TS `DEFAULT_LLM_TIMEOUT_MS` (commands/default-args.ts).
 pub const DEFAULT_LLM_TIMEOUT_MS: u64 = 300_000;
 
+/// The TS default `max_tokens` (completion budget per request).
+pub const DEFAULT_MAX_TOKENS: u64 = 6000;
+
 impl LlmConfig {
     /// The TS constructor's defaults for everything the caller leaves out.
     pub fn new(endpoint: &str, api_key: &str, model: &str) -> Self {
@@ -453,7 +456,7 @@ impl LlmConfig {
             endpoint: endpoint.to_string(),
             api_key: api_key.to_string(),
             model: model.to_string(),
-            max_tokens: 6000,
+            max_tokens: DEFAULT_MAX_TOKENS,
             temperature: 0.0,
             timeout_ms: DEFAULT_LLM_TIMEOUT_MS,
             reasoning_effort: None,
