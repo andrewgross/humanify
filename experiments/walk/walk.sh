@@ -15,9 +15,11 @@
 #       [--resume]                continue a walk in <dir>; finished hops skipped
 #       [--endpoint <url>]        LLM endpoint override (default pairs.json)
 #       [--inputs-base <dir>]     override pairs.json inputsBase
-#       [--lock <file>]           serialize every pipeline run on this flock
-#                                 (default /work/heavy.lock — HEAVY-RUN-RULE)
-#       [--no-lock]               run without the lock (fixture-scale only)
+#       [--slots <wrapper>]       run each hop's pipeline through this slot
+#                                 wrapper (default /work/heavy-run.sh: one of
+#                                 three machine-wide slots — HEAVY-RUN-RULE)
+#       [--lock <file>]           instead: serialize on a single flock file
+#       [--no-lock]               run with neither (fixture-scale only)
 #       [--no-boot-prompt]        boot gate checks --version only
 #       [--force-mixed]           accept a --bin built from a dirty tree
 #       [--reboot]                with --resume: re-run the boot gate on finished
@@ -46,8 +48,9 @@
 # Rules this obeys (CLAUDE.md): cold — no --llm-cache, ever (rule 10); the
 # endpoint/model come from 034's pairs.json so a walk and the eval ask the
 # same model; the boot gate pins BOOT_GATE_MODEL (lib/boot-gate.sh); each
-# pipeline run holds /work/heavy.lock so two walks launched together alternate
-# hop by hop instead of OOMing each other.
+# pipeline run holds one /work/heavy-run.sh slot, so a Rust and a TS walk
+# launched together run concurrently without joining an OOM pile-up. Only the
+# pipeline holds a slot — the boot gate and background scoring do not.
 #
 # ROBUST OVERNIGHT: a boot failure is recorded, never fatal. A hop that exits
 # non-zero but wrote its tree is recorded and the walk continues on that tree
@@ -77,7 +80,8 @@ TS_TREE="/work/tsctl-fec64e5-walk"
 RESUME=0
 ENDPOINT_OVERRIDE=""
 INPUTS_OVERRIDE=""
-LOCK="/work/heavy.lock"
+LOCK=""
+SLOTS="/work/heavy-run.sh"
 BOOT_PROMPT_ON=1
 FORCE_MIXED=0
 SCORE=1
@@ -94,8 +98,9 @@ while [[ $# -gt 0 ]]; do
     --resume)         RESUME=1 ;;
     --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
     --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
-    --lock)           LOCK="$2"; shift ;;
-    --no-lock)        LOCK="" ;;
+    --slots)          SLOTS="$2"; LOCK=""; shift ;;
+    --lock)           LOCK="$2"; SLOTS=""; shift ;;
+    --no-lock)        LOCK=""; SLOTS="" ;;
     --no-boot-prompt) BOOT_PROMPT_ON=0 ;;
     --force-mixed)    FORCE_MIXED=1 ;;
     --no-score)       SCORE=0 ;;
@@ -203,7 +208,7 @@ VERSIONS_JSON=$(printf '%s\n' "${VERSIONS[@]}" | jq -R . | jq -sc .)
 NEW_MANIFEST=$(jq -n --arg pipeline "$PIPELINE" --argjson desc "$PIPE_DESC" \
   --argjson versions "$VERSIONS_JSON" --arg range "$VERSIONS_ARG" \
   --arg inputs "$INPUTS" --arg endpoint "$ENDPOINT" --arg model "$MODELNAME" \
-  --arg effort "$EFFORT" --argjson conc "$CONC" --arg lock "$LOCK" \
+  --arg effort "$EFFORT" --argjson conc "$CONC" --arg lock "${SLOTS:+slots:$SLOTS}${LOCK:+flock:$LOCK}" \
   --arg bootModel "$BOOT_GATE_MODEL" --argjson bootPrompt "$BOOT_PROMPT_ON" \
   --arg harness "$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" \
   '{pipeline:$pipeline, pipelineRecord:$desc, range:$range, versions:$versions,
@@ -228,10 +233,15 @@ else
 fi
 
 echo "walk: $PIPELINE over ${#VERSIONS[@]} versions: ${VERSIONS[*]}"
-echo "walk: out $OUT; endpoint $ENDPOINT ($MODELNAME); LLM cache OFF; lock '${LOCK:-none}'"
+echo "walk: out $OUT; endpoint $ENDPOINT ($MODELNAME); LLM cache OFF; heavy-run '${SLOTS:+slots $SLOTS}${LOCK:+flock $LOCK}'"
 
 LOCK_CMD=()
-[[ -n "$LOCK" ]] && LOCK_CMD=(flock "$LOCK")
+if [[ -n "$SLOTS" ]]; then
+  [[ -x "$SLOTS" ]] || { echo "walk.sh: slot wrapper $SLOTS is not executable (--lock <file> or --no-lock to choose otherwise)" >&2; exit 2; }
+  LOCK_CMD=("$SLOTS")
+elif [[ -n "$LOCK" ]]; then
+  LOCK_CMD=(flock "$LOCK")
+fi
 
 # The booted tree IS Claude Code: launched from inside a Claude Code session
 # (an agent running this walk) it inherits CLAUDECODE and refuses to start
