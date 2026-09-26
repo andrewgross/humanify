@@ -1,0 +1,11 @@
+Usage: humanify env-reads [options] <path>
+
+Inventory process.env / Bun.env / import.meta.env reads in a file or tree
+
+Arguments:
+  path                 A JS file, or a directory of JS files to scan
+
+Options:
+  --markdown           Emit the report as Markdown
+  -o, --output <file>  Write the report to a file instead of stdout
+  -h, --help           display help for command

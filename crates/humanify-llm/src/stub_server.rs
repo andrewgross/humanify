@@ -26,6 +26,12 @@ impl StubResponse {
         }
     }
 
+    /// Close the connection without answering (a transport failure the
+    /// client sees as "Connection error.").
+    pub fn hang_up() -> Self {
+        StubResponse::status(0, "")
+    }
+
     pub fn status(status: u16, body: impl Into<String>) -> Self {
         StubResponse {
             status,
@@ -154,6 +160,9 @@ async fn serve_connection(
         tokio::time::sleep(delay).await;
         let response = handler(index, &body);
         stats.in_flight.fetch_sub(1, Ordering::SeqCst);
+        if response.status == 0 {
+            return;
+        }
 
         let mut out = format!(
             "HTTP/1.1 {} STUB\r\ncontent-type: application/json\r\ncontent-length: {}\r\n",

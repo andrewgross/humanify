@@ -147,18 +147,26 @@ fn number_to_string_covers_non_finite_values() {
     assert_eq!(number_to_string(f64::NEG_INFINITY), "-Infinity");
 }
 
-/// TS `formatDuration` (src/llm/metrics.ts), one owner for the LLM
-/// metrics and the profile summary — accidents included (59,999 ms →
-/// "60.0s"; 3,599,999 ms → "59m 60s").
+/// `format_duration`, one owner for the LLM metrics and the profile
+/// summary. Finding #11 FIXED: the TS rounded seconds under FLOORED
+/// minutes (59,999 ms → "60.0s"; 3,599,999 ms → "59m 60s"); a value that
+/// rounds up to the next unit now carries into it.
 #[test]
-fn format_duration_matches_the_ts() {
+fn format_duration_carries_rounding_into_the_next_unit() {
     use crate::js::format_duration;
     assert_eq!(format_duration(500.0), "500ms");
     assert_eq!(format_duration(5000.0), "5.0s");
     assert_eq!(format_duration(1250.0), "1.3s");
-    assert_eq!(format_duration(59_999.0), "60.0s");
+    assert_eq!(format_duration(59_949.0), "59.9s");
+    assert_eq!(format_duration(59_999.0), "1m 0s");
+    assert_eq!(format_duration(119_600.0), "2m 0s");
     assert_eq!(format_duration(125_000.0), "2m 5s");
-    assert_eq!(format_duration(3_599_999.0), "59m 60s");
+    assert_eq!(format_duration(3_599_999.0), "1h 0m");
+    assert_eq!(
+        format_duration(7_199_999.0),
+        "1h 59m",
+        "hours truncate minutes"
+    );
     assert_eq!(format_duration(7_500_000.0), "2h 5m");
 }
 

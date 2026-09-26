@@ -1,21 +1,25 @@
-//! The WPB.4 flag-surface gate: the Rust pipeline program against the REAL
-//! commander program, recorded by test/parity/wpb4-cli-probe.ts into
-//! test/parity/wpb4-cli-surface.json.
+//! The pipeline program's flag surface, three ways:
 //!
-//! Three comparisons, every one exact:
 //! 1. the option TABLE — per command, every option's flags, short, long,
-//!    negate/required/optional/variadic, attributeName, default and
-//!    description, in declaration order (Rust-only options are named in
+//!    negate/required/optional/variadic, attributeName and default, in
+//!    declaration order, against the commander program the TS recorded
+//!    (test/parity/wpb4-cli-surface.json; Rust-only options are named in
 //!    `RUST_ONLY_OPTIONS` and printed, never silently extra);
-//! 2. the rendered HELP text (what every usage error prints to stderr);
+//! 2. the rendered HELP text against the committed golden of the BINARY's
+//!    help (test/golden/help/<command>.txt). The Rust binary is the product
+//!    since the cutover, so its help is pinned to itself, not to the TS's
+//!    wording (which named deleted TS files); regenerate a golden with
+//!    `humanify --help > test/golden/help/humanify.txt` after a deliberate
+//!    wording change;
 //! 3. the PARSE corpus — every recorded argv's outcome: the action's
 //!    command, arguments, option values and value sources; or commander's
-//!    exit code, error code and exact stdout/stderr bytes.
+//!    exit code, error code and exact stdout/stderr bytes, whose help body
+//!    is recorded as a `{{help:<command>}}` placeholder (item 2 pins it).
 
 use serde_json::Value;
 
 use crate::commander::{ParseOutcome, ValueSource};
-use crate::surface::{RUST_ONLY_OPTIONS, program};
+use crate::surface::{RUST_ONLY_OPTIONS, expand_help_placeholders, help_text, program};
 
 fn surface() -> Value {
     let path = format!(
@@ -77,7 +81,6 @@ fn option_table_matches_commander_exactly() {
                 "variadic": r.variadic,
                 "attributeName": r.attribute_name(),
                 "defaultValue": r.default_value.clone().unwrap_or(Value::Null),
-                "description": r.description,
             });
             if &rs != t {
                 mismatches.push(format!("{name} option #{i}:\n  ts   {t}\n  rust {rs}"));
@@ -98,28 +101,66 @@ fn option_table_matches_commander_exactly() {
         "surface: {compared} options identical; Rust-only (declared): {:?}",
         RUST_ONLY_OPTIONS
     );
-    // 41 pipeline options (incl. -V and #39's --context-tokens; --skip-libraries and
-    // --no-skip-libraries are two since 16-findings-queue #19) + 2 env-reads.
-    assert_eq!(compared, 43, "41 pipeline options (incl. -V) + 2 env-reads");
+    // 40 pipeline options (incl. -V and #39's --context-tokens;
+    // --skip-libraries and --no-skip-libraries are two since
+    // 16-findings-queue #19; --ambiguity-probe retired at the cutover — it
+    // was parsed and never read) + 2 env-reads.
+    assert_eq!(compared, 42, "40 pipeline options (incl. -V) + 2 env-reads");
+}
+
+fn golden_help(command: &str) -> String {
+    let path = format!(
+        "{}/../../test/golden/help/{command}.txt",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
 #[test]
-fn help_text_matches_commander_byte_for_byte() {
-    let s = surface();
+fn help_text_matches_the_golden() {
     let root = program();
-    for ts_cmd in s["commands"].as_array().unwrap() {
-        let name = ts_cmd["name"].as_str().unwrap();
-        let rs_cmd = command_by_name(&root, name);
-        let ancestors: Vec<&str> = if name == root.name {
-            vec![]
-        } else {
-            vec!["humanify"]
-        };
+    let mut commands = vec![root.name.clone()];
+    commands.extend(root.commands.iter().map(|c| c.name.clone()));
+    for name in commands {
         assert_eq!(
-            rs_cmd.help_information(&ancestors),
-            ts_cmd["help"].as_str().unwrap(),
-            "help for {name}"
+            help_text(&name),
+            golden_help(&name),
+            "help for {name} (regenerate the golden with --help after a deliberate change)"
         );
+    }
+}
+
+/// The help is the binary's user-facing text: it names no file the
+/// cutover deleted (the TS pipeline's `.ts` files) and no migration-era
+/// instrument label.
+#[test]
+fn help_names_no_deleted_ts_file() {
+    let root = program();
+    let mut helps = vec![help_text(&root.name)];
+    helps.extend(root.commands.iter().map(|c| help_text(&c.name)));
+    for help in helps {
+        for stale in [".ts", "parity-era", "07 §2"] {
+            assert!(!help.contains(stale), "help mentions {stale:?}:\n{help}");
+        }
+    }
+}
+
+/// Every option the help lists does something: --ambiguity-probe was
+/// parsed and then never read by the Rust pipeline, so it is gone and is
+/// an unknown option like any other.
+#[test]
+fn a_retired_option_is_unknown() {
+    let argv: Vec<String> = ["in.js", "--ambiguity-probe", "p.json"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    match program().parse(&argv) {
+        ParseOutcome::Exit {
+            exit_code, code, ..
+        } => {
+            assert_eq!((exit_code, code), (1, "commander.unknownOption"));
+        }
+        ParseOutcome::Action { .. } => panic!("--ambiguity-probe still parses"),
     }
 }
 
@@ -182,6 +223,11 @@ fn every_recorded_argv_parses_like_commander() {
         let rs = root.parse(&argv);
         let mut rs_json = outcome_json(&rs);
         let mut ts_cmp = ts.clone();
+        for stream in ["stdout", "stderr"] {
+            if let Some(Value::String(text)) = ts_cmp.get_mut(stream) {
+                *text = expand_help_placeholders(text);
+            }
+        }
         // Sources are compared separately (below); drop from the value view.
         ts_cmp.as_object_mut().unwrap().remove("sources");
         if let Some(o) = rs_json.as_object_mut() {

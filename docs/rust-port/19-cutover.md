@@ -155,11 +155,16 @@ exported bindings (`createStore` → `createStoreRenamed`). The stage reports
   retargeted ground-truth harness.
 - **M5's 20-hop walk segment** (`10-work-breakdown.md` M5) was not run here;
   the walk driver lives outside the repo.
-- **The binary's `--help` still names TS files** (`--disable`: "registry:
-  src/kill-switches.ts"; `--dump-artifacts`: "the parity-era instrument"). The
-  help text is pinned byte-for-byte to the TS program's by
-  `test/parity/wpb4-cli-surface.json`; rewording it is a deliberate surface
-  change for its own commit.
+- **The binary's `--help` named TS files** — RESOLVED 2026-09-26
+  (fix/client-cli-bugs). `--disable` no longer points at
+  `src/kill-switches.ts`, `--dump-artifacts` dropped "the parity-era
+  instrument", and `--ambiguity-probe` is gone: the Rust pipeline parsed it
+  and never read it (its TS instrument was re-homed harness-side and never
+  ported), so it is now an unknown option. The help is pinned to the
+  BINARY's own text by `test/golden/help/<command>.txt`; the recorded
+  commander corpora (`wpb4-cli-surface.json`, `wpb4-scenarios.json`) keep
+  the TS option table, parse outcomes and error lines, with each recorded
+  help body replaced by a `{{help:<command>}}` placeholder.
 - **Rust doc comments cite TS files** (`src/…`) as the provenance of ported
   code. They are history, and `PORTING.md` maps them; they were not swept.
 - **`--heap-mb` stays in run.sh** though inert for the binary: every run

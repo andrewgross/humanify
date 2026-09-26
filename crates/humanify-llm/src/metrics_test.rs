@@ -432,8 +432,9 @@ fn js_vectors() -> serde_json::Value {
 
 /// The formatter vectors from the real TS functions, including the
 /// rounding quirks: 1150 ms → "1.1s" (1.15 is 1.1499… in binary), 1250 ms →
-/// "1.3s" (an exact tie rounds UP; Rust's `{:.1}` would say "1.2s"),
-/// 59999 ms → "60.0s", 3599999 ms → "59m 60s".
+/// "1.3s" (an exact tie rounds UP; Rust's `{:.1}` would say "1.2s"). Two
+/// entries are deliberate departures from the TS (finding #11 FIXED):
+/// 59999 ms → "1m 0s" (TS "60.0s"), 3599999 ms → "1h 0m" (TS "59m 60s").
 #[test]
 fn formatters_match_the_ts_vectors() {
     let v = js_vectors();
