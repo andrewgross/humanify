@@ -19,7 +19,8 @@
 //! token context — is the generator's, byte for byte.
 //!
 //! Comments are never printed (`shouldPrintComment` is false for every
-//! comment without `@license` / `@preserve`, and `format` refuses those),
+//! comment without `@license` / `@preserve`, and `format` prints those as
+//! a file header instead — finding #46),
 //! but ATTACHED comments still steer the output exactly where the
 //! generator reads them without printing: a parenthesized expression with
 //! a leading block comment keeps its parentheses; a newline-carrying

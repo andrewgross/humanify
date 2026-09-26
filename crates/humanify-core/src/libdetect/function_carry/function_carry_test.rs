@@ -275,8 +275,12 @@ fn regions_json_writes_the_ts_bytes() {
 }
 
 /// WP5.6c / G3: the native stage 6 carries the TS's OUTPUT-tree carry on
-/// every vector — `reorder` included, the one a raw-tree carry gets wrong —
-/// and prints the TS's beautified bytes.
+/// every vector and prints the TS's beautified bytes — except `reorder`.
+/// That vector's reorder came from the comparison flip swapping a template
+/// literal WITH EXPRESSIONS to the right, which ran the other side's code
+/// first (a meaning change the formatter no longer makes, fix/format-bugs
+/// 2026-09-26): the native format keeps source order there, so its
+/// output-tree carry is the raw-tree walk's.
 #[test]
 fn the_native_format_carries_the_ts_output_tree_carry_on_every_vector() {
     use crate::format::{FormatOptions, format_file};
@@ -285,6 +289,19 @@ fn the_native_format_carries_the_ts_output_tree_carry_on_every_vector() {
         let regions = find_comment_regions(raw);
         assert!(!regions.is_empty(), "{name}");
         let got = format_file(raw, &FormatOptions::default(), &regions).unwrap();
+        if name == "reorder" {
+            assert_eq!(
+                got.text,
+                "`${function (early) {\n  return early;\n}}` === f(function (late) {\n  return late;\n});"
+            );
+            let raw_carry = carry_function_libraries(&json_of(raw), &regions).unwrap();
+            assert_eq!(
+                got.library_carry,
+                Some(raw_carry),
+                "{name}: source order kept"
+            );
+            continue;
+        }
         assert_eq!(got.text, case["beautified"].as_str().unwrap(), "{name}");
         assert_eq!(
             got.library_carry,

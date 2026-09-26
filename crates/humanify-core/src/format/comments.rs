@@ -5,7 +5,8 @@
 //! dropping the `//# sourceMappingURL=` comments.
 //!
 //! With `comments: false` nothing here is printed (only an `@license` /
-//! `@preserve` comment would be, and `super::format` refuses those), but
+//! `@preserve` comment would be, and `super::format_file` prints those as
+//! a file header — [`license_comments`], finding #46), but
 //! attached comments still decide output bytes: parentheses kept around a
 //! parenthesized expression with a leading block comment, `(`…`)` at a
 //! no-line-terminator position with a newline comment, an arrow's lone
@@ -396,10 +397,22 @@ fn drop_source_map_comments(tree: &mut Tree) {
     }
 }
 
-/// Babel prints a comment only when `shouldPrintComment` says so: with
-/// `comments: false`, exactly the `@license` / `@preserve` ones.
-pub fn printable(tree: &Tree) -> Option<&Comment> {
+/// The comments Babel's `shouldPrintComment` keeps with `comments: false`
+/// — exactly the `@license` / `@preserve` ones — in source order, each as
+/// its source text (`/*…*/` or `//…`). Finding #46: the formatter prints
+/// them as a header (see `super::format_file`).
+pub fn license_comments(tree: &Tree) -> Vec<String> {
     tree.comments
         .iter()
-        .find(|c| c.value.contains("@license") || c.value.contains("@preserve"))
+        .filter(|c| c.value.contains("@license") || c.value.contains("@preserve"))
+        .map(comment_text)
+        .collect()
+}
+
+fn comment_text(c: &Comment) -> String {
+    if c.block {
+        format!("/*{}*/", c.value)
+    } else {
+        format!("//{}", c.value)
+    }
 }

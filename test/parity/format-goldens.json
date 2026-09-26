@@ -356,7 +356,13 @@
       "text": "let undefined = 1;\nconsole.log(void 0);"
     },
     "full": {
-      "text": "let undefined = 1;\nconsole.log(undefined);"
+      "text": "let undefined = 1;\nconsole.log(void 0);"
+    },
+    "fixed": {
+      "was": {
+        "text": "let undefined = 1;\nconsole.log(undefined);"
+      },
+      "why": "#42: `void 0` -> `undefined` now checks for a local `undefined` binding (here `let undefined = 1` made the old output print 1)"
     }
   },
   {
@@ -406,7 +412,13 @@
       "text": "H._zod ?? (H._zod = {});"
     },
     "full": {
-      "text": "if (!H._zod) {\n  H._zod = {};\n}"
+      "text": "if (H._zod == null) {\n  H._zod = {};\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "if (!H._zod) {\n  H._zod = {};\n}"
+      },
+      "why": "#42: `a ?? b;` -> `if (a == null) b;` (was `if (!a)`, which also fires on 0/''/false)"
     }
   },
   {
@@ -416,7 +428,13 @@
       "text": "a ?? b ?? c;"
     },
     "full": {
-      "text": "if (!(a ?? b)) {\n  c;\n}"
+      "text": "if ((a ?? b) == null) {\n  c;\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "if (!(a ?? b)) {\n  c;\n}"
+      },
+      "why": "#42: `a ?? b;` -> `if (a == null) b;`"
     }
   },
   {
@@ -426,7 +444,13 @@
       "text": "\"a\\nb\\\\c\".concat(x);"
     },
     "full": {
-      "text": "`a\nb\\c${x}`;"
+      "text": "`a\\nb\\\\c${x}`;"
+    },
+    "fixed": {
+      "was": {
+        "text": "`a\nb\\c${x}`;"
+      },
+      "why": "#42: the .concat fold keeps the string's escapes as template raw (was the cooked value: `\\\\c` lost its backslash)"
     }
   },
   {
@@ -436,7 +460,13 @@
       "text": "\"a`b${c}\".concat(x);"
     },
     "full": {
-      "error": "unknown file: Invalid raw"
+      "text": "`a\\`b\\${c}${x}`;"
+    },
+    "fixed": {
+      "was": {
+        "error": "unknown file: Invalid raw"
+      },
+      "why": "#44: the .concat fold escapes a backtick and `${` in the template raw (was a throw, 'Invalid raw')"
     }
   },
   {
@@ -446,7 +476,13 @@
       "text": "`x${y}z`.concat(\"!\");"
     },
     "full": {
-      "text": "`x${y}z!!`;"
+      "text": "`x${y}z!`;"
+    },
+    "fixed": {
+      "was": {
+        "text": "`x${y}z!!`;"
+      },
+      "why": "#42: a string tail is appended to the template once (was twice)"
     }
   },
   {
@@ -466,7 +502,13 @@
       "text": "function f(undefined) {\n  return void 0;\n}"
     },
     "full": {
-      "text": "function f(undefined) {\n  return undefined;\n}"
+      "text": "function f(undefined) {\n  return void 0;\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "function f(undefined) {\n  return undefined;\n}"
+      },
+      "why": "#42: `void 0` is kept where a scope declares `undefined`"
     }
   },
   {
@@ -496,7 +538,13 @@
       "text": "g(void `a${b()}`);"
     },
     "full": {
-      "text": "g(undefined);"
+      "text": "g(void `a${b()}`);"
+    },
+    "fixed": {
+      "was": {
+        "text": "g(undefined);"
+      },
+      "why": "`void <template with expressions>` is no longer treated as an inert literal (the old `g(undefined)` dropped the `b()` call)"
     }
   },
   {
@@ -506,7 +554,13 @@
       "text": "lbl: var a = 1,\n  b = 2;"
     },
     "full": {
-      "text": "var a = 1;\nvar b = 2;"
+      "text": "lbl: var a = 1,\n  b = 2;"
+    },
+    "fixed": {
+      "was": {
+        "text": "var a = 1;\nvar b = 2;"
+      },
+      "why": "#44: a labeled multi-declarator var is left whole (the split dropped the label)"
     }
   },
   {
@@ -576,7 +630,13 @@
       "text": "while (a(), b) c();"
     },
     "full": {
-      "text": "a();\nwhile (b) c();"
+      "text": "while (a(), b) c();"
+    },
+    "fixed": {
+      "was": {
+        "text": "a();\nwhile (b) c();"
+      },
+      "why": "a sequence in a while / do-while test is no longer hoisted before the loop (the old output ran `a()` once instead of before every test)"
     }
   },
   {
@@ -786,7 +846,13 @@
       "text": "for (;; void a()) b();"
     },
     "full": {
-      "text": "a();\nfor (;; undefined) {\n  b();\n}"
+      "text": "for (;; void a()) {\n  b();\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "a();\nfor (;; undefined) {\n  b();\n}"
+      },
+      "why": "a `void x` in a loop head is no longer hoisted before the loop (the old output ran the update once instead of every turn)"
     }
   },
   {
@@ -946,7 +1012,13 @@
       "text": "{\n  let undefined = 1;\n  void 'a';\n  void b();\n}\nvoid 'c';"
     },
     "full": {
-      "text": "{\n  let undefined = 1;\n  void 'a';\n  b();\n  void b();\n}\nundefined;"
+      "text": "{\n  let undefined = 1;\n  void 'a';\n  void b();\n}\nundefined;"
+    },
+    "fixed": {
+      "was": {
+        "text": "{\n  let undefined = 1;\n  void 'a';\n  b();\n  void b();\n}\nundefined;"
+      },
+      "why": "a statement `void x` where `undefined` is a local binding is left alone (the old output hoisted `b()` AND kept `void b()`, running it twice)"
     }
   },
   {
@@ -956,7 +1028,13 @@
       "text": "try {} catch (undefined) {\n  void 'a';\n  void b();\n}"
     },
     "full": {
-      "text": "try {} catch (undefined) {\n  void 'a';\n  b();\n  void b();\n}"
+      "text": "try {} catch (undefined) {\n  void 'a';\n  void b();\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "try {} catch (undefined) {\n  void 'a';\n  b();\n  void b();\n}"
+      },
+      "why": "a statement `void x` where `undefined` is a local binding is left alone (the old output ran `b()` twice)"
     }
   },
   {
@@ -986,7 +1064,13 @@
       "text": "while (x) a, `u`.concat(y) ?? z;"
     },
     "full": {
-      "text": "while (x) {\n  a;\n  if (!`u${y}${y}`) {\n    z;\n  }\n}"
+      "text": "while (x) {\n  a;\n  if (`u${y}` == null) {\n    z;\n  }\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "while (x) {\n  a;\n  if (!`u${y}${y}`) {\n    z;\n  }\n}"
+      },
+      "why": "#45: the .concat fold builds a new template, so the argument is folded once (was `${y}${y}`, a side effect run twice); plus #42's `== null`"
     }
   },
   {
@@ -1016,7 +1100,13 @@
       "text": "a(1_0e3, 1_000, 0xe_1);"
     },
     "full": {
-      "text": "a(NaN, 1_000, NaN);"
+      "text": "a(10000, 1_000, 225);"
+    },
+    "fixed": {
+      "was": {
+        "text": "a(NaN, 1_000, NaN);"
+      },
+      "why": "makeNumbersLonger uses the parsed value (was NaN for a literal with a numeric separator)"
     }
   },
   {
@@ -1226,7 +1316,13 @@
       "text": "a = (b, c);\n(function () {})();\n(class {});\n({}).x;\n(a || b) && c;\na ?? (b || c);\n(-a) ** 2;\n(await x)?.y;"
     },
     "full": {
-      "text": "a = (b, c);\n(function () {})();\n(class {});\n({}).x;\nif (a || b) {\n  c;\n}\nif (!a) {\n  if (!b) {\n    c;\n  }\n}\n(-a) ** 2;\n(await x)?.y;"
+      "text": "a = (b, c);\n(function () {})();\n(class {});\n({}).x;\nif (a || b) {\n  c;\n}\nif (a == null) {\n  if (!b) {\n    c;\n  }\n}\n(-a) ** 2;\n(await x)?.y;"
+    },
+    "fixed": {
+      "was": {
+        "text": "a = (b, c);\n(function () {})();\n(class {});\n({}).x;\nif (a || b) {\n  c;\n}\nif (!a) {\n  if (!b) {\n    c;\n  }\n}\n(-a) ** 2;\n(await x)?.y;"
+      },
+      "why": "#42: `a ?? (b || c);` -> `if (a == null) ...`"
     }
   },
   {
@@ -1496,7 +1592,13 @@
       "text": "do lbl: var a = 1,\n  b = 2; while (x);"
     },
     "full": {
-      "error": "unknown file: Property body expected type of array but got null"
+      "text": "do lbl: var a = 1,\n  b = 2; while (x);"
+    },
+    "fixed": {
+      "was": {
+        "error": "unknown file: Property body expected type of array but got null"
+      },
+      "why": "#44: a labeled multi-declarator var as a loop body is left whole (was a throw)"
     }
   },
   {
@@ -1506,7 +1608,13 @@
       "text": "if (x) lbl: var a = 1,\n  b = 2;"
     },
     "full": {
-      "text": "if (x) {\n  var a = 1;\n  var b = 2;\n}"
+      "text": "if (x) {\n  lbl: var a = 1,\n    b = 2;\n}"
+    },
+    "fixed": {
+      "was": {
+        "text": "if (x) {\n  var a = 1;\n  var b = 2;\n}"
+      },
+      "why": "#44: a labeled multi-declarator var in an if-branch keeps its label (was dropped)"
     }
   }
 ]
