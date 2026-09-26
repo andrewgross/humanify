@@ -20,7 +20,7 @@ use oxc_span::GetSpan;
 
 use humanify_model::js::JsValue;
 
-use crate::babel_view::BabelLines;
+use crate::babel_view::DiffLines;
 use crate::emit::substitutions::{Substitution, apply_substitutions};
 use crate::naming::reconcile::resolve::{identifier_sites, shorthand_key};
 use crate::rename::validated::scopes::BScopeId;
@@ -196,7 +196,7 @@ fn occurrences_of(
     binding: crate::rename::validated::scopes::BindingId,
     from: &str,
     to: &str,
-    lines: &BabelLines<'_>,
+    lines: &DiffLines<'_>,
     text_lines: &[&str],
     shorthand_keys: &HashMap<u32, Option<String>>,
 ) -> Option<Vec<Substitution>> {
@@ -250,7 +250,7 @@ pub fn carry_renames_into_bundle(
     let targets = resolve_targets(renames, ledger, body.len(), &mut result.abstained);
     let mut state = RenameState::new(ingest.semantic(), Anchor::Shipped);
     let decls = bundle_declarations(&state, &body);
-    let lines = BabelLines::new(bundle);
+    let lines = DiffLines::new(bundle);
     let text_lines: Vec<&str> = bundle.split('\n').collect();
     let shorthand_keys: HashMap<u32, Option<String>> = identifier_sites(ingest.semantic(), &state)
         .iter()

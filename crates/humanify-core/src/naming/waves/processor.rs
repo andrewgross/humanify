@@ -329,13 +329,6 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     graph_era: HashMap<BScopeId, JsSet>,
     /// The fresh-era scopes by span (start, end, id), sorted.
     fresh_scopes: Vec<(u32, u32, BScopeId)>,
-    /// Every non-program scope by span (start, end, id), sorted — for the
-    /// reference-duplication model of the two epochs (see [`Run::ref_count`]).
-    all_scopes: Vec<(u32, u32, BScopeId)>,
-    /// Scope → the function whose traversal first gave it a fresh-era copy.
-    fresh_root: HashMap<BScopeId, usize>,
-    /// Scope → its child scopes.
-    children: HashMap<BScopeId, Vec<BScopeId>>,
     wave: u64,
     // dump
     dispatches: Vec<DispatchRecord>,
@@ -392,25 +385,6 @@ pub fn run_waves<P: NameProvider>(
         })
         .collect();
     fresh_scopes.sort_unstable();
-    let mut all_scopes: Vec<(u32, u32, BScopeId)> = if inp.single_epoch {
-        Vec::new()
-    } else {
-        (0..n_scopes)
-            .map(|i| BScopeId(i as u32))
-            .filter(|&sid| sid != program_scope)
-            .map(|sid| {
-                let span = state.view().scope(sid).span;
-                (span.start, span.end, sid)
-            })
-            .collect()
-    };
-    all_scopes.sort_unstable();
-    let mut children: HashMap<BScopeId, Vec<BScopeId>> = HashMap::new();
-    for &(_, _, sid) in &all_scopes {
-        if let Some(p) = state.view().scope(sid).parent {
-            children.entry(p).or_default().push(sid);
-        }
-    }
     state.recrawl_order(fresh_era);
     let target_scope = inp
         .rows
@@ -436,9 +410,6 @@ pub fn run_waves<P: NameProvider>(
         program_scope,
         graph_era,
         fresh_scopes,
-        all_scopes,
-        fresh_root: HashMap::new(),
-        children,
         wave: 0,
         dispatches: Vec::new(),
         rounds: HashMap::new(),
@@ -626,7 +597,6 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             // the function, so every fresh-era scope inside it is
             // (re)crawled NOW — registration order, current names.
             self.recrawl_inside(self.inp.graph.functions[f].span);
-            self.mark_fresh_roots(f);
             let row = &self.inp.rows.fns[f];
             let all = collect_owned_binding_infos(&self.state, row);
             match self.select_llm_bindings(f, &all) {
@@ -683,78 +653,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         self.ctxs.len() - 1
     }
 
-    /// The function task's traversal gives every scope strictly inside it
-    /// that no earlier traversal reached a fresh-era copy rooted HERE (the
-    /// path cache is keyed by parent node: the first traversal's paths win).
-    fn mark_fresh_roots(&mut self, f: usize) {
-        if self.inp.single_epoch {
-            return;
-        }
-        let span = self.inp.graph.functions[f].span;
-        let own = self.inp.rows.fns[f].scope;
-        let lo = self.all_scopes.partition_point(|s| s.0 < span.start);
-        for &(_, end, sid) in self.all_scopes[lo..].iter().take_while(|s| s.0 < span.end) {
-            if end <= span.end && sid != own {
-                self.fresh_root.entry(sid).or_insert(f);
-            }
-        }
-    }
-
-    /// `referencePaths.length + constantViolations.length` of the binding
-    /// `scope.getBinding(old)` resolves, as the TS reads it. A binding of a
-    /// RETAINED scope (a function's own, the program) is a graph-era Binding
-    /// object; every fresh-era crawl whose scope chain reaches it registers
-    /// the references in its subtree AGAIN through new path objects
-    /// (`Binding.reference` dedupes by path, not node). So each reference
-    /// or violation sitting in a fresh-era scope whose traversal root lies
-    /// at or below the binding's scope counts twice.
+    /// The references and writes of the binding `scope.getBinding(old)`
+    /// resolves, each counted once (finding #35: the TS's two scope epochs
+    /// re-registered a retained binding's references inside every fresh-era
+    /// crawl, so the count read up to 2x; the diagnostics count the binding,
+    /// not the crawls).
     fn ref_count(&self, b: BindingId) -> u32 {
-        let view = self.state.view();
-        let bb = view.binding(b);
-        let base = (bb.refs.len() + bb.violations.len()) as u32;
-        let owner = bb.owner;
-        let retained =
-            owner == self.program_scope || self.inp.rows.fn_by_scope.contains_key(&owner);
-        if self.inp.single_epoch || !retained {
-            return base;
-        }
-        let reaches = |root: usize| {
-            let mut cur = Some(self.inp.rows.fns[root].scope);
-            while let Some(s) = cur {
-                if s == owner {
-                    return true;
-                }
-                cur = view.scope(s).parent;
-            }
-            false
-        };
-        // The crawl that covers a site is by BLOCK: a switch discriminant
-        // (semantically the parent scope's) sits inside the switch's block,
-        // so the switch scope's fresh crawl registers it too.
-        let covering_root = |site: &crate::rename::validated::scopes::Site| {
-            self.fresh_root.get(&site.scope).copied().or_else(|| {
-                self.children.get(&site.scope).and_then(|kids| {
-                    kids.iter()
-                        .filter(|&&c| {
-                            let sp = view.scope(c).span;
-                            sp.start <= site.span.start && site.span.end <= sp.end
-                        })
-                        .find_map(|c| self.fresh_root.get(c).copied())
-                })
-            })
-        };
-        // A re-crawl re-registering the binding's OWN declaration skips it
-        // (`registerBinding`: `local.identifier === id` continues).
-        let own_declaration = |site: &crate::rename::validated::scopes::Site| {
-            site.span.start <= bb.id_span.start && bb.id_span.end <= site.span.end
-        };
-        let extra = bb
-            .refs
-            .iter()
-            .chain(bb.violations.iter().filter(|v| !own_declaration(v)))
-            .filter(|site| covering_root(site).is_some_and(reaches))
-            .count() as u32;
-        base + extra
+        let bb = self.state.view().binding(b);
+        (bb.refs.len() + bb.violations.len()) as u32
     }
 
     /// Re-crawl every fresh-era scope inside `span`.

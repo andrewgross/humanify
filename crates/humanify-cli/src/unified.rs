@@ -985,11 +985,15 @@ impl NamingRun<'_> {
         // diagnostic artifact): replayed, it must reproduce the shipped code.
         if let Some(bundle) = &outcome.rename_ledger {
             use humanify_core::rename::validated::ledger::apply_rename_ledger;
-            let replayed = apply_rename_ledger(&bundle.source, &bundle.ledger).ok();
-            if replayed.is_none() || replayed != outcome.code {
+            let problem = match apply_rename_ledger(&bundle.source, &bundle.ledger) {
+                Ok(replayed) if Some(&replayed) == outcome.code.as_ref() => None,
+                Ok(_) => Some("the replay differs from the shipped output".to_string()),
+                Err(e) => Some(e.to_string()),
+            };
+            if let Some(problem) = problem {
                 crate::log::debug_log(
                     "rename-ledger",
-                    "WARNING: replay does not reproduce the shipped output — the ledger may be missing a rename",
+                    &format!("WARNING: replay does not reproduce the shipped output ({problem})"),
                 );
             }
         }

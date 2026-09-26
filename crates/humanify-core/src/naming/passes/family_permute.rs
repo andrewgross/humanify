@@ -25,7 +25,7 @@ use oxc_span::{GetSpan, Span};
 use serde_json::Value;
 
 use super::sweep::{is_statement, statement_parent};
-use crate::babel_view::BabelLines;
+use crate::babel_view::DiffLines;
 use crate::hash::statement_hash::statement_hash;
 use crate::ingest::{Ingest, program_estree_json};
 use crate::modules::wrapper::find_wrapper_function;
@@ -233,7 +233,7 @@ fn collect_members(
 ) -> Result<Vec<MemberInfo>, String> {
     let text = semantic.source_text();
     let lines: Vec<&str> = text.split('\n').collect();
-    let babel_lines = BabelLines::new(text);
+    let diff_lines = DiffLines::new(text);
     let view = state.view();
     let nodes = semantic.nodes();
     let mut scopes = Vec::new();
@@ -282,7 +282,7 @@ fn collect_members(
                 .refs
                 .iter()
                 .filter_map(|r| {
-                    let ln = babel_lines.line(r.span.start);
+                    let ln = diff_lines.line(r.span.start);
                     lines.get(ln - 1).map(|l| mask_name(l, &name))
                 })
                 .collect();
