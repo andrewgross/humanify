@@ -215,3 +215,84 @@ fn mb_edge_from_object_key_position() {
         .expect("all row");
     assert_eq!(pp.internal_callees[0], all_row.span);
 }
+
+/// Finding #1: optional calls are call edges. `x?.()` (an optional call)
+/// and `a?.b()` (a call inside an optional chain) are calls like any
+/// other — dropping them left internalCallees (processing order AND the
+/// fingerprint's callee inputs) blind to every `?.` call.
+#[test]
+fn optional_calls_are_call_edges() {
+    let (_a, g) = graph_of(
+        "(function(){\nfunction target() { return 1; }\nfunction caller() { target?.(); obj?.method(); obj?.a.deep?.(); }\ncaller();\n})();\n",
+    );
+    let caller = g
+        .functions
+        .iter()
+        .find(|f| f.name == "caller")
+        .expect("caller row");
+    let target = g
+        .functions
+        .iter()
+        .find(|f| f.name == "target")
+        .expect("target row");
+    assert_eq!(
+        caller.internal_callees,
+        vec![target.span],
+        "`target?.()` edges target"
+    );
+    assert!(
+        caller.external_callees.contains("method") && caller.external_callees.contains("deep"),
+        "optional-chain member calls carry their names: {:?}",
+        caller.external_callees
+    );
+}
+
+/// Finding #17: which identifiers Babel counts as assignment TARGETS
+/// (constant violations) vs references. Only the target slots of an
+/// assignment's left are targets — a default value, a computed key, or a
+/// member expression's object inside the left are ordinary expressions.
+#[test]
+fn babel_assignment_target_is_only_the_target_slot() {
+    use crate::graph::is_babel_assignment_target;
+    let cases: &[(&str, bool)] = &[
+        ("var a, b, c; b = c;", true),
+        ("var a, b, c; b += c;", true),
+        ("var a, b, c; [a, b] = c;", true),
+        ("var a, b, c; ({ x: b } = c);", true),
+        ("var a, b, c; ({ b } = c);", true),
+        ("var a, b, c; [a = 1, ...b] = c;", true),
+        ("var a, b, c; [b = 1] = c;", true),
+        ("var a, b, c; ({ b = 1 } = c);", true),
+        ("var a, b, c; ({ x: b = 1 } = c);", true),
+        ("var a, b, c; (b) = c;", true),
+        // the default value is evaluated, never assigned (#17's probe)
+        ("var a, b, c; [a = b++] = c;", false),
+        ("var a, b, c; [a = b] = c;", false),
+        ("var a, b, c; ({ a = b } = c);", false),
+        ("var a, b, c; ({ x: a = b } = c);", false),
+        // a computed key and a member object are read
+        ("var a, b, c; ({ [b]: a } = c);", false),
+        ("var a, b, c; b.x = c;", false),
+        ("var a, b, c; a[b] = c;", false),
+        ("var a, b, c; [b.x] = c;", false),
+        // the right side, updates, for-of targets
+        ("var a, b, c; a = b;", false),
+        ("var a, b, c; b++;", false),
+        ("var a, b, c; for (b of c);", false),
+    ];
+    let mut wrong = Vec::new();
+    for (code, expected) in cases {
+        let allocator = Allocator::default();
+        let ingest = Ingest::parse(&allocator, code, "input.js");
+        assert!(ingest.errors.is_empty(), "must parse: {code}");
+        let nodes = ingest.semantic().nodes();
+        let b_ref = nodes
+            .iter()
+            .find(|n| matches!(n.kind(), oxc_ast::AstKind::IdentifierReference(r) if r.name == "b"))
+            .unwrap_or_else(|| panic!("a `b` reference in {code}"));
+        if is_babel_assignment_target(nodes, b_ref.id()) != *expected {
+            wrong.push(*code);
+        }
+    }
+    assert!(wrong.is_empty(), "wrong verdict for `b` in: {wrong:#?}");
+}
