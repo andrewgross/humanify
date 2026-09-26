@@ -161,7 +161,11 @@ fn build_ledger(
 
 /// `stableSplitFromCode` + `tryEmitRunnableCjs` over the shipped text.
 pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<SplitOutcome, String> {
+    use crate::profiling::phase;
+    let ph = phase("split:input");
     let input = split_input(shipped)?;
+    drop(ph);
+    let ph = phase("split:assign");
     let mut own_trail = PlacementTrail::default();
     let trail = options.trail.unwrap_or(&mut own_trail);
     let Placed {
@@ -187,6 +191,8 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         None,
     )?;
 
+    drop(ph);
+    let ph = phase("split:review");
     // The typed parse the emit walks (same text, same spans).
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, shipped, "shipped.js");
@@ -248,6 +254,8 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         tiers: tier_stats,
     };
 
+    drop(ph);
+    let ph = phase("split:runnable-cjs");
     let runnable = if options.split_pure {
         None
     } else {
@@ -268,6 +276,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             switches: options.align,
         }))
     };
+    drop(ph);
     let mut outcome = SplitOutcome {
         files: Vec::new(),
         runnable: None,

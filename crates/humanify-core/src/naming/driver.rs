@@ -79,6 +79,10 @@ pub struct NamingConfig {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`.
     pub shingle_probe: bool,
+    /// `--fast`: the post-parity performance mode (docs/rust-port/20-fast-mode.md).
+    /// Every change it gates is deterministic; it may move output once
+    /// relative to the parity-faithful path, never between two runs.
+    pub fast: bool,
 }
 
 impl NamingConfig {
@@ -177,6 +181,7 @@ pub fn run_naming<P: NameProvider>(
         capture: config.capture_dump,
         tunables: config.tunables,
         shingle_probe: config.shingle_probe,
+        fast: config.fast,
     };
     let era = match input.prior {
         Some(prior) => match_prior_version(
@@ -250,6 +255,7 @@ pub fn run_naming<P: NameProvider>(
     };
     // `captureSemanticBaseline` + the invariant checks on the generated
     // text: the post-generate passes need a valid output.
+    let ph = crate::profiling::phase("naming:validate");
     let verdict = match validate::baseline_of(input.fresh) {
         Some(b) => validate::verdict(&generated, &b),
         // The fresh text itself does not parse: nothing can be validated.
@@ -261,6 +267,8 @@ pub fn run_naming<P: NameProvider>(
     let trail = std::mem::take(&mut out.trail);
 
     // -- the prior-diff reconcile --------------------------------------
+    drop(ph);
+    let ph = crate::profiling::phase("naming:prior-diff-reconcile");
     let run_reconcile = config.reconcile_prior_diff && !config.source_map && out.output_valid;
     let trail = match input.prior.filter(|_| run_reconcile) {
         None => trail,
@@ -293,6 +301,8 @@ pub fn run_naming<P: NameProvider>(
     };
     let recon_code = out.reconcile.as_ref().and_then(|r| r.code.clone());
 
+    drop(ph);
+    let ph = crate::profiling::phase("naming:deferred-sweep");
     // -- the deferred sweep -----------------------------------------------
     let trail = if deferred && out.output_valid {
         let text = recon_code.clone().unwrap_or_else(|| generated.clone());
@@ -363,6 +373,8 @@ pub fn run_naming<P: NameProvider>(
         }
     });
 
+    drop(ph);
+    let ph = crate::profiling::phase("naming:family-permute");
     // -- the family permute ------------------------------------------------
     let permute_eligible = config.reconcile_prior_diff
         && !config.source_map
@@ -383,6 +395,8 @@ pub fn run_naming<P: NameProvider>(
         }
     }
 
+    drop(ph);
+    let _ph = crate::profiling::phase("naming:census");
     // -- the census + coverage ----------------------------------------------
     let census = census_of_text(&shipped, &eligible)?;
     let mut coverage = build_coverage_summary(
@@ -584,3 +598,6 @@ impl NamingOutcome {
 
 #[cfg(test)]
 mod driver_test;
+
+#[cfg(test)]
+mod fast_test;

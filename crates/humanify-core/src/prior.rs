@@ -131,11 +131,15 @@ pub fn match_prior_version<T>(
     // The JSON is shared by every consumer below (the graph's row hashes
     // and features, the statement contexts, the close tier, the twin
     // inventories); the two parses are independent and run concurrently.
+    use crate::profiling::phase;
+    let ph = phase("prior:parse+json");
     let fresh_allocator = Allocator::default();
     let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
     let prior_allocator = Allocator::default();
     let prior_ingest = parse_side(&prior_allocator, prior, "prior.js")?;
     let (fresh_json, prior_json) = program_jsons(&fresh_ingest, &prior_ingest);
+    drop(ph);
+    let ph = phase("prior:graph-fresh");
 
     // ── the fresh side (the pipeline's own eligibility) ─────────────────
     let SideParts {
@@ -156,7 +160,12 @@ pub fn match_prior_version<T>(
         graph: prior_graph,
         ctx: prior_ctx,
         spans: prior_spans,
-    } = build_side_parts(&prior_ingest, &prior_json, "prior.js", Eligibility::All);
+    } = {
+        drop(ph);
+        let _ph = phase("prior:graph-prior");
+        build_side_parts(&prior_ingest, &prior_json, "prior.js", Eligibility::All)
+    };
+    let ph = phase("prior:index");
 
     // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
     // The initial function cascade (propagation on), the alternation with
@@ -167,6 +176,8 @@ pub fn match_prior_version<T>(
     let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
     let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
     let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
+    drop(ph);
+    let ph = phase("prior:match-cascade");
     let initial = match_functions(
         &prior_index,
         &fresh_index,
@@ -213,6 +224,8 @@ pub fn match_prior_version<T>(
     // The TS runs buildCloseMatchContext here (:632-640, after the tail
     // tiers) with the cascade's final matches — the close dump's rows are
     // the tier's candidates, assignment outcomes and corroboration verdicts.
+    drop(ph);
+    let ph = phase("prior:close-dump");
     let fn_matches_for_close = function_result.matches.to_hash_map();
     let (close_file, close_pairs) = crate::matching::close_dump::close_dump_with_context(
         &crate::matching::close_dump::CloseDumpSides {
@@ -238,6 +251,8 @@ pub fn match_prior_version<T>(
         function_result.unmatched.len(),
     )?;
 
+    drop(ph);
+    let ph = phase("prior:twin-inventories");
     // ── the twins' inventories (WP2.3) ───────────────────────────────────
     let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
         prior_ingest.program,
@@ -296,6 +311,8 @@ pub fn match_prior_version<T>(
         close_pairs: &close_pairs,
         evidence: &evidence,
     };
+    drop(ph);
+    let _ph = phase("naming-era");
     consume(&stage)
 }
 
