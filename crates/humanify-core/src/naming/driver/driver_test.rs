@@ -112,6 +112,38 @@ fn rename_every_binding_and_render(code: &str) -> String {
     })
 }
 
+/// Finding #16, its exact sequence: rename one `export const` binding,
+/// then the other, then the first again. The TS (and the port until #55)
+/// split the declaration on the first rename and renamed in place after,
+/// printing `export { first as a, b }` over locals named `again`/`second`
+/// — dead names, a module that no longer loads. Export names are never
+/// renamed now, so the module prints as it came.
+#[test]
+fn export_const_renames_never_leave_a_specifier_on_a_dead_name() {
+    use crate::naming::waves::render::render_program;
+    use crate::rename::validated::test_support::with_semantic;
+    use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
+    use crate::trail::Anchor;
+    let code = "export const a = 1, b = 2;\nuse(a, b);\n";
+    let out = with_semantic(code, true, |semantic| {
+        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let program = state.view().program_scope();
+        for (old, new) in [("a", "first"), ("b", "second"), ("first", "again")] {
+            let _ = state.attempt_validated_rename(
+                RenameRequest {
+                    scope: program,
+                    old_name: old,
+                    new_name: new,
+                    expected: None,
+                },
+                TrailSpec::Untrailed { why: "test" },
+            );
+        }
+        render_program(semantic, &state)
+    });
+    assert_eq!(out, code);
+}
+
 /// Finding #55: renaming every binding of a module that uses every export
 /// form leaves every export NAME as it was — declarations keep their ids,
 /// specifiers keep their external names, re-exports bind nothing — and the

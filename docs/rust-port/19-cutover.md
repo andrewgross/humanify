@@ -143,8 +143,10 @@ naming path runs; a run where no rename lands fails), the prior run twice for
 byte-determinism, and every output imported by Node and required to export
 the input's surface (names, types, the shape of each export's no-argument
 result). Its first run found **#55**: the naming stage renames an ESM module's
-exported bindings (`createStore` → `createStoreRenamed`). The stage reports
-#55 in exactly that shape and fails on any other surface change.
+exported bindings (`createStore` → `createStoreRenamed`). The stage reported
+#55 in exactly that shape and failed on any other surface change — until #55
+was fixed (branch `fix/f55-esm-exports`, 16-findings-queue.md): the stage is
+now STRICT, and a third fixture, `esm-exports`, holds every ESM export form.
 
 ## 6. What could not be retired, and what is left open
 
@@ -164,7 +166,8 @@ exported bindings (`createStore` → `createStoreRenamed`). The stage reports
   code. They are history, and `PORTING.md` maps them; they were not swept.
 - **`--heap-mb` stays in run.sh** though inert for the binary: every run
   manifest records `heapMb`; removing it is a manifest-schema change.
-- **Finding #55** (above) is open.
+- **Finding #55** (above) — FIXED after the cutover (with #16); see
+  16-findings-queue.md.
 
 ## Appendix — historical experiment files deleted (dead without `src/`)
 
