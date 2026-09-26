@@ -574,7 +574,6 @@ fn reconcile_one_file(
         last_resort_tier: true,
         skip_import_declarations: true,
         skeleton_vote_tier: true,
-        plant: None,
     };
     let result = reconcile_diff_noise(ingest.semantic(), &mut state, &diff_text, eligible, &opts);
     // Recorded as the pass ran — whatever the file's fate below.

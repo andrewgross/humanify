@@ -13,7 +13,7 @@
 //! Each post-generate pass parses ITS input text afresh (a new Babel scope
 //! epoch in the TS — every `parseSourceAst` of a bundle clears the traverse
 //! cache) and hands on a re-rendered text plus the continued strategy
-//! trail. [`dump`] is the gate's verb (migration scaffolding).
+//! trail.
 //!
 //! ## What the driver (`naming::driver`) runs, and when (plugin.ts)
 //!
@@ -41,7 +41,6 @@
 //! class-id skips + decoration skips + both sweeps' skips.
 
 pub mod census;
-pub mod dump;
 pub mod family_permute;
 pub mod floor_passes;
 pub mod sweep;

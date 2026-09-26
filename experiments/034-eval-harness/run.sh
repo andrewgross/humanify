@@ -11,8 +11,9 @@
 #                          re-humanifying it first (default: fresh base;
 #                          archive mode reads ~3.7x worse and says so)
 #   --pairs <a,b>          restrict to named pairs ("215->216" or full form)
-#   --heap-mb <n>          pipeline heap (default 65536)
-#   --skip-preflight       skip the matcher outcome-set check (says so loudly)
+#   --heap-mb <n>          recorded heap (default 65536) — INERT for the
+#                          binary (not a Node process); kept because every
+#                          run manifest records it
 #   --endpoint <url>       LLM endpoint override (default pairs.json)
 #   --llm-cache <dir>      opt IN to a response cache — iteration only,
 #                          never valid for a gate run
@@ -20,20 +21,21 @@
 #   --no-vendor            skip the vendor churn analysis
 #   --inputs-base <dir>    override pairs.json inputsBase
 #   --priors-base <dir>    override pairs.json priorsBase
-#   --bin <path>           score with a Rust binary instead of
-#                          `npx tsx src/index.ts`, at ALL THREE launch sites
-#                          (rebase, scored leg, self-hop). The harness BUILDS
-#                          it first (`cargo build --release --locked` in the
-#                          cargo workspace owning <path>) and REFUSES a binary
-#                          whose build commit is not this label's commit
-#                          (experiments/lib/pipeline-bin.ts). Implies
-#                          --warm-self-hop. --heap-mb is INERT for it.
+#   --bin <path>           the Rust binary to score (default: this repo's
+#                          target/release/humanify). It runs at ALL THREE
+#                          launch sites (rebase, scored leg, self-hop). The
+#                          harness BUILDS it first (`cargo build --release
+#                          --locked` in the cargo workspace owning <path>) and
+#                          REFUSES a binary whose build commit is not this
+#                          label's commit (experiments/lib/pipeline-bin.ts).
+#                          There is no other pipeline: the TS program was
+#                          deleted at the cutover (docs/rust-port/19-cutover.md).
 #   --force-mixed          accept a --bin built from another/unknown commit or
 #                          a dirty tree (recorded, and warned on per pair)
-#   --warm-self-hop        after the cold self-hop, replay a scratch COPY of
-#                          the cache that leg filled and require byte identity
-#                          with 0 writes (the 5b self-hop gate, 00-control §3).
-#                          The cold leg then records into a fresh cache dir.
+#
+# The self-hop always runs both halves (the 5b self-hop gate, 00-control §3):
+# the cold leg records into a fresh cache dir, then a warm leg replays a
+# scratch COPY of it and must be byte-identical with 0 writes.
 #
 # <model-label> names this run (a branch, a commit, an idea — e.g.
 # "main-4117212" or "fix-close-match"). Results land in results/<model-label>/;
@@ -53,7 +55,6 @@ WORK="/tmp/eval-work"
 ARCHIVE_PRIOR=0
 PAIRS_FILTER=""
 HEAP_MB=65536
-SKIP_PREFLIGHT=0
 ENDPOINT_OVERRIDE=""
 LLM_CACHE_DIR=""
 RUN_LAYOUT=1
@@ -62,16 +63,14 @@ RUN_BOOT_PROMPT=1
 RUN_SELF_HOP=1
 INPUTS_OVERRIDE=""
 PRIORS_OVERRIDE=""
-BIN=""
+BIN="$REPO/target/release/humanify"
 FORCE_MIXED=0
-WARM_SELF_HOP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workdir)        WORK="$2"; shift ;;
     --archive-prior)  ARCHIVE_PRIOR=1 ;;
     --pairs)          PAIRS_FILTER="$2"; shift ;;
     --heap-mb)        HEAP_MB="$2"; shift ;;
-    --skip-preflight) SKIP_PREFLIGHT=1 ;;
     --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
     --llm-cache)      LLM_CACHE_DIR="$2"; shift ;;
     --no-layout)      RUN_LAYOUT=0 ;;
@@ -82,7 +81,6 @@ while [[ $# -gt 0 ]]; do
     --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
     --bin)            BIN="$2"; shift ;;
     --force-mixed)    FORCE_MIXED=1 ;;
-    --warm-self-hop)  WARM_SELF_HOP=1 ;;
     --*)            echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
     *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
                       MODEL="$1" ;;
@@ -100,91 +98,36 @@ EVAL_HEAP="$HEAP_MB"
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
 
-# WHAT RUNS THE PIPELINE — one array, used at all three launch sites (rebase,
-# scored leg via run-pipeline.ts, self-hop). Without --bin it is exactly the
-# command every committed reference was scored by (run-launch.test.ts holds
-# the launches byte-identical to the pre---bin golden).
+# WHAT RUNS THE PIPELINE — the Rust binary, one array used at all three launch
+# sites (rebase, scored leg via run-pipeline.ts, self-hop). run-launch.test.ts
+# holds the launches byte-identical to the golden the binary-scored references
+# ran with. Built HERE, so the label's commit is the binary's commit by
+# construction — or refused (exit 2) before anything launches.
 LABEL_COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || true)
-if [[ -n "$BIN" ]]; then
-  # Build it HERE, so the label's commit is the binary's commit by
-  # construction — or refuse (exit 2) before anything launches.
-  echo "=== --bin: building and recording $BIN ==="
-  FORCE_ARGS=()
-  [[ "$FORCE_MIXED" == "1" ]] && FORCE_ARGS=(--force-mixed)
-  BIN_JSON=$(npx tsx "$REPO/experiments/lib/pipeline-bin.ts" "$BIN" "$LABEL_COMMIT" \
-    ${FORCE_ARGS[@]+"${FORCE_ARGS[@]}"})
-  BIN_RC=$?
-  if [[ $BIN_RC -eq 2 ]]; then exit 2; fi
-  if [[ $BIN_RC -ne 0 || -z "$BIN_JSON" ]]; then
-    echo "FATAL: could not build/record --bin $BIN (exit $BIN_RC)" >&2
-    exit 1
-  fi
-  BIN=$(jq -r .path <<< "$BIN_JSON")
-  PIPE_CMD=("$BIN")
-  WARM_SELF_HOP=1
-  echo "PIPELINE: Rust binary $BIN"
-  echo "  sha256 $(jq -r .sha256 <<< "$BIN_JSON"), built from $(jq -r '.commit | if . == "" then "an UNKNOWN commit" else .[0:12] end' <<< "$BIN_JSON")$(jq -r 'if .dirty then " (DIRTY tree)" else "" end' <<< "$BIN_JSON")"
-  echo "HEAP: --heap-mb / NODE_OPTIONS are INERT for the Rust binary (it is not a Node process);"
-  echo "  the recorded heapMb is not a limit on it, and no heap-headroom warning applies."
-  RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" \
-    '{command:[$bin], bin:$rec}')
-else
-  PIPE_CMD=(npx tsx "$REPO/src/index.ts")
-  RUNCFG_EXTRA='{}'
+echo "=== --bin: building and recording $BIN ==="
+FORCE_ARGS=()
+[[ "$FORCE_MIXED" == "1" ]] && FORCE_ARGS=(--force-mixed)
+BIN_JSON=$(npx tsx "$REPO/experiments/lib/pipeline-bin.ts" "$BIN" "$LABEL_COMMIT" \
+  ${FORCE_ARGS[@]+"${FORCE_ARGS[@]}"})
+BIN_RC=$?
+if [[ $BIN_RC -eq 2 ]]; then exit 2; fi
+if [[ $BIN_RC -ne 0 || -z "$BIN_JSON" ]]; then
+  echo "FATAL: could not build/record --bin $BIN (exit $BIN_RC)" >&2
+  exit 1
 fi
+BIN=$(jq -r .path <<< "$BIN_JSON")
+PIPE_CMD=("$BIN")
+echo "PIPELINE: Rust binary $BIN"
+echo "  sha256 $(jq -r .sha256 <<< "$BIN_JSON"), built from $(jq -r '.commit | if . == "" then "an UNKNOWN commit" else .[0:12] end' <<< "$BIN_JSON")$(jq -r 'if .dirty then " (DIRTY tree)" else "" end' <<< "$BIN_JSON")"
+echo "HEAP: --heap-mb / NODE_OPTIONS are INERT for the Rust binary (it is not a Node process);"
+echo "  the recorded heapMb is not a limit on it, and no heap-headroom warning applies."
+RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" \
+  '{command:[$bin], bin:$rec}')
 
-# Validate the fingerprint matcher against real npm packages BEFORE spending an
-# hour on four claude-code pairs. ~5s, no LLM. It asserts the expected outcome
-# SET rather than a threshold, because one fixture cannot reach 100% by design.
-# This harness had drifted out of every gate and nothing proved it still ran.
-# Hard gate: an outcome-set change means the matcher differs from the record —
-# scoring an hour of pairs on top of that is measuring an unknown matcher.
-# --skip-preflight remains the documented skip.
-if [[ -n "$BIN" ]]; then
-  echo "MATCHER PREFLIGHT: this tests the TS matcher (test/e2e/harness), NOT the binary"
-  echo "  under --bin — a pass says nothing about the Rust matcher that scores these pairs."
-fi
-if [[ "$SKIP_PREFLIGHT" == "1" ]]; then
-  "$REPO/experiments/lib/matcher-preflight.sh" --skip
-  PREFLIGHT_STATUS=0
-  PREFLIGHT_VERDICT="skipped"
-else
-  "$REPO/experiments/lib/matcher-preflight.sh"
-  PREFLIGHT_STATUS=$?
-  # The comment above called this a hard gate for months while the code read
-  # nothing back — the script's exit code went to no one, so two frozen-tree
-  # runs scored four pairs each on an unverified matcher. Three outcomes now,
-  # kept distinct because they call for different actions:
-  #   0  outcome set unchanged
-  #   1  the matcher CHANGED — abort; scoring on top measures an unknown
-  #   2  the check could not run (fixtures unbuilt) — record and continue,
-  #      because an absent build artifact is an environment gap, not a finding
-  case "$PREFLIGHT_STATUS" in
-    0) PREFLIGHT_VERDICT="ok" ;;
-    2) PREFLIGHT_VERDICT="not-verified"
-       echo "CONTINUING with an UNVERIFIED matcher — this label is marked."
-       ;;
-    *) PREFLIGHT_VERDICT="regressed"
-       echo "ABORTING before the pairs: the matcher differs from the record."
-       echo "  Re-run with --skip-preflight only if that difference is intended."
-       exit 1
-       ;;
-  esac
-fi
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
-# Written where the label lives, so a summary read weeks later carries how far
-# the matcher was actually checked (rule 9: the reader gets the newer file).
-if [[ -n "$BIN" ]]; then
-  printf '{"preflight":{"verdict":"%s","status":%s,"covers":"ts-matcher"}}\n' \
-    "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
-  jq -cn --argjson bin "$BIN_JSON" \
-    '{pipeline:{kind:"rust-bin", bin:$bin}}' > "$RESULTS/pipeline.json"
-else
-  printf '{"preflight":{"verdict":"%s","status":%s}}\n' \
-    "$PREFLIGHT_VERDICT" "$PREFLIGHT_STATUS" > "$RESULTS/preflight-status.json"
-  printf '{"pipeline":{"kind":"ts"}}\n' > "$RESULTS/pipeline.json"
-fi
+jq -cn --argjson bin "$BIN_JSON" \
+  '{pipeline:{kind:"rust-bin", bin:$bin}}' > "$RESULTS/pipeline.json"
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
@@ -349,7 +292,7 @@ for i in $(seq 0 $((npairs - 1))); do
   done
   if [[ -n "$MISSING" ]]; then
     echo "PIPELINE FAILED for $PAIR — missing:$MISSING"
-    echo "  (see $RESULTS/$TO.stdout; an OOM here means EVAL_HEAP is too small)"
+    echo "  (see $RESULTS/$TO.stdout; an OOM here means the box ran out of memory — run the eval alone)"
     continue
   fi
 
@@ -381,19 +324,12 @@ for i in $(seq 0 $((npairs - 1))); do
 
   # Human-readable evidence page (identifier + diff ledgers, funnel):
   # small HTML committed with the results; the big diag JSON stays in WORK.
-  # A MISSING trail is said out loud, not folded into "REPORT PAGE FAILED":
-  # the binary accepts --diagnostics but does not write it yet (its writer is
-  # being ported on rust/unified-leftovers), and a generic failure line would
-  # hide which of the two happened.
+  # A MISSING trail is said out loud, not folded into "REPORT PAGE FAILED",
+  # so a reader can tell "no trail" from "the page failed".
   DIAG="$WORK/$MODEL/$TO.diag.json"
   if [[ ! -f "$DIAG" ]]; then
     echo "NO DIAGNOSTICS TRAIL for $PAIR at $DIAG — report page NOT written."
-    if [[ -n "$BIN" ]]; then
-      echo "  Expected for now: the binary accepts --diagnostics but does not write it"
-      echo "  (unified.rs; the writer is being ported). Every KPI above is unaffected."
-    else
-      echo "  The TS pipeline always writes it — see $RESULTS/$TO.stdout."
-    fi
+    echo "  See $RESULTS/$TO.stdout. Every KPI above is unaffected."
   else
     NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/trail-report.ts" \
       "$DIAG" "$RESULTS/$TO-report.html" \
@@ -449,7 +385,7 @@ done
 # model; self-hop-reference.json).
 #   COLD  — the leg as it always ran. Its bundle diff count is judged against
 #           the reference range by the summary (invariants.ts coldRangeVerdict).
-#   WARM  — (--warm-self-hop, implied by --bin) the same leg again, replaying
+#   WARM  — the same leg again, replaying
 #           a scratch COPY of the cache the cold leg filled. With the model
 #           held fixed it must reproduce the cold leg's tree byte for byte and
 #           write 0 cache entries: determinism, rule 10's permitted use.
@@ -515,30 +451,22 @@ if [[ "$RUN_SELF_HOP" == "1" && -n "$TO" && -f "$WORK/$MODEL/$TO/.humanify/human
   rm -rf "$SELF_OUT"
   # What cache the COLD leg runs with (recorded; the summary refuses to judge
   # a leg that was not cold). The warm leg needs the answers the cold leg got,
-  # so with --warm-self-hop the cold leg records into a FRESH dir — still
-  # cold: it starts empty, every prompt is live.
-  SELF_CACHE_ARGS=(${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"})
-  COLD_CACHE="none"
-  [[ -n "$LLM_CACHE_DIR" ]] && COLD_CACHE="seeded"
-  if [[ "$WARM_SELF_HOP" == "1" ]]; then
-    SELF_CACHE="$WORK/$MODEL/${TO}-selfhop-cache"
-    rm -rf "$SELF_CACHE"
-    if [[ -n "$LLM_CACHE_DIR" ]]; then
-      cp -r "$LLM_CACHE_DIR" "$SELF_CACHE"
-      echo "  cold self-hop leg SEEDED from --llm-cache: it is NOT cold; its count will not be judged"
-    else
-      mkdir -p "$SELF_CACHE"
-      COLD_CACHE="fresh"
-    fi
-    SELF_CACHE_ARGS=(--llm-cache "$SELF_CACHE")
+  # so the cold leg records into a FRESH dir — still cold: it starts empty,
+  # every prompt is live.
+  COLD_CACHE="fresh"
+  SELF_CACHE="$WORK/$MODEL/${TO}-selfhop-cache"
+  rm -rf "$SELF_CACHE"
+  if [[ -n "$LLM_CACHE_DIR" ]]; then
+    cp -r "$LLM_CACHE_DIR" "$SELF_CACHE"
+    COLD_CACHE="seeded"
+    echo "  cold self-hop leg SEEDED from --llm-cache: it is NOT cold; its count will not be judged"
+  else
+    mkdir -p "$SELF_CACHE"
   fi
-  COLD_BEFORE=0
-  [[ "$WARM_SELF_HOP" == "1" ]] && COLD_BEFORE=$(count_files "$SELF_CACHE")
-  self_hop_leg "$SELF_OUT" "$RESULTS/$TO-selfhop.stdout" \
-    ${SELF_CACHE_ARGS[@]+"${SELF_CACHE_ARGS[@]}"}
+  COLD_BEFORE=$(count_files "$SELF_CACHE")
+  self_hop_leg "$SELF_OUT" "$RESULTS/$TO-selfhop.stdout" --llm-cache "$SELF_CACHE"
   SELF_RC=$?
-  COLD_WRITES=0
-  [[ "$WARM_SELF_HOP" == "1" ]] && COLD_WRITES=$(( $(count_files "$SELF_CACHE") - COLD_BEFORE ))
+  COLD_WRITES=$(( $(count_files "$SELF_CACHE") - COLD_BEFORE ))
   # DID IT RUN, before asking whether it MATCHED. `cmp -s` is non-zero for a
   # MISSING file just as it is for a different one, and `diff` against a
   # missing file prints its error to stderr and counts zero lines — so a
@@ -556,7 +484,7 @@ if [[ "$RUN_SELF_HOP" == "1" && -n "$TO" && -f "$WORK/$MODEL/$TO/.humanify/human
       "$TO" > "$RESULTS/$TO-self-hop.json"
     echo "SELF-HOP DID NOT RUN for $TO — missing:$SELF_MISSING"
     echo "  This is NOT a passing invariant and NOT a violation; the check did not happen."
-    echo "  (see $RESULTS/$TO-selfhop.stdout; an OOM here means EVAL_HEAP is too small)"
+    echo "  (see $RESULTS/$TO-selfhop.stdout; an OOM here means the box ran out of memory — run the eval alone)"
   else
   SELF_OK=true
   SELF_DIFF=0
@@ -573,14 +501,13 @@ if [[ "$RUN_SELF_HOP" == "1" && -n "$TO" && -f "$WORK/$MODEL/$TO/.humanify/human
     echo "COLD SELF-HOP: $SELF_DIFF bundle diff lines (cache: $COLD_CACHE; see $RESULTS/$TO-selfhop.stdout)"
     echo "  reference range on record: $(jq -r '[.coldDiffLines[]] | "\(min)-\(max) ln over \(length) cold runs"' "$HERE/self-hop-reference.json") on $(jq -r .version "$HERE/self-hop-reference.json") — judged in the summary"
   fi
-  WARM_JSON="null"
-  [[ "$WARM_SELF_HOP" == "1" ]] && warm_self_hop
+  warm_self_hop
   # Per version, not a fixed filename: with several pairs the old path meant
   # only the last one survived.
   jq -cn --arg v "$TO" --argjson identical "$SELF_OK" --argjson diff "$SELF_DIFF" \
     --arg coldCache "$COLD_CACHE" --argjson warm "$WARM_JSON" \
-    '{selfHop:({version:$v, ran:true, identical:$identical, diffLines:$diff,
-      coldCache:$coldCache} + (if $warm == null then {} else {warm:$warm} end))}' \
+    '{selfHop:{version:$v, ran:true, identical:$identical, diffLines:$diff,
+      coldCache:$coldCache, warm:$warm}}' \
     > "$RESULTS/$TO-self-hop.json"
   fi
 fi

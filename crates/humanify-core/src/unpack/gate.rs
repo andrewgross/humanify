@@ -1,20 +1,11 @@
-//! The WPB.2 gate's seams (migration scaffolding — deleted at phase 6 with
-//! the TS core, 02 §9).
-//!
-//! The TS structural-hash injection that bridged the hash-byte difference
-//! (the structuralSignature exemption) ended at WP5.6e: the unpack names
-//! vendor files by the Rust's OWN factory hashes, so this verb's tree no
-//! longer equals a TS unpack tree wherever a hash-derived string reaches
-//! it (`lib_<hash8>` names and file names, runtime identifiers, the LLM
-//! batch keys). What is left is the recording namer the verb's
-//! `--llm-log` writes.
+//! The `humanify unpack` verb's recording namer: what its `--llm-log`
+//! writes (every vendor LLM batch's keys, evidence and answers).
 
 use serde::Serialize;
 
 use crate::modules::vendor_names::{VendorNameRequest, VendorNamer};
 
-/// One LLM batch as the gate records it — the TS probe's `.llm.json`
-/// `batches[]` shape.
+/// One LLM batch as the verb records it (`batches[]` of the log).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RecordedBatch {
     pub keys: Vec<String>,

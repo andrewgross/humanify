@@ -1,4 +1,6 @@
-//! WP4.2's byte-identity gate (migration scaffolding — deleted at phase 6).
+//! WP4.2's byte-identity gate, kept as a unit-test golden since the cutover:
+//! the live prompt builders replayed against the frozen TS-captured fixture
+//! (test/parity/wp42-gate-fixture/). Test-only (`#[cfg(test)]`).
 //!
 //! Four sections per pair:
 //!
@@ -168,24 +170,6 @@ impl PromptGateReport {
         } else {
             " => DIVERGES"
         }
-    }
-
-    /// Every recorded divergence, section-labelled.
-    pub fn divergences(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        let mut add = |name: &str, s: &Section| {
-            out.extend(s.divergences.iter().map(|d| format!("{name}: {d}")));
-        };
-        add("systemPrompt", &self.system_prompts);
-        add("userPrompt", &self.user_prompts);
-        add("retryPromptBody", &self.retry_bodies);
-        if let Some(c) = &self.capture {
-            add("module-dispatch", &c.module_dispatches);
-            add("module-builder-call", &c.module_builder_calls);
-            add("code-window", &c.code_window);
-            add("context", &c.context);
-        }
-        out
     }
 }
 

@@ -209,19 +209,7 @@ macro_rules! serialize_node_json {
     }};
 }
 
-/// One graph-entry node's canonical serialization — the pass-1 code path
-/// (ESTree JSON → canonical token stream) as a function, so the WP2.1 hash
-/// probe reproduces row hashes and can diff the token stream itself
-/// (the stream is the diagnostics surface: [`CanonicalOutput::parts`]).
-pub(crate) fn hash_entry_subtree(
-    nodes: &AstNodes<'_>,
-    node_id: NodeId,
-    tables: &SymbolTables,
-) -> crate::hash::serialize::CanonicalOutput {
-    hash_entry_json(&entry_subtree_json(nodes, node_id), tables)
-}
-
-/// A graph-entry node's ESTree JSON — the half of [`hash_entry_subtree`]
+/// A graph-entry node's ESTree JSON — the half of the entry hash
 /// that reads the AST (so it runs on the thread that owns the arena).
 pub(crate) fn entry_subtree_json(nodes: &AstNodes<'_>, node_id: NodeId) -> String {
     let node = nodes.get_node(node_id);
@@ -236,16 +224,6 @@ pub(crate) fn entry_subtree_json(nodes: &AstNodes<'_>, node_id: NodeId) -> Strin
         _ => {}
     }
     ser.into_string()
-}
-
-/// The pure half of [`hash_entry_subtree`]: parse the entry's JSON and
-/// canonicalize it.
-fn hash_entry_json(json: &str, tables: &SymbolTables) -> crate::hash::serialize::CanonicalOutput {
-    canonical_serialize(
-        &crate::ingest::parse_estree_json(json),
-        tables,
-        LiteralPolicy::Blurred,
-    )
 }
 
 /// The ESTree `type` names a graph entry's own JSON node carries, per
@@ -435,7 +413,6 @@ fn analyze_call_edges(
     function_by_symbol: &HashMap<SymbolId, usize>,
     tables: &crate::hash::serialize::SymbolTables,
     idx_by_node: &HashMap<NodeId, usize>,
-    visit_optional_calls: bool,
 ) {
     let entry_spans: std::collections::HashSet<(u32, u32)> =
         entries.iter().map(|e| (e.span.start, e.span.end)).collect();
@@ -449,10 +426,9 @@ fn analyze_call_edges(
         // internal edge AND no external name (the Pp9 one-edge divergence's
         // real mechanism; the factory-classification attribution was wrong).
         // oxc folds optional into CallExpression.optional. SKIPPING is the
-        // shipped TS's blind spot, kept for parity; `visit_optional_calls`
-        // is the SIZING probe for fixing it (how many matches the ~250
-        // missing identifier-optional edges would earn).
-        if call.optional && !visit_optional_calls {
+        // shipped TS's blind spot, kept (a fix is an eval-measured lever:
+        // ~250 identifier-optional edges are missing).
+        if call.optional {
             continue;
         }
         // THE EDGE SEMANTICS (babel's analyzeCallees is a RECURSIVE
@@ -532,36 +508,17 @@ pub fn build_function_graph(
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
 ) -> (FunctionGraph, HashMap<SymbolId, usize>) {
-    build_function_graph_opts(semantic, file_name, factories, false)
-}
-
-/// The sizing-probe variant: `visit_optional_calls` = the FIX for babel's
-/// optional-call blind spot (visit `x?.()` like a normal call). Parity
-/// runs pass false (the shipped TS never visits them).
-pub fn build_function_graph_opts(
-    semantic: &Semantic<'_>,
-    file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
-    visit_optional_calls: bool,
-) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let program_json = crate::ingest::program_estree_json(semantic.nodes().program());
-    build_function_graph_with_json(
-        semantic,
-        &program_json,
-        file_name,
-        factories,
-        visit_optional_calls,
-    )
+    build_function_graph_with_json(semantic, &program_json, file_name, factories)
 }
 
-/// [`build_function_graph_opts`] over the side's already-parsed program
+/// [`build_function_graph`] over the side's already-parsed program
 /// JSON ([`crate::ingest::program_estree_json`]).
 fn build_function_graph_with_json(
     semantic: &Semantic<'_>,
     program_json: &Value,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
-    visit_optional_calls: bool,
 ) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
@@ -667,7 +624,6 @@ fn build_function_graph_with_json(
         &function_by_symbol,
         &tables,
         &idx_by_node,
-        visit_optional_calls,
     );
 
     // --- pass 3: scope nesting -----------------------------------------
@@ -733,25 +689,6 @@ pub fn build_unified_graph_with_eligibility(
     factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility<'_>,
 ) -> UnifiedGraph {
-    build_unified_graph_with_eligibility_opts(
-        semantic,
-        program,
-        file_name,
-        factories,
-        eligibility,
-        false,
-    )
-}
-
-/// The sizing-probe variant (see build_function_graph_opts).
-pub fn build_unified_graph_with_eligibility_opts(
-    semantic: &Semantic<'_>,
-    program: &oxc_ast::ast::Program<'_>,
-    file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
-    eligibility: Eligibility<'_>,
-    visit_optional_calls: bool,
-) -> UnifiedGraph {
     let program_json = crate::ingest::program_estree_json(program);
     build_unified_graph_with_json(
         semantic,
@@ -760,11 +697,10 @@ pub fn build_unified_graph_with_eligibility_opts(
         file_name,
         factories,
         eligibility,
-        visit_optional_calls,
     )
 }
 
-/// [`build_unified_graph_with_eligibility_opts`] over the side's
+/// [`build_unified_graph_with_eligibility`] over the side's
 /// already-parsed program JSON ([`crate::ingest::program_estree_json`]) —
 /// the dump shares one per side across every consumer.
 pub fn build_unified_graph_with_json(
@@ -774,15 +710,9 @@ pub fn build_unified_graph_with_json(
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility<'_>,
-    visit_optional_calls: bool,
 ) -> UnifiedGraph {
-    let (graph, function_by_symbol) = build_function_graph_with_json(
-        semantic,
-        program_json,
-        file_name,
-        factories,
-        visit_optional_calls,
-    );
+    let (graph, function_by_symbol) =
+        build_function_graph_with_json(semantic, program_json, file_name, factories);
     let module_bindings = build_module_bindings(
         semantic,
         program,
@@ -1713,81 +1643,18 @@ fn nearest_function_ancestor(
     None
 }
 
-/// The WP1.4 gate's Rust-side functions dump: rebuild `functions.json`'s
-/// kind=function rows (the graph edges + scope parents + hashes) into a
-/// Rust-side dump dir the differ can compare. The module-binding rows
-/// land with WP1.5 (the bun classification owns their member set).
+/// The graph's rows in the `--dump-artifacts` catalog (functions.json and
+/// the partitions' structuralHash family).
 pub mod functions_dump {
-    use std::fs;
-    use std::path::Path;
 
-    use oxc_allocator::Allocator;
     use serde_json::{Value, json};
-
-    use crate::graph::build_unified_graph;
-
-    pub fn dump_functions(ts_dump_dir: &Path, out_dir: &Path) -> Result<usize, String> {
-        let meta_text = fs::read_to_string(ts_dump_dir.join("meta.json"))
-            .map_err(|e| format!("meta.json: {e}"))?;
-        let meta: Value = serde_json::from_str(&meta_text).map_err(|e| format!("meta: {e}"))?;
-        // functions.json's rows anchor the FRESH text (the beautified
-        // input the rename-era decisions consumed) — NOT the shipped text
-        // the split-era sections anchor.
-        let fresh = fs::read_to_string(ts_dump_dir.join("text").join("fresh.js"))
-            .map_err(|e| format!("fresh: {e}"))?;
-        // The eligibility skip-set resolves from the run's own flags.
-        let bundler = meta["flags"]["bundler"].as_str();
-        let minifier = meta["flags"]["minifier"].as_str();
-
-        let allocator = Allocator::default();
-        let ingest = crate::ingest::Ingest::parse(&allocator, &fresh, "fresh.js");
-        if !ingest.errors.is_empty() {
-            return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
-        }
-        // The graph's classification: computed here on the fresh text —
-        // the same pure function the TS graph build runs (WP1.5).
-        let wrapper =
-            crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
-        let tables = crate::hash::serialize::SymbolTables::build(ingest.semantic());
-        let classification = crate::modules::classify_bun_modules(
-            &fresh,
-            ingest.program,
-            ingest.semantic(),
-            wrapper.as_ref().map(|w| w.body_span),
-            &tables,
-        );
-        let factories = classification.map(|c| c.factories).unwrap_or_default();
-        let graph = build_unified_graph(
-            ingest.semantic(),
-            ingest.program,
-            "input.js",
-            &factories,
-            bundler,
-            minifier,
-        );
-
-        let rows = function_rows(&graph);
-
-        fs::create_dir_all(out_dir).map_err(|e| format!("mkdir: {e}"))?;
-        fs::write(
-            out_dir.join("meta.json"),
-            serde_json::to_string(&meta).unwrap(),
-        )
-        .map_err(|e| format!("write meta: {e}"))?;
-        fs::write(
-            out_dir.join("functions.json"),
-            serde_json::to_string(&json!({"schemaVersion": 1, "functions": rows})).unwrap(),
-        )
-        .map_err(|e| format!("write functions: {e}"))?;
-        Ok(rows.len())
-    }
 
     /// `captureGraphDump`'s rows (functions.json): every graph node's
     /// PRE-NAMING state — span key, session id, kind, the name binding,
     /// the structural hash (a module binding without a fingerprint writes
     /// `""`, the TS's `?? ""`), callee edges, scope parent, the placeholder
     /// slots with their ORIGINAL names — sorted by span (`spanKeyOrder`).
-    /// The dump writer's owner; the WP1.4/1.5 verb above reads it too.
+    /// The dump writer's owner.
     pub fn function_rows(graph: &crate::graph::UnifiedGraph) -> Vec<Value> {
         let key =
             |span: oxc_span::Span| json!({"text": "fresh", "start": span.start, "end": span.end});

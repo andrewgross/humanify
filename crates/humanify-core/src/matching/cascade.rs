@@ -1258,10 +1258,6 @@ fn demote_non_injective_matches(state: &mut MatchingState<'_, '_, '_>) {
         for old_id in old_ids {
             state.demoted_priors.insert(old_id.clone());
             state.matches.remove(old_id);
-            crate::propagation::trace::entry_line(
-                old_id,
-                format_args!("DEMOTE {old_id} (contested {new_id}) — re-parked at the map's end"),
-            );
             let candidates = state
                 .old
                 .fingerprint(old_id)
@@ -1316,14 +1312,6 @@ fn revoke_crossed_containers(state: &mut MatchingState<'_, '_, '_>) {
         if let Some(fresh_id) = fresh_id {
             state.revoked.push((old_id.clone(), fresh_id));
         }
-        crate::propagation::trace::entry_line(
-            old_id,
-            format_args!(
-                "REVOKE {} (was matched {:?}) — re-parked at the map's end",
-                old_id,
-                state.matches.get(old_id)
-            ),
-        );
         state.matches.remove(old_id);
         state.resolutions.remove(old_id);
         let pool = state

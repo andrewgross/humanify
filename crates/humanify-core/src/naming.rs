@@ -15,8 +15,8 @@
 //! - [`validation`] — reserved words, global builtins, identifier syntax,
 //!   the decoration ladder (src/llm/validation.ts — the DECORATION_WORDS
 //!   owner).
-//! - [`prompt_gate`] — the byte-identity gate against the oracle's
-//!   prompts and the captured builder inputs (migration scaffolding).
+//! - `prompt_gate` (test-only) — the prompt builders replayed against
+//!   the frozen TS-captured fixture (test/parity/wp42-gate-fixture/).
 //! - [`js_record`] — the one owner of "what does `record[key]` read" for a
 //!   TS `Record<string, string>` (an absent key falls through to
 //!   Object.prototype — probed, see the module).
@@ -26,7 +26,8 @@ pub mod context;
 pub mod driver;
 pub mod js_record;
 pub mod passes;
-pub mod prompt_gate;
+#[cfg(test)]
+mod prompt_gate;
 pub mod prompts;
 pub mod reconcile;
 pub mod report;

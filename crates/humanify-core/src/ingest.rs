@@ -48,62 +48,8 @@ pub struct Ingest<'a> {
     /// ```
     semantic: Semantic<'a>,
     /// Parse diagnostics: EMPTY for a clean ingest; anything here is a
-    /// loud failure (the gate's "zero errors").
+    /// loud failure.
     pub errors: Vec<String>,
-}
-
-/// The recordable counts (the WP1.2 gate's table).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
-pub struct IngestCounts {
-    pub symbols: usize,
-    pub scopes: usize,
-    pub references: usize,
-    pub top_level_statements: usize,
-    /// The wrapper IIFE body's statement count — the split's unit and the
-    /// number the oracle comparison is actually about.
-    pub wrapper_statements: usize,
-    pub text_bytes: usize,
-}
-
-/// Count the statements inside the top-level wrapper call/arrow, unwrapping
-/// oxc's ParenthesizedExpression nodes (R1's finding).
-pub fn wrapper_statement_count(program: &oxc_ast::ast::Program<'_>) -> usize {
-    let Some(stmt) = program.body.first() else {
-        return 0;
-    };
-    let mut expr: Option<&oxc_ast::ast::Expression> = match stmt {
-        oxc_ast::ast::Statement::ExpressionStatement(es) => Some(&es.expression),
-        _ => None,
-    };
-    if let Some(e) = expr {
-        // (the shared paren view — Babel drops the wrappers)
-        expr = Some(crate::babel_view::unparen(e));
-    }
-    match expr {
-        Some(oxc_ast::ast::Expression::ArrowFunctionExpression(a)) => match &a.body {
-            oxc_ast::ast::ArrowFunctionBody::FunctionBody(b) => b.statements.len(),
-            _ => 0,
-        },
-        Some(oxc_ast::ast::Expression::FunctionExpression(f)) => {
-            f.body.as_ref().map(|b| b.statements.len()).unwrap_or(0)
-        }
-        Some(oxc_ast::ast::Expression::CallExpression(c)) => {
-            // The callee may be parenthesized: `(function(){...})()`.
-            // (the shared paren view — Babel drops the wrappers)
-            let callee = crate::babel_view::unparen(&c.callee);
-            match callee {
-                oxc_ast::ast::Expression::ArrowFunctionExpression(a) => match &a.body {
-                    oxc_ast::ast::ArrowFunctionBody::FunctionBody(b) => b.statements.len(),
-                    _ => 0,
-                },
-                oxc_ast::ast::Expression::FunctionExpression(f) => {
-                    f.body.as_ref().map(|b| b.statements.len()).unwrap_or(0)
-                }
-                _ => 0,
-            }
-        }
-        _ => 0,
-    }
 }
 
 /// The program's ESTree JSON, parsed: `program.to_estree_json(false,
@@ -122,15 +68,6 @@ pub fn parse_estree_json(text: &str) -> serde_json::Value {
     let mut de = serde_json::Deserializer::from_str(text);
     de.disable_recursion_limit();
     serde::Deserialize::deserialize(&mut de).unwrap_or(serde_json::Value::Null)
-}
-
-/// The WP1.2 gate helper: counts + the parse errors of one text.
-pub fn ingest_counts_of_file(text: &str, name: &str) -> (IngestCounts, Vec<String>) {
-    let allocator = Allocator::default();
-    let ingest = Ingest::parse(&allocator, text, name);
-    let mut counts = ingest.counts();
-    counts.wrapper_statements = wrapper_statement_count(ingest.program);
-    (counts, ingest.errors)
 }
 
 impl<'a> Ingest<'a> {
@@ -212,19 +149,6 @@ impl<'a> Ingest<'a> {
             module
         } else {
             script
-        }
-    }
-
-    /// The gate's counts.
-    pub fn counts(&self) -> IngestCounts {
-        let scoping = self.semantic.scoping();
-        IngestCounts {
-            symbols: scoping.symbol_ids().len(),
-            scopes: scoping.scope_descendants_from_root().len(),
-            references: scoping.references_len(),
-            top_level_statements: self.program.body.len(),
-            wrapper_statements: wrapper_statement_count(self.program),
-            text_bytes: self.text.len(),
         }
     }
 }

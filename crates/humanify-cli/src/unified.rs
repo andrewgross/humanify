@@ -27,9 +27,7 @@ use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use humanify_core::naming::driver::{
-    NamingConfig, NamingHooks, NamingInput, NamingOutcome, run_naming,
-};
+use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::unpack::select_unpack_adapter;
 use humanify_llm::LlmClient;
@@ -963,7 +961,6 @@ impl NamingRun<'_> {
                 library,
             },
             &self.config,
-            &NamingHooks::default(),
             &self.provider,
         )?;
         // buildRenameLedgerBundle's self-check (non-fatal: the ledger is a

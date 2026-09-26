@@ -145,23 +145,6 @@ fn truncates_the_declared_names_but_says_how_many() {
     assert_eq!(trail.rows[1].name_count, None);
 }
 
-#[test]
-fn the_placement_file_is_sorted_by_span_and_a_missing_span_is_minus_one() {
-    let mut trail = PlacementTrail::default();
-    trail.record(TrailEntry {
-        span: Some((10, 20)),
-        ..entry(1, "hash", "a.js")
-    });
-    trail.record(TrailEntry {
-        span: Some((0, 5)),
-        ..entry(0, "hash", "a.js")
-    });
-    trail.record(entry(2, "hash", "a.js"));
-    let file = trail.to_placement_file();
-    let starts: Vec<i64> = file.placements.iter().map(|r| r.key.start).collect();
-    assert_eq!(starts, [-1, 0, 10]);
-}
-
 /// `--diagnostics`' `placementTrails` is `placementTrail.report()` as
 /// `JSON.stringify` writes it: `tiers` in first-seen order, then every
 /// recorded entry with its RAW span (JS string indexes into the shipped

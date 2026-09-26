@@ -1,42 +1,22 @@
 {
   "name": "humanifyjs",
   "version": "2.2.2",
-  "description": "",
-  "main": "dist/index.mjs",
+  "description": "Deobfuscate a minified JavaScript bundle into a readable, version-stable source tree. The pipeline is the Rust binary (crates/humanify-cli); this package holds its measurement harness.",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "debug": "node --inspect-brk ./node_modules/.bin/tsx src/index.ts",
-    "build": "pkgroll",
-    "deploy:patch": "npm version patch && npm run deploy:release",
-    "deploy:minor": "npm version minor && npm run deploy:release",
-    "deploy:major": "npm version major && npm run deploy:release",
-    "deploy:release": " git push --tags && git push && npm run build && npm publish && npm run deploy:create-github-release",
-    "deploy:create-github-release": "tar -czvf dist.tar.gz dist && gh release create v$npm_package_version --generate-notes dist.tar.gz",
     "typecheck": "tsc --noEmit",
     "test": "npm run check",
-    "test:unit": "find src test experiments -name '*.test.ts' -not -path '*/node_modules/*' -not -path '*/.tmp-clone/*' | xargs tsx --test",
-    "test:e2e": "npm run build && find src -name '*.e2etest.ts' | xargs tsx --test --test-concurrency=1",
+    "test:unit": "find test experiments -name '*.test.ts' -not -path '*/node_modules/*' -not -path '*/.tmp-clone/*' -not -path '*/results/*' | xargs tsx --test",
+    "test:e2e": "tsx scripts/e2e.ts",
     "lint": "npm run lint:prettier && npm run lint:biome",
-    "lint:prettier": "prettier --check 'src/**/*.{ts,js,json}' 'test/**/*.ts' 'scripts/**/*.ts' 'experiments/**/lib/**/*.ts'",
-    "lint:biome": "biome check src/ test/ scripts/ experiments/lib/",
+    "lint:prettier": "prettier --check 'test/**/*.ts' 'scripts/**/*.ts' 'experiments/**/lib/**/*.ts'",
+    "lint:biome": "biome check test/ scripts/ experiments/lib/",
     "check": "tsx scripts/check.ts",
     "check:all": "npm run check",
     "knip": "knip",
     "knip:prod": "knip --production --tags=-internal",
-    "e2e": "NODE_OPTIONS=--max-old-space-size=14336 tsx test/e2e/harness/index.ts",
-    "e2e:humanify": "NODE_OPTIONS=--max-old-space-size=14336 tsx test/e2e/harness/index.ts humanify",
-    "test:fingerprint": "find test/e2e -name '*.fptest.ts' | xargs tsx --test --test-concurrency=1",
-    "test:fingerprint:quick": "tsx --test test/e2e/mitt.fptest.ts",
-    "experiment:prepare": "tsx experiments/prepare.ts",
-    "experiment:run": "tsx experiments/run.ts",
     "prepare": "husky",
     "eval": "tsx scripts/eval.ts",
-    "census:switches": "tsx scripts/switch-census.ts",
-    "census:exec": "tsx scripts/exec-census.ts",
     "census:clones": "tsx scripts/clone-census.ts"
-  },
-  "bin": {
-    "humanify": "dist/index.mjs"
   },
   "type": "module",
   "keywords": [
@@ -60,33 +40,7 @@
   "author": "Jesse Luoto",
   "license": "MIT",
   "dependencies": {
-    "@babel/core": "^7.25.2",
-    "@babel/generator": "^7.25.2",
-    "@babel/plugin-transform-explicit-resource-management": "^7.29.7",
-    "@babel/traverse": "^7.25.2",
-    "@babel/types": "^7.25.2",
-    "@types/babel__core": "^7.20.5",
-    "babel-plugin-transform-beautifier": "^0.1.0",
-    "commander": "^13.0.0",
-    "dotenv": "^16.4.5",
-    "globals": "^17.4.0",
-    "openai": "^4.55.1",
-    "tsx": "^4.16.2",
-    "typescript": "^5.5.4",
     "webcrack": "^2.13.0"
-  },
-  "knip": {
-    "entry": [
-      "scripts/*.ts!"
-    ],
-    "ignoreBinaries": [
-      "tar",
-      "gh"
-    ],
-    "ignore": [
-      "experiments/**"
-    ],
-    "ignoreExportsUsedInFile": true
   },
   "lint-staged": {
     "*.{ts,js,json,md}": "prettier --write",
@@ -94,16 +48,18 @@
     "*.rs": "scripts/rustfmt-staged.sh"
   },
   "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/traverse": "^7.25.2",
+    "@babel/types": "^7.25.2",
     "@biomejs/biome": "^2.4.6",
-    "@swc/core": "^1.15.11",
+    "@types/babel__core": "^7.20.5",
     "@types/node": "^22.0.0",
-    "esbuild": "^0.27.2",
     "husky": "^9.1.7",
     "knip": "^5.86.0",
     "lint-staged": "^16.3.3",
-    "pkgroll": "^2.4.2",
     "prettier": "^3.3.3",
-    "source-map": "^0.7.4",
-    "terser": "^5.37.0"
-  }
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  },
+  "private": true
 }

@@ -4,8 +4,9 @@
 //! Every struct mirrors the TS writer's JSON exactly (camelCase via
 //! `rename_all`); the comparer joins rows by their primary span key and
 //! compares whole values. This schema doubles as the production
-//! version-record format (12 §2) — it is the one parity artifact that
-//! survives phase 6.
+//! version-record format (12 §2) — the one parity artifact that
+//! survived the cutover; `humanify-parity compare` now diffs two Rust
+//! `--dump-artifacts` dumps.
 //!
 //! Number types: spans are i64 (the -1 no-position sentinel); counts are
 //! u64; `round`/`slotIndex`/`bundleIndex` are u64. Every struct is

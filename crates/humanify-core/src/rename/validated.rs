@@ -52,7 +52,6 @@ use crate::rename::floor::is_below_floor_name;
 use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier, TrailTarget};
 
 pub mod ledger;
-pub mod scope_dump;
 pub mod scopes;
 pub mod target;
 

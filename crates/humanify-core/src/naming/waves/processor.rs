@@ -101,23 +101,9 @@ pub struct WaveInputs<'a, 's> {
     /// never ran — every traversal reuses the graph build's cached paths
     /// and scopes (no fresh-era re-crawl; a context reads the live names).
     pub single_epoch: bool,
-    /// A planted order bug (gate scaffolding: proves the gate SEES order).
-    pub plant: Option<Plant>,
     /// `--batch-size` / `--max-retries` / `--max-free-retries` /
     /// `--lane-threshold`.
     pub tunables: WaveTunables,
-}
-
-/// The gate's planted reds: each breaks one ORDER the TS decides by.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Plant {
-    /// Apply barrier entries in REVERSED (node, phase, binding, seq)
-    /// order — the last claimant wins.
-    BarrierReversed,
-    /// Keep the transfer stage's table orders (no fresh-era re-crawl).
-    NoRecrawl,
-    /// Drop the barrier's retry seeds.
-    NoRetries,
 }
 
 /// One recorded dispatch (a prompts.jsonl row + its cache-key material).
@@ -425,9 +411,7 @@ pub fn run_waves<P: NameProvider>(
             children.entry(p).or_default().push(sid);
         }
     }
-    if inp.plant != Some(Plant::NoRecrawl) {
-        state.recrawl_order(fresh_era);
-    }
+    state.recrawl_order(fresh_era);
     let target_scope = inp
         .rows
         .modules
@@ -542,9 +526,6 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             let member_set: HashSet<usize> = members.iter().copied().collect();
             pending.retain(|p| !member_set.contains(p));
             seeds = self.wave_step(&members, seeds);
-            if self.inp.plant == Some(Plant::NoRetries) {
-                seeds.clear();
-            }
             self.settle_nodes(&seeds);
             self.wave += 1;
         }
@@ -644,9 +625,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             // The task's traversal: a fresh path for every node under
             // the function, so every fresh-era scope inside it is
             // (re)crawled NOW — registration order, current names.
-            if self.inp.plant != Some(Plant::NoRecrawl) {
-                self.recrawl_inside(self.inp.graph.functions[f].span);
-            }
+            self.recrawl_inside(self.inp.graph.functions[f].span);
             self.mark_fresh_roots(f);
             let row = &self.inp.rows.fns[f];
             let all = collect_owned_binding_infos(&self.state, row);
@@ -1928,25 +1907,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// `applyWaveBarrier` over every collected entry.
     fn barrier(&mut self) -> Vec<Rejection> {
         let mut entries = std::mem::take(&mut self.entries);
-        if self.inp.plant == Some(Plant::BarrierReversed) {
-            entries.sort_by(|a, b| {
-                (b.node_index, b.phase, b.binding_index, b.seq).cmp(&(
-                    a.node_index,
-                    a.phase,
-                    a.binding_index,
-                    a.seq,
-                ))
-            });
-        } else {
-            entries.sort_by(|a, b| {
-                (a.node_index, a.phase, a.binding_index, a.seq).cmp(&(
-                    b.node_index,
-                    b.phase,
-                    b.binding_index,
-                    b.seq,
-                ))
-            });
-        }
+        entries.sort_by(|a, b| {
+            (a.node_index, a.phase, a.binding_index, a.seq).cmp(&(
+                b.node_index,
+                b.phase,
+                b.binding_index,
+                b.seq,
+            ))
+        });
         let mut rejections = Vec::new();
         for entry in entries {
             if entry.identity {

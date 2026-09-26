@@ -1,2 +1,0 @@
-export default function mitt(e){return{all:e=e||new Map,on(t,n){const s=e.get(t);s?s.push(n):e.set(t,[n])},off(t,n){const s=e.get(t);s&&(n?s.splice(s.indexOf(n)>>>0,1):e.set(t,[]))},emit(t,n){let s=e.get(t);s&&s.slice().map(e=>{e(n)}),s=e.get("*"),s&&s.slice().map(e=>{e(t,n)})}}}
-//# sourceMappingURL=terser-default.js.map

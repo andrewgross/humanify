@@ -49,10 +49,7 @@ import {
   composeDiff,
   type NoiseSample
 } from "../037-noise-source-decomposition/diff-composition.js";
-import {
-  computeNormalDiff,
-  tokenizeLine
-} from "../../src/rename/diff-reconcile.js";
+import { computeNormalDiff, tokenizeLine } from "../lib/js/line-diff.js";
 import { composeFile } from "../037-noise-source-decomposition/diff-composition.js";
 
 const [PRIOR, FRESH, LABEL = ""] = process.argv.slice(2);

@@ -86,6 +86,9 @@ CONC=$(jq -r .llm.concurrency "$CFG")
 # this script used to print a warning and carry on, which is a gate that
 # reports success having verified nothing.
 source "$HERE/boot-gate.sh"
+source "$HERE/build-bin.sh"
+mkdir -p "$WORK"
+HUMANIFY_BIN=$(build_humanify "$REPO" "$WORK/gate-build.log") || exit 1
 
 PAIRS="${PAIRS_ARG:-2.1.85:2.1.86 2.1.118:2.1.119 2.1.197:2.1.198 2.1.215:2.1.216}"
 
@@ -106,7 +109,7 @@ run_leg() {
   rm -rf "$OUT"
   local INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
   [[ -f "$INPUT" ]] || { echo "FATAL: no input at $INPUT" >&2; return 1; }
-  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
+  "$HUMANIFY_BIN" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     --llm-cache "$CACHE" --prior-version "$PRIOR" \

@@ -155,10 +155,11 @@ export interface ProcSample {
  * is a PER-PROCESS limit, so what decides whether the run OOMs is the biggest
  * single process, not the total across a tree.
  *
- * Walking the tree at all is required because the harness launches the pipeline
- * as `npx tsx src/index.ts`, and `npx` immediately spawns the process that does
- * the work. Sampling only the direct child measured the npx wrapper — it
- * reported 97 MB for a tree that had just allocated 600.
+ * Walking the tree at all was required when the harness launched the TS
+ * pipeline through `npx`, which immediately spawns the process that does the
+ * work: sampling only the direct child measured the npx wrapper (97 MB for a
+ * tree that had just allocated 600). The binary still spawns children (the
+ * webcrack shim), so the walk stays.
  */
 export function peakRssMbOfTree(
   samples: readonly ProcSample[],

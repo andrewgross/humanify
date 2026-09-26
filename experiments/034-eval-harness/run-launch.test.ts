@@ -9,14 +9,16 @@ import { describe, it } from "node:test";
  * WHAT run.sh LAUNCHES, observed rather than read.
  *
  * run.sh starts the pipeline in three places (the rebase, the scored leg via
- * run-pipeline.ts, the self-hop) and `--bin` swaps what all three run. The
- * guard that matters most is the one a reader cannot do by eye: WITHOUT
- * `--bin`, every launch must be byte-identical to what the harness ran before
- * the flag existed, because every committed reference was scored by those
- * exact command lines. So the harness is run for real, end to end, with
- * `npx` and the binary replaced by a recorder that writes the promised
- * artifacts and nothing else; the recorded launches are normalised and
- * compared against a golden captured from the pre-`--bin` run.sh.
+ * run-pipeline.ts, the self-hop), and since the cutover every one of them
+ * runs the Rust binary: `--bin <path>` names it, and without the flag it is
+ * the repo's own `target/release/humanify`, built by the harness. The guard
+ * that matters most is the one a reader cannot do by eye: every launch must
+ * be byte-identical to the command lines the binary-scored references
+ * (rust-5b-c3b272f-a/-b, docs/rust-port/18-5b-eval-result.md) were scored
+ * by. So the harness is run for real, end to end, with `npx` and the binary
+ * replaced by a recorder that writes the promised artifacts and nothing
+ * else; the recorded launches are normalised and compared against a golden
+ * captured from the pre-cutover run.sh under `--bin`.
  */
 
 const HERE = import.meta.dirname;
@@ -64,7 +66,6 @@ case "$*" in
     cp "$cfg" "$RECORDER_ROOT/runcfg-$(jq -r .version "$cfg").json"
     jq -r '.artifacts[]' "$cfg" | while read -r p; do mkdir -p "$(dirname "$p")"; echo x > "$p"; done
     ;;
-  *src/index.ts*) write_tree "$@" ;;
 esac
 exit 0
 `;
@@ -114,7 +115,7 @@ function launchesOf(root: string, label: string): string {
   const calls = fs
     .readFileSync(path.join(root, "calls.log"), "utf8")
     .split("\n")
-    .filter((l) => /src\/index\.ts|^humanify /.test(l));
+    .filter((l) => /src\/index\.ts|^humanify |^cargo /.test(l));
   const cfgs = fs
     .readdirSync(root)
     .filter((f) => f.startsWith("runcfg-"))
@@ -134,6 +135,18 @@ function runHarness(
   for (const name of ["npx", "humanify"]) {
     fs.writeFileSync(path.join(shims, name), RECORDER, { mode: 0o755 });
   }
+  // The harness builds the default binary with the user-level cargo
+  // (pipeline-bin.ts puts $HOME/.cargo/bin first). A HOME under the scratch
+  // root makes that cargo a recorder that FAILS, so a no---bin run is
+  // observed reaching the build and stopping there — no real build, and no
+  // launch of anything else.
+  const cargoBin = path.join(root, "home/.cargo/bin");
+  fs.mkdirSync(cargoBin, { recursive: true });
+  fs.writeFileSync(
+    path.join(cargoBin, "cargo"),
+    `#!/usr/bin/env bash\necho "cargo :: $* (in $PWD)" >> "$RECORDER_ROOT/calls.log"\nexit 1\n`,
+    { mode: 0o755 }
+  );
   fakeCorpus(root);
   const results = path.join(HERE, "results", label);
   try {
@@ -142,7 +155,6 @@ function runHarness(
       [
         RUN_SH,
         label,
-        "--skip-preflight",
         "--workdir",
         path.join(root, "work"),
         "--inputs-base",
@@ -162,7 +174,12 @@ function runHarness(
           BOOT_GATE_SOFT: "1",
           RECORDER_ROOT: root,
           RECORDER_REAL_NPX: realNpx(),
-          ...env
+          ...Object.fromEntries(
+            Object.entries(env).map(([k, v]) => [
+              k,
+              v.replaceAll("<TMP>", root)
+            ])
+          )
         }
       }
     );
@@ -191,8 +208,8 @@ function runHarness(
 }
 
 describe("run.sh pipeline launches", () => {
-  it("WITHOUT --bin, every launch is byte-identical to the pre---bin harness", () => {
-    const h = runHarness([]);
+  it("every --bin launch is byte-identical to the binary-scored references'", () => {
+    const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
     assert.strictEqual(h.status, 0, h.stdout);
     if (process.env.UPDATE_RUN_LAUNCH_GOLDEN === "1") {
       fs.writeFileSync(GOLDEN, h.launches);
@@ -200,9 +217,29 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(
       h.launches,
       fs.readFileSync(GOLDEN, "utf8"),
-      "the no-flag launches changed — every committed reference was scored by the golden's command lines"
+      "the --bin launches changed — the binary-scored references were scored by the golden's command lines"
     );
-    assert.doesNotMatch(h.launches, /^humanify /m);
+  });
+
+  it("WITHOUT --bin the harness builds and runs the repo's own binary — the TS mode is gone", () => {
+    const h = runHarness([], { HOME: "<TMP>/home" });
+    // The recorder cargo fails, so the run stops at the build: exit 1 with
+    // the build named, and NOTHING launched — above all not src/index.ts.
+    assert.strictEqual(h.status, 1, h.stdout);
+    assert.match(
+      h.stdout,
+      /building and recording <REPO>\/target\/release\/humanify/
+    );
+    assert.match(
+      h.launches,
+      /^cargo :: build --release --locked -p humanify-cli \(in <REPO>\)$/m
+    );
+    assert.doesNotMatch(h.launches, /src\/index\.ts|^humanify /m);
+    assert.doesNotMatch(
+      fs.readFileSync(RUN_SH, "utf8"),
+      /src\/index\.ts/,
+      "run.sh must not name the deleted TS entry point"
+    );
   });
 
   it("--bin runs the binary at ALL THREE launch sites, never src/index.ts", () => {
@@ -227,12 +264,26 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(cfgs?.length, 4, h.launches);
   });
 
-  it("--bin says --heap-mb is inert and labels the preflight as the TS matcher's", () => {
+  it("says --heap-mb is inert and records the binary as the label's pipeline", () => {
     const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
     assert.match(h.stdout, /INERT for the Rust binary/);
-    assert.match(h.stdout, /tests the TS matcher/);
-    assert.match(h.results, /preflight-status\.json: .*"covers":"ts-matcher"/);
     assert.match(h.results, /pipeline\.json: .*"kind":"rust-bin"/);
+    // The matcher preflight tested the deleted TS matcher; it is retired
+    // (docs/rust-port/19-cutover.md) and writes no verdict any more.
+    assert.doesNotMatch(h.results, /preflight-status\.json/);
+  });
+
+  it("the retired flags are refused upfront: --skip-preflight, --warm-self-hop", () => {
+    for (const flag of ["--skip-preflight", "--warm-self-hop"]) {
+      const h = runHarness([
+        "--bin",
+        "<TMP>/shims/humanify",
+        "--force-mixed",
+        flag
+      ]);
+      assert.strictEqual(h.status, 2, `${flag}: ${h.stdout}`);
+      assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
+    }
   });
 
   it("--bin whose build commit is not the label's commit is REFUSED without --force-mixed", () => {

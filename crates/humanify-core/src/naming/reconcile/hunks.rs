@@ -5,8 +5,8 @@
 //! `computeNormalDiff` shells out to the system `diff` exactly as the TS
 //! does (normal format, CRLF-normalized temp files): the alignment IS
 //! GNU diff's, and re-implementing its LCS heuristics would be a second
-//! diff with its own hunk boundaries. The binary is a pipeline dependency
-//! on both sides until the TS core is deleted (phase 6).
+//! diff with its own hunk boundaries. The binary is a pipeline
+//! dependency.
 
 use std::collections::{BTreeSet, HashMap};
 

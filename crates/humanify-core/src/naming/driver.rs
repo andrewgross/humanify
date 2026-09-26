@@ -38,17 +38,14 @@ use humanify_model::stats::{
 
 use crate::naming::passes::census::MintedCensus;
 use crate::naming::passes::census_of_text;
-use crate::naming::passes::family_permute::{
-    FamilyPermuteOutcome, PermutePlant, run_family_permute,
-};
+use crate::naming::passes::family_permute::{FamilyPermuteOutcome, run_family_permute};
 use crate::naming::passes::sweep::{SweepResult, run_deferred_sweep};
+use crate::naming::reconcile::ReconcileResult;
 use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
-use crate::naming::reconcile::{ReconcilePlant, ReconcileResult};
 use crate::naming::report::coverage::{
     CoverageInputs, build_coverage_summary, census_record, format_coverage_summary,
 };
 use crate::naming::report::{ProcessorReport, RenameReport};
-use crate::naming::waves::processor::Plant;
 use crate::prior::{PriorMatchInput, match_prior_version};
 use crate::rename::eligibility::Eligibility;
 use crate::rename::transfer::TransferStats;
@@ -105,43 +102,6 @@ pub struct NamingInput<'t> {
     /// The file's library classification (None: no banner regions) —
     /// `libdetect::function_carry`, the one owner.
     pub library: Option<&'t crate::libdetect::function_carry::LibraryClassification>,
-}
-
-/// Which post-generate pass a text override feeds.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PostPass {
-    Reconcile,
-    Sweep,
-    Permute,
-}
-
-/// Gate scaffolding: planted order bugs, per-pass input overrides (the
-/// bisection mode — each pass reads the TS's input text), and the
-/// wave-boundary stop.
-#[derive(Default)]
-pub struct NamingHooks<'h> {
-    pub stop_after_waves: bool,
-    pub wave_plant: Option<Plant>,
-    pub reconcile_plant: Option<ReconcilePlant>,
-    pub permute_plant: Option<PermutePlant>,
-    #[allow(clippy::type_complexity)]
-    pub pass_input: Option<&'h dyn Fn(PostPass) -> Option<String>>,
-    /// The wall-clock elapsed the coverage reports (0 in the gate).
-    pub elapsed_ms: f64,
-    pub driver_plant: Option<DriverPlant>,
-}
-
-/// The driver's planted bugs (the gate's red runs): each breaks one ORDER
-/// or CONDITION plugin.ts decides by.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DriverPlant {
-    /// Drop `isSweepDeferred`: the sweep runs pre-generate with a prior.
-    NoDeferral,
-    /// Run the family permute FIRST — over the generated text, ahead of
-    /// the reconcile and the sweep (two pass calls swapped).
-    PermuteFirst,
-    /// Model a first version with the prior's TWO scope epochs.
-    TwoEpochsWithoutPrior,
 }
 
 /// A post-generate pass that ran, with the text it produced (None when it
@@ -201,12 +161,10 @@ pub struct NamingOutcome {
 pub fn run_naming<P: NameProvider>(
     input: &NamingInput<'_>,
     config: &NamingConfig,
-    hooks: &NamingHooks<'_>,
     provider: &P,
 ) -> Result<NamingOutcome, String> {
     let has_prior = input.prior.is_some();
-    let deferred =
-        config.sweep_deferred(has_prior) && hooks.driver_plant != Some(DriverPlant::NoDeferral);
+    let deferred = config.sweep_deferred(has_prior);
     let opts = EraOptions {
         bundler: config.bundler.as_deref(),
         minifier: config.minifier.as_deref(),
@@ -215,9 +173,6 @@ pub fn run_naming<P: NameProvider>(
         pre_generate_sweep: config.naming_floor_sweep && !deferred,
         skip_libraries: config.skip_libraries,
         library: input.library,
-        wave_plant: hooks.wave_plant,
-        stop_after_waves: hooks.stop_after_waves,
-        two_epochs_without_prior: hooks.driver_plant == Some(DriverPlant::TwoEpochsWithoutPrior),
         rename_ledger: config.emit_rename_ledger,
         capture: config.capture_dump,
         tunables: config.tunables,
@@ -230,7 +185,6 @@ pub fn run_naming<P: NameProvider>(
                 prior,
                 bundler: opts.bundler,
                 minifier: opts.minifier,
-                visit_optional_calls: false,
             },
             |stage| era::prior_era(stage, &opts, provider),
         )?,
@@ -304,7 +258,6 @@ pub fn run_naming<P: NameProvider>(
     out.output_valid = verdict == validate::Verdict::Valid;
     out.verdict = Some(verdict);
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
-    let over = |p: PostPass| hooks.pass_input.and_then(|f| f(p));
     let trail = std::mem::take(&mut out.trail);
 
     // -- the prior-diff reconcile --------------------------------------
@@ -312,13 +265,12 @@ pub fn run_naming<P: NameProvider>(
     let trail = match input.prior.filter(|_| run_reconcile) {
         None => trail,
         Some(prior) => {
-            let text = over(PostPass::Reconcile).unwrap_or_else(|| generated.clone());
+            let text = generated.clone();
             match run_prior_diff_reconciliation(
                 &text,
                 prior,
                 &eligible,
                 trail,
-                hooks.reconcile_plant,
                 config.emit_rename_ledger.then_some(if deferred {
                     crate::naming::reconcile::step::LedgerWalk::AfterLaterParse
                 } else {
@@ -343,8 +295,7 @@ pub fn run_naming<P: NameProvider>(
 
     // -- the deferred sweep -----------------------------------------------
     let trail = if deferred && out.output_valid {
-        let text = over(PostPass::Sweep)
-            .unwrap_or_else(|| recon_code.clone().unwrap_or_else(|| generated.clone()));
+        let text = recon_code.clone().unwrap_or_else(|| generated.clone());
         let anchor = if recon_code.is_some() {
             Anchor::Reconciled
         } else {
@@ -421,12 +372,8 @@ pub fn run_naming<P: NameProvider>(
         && permute_eligible
         && let Some(prior) = input.prior
     {
-        let text = if hooks.driver_plant == Some(DriverPlant::PermuteFirst) {
-            generated.clone()
-        } else {
-            over(PostPass::Permute).unwrap_or(resolved)
-        };
-        if let Ok(p) = run_family_permute(&text, prior, &eligible, hooks.permute_plant) {
+        let text = resolved;
+        if let Ok(p) = run_family_permute(&text, prior, &eligible) {
             add_claims(&mut out.claims, &p.claims);
             shipped = p.code.clone().unwrap_or(text);
             out.permute = Some(p);
@@ -439,7 +386,7 @@ pub fn run_naming<P: NameProvider>(
     let census = census_of_text(&shipped, &eligible)?;
     let mut coverage = build_coverage_summary(
         &out.reports,
-        &coverage_inputs(&out, function_count, &library, hooks),
+        &coverage_inputs(&out, function_count, &library),
     );
     coverage.minted_census = Some(census_record(&census));
     out.coverage_text = Some(format_coverage_summary(&coverage));
@@ -465,7 +412,6 @@ fn coverage_inputs(
     out: &NamingOutcome,
     function_count: usize,
     library: &library::LibraryOutcome,
-    hooks: &NamingHooks<'_>,
 ) -> CoverageInputs {
     let counts = out.prior.as_ref().map(|p| p.counts).unwrap_or_default();
     CoverageInputs {
@@ -480,7 +426,8 @@ fn coverage_inputs(
         llm_calls: out.processor.completed_calls,
         llm_retries: 0,
         avg_response_time_ms: 0.0,
-        elapsed_ms: hooks.elapsed_ms,
+        // The run's wall-clock is not part of the recorded coverage.
+        elapsed_ms: 0.0,
     }
 }
 

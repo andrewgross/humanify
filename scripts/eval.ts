@@ -130,7 +130,6 @@ const SCORE_FLAGS: Record<string, "bool" | "value"> = {
   "--archive-prior": "bool",
   "--pairs": "value",
   "--heap-mb": "value",
-  "--skip-preflight": "bool",
   "--endpoint": "value",
   "--llm-cache": "value",
   "--no-layout": "bool",
@@ -140,23 +139,21 @@ const SCORE_FLAGS: Record<string, "bool" | "value"> = {
   "--inputs-base": "value",
   "--priors-base": "value",
   "--workdir": "value",
-  // WP5.6f: score with a Rust binary (run.sh builds it, records its sha and
-  // build commit, and refuses one not built from the label's commit).
-  "--bin": "value",
-  "--warm-self-hop": "bool"
+  // The binary to score (default: this repo's target/release/humanify).
+  // run.sh builds it, records its sha and build commit, and refuses one not
+  // built from the label's commit. There is no other pipeline since the
+  // cutover (docs/rust-port/19-cutover.md).
+  "--bin": "value"
 };
 
 /**
- * Refuse a label already holding cards from the OTHER pipeline (TS vs a Rust
- * binary). summarize totals every card in the directory, so a mixed label
+ * Refuse a label already holding cards from the OTHER pipeline — a
+ * pre-cutover label scored by the TS program. Every run now is the Rust
+ * binary. summarize totals every card in the directory, so a mixed label
  * reads as one run of one pipeline — the mixed-commit failure, one axis over.
  * Labels from before `pipeline.json` existed were all TS.
  */
-function guardPipeline(
-  label: string,
-  wantsBin: boolean,
-  force: boolean
-): string | null {
+function guardPipeline(label: string, force: boolean): string | null {
   const dir = path.join(RESULTS, label);
   if (!fs.existsSync(path.join(dir, "commit.txt"))) return null;
   let recorded = "ts";
@@ -167,7 +164,7 @@ function guardPipeline(
   } catch {
     /* no pipeline.json: a pre-2026-09-25 label, scored by the TS program */
   }
-  const requested = wantsBin ? "rust-bin" : "ts";
+  const requested = "rust-bin";
   if (recorded === requested) return null;
   const name = (k: string) =>
     k === "rust-bin" ? "a Rust binary" : "the TS program";
@@ -188,10 +185,10 @@ const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--warm-self-hop] ...",
+      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] ...",
     description:
-      "Cold scored run over the eval pairs; cards + summary under results/<label>. " +
-      "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, preflight on.",
+      "Cold scored run of the Rust binary over the eval pairs (the harness builds target/release/humanify unless --bin names another); cards + summary under results/<label>. " +
+      "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, cold + warm self-hop.",
     proves:
       "how the CURRENT TREE's cross-version diff decomposes (KPIs), pipeline exit, boot",
     cannotProve:
@@ -208,9 +205,7 @@ const VERBS: Verb[] = [
         return 2;
       }
       const force = parsed.flags["--force-mixed"] === true;
-      const err =
-        guardLabel(label, force) ??
-        guardPipeline(label, typeof parsed.flags["--bin"] === "string", force);
+      const err = guardLabel(label, force) ?? guardPipeline(label, force);
       if (err) {
         console.error(err);
         return 2;
@@ -225,7 +220,7 @@ const VERBS: Verb[] = [
           "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than fresh bases; not comparable to the standing reference."
         );
       }
-      // --force-mixed passes through too: run.sh needs it to accept a --bin
+      // --force-mixed passes through too: run.sh needs it to accept a binary
       // built from another commit (pipeline-bin.ts).
       const passthrough: string[] = [];
       for (const [k, v] of Object.entries(parsed.flags)) {
@@ -256,8 +251,7 @@ const VERBS: Verb[] = [
         "--cache": "value",
         "--priors": "value",
         "--inputs-base": "value",
-        "--endpoint": "value",
-        "--heap-mb": "value"
+        "--endpoint": "value"
       });
       if (typeof parsed === "string") {
         console.error(`eval neutrality: ${parsed}`);
@@ -266,20 +260,6 @@ const VERBS: Verb[] = [
       return sh("bash", [
         path.join(REPO, "experiments/lib/neutrality.sh"),
         ...args
-      ]);
-    }
-  },
-  {
-    name: "preflight",
-    usage: "preflight",
-    description:
-      "Matcher outcome-set check against real npm packages (~5s, no LLM).",
-    proves: "the fingerprint matcher's pass/shortfall OUTCOME SET is unchanged",
-    cannotProve:
-      "matcher quality — a fixture moving between lists is the signal, not a threshold",
-    run() {
-      return sh("bash", [
-        path.join(REPO, "experiments/lib/matcher-preflight.sh")
       ]);
     }
   },

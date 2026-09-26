@@ -11,14 +11,11 @@
 //!   insertion order, call sites, module-binding prompt texts;
 //! - [`render`] — the printer under the CURRENT names (the rename
 //!   overlay's edits);
-//! - [`probe`] — the naming graph's bisection probe (scaffolding).
 
 pub mod batch;
-pub mod dump;
 pub mod generate;
 pub mod graph_ext;
 pub mod jsset;
 pub mod nodes;
-pub mod probe;
 pub mod processor;
 pub mod render;

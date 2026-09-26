@@ -5,8 +5,8 @@
 //! vendor and split namers' explicit prompts), their standing-cache entries
 //! and the TS CachedLLMProvider's answers. Picked by
 //! test/parity/wp41-pick-fixture.mjs from the full-material capture
-//! (test/parity/wp41-capture-pair.sh). The full four-pair run is the CLI's
-//! `llm-replay-gate` (test/parity/wp41-run-gate.sh).
+//! (test/parity/wp41-capture-pair.sh). The full four-pair CLI verb was
+//! deleted at the cutover; this committed slice is the frozen spec.
 
 use std::path::PathBuf;
 

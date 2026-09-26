@@ -24,10 +24,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type * as t from "@babel/types";
-import { findWrapperFunction } from "../../src/analysis/wrapper-detection.js";
-import { parseFileAst } from "../../src/babel-utils.js";
-import { listJsFilesRecursive } from "../../src/file-utils.js";
-import { METADATA_DIR } from "../../src/split/layout.js";
+import { parseFileAst } from "./js/babel.js";
+import {
+  listJsFilesRecursive,
+  METADATA_DIR,
+  type SplitLedger
+} from "./js/tree-layout.js";
+import { findWrapperFunction } from "./js/wrapper.js";
 
 /** Emitted `.js` files under a tree, relative to it, `.humanify/` excluded. */
 export function treeFiles(dir: string): string[] {
@@ -82,19 +85,19 @@ export function fileStatements(code: string, label = "file"): t.Statement[] {
 }
 
 /**
- * The ledger type is the PRODUCTION one, re-exported — not a copy.
+ * The ledger type is the harness's ONE read view of the file the binary
+ * writes (js/tree-layout.ts) — re-exported, not a copy.
  *
  * Experiments each declared their own `{hashes, order, nameToFiles}` shape and
  * every copy was a chance to drift from what the splitter actually writes.
  */
-export type { StableSplitLedger as SplitLedger } from "../../src/split/stable-split.js";
-import type { StableSplitLedger } from "../../src/split/stable-split.js";
+export type { SplitLedger };
 
 /** Read a tree's split ledger, failing with the path rather than a JSON error. */
-export function readLedger(treeDir: string): StableSplitLedger {
+export function readLedger(treeDir: string): SplitLedger {
   const p = path.join(treeDir, METADATA_DIR, "split-ledger.json");
   if (!fs.existsSync(p)) throw new Error(`no split ledger at ${p}`);
-  return JSON.parse(fs.readFileSync(p, "utf8")) as StableSplitLedger;
+  return JSON.parse(fs.readFileSync(p, "utf8")) as SplitLedger;
 }
 
 /** A tree's bundle — what `--prior-version` points the next release at. */

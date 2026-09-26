@@ -37,7 +37,6 @@ fn options(preset: &str, prior: &str) -> ReconcileOptions {
         last_resort_tier: post,
         skip_import_declarations: post,
         skeleton_vote_tier: post,
-        plant: None,
     }
 }
 

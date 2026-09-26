@@ -21,7 +21,7 @@ else
   command -v cargo-nextest >/dev/null 2>&1 && say "cargo-nextest" "present (rust:unit may switch to it)" || say "cargo-nextest" "absent (rust:unit uses cargo test)"
 fi
 command -v bun >/dev/null 2>&1 && say "bun" "$(bun --version) (boot gates)" || die "bun" "absent — boot gates cannot run (~/.bun/bin)"
-say "node" "$(node --version) (must stay pinned: byte-identical TS oracle)"
+say "node" "$(node --version) (the harness + the webcrack shim)"
 [ -d "$REPO/node_modules" ] && say "node_modules" "present" || die "node_modules" "run: npm ci --ignore-scripts && npm rebuild esbuild @swc/core"
 inputs=/Users/andrewgross/Development/claude-code-versions/inputs
 n=$(ls -d "$inputs"/claude-code-2.1.* 2>/dev/null | wc -l); [ "$n" -gt 0 ] && say "corpus bundles" "$n versions under $inputs" || die "corpus bundles" "none under $inputs"

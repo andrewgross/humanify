@@ -9,7 +9,7 @@
  * numbers instead of an error; `experiments/lib/trees.ts` was written
  * specifically to make that an error, and this file predated it.
  */
-import { statementHash } from "../../src/split/statement-hash.js";
+import { statementHash } from "../lib/js/statement-hash.js";
 import { bundleStatements } from "../lib/trees.js";
 
 export interface Stmt {

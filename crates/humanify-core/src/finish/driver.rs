@@ -10,7 +10,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use humanify_model::js::{JsObject, JsValue, cmp_utf16, stringify, stringify_pretty};
+use humanify_model::js::{JsValue, stringify};
 
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::Eligibility;
@@ -364,61 +364,4 @@ fn carry_into_bundle(
         }
     ));
     Some(carry)
-}
-
-/// The gate's JSON report (the TS probe's shape,
-/// test/parity/wp54-reconcile-probe.ts).
-pub fn reconcile_report_json(report: &ReconcileReport) -> String {
-    let r = &report.result;
-    let mut stats = JsObject::new();
-    stats.insert("considered", JsValue::Number(r.stats.considered as f64));
-    stats.insert("changed", JsValue::Number(r.stats.changed as f64));
-    stats.insert("corpusGated", JsValue::Number(r.stats.corpus_gated as f64));
-    stats.insert("discarded", JsValue::Number(r.stats.discarded as f64));
-    stats.insert("incoherent", JsValue::Number(r.stats.incoherent as f64));
-    let mut changed: Vec<&str> = r.changed.iter().map(|(f, _)| f.as_str()).collect();
-    changed.sort_by(|a, b| cmp_utf16(a, b));
-    let renames: Vec<JsValue> = r
-        .renames
-        .iter()
-        .map(|x| {
-            let mut o = JsObject::new();
-            o.insert("file", JsValue::str(&x.file));
-            o.insert("fromName", JsValue::str(&x.from_name));
-            o.insert("toName", JsValue::str(&x.to_name));
-            o.insert("kind", JsValue::str(x.kind));
-            o.insert("votes", JsValue::Number(x.votes as f64));
-            o.insert("topLevel", JsValue::Bool(x.top_level));
-            if let Some((body, name)) = x.locator {
-                let mut l = JsObject::new();
-                l.insert("bodyOrdinal", JsValue::Number(body as f64));
-                l.insert("nameOrdinal", JsValue::Number(name as f64));
-                o.insert("locator", JsValue::Object(l));
-            }
-            JsValue::Object(o)
-        })
-        .collect();
-    let mut root = JsObject::new();
-    root.insert("messages", JsValue::Array(Vec::new()));
-    root.insert("stats", JsValue::Object(stats));
-    root.insert("changedFiles", JsValue::str_array(&changed));
-    root.insert("renames", JsValue::Array(renames));
-    let carry = match &report.carry {
-        None => JsValue::Null,
-        Some(c) => {
-            let mut o = JsObject::new();
-            o.insert("carried", JsValue::Number(c.carried as f64));
-            o.insert("wroteBundle", JsValue::Bool(c.code.is_some()));
-            let mut ab = c.abstained.clone();
-            ab.sort_by(|a, b| cmp_utf16(&a.0, &b.0));
-            let mut a = JsObject::new();
-            for (k, n) in ab {
-                a.insert(k, JsValue::Number(n as f64));
-            }
-            o.insert("abstained", JsValue::Object(a));
-            JsValue::Object(o)
-        }
-    };
-    root.insert("carry", carry);
-    format!("{}\n", stringify_pretty(&JsValue::Object(root), 2))
 }

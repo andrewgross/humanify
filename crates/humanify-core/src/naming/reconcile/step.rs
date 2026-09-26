@@ -13,10 +13,7 @@
 
 use oxc_allocator::Allocator;
 
-use super::{
-    ReconcileOptions, ReconcilePlant, ReconcileResult, collect_word_tokens, hunks,
-    reconcile_diff_noise,
-};
+use super::{ReconcileOptions, ReconcileResult, collect_word_tokens, hunks, reconcile_diff_noise};
 use crate::ingest::Ingest;
 use crate::naming::waves::render::render_program;
 use crate::rename::eligibility::Eligibility;
@@ -68,7 +65,6 @@ pub fn run_prior_diff_reconciliation(
     prior_text: &str,
     eligible: &Eligibility,
     trail: StrategyTrail,
-    plant: Option<ReconcilePlant>,
     ledger: Option<LedgerWalk>,
 ) -> Result<PriorDiffOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
@@ -85,10 +81,7 @@ pub fn run_prior_diff_reconciliation(
         Err(e) => return Err((e, trail)),
     };
     let mut state = RenameState::with_trail(semantic, Anchor::Generated, trail);
-    let opts = ReconcileOptions {
-        plant,
-        ..pipeline_options(prior_text)
-    };
+    let opts = pipeline_options(prior_text);
     let result = reconcile_diff_noise(semantic, &mut state, &diff_text, eligible, &opts);
     let code = (!result.renames.is_empty()).then(|| render_program(semantic, &state));
     let ledger = ledger.filter(|_| code.is_some()).map(|walk| {

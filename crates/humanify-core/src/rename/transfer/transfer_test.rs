@@ -84,7 +84,6 @@ fn synthetic_pairs_match_the_ts_probe() {
             prior: case["prior"].as_str().unwrap(),
             bundler: None,
             minifier: None,
-            visit_optional_calls: false,
         };
         let rows = match_prior_version(input, |stage| {
             let (outcome, _) = apply_prior_version(stage, &Default::default())?;

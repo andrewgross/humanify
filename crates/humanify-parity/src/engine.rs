@@ -268,17 +268,6 @@ fn partition_representatives(members: &[PartitionMember]) -> BTreeMap<SpanKey, S
     out
 }
 
-/// Partition families EXEMPT from comparison. `structuralSignature`: the
-/// vendor manifest's family, whose member KEYS are the emitted vendor file
-/// paths — and the `lib_<hash8>` name part is the structural hash BYTES,
-/// which differ between the implementations by design (07 §4a: only the
-/// equivalence CLASSES are comparable, and the class structure is not
-/// asserted here either). Blessed 2026-09-21 (Andrew): migration-only pain
-/// — going forward the pipeline is all-Rust and the names are
-/// self-consistent; during the migration, compare vendored files by
-/// CONTENT, not by path (the exp046 lesson).
-const EXEMPT_PARTITION_FAMILIES: &[&str] = &["structuralSignature"];
-
 fn compare_partitions(left: &PartitionsFile, right: &PartitionsFile, out: &mut Vec<Divergence>) {
     let l: BTreeMap<&str, &PartitionFamily> = left
         .families
@@ -295,20 +284,6 @@ fn compare_partitions(left: &PartitionsFile, right: &PartitionsFile, out: &mut V
         .chain(r.keys())
         .collect::<std::collections::BTreeSet<_>>()
     {
-        if EXEMPT_PARTITION_FAMILIES.contains(name) {
-            // Printed as a loud exception, never counted (main.rs's verdict
-            // ignores kind "exception").
-            out.push(Divergence {
-                section: "partitions".to_string(),
-                kind: "exception",
-                key: format!(
-                    "family:{name} — exempt (07 §4a; blessed 2026-09-21): member keys are hash-derived vendor file paths, compared by content during the migration, not by path"
-                ),
-                left: l.get(name).map(|f| format!("{} members", f.members.len())),
-                right: r.get(name).map(|f| format!("{} members", f.members.len())),
-            });
-            continue;
-        }
         match (l.get(name), r.get(name)) {
             (Some(lf), Some(rf)) => {
                 let lmap = partition_representatives(&lf.members);

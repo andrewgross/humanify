@@ -1,16 +1,19 @@
 {
-  "ignoreBinaries": [
-    "tar",
-    "gh",
-    "scripts/rustfmt-staged.sh"
+  "entry": [
+    "scripts/*.ts!",
+    "experiments/lib/*.ts!",
+    "experiments/034-eval-harness/*.ts!",
+    "experiments/055-residual-recount/real-ledger.ts!"
   ],
-  "ignore": [
-    "experiments/**",
-    "test/fixtures/clone-census/**",
-    "test/parity/**"
+  "project": [
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "experiments/lib/**/*.ts",
+    "experiments/034-eval-harness/**/*.ts",
+    "experiments/037-noise-source-decomposition/diff-composition.ts",
+    "experiments/046-vendor-noise/vendor-churn.ts"
   ],
-  "ignoreExportsUsedInFile": true,
-  "ignoreDependencies": [
-    "@babel/plugin-transform-explicit-resource-management"
-  ]
+  "ignoreBinaries": ["scripts/rustfmt-staged.sh"],
+  "ignore": ["test/parity/**"],
+  "ignoreExportsUsedInFile": true
 }

@@ -23,7 +23,7 @@
 //! - [`bun_helpers`] — the Bun lazy-init helper's structural detection;
 //! - [`paths`] / [`substitutions`] — the relative-import and positional
 //!   text-splice owners the post-split passes share;
-//! - [`emit_dump`] — the WP5.3 gate's verb (migration scaffolding).
+//! - [`emit_dump`] — the emit section of the `--dump-artifacts` catalog.
 
 pub mod align;
 pub mod bun_helpers;

@@ -100,10 +100,10 @@ fn refuse(ingest: &Ingest<'_>, code: &str) -> Result<(), String> {
 }
 
 /// Babel's `transformSync(code, { retainLines: true, compact: false })`
-/// with NO plugins: parse, then print. The printer's corpus gate (every
-/// file of a tree against the TS's own output) — the desugar prints
-/// through the same code.
-pub fn print_retaining_lines(code: &str) -> Result<String, String> {
+/// with NO plugins: parse, then print — the printer the desugar prints
+/// through, exercised alone by the unit tests.
+#[cfg(test)]
+pub(crate) fn print_retaining_lines(code: &str) -> Result<String, String> {
     let allocator = Allocator::default();
     let ingest = parse_or_err(&allocator, code)?;
     if !ingest.program.comments.is_empty() {

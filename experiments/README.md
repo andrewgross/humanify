@@ -22,6 +22,14 @@ That means:
 - **Present tense has expired.** Titles like "the top remaining lever" and "the
   best-shaped one left" were true the day they were written and are not now.
 
+- **Code that drove the TS pipeline is gone from this tree.** The cutover
+  (2026-09-26, `docs/rust-port/19-cutover.md`) deleted `src/` and, with it,
+  every experiment script that imported it or launched `src/index.ts` — about
+  200 files across these directories (the ledger lists them). Their READMEs,
+  RESULTS files and data stay; a README that says "run `npx tsx
+experiments/NNN/foo.ts`" refers to a script that exists at tag `m4`, not
+  here. To re-run one: `git worktree add --detach /work/m4 m4`.
+
 Each README in the active arc below carries a **STATUS block** at the top giving
 its outcome, what superseded it, and which of its own claims are refuted. A
 directory with no STATUS block has not been audited — check its numbers before

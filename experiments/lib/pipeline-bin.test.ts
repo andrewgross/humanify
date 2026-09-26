@@ -8,30 +8,25 @@ import {
   pipelineCommandOf,
   sameCommit,
   sha256File,
-  tsPipelineCommand,
   workspaceRootOf
 } from "./pipeline-bin.js";
 
 describe("pipeline-bin: which binary scored a label", () => {
-  it("the TS command is exactly the one the harness always ran", () => {
-    // run-pipeline.ts spawned this literal before --bin existed; a config
-    // without `command` must still produce it, byte for byte.
-    assert.deepStrictEqual(tsPipelineCommand("/r"), [
-      "npx",
-      "tsx",
-      "/r/src/index.ts"
-    ]);
-  });
-
-  it("a run config without `command` launches the TS program; with one, that", () => {
-    assert.deepStrictEqual(pipelineCommandOf({ repo: "/r" }), [
-      "npx",
-      "tsx",
-      "/r/src/index.ts"
-    ]);
+  it("a run config launches its `command`; without one it is REFUSED (the TS program is gone)", () => {
     assert.deepStrictEqual(
       pipelineCommandOf({ repo: "/r", command: ["/b/humanify"] }),
       ["/b/humanify"]
+    );
+    // Before the cutover a command-less config meant `npx tsx src/index.ts`.
+    // That program is deleted; a config that names no binary is a harness
+    // bug, and must fail loudly rather than launch anything.
+    assert.throws(
+      () => pipelineCommandOf({ repo: "/r" }),
+      /no pipeline command/
+    );
+    assert.throws(
+      () => pipelineCommandOf({ repo: "/r", command: [] }),
+      /no pipeline command/
     );
   });
 

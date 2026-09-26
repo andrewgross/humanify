@@ -1,56 +1,46 @@
-//! Ingest unit tests (WP1.2): parse + semantic over small programs; the
-//! counts' relative behavior (a symbol exists per binding; references grow
-//! with uses).
+//! Ingest unit tests: parse + semantic over small programs; the semantic
+//! model's relative behavior (a symbol exists per binding; references grow
+//! with uses) and loud parse errors.
 
 use oxc_allocator::Allocator;
 
-use crate::ingest::{Ingest, ingest_counts_of_file, wrapper_statement_count};
+use crate::ingest::Ingest;
 
-#[test]
-fn ingest_counts_a_simple_program() {
-    let text = "var a = 1;\nfunction f() { return a + 1; }\nconsole.log(f());\n";
-    let (counts, errors) = ingest_counts_of_file(text, "t.js");
-    assert!(
-        errors.is_empty(),
-        "a simple program must parse clean: {errors:?}"
-    );
-    assert!(
-        counts.symbols >= 2,
-        "a and f are symbols (globals are unresolved): {counts:?}"
-    );
-    assert!(counts.scopes >= 2, "program + function scopes: {counts:?}");
-    assert!(
-        counts.references >= 2,
-        "a's use inside f + f's call: {counts:?}"
-    );
-    assert_eq!(counts.top_level_statements, 3);
+/// (symbols, scopes, references, top-level statements, errors) of one text.
+fn counts(text: &str) -> (usize, usize, usize, usize, usize) {
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, text, "t.js");
+    let scoping = ingest.semantic().scoping();
+    (
+        scoping.symbol_ids().len(),
+        scoping.scope_descendants_from_root().len(),
+        scoping.references_len(),
+        ingest.program.body.len(),
+        ingest.errors.len(),
+    )
 }
 
 #[test]
-fn ingest_counts_the_wrapper_statements() {
-    let allocator = Allocator::default();
-    let text = "(function(){var a=1;var b=2;return a+b})();\n";
-    let ingest = Ingest::parse(&allocator, text, "w.js");
-    assert!(ingest.errors.is_empty());
-    assert_eq!(wrapper_statement_count(ingest.program), 3);
+fn ingest_models_a_simple_program() {
+    let (symbols, scopes, references, statements, errors) =
+        counts("var a = 1;\nfunction f() { return a + 1; }\nconsole.log(f());\n");
+    assert_eq!(errors, 0, "a simple program must parse clean");
+    assert!(symbols >= 2, "a and f are symbols (globals are unresolved)");
+    assert!(scopes >= 2, "program + function scopes");
+    assert!(references >= 2, "a's use inside f + f's call");
+    assert_eq!(statements, 3);
 }
 
 #[test]
 fn ingest_reports_parse_errors_loud() {
-    let text = "function {{{{{";
-    let (_counts, errors) = ingest_counts_of_file(text, "bad.js");
-    assert!(!errors.is_empty(), "a broken program must report errors");
+    let (.., errors) = counts("function {{{{{");
+    assert!(errors > 0, "a broken program must report errors");
 }
 
 #[test]
-fn ingest_counts_grow_with_uses() {
-    let one = "var a = 1; a;";
-    let two = "var a = 1; a; a; a; a; a;";
-    let (c1, _) = ingest_counts_of_file(one, "1.js");
-    let (c2, _) = ingest_counts_of_file(two, "2.js");
-    assert_eq!(c1.symbols, c2.symbols, "same bindings");
-    assert!(
-        c2.references > c1.references,
-        "more uses = more references ({c2:?} vs {c1:?})"
-    );
+fn ingest_references_grow_with_uses() {
+    let one = counts("var a = 1; a;");
+    let two = counts("var a = 1; a; a; a; a; a;");
+    assert_eq!(one.0, two.0, "same bindings");
+    assert!(two.2 > one.2, "more uses = more references");
 }

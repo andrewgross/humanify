@@ -122,6 +122,8 @@ post-split reconcile, sidecar emission (02 §4b). Two sub-steps:
 
 ## Phase 6 — cutover and deletion
 
+**DONE 2026-09-26 (branch `rust/cutover`): see `19-cutover.md`.** The walk segment below was not run at the cutover (open in 19 §6).
+
 - Point `run.sh`, `walk-versions.sh`, and `npm run eval` at the binary (one
   variable each — they spawn a subprocess).
 - Run one full walk segment (e.g. 20 hops) side-by-side sanity vs the TS

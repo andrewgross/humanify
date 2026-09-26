@@ -30,8 +30,8 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { computeNormalDiff } from "../../src/rename/diff-reconcile.js";
-import { listJsFilesRecursive } from "../../src/file-utils.js";
+import { computeNormalDiff } from "./js/line-diff.js";
+import { listJsFilesRecursive } from "./js/tree-layout.js";
 
 /** `diff` output can be very large on a whole tree. */
 const MAX_BUFFER = 1 << 30;

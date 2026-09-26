@@ -14,28 +14,34 @@ had written down.
 Ordered as they execute. "Pluggable" means a strategy can be selected without
 editing the caller.
 
-| #   | stage                    | entry point                                     | pluggable?                                                                           |
-| --- | ------------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 1   | Detect bundler/minifier  | `detectBundle` → `buildPipelineConfig`          | **yes** — `--bundler` / `--minifier` override detection                              |
-| 2   | Select unpack adapter    | `selectUnpackAdapter` (`src/unpack/index.ts`)   | **yes** — registry of 3, chosen by name, passthrough last                            |
-| 3   | Unpack the bundle        | `unpackBundle` → `adapter.unpack`               | via stage 2                                                                          |
-| 4   | Detect libraries         | `selectLibraryDetector` (`library-detection/`)  | **yes** — registry of 2, `supports()`, default last                                  |
-| 5   | Name vendor files        | `vendorNamer`, `priorVendorNames`               | injected function type, one implementation — a seam, not a registry                  |
-| 6   | Format                   | `createBabelPlugin`                             | **no** — deliberately; output shape is a fixed point                                 |
-| 7   | Build the function graph | `buildFunctionGraph` / `buildUnifiedGraph`      | **no**                                                                               |
-| 8   | Match against the prior  | `matchFunctions` + the fingerprint cascade      | **no** — the cascade is hard-coded order, see below                                  |
-| 9   | Name identifiers         | `createRenamePlugin` (LLM + prior transfer)     | **no** — levers toggle passes, they do not select a strategy                         |
-| 10  | Place statements         | `PLACEMENT_TIERS` (`stable-split.ts`)           | **partly** — a real registry, but not selectable from outside                        |
-| 11  | Split (one path)         | `stableSplitFromCode` (`split/stable-split.ts`) | **no** — prior present → inherit layout; no prior → `assignClustered` fresh grouping |
-| 12  | Emit + finish on disk    | `emitRunnableCjs`, scaffold, relink, ledgers    | **no**                                                                               |
+| #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)       | pluggable?                                                                                          |
+| --- | ------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | Detect bundler/minifier  | `detect` → `humanify_cli::pipeline_config`                                | **yes** — `--bundler` / `--minifier` override detection                                             |
+| 2   | Select unpack adapter    | `unpack` (adapter selection)                                              | **yes** — registry of 3, chosen by name, passthrough last                                           |
+| 3   | Unpack the bundle        | `unpack` (the selected adapter; webpack/browserify via the webcrack shim) | via stage 2                                                                                         |
+| 4   | Detect libraries         | `libdetect`                                                               | **yes** — registry of 2, `supports()`, default last                                                 |
+| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over)                     | injected namer, one implementation — a seam, not a registry                                         |
+| 6   | Format                   | `format` (`core::format`, the native formatter)                           | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json) |
+| 7   | Build the function graph | `graph`                                                                   | **no**                                                                                              |
+| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                            | **no** — the cascade is hard-coded order, see below                                                 |
+| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                           | **no** — levers toggle passes, they do not select a strategy                                        |
+| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                        | **partly** — a real registry, but not selectable from outside                                       |
+| 11  | Split (one path)         | `emit::stable_split`                                                      | **no** — prior present → inherit layout; no prior → clustered fresh grouping                        |
+| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                              |
+
+Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
+binary; the TypeScript names used below (`stableSplitFromCode`,
+`PLACEMENT_TIERS`, …) are the historical names of the same stages, kept
+because the experiment records use them — `docs/rust-port/01-current-architecture.md`
+maps each to its Rust module.
 
 Three stages sit _after_ placement and are easy to forget when reasoning about
 output, because they run once the tree looks finished:
 
-- **post-split reconcile** (`post-split-reconcile.ts`) — renames inside split
+- **post-split reconcile** (`finish::reconcile`) — renames inside split
   files, after every prompt. Deterministic; this is why a draw-pinned A/B is
   licensed to measure it.
-- **carry into bundle** (`bundle-carry.ts`) — writes names back into
+- **carry into bundle** (`finish::carry`) — writes names back into
   `.humanify/humanified.js`, which becomes the NEXT release's prior. Top-level
   renames must never carry: the export key is a string, and 238/238 drifted.
 - **finish on disk** — scaffold, bun factory relink, ledgers, eval stats.
@@ -45,8 +51,8 @@ After those, the run's REPORTS are written, in this order: `--diagnostics`
 trail), `--stats-json`, `--dump-artifacts`, `--rename-ledger`. They observe
 decisions already made — except `--rename-ledger`, which is NOT inert: it
 gates the family permute off (plugin.ts `finalizeWithFamilyPermute`), so a
-ledger run ships a different tree. (Rust: `humanify_cli::unified::RunReports`,
-the dump in `humanify_core::artifact_dump`.)
+ledger run ships a different tree. (`humanify_cli::unified::RunReports`, the
+dump in `humanify_core::artifact_dump`.)
 
 ## What was missing from the four-stage model
 

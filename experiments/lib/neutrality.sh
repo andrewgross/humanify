@@ -50,15 +50,22 @@ set -uo pipefail
 #   --priors <dir>    root holding the prior trees (default <workdir>/exp050-cold)
 #   --inputs-base <dir>  override pairs.json inputsBase
 #   --endpoint <url>     LLM endpoint override (default pairs.json)
-#   --heap-mb <n>        pipeline heap (default 65536)
 #   --candidate-cmd '<argv>'  per-leg pipeline command (RUNBOOK §7): replaces
-#                     `NODE_OPTIONS=... npx tsx $SRCDIR/src/index.ts` with the
+#                     the leg's own `target/release/humanify` (built by this
+#                     script at that leg's commit) with the
 #                     given argv (shell-quoted; the identical pipeline flags
 #                     are appended). Its provenance is the argv, echoed into
 #                     the run header and the leg's stdout. When set, the
 #                     same-commit fatal check is skipped — the candidate is no
-#                     longer a git ref. Needed by the flag-on/off inertness
-#                     proof (07 §3) and by phase 5a's cross-implementation run.
+#                     longer a git ref. Needed by a flag-on/off inertness
+#                     proof (07 §3).
+#
+# Each leg runs the Rust binary built from ITS commit: the candidate from this
+# checkout, the baseline from a detached worktree of <baseline-ref> (each
+# `cargo build --release --locked -p humanify-cli`, log beside the leg's
+# stdout). The TS pipeline these legs launched before the cutover is deleted
+# (docs/rust-port/19-cutover.md); a baseline ref from before it has no binary
+# that is the pipeline, and its verdict would compare two different programs.
 #   --baseline-cmd '<argv>'   same, for the baseline leg (worktree skipped).
 BASELINE=""
 PAIR="2.1.85:2.1.86"
@@ -67,7 +74,6 @@ CACHE_OVERRIDE=""
 PRIORS_OVERRIDE=""
 INPUTS_OVERRIDE=""
 ENDPOINT_OVERRIDE=""
-HEAP_MB=65536
 CANDIDATE_CMD=""
 BASELINE_CMD=""
 POSITIONAL=0
@@ -78,7 +84,6 @@ while [[ $# -gt 0 ]]; do
     --priors)  PRIORS_OVERRIDE="$2"; shift ;;
     --inputs-base) INPUTS_OVERRIDE="$2"; shift ;;
     --endpoint)    ENDPOINT_OVERRIDE="$2"; shift ;;
-    --heap-mb)     HEAP_MB="$2"; shift ;;
     --candidate-cmd) CANDIDATE_CMD="$2"; shift ;;
     --baseline-cmd)  BASELINE_CMD="$2"; shift ;;
     --*)       echo "neutrality.sh: unknown flag $1" >&2; exit 2 ;;
@@ -110,7 +115,7 @@ MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
-HEAP="$HEAP_MB"
+source "$HERE/build-bin.sh"
 
 INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
 
@@ -200,15 +205,17 @@ run_leg() {
     eval "LEG_ARR=($CMD_TEMPLATE)"
     {
       echo "# neutrality per-leg cmd: $CMD_TEMPLATE"
-      NODE_OPTIONS="--max-old-space-size=$HEAP" \
-        "${LEG_ARR[@]}" "$INPUT" --split \
+      "${LEG_ARR[@]}" "$INPUT" --split \
         --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
         --llm-cache "$CACHE" --prior-version "$PRIOR"
     } > "$WORK/neutrality-$LABEL.stdout" 2>&1
   else
-    NODE_OPTIONS="--max-old-space-size=$HEAP" npx tsx "$SRCDIR/src/index.ts" \
-      "$INPUT" --split \
+    # The leg's OWN binary, built from its commit — never a leftover.
+    local BIN
+    BIN=$(build_humanify "$SRCDIR" "$WORK/neutrality-$LABEL.build.log") || return 1
+    echo "    binary: $BIN"
+    "$BIN" "$INPUT" --split \
       --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
       --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
       --llm-cache "$CACHE" --prior-version "$PRIOR" \
@@ -248,7 +255,8 @@ else
   git worktree remove --force "$WT" 2>/dev/null
   git worktree add --detach "$WT" "$BASELINE" >/dev/null 2>&1 || {
     echo "FATAL: could not create a worktree at $WT for $BASELINE" >&2; exit 1; }
-  # The worktree needs the repo's installed deps; symlink rather than reinstall.
+  # The binary shells out to scripts/webcrack-shim.ts (webpack/browserify
+  # inputs only), which needs the repo's installed deps; symlink them.
   ln -sfn "$REPO/node_modules" "$WT/node_modules"
 
   run_leg baseline "$WT" || { git worktree remove --force "$WT"; exit 1; }

@@ -25,7 +25,7 @@ import {
   maskedHead,
   tokenSet
 } from "../034-eval-harness/diff-ledger.js";
-import { statementHash } from "../../src/split/statement-hash.js";
+import { statementHash } from "../lib/js/statement-hash.js";
 
 export interface Stmt {
   hash: string;
