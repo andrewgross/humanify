@@ -7,6 +7,7 @@ pub mod artifact_dump;
 pub mod babel_view;
 pub mod detect;
 pub mod emit;
+pub mod fast;
 pub mod finish;
 pub mod format;
 pub mod graph;

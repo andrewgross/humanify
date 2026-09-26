@@ -71,8 +71,8 @@ pub struct EraOptions<'o> {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`: the close pairs' shingle census lines.
     pub shingle_probe: bool,
-    /// `--fast` (see `NamingConfig::fast`).
-    pub fast: bool,
+    /// `--fast [tier]` (see `NamingConfig::fast`).
+    pub fast: crate::fast::FastTier,
 }
 
 /// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
@@ -274,7 +274,7 @@ pub fn prior_era<P: NameProvider>(
         ..capture_graph(graph, &outcome.rename)
     });
     let ph = crate::profiling::phase("era:close-contexts");
-    let close = close_contexts(stage, &outcome.fn_close_prior, opts.fast)?;
+    let close = close_contexts(stage, &outcome.fn_close_prior, opts.fast.on())?;
     drop(ph);
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),

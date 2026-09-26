@@ -20,6 +20,10 @@ use super::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 struct LifoProvider {
     overlapped: Cell<bool>,
     calls: Cell<usize>,
+    /// Dispatch generations with at least one call (a round = one).
+    rounds: Cell<usize>,
+    /// Lane chains: the longest run of follow-ups from one initial call.
+    longest_chain: Cell<usize>,
 }
 
 fn answer(call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
@@ -37,27 +41,44 @@ fn answer(call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
 impl NameProvider for LifoProvider {
     fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
         self.calls.set(self.calls.get() + calls.len());
+        if !calls.is_empty() {
+            self.rounds.set(self.rounds.get() + 1);
+        }
         calls.iter().map(answer).collect()
     }
 
     fn run_pipelined(&self, initial: Vec<(usize, LlmCall)>, on_done: &mut OnCallDone<'_>) {
-        // In flight, as a stack: the newest call completes first.
-        let mut in_flight: Vec<(usize, LlmCall)> = initial;
+        if !initial.is_empty() {
+            self.rounds.set(self.rounds.get() + 1);
+        }
+        // In flight, as a stack: the newest call completes first. Each
+        // entry carries its chain depth.
+        let mut in_flight: Vec<(usize, LlmCall, usize)> =
+            initial.into_iter().map(|(id, c)| (id, c, 1)).collect();
         let initial_len = in_flight.len();
         let mut done = 0usize;
-        while let Some((id, call)) = in_flight.pop() {
+        while let Some((id, call, depth)) = in_flight.pop() {
             self.calls.set(self.calls.get() + 1);
+            self.longest_chain.set(self.longest_chain.get().max(depth));
             done += 1;
             let follow = on_done(id, answer(&call));
             if !follow.is_empty() && done < initial_len && !in_flight.is_empty() {
                 self.overlapped.set(true);
             }
-            in_flight.extend(follow);
+            in_flight.extend(follow.into_iter().map(|(i, c)| (i, c, depth + 1)));
         }
     }
 }
 
 fn config(fast: bool) -> NamingConfig {
+    config_tier(if fast {
+        crate::fast::FastTier::Exact
+    } else {
+        crate::fast::FastTier::Off
+    })
+}
+
+fn config_tier(fast: crate::fast::FastTier) -> NamingConfig {
     NamingConfig {
         bundler: None,
         minifier: None,
@@ -100,7 +121,8 @@ fn fixture() -> String {
     format!(
         "var m0 = 1, m1 = 2, m2 = 3;\nfunction h(q) {{\n{}\n  return {sum};\n}}\n\
          function g(x, y) {{\n  var z = x * y;\n  return h(z) + m0;\n}}\n\
-         function f(p) {{\n  var r = g(p, m1);\n  var s = g(r, m2);\n  return r + s;\n}}\n\
+         function k(u) {{\n  {{\n    let t = u + 1;\n    console.log(t);\n  }}\n  {{\n    let t = u + 2;\n    console.log(t);\n  }}\n  return u;\n}}\n\
+         function f(p) {{\n  var r = g(p, m1);\n  var s = g(k(r), m2);\n  return r + s;\n}}\n\
          console.log(f(4));\n",
         decls.join("\n")
     )
@@ -204,5 +226,82 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
     assert_eq!(
         fast.reconcile.as_ref().map(|r| &r.code),
         parity.reconcile.as_ref().map(|r| &r.code)
+    );
+}
+
+fn run_tier(fresh: &str, tier: &str, provider: &dyn NameProvider) -> NamingOutcome {
+    run_naming(
+        &NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config_tier(crate::fast::FastTier::parse(tier).expect("a tier")),
+        &provider,
+    )
+    .expect("the stage runs")
+}
+
+/// Answers like [`LifoProvider`] but runs every pipelined round
+/// GENERATIONALLY (the trait default): the other extreme of completion
+/// order.
+struct Generational;
+
+impl NameProvider for Generational {
+    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+        calls.iter().map(answer).collect()
+    }
+}
+
+/// Every relaxed lever, alone and together: deterministic (twice -> same),
+/// independent of completion order (LIFO vs generational -> same) and a
+/// valid output.
+#[test]
+fn relaxed_levers_are_deterministic_and_order_independent() {
+    let fresh = fixture();
+    for tier in ["relaxed", "relaxed:window-lanes", "relaxed:defer-shadowed"] {
+        let a = run_tier(&fresh, tier, &LifoProvider::default());
+        let b = run_tier(&fresh, tier, &LifoProvider::default());
+        assert_eq!(fingerprint(&a), fingerprint(&b), "{tier}: twice");
+        let g = run_tier(&fresh, tier, &Generational);
+        assert_eq!(
+            fingerprint(&a),
+            fingerprint(&g),
+            "{tier}: LIFO vs generational"
+        );
+        assert!(a.output_valid, "{tier}: {:?}", a.verdict);
+    }
+}
+
+/// window-lanes: no lane chain is as long as the exact tier's longest.
+#[test]
+fn window_lanes_shorten_the_longest_chain() {
+    let fresh = fixture();
+    let exact = LifoProvider::default();
+    run_tier(&fresh, "exact", &exact);
+    let lanes = LifoProvider::default();
+    run_tier(&fresh, "relaxed:window-lanes", &lanes);
+    assert!(
+        lanes.longest_chain.get() < exact.longest_chain.get(),
+        "window-lanes chain {} vs exact {}",
+        lanes.longest_chain.get(),
+        exact.longest_chain.get()
+    );
+}
+
+/// defer-shadowed: the shadowed pass costs no round of its own.
+#[test]
+fn defer_shadowed_saves_rounds() {
+    let fresh = fixture();
+    let exact = LifoProvider::default();
+    // `k`'s second `let t` is a shadowed block binding: a round-B call.
+    run_tier(&fresh, "exact", &exact);
+    let deferred = LifoProvider::default();
+    run_tier(&fresh, "relaxed:defer-shadowed", &deferred);
+    assert!(
+        deferred.rounds.get() < exact.rounds.get(),
+        "defer-shadowed rounds {} vs exact {}",
+        deferred.rounds.get(),
+        exact.rounds.get()
     );
 }

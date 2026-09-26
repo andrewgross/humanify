@@ -26,7 +26,7 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 /// classification itself) and `--inject-ts-hashes` (WP5.6e, 2026-09-25:
 /// the structuralSignature exemption ended; the Rust hashes are the only
 /// hashes, and a TS-era prior is re-keyed or refused loudly).
-pub const RUST_ONLY_OPTIONS: &[&str] = &["--fast"];
+pub const RUST_ONLY_OPTIONS: &[&str] = &["--fast [tier]", "--simulate-llm-latency <path>"];
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -258,10 +258,16 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
-            "--fast",
-            "Post-parity performance mode: pipelined LLM dispatch and parallel stages. \
-             Deterministic (same input + same answers = same bytes), but not \
-             byte-equal to the default parity-faithful path",
+            "--fast [tier]",
+            "Post-parity performance tiers, both deterministic (same input + same \
+             answers = same bytes). `exact` (the default when bare) ships the \
+             default path's bytes; `relaxed` may change decisions (judged by the eval)",
+            None,
+        )
+        .option(
+            "--simulate-llm-latency <path>",
+            "Instrument: price this run's LLM schedule with cold per-call latencies \
+             on a virtual clock and write the simulated LLM wall time to <path> (JSON)",
             None,
         )
         .option(

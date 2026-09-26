@@ -26,10 +26,11 @@
  *     under any other name fails (finding #55 — the naming stage renamed
  *     `export function createStore`; the `esm-exports` fixture holds every
  *     export form).
- *  5. FAST — step 2 with `--fast` (docs/rust-port/20-fast-mode.md), twice:
- *     the two trees must be byte-identical, and the output boots (step 4).
- *     Fast mode may differ from the default path; it may never differ from
- *     itself.
+ *  5. FAST — step 2 with `--fast` and with `--fast relaxed`
+ *     (docs/rust-port/20-fast-mode.md), each twice: the two trees must be
+ *     byte-identical, and the output boots (step 4). The exact tier must
+ *     also equal step 2's tree; the relaxed tier may differ from the
+ *     default path, never from itself.
  *
  * What it cannot see: the split tree and its run scaffold (the fixtures are
  * single-module libraries, not bundles), and model quality. Both belong to
@@ -229,6 +230,8 @@ async function checkPair(
   const again = path.join(root, "prior-b");
   const fastA = path.join(root, "fast-a");
   const fastB = path.join(root, "fast-b");
+  const relaxedA = path.join(root, "relaxed-a");
+  const relaxedB = path.join(root, "relaxed-b");
 
   await runBinary(
     [inputOf(name, pair.v1), "-o", fresh],
@@ -259,11 +262,25 @@ async function checkPair(
     `${label} fast (again)`
   );
   assertIdenticalTrees(fastA, fastB, `${label} --fast`);
+  assertIdenticalTrees(prior, fastA, `${label} --fast vs the default path`);
+  const relaxedArgs = [...priorArgs, "--fast", "relaxed"];
+  await runBinary(
+    [...relaxedArgs, "-o", relaxedA],
+    endpoint,
+    `${label} relaxed`
+  );
+  await runBinary(
+    [...relaxedArgs, "-o", relaxedB],
+    endpoint,
+    `${label} relaxed (again)`
+  );
+  assertIdenticalTrees(relaxedA, relaxedB, `${label} --fast relaxed`);
 
   for (const [version, out, tag] of [
     [pair.v1, freshOut, "fresh"],
     [pair.v2, path.join(prior, "index.js"), "prior"],
-    [pair.v2, path.join(fastA, "index.js"), "fast"]
+    [pair.v2, path.join(fastA, "index.js"), "fast"],
+    [pair.v2, path.join(relaxedA, "index.js"), "relaxed"]
   ] as const) {
     const want = surfaceOf(
       asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
@@ -280,7 +297,7 @@ async function checkPair(
     }
   }
   console.log(
-    `  ${label}: fresh + prior (+ --fast) ran, deterministic, boots with the input's surface`
+    `  ${label}: fresh + prior (+ --fast, --fast relaxed) ran, deterministic, boots with the input's surface`
   );
 }
 

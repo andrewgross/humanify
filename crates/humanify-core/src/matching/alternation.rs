@@ -657,6 +657,7 @@ pub fn alternate_function_and_binding_matching(
     let mut function_result = initial_function_result;
     let mut last_evidence: Option<crate::propagation::ExternalRefEvidence> = None;
     let mut binding_result = setup.map(|s| {
+        let _ph = crate::profiling::phase("match:bindings");
         run_binding_match_rounds(
             &s.prior_index,
             &s.new_index,
@@ -671,6 +672,7 @@ pub fn alternate_function_and_binding_matching(
         if function_result.ambiguous.is_empty() {
             break;
         }
+        let ph = crate::profiling::phase("match:evidence");
         let evidence = build_external_ref_evidence(
             &function_result.ambiguous,
             prior,
@@ -681,10 +683,12 @@ pub fn alternate_function_and_binding_matching(
                 .map_or(&HashMap::new(), |r| &r.matches),
             &function_result.matches,
         );
+        drop(ph);
         let Some(evidence) = evidence else {
             break;
         };
         last_evidence = Some(evidence.clone());
+        let ph = crate::profiling::phase("match:functions");
         let next = match_functions(
             prior_index,
             new_index,
@@ -696,12 +700,14 @@ pub fn alternate_function_and_binding_matching(
                 ..MatchOptions::default()
             },
         );
+        drop(ph);
         let kept = next.matches.len() > function_result.matches.len();
         if !kept {
             break;
         }
         function_result = next;
         if let Some(s) = setup {
+            let _ph = crate::profiling::phase("match:bindings");
             binding_result = Some(run_binding_match_rounds(
                 &s.prior_index,
                 &s.new_index,

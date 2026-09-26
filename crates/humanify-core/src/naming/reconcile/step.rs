@@ -76,13 +76,19 @@ pub fn run_prior_diff_reconciliation(
         ));
     }
     let semantic = ingest.semantic();
+    let ph = crate::profiling::phase("reconcile:diff");
     let diff_text = match hunks::compute_normal_diff(prior_text, code) {
         Ok(d) => d,
         Err(e) => return Err((e, trail)),
     };
+    drop(ph);
+    let ph = crate::profiling::phase("reconcile:options");
     let mut state = RenameState::with_trail(semantic, Anchor::Generated, trail);
     let opts = pipeline_options(prior_text);
+    drop(ph);
+    let ph = crate::profiling::phase("reconcile:apply");
     let result = reconcile_diff_noise(semantic, &mut state, &diff_text, eligible, &opts);
+    drop(ph);
     let code = (!result.renames.is_empty()).then(|| render_program(semantic, &state));
     let ledger = ledger.filter(|_| code.is_some()).map(|walk| {
         use crate::rename::validated::ledger::{build_rename_ledger, parse_clears_scope_cache};

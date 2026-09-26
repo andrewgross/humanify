@@ -137,16 +137,31 @@ fn disabled_profiler_is_callable_and_records_nothing() {
 
 #[test]
 fn concurrency_sampling_records_until_stopped() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     let p = Profiler::new(true);
+    let ticks = Arc::new(AtomicUsize::new(0));
+    let seen = Arc::clone(&ticks);
     p.start_concurrency_sampling(
-        || ConcurrencyCounts {
-            in_flight: 1,
-            ready: 2,
-            blocked: 3,
+        move || {
+            seen.fetch_add(1, Ordering::SeqCst);
+            ConcurrencyCounts {
+                in_flight: 1,
+                ready: 2,
+                blocked: 3,
+            }
         },
         Duration::from_millis(2),
     );
+    // Wait for the first sample (bounded) rather than a fixed 30 ms: on a
+    // loaded 64-core box the sampler thread may not be scheduled that soon
+    // (it read 0 samples twice on 2026-09-26). `finalize` would stop the
+    // sampler, so the wait watches the sampler's own tick count.
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
     std::thread::sleep(Duration::from_millis(30));
+    while ticks.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
     p.stop_concurrency_sampling();
     let n = p.finalize(None).concurrency_snapshots.len();
     assert!(n >= 1, "sampled {n}");
