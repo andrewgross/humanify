@@ -13,8 +13,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
@@ -59,7 +59,7 @@ fn answer(user: &str, n: usize) -> String {
     Value::Object(entries).to_string()
 }
 
-fn serve(stream: std::net::TcpStream, counter: &AtomicUsize) {
+fn serve(stream: std::net::TcpStream, counter: &AtomicUsize, seen: &Mutex<Vec<String>>) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut len = 0usize;
     loop {
@@ -84,6 +84,7 @@ fn serve(stream: std::net::TcpStream, counter: &AtomicUsize) {
     std::thread::sleep(std::time::Duration::from_millis(((7 - n % 7) * 15) as u64));
     let v: Value = serde_json::from_slice(&body).unwrap();
     let user = v["messages"][1]["content"].as_str().unwrap_or("");
+    seen.lock().unwrap().push(user.to_string());
     let out = serde_json::json!({
         "choices": [{"message": {"role": "assistant", "content": answer(user, n)},
                      "finish_reason": "stop"}],
@@ -99,34 +100,49 @@ fn serve(stream: std::net::TcpStream, counter: &AtomicUsize) {
     );
 }
 
-/// Start the stub; returns its base URL and its request counter.
-fn start() -> (String, Arc<AtomicUsize>) {
+type Seen = Arc<Mutex<Vec<String>>>;
+
+/// Start the stub; returns its base URL, its request counter and the user
+/// prompts it was sent.
+fn start_recording() -> (String, Arc<AtomicUsize>, Seen) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/v1", listener.local_addr().unwrap());
     let counter = Arc::new(AtomicUsize::new(0));
-    let c = counter.clone();
+    let seen: Seen = Arc::default();
+    let (c, s) = (counter.clone(), seen.clone());
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
-            let c = c.clone();
-            std::thread::spawn(move || serve(stream, &c));
+            let (c, s) = (c.clone(), s.clone());
+            std::thread::spawn(move || serve(stream, &c, &s));
         }
     });
+    (url, counter, seen)
+}
+
+/// Start the stub; returns its base URL and its request counter.
+fn start() -> (String, Arc<AtomicUsize>) {
+    let (url, counter, _) = start_recording();
     (url, counter)
 }
 
 fn run(dir: &Path, input: &str, out: &Path, cache: &Path, endpoint: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_humanify"))
-        .current_dir(dir)
+    command(dir, input, out, endpoint)
+        .arg("--llm-cache")
+        .arg(cache)
+        .output()
+        .unwrap()
+}
+
+fn command(dir: &Path, input: &str, out: &Path, endpoint: &str) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_humanify"));
+    cmd.current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .args([input, "--api-key", "k", "--model", "stub-model", "-c", "8"])
         .args(["--retries", "0", "--endpoint", endpoint])
         .arg("-o")
-        .arg(out)
-        .arg("--llm-cache")
-        .arg(cache)
-        .output()
-        .unwrap()
+        .arg(out);
+    cmd
 }
 
 /// Every file under `root`, relative path → bytes, sorted.
@@ -186,5 +202,50 @@ fn a_replay_of_a_live_run_asks_nothing_new_and_writes_the_same_tree() {
     assert!(
         live_tree == tree(&s.0.join("replay")),
         "the replay wrote a different tree"
+    );
+}
+
+/// The same guarantee WITHOUT `--llm-cache` — how production runs, the cold
+/// eval and the version walks run. The copies of the configure arrow are
+/// one request: the model is asked it ONCE, and the run says how many
+/// copies were served that answer.
+#[test]
+fn without_a_cache_identical_requests_reach_the_model_once() {
+    let s = Scratch::new("no-cache");
+    let input = s.0.join("bundle.js");
+    std::fs::write(&input, INPUT).unwrap();
+    let input = input.display().to_string();
+    let (url, counter, seen) = start_recording();
+
+    let out = command(&s.0, &input, &s.0.join("out"), &url)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+    assert_eq!(out.status.code(), Some(0), "{err}");
+    let prompts = seen.lock().unwrap().clone();
+    assert_eq!(prompts.len(), counter.load(Ordering::SeqCst));
+    let mut distinct = prompts.clone();
+    distinct.sort();
+    distinct.dedup();
+    assert_eq!(
+        distinct.len(),
+        prompts.len(),
+        "a prompt reached the model more than once"
+    );
+    let line = err
+        .lines()
+        .find(|l| l.contains("LLM requests: "))
+        .unwrap_or_else(|| panic!("no memo line in: {err}"));
+    eprintln!("{line}");
+    assert!(
+        line.contains(&format!(
+            "LLM requests: {} sent to the model, ",
+            prompts.len()
+        )),
+        "{line}"
+    );
+    assert!(
+        !line.contains(", 0 identical copies"),
+        "the configure arrow's copies were shared: {line}"
     );
 }

@@ -4,9 +4,10 @@
 //! (`humanify_model::llm::NameProvider`, implemented by [`LlmClient`]).
 //!
 //! The provider stack mirrors src/commands/unified.ts `buildProvider`:
-//! cache OUTERMOST (hits bypass the limiter and the debug wrapper), then
-//! the rate limiter (concurrency + requests/minute + retries), the debug
-//! wrapper, and the HTTP client.
+//! the answer memo OUTERMOST on every run (one key, one answer; the disk
+//! cache, when set, is its backing store; hits bypass the limiter and the
+//! debug wrapper), then the rate limiter (concurrency + requests/minute +
+//! retries), the debug wrapper, and the HTTP client.
 //!
 //! | TS                         | here                 |
 //! | -------------------------- | -------------------- |

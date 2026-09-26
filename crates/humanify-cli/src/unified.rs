@@ -339,6 +339,7 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
     if let Ok(Ended::Immediate(code)) = ended {
         return code;
     }
+    report_memo(&provider, &mut *renderer);
     // The TS `finally`.
     finalize_profile(&opts, input, &profiler, &mut *renderer);
     renderer.finish();
@@ -352,6 +353,19 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
             eprintln!("Error: {message}");
             1
         }
+    }
+}
+
+/// One line per run: how many requests reached the model and how many
+/// identical copies were served an earlier answer instead (finding #57's
+/// one-key-one-answer memo, which holds with or without `--llm-cache`).
+fn report_memo(provider: &LlmClient<LiveStack>, renderer: &mut dyn ProgressRenderer) {
+    let memo = provider.memo_stats();
+    if memo.asked + memo.shared > 0 {
+        renderer.message(&format!(
+            "LLM requests: {} sent to the model, {} identical copies served an earlier answer",
+            memo.asked, memo.shared
+        ));
     }
 }
 
@@ -477,21 +491,19 @@ fn build_provider(settings: &Settings) -> Result<LlmClient<LiveStack>, String> {
             .map_or(defaults.retry_attempts, |r| r as u32),
         ..defaults
     };
-    let cache = settings.llm_cache_dir.as_ref().map(|dir| {
-        (
-            std::path::PathBuf::from(dir),
-            CacheKeyParams {
-                model: settings.model.clone(),
-                temperature: Some(0.0),
-                max_tokens,
-                reasoning_effort,
-            },
-        )
-    });
     LlmClient::live(LiveOptions {
         config,
         rate,
-        cache,
+        key_params: CacheKeyParams {
+            model: settings.model.clone(),
+            temperature: Some(0.0),
+            max_tokens,
+            reasoning_effort,
+        },
+        cache_dir: settings
+            .llm_cache_dir
+            .as_ref()
+            .map(std::path::PathBuf::from),
         metrics: None,
         log: Some(crate::log::llm_log_sink()),
     })

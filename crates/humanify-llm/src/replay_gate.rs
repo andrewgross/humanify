@@ -25,7 +25,7 @@ use std::path::Path;
 
 use humanify_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall, cache_key_of};
 
-use crate::cache::{CacheEntry, CachedProvider, DiskCache};
+use crate::cache::{AnswerMemo, CacheEntry, DiskCache};
 use crate::provider::{AsyncProvider, ReplayMiss};
 
 /// One dispatch row (capture or dump shape).
@@ -202,7 +202,7 @@ pub fn run(
         }
         // One provider per row: the params are per row (the TS probe does
         // the same), the cache read-only, the inner provider a dead end.
-        let provider = CachedProvider::new(
+        let provider = AnswerMemo::on_disk(
             ReplayMiss,
             DiskCache::open_read_only(cache_dir),
             row.params.clone(),
@@ -211,7 +211,7 @@ pub fn run(
         let got = runtime
             .block_on(provider.suggest_all_names(&call_of(row)))
             .ok();
-        report.cache_writes += provider.stats().writes;
+        report.cache_writes += provider.stats().map_or(0, |s| s.writes);
         let got_json = got.as_ref().map(|r| r.to_json());
         if got.is_some() {
             report.hits += 1;

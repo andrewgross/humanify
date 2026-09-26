@@ -50,7 +50,8 @@ fn live(
             max_concurrent,
             ..RateLimitConfig::default()
         },
-        cache: cache.map(|dir| (dir, params())),
+        key_params: params(),
+        cache_dir: cache,
         metrics: Some(Arc::new(MetricsTracker::default())),
         log: None,
     })
@@ -211,4 +212,70 @@ fn an_empty_answer_is_recorded_and_replays() {
     let replayed = replay.run_wave(vec![call(0)]);
     assert!(replayed[0].as_ref().unwrap().renames.is_empty());
     assert_eq!(replay.cache_stats().unwrap().misses, 0);
+}
+
+/// Finding #57 without a cache: production runs, the cold eval and the
+/// version walks run with NO `--llm-cache`, and the copies of one request
+/// must still share one answer — the first copy asks, every later copy
+/// (in flight or in a later wave) is served that answer, and the model is
+/// asked once per distinct key.
+#[test]
+fn identical_requests_share_one_answer_without_a_cache() {
+    // Every request the server sees gets a DIFFERENT name.
+    let server = StubServer::start(
+        Duration::from_millis(20),
+        Arc::new(|i, _| StubResponse::ok(completion(Some(&format!(r#"{{"x":"name{i}"}}"#))))),
+    );
+    let client = live(&server, 4, None);
+    let wave = || vec![call(0), call(1), call(0), call(2), call(0), call(1)];
+    let answers: Vec<_> = client
+        .run_wave(wave())
+        .into_iter()
+        .map(|r| r.unwrap().renames)
+        .collect();
+    assert_eq!(server.requests(), 3, "one request per distinct key");
+    assert_eq!(answers[0], answers[2]);
+    assert_eq!(answers[0], answers[4]);
+    assert_eq!(answers[1], answers[5]);
+    assert_ne!(answers[0], answers[1]);
+    // A later wave in the same run: served the recorded answers, no asks.
+    let later: Vec<_> = client
+        .run_wave(wave())
+        .into_iter()
+        .map(|r| r.unwrap().renames)
+        .collect();
+    assert_eq!(server.requests(), 3, "a later copy asks nothing");
+    assert_eq!(later, answers);
+    let memo = client.memo_stats();
+    assert_eq!((memo.asked, memo.shared), (3, 9));
+    assert!(
+        client.cache_stats().is_none(),
+        "no disk cache, no disk stats"
+    );
+}
+
+/// Errors are never memoized: a copy behind a failed first copy asks again.
+#[test]
+fn a_failed_answer_is_not_shared_and_a_later_copy_retries() {
+    // The first request fails (400: never retried), the rest answer.
+    let server = StubServer::start(
+        Duration::ZERO,
+        Arc::new(|i, _| {
+            if i == 0 {
+                StubResponse::status(400, r#"{"error":{"message":"bad"}}"#)
+            } else {
+                StubResponse::ok(completion(Some(&format!(r#"{{"x":"name{i}"}}"#))))
+            }
+        }),
+    );
+    let client = live(&server, 4, None);
+    let results = client.run_wave(vec![call(0), call(0), call(0)]);
+    assert!(results[0].is_err());
+    let second = results[1].as_ref().unwrap().renames.clone();
+    assert_eq!(results[2].as_ref().unwrap().renames, second);
+    assert_eq!(
+        server.requests(),
+        2,
+        "the failure is asked again once, then shared"
+    );
 }
