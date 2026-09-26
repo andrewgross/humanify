@@ -5,11 +5,69 @@
 //! unescaped `` ` `` or `${`), and otherwise RECOMPUTES `cooked` from the
 //! raw text — null when it holds an invalid escape.
 //!
-//! The beautifier's `.concat` fold builds its template from a string's
-//! COOKED value used as raw (finding #42), so both effects reach the
-//! output: a string with a backtick or `${` makes the whole stage-6
-//! beautify throw (finding #44), and the recomputed cooked value decides
-//! whether a later `` `…`.concat("s") `` appends `s` once or twice.
+//! The TS beautifier's `.concat` fold built its template from a string's
+//! COOKED value used as raw (finding #42): a string with a backtick or
+//! `${` made the whole stage-6 beautify throw (finding #44) and a
+//! backslash was lost. The fold now builds the raw text with
+//! [`raw_for_string`], which uses [`template_element_cooked`] to prove the
+//! raw text cooks back to the string's value.
+
+/// The template raw text whose cooked value is `value`, for a string the
+/// `.concat` fold moves into a template (findings #42, #44): the string
+/// literal's own source escapes when it has them (`source` is its
+/// `extra.raw`, quotes included — `"a\nb"` stays `a\nb`), with a backtick
+/// and `${` escaped; otherwise escaped from the value. The source-derived
+/// text is used only when it cooks back to exactly `value`.
+pub fn raw_for_string(value: &str, source: Option<&str>) -> String {
+    if let Some(raw) = source.and_then(raw_from_string_source)
+        && template_element_cooked(&raw).ok().flatten().as_deref() == Some(value)
+    {
+        return raw;
+    }
+    raw_from_value(value)
+}
+
+/// A string literal's source text (quotes included) as template raw
+/// text: every escape kept verbatim (a string's escapes mean the same in a
+/// template), an unescaped backtick or `${` escaped.
+fn raw_from_string_source(source: &str) -> Option<String> {
+    let inner = source
+        .strip_prefix(['"', '\''])?
+        .strip_suffix(['"', '\''])?;
+    let mut out = String::with_capacity(inner.len() + 2);
+    let mut chars = inner.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                out.push('\\');
+                out.push(chars.next()?);
+            }
+            '`' => out.push_str("\\`"),
+            '$' if chars.peek() == Some(&'{') => out.push_str("\\$"),
+            c => out.push(c),
+        }
+    }
+    Some(out)
+}
+
+/// A string VALUE as template raw text: `\`, a backtick, `${` and the two
+/// line terminators a template would normalize (CR) or that would break
+/// the line (LF) escaped.
+fn raw_from_value(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '`' => out.push_str("\\`"),
+            '$' if chars.peek() == Some(&'{') => out.push_str("\\$"),
+            '\r' => out.push_str("\\r"),
+            '\n' => out.push_str("\\n"),
+            c => out.push(c),
+        }
+    }
+    out
+}
 
 /// The quasi's recomputed `cooked`, or Err("Invalid raw").
 pub fn template_element_cooked(raw: &str) -> Result<Option<String>, String> {
@@ -20,8 +78,10 @@ pub fn template_element_cooked(raw: &str) -> Result<Option<String>, String> {
     let mut chunk = 0usize;
     loop {
         if pos >= units.len() {
-            // `unterminated` — the only accepted ending.
-            out.extend_from_slice(&units[chunk..pos]);
+            // `unterminated` — the only accepted ending. (A `\` at the
+            // very end leaves `pos` one past the end: clamp, not panic.)
+            let pos = pos.min(units.len());
+            out.extend_from_slice(&units[chunk.min(pos)..pos]);
             break;
         }
         let ch = units[pos];
@@ -199,5 +259,23 @@ mod tests {
         assert!(template_element_cooked("a`b").is_err());
         assert!(template_element_cooked("a${b").is_err());
         assert_eq!(template_element_cooked("a$b\\`"), Ok(Some("a$b`".into())));
+        // A lone trailing backslash panicked (a slice past the end).
+        assert_eq!(template_element_cooked("p\\"), Ok(Some("p\u{0}".into())));
+    }
+
+    #[test]
+    fn raw_for_string_escapes_what_a_template_would_misread() {
+        use super::raw_for_string;
+        // The literal's own escapes are kept.
+        assert_eq!(raw_for_string("a\nb\\c", Some(r#""a\nb\\c""#)), r"a\nb\\c");
+        assert_eq!(raw_for_string("A'", Some(r"'\x41\''")), r"\x41\'");
+        // A backtick and `${` are escaped, a lone `$` is not.
+        assert_eq!(
+            raw_for_string("a`b${c}$d", Some("\"a`b${c}$d\"")),
+            r"a\`b\${c}$d"
+        );
+        // Without a source (or one that does not cook back), from the value.
+        assert_eq!(raw_for_string("a`\\${\r\n", None), r"a\`\\\${\r\n");
+        assert_eq!(raw_for_string("x", Some("\"y\"")), "x");
     }
 }
