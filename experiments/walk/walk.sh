@@ -8,7 +8,10 @@
 #       [--bin <path>]            rust: binary to walk (default: this repo's
 #                                 target/release/humanify, built first)
 #       [--ts-tree <dir>]         ts: the frozen TS pipeline checkout
-#                                 (default /work/tsctl-fec64e5; READ-ONLY)
+#                                 (default /work/tsctl-fec64e5-walk: a copy of
+#                                 /work/tsctl-fec64e5 src/ + its OWN npm ci —
+#                                 that tree symlinks the repo node_modules,
+#                                 which lost `commander` at the cutover)
 #       [--resume]                continue a walk in <dir>; finished hops skipped
 #       [--endpoint <url>]        LLM endpoint override (default pairs.json)
 #       [--inputs-base <dir>]     override pairs.json inputsBase
@@ -60,7 +63,7 @@ PIPELINE=""
 VERSIONS_ARG=""
 OUT=""
 BIN="$REPO/target/release/humanify"
-TS_TREE="/work/tsctl-fec64e5"
+TS_TREE="/work/tsctl-fec64e5-walk"
 RESUME=0
 ENDPOINT_OVERRIDE=""
 INPUTS_OVERRIDE=""
@@ -164,12 +167,24 @@ if [[ "$PIPELINE" == "rust" ]]; then
   PIPE_DESC=$(jq -c '{kind:"rust-bin", bin:., frozenCopy:"'"$FROZEN"'"}' <<< "$BIN_JSON")
 else
   [[ -f "$TS_TREE/src/index.ts" ]] || { echo "walk.sh: no TS pipeline at $TS_TREE/src/index.ts" >&2; exit 2; }
-  TS_COMMIT=$(git -C "$TS_TREE" rev-parse HEAD 2>/dev/null || echo "")
+  # A git checkout records its HEAD; a plain copy (the default — see header)
+  # carries the commit it was copied from in COMMIT.
+  TS_COMMIT=$(git -C "$TS_TREE" rev-parse HEAD 2>/dev/null || cat "$TS_TREE/COMMIT" 2>/dev/null || echo "")
   TS_DIRTY=$( [[ -n "$(git -C "$TS_TREE" status --porcelain --untracked-files=no 2>/dev/null)" ]] && echo true || echo false )
+  SRC_SHA=$(cd "$TS_TREE" && find src -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
   PIPE_CMD_JSON=$(jq -cn --arg t "$TS_TREE/src/index.ts" '["npx","tsx",$t]')
   RUN_REPO="$TS_TREE"
   PIPE_DESC=$(jq -cn --arg tree "$TS_TREE" --arg c "$TS_COMMIT" --argjson d "$TS_DIRTY" \
-    --argjson cmd "$PIPE_CMD_JSON" '{kind:"ts", tree:$tree, commit:$c, dirty:$d, command:$cmd}')
+    --arg srcSha "$SRC_SHA" --argjson cmd "$PIPE_CMD_JSON" \
+    '{kind:"ts", tree:$tree, commit:$c, dirty:$d, srcSha256:$srcSha, command:$cmd}')
+fi
+
+# PREFLIGHT: the pipeline must at least start. A TS tree whose node_modules
+# lost a dependency (the cutover pruned the repo's) dies in 0 s on every hop.
+PREFLIGHT_CMD=($(jq -r '.[]' <<< "$PIPE_CMD_JSON"))
+if ! (cd "$RUN_REPO" && timeout 300 "${PREFLIGHT_CMD[@]}" --help > "$OUT/preflight.log" 2>&1); then
+  echo "walk.sh: PREFLIGHT FAILED — '${PREFLIGHT_CMD[*]} --help' does not run (see $OUT/preflight.log)" >&2
+  exit 2
 fi
 
 VERSIONS_JSON=$(printf '%s\n' "${VERSIONS[@]}" | jq -R . | jq -sc .)

@@ -413,7 +413,8 @@ const KIND_LABEL: Record<HunkKind, string> = {
   added: "real change (new code)",
   removed: "real change (deleted code)",
   "name-only": "NOISE: same code, different local names",
-  moved: "NOISE: identical lines moved"
+  moved:
+    "REORDER: identical lines in a new order (noise, or an upstream init-order change — the text alone cannot tell)"
 };
 
 function examplesSection(
@@ -476,7 +477,7 @@ const DEFINITIONS = [
   "",
   "All per-hop numbers score (hop N-1 tree → hop N tree) of the SAME walk.",
   "",
-  "- **diffLn / src / vendor** — changed lines between the two trees (`lib/diff.ts`, `diff -rN`; a modified line counts twice; = `git diff --numstat --no-renames` on `history.git`). `.humanify/` excluded. Includes REAL change.",
+  "- **diffLn / src / vendor** — changed lines between the two trees (`lib/diff.ts`, `diff -rN`; a modified line counts twice; the convention of `git diff --numstat --no-renames`; git rename detection would count a moved-but-identical file as 0). `.humanify/` excluded. Includes REAL change.",
   "- **noiseLines** — the headline noise: src on-disk noise (`layout.noise` = naming + alias + reorder, git lines) + `vendor.noise`. Lower is better.",
   "- **naming / alias / reorderLn** — composeDiff's src components. `naming` only sees renames in statements whose hash did NOT flip.",
   "- **nameOnly** — `layout.nameOnlyLines`: LINE-level name-only churn (identical once local names are masked), incl. renames inside edited statements. Not additive with `naming`.",
