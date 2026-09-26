@@ -225,9 +225,20 @@ fn classify(reports: &[RenameReport]) -> Buckets {
 }
 
 /// Rows recorded into the run's trail by a pass over ANOTHER text than
-/// the four anchored ones (the post-split reconcile, per split file): the
-/// text their spans index, and the rows, in record order.
-pub type ExtraTrail = [(String, Vec<TrailEntry>)];
+/// the four anchored ones (the post-split reconcile, per split file).
+#[derive(Clone, Debug, Default)]
+pub struct ExtraText {
+    /// The split file's tree-relative path — the rows' text label (07 §1's
+    /// path key space; finding #50: these rows used to say "generated").
+    pub file: String,
+    /// The text the rows' spans index (the file as the pass parsed it).
+    pub text: String,
+    /// The rows, in record order.
+    pub rows: Vec<TrailEntry>,
+}
+
+/// Every extra text's rows, in record order.
+pub type ExtraTrail = [ExtraText];
 
 /// The strategy trail as `StrategyTrailReport` (`trails` + `funnel`): the
 /// run's rows, then the extra rows (the TS's one trail keyed by binding
@@ -262,13 +273,13 @@ pub fn trail_report(trail: &StrategyTrail, texts: &AnchorTexts<'_>, extra: &Extr
                 .iter()
                 .find(|(a, _, _)| *a == e.target.anchor)
                 .expect("an anchored text for every row");
-            trail_entry(e, map, lines)
+            trail_entry(e, e.target.anchor.as_str(), map, lines)
         })
         .collect();
-    for (text, rows) in extra {
-        let map = Utf16Map::build(text, entry_positions(rows.iter()));
-        let lines = BabelLines::new(text);
-        trails.extend(rows.iter().map(|e| trail_entry(e, &map, &lines)));
+    for x in extra {
+        let map = Utf16Map::build(&x.text, entry_positions(x.rows.iter()));
+        let lines = BabelLines::new(&x.text);
+        trails.extend(x.rows.iter().map(|e| trail_entry(e, &x.file, &map, &lines)));
     }
     let mut funnel = JsObject::new();
     for (tier, outcomes) in funnel_of(all_entries(trail, extra)) {
@@ -308,7 +319,7 @@ fn all_entries<'e>(
     trail
         .entries()
         .iter()
-        .chain(extra.iter().flat_map(|(_, rows)| rows.iter()))
+        .chain(extra.iter().flat_map(|x| x.rows.iter()))
 }
 
 /// `report().funnel`: per tier (first-seen order), per outcome (first-seen
@@ -334,7 +345,9 @@ fn funnel_of<'e>(
     funnel
 }
 
-fn trail_entry(e: &TrailEntry, map: &Utf16Map, lines: &BabelLines<'_>) -> JsValue {
+/// One diag.json trail row; `text` labels the text its spans index (an
+/// anchor, or a split file's path).
+fn trail_entry(e: &TrailEntry, text: &str, map: &Utf16Map, lines: &BabelLines<'_>) -> JsValue {
     let (line, col) = lines.loc(e.target.decl_span.start);
     let attempts: Vec<JsValue> = e
         .attempts
@@ -364,7 +377,7 @@ fn trail_entry(e: &TrailEntry, map: &Utf16Map, lines: &BabelLines<'_>) -> JsValu
                 ("end", Some(num(map.get(e.target.decl_span.end)))),
             ])),
         ),
-        ("declText", Some(JsValue::str(e.target.anchor.as_str()))),
+        ("declText", Some(JsValue::str(text))),
         ("trail", Some(JsValue::Array(attempts))),
         ("postSettleAttempts", Some(num(e.post_settle_attempts))),
         ("postSettleVotes", Some(num(e.post_settle_votes))),

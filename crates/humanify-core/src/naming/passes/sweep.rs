@@ -27,7 +27,7 @@ use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
 use crate::naming::code_window::MAX_CODE_LINES;
 use crate::naming::prompts::{render_system_prompt, render_user_prompt};
 use crate::naming::waves::generate::TextView;
-use crate::naming::waves::render::{Occurrences, render_program};
+use crate::naming::waves::render::{Occurrences, program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
 use crate::rename::floor::{is_bun_token, is_half_mint_head, is_wordless_mint_shape};
 use crate::rename::validated::scopes::{BScopeId, BindingId};
@@ -401,7 +401,12 @@ pub fn run_deferred_sweep<P: NameProvider>(
     let sweep = sweep_minted_names(semantic, &mut state, eligible, &taint, provider, params);
     let code = (sweep.named > 0).then(|| render_program(semantic, &state));
     let ledger = (ledger && code.is_some()).then(|| {
-        crate::rename::validated::ledger::build_rename_ledger(semantic.source_text(), &state)
+        let rendered = program_edits(semantic, &state, &[]);
+        crate::rename::validated::ledger::build_rename_ledger(
+            semantic.source_text(),
+            &state,
+            &rendered,
+        )
     });
     Ok(DeferredSweepOutcome {
         sweep,

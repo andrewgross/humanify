@@ -15,7 +15,7 @@ use oxc_allocator::Allocator;
 
 use super::{ReconcileOptions, ReconcileResult, collect_word_tokens, hunks, reconcile_diff_noise};
 use crate::ingest::Ingest;
-use crate::naming::waves::render::render_program;
+use crate::naming::waves::render::{program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
 use crate::rename::validated::RenameState;
 use crate::trail::{Anchor, StrategyTrail};
@@ -91,7 +91,8 @@ pub fn run_prior_diff_reconciliation(
         {
             state.recrawl_order(|_| true);
         }
-        build_rename_ledger(semantic.source_text(), &state)
+        let rendered = program_edits(semantic, &state, &[]);
+        build_rename_ledger(semantic.source_text(), &state, &rendered)
     });
     Ok(PriorDiffOutcome {
         result,

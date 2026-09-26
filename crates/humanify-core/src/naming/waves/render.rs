@@ -220,11 +220,23 @@ pub fn render_program_with(
     extra: &[Replacement],
 ) -> String {
     let view = TextView::build(semantic);
+    let edits = program_edits(semantic, state, extra);
+    view.pretty(Span::new(0, view.text.len() as u32), &edits, true)
+}
+
+/// The whole-text edit list [`render_program_with`] applies — the one
+/// list the rename ledger partitions (`rename::validated::ledger`), so a
+/// ledger replay is the render.
+pub fn program_edits(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    extra: &[Replacement],
+) -> Vec<Replacement> {
+    let text = semantic.source_text();
     let occ = Occurrences::build(semantic, state);
-    let span = Span::new(0, view.text.len() as u32);
-    let mut edits = occ.edits(view.text, state, span);
+    let mut edits = occ.edits(text, state, Span::new(0, text.len() as u32));
     edits.extend_from_slice(extra);
-    view.pretty(span, &edits, true)
+    edits
 }
 
 /// The statement-twin tier's private-name rewrites as edits of `text`

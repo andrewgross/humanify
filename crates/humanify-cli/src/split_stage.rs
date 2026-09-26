@@ -149,7 +149,7 @@ pub struct SplitRecords {
 /// The finishing passes' contribution to the run-wide recorders.
 #[derive(Default)]
 pub struct PostSplitRecords {
-    pub trail: Vec<(String, Vec<humanify_core::trail::TrailEntry>)>,
+    pub trail: Vec<humanify_core::naming::report::diagnostics::ExtraText>,
     pub claims: humanify_core::rename::validated::RenameClaimStats,
 }
 

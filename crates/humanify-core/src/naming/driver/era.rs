@@ -38,7 +38,7 @@ use crate::naming::waves::processor::{
     CloseContext, DispatchRecord, NameRecord, WaveInputs, WaveOutcome, run_waves,
 };
 use crate::naming::waves::render::{
-    FnPrinter, Occurrences, private_rename_edits, render_program_with,
+    FnPrinter, Occurrences, private_rename_edits, program_edits, render_program_with,
 };
 use crate::prior::MatchStage;
 use crate::rename::eligibility::Eligibility;
@@ -569,7 +569,8 @@ fn run_era<P: NameProvider>(
             let retained: std::collections::HashSet<_> = rows.fns.iter().map(|f| f.scope).collect();
             state.recrawl_order(|s| s == program || retained.contains(&s));
         }
-        build_rename_ledger(semantic.source_text(), &state)
+        let rendered = program_edits(semantic, &state, &privates);
+        build_rename_ledger(semantic.source_text(), &state, &rendered)
     });
     era.generated = Some(generated);
     era.claims = state.claim_stats();

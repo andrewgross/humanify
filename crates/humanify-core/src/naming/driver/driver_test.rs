@@ -302,6 +302,31 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
             prior.is_some()
         );
     }
+    // Finding #49: a renamed shorthand property prints `key: name` — the
+    // ledger records the printed form and pins the shipped text's hash.
+    let shorthand =
+        "function a(b) {\n  var c = b + 1;\n  return { c };\n}\nvar d = a(2);\nconsole.log(d);\n";
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh: shorthand,
+            prior: None,
+            library: None,
+        },
+        &ledger_config(),
+        &SuffixProvider,
+    )
+    .expect("the stage runs");
+    let shipped = out.code.as_deref().expect("shipped");
+    assert!(shipped.contains("{ c: cNamed }"), "{shipped}");
+    let bundle = out.rename_ledger.as_ref().expect("a ledger");
+    assert_eq!(
+        bundle.ledger.output_sha256.as_deref(),
+        Some(crate::rename::validated::ledger::sha256_hex(shipped).as_str())
+    );
+    assert_eq!(
+        apply_rename_ledger(shorthand, &bundle.ledger).as_deref(),
+        Ok(shipped)
+    );
     // Without the flag there is no ledger.
     let mut config = ledger_config();
     config.emit_rename_ledger = false;
@@ -316,6 +341,39 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
     )
     .expect("the stage runs");
     assert!(out.rename_ledger.is_none());
+}
+
+/// Finding #35: an `llm` trail row's `refCount` counts each reference and
+/// write of the binding ONCE. With a prior (the two scope epochs) a
+/// function's own-scope binding referenced inside a nested block used to
+/// count those references twice (the TS's fresh-era re-registration).
+#[test]
+fn the_llm_ref_count_counts_each_reference_once() {
+    let fresh = "function a(b) {\n  if (b) {\n    let q = b;\n    use(q, b);\n  }\n  b = 2;\n  return b;\n}\nuse(a);\n";
+    let prior = "var unrelated = 1;\nconsole.log(unrelated);\n";
+    for prior in [None, Some(prior)] {
+        let out = super::run_naming(
+            &super::NamingInput {
+                fresh,
+                prior,
+                library: None,
+            },
+            &ledger_config(),
+            &SuffixProvider,
+        )
+        .expect("the stage runs");
+        let counts: Vec<Option<u32>> = out
+            .trail
+            .entries()
+            .iter()
+            .filter(|e| e.old_name == "b")
+            .flat_map(|e| &e.attempts)
+            .filter(|a| a.tier == crate::trail::Tier::Llm)
+            .map(|a| a.ref_count)
+            .collect();
+        // Reads: `if (b)`, `q = b`, `use(q, b)`, `return b`; write: `b = 2`.
+        assert_eq!(counts, [Some(5)], "prior {}", prior.is_some());
+    }
 }
 
 /// Finding #41: a structural failure NAMES its first diverging token

@@ -19,16 +19,33 @@ pub fn unparen<'a>(expr: &'a Expression<'a>) -> &'a Expression<'a> {
     e
 }
 
-/// Babel `loc` (1-based line, 0-based UTF-16 column) of a byte offset —
-/// the ONE owner of the question (docs/responsibility.md). Babel's line
-/// terminators are `\r\n`, `\r`, `\n`, U+2028 and U+2029 (anywhere, raw
-/// strings and templates included); `diff` and `split("\n")` count `\n`
-/// only, and every TS consumer that joins the two inherits the mismatch —
-/// so do the ports (the reconcile's line keys, the permute's contexts).
-pub struct BabelLines<'t> {
+/// The line model of a text: where each line starts, and the (1-based
+/// line, 0-based UTF-16 column) of a byte offset under that model.
+struct LineStarts<'t> {
     text: &'t str,
     starts: Vec<u32>,
 }
+
+impl LineStarts<'_> {
+    fn line(&self, pos: u32) -> usize {
+        self.starts.partition_point(|s| *s <= pos)
+    }
+
+    fn loc(&self, pos: u32) -> (usize, usize) {
+        let line = self.line(pos);
+        let start = self.starts[line - 1] as usize;
+        let col = self.text[start..pos as usize].encode_utf16().count();
+        (line, col)
+    }
+}
+
+/// Babel `loc` (1-based line, 0-based UTF-16 column) of a byte offset —
+/// the ONE owner of the question (docs/responsibility.md). Babel's line
+/// terminators are `\r\n`, `\r`, `\n`, U+2028 and U+2029 (anywhere, raw
+/// strings and templates included). What is REPORTED as a Babel loc (the
+/// diagnostics' `loc`, the naming prompts' line numbers) reads this; what
+/// is JOINED with `diff` hunks or `split("\n")` lines reads [`DiffLines`].
+pub struct BabelLines<'t>(LineStarts<'t>);
 
 impl<'t> BabelLines<'t> {
     pub fn new(text: &'t str) -> BabelLines<'t> {
@@ -55,19 +72,49 @@ impl<'t> BabelLines<'t> {
             }
             i += 1;
         }
-        BabelLines { text, starts }
+        BabelLines(LineStarts { text, starts })
     }
 
     /// The 1-based line of byte `pos`.
     pub fn line(&self, pos: u32) -> usize {
-        self.starts.partition_point(|s| *s <= pos)
+        self.0.line(pos)
     }
 
     /// `(line, column)` of byte `pos`.
     pub fn loc(&self, pos: u32) -> (usize, usize) {
-        let line = self.line(pos);
-        let start = self.starts[line - 1] as usize;
-        let col = self.text[start..pos as usize].encode_utf16().count();
-        (line, col)
+        self.0.loc(pos)
+    }
+}
+
+/// `diff`'s line model (`\n` only — `split("\n")`'s): the (1-based line,
+/// 0-based UTF-16 column) of a byte offset — the ONE owner for every
+/// consumer that joins a position with a `diff` hunk or a `split("\n")`
+/// line: the prior-diff reconcile's candidate resolution and occurrence
+/// lines, the post-split text rewrite and bundle carry, the family
+/// permute's contexts (finding #26: they resolved by [`BabelLines`], so a
+/// raw `\r` or U+2028/2029 shifted every later position by one line).
+pub struct DiffLines<'t>(LineStarts<'t>);
+
+impl<'t> DiffLines<'t> {
+    pub fn new(text: &'t str) -> DiffLines<'t> {
+        let starts = std::iter::once(0)
+            .chain(
+                text.bytes()
+                    .enumerate()
+                    .filter(|(_, b)| *b == b'\n')
+                    .map(|(i, _)| i as u32 + 1),
+            )
+            .collect();
+        DiffLines(LineStarts { text, starts })
+    }
+
+    /// The 1-based line of byte `pos`.
+    pub fn line(&self, pos: u32) -> usize {
+        self.0.line(pos)
+    }
+
+    /// `(line, column)` of byte `pos`.
+    pub fn loc(&self, pos: u32) -> (usize, usize) {
+        self.0.loc(pos)
     }
 }

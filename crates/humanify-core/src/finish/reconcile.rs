@@ -24,7 +24,7 @@ use oxc_syntax::identifier::{is_identifier_part, is_identifier_start};
 
 use humanify_model::js::{JsObject, JsValue, cmp_utf16};
 
-use crate::babel_view::BabelLines;
+use crate::babel_view::DiffLines;
 use crate::emit::substitutions::{Substitution, apply_substitutions};
 use crate::naming::reconcile::hunks::compute_normal_diff;
 use crate::naming::reconcile::resolve::{IdentSite, identifier_sites, shorthand_key};
@@ -68,11 +68,11 @@ pub struct PostSplitResult {
     pub renames: Vec<PostSplitRename>,
     pub stats: PostSplitStats,
     /// What the pass recorded into the run's strategy trail, per file in
-    /// visit order: the file's text (the rows' spans index it) and its
-    /// rows. The TS records into the ONE run-wide trail with the reconcile
-    /// pass's `"generated"` label (diff-reconcile.ts), one entry per
-    /// binding NODE — never merged with the naming era's rows.
-    pub trail: Vec<(String, Vec<crate::trail::TrailEntry>)>,
+    /// visit order: the file's path, its text (the rows' spans index it)
+    /// and its rows — one entry per binding NODE, never merged with the
+    /// naming era's rows (finding #50: labelled by the file, not
+    /// "generated").
+    pub trail: Vec<crate::naming::report::diagnostics::ExtraText>,
     /// The validated renames' claim counters (the run-wide
     /// `renameClaimStats`).
     pub claims: crate::rename::validated::RenameClaimStats,
@@ -287,7 +287,7 @@ fn renamed_occurrences(state: &RenameState, source: &str) -> HashMap<u32, String
 fn collect_substitutions(
     semantic: &oxc_semantic::Semantic<'_>,
     sites: &[IdentSite<'_>],
-    lines: &BabelLines<'_>,
+    lines: &DiffLines<'_>,
     renamed: &HashMap<u32, String>,
     text_lines: &[&str],
 ) -> Vec<Substitution> {
@@ -463,7 +463,7 @@ pub(crate) fn statement_of(spans: &[(u32, u32)], pos: u32) -> Option<usize> {
 fn declaration_index(
     view: &BabelScopes,
     program: &Program<'_>,
-    lines: &BabelLines<'_>,
+    lines: &DiffLines<'_>,
 ) -> Vec<Decl> {
     let spans: Vec<(u32, u32)> = program
         .body
@@ -496,7 +496,7 @@ fn declaration_index(
 fn locate_renames(
     view: &BabelScopes,
     program: &Program<'_>,
-    lines: &BabelLines<'_>,
+    lines: &DiffLines<'_>,
     renames: &mut [PostSplitRename],
     decl_lines: &[usize],
     ledger_statements: usize,
@@ -556,7 +556,7 @@ fn reconcile_one_file(
     let allocator = Allocator::default();
     let ingest = parse_or_err(&allocator, fresh)?;
     let baseline = file_signature(fresh).ok_or("the fresh text does not parse")?;
-    let lines = BabelLines::new(fresh);
+    let lines = DiffLines::new(fresh);
     let mut state = RenameState::with_trail(
         ingest.semantic(),
         Anchor::Generated,
@@ -579,7 +579,12 @@ fn reconcile_one_file(
     // Recorded as the pass ran — whatever the file's fate below.
     let rows = state.trail().entries().to_vec();
     if !rows.is_empty() {
-        sink.trail.push((fresh.to_string(), rows));
+        sink.trail
+            .push(crate::naming::report::diagnostics::ExtraText {
+                file: file.to_string(),
+                text: fresh.to_string(),
+                rows,
+            });
     }
     crate::naming::driver::add_claims(&mut sink.claims, &state.claim_stats());
     if result.prior_too_dissimilar {
@@ -618,7 +623,7 @@ fn reconcile_one_file(
         })
         .collect();
     let decl_lines: Vec<usize> = result.renames.iter().map(|r| r.decl_line).collect();
-    let re_lines = BabelLines::new(&rewritten);
+    let re_lines = DiffLines::new(&rewritten);
     let re_view = BabelScopes::build(reparsed.semantic());
     locate_renames(
         &re_view,

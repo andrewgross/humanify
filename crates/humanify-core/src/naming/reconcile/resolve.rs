@@ -30,7 +30,7 @@ use oxc_semantic::{AstNodes, NodeId, Semantic};
 use oxc_span::GetSpan;
 
 use super::hunks::PositionCandidate;
-use crate::babel_view::BabelLines;
+use crate::babel_view::DiffLines;
 use crate::rename::validated::RenameState;
 use crate::rename::validated::scopes::{BScopeId, BindingId, SiteType};
 
@@ -232,7 +232,7 @@ pub struct Resolution {
 pub fn resolve_candidates(
     semantic: &Semantic<'_>,
     state: &RenameState,
-    lines: &BabelLines<'_>,
+    lines: &DiffLines<'_>,
     candidates: &[PositionCandidate],
 ) -> Resolution {
     // `byPos` — a Map: the LAST candidate at a position wins.

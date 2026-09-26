@@ -80,6 +80,33 @@ fn run_case(preset: &str, prior: &str, next: &str) -> Value {
     })
 }
 
+/// Finding #26: the reconcile keys its candidates by `diff`'s lines (`\n`
+/// only), so it must resolve positions by the same lines. A raw U+2028 in
+/// a string or a raw `\r` in a template ahead of a name-only hunk used to
+/// shift every later Babel line by one: the hunk's candidates missed their
+/// identifiers and the rename was lost.
+#[test]
+fn a_raw_line_separator_does_not_shift_the_hunks() {
+    let prior = "function f() {\n  let limit = readLimit(1);\n  let runningTotal = compute(limit);\n  emit(runningTotal);\n}\n";
+    let next = "function f() {\n  let limit = readLimit(2);\n  let currentTotal = compute(limit);\n  emit(currentTotal);\n}\n";
+    for head in [
+        "var s = \"a\u{2028}b\";\n",
+        "var s = `a\rb`;\n",
+        "var s = \"a\u{2029}b\";\n",
+    ] {
+        let got = run_case("mixed", &format!("{head}{prior}"), &format!("{head}{next}"));
+        assert_eq!(
+            got["renames"],
+            serde_json::json!([{
+                "fromName": "currentTotal", "toName": "runningTotal", "votes": 2,
+                "kind": "descriptive", "declLine": 4, "applied": true,
+            }]),
+            "{head:?}"
+        );
+        assert_eq!(got["tainted"], 0, "{head:?}");
+    }
+}
+
 #[test]
 fn decisions_match_the_ts() {
     let rows = fixture();
