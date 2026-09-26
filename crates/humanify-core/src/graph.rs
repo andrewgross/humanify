@@ -420,17 +420,12 @@ fn analyze_call_edges(
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
         };
-        // Babel parses `x?.()` as an OptionalCallExpression — a node type
-        // whose alias list does NOT include CallExpression — so the TS's
-        // CallExpression-only visitor NEVER visits optional calls: no
-        // internal edge AND no external name (the Pp9 one-edge divergence's
-        // real mechanism; the factory-classification attribution was wrong).
-        // oxc folds optional into CallExpression.optional. SKIPPING is the
-        // shipped TS's blind spot, kept (a fix is an eval-measured lever:
-        // ~250 identifier-optional edges are missing).
-        if call.optional {
-            continue;
-        }
+        // Optional calls (`x?.()`, `a?.b()`) are calls: oxc folds them into
+        // CallExpression (`call.optional` / an enclosing ChainExpression),
+        // and they edge exactly like plain calls. (The TS's Babel visitor
+        // never saw OptionalCallExpression and dropped them — finding #1,
+        // fixed after the cutover.)
+        //
         // THE EDGE SEMANTICS (babel's analyzeCallees is a RECURSIVE
         // traverse of each function's subtree): every ANCESTOR function of
         // a call accumulates the edge — the wrapper (containing the whole
@@ -1367,32 +1362,40 @@ pub fn babel_reference_node_ids(semantic: &Semantic<'_>, symbol: SymbolId) -> Ve
         .collect()
 }
 
-/// Whether this WRITE reference sits inside an AssignmentExpression's LEFT
-/// target — simple (`mb = x`), compound (`mb += x`) or destructuring
-/// (`({x: mb} = o)`) — the positions babel records as constantViolations
-/// instead of referencePaths. Update targets (`mb++`) and for-of/for-in
-/// targets stay references, so the walk stops at the first statement or
-/// function boundary instead of climbing out of them.
+/// Whether this identifier IS an AssignmentExpression's target — simple
+/// (`mb = x`), compound (`mb += x`) or a destructuring target slot
+/// (`({x: mb} = o)`, `[mb = 1] = o`, `[...mb] = o`) — the positions babel
+/// records as constantViolations instead of referencePaths.
+///
+/// Only a TARGET SLOT counts: the walk climbs through destructuring
+/// structure alone, so an identifier evaluated inside the left — a default
+/// value (`[a = mb++] = c`, finding #17), a computed key (`{[mb]: a}`), a
+/// member object (`mb.x = c`) — is a reference, as is every update
+/// (`mb++`) and for-of/for-in target.
 pub(crate) fn is_babel_assignment_target(
     nodes: &oxc_semantic::AstNodes<'_>,
     node_id: NodeId,
 ) -> bool {
-    let span = nodes.get_node(node_id).span();
+    let mut child = nodes.get_node(node_id).span();
     let mut prev = node_id;
     let mut parent = nodes.parent_id(prev);
     while parent != prev {
         let kind = nodes.get_node(parent).kind();
-        if let AstKind::AssignmentExpression(assignment) = kind {
-            return assignment.left.span().contains_inclusive(span);
-        }
-        if kind.is_statement()
-            || matches!(
-                kind,
-                AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) | AstKind::Program(_)
-            )
-        {
+        let in_target_slot = match kind {
+            AstKind::AssignmentExpression(assignment) => return assignment.left.span() == child,
+            AstKind::ArrayAssignmentTarget(_)
+            | AstKind::ObjectAssignmentTarget(_)
+            | AstKind::AssignmentTargetRest(_)
+            | AstKind::ParenthesizedExpression(_) => true,
+            AstKind::AssignmentTargetWithDefault(d) => d.binding.span() == child,
+            AstKind::AssignmentTargetPropertyIdentifier(p) => p.binding.span == child,
+            AstKind::AssignmentTargetPropertyProperty(p) => p.binding.span() == child,
+            _ => false,
+        };
+        if !in_target_slot {
             return false;
         }
+        child = kind.span();
         prev = parent;
         parent = nodes.parent_id(prev);
     }

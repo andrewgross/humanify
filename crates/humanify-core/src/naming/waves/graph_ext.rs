@@ -199,7 +199,7 @@ struct CallTarget {
 }
 
 /// Every call babel's `CallExpression` visitor sees inside a graph
-/// function (optional calls excluded — lesson 1), in pre-order, with an
+/// function (optional calls included — finding #1), in pre-order, with an
 /// internal target.
 fn call_targets(
     semantic: &Semantic<'_>,
@@ -213,9 +213,6 @@ fn call_targets(
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
         };
-        if call.optional {
-            continue;
-        }
         let target = match &call.callee {
             Expression::Identifier(id) => id
                 .reference_id
