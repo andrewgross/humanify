@@ -145,21 +145,18 @@ fn callee_signature(c: &CalleeView) -> CalleeSignature {
 
 /// Every binding name from the function's scope outward, then the file's
 /// free names — an insertion-ordered set.
+/// The Set's order has ONE owner, [`UsedSet`] (the wave processor holds
+/// the same layers shared across contexts).
 fn used_identifiers(view: &ContextView) -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    let all = view
+    use crate::naming::waves::used_set::{NameLayer, UsedSet};
+    let layer = |names: &Vec<String>| std::sync::Arc::new(NameLayer::new(names.iter().cloned()));
+    let layers = view
         .scope_chain
         .iter()
-        .flatten()
-        .chain(&view.program_bindings)
-        .chain(&view.program_globals);
-    for name in all {
-        if seen.insert(name.as_str()) {
-            out.push(name.clone());
-        }
-    }
-    out
+        .chain([&view.program_bindings, &view.program_globals])
+        .map(layer)
+        .collect();
+    UsedSet::new(layers).order().map(str::to_string).collect()
 }
 
 /// `getParentScopeContextVars`: eligible bindings' declaration first

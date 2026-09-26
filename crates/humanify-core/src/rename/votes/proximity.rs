@@ -73,8 +73,8 @@ fn in_window(binding: Option<&ProximityBinding>, min_line: f64, max_line: f64) -
 /// TS `getProximateUsedNames`: the windowed usedNames, in insertion order
 /// (the TS returns a Set — well-known names first, then the preserved
 /// names in `all_used_names` order).
-pub fn get_proximate_used_names(
-    all_used_names: &[String],
+pub fn get_proximate_used_names<'a, S: AsRef<str>>(
+    all_used_names: &'a [S],
     batch_lines: &[u32],
     scope_binding: impl Fn(&str) -> Option<ProximityBinding>,
     total_bindings: usize,
@@ -83,18 +83,19 @@ pub fn get_proximate_used_names(
     // The Set: insertion-ordered result + a membership index (the waves
     // call this per request over ~25k names — a linear `has` is quadratic).
     let mut result: Vec<String> = Vec::new();
-    let mut members: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut push = |result: &mut Vec<String>, name: &String| {
-        if members.insert(name.clone()) {
-            result.push(name.clone());
+    let mut members: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let names = all_used_names.iter().map(AsRef::as_ref);
+    let mut push = |result: &mut Vec<String>, name: &'a str| {
+        if members.insert(name) {
+            result.push(name.to_string());
         }
     };
-    for name in all_used_names {
-        if WELL_KNOWN_NAMES.contains(&name.as_str()) {
+    for name in names.clone() {
+        if WELL_KNOWN_NAMES.contains(&name) {
             push(&mut result, name);
         }
     }
-    let preserved: Vec<&String> = all_used_names.iter().filter(|n| !is_eligible(n)).collect();
+    let preserved: Vec<&str> = names.filter(|n| !is_eligible(n)).collect();
     if total_bindings < WINDOWING_THRESHOLD {
         for name in preserved {
             push(&mut result, name);

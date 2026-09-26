@@ -21,6 +21,7 @@
 //! dispatch order is not a decision input (the dump's `seq`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
 
 use humanify_model::llm::{
     BatchRenameRequest, CacheKeyParams, CalleeSignature, LlmCall, LlmErrorKind, NameProvider,
@@ -38,6 +39,7 @@ use super::graph_ext::{NamingGraph, NodeRef};
 use super::jsset::{JsRecord, JsSet};
 use super::nodes::FnNode;
 use super::render::{FnPrinter, Occurrences};
+use super::used_set::{NameLayer, UsedSet};
 use crate::graph::UnifiedGraph;
 use crate::naming::code_window::{FunctionCodeSelection, cap_context_code, select_function_code};
 use crate::naming::context::{ContextView, DeclView, ParentBinding, build_context};
@@ -144,6 +146,9 @@ pub struct WaveOutcome {
     pub waves: u64,
     /// The processor's reports and counters (coverage + diagnostics).
     pub processor: ProcessorReport,
+    /// Name strings the function contexts' used-identifier Sets hold at
+    /// the end of the run — the memory bound's observable (finding #56).
+    pub context_set_names: usize,
 }
 
 impl WaveOutcome {
@@ -163,6 +168,7 @@ impl WaveOutcome {
             errors: 0,
             waves: 0,
             processor: ProcessorReport::default(),
+            context_set_names: 0,
         }
     }
 }
@@ -259,13 +265,6 @@ enum Settle {
     Module(Vec<usize>, usize),
 }
 
-/// A context's `usedIdentifiers` Set: build-time order + membership (the
-/// order is only read before any barrier touches the set).
-struct CtxSet {
-    order: Vec<String>,
-    members: HashSet<String>,
-}
-
 /// The request-building strategy of one lane group.
 #[derive(Clone)]
 enum Strategy {
@@ -318,7 +317,14 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     winners: HashMap<String, String>,
     settle: BTreeMap<usize, Settle>,
     ctxs: Vec<NodeCtx>,
-    sets: Vec<CtxSet>,
+    /// Each function context's `usedIdentifiers` Set, over shared layers.
+    sets: Vec<UsedSet>,
+    /// The latest snapshot of each scope table a context read, with the
+    /// table version it was taken at (a context built while the table is
+    /// unchanged shares it).
+    layers: HashMap<BScopeId, (u64, Arc<NameLayer>)>,
+    /// The file's free names (`scope.globals`) — fixed for the run.
+    globals_layer: Arc<NameLayer>,
     strategies: Vec<Strategy>,
     entries: Vec<Entry>,
     entry_seq: usize,
@@ -392,6 +398,7 @@ pub fn run_waves<P: NameProvider>(
         .first()
         .map(|m| m.scope)
         .unwrap_or(program_scope);
+    let globals_layer = Arc::new(NameLayer::new(state.view().globals_order.iter().cloned()));
     let mut run = Run {
         inp,
         provider,
@@ -403,6 +410,8 @@ pub fn run_waves<P: NameProvider>(
         settle: BTreeMap::new(),
         ctxs: Vec::new(),
         sets: Vec::new(),
+        layers: HashMap::new(),
+        globals_layer,
         strategies: Vec::new(),
         entries: Vec::new(),
         entry_seq: 0,
@@ -432,7 +441,9 @@ pub fn run_waves<P: NameProvider>(
             processor.reports.push(report);
         }
     }
+    let context_set_names = run.context_set_names();
     WaveOutcome {
+        context_set_names,
         state: run.state,
         fn_state: run.fn_state,
         binding_state: run.binding_state,
@@ -446,6 +457,18 @@ pub fn run_waves<P: NameProvider>(
 }
 
 impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
+    fn context_set_names(&self) -> usize {
+        let mut seen: HashSet<*const NameLayer> = HashSet::new();
+        let shared: usize = self
+            .sets
+            .iter()
+            .flat_map(UsedSet::layers)
+            .filter(|l| seen.insert(Arc::as_ptr(l)))
+            .map(|l| l.len())
+            .sum();
+        shared + self.sets.iter().map(UsedSet::owned_names).sum::<usize>()
+    }
+
     fn printer(&self) -> FnPrinter<'_, 's> {
         FnPrinter {
             semantic: self.inp.semantic,
@@ -779,11 +802,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let ctx = build_context(&view, &self.inp.ng.fn_call_sites[f], |n: &str| {
             eligible.is_eligible(n)
         });
-        let members: HashSet<String> = ctx.used_identifiers.iter().cloned().collect();
-        self.sets.push(CtxSet {
-            order: ctx.used_identifiers,
-            members,
-        });
+        let layers = self.used_layers(f);
+        self.sets.push(UsedSet::new(layers));
         (
             FnContext {
                 callee_signatures: ctx.callee_signatures,
@@ -799,30 +819,6 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let callees = self.inp.ng.fn_callees[f]
             .iter()
             .map(|&c| printer.callee_view(c))
-            .collect();
-        let view = self.state.view();
-        let mut scope_chain = Vec::new();
-        let mut cur = Some(self.inp.rows.fns[f].scope);
-        while let Some(s) = cur {
-            if s == self.program_scope {
-                break;
-            }
-            scope_chain.push(match self.graph_era.get(&s) {
-                Some(era) => era.to_vec(),
-                None => self
-                    .state
-                    .bindings_in(s)
-                    .into_iter()
-                    .map(|(n, _)| n)
-                    .collect(),
-            });
-            cur = view.scope(s).parent;
-        }
-        let program_bindings = self
-            .state
-            .bindings_in(self.program_scope)
-            .into_iter()
-            .map(|(n, _)| n)
             .collect();
         let parent_bindings = self.inp.ng.fn_scope_parent[f]
             .filter(|&p| self.fn_state[p].is_pending())
@@ -840,13 +836,51 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     })
                     .collect()
             });
+        // The used-identifier names are layered in the context's UsedSet
+        // (`used_layers`), shared across contexts — not copied here.
         ContextView {
             callees,
-            scope_chain,
-            program_bindings,
-            program_globals: view.globals_order.clone(),
+            scope_chain: Vec::new(),
+            program_bindings: Vec::new(),
+            program_globals: Vec::new(),
             parent_bindings,
         }
+    }
+
+    /// The `usedIdentifiers` layers of function `f`'s context: each
+    /// non-program scope from its own outward (a graph-era scope reads its
+    /// retained table), the program's bindings, the file's free names.
+    fn used_layers(&mut self, f: usize) -> Vec<Arc<NameLayer>> {
+        let mut layers = Vec::new();
+        let mut cur = Some(self.inp.rows.fns[f].scope);
+        while let Some(s) = cur {
+            if s == self.program_scope {
+                break;
+            }
+            layers.push(match self.graph_era.get(&s) {
+                Some(era) => Arc::new(NameLayer::new(era.to_vec())),
+                None => self.table_layer(s),
+            });
+            cur = self.state.view().scope(s).parent;
+        }
+        layers.push(self.table_layer(self.program_scope));
+        layers.push(self.globals_layer.clone());
+        layers
+    }
+
+    /// The current names of `scope`'s table, as a snapshot shared while
+    /// the table is unchanged.
+    fn table_layer(&mut self, scope: BScopeId) -> Arc<NameLayer> {
+        let version = self.state.table_version(scope);
+        if let Some((v, layer)) = self.layers.get(&scope)
+            && *v == version
+        {
+            return layer.clone();
+        }
+        let names = self.state.bindings_in(scope).into_iter().map(|(n, _)| n);
+        let layer = Arc::new(NameLayer::new(names));
+        self.layers.insert(scope, (version, layer.clone()));
+        layer
     }
 
     /// `computeShadowedUniquified` (inside the barrier: it renames).
@@ -1043,7 +1077,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         f: usize,
         remaining: &[String],
         binding_map: &HashMap<&str, &BindingInfo>,
-        set: &CtxSet,
+        set: &UsedSet,
     ) -> Vec<String> {
         let batch_lines: Vec<u32> = remaining
             .iter()
@@ -1054,12 +1088,13 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             })
             .collect();
         if batch_lines.is_empty() {
-            return set.order.clone();
+            return set.order().map(str::to_string).collect();
         }
         let scope = self.inp.rows.fns[f].scope;
         let total = self.state.bindings_in(scope).len();
+        let order: Vec<&str> = set.order().collect();
         get_proximate_used_names(
-            &set.order,
+            &order,
             &batch_lines,
             |name| {
                 self.state
@@ -1625,7 +1660,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 ..
             } => {
                 let set = &self.sets[*set];
-                let used = |n: &str| set.members.contains(n) || self.used.has(n);
+                let used = |n: &str| set.contains(n) || self.used.has(n);
                 let scopes: HashMap<&str, BScopeId> = bindings
                     .iter()
                     .map(|b| (b.name.as_str(), b.scope))
@@ -1805,7 +1840,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     fn live_has(&self, live: Live, name: &str) -> bool {
         match live {
-            Live::Fn(set) => self.sets[set].members.contains(name) || self.used.has(name),
+            Live::Fn(set) => self.sets[set].contains(name) || self.used.has(name),
             Live::Module => self.used.has(name),
         }
     }
@@ -1903,8 +1938,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     function_id: self.inp.graph.functions[f].session_id.clone(),
                 });
                 let s = &mut self.sets[*set];
-                s.members.remove(&entry.old);
-                s.members.insert(name.to_string());
+                s.remove(&entry.old);
+                s.insert(name);
                 // A function declaration's own name renames through
                 // `fnPath.parentPath.scope` — a graph-era object.
                 if self.is_own_name(f, b.binding)

@@ -223,6 +223,10 @@ pub struct RenameState {
     names: Vec<Option<String>>,
     /// Babel's `scope.bindings`, current names: name → (order, binding).
     maps: Vec<BTreeMap<String, (u64, BindingId)>>,
+    /// Per scope: the table's version, bumped by every change to its map
+    /// (a rename, a re-crawl) — equal versions mean equal tables.
+    versions: Vec<u64>,
+    next_version: u64,
     next_order: u64,
     /// `carriedNames`: bindings whose APPLIED name is below the floor.
     carried: BTreeSet<BindingId>,
@@ -260,6 +264,8 @@ impl RenameState {
         let next_order = maps.iter().map(|m| m.len() as u64).max().unwrap_or(0);
         RenameState {
             names: vec![None; view.bindings.len()],
+            versions: vec![0; maps.len()],
+            next_version: 1,
             view,
             anchor,
             maps,
@@ -310,6 +316,18 @@ impl RenameState {
             .collect()
     }
 
+    /// The version of `scope`'s table: unchanged between two reads exactly
+    /// when [`RenameState::bindings_in`] reads the same entries — what a
+    /// cached snapshot of the table keys on.
+    pub fn table_version(&self, scope: BScopeId) -> u64 {
+        self.versions[scope.0 as usize]
+    }
+
+    fn bump_version(&mut self, scope: usize) {
+        self.versions[scope] = self.next_version;
+        self.next_version += 1;
+    }
+
     /// A Babel RE-CRAWL of the scopes `recrawled` selects: each scope's
     /// table goes back to registration (AST) order under the CURRENT names
     /// — the order a freshly crawled Scope object's `Object.keys` shows.
@@ -330,6 +348,7 @@ impl RenameState {
     pub fn recrawl_scopes(&mut self, scopes: &[BScopeId]) {
         for &sid in scopes {
             let i = sid.0 as usize;
+            self.bump_version(i);
             let entries = &self.view.initial_maps[i];
             let map = &mut self.maps[i];
             for (order, (_, b)) in entries.iter().enumerate() {
@@ -694,6 +713,7 @@ impl RenameState {
             is_valid_rename_target(new_name),
             "invalid rename target {new_name:?} reached the applier — callers must validate first"
         );
+        self.bump_version(scope.0 as usize);
         let map = &mut self.maps[scope.0 as usize];
         map.remove(old_name);
         map.insert(new_name.to_string(), (self.next_order, binding));

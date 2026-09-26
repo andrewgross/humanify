@@ -146,6 +146,8 @@ pub struct WaveRecords {
     pub misses: usize,
     pub errors: usize,
     pub waves: u64,
+    /// [`WaveOutcome::context_set_names`].
+    pub context_set_names: usize,
 }
 
 /// `applyPriorVersionIfPresent`'s stats (stats.json / the coverage).
@@ -469,6 +471,7 @@ fn run_era<P: NameProvider>(
         errors,
         waves,
         processor,
+        context_set_names,
         ..
     } = if has_nodes {
         run_waves(
@@ -487,6 +490,7 @@ fn run_era<P: NameProvider>(
         misses,
         errors,
         waves,
+        context_set_names,
     };
     let library_functions = library_function_rows(&library, graph);
     let eval_tainted = collect_eval_with_taint(semantic).tainted_functions;
