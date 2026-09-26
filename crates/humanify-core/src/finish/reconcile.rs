@@ -491,36 +491,61 @@ fn declaration_index(
     out
 }
 
+/// One parse of a file for [`locate_renames`]: its declarations.
+struct DeclSide<'s, 'a> {
+    view: &'s BabelScopes,
+    program: &'s Program<'a>,
+    lines: &'s DiffLines<'s>,
+}
+
 /// `locateRenames`: each rename's (bodyOrdinal, nameOrdinal) against the
 /// file's ledger statements (the LAST `ledger_statements` of the body).
+///
+/// The bundle carry looks the binding up among the BUNDLE statement's
+/// declarations named `from_name` — and the bundle still holds the FRESH
+/// names. So the nameOrdinal is counted in the fresh parse: the renamed
+/// declaration is found in the rewritten parse (by its new name and line)
+/// and mapped to the fresh parse by its rank in source order (a rename
+/// never adds, drops or reorders a declaration). Counting in the rewritten
+/// file instead mis-carried a chain (finding #31): after X `a`→`b`,
+/// Y `b`→`c` read as the 2nd `b` of the statement, which in the bundle is
+/// a third binding W.
 fn locate_renames(
-    view: &BabelScopes,
-    program: &Program<'_>,
-    lines: &DiffLines<'_>,
+    fresh: &DeclSide<'_, '_>,
+    rewritten: &DeclSide<'_, '_>,
     renames: &mut [PostSplitRename],
     decl_lines: &[usize],
     ledger_statements: usize,
 ) {
-    let Some(header) = program.body.len().checked_sub(ledger_statements) else {
+    let Some(header) = rewritten.program.body.len().checked_sub(ledger_statements) else {
         return;
     };
-    let decls = declaration_index(view, program, lines);
+    let by_start = |side: &DeclSide<'_, '_>| {
+        let mut decls = declaration_index(side.view, side.program, side.lines);
+        decls.sort_by_key(|d| d.start);
+        decls
+    };
+    let re_decls = by_start(rewritten);
+    let fresh_decls = by_start(fresh);
+    if re_decls.len() != fresh_decls.len() {
+        return; // not the same program: abstain (no locator)
+    }
     for (i, rename) in renames.iter_mut().enumerate() {
-        let Some(me) = decls
+        let Some(rank) = re_decls
             .iter()
             .position(|d| d.name == rename.to_name && d.line == decl_lines[i] && d.stmt >= header)
         else {
             continue;
         };
-        let mut siblings: Vec<usize> = (0..decls.len())
-            .filter(|&k| {
-                decls[k].stmt == decls[me].stmt && (decls[k].name == rename.from_name || k == me)
-            })
-            .collect();
-        siblings.sort_by_key(|&k| decls[k].start);
-        if let Some(name_ordinal) = siblings.iter().position(|&k| k == me) {
-            rename.locator = Some((decls[me].stmt - header, name_ordinal));
+        let me = &fresh_decls[rank];
+        if me.name != rename.from_name || me.stmt != re_decls[rank].stmt {
+            continue;
         }
+        let name_ordinal = fresh_decls[..rank]
+            .iter()
+            .filter(|d| d.stmt == me.stmt && d.name == rename.from_name)
+            .count();
+        rename.locator = Some((me.stmt - header, name_ordinal));
     }
 }
 
@@ -625,10 +650,18 @@ fn reconcile_one_file(
     let decl_lines: Vec<usize> = result.renames.iter().map(|r| r.decl_line).collect();
     let re_lines = DiffLines::new(&rewritten);
     let re_view = BabelScopes::build(reparsed.semantic());
+    let fresh_view = BabelScopes::build(ingest.semantic());
     locate_renames(
-        &re_view,
-        reparsed.program,
-        &re_lines,
+        &DeclSide {
+            view: &fresh_view,
+            program: ingest.program,
+            lines: &lines,
+        },
+        &DeclSide {
+            view: &re_view,
+            program: reparsed.program,
+            lines: &re_lines,
+        },
         &mut renames,
         &decl_lines,
         ledger_statements,

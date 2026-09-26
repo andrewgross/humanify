@@ -142,3 +142,52 @@ fn a_non_ascii_identifier_is_left_intact() {
         )]
     );
 }
+
+/// Finding #31: a rename CHAIN inside one statement — X `a`→`b`, then
+/// Y `b`→`c`, with a third binding W still named `b` after Y. The locator's
+/// nameOrdinal was counted in the REWRITTEN file, where X already holds
+/// `b`: Y read as the 2nd `b` there, but in the bundle (which still has the
+/// fresh names) the 2nd `b` is W. The carry then renamed W, not Y — the
+/// bundle (the next release's prior) disagreed with the tree while still
+/// passing the structural-signature check. The carried bundle must hold
+/// exactly the tree's names.
+#[test]
+fn a_rename_chain_carries_the_binding_the_tree_renamed() {
+    let fresh = "function f(p) {\n  {\n    let Rb = p + 1;\n    g(Rb);\n  }\n  {\n    let value = p + 2;\n    h(value);\n  }\n  {\n    let value = p + 3;\n    k(value);\n  }\n}\n";
+    let prior = "function f(p) {\n  {\n    let value = p + 1;\n    g(value);\n  }\n  {\n    let total = p + 2;\n    h(total);\n  }\n  {\n    let value = p + 3;\n    k(value);\n  }\n}\n";
+    let mut ledger = JsValue::parse(
+        "{\"version\":1,\"files\":[\"a.js\"],\"nameToFiles\":{},\"order\":[\"a.js\"],\"hashes\":[\"h0\"],\"emitHashes\":[\"h0\"],\"emitNames\":[\"f\"],\"emitIndexes\":[0]}",
+    )
+    .unwrap();
+    let read_fresh = |_: &str| Some(fresh.to_string());
+    let read_prior = |_: &str| Some(prior.to_string());
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let result = post_split_reconcile(PostSplitInput {
+        ledger: &mut ledger,
+        read_fresh: &read_fresh,
+        read_prior: &read_prior,
+        eligible: &eligible,
+        disabled: false,
+    });
+    // The tree took the chain: the file now reads exactly as the prior.
+    assert_eq!(
+        result.changed,
+        vec![("a.js".to_string(), prior.to_string())]
+    );
+    let indent = |s: &str| {
+        s.lines()
+            .map(|l| format!("  {l}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let bundle = format!("(function () {{\n{}\n}})();\n", indent(fresh));
+    let locators: Vec<_> = result.renames.iter().map(|r| r.locator).collect();
+    // X is the only `Rb`; Y is the FIRST of the fresh `value`s.
+    assert_eq!(locators, vec![Some((0, 0)), Some((0, 0))]);
+    let carry = carry_renames_into_bundle(&bundle, &ledger, &result.renames).unwrap();
+    assert_eq!(carry.carried, 2);
+    assert_eq!(
+        carry.code.as_deref(),
+        Some(format!("(function () {{\n{}\n}})();\n", indent(prior)).as_str())
+    );
+}
