@@ -32,6 +32,7 @@ use crate::ingest::Ingest;
 use crate::place::layout::METADATA_DIR;
 use crate::rename::validated::RenameState;
 use crate::trail::Anchor;
+use crate::unpack::bun::{TO_COMMON_JS, TO_ESM};
 
 /// The shared factory-helper runtime's path (a generated shim that lives
 /// with the metadata, like `_bundle.js`).
@@ -39,7 +40,10 @@ pub fn bun_relink_runtime_filename() -> String {
     format!("{METADATA_DIR}/__bun-runtime.js")
 }
 
-/// The shared Bun factory helpers (the bundle's own `Q` / `__esm`).
+/// The shared Bun factory helpers (the bundle's own `Q` / `__esm`), plus
+/// Bun's `__toESM` / `__toCommonJS` interop helpers, which a vendored body
+/// names when its factory called the bundle's (finding #51; the unpack
+/// rewrites those references — `unpack::bun` scope planning).
 pub const BUN_RELINK_RUNTIME: &str =
     "// Bun CJS/ESM factory helpers, extracted for the runnable split graph.
 // __commonJS wraps a (exports, module) factory into a lazy, run-once,
@@ -54,8 +58,52 @@ const __esm = (factory) => {
   let value;
   return () => (factory && (value = factory((factory = 0))), value);
 };
-module.exports = { __commonJS, __esm };
+// Bun's module interop, as the bundle defines it: __toESM views a CommonJS
+// exports object as an ES namespace, __toCommonJS the reverse.
+const __accessProp = function (key) {
+  return this[key];
+};
+const __toESMCache_node = new WeakMap();
+const __toESMCache_esm = new WeakMap();
+const __toESM = (mod, isNodeMode, target) => {
+  const canCache = mod != null && typeof mod === \"object\";
+  if (canCache) {
+    const cached = (isNodeMode ? __toESMCache_node : __toESMCache_esm).get(mod);
+    if (cached) return cached;
+  }
+  target = mod != null ? Object.create(Object.getPrototypeOf(mod)) : {};
+  const to =
+    isNodeMode || !mod || !mod.__esModule
+      ? Object.defineProperty(target, \"default\", { value: mod, enumerable: true })
+      : target;
+  for (const key of Object.getOwnPropertyNames(mod))
+    if (!Object.prototype.hasOwnProperty.call(to, key))
+      Object.defineProperty(to, key, { get: __accessProp.bind(mod, key), enumerable: true });
+  if (canCache) (isNodeMode ? __toESMCache_node : __toESMCache_esm).set(mod, to);
+  return to;
+};
+const __moduleCache = new WeakMap();
+const __toCommonJS = (from) => {
+  let entry = __moduleCache.get(from);
+  if (entry) return entry;
+  entry = Object.defineProperty({}, \"__esModule\", { value: true });
+  if ((from && typeof from === \"object\") || typeof from === \"function\")
+    for (const key of Object.getOwnPropertyNames(from))
+      if (!Object.prototype.hasOwnProperty.call(entry, key)) {
+        const desc = Object.getOwnPropertyDescriptor(from, key);
+        Object.defineProperty(entry, key, {
+          get: __accessProp.bind(from, key),
+          enumerable: !desc || desc.enumerable,
+        });
+      }
+  __moduleCache.set(from, entry);
+  return entry;
+};
+module.exports = { __commonJS, __esm, __toESM, __toCommonJS };
 ";
+
+/// The runtime helpers a vendored body may name free, bound from the shim.
+const INTEROP_HELPERS: [&str; 2] = [TO_ESM, TO_COMMON_JS];
 
 /// runtimeIdentifier → the file that defines that factory
 /// (`FactoryLookup`; only `has` / `get` are read, so the map's order is
@@ -196,19 +244,34 @@ pub fn relink_factory_references(
     Ok(insert_header_at(&spliced, at, &lines))
 }
 
+/// The interop helpers `body` references FREE (unbound anywhere in it).
+fn free_interop_helpers(body: &str) -> Result<Vec<&'static str>, String> {
+    let allocator = Allocator::default();
+    let ingest = parse_or_err(&allocator, body)?;
+    let unresolved = ingest.semantic().scoping().root_unresolved_references();
+    Ok(INTEROP_HELPERS
+        .into_iter()
+        .filter(|h| unresolved.keys().any(|k| k == h))
+        .collect())
+}
+
 /// `wrapExtractedFactory`: an extracted factory body (a raw
 /// `(exports, module) => {…}` expression) as a runnable CJS module
-/// exporting the memoizing thunk, its factory references re-bound.
+/// exporting the memoizing thunk, its factory references re-bound and the
+/// interop helpers it names bound from the shim.
 pub fn wrap_extracted_factory(
     body: &str,
     from_file: &str,
     lookup: &FactoryLookup,
 ) -> Result<String, String> {
     let rt = compute_relative_import_path(from_file, &bun_relink_runtime_filename());
+    let mut bound = vec!["__commonJS"];
+    bound.extend(free_interop_helpers(trim(body))?);
     // `exports.f = …` MUTATES the initial exports object, so a cyclic
     // requirer's captured identity stays valid.
     let wrapped = format!(
-        "const {{ __commonJS }} = require(\"{rt}\");\nexports.{THUNK_PROP} = __commonJS({});\n",
+        "const {{ {} }} = require(\"{rt}\");\nexports.{THUNK_PROP} = __commonJS({});\n",
+        bound.join(", "),
         trim(body)
     );
     relink_factory_references(&wrapped, from_file, lookup)

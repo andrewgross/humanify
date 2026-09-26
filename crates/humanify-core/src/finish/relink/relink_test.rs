@@ -172,7 +172,56 @@ fn a_parse_error_is_an_error_not_a_silent_pass() {
 }
 
 #[test]
-fn the_runtime_text_is_the_ts_constant() {
+fn the_runtime_exports_the_factory_and_interop_helpers() {
     assert!(BUN_RELINK_RUNTIME.starts_with("// Bun CJS/ESM factory helpers"));
-    assert!(BUN_RELINK_RUNTIME.ends_with("module.exports = { __commonJS, __esm };\n"));
+    assert!(
+        BUN_RELINK_RUNTIME
+            .ends_with("module.exports = { __commonJS, __esm, __toESM, __toCommonJS };\n")
+    );
+}
+
+#[test]
+fn a_body_naming_an_interop_helper_binds_it_from_the_shim() {
+    // Finding #51: the unpack rewrites a vendored body's reference to the
+    // bundle's __toESM / __toCommonJS to these names; the wrap binds them.
+    let out = wrap_extracted_factory(
+        "(exports, module) => { module.exports = __toESM(lib_aaaa(), 1).x + __toCommonJS({}).y; }",
+        "lib_bbbb.js",
+        &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst { __commonJS, __toESM, __toCommonJS } = require(\"./.humanify/__bun-runtime.js\");\nexports.f = __commonJS((exports, module) => { module.exports = __toESM(lib_aaaa.f(), 1).x + __toCommonJS({}).y; });\n"
+    );
+    // A body's OWN binding of the name is not the helper.
+    let out = wrap_extracted_factory(
+        "(exports) => { var __toESM = 1; exports.v = __toESM; }",
+        "lib_bbbb.js",
+        &lookup(&[]),
+    )
+    .unwrap();
+    assert!(out.starts_with("const { __commonJS } = require("), "{out}");
+}
+
+#[test]
+fn the_shim_interop_helpers_behave_as_buns() {
+    // Bun's own definitions against the shim's, run by Node (the probe
+    // prints "same" or both result rows).
+    let dir = std::env::temp_dir().join(format!("humanify-shim-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("shim.js"), BUN_RELINK_RUNTIME).unwrap();
+    std::fs::write(dir.join("probe.js"), include_str!("interop_probe.js")).unwrap();
+    let out = std::process::Command::new("node")
+        .arg(dir.join("probe.js"))
+        .arg(dir.join("shim.js"))
+        .output()
+        .expect("node is on PATH (npm run check runs under it)");
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "same\n",
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

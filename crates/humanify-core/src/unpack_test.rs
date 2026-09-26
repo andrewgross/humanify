@@ -993,3 +993,113 @@ fn the_manifest_prior_order_switch_reverts_exp047() {
     let without = factories(&read_manifest(&off.0));
     assert!(without.iter().all(|f| f.get("hashOrdinal").is_none()));
 }
+
+// ---- finding #51: vendor bodies that reference bundle-scope bindings -------
+
+/// A Bun bundle whose factory bodies reach OUTSIDE themselves for
+/// something other than another factory: `mod_a` calls the bundle's
+/// `__toESM` (`u`), `mod_c` runs an app ESM module's init and converts its
+/// namespace (`(initM(), Rq(ns))` — Bun's `require()` of an ESM module), and
+/// `mod_d` depends on `mod_c`. The bundle prints `[43,"hi!"]`.
+const BUN_BUNDLE_SCOPE_REFS: &str = concat!(
+    "var cr=Object.create,gp=Object.getPrototypeOf,dp=Object.defineProperty,gn=Object.getOwnPropertyNames,gd=Object.getOwnPropertyDescriptor,hp=Object.prototype.hasOwnProperty;\n",
+    "function ap(k){return this[k]}\n",
+    "var c1,c2,u=(H,_,q)=>{var $=H!=null&&typeof H===\"object\";if($){var K=_?c1??=new WeakMap:c2??=new WeakMap,O=K.get(H);if(O)return O}q=H!=null?cr(gp(H)):{};let T=_||!H||!H.__esModule?dp(q,\"default\",{value:H,enumerable:!0}):q;for(let z of gn(H))if(!hp.call(T,z))dp(T,z,{get:ap.bind(H,z),enumerable:!0});if($)K.set(H,T);return T};\n",
+    "var cm,Rq=(H)=>{var _=(cm??=new WeakMap).get(H),q;if(_)return _;if(_=dp({},\"__esModule\",{value:!0}),H&&typeof H===\"object\"||typeof H===\"function\"){for(var $ of gn(H))if(!hp.call(_,$))dp(_,$,{get:ap.bind(H,$),enumerable:!(q=gd(H,$))||q.enumerable})}return cm.set(H,_),_};\n",
+    "var G=(H,_)=>()=>(H&&(_=H(H=0)),_);\n",
+    "var J_=(H,_)=>{for(var q in _)dp(H,q,{get:_[q],enumerable:!0,configurable:!0})};\n",
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var mod_b=x((exports)=>{exports.value=42;});\n",
+    "var mod_a=x((exports,module)=>{module.exports=u(mod_b()).value+1;});\n",
+    "function hi(){return \"hi\"}\n",
+    "var ns={};\n",
+    "var initM=G(()=>{J_(ns,{hi:()=>hi})});\n",
+    "var mod_c=x((exports,module)=>{module.exports=(initM(),Rq(ns)).hi();});\n",
+    "var mod_d=x((exports,module)=>{module.exports=mod_c()+\"!\";});\n",
+    "console.log(JSON.stringify([mod_a(),mod_d()]));\n",
+);
+
+/// The runnable graph the finish builds from an unpacked tree, at unit
+/// scale: every vendor file wrapped (`wrap_extracted_factory`), the runtime
+/// relinked (`relink_factory_references`) and the factory-helper shim
+/// written — then RUN by Node. Node's stdout, or its stderr as the error.
+fn run_relinked(dir: &Path) -> Result<String, String> {
+    use crate::finish::relink::{
+        BUN_RELINK_RUNTIME, FactoryLookup, bun_relink_runtime_filename, relink_factory_references,
+        wrap_extracted_factory,
+    };
+    let entries = factories(&read_manifest(dir));
+    let lookup: FactoryLookup = entries
+        .iter()
+        .map(|e| {
+            (
+                s(e, "runtimeIdentifier").to_string(),
+                s(e, "fileName").to_string(),
+            )
+        })
+        .collect();
+    for e in &entries {
+        let file = s(e, "fileName");
+        let body = fs::read_to_string(dir.join(file)).unwrap();
+        let wrapped = wrap_extracted_factory(&body, file, &lookup).unwrap();
+        fs::write(dir.join(file), wrapped).unwrap();
+    }
+    let runtime = fs::read_to_string(dir.join("runtime.js")).unwrap();
+    let relinked = relink_factory_references(&runtime, "runtime.js", &lookup).unwrap();
+    fs::write(dir.join("runtime.js"), relinked).unwrap();
+    let shim = dir.join(bun_relink_runtime_filename());
+    fs::create_dir_all(shim.parent().unwrap()).unwrap();
+    fs::write(shim, BUN_RELINK_RUNTIME).unwrap();
+    node(&dir.join("runtime.js"))
+}
+
+fn node(file: &Path) -> Result<String, String> {
+    let out = std::process::Command::new("node")
+        .arg(file)
+        .output()
+        .expect("node is on PATH (npm run check runs under it)");
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).into_owned())
+    }
+}
+
+#[test]
+fn the_scope_refs_bundle_itself_runs() {
+    // The control: the input prints what the unpacked tree must print.
+    let t = TempDir::new("scope-refs-control");
+    let path = t.0.join("bundle.js");
+    fs::write(&path, BUN_BUNDLE_SCOPE_REFS).unwrap();
+    assert_eq!(node(&path).as_deref(), Ok("[43,\"hi!\"]\n"));
+}
+
+#[test]
+fn a_vendor_body_never_references_a_bundle_scope_binding() {
+    // Finding #51: only FACTORY references were rewritten and relinked, so
+    // `u` (the bundle's __toESM) and `initM` / `Rq` / `ns` stayed free in
+    // the vendor files — a ReferenceError the moment the factory ran.
+    let t = TempDir::new("scope-refs");
+    unpack(BUN_BUNDLE_SCOPE_REFS, &t.0);
+    assert_eq!(run_relinked(&t.0).as_deref(), Ok("[43,\"hi!\"]\n"));
+}
+
+#[test]
+fn runtime_helpers_come_from_the_shim_and_app_reaching_factories_stay_in_the_app() {
+    let t = TempDir::new("scope-refs-shape");
+    unpack(BUN_BUNDLE_SCOPE_REFS, &t.0);
+    let entries = factories(&read_manifest(&t.0));
+    let bodies: Vec<String> = entries
+        .iter()
+        .map(|e| fs::read_to_string(t.0.join(s(e, "fileName"))).unwrap())
+        .collect();
+    // mod_b and mod_a are vendored; mod_a's `u(...)` now names the shim's
+    // helper. mod_c reaches an app ESM module, so it stays in the app — and
+    // so does mod_d, which depends on it.
+    assert_eq!(entries.len(), 2, "{bodies:?}");
+    assert!(bodies.iter().any(|b| b.contains("__toESM(")), "{bodies:?}");
+    assert!(!bodies.iter().any(|b| b.contains("u(")), "{bodies:?}");
+    let runtime = fs::read_to_string(t.0.join("runtime.js")).unwrap();
+    assert!(runtime.contains("var mod_c=x("), "{runtime}");
+    assert!(runtime.contains("var mod_d=x("), "{runtime}");
+}
