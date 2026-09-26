@@ -246,8 +246,11 @@ pub fn relink_factory_references(
 
 /// The interop helpers `body` references FREE (unbound anywhere in it).
 fn free_interop_helpers(body: &str) -> Result<Vec<&'static str>, String> {
+    // The body is an EXPRESSION: parenthesized, so a `function (…) {…}`
+    // factory is not read as a nameless declaration.
+    let expression = format!("({body}\n)");
     let allocator = Allocator::default();
-    let ingest = parse_or_err(&allocator, body)?;
+    let ingest = parse_or_err(&allocator, &expression)?;
     let unresolved = ingest.semantic().scoping().root_unresolved_references();
     Ok(INTEROP_HELPERS
         .into_iter()

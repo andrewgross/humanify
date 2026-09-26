@@ -205,6 +205,23 @@ fn a_body_naming_an_interop_helper_binds_it_from_the_shim() {
 }
 
 #[test]
+fn a_function_expression_body_wraps_like_an_arrow() {
+    // A factory body is an EXPRESSION; `function (…) {…}` read as a
+    // statement is a nameless declaration — a parse error that failed the
+    // whole post-split step on 2.1.216 (vendor/image-processor.js).
+    let out = wrap_extracted_factory(
+        "function (exports, module) { module.exports = __toESM(lib_aaaa()); }",
+        "lib_bbbb.js",
+        &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst { __commonJS, __toESM } = require(\"./.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) { module.exports = __toESM(lib_aaaa.f()); });\n"
+    );
+}
+
+#[test]
 fn the_shim_interop_helpers_behave_as_buns() {
     // Bun's own definitions against the shim's, run by Node (the probe
     // prints "same" or both result rows).
