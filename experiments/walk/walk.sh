@@ -20,6 +20,8 @@
 #       [--no-lock]               run without the lock (fixture-scale only)
 #       [--no-boot-prompt]        boot gate checks --version only
 #       [--force-mixed]           accept a --bin built from a dirty tree
+#       [--reboot]                with --resume: re-run the boot gate on finished
+#                                 hops whose boot FAILED (re-recorded, marked)
 #       [--no-score]              do not score each finished hop in the
 #                                 background (report.ts scores it later)
 #
@@ -54,7 +56,15 @@
 # hop then has no prior.
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+# FREEZE THIS SCRIPT. bash reads a script as it runs, so editing walk.sh in the
+# repo mid-walk (a merge, a checkout) would change a running overnight walk
+# under it. Re-exec from a private copy; HERE/REPO still name the checkout.
+if [[ -z "${WALK_SH_FROZEN:-}" ]]; then
+  _frozen="$(mktemp "${TMPDIR:-/tmp}/walk.sh.XXXXXX")"
+  cp "$0" "$_frozen"
+  WALK_SH_FROZEN="$(cd "$(dirname "$0")" && pwd)" exec bash "$_frozen" "$@"
+fi
+HERE="$WALK_SH_FROZEN"
 REPO="$(cd "$HERE/../.." && pwd)"
 CFG="$REPO/experiments/034-eval-harness/pairs.json"
 export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"
@@ -71,6 +81,7 @@ LOCK="/work/heavy.lock"
 BOOT_PROMPT_ON=1
 FORCE_MIXED=0
 SCORE=1
+REBOOT=0
 SCORE_PIDS=()
 HEAP_MB=65536
 while [[ $# -gt 0 ]]; do
@@ -88,6 +99,7 @@ while [[ $# -gt 0 ]]; do
     --no-boot-prompt) BOOT_PROMPT_ON=0 ;;
     --force-mixed)    FORCE_MIXED=1 ;;
     --no-score)       SCORE=0 ;;
+    --reboot)         REBOOT=1 ;;
     *) echo "walk.sh: unknown arg $1 (see header)" >&2; exit 2 ;;
   esac
   shift
@@ -221,14 +233,22 @@ echo "walk: out $OUT; endpoint $ENDPOINT ($MODELNAME); LLM cache OFF; lock '${LO
 LOCK_CMD=()
 [[ -n "$LOCK" ]] && LOCK_CMD=(flock "$LOCK")
 
+# The booted tree IS Claude Code: launched from inside a Claude Code session
+# (an agent running this walk) it inherits CLAUDECODE and refuses to start
+# ("cannot be launched inside another Claude Code session") — which reads as a
+# boot FAILURE of a tree that is fine. Strip the session's variables.
+BOOT_ENV=(env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION
+  -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET
+  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID)
+
 # Boot both halves and RECORD them; never exits.
 boot_record() {
   local dir="$1" v="$2" dest="$3"
   local version="" prompt="skipped"
   if [[ -f "$dir/run.cjs" ]]; then
-    version=$( (cd "$dir" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
+    version=$( (cd "$dir" && timeout 60 "${BOOT_ENV[@]}" bun run.cjs --version 2>&1 | tail -1) || true )
     if [[ "$BOOT_PROMPT_ON" == "1" ]]; then
-      prompt=$( (cd "$dir" && timeout 120 bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
+      prompt=$( (cd "$dir" && timeout 120 "${BOOT_ENV[@]}" bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
     fi
   else
     version="(no run.cjs)"
@@ -248,6 +268,13 @@ for V in "${VERSIONS[@]}"; do
   TREE="$OUT/trees/$V"
   HOP="$OUT/runs/$V.hop.json"
   if [[ -f "$HOP" && -f "$TREE/.humanify/humanified.js" ]]; then
+    if [[ "$REBOOT" == "1" && "$(jq -r .boot.ok "$HOP")" != "true" ]]; then
+      echo "=== $V: re-running the boot gate (--reboot)"
+      boot_record "$TREE" "$V" "$OUT/runs/$V-boot.json"
+      jq --slurpfile boot "$OUT/runs/$V-boot.json" \
+        '.boot = ($boot[0] + {rerecorded:(now | todate)})' "$HOP" > "$HOP.tmp" \
+        && mv "$HOP.tmp" "$HOP"
+    fi
     echo "=== $V: done ($(jq -r '"exit \(.exitCode), \(.wallSeconds)s, boot \(.boot.ok)"' "$HOP")) — skipped"
     PRIOR_V="$V"
     continue
