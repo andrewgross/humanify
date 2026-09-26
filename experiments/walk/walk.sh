@@ -266,10 +266,15 @@ boot_record() {
   local vok=false pok=false
   [[ "$version" == *"$v"* ]] && vok=true
   [[ "$BOOT_PROMPT_ON" != "1" || "$prompt" == *"boot-ok"* ]] && pok=true
+  # The live half needs account quota: "You're out of extra usage" says
+  # nothing about the tree. Flag it so it reads as UNVERIFIED, not broken, and
+  # re-record later with --resume --reboot.
+  local blocked=false
+  [[ "$pok" == "false" && "$prompt" =~ (out of extra usage|usage limit|rate limit|overloaded) ]] && blocked=true
   jq -n --arg version "$version" --arg prompt "$prompt" --argjson vok "$vok" \
-    --argjson pok "$pok" --arg model "$BOOT_GATE_MODEL" \
+    --argjson pok "$pok" --arg model "$BOOT_GATE_MODEL" --argjson blocked "$blocked" \
     '{version:$version, prompt:$prompt, versionOk:$vok, promptOk:$pok,
-      ok:($vok and $pok), model:$model}' > "$dest"
+      promptBlockedByAccount:$blocked, ok:($vok and $pok), model:$model}' > "$dest"
   jq -r '"  boot: " + (if .ok then "OK" else "FAIL" end) + "  --version=\(.versionOk) -p=\(.promptOk)"' "$dest"
 }
 

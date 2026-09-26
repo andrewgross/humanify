@@ -49,7 +49,13 @@ interface HopRecord {
   wallSeconds: number | null;
   peakRssMb: number | null;
   cacheWritten: number | null;
-  boot: { ok: boolean; versionOk: boolean; promptOk: boolean };
+  boot: {
+    ok: boolean;
+    versionOk: boolean;
+    promptOk: boolean;
+    /** The live half failed on account quota, not on the tree. */
+    promptBlockedByAccount?: boolean;
+  };
 }
 
 interface WalkManifest {
@@ -265,6 +271,9 @@ const DETAIL: Column[] = [
 
 function bootCell(h: HopRecord): string {
   if (h.boot.ok) return "OK";
+  if (h.boot.versionOk && h.boot.promptBlockedByAccount) {
+    return "--version OK, -p UNVERIFIED (account quota)";
+  }
   return `FAIL(${h.boot.versionOk ? "" : "ver"}${h.boot.promptOk ? "" : " -p"})`;
 }
 
