@@ -3,11 +3,14 @@
 //! test/parity/wpb4-scenarios.mjs --record) runs through the built
 //! `humanify` binary in a fresh directory with a minimal environment; exit
 //! code, stdout, stderr (the TS crash dump already reduced to its headline
-//! in the fixture) and the files left behind must match.
+//! in the fixture) and the files left behind must match. A recorded help
+//! body is a `{{help:<command>}}` placeholder: the help's wording is the
+//! binary's own, pinned by the golden in surface_test.rs.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use humanify_cli::surface::expand_help_placeholders;
 use serde_json::Value;
 
 fn fixture() -> Vec<Value> {
@@ -90,13 +93,14 @@ fn every_recorded_scenario_matches_the_ts_binary() {
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
         let ts_code = ts["exitCode"].as_i64().map(|c| c as i32);
-        let ts_stderr = ts["stderr"].as_str().unwrap();
+        let ts_stderr = &expand_help_placeholders(ts["stderr"].as_str().unwrap());
+        let ts_stdout = &expand_help_placeholders(ts["stdout"].as_str().unwrap());
         let same = if s["compare"] == "headline" {
             code == ts_code && last_error_line(&stderr) == last_error_line(ts_stderr)
         } else {
             code == ts_code
-                && stdout == ts["stdout"].as_str().unwrap()
-                && stderr == ts_stderr
+                && stdout == *ts_stdout
+                && stderr == *ts_stderr
                 && created == strs(&ts["created"])
         };
         if !same {

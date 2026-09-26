@@ -23,8 +23,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "version",
-          "defaultValue": null,
-          "description": "output the version number"
+          "defaultValue": null
         },
         {
           "flags": "--endpoint <url>",
@@ -35,8 +34,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "endpoint",
-          "defaultValue": "https://api.openai.com/v1",
-          "description": "OpenAI-compatible API endpoint"
+          "defaultValue": "https://api.openai.com/v1"
         },
         {
           "flags": "--api-key <key>",
@@ -47,8 +45,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "apiKey",
-          "defaultValue": null,
-          "description": "API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)"
+          "defaultValue": null
         },
         {
           "flags": "-m, --model <model>",
@@ -59,8 +56,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "model",
-          "defaultValue": "gpt-4o-mini",
-          "description": "Model identifier"
+          "defaultValue": "gpt-4o-mini"
         },
         {
           "flags": "-o, --output-dir <output>",
@@ -71,8 +67,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "outputDir",
-          "defaultValue": "output",
-          "description": "Output directory"
+          "defaultValue": "output"
         },
         {
           "flags": "-v, --verbose",
@@ -83,8 +78,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "verbose",
-          "defaultValue": 0,
-          "description": "Increase verbosity (-v for info, -vv for debug)"
+          "defaultValue": 0
         },
         {
           "flags": "-c, --concurrency <n>",
@@ -95,8 +89,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "concurrency",
-          "defaultValue": "50",
-          "description": "Max concurrent function-lane LLM requests. Module-lane size is set separately via --module-concurrency; the global in-flight cap is their sum."
+          "defaultValue": "50"
         },
         {
           "flags": "--module-concurrency <n>",
@@ -107,8 +100,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "moduleConcurrency",
-          "defaultValue": null,
-          "description": "Max concurrent module-lane LLM requests (default derived from -c)"
+          "defaultValue": null
         },
         {
           "flags": "--max-tokens <n>",
@@ -119,8 +111,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "maxTokens",
-          "defaultValue": null,
-          "description": "Per-request completion token budget"
+          "defaultValue": null
         },
         {
           "flags": "--context-tokens <n>",
@@ -131,20 +122,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "contextTokens",
-          "defaultValue": null,
-          "description": "Model context window in tokens; sizes the batched split-naming prompts (default: 32768)"
-        },
-        {
-          "flags": "--ambiguity-probe <path>",
-          "short": null,
-          "long": "--ambiguity-probe",
-          "negate": false,
-          "required": true,
-          "optional": false,
-          "variadic": false,
-          "attributeName": "ambiguityProbe",
-          "defaultValue": null,
-          "description": "Write the matcher ambiguity probe JSON to this path (instrumentation)"
+          "defaultValue": null
         },
         {
           "flags": "--disable <passes>",
@@ -155,8 +133,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "disable",
-          "defaultValue": null,
-          "description": "Comma-separated pass switches to turn OFF for ablation (registry: src/kill-switches.ts; unknown names are fatal and list the valid set)"
+          "defaultValue": null
         },
         {
           "flags": "--probe <probes>",
@@ -167,8 +144,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "probe",
-          "defaultValue": null,
-          "description": "Comma-separated instrumentation probes to turn ON (same registry)"
+          "defaultValue": null
         },
         {
           "flags": "--retries <n>",
@@ -179,8 +155,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "retries",
-          "defaultValue": "3",
-          "description": "Number of retry attempts for failed API calls"
+          "defaultValue": "3"
         },
         {
           "flags": "--timeout <ms>",
@@ -191,8 +166,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "timeout",
-          "defaultValue": "300000",
-          "description": "LLM request timeout in milliseconds"
+          "defaultValue": "300000"
         },
         {
           "flags": "--llm-cache <dir>",
@@ -203,8 +177,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "llmCache",
-          "defaultValue": null,
-          "description": "Cache LLM responses on disk keyed by request content. Repeated prompts become deterministic across sessions and reruns are nearly free — the serving-drift countermeasure the 034 eval README describes."
+          "defaultValue": null
         },
         {
           "flags": "--reasoning-effort <level>",
@@ -215,8 +188,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "reasoningEffort",
-          "defaultValue": null,
-          "description": "Reasoning effort for reasoning models: low, medium, or high (no env fallback; default: server-side default). 'low' is ~8x faster on gpt-oss at equal name quality; only set it for reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it."
+          "defaultValue": null
         },
         {
           "flags": "--skip-libraries",
@@ -227,8 +199,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "skipLibraries",
-          "defaultValue": null,
-          "description": "Skip library code instead of processing it with the LLM (default: true)"
+          "defaultValue": null
         },
         {
           "flags": "--no-skip-libraries",
@@ -239,8 +210,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "skipLibraries",
-          "defaultValue": null,
-          "description": "Process library code with the LLM"
+          "defaultValue": null
         },
         {
           "flags": "--log-file <path>",
@@ -251,8 +221,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "logFile",
-          "defaultValue": null,
-          "description": "Write debug logs to file (implies -vv)"
+          "defaultValue": null
         },
         {
           "flags": "--diagnostics <path>",
@@ -263,8 +232,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "diagnostics",
-          "defaultValue": null,
-          "description": "Write detailed rename diagnostics to JSON file"
+          "defaultValue": null
         },
         {
           "flags": "--stats-json <path>",
@@ -275,8 +243,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "statsJson",
-          "defaultValue": null,
-          "description": "Write the deterministic match/rename breakdown as compact JSON (coverage + transfer stats + prior-match counts) for the eval harness"
+          "defaultValue": null
         },
         {
           "flags": "--dump-artifacts <dir>",
@@ -287,8 +254,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "dumpArtifacts",
-          "defaultValue": null,
-          "description": "Write the span-keyed decision-record dump (07 §2 catalog) to this directory — the parity-era instrument. Inert by construction: the run's decisions are unchanged (proven by neutrality)."
+          "defaultValue": null
         },
         {
           "flags": "--bundler <type>",
@@ -299,8 +265,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "bundler",
-          "defaultValue": null,
-          "description": "Force bundler type (webpack, browserify, rollup, esbuild, parcel, bun)"
+          "defaultValue": null
         },
         {
           "flags": "--minifier <type>",
@@ -311,8 +276,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "minifier",
-          "defaultValue": null,
-          "description": "Force minifier type (terser, esbuild, swc, bun, none)"
+          "defaultValue": null
         },
         {
           "flags": "--batch-size <n>",
@@ -323,8 +287,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "batchSize",
-          "defaultValue": null,
-          "description": "Identifiers per LLM batch (default: 10)"
+          "defaultValue": null
         },
         {
           "flags": "--max-retries <n>",
@@ -335,8 +298,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "maxRetries",
-          "defaultValue": null,
-          "description": "Per-identifier LLM call limit, initial + retries (default: 2; further conflicts resolve by suffixing)"
+          "defaultValue": null
         },
         {
           "flags": "--max-free-retries <n>",
@@ -347,8 +309,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "maxFreeRetries",
-          "defaultValue": null,
-          "description": "Cross-lane collision retry limit (default: 100)"
+          "defaultValue": null
         },
         {
           "flags": "--lane-threshold <n>",
@@ -359,8 +320,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "laneThreshold",
-          "defaultValue": null,
-          "description": "Min bindings to enable parallel lanes (default: 25)"
+          "defaultValue": null
         },
         {
           "flags": "--split",
@@ -371,8 +331,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "split",
-          "defaultValue": null,
-          "description": "Split output into a multi-file tree (src/ + vendor/ + run scaffold), emitted as a runnable CommonJS module graph by default"
+          "defaultValue": null
         },
         {
           "flags": "--prior-version <path>",
@@ -383,8 +342,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "priorVersion",
-          "defaultValue": null,
-          "description": "Path to a prior humanified file for cross-version rename reuse"
+          "defaultValue": null
         },
         {
           "flags": "--reconcile-prior-diff",
@@ -395,8 +353,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "reconcilePriorDiff",
-          "defaultValue": null,
-          "description": "After generation, snap rename-noise diff hunks back to the prior version's names (default with --prior-version)"
+          "defaultValue": null
         },
         {
           "flags": "--no-reconcile-prior-diff",
@@ -407,8 +364,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "reconcilePriorDiff",
-          "defaultValue": null,
-          "description": "Disable the prior-diff reconcile pass"
+          "defaultValue": null
         },
         {
           "flags": "--naming-floor",
@@ -419,8 +375,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "namingFloor",
-          "defaultValue": null,
-          "description": "Close minted-token coverage gaps deterministically (class/function-expression inner-id derivation + decoration retry; default on)"
+          "defaultValue": null
         },
         {
           "flags": "--no-naming-floor",
@@ -431,8 +386,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "namingFloor",
-          "defaultValue": null,
-          "description": "Disable the deterministic naming floor"
+          "defaultValue": null
         },
         {
           "flags": "--naming-floor-sweep",
@@ -443,8 +397,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "namingFloorSweep",
-          "defaultValue": null,
-          "description": "LLM-name the minted survivors the naming floor cannot derive (params/decls/vars; default on). Prior-aware with a prior version: prior names transfer deterministically and the LLM names only the residue"
+          "defaultValue": null
         },
         {
           "flags": "--no-naming-floor-sweep",
@@ -455,8 +408,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "namingFloorSweep",
-          "defaultValue": null,
-          "description": "Disable the LLM sweep of minted survivors"
+          "defaultValue": null
         },
         {
           "flags": "--split-ledger <path>",
@@ -467,8 +419,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "splitLedger",
-          "defaultValue": null,
-          "description": "Prior split ledger for cross-release file-assignment inheritance (default: auto-discovered next to --prior-version)"
+          "defaultValue": null
         },
         {
           "flags": "--split-pure",
@@ -479,8 +430,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "splitPure",
-          "defaultValue": null,
-          "description": "Emit the byte-exact review tree instead of the runnable CommonJS module graph (the --split default). Requires --split"
+          "defaultValue": null
         },
         {
           "flags": "--rename-ledger <dir>",
@@ -491,8 +441,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "renameLedger",
-          "defaultValue": null,
-          "description": "Write a replayable rename ledger (every rename keyed by byte position) + source snapshot + a standalone apply.mjs, so the LLM-rename output can be reproduced without re-running the model"
+          "defaultValue": null
         },
         {
           "flags": "--profile <path>",
@@ -503,11 +452,9 @@
           "optional": false,
           "variadic": false,
           "attributeName": "profile",
-          "defaultValue": null,
-          "description": "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)"
+          "defaultValue": null
         }
-      ],
-      "help": "Usage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+      ]
     },
     {
       "name": "env-reads",
@@ -531,8 +478,7 @@
           "optional": false,
           "variadic": false,
           "attributeName": "markdown",
-          "defaultValue": null,
-          "description": "Emit the report as Markdown"
+          "defaultValue": null
         },
         {
           "flags": "-o, --output <file>",
@@ -543,11 +489,9 @@
           "optional": false,
           "variadic": false,
           "attributeName": "output",
-          "defaultValue": null,
-          "description": "Write the report to a file instead of stdout"
+          "defaultValue": null
         }
-      ],
-      "help": "Usage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+      ]
     }
   ],
   "cases": [
@@ -558,7 +502,7 @@
         "exitCode": 1,
         "code": "commander.missingArgument",
         "stdout": "",
-        "stderr": "error: missing required argument 'input'\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: missing required argument 'input'\n\n{{help:humanify}}"
       }
     },
     {
@@ -590,7 +534,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -628,7 +571,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n",
+        "stdout": "{{help:humanify}}",
         "stderr": ""
       }
     },
@@ -640,7 +583,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n",
+        "stdout": "{{help:humanify}}",
         "stderr": ""
       }
     },
@@ -653,7 +596,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n",
+        "stdout": "{{help:humanify}}",
         "stderr": ""
       }
     },
@@ -667,7 +610,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n",
+        "stdout": "{{help:humanify}}",
         "stderr": ""
       }
     },
@@ -679,7 +622,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n",
+        "stdout": "{{help:humanify}}",
         "stderr": ""
       }
     },
@@ -730,7 +673,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '--bogus'\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: unknown option '--bogus'\n\n{{help:humanify}}"
       }
     },
     {
@@ -742,7 +685,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '--bogus'\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: unknown option '--bogus'\n\n{{help:humanify}}"
       }
     },
     {
@@ -754,7 +697,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '-x'\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: unknown option '-x'\n\n{{help:humanify}}"
       }
     },
     {
@@ -767,7 +710,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '-x'\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: unknown option '-x'\n\n{{help:humanify}}"
       }
     },
     {
@@ -780,7 +723,7 @@
         "exitCode": 1,
         "code": "commander.excessArguments",
         "stdout": "",
-        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\n{{help:humanify}}"
       }
     },
     {
@@ -794,7 +737,7 @@
         "exitCode": 1,
         "code": "commander.excessArguments",
         "stdout": "",
-        "stderr": "error: too many arguments. Expected 1 argument but got 3.\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: too many arguments. Expected 1 argument but got 3.\n\n{{help:humanify}}"
       }
     },
     {
@@ -807,7 +750,7 @@
         "exitCode": 1,
         "code": "commander.optionMissingArgument",
         "stdout": "",
-        "stderr": "error: option '-m, --model <model>' argument missing\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: option '-m, --model <model>' argument missing\n\n{{help:humanify}}"
       }
     },
     {
@@ -820,7 +763,7 @@
         "exitCode": 1,
         "code": "commander.optionMissingArgument",
         "stdout": "",
-        "stderr": "error: option '-m, --model <model>' argument missing\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: option '-m, --model <model>' argument missing\n\n{{help:humanify}}"
       }
     },
     {
@@ -833,7 +776,7 @@
         "exitCode": 1,
         "code": "commander.optionMissingArgument",
         "stdout": "",
-        "stderr": "error: option '-o, --output-dir <output>' argument missing\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: option '-o, --output-dir <output>' argument missing\n\n{{help:humanify}}"
       }
     },
     {
@@ -846,7 +789,7 @@
         "exitCode": 1,
         "code": "commander.optionMissingArgument",
         "stdout": "",
-        "stderr": "error: option '--endpoint <url>' argument missing\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: option '--endpoint <url>' argument missing\n\n{{help:humanify}}"
       }
     },
     {
@@ -880,7 +823,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -940,7 +882,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1000,7 +941,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1060,7 +1000,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1121,7 +1060,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1182,7 +1120,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1245,7 +1182,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1306,7 +1242,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1366,7 +1301,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1426,7 +1360,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1486,7 +1419,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1547,7 +1479,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1608,7 +1539,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1668,7 +1598,6 @@
           "concurrency": "cli",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1729,7 +1658,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1790,7 +1718,6 @@
           "concurrency": "cli",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1850,7 +1777,6 @@
           "concurrency": "cli",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1910,7 +1836,6 @@
           "concurrency": "cli",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -1971,7 +1896,6 @@
           "concurrency": "cli",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2032,7 +1956,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2093,7 +2016,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2155,7 +2077,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2216,7 +2137,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2277,7 +2197,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2339,7 +2258,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2400,7 +2318,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2461,7 +2378,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2522,7 +2438,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2583,7 +2498,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2646,7 +2560,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2707,7 +2620,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2747,7 +2659,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '--split=yes'\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: unknown option '--split=yes'\n\n{{help:humanify}}"
       }
     },
     {
@@ -2783,7 +2695,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2844,7 +2755,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2906,7 +2816,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -2968,7 +2877,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": "cli",
           "probe": null,
           "retries": "default",
@@ -3030,7 +2938,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": "cli",
           "retries": "default",
@@ -3095,7 +3002,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3160,7 +3066,6 @@
           "concurrency": "default",
           "moduleConcurrency": "cli",
           "maxTokens": "cli",
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3228,7 +3133,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3294,7 +3198,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "cli",
@@ -3327,8 +3230,6 @@
     {
       "argv": [
         "in.js",
-        "--ambiguity-probe",
-        "p.json",
         "--rename-ledger",
         "rl"
       ],
@@ -3346,7 +3247,6 @@
           "concurrency": "50",
           "retries": "3",
           "timeout": "300000",
-          "ambiguityProbe": "p.json",
           "renameLedger": "rl"
         },
         "sources": {
@@ -3359,7 +3259,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": "cli",
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3424,7 +3323,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3490,7 +3388,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3550,7 +3447,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3591,7 +3487,7 @@
         "exitCode": 1,
         "code": "commander.excessArguments",
         "stdout": "",
-        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\n{{help:humanify}}"
       }
     },
     {
@@ -3623,7 +3519,6 @@
           "concurrency": "default",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3663,7 +3558,7 @@
         "exitCode": 1,
         "code": "commander.excessArguments",
         "stdout": "",
-        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\n{{help:humanify}}"
       }
     },
     {
@@ -3727,7 +3622,6 @@
           "concurrency": "cli",
           "moduleConcurrency": null,
           "maxTokens": null,
-          "ambiguityProbe": null,
           "disable": null,
           "probe": null,
           "retries": "default",
@@ -3766,7 +3660,7 @@
         "exitCode": 1,
         "code": "commander.missingArgument",
         "stdout": "",
-        "stderr": "error: missing required argument 'path'\n\nUsage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+        "stderr": "error: missing required argument 'path'\n\n{{help:env-reads}}"
       }
     },
     {
@@ -3841,7 +3735,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n",
+        "stdout": "{{help:env-reads}}",
         "stderr": ""
       }
     },
@@ -3855,7 +3749,7 @@
         "kind": "exit",
         "exitCode": 0,
         "code": "commander.helpDisplayed",
-        "stdout": "Usage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n",
+        "stdout": "{{help:env-reads}}",
         "stderr": ""
       }
     },
@@ -3870,7 +3764,7 @@
         "exitCode": 1,
         "code": "commander.excessArguments",
         "stdout": "",
-        "stderr": "error: too many arguments for 'env-reads'. Expected 1 argument but got 2.\n\nUsage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+        "stderr": "error: too many arguments for 'env-reads'. Expected 1 argument but got 2.\n\n{{help:env-reads}}"
       }
     },
     {
@@ -3884,7 +3778,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '--bogus'\n\nUsage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+        "stderr": "error: unknown option '--bogus'\n\n{{help:env-reads}}"
       }
     },
     {
@@ -3898,7 +3792,7 @@
         "exitCode": 1,
         "code": "commander.optionMissingArgument",
         "stdout": "",
-        "stderr": "error: option '-o, --output <file>' argument missing\n\nUsage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+        "stderr": "error: option '-o, --output <file>' argument missing\n\n{{help:env-reads}}"
       }
     },
     {
@@ -3911,7 +3805,7 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '-V'\n\nUsage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+        "stderr": "error: unknown option '-V'\n\n{{help:env-reads}}"
       }
     },
     {
@@ -3963,7 +3857,7 @@
         "exitCode": 1,
         "code": "commander.excessArguments",
         "stdout": "",
-        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\nUsage: humanify [options] [command] <input>\n\nUnminify JavaScript using an OpenAI-compatible API\n\nArguments:\n  input                       The input minified JavaScript file\n\nOptions:\n  -V, --version               output the version number\n  --endpoint <url>            OpenAI-compatible API endpoint (default:\n                              \"https://api.openai.com/v1\")\n  --api-key <key>             API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY\n                              env vars)\n  -m, --model <model>         Model identifier (default: \"gpt-4o-mini\")\n  -o, --output-dir <output>   Output directory (default: \"output\")\n  -v, --verbose               Increase verbosity (-v for info, -vv for debug)\n  -c, --concurrency <n>       Max concurrent function-lane LLM requests.\n                              Module-lane size is set separately via\n                              --module-concurrency; the global in-flight cap is\n                              their sum. (default: \"50\")\n  --module-concurrency <n>    Max concurrent module-lane LLM requests (default\n                              derived from -c)\n  --max-tokens <n>            Per-request completion token budget\n  --context-tokens <n>        Model context window in tokens; sizes the batched\n                              split-naming prompts (default: 32768)\n  --ambiguity-probe <path>    Write the matcher ambiguity probe JSON to this\n                              path (instrumentation)\n  --disable <passes>          Comma-separated pass switches to turn OFF for\n                              ablation (registry: src/kill-switches.ts; unknown\n                              names are fatal and list the valid set)\n  --probe <probes>            Comma-separated instrumentation probes to turn ON\n                              (same registry)\n  --retries <n>               Number of retry attempts for failed API calls\n                              (default: \"3\")\n  --timeout <ms>              LLM request timeout in milliseconds (default:\n                              \"300000\")\n  --llm-cache <dir>           Cache LLM responses on disk keyed by request\n                              content. Repeated prompts become deterministic\n                              across sessions and reruns are nearly free — the\n                              serving-drift countermeasure the 034 eval README\n                              describes.\n  --reasoning-effort <level>  Reasoning effort for reasoning models: low,\n                              medium, or high (no env fallback; default:\n                              server-side default). 'low' is ~8x faster on\n                              gpt-oss at equal name quality; only set it for\n                              reasoning models — non-reasoning models (e.g.\n                              gpt-4o-mini) reject it.\n  --skip-libraries            Skip library code instead of processing it with\n                              the LLM (default: true)\n  --no-skip-libraries         Process library code with the LLM\n  --log-file <path>           Write debug logs to file (implies -vv)\n  --diagnostics <path>        Write detailed rename diagnostics to JSON file\n  --stats-json <path>         Write the deterministic match/rename breakdown as\n                              compact JSON (coverage + transfer stats +\n                              prior-match counts) for the eval harness\n  --dump-artifacts <dir>      Write the span-keyed decision-record dump (07 §2\n                              catalog) to this directory — the parity-era\n                              instrument. Inert by construction: the run's\n                              decisions are unchanged (proven by neutrality).\n  --bundler <type>            Force bundler type (webpack, browserify, rollup,\n                              esbuild, parcel, bun)\n  --minifier <type>           Force minifier type (terser, esbuild, swc, bun,\n                              none)\n  --batch-size <n>            Identifiers per LLM batch (default: 10)\n  --max-retries <n>           Per-identifier LLM call limit, initial + retries\n                              (default: 2; further conflicts resolve by\n                              suffixing)\n  --max-free-retries <n>      Cross-lane collision retry limit (default: 100)\n  --lane-threshold <n>        Min bindings to enable parallel lanes (default:\n                              25)\n  --split                     Split output into a multi-file tree (src/ +\n                              vendor/ + run scaffold), emitted as a runnable\n                              CommonJS module graph by default\n  --prior-version <path>      Path to a prior humanified file for cross-version\n                              rename reuse\n  --reconcile-prior-diff      After generation, snap rename-noise diff hunks\n                              back to the prior version's names (default with\n                              --prior-version)\n  --no-reconcile-prior-diff   Disable the prior-diff reconcile pass\n  --naming-floor              Close minted-token coverage gaps deterministically\n                              (class/function-expression inner-id derivation +\n                              decoration retry; default on)\n  --no-naming-floor           Disable the deterministic naming floor\n  --naming-floor-sweep        LLM-name the minted survivors the naming floor\n                              cannot derive (params/decls/vars; default on).\n                              Prior-aware with a prior version: prior names\n                              transfer deterministically and the LLM names only\n                              the residue\n  --no-naming-floor-sweep     Disable the LLM sweep of minted survivors\n  --split-ledger <path>       Prior split ledger for cross-release\n                              file-assignment inheritance (default:\n                              auto-discovered next to --prior-version)\n  --split-pure                Emit the byte-exact review tree instead of the\n                              runnable CommonJS module graph (the --split\n                              default). Requires --split\n  --rename-ledger <dir>       Write a replayable rename ledger (every rename\n                              keyed by byte position) + source snapshot + a\n                              standalone apply.mjs, so the LLM-rename output can\n                              be reproduced without re-running the model\n  --profile <path>            Write performance profile to JSON file (Chrome\n                              Trace Event format, viewable at chrome://tracing\n                              or ui.perfetto.dev)\n  -h, --help                  display help for command\n\nCommands:\n  env-reads [options] <path>  Inventory process.env / Bun.env / import.meta.env\n                              reads in a file or tree\n"
+        "stderr": "error: too many arguments. Expected 1 argument but got 2.\n\n{{help:humanify}}"
       }
     },
     {
@@ -3978,7 +3872,21 @@
         "exitCode": 1,
         "code": "commander.unknownOption",
         "stdout": "",
-        "stderr": "error: unknown option '-m'\n\nUsage: humanify env-reads [options] <path>\n\nInventory process.env / Bun.env / import.meta.env reads in a file or tree\n\nArguments:\n  path                 A JS file, or a directory of JS files to scan\n\nOptions:\n  --markdown           Emit the report as Markdown\n  -o, --output <file>  Write the report to a file instead of stdout\n  -h, --help           display help for command\n"
+        "stderr": "error: unknown option '-m'\n\n{{help:env-reads}}"
+      }
+    },
+    {
+      "argv": [
+        "in.js",
+        "--ambiguity-probe",
+        "p.json"
+      ],
+      "outcome": {
+        "kind": "exit",
+        "exitCode": 1,
+        "code": "commander.unknownOption",
+        "stdout": "",
+        "stderr": "error: unknown option '--ambiguity-probe'\n\n{{help:humanify}}"
       }
     }
   ]

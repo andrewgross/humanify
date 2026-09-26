@@ -826,21 +826,32 @@ pub fn to_fixed(x: f64, digits: usize) -> String {
     format!("{}.{}", &text[..split], &text[split..])
 }
 
-/// TS `formatDuration` (src/llm/metrics.ts): 500ms / 5.0s / 2m 5s / 2h 5m,
-/// with the TS's accidents — seconds are ROUNDED under FLOORED minutes, so
-/// 59,999 ms prints "60.0s" and 3,599,999 ms prints "59m 60s". The one
-/// owner: the LLM metrics and the profile summary both print through it.
+/// `formatDuration` (from src/llm/metrics.ts): 500ms / 5.0s / 2m 5s /
+/// 2h 5m. The one owner: the LLM metrics and the profile summary both
+/// print through it. Seconds are rounded and hours-tier minutes truncated,
+/// as in the TS, except that a rounding which reaches the next unit now
+/// carries into it: the TS printed 59,999 ms as "60.0s" and 3,599,999 ms
+/// as "59m 60s" (finding #11, fixed: "1m 0s" and "1h 0m").
 pub fn format_duration(ms: f64) -> String {
     if ms < 1000.0 {
         return format!("{}ms", number_to_string(ms));
     }
     if ms < 60_000.0 {
-        return format!("{}s", to_fixed(ms / 1000.0, 1));
+        let seconds = to_fixed(ms / 1000.0, 1);
+        if seconds != "60.0" {
+            return format!("{seconds}s");
+        }
     }
-    let mins = (ms / 60_000.0).floor();
-    let secs = math_round((ms % 60_000.0) / 1000.0);
+    let mut mins = (ms / 60_000.0).floor();
     if mins < 60.0 {
-        return format!("{}m {}s", number_to_string(mins), number_to_string(secs));
+        let mut secs = math_round((ms % 60_000.0) / 1000.0);
+        if secs == 60.0 {
+            mins += 1.0;
+            secs = 0.0;
+        }
+        if mins < 60.0 {
+            return format!("{}m {}s", number_to_string(mins), number_to_string(secs));
+        }
     }
     let hours = (mins / 60.0).floor();
     format!(

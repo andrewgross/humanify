@@ -13,8 +13,9 @@
 //! the terminal; TS reads `process.stderr.columns` — dashboard layout only,
 //! not contract) and stderr.
 //!
-//! Known TS finding reproduced (WPB.4 hand-back): the dashboard's percent
-//! column prints `(  34.4)` — `pct()` omits the `%` its zero case has.
+//! One deliberate departure (finding #21, fixed): the TS dashboard printed
+//! its percent column as `(  34.4)`, the `%` only in the zero case; it now
+//! prints `( 34.4%)`, and the recorded vectors carry the corrected bytes.
 
 use std::sync::{Arc, Mutex};
 
@@ -79,12 +80,14 @@ fn build_progress_bar(completed: u64, total: u64, width: usize) -> String {
     )
 }
 
+/// The dashboard's percent column, `%` included, right-aligned to 6.
 fn pct(completed: u64, total: u64) -> String {
-    if total == 0 {
-        return "  0.0%".to_string();
-    }
-    let p = to_fixed(completed as f64 / total as f64 * 100.0, 1);
-    format!("{p:>6}")
+    let p = if total == 0 {
+        "0.0".to_string()
+    } else {
+        to_fixed(completed as f64 / total as f64 * 100.0, 1)
+    };
+    format!("{:>6}", format!("{p}%"))
 }
 
 fn compute_eta(fresh_elapsed: f64, total_completed: u64, total_items: u64) -> String {

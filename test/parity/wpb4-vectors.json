@@ -7182,7 +7182,7 @@
           "writes": [
             "before any metrics\n",
             "first\n",
-            " humanify                                                                   elapsed 1m 5s  ETA 2m 4s\n ── Renaming functions & modules ──────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   (  34.4)\n Modules    [========================>·························]       10 / 20       (  50.0)\n LLM        1,234 reqs · 2 in-flight · 1 failed · avg 200ms\n Tokens      5.0K total · 1,234.568 tok/s\n"
+            " humanify                                                                   elapsed 1m 5s  ETA 2m 4s\n ── Renaming functions & modules ──────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   ( 34.4%)\n Modules    [========================>·························]       10 / 20       ( 50.0%)\n LLM        1,234 reqs · 2 in-flight · 1 failed · avg 200ms\n Tokens      5.0K total · 1,234.568 tok/s\n"
           ]
         },
         {
@@ -7197,7 +7197,7 @@
             "\u001b[2K\n",
             "\u001b[6A",
             "second\n",
-            " humanify                                                                   elapsed 1m 5s  ETA 2m 4s\n ── Renaming functions & modules ──────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   (  34.4)\n Modules    [========================>·························]       10 / 20       (  50.0)\n LLM        1,234 reqs · 2 in-flight · 1 failed · avg 200ms\n Tokens      5.0K total · 1,234.568 tok/s\n"
+            " humanify                                                                   elapsed 1m 5s  ETA 2m 4s\n ── Renaming functions & modules ──────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   ( 34.4%)\n Modules    [========================>·························]       10 / 20       ( 50.0%)\n LLM        1,234 reqs · 2 in-flight · 1 failed · avg 200ms\n Tokens      5.0K total · 1,234.568 tok/s\n"
           ]
         },
         {
@@ -7217,7 +7217,7 @@
             "\u001b[6A",
             " ✓ Renaming functions & modules (1m 5s)\n",
             "third\n",
-            " humanify                                                                   elapsed 1m 5s  ETA 2m 5s\n ── Generating output ─────────────────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   (  34.4)\n Modules    [========================>·························]       10 / 20       (  50.0)\n LLM        1,234 reqs · 2 in-flight · 1 failed · avg 200ms\n Tokens      5.0K total · 1,234.568 tok/s\n"
+            " humanify                                                                   elapsed 1m 5s  ETA 2m 5s\n ── Generating output ─────────────────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   ( 34.4%)\n Modules    [========================>·························]       10 / 20       ( 50.0%)\n LLM        1,234 reqs · 2 in-flight · 1 failed · avg 200ms\n Tokens      5.0K total · 1,234.568 tok/s\n"
           ]
         },
         {
@@ -7237,7 +7237,7 @@
             "\u001b[6A",
             " ✓ Generating output (1m 5s)\n",
             "fourth\n",
-            " humanify                                                                   elapsed 1m 6s  ETA 2m 5s\n ── Renaming functions & modules ──────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   (  34.4)\n Modules    [========================>·························]       10 / 20       (  50.0)\n LLM        8 reqs · 0 in-flight · 0 failed · avg 150ms · 3 retries\n Tokens      1.0M in / 250.0K out · 1,234.568 tok/s\n"
+            " humanify                                                                   elapsed 1m 6s  ETA 2m 5s\n ── Renaming functions & modules ──────────────────────────────────────────────────────────────────\n Functions  [================>·································]   12,345 / 35,872   ( 34.4%)\n Modules    [========================>·························]       10 / 20       ( 50.0%)\n LLM        8 reqs · 0 in-flight · 0 failed · avg 150ms · 3 retries\n Tokens      1.0M in / 250.0K out · 1,234.568 tok/s\n"
           ]
         },
         {
@@ -7347,7 +7347,7 @@
           "step": 1,
           "writes": [
             "narrow\n",
-            " humanify         elapsed 1m 5s  ETA ...\n ── Renaming functions & modules ──────\n Functions  [··········]        0 / 3        (   0.0)\n LLM        0 reqs · 0 in-flight · 0 failed · avg 0ms\n"
+            " humanify         elapsed 1m 5s  ETA ...\n ── Renaming functions & modules ──────\n Functions  [··········]        0 / 3        (  0.0%)\n LLM        0 reqs · 0 in-flight · 0 failed · avg 0ms\n"
           ]
         },
         {

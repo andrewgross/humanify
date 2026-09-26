@@ -1,25 +1,24 @@
-//! The rate limiter (llm/rate-limiter.ts): a concurrency cap, an optional
-//! requests-per-minute window, and retries with exponential backoff —
-//! same order of operations as the TS:
+//! The rate limiter (from llm/rate-limiter.ts): a concurrency cap, an
+//! optional requests-per-minute window, and retries with exponential
+//! backoff:
 //!
-//! 1. wait for the requests-per-minute window (checked BEFORE queueing);
-//! 2. queue for a concurrency slot (FIFO — tokio's semaphore is fair, as
-//!    the TS's array queue is);
-//! 3. record the request timestamp when the slot is taken;
-//! 4. run the call with retries INSIDE the slot (backoff sleeps hold it).
+//! 1. queue for a concurrency slot (FIFO — tokio's semaphore is fair);
+//! 2. take a place in the requests-per-minute window: check AND record the
+//!    timestamp under one lock, sleeping and re-checking while it is full;
+//! 3. run the call with retries INSIDE the slot (backoff sleeps hold it).
 //!
-//! TS behavior reproduced, not fixed: the per-minute check is not atomic
-//! with the timestamp record (step 1 vs step 3), so a burst of concurrent
-//! calls all see the same window and all pass — the limit only binds once
-//! earlier calls have STARTED. Production never sets requestsPerMinute
-//! (unified.ts passes only maxConcurrent + retryAttempts), so this is
-//! recorded for the record, not load-bearing.
+//! Finding #9 (fixed): the TS checked the window BEFORE queueing and
+//! recorded the stamp only once the slot was taken, so a burst of
+//! concurrent calls all saw the same window and all passed. Step 2 is now
+//! one critical section, run inside the slot, so every recorded stamp is a
+//! real start time. Production never sets requestsPerMinute, so pipeline
+//! output cannot depend on this.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use humanify_model::llm::{BatchRenameResponse, LlmCall, LlmError, RateLimitConfig};
+use humanify_model::llm::{BatchRenameResponse, LlmCall, LlmError, LlmErrorKind, RateLimitConfig};
 use tokio::sync::Semaphore;
 use tokio::time::Instant;
 
@@ -36,12 +35,30 @@ pub struct RateLimited<P> {
     metrics: Option<Arc<MetricsTracker>>,
 }
 
-/// `isRetryableError`: a message naming a transient failure, or an HTTP
-/// status of 429 / 5xx. Note what it does NOT match: the openai SDK's
-/// "Connection error." and "Request timed out." (no "network", no
-/// "timeout" substring, no status) — those were already retried by the
-/// SDK's own layer (client.rs) and are final here.
+/// Whether a failed call is worth another attempt, decided by the most
+/// specific evidence the error carries:
+///
+/// - a transport failure or per-attempt timeout (the client's final
+///   "Connection error." / "Request timed out.") — yes;
+/// - a replay-only cache miss — never (the answer cannot appear);
+/// - an HTTP status — 429 or 5xx only, whatever the body text says;
+/// - anything else — a message naming a transient failure.
+///
+/// Finding #10 (fixed): the TS `isRetryableError` matched message
+/// substrings only, so it never matched the client's two final transport
+/// messages, and it DID match a 400 whose text held "500" (a
+/// context-length error quoting "135000 tokens").
 pub fn is_retryable(error: &LlmError) -> bool {
+    match (error.kind, error.status) {
+        (LlmErrorKind::Connection | LlmErrorKind::Timeout, _) => true,
+        (LlmErrorKind::CacheMiss, _) => false,
+        (_, Some(status)) => status == 429 || (500..600).contains(&status),
+        (_, None) => names_a_transient_failure(&error.message),
+    }
+}
+
+/// The TS message patterns, for errors that carry no kind or status.
+fn names_a_transient_failure(message: &str) -> bool {
     const PATTERNS: [&str; 10] = [
         "network",
         "timeout",
@@ -54,11 +71,8 @@ pub fn is_retryable(error: &LlmError) -> bool {
         "503",
         "504",
     ];
-    let message = error.message.to_lowercase();
-    if PATTERNS.iter().any(|p| message.contains(p)) {
-        return true;
-    }
-    matches!(error.status, Some(s) if s == 429 || (500..600).contains(&s))
+    let message = message.to_lowercase();
+    PATTERNS.iter().any(|p| message.contains(p))
 }
 
 impl<P> RateLimited<P> {
@@ -72,53 +86,41 @@ impl<P> RateLimited<P> {
         }
     }
 
-    /// Step 1: if the last minute already holds `requestsPerMinute`
-    /// started requests, sleep until the oldest leaves the window.
-    async fn wait_for_rate_limit(&self) {
+    /// Step 2: when the last minute holds fewer than `requestsPerMinute`
+    /// started requests, record this one and return; else sleep until the
+    /// oldest leaves the window and try again. Check and record share one
+    /// lock, so concurrent callers can never both take the last place.
+    async fn take_window_place(&self) {
         let limit = self.config.requests_per_minute;
         if limit == 0 {
             return;
         }
-        let wait = {
-            let now = Instant::now();
-            let mut stamps = self.timestamps.lock().expect("timestamps lock");
-            // Keep stamps strictly newer than one minute ago.
-            while stamps
-                .front()
-                .is_some_and(|ts| now.duration_since(*ts) >= WINDOW)
-            {
-                stamps.pop_front();
-            }
-            if stamps.len() >= limit {
-                stamps
+        loop {
+            let wait = {
+                let now = Instant::now();
+                let mut stamps = self.timestamps.lock().expect("timestamps lock");
+                // Keep stamps strictly newer than one minute ago.
+                while stamps
                     .front()
-                    .map(|oldest| WINDOW.saturating_sub(now.duration_since(*oldest)))
-            } else {
-                None
-            }
-        };
-        match wait.filter(|w| !w.is_zero()) {
-            Some(wait) => tokio::time::sleep(wait).await,
-            // The TS `await this.waitForRateLimit()` yields even when it
-            // does not wait: every call of a burst runs its check before
-            // any of them records (the burst hole above depends on it).
-            None => tokio::task::yield_now().await,
-        }
-    }
-
-    /// Step 3.
-    fn record_request(&self) {
-        if self.config.requests_per_minute > 0 {
-            self.timestamps
-                .lock()
-                .expect("timestamps lock")
-                .push_back(Instant::now());
+                    .is_some_and(|ts| now.duration_since(*ts) >= WINDOW)
+                {
+                    stamps.pop_front();
+                }
+                if stamps.len() < limit {
+                    stamps.push_back(now);
+                    return;
+                }
+                stamps.front().map_or(WINDOW, |oldest| {
+                    WINDOW.saturating_sub(now.duration_since(*oldest))
+                })
+            };
+            tokio::time::sleep(wait).await;
         }
     }
 }
 
 impl<P: AsyncProvider> RateLimited<P> {
-    /// Step 4 (`withRetry`): initial try + `retryAttempts` retries, sleeping
+    /// Step 3 (`withRetry`): initial try + `retryAttempts` retries, sleeping
     /// `retryDelayMs * 2^attempt` between them; a non-retryable error stops
     /// at once. Metrics: one start, then exactly one of done / failed.
     async fn with_retry(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
@@ -164,13 +166,12 @@ impl<P: AsyncProvider> RateLimited<P> {
 
 impl<P: AsyncProvider> AsyncProvider for RateLimited<P> {
     async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
-        self.wait_for_rate_limit().await;
         let _slot = self
             .slots
             .acquire()
             .await
             .expect("the semaphore is never closed");
-        self.record_request();
+        self.take_window_place().await;
         self.with_retry(call).await
     }
 

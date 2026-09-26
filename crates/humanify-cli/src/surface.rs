@@ -3,11 +3,12 @@
 //! (help-after-error), `configureUnifiedCommand` (unified.ts:1469-1628) and
 //! `configureEnvReadsCommand` (env-reads.ts:26-59).
 //!
-//! Every flag string, description and default below is the TS literal; the
-//! surface gate (`surface_test.rs`) compares them, the rendered help and a
-//! parse corpus against the real commander program. The descriptions are
-//! user-facing text, but they are also what every usage error prints, so
-//! they are held byte-exact rather than paraphrased.
+//! Every flag string and default below is the TS literal, and the surface
+//! gate (`surface_test.rs`) compares them and a parse corpus against the
+//! real commander program the TS recorded. The DESCRIPTIONS are the
+//! binary's own since the cutover: the rendered help (which every usage
+//! error also prints) is pinned by a golden of this program's help,
+//! test/golden/help/<command>.txt, not by the TS's wording.
 
 use serde_json::Value;
 
@@ -97,19 +98,15 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
-            "--ambiguity-probe <path>",
-            "Write the matcher ambiguity probe JSON to this path (instrumentation)",
-            None,
-        )
-        .option(
             "--disable <passes>",
-            "Comma-separated pass switches to turn OFF for ablation (registry: \
-             src/kill-switches.ts; unknown names are fatal and list the valid set)",
+            "Comma-separated pass switches to turn OFF for ablation (unknown \
+             names are fatal and list the valid set)",
             None,
         )
         .option(
             "--probe <probes>",
-            "Comma-separated instrumentation probes to turn ON (same registry)",
+            "Comma-separated instrumentation probes to turn ON (unknown names \
+             are fatal and list the valid set)",
             None,
         )
         .option(
@@ -164,9 +161,9 @@ pub fn program() -> CliCommand {
         )
         .option(
             "--dump-artifacts <dir>",
-            "Write the span-keyed decision-record dump (07 §2 catalog) to this \
-             directory — the parity-era instrument. Inert by construction: the \
-             run's decisions are unchanged (proven by neutrality).",
+            "Write the span-keyed decision-record dump to this directory \
+             (instrumentation). Inert by construction: the run's decisions are \
+             unchanged (proven by neutrality).",
             None,
         )
         .option(
@@ -266,6 +263,36 @@ pub fn program() -> CliCommand {
             None,
         )
         .subcommand(env_reads_command())
+}
+
+/// The help `command` prints for `--help` and after a usage error:
+/// `"humanify"` names the pipeline program, anything else a subcommand.
+pub fn help_text(command: &str) -> String {
+    let root = program();
+    if command == root.name {
+        return root.help_information(&[]);
+    }
+    root.commands
+        .iter()
+        .find(|c| c.name == command)
+        .unwrap_or_else(|| panic!("the program has no command {command}"))
+        .help_information(&[root.name.as_str()])
+}
+
+/// A recorded usage-error envelope with each `{{help:<command>}}`
+/// placeholder replaced by that command's current help: the recorded
+/// corpora (test/parity/wpb4-cli-surface.json, wpb4-scenarios.json) keep
+/// commander's error lines, while the help's wording is the binary's own.
+pub fn expand_help_placeholders(text: &str) -> String {
+    let root = program();
+    let mut out = text.to_string();
+    for name in std::iter::once(&root.name).chain(root.commands.iter().map(|c| &c.name)) {
+        let placeholder = format!("{{{{help:{name}}}}}");
+        if out.contains(&placeholder) {
+            out = out.replace(&placeholder, &help_text(name));
+        }
+    }
+    out
 }
 
 /// `configureEnvReadsCommand`.

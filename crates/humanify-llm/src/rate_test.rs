@@ -1,5 +1,6 @@
 //! Port of src/llm/rate-limiter.test.ts, fixture for fixture, plus the
-//! requests-per-minute window (untested in the TS) on tokio's paused clock.
+//! requests-per-minute window (untested in the TS) on tokio's paused clock,
+//! and the retry envelope end to end over the real client + stub server.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -10,9 +11,13 @@ use humanify_model::llm::{
     Renames,
 };
 
+use humanify_model::llm::LlmConfig;
+
+use crate::client::{OpenAiClient, status_error};
 use crate::metrics::MetricsTracker;
 use crate::provider::AsyncProvider;
 use crate::rate::{RateLimited, is_retryable};
+use crate::stub_server::{Handler, StubResponse, StubServer, completion};
 
 /// `makeRequest(identifiers)`.
 fn make_request(identifiers: &[&str]) -> LlmCall {
@@ -210,10 +215,12 @@ fn recognizes_various_retryable_error_patterns() {
     }
 }
 
-/// Not a TS case: what the classifier does NOT retry — the SDK's final
-/// connection/timeout messages (already retried one layer down), and a 400.
+/// Finding #10 FIXED: the client's final "Connection error." / "Request
+/// timed out." are transient and retry here (the TS classifier matched
+/// neither string); a status decides by the status alone, so a 4xx never
+/// retries even when its text contains "500" or "timeout".
 #[test]
-fn sdk_final_errors_and_client_errors_are_not_retryable() {
+fn transient_transport_errors_retry_and_client_errors_do_not() {
     let connection = LlmError::new(LlmErrorKind::Connection, "Connection error.");
     let timeout = LlmError::new(LlmErrorKind::Timeout, "Request timed out.");
     let bad_request = LlmError {
@@ -226,10 +233,85 @@ fn sdk_final_errors_and_client_errors_are_not_retryable() {
         message: "529 overloaded".to_string(),
         status: Some(529),
     };
-    assert!(!is_retryable(&connection));
-    assert!(!is_retryable(&timeout));
+    let context_length = status_error(
+        400,
+        r#"{"error":{"message":"This model's maximum context length is 131072 tokens. However, you requested 135000 tokens. Request timeout avoided."}}"#,
+    );
+    let cache_miss = LlmError::new(LlmErrorKind::CacheMiss, "no cache entry (network off)");
+    assert!(is_retryable(&connection));
+    assert!(is_retryable(&timeout));
     assert!(!is_retryable(&bad_request));
+    assert!(
+        !is_retryable(&context_length),
+        "a 400 is final whatever its text"
+    );
+    assert!(!is_retryable(&cache_miss), "a replay-only miss is final");
     assert!(is_retryable(&overloaded), "any 5xx status retries");
+}
+
+// ---- the retry envelope end to end: limiter over the real client ----
+
+/// The limiter over a real client (SDK retries off, so every retry seen
+/// here is the limiter's) against the stub server.
+fn over_client(server: &StubServer, timeout_ms: u64) -> RateLimited<OpenAiClient> {
+    let mut llm = LlmConfig::new(&server.base_url, "test-key", "test-model");
+    llm.sdk_max_retries = 0;
+    llm.timeout_ms = timeout_ms;
+    RateLimited::new(OpenAiClient::new(llm, None), config(4, 2, 1), None)
+}
+
+fn answer_after(first: StubResponse) -> Handler {
+    let first = std::sync::Mutex::new(Some(first));
+    Arc::new(move |index, _| {
+        if index == 0 {
+            return first.lock().unwrap().take().unwrap();
+        }
+        StubResponse::ok(completion(Some(r#"{"a":"alpha"}"#)))
+    })
+}
+
+/// A dropped connection ("Connection error.") is retried and recovers.
+#[test]
+fn a_dropped_connection_is_retried() {
+    let server = StubServer::start(Duration::ZERO, answer_after(StubResponse::hang_up()));
+    let limited = over_client(&server, 5_000);
+    let result = one(&limited, &make_request(&["a"])).unwrap();
+    assert_eq!(result.renames.get("a"), Some("alpha"));
+    assert_eq!(server.requests(), 2);
+}
+
+/// A per-attempt timeout ("Request timed out.") is retried and recovers.
+#[test]
+fn a_timed_out_request_is_retried() {
+    let slow: Handler = Arc::new(|index, _| {
+        if index == 0 {
+            // Blocks the stub past the 100 ms timeout; it is free again
+            // before the retry's own deadline.
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        StubResponse::ok(completion(Some(r#"{"a":"alpha"}"#)))
+    });
+    let server = StubServer::start(Duration::ZERO, slow);
+    let limited = over_client(&server, 100);
+    let result = one(&limited, &make_request(&["a"])).unwrap();
+    assert_eq!(result.renames.get("a"), Some("alpha"));
+    assert_eq!(server.requests(), 2);
+}
+
+/// The 400 a too-long prompt draws is final: one request, no retry.
+#[test]
+fn a_context_length_400_is_not_retried() {
+    let server = StubServer::start(
+        Duration::ZERO,
+        answer_after(StubResponse::status(
+            400,
+            r#"{"error":{"message":"This model's maximum context length is 131072 tokens. However, you requested 135000 tokens (129000 in the messages, 6000 in the completion)."}}"#,
+        )),
+    );
+    let limited = over_client(&server, 5_000);
+    let error = one(&limited, &make_request(&["a"])).unwrap_err();
+    assert_eq!(error.status, Some(400));
+    assert_eq!(server.requests(), 1);
 }
 
 /// "tracks successful calls" (metrics integration)
@@ -326,11 +408,12 @@ async fn requests_per_minute_waits_for_the_window() {
     assert_eq!(flaky.attempts(), 3);
 }
 
-/// The TS window check is not atomic with the record: a BURST of
-/// concurrent calls all see an empty window and all start at once — the
-/// TS behavior, reproduced (see rate.rs's module doc).
+/// Finding #9 FIXED: the window check and the timestamp record are ONE
+/// step, so a BURST of concurrent callers cannot all see the same empty
+/// window. Limit 2, four concurrent calls: two start at once, the other two
+/// wait for the first stamps to age out of the 60 s window.
 #[tokio::test(start_paused = true)]
-async fn requests_per_minute_does_not_bind_a_concurrent_burst() {
+async fn requests_per_minute_binds_a_concurrent_burst() {
     let flaky = Flaky::new("", 1);
     let limited = RateLimited::new(
         &flaky,
@@ -342,12 +425,68 @@ async fn requests_per_minute_does_not_bind_a_concurrent_burst() {
     );
     let calls: Vec<LlmCall> = (0..4).map(|i| make_request(&[&format!("v{i}")])).collect();
     let start = tokio::time::Instant::now();
-    futures_util::future::join_all(calls.iter().map(|c| limited.suggest_all_names(c))).await;
+    let finished = futures_util::future::join_all(calls.iter().map(|c| async {
+        limited.suggest_all_names(c).await.unwrap();
+        start.elapsed()
+    }))
+    .await;
+    let immediate = finished
+        .iter()
+        .filter(|e| **e < Duration::from_secs(1))
+        .count();
+    assert_eq!(
+        immediate, 2,
+        "only the limit may start at once: {finished:?}"
+    );
     assert!(
-        start.elapsed() < Duration::from_secs(1),
-        "all four started at once"
+        finished.iter().all(|e| *e < Duration::from_secs(61)),
+        "the rest start once the window frees: {finished:?}"
     );
     assert_eq!(flaky.attempts(), 4);
+}
+
+/// The same bound across OS threads: 8 truly parallel callers (each on its
+/// own runtime, released together by a barrier) against a limit of 3 —
+/// exactly 3 pass the window; the rest are still waiting when cut off.
+#[test]
+fn requests_per_minute_binds_parallel_callers() {
+    let limited = Arc::new(RateLimited::new(
+        Arc::new(Sleeper::default()),
+        RateLimitConfig {
+            requests_per_minute: 3,
+            ..RateLimitConfig::default()
+        },
+        None,
+    ));
+    let barrier = Arc::new(std::sync::Barrier::new(8));
+    let threads: Vec<_> = (0..8)
+        .map(|i| {
+            let limited = limited.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                let call = make_request(&[&format!("p{i}")]);
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                barrier.wait();
+                runtime.block_on(async {
+                    tokio::time::timeout(
+                        Duration::from_millis(1000),
+                        limited.suggest_all_names(&call),
+                    )
+                    .await
+                    .is_ok()
+                })
+            })
+        })
+        .collect();
+    let started = threads
+        .into_iter()
+        .map(|t| t.join().unwrap())
+        .filter(|ok| *ok)
+        .count();
+    assert_eq!(started, 3);
 }
 
 /// Exponential backoff: retryDelayMs * 2^attempt (100, 200, 400 ms).

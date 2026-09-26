@@ -5,6 +5,9 @@
 //!    → `test/parity/wpb5-profile-vectors.json`): for every frozen report,
 //!    the `--profile` file body (pretty JSON) and the console summary are
 //!    BYTE-equal to the TS's; percentiles and `formatDuration` likewise.
+//!    Three recorded strings are deliberate departures (finding #11, fixed):
+//!    `formatDuration` 59999 → "1m 0s" and 3599999 → "1h 0m", and the
+//!    `rich` summary's "p95: 1m 0s" (the TS printed "60.0s" / "59m 60s").
 
 use std::time::Duration;
 
