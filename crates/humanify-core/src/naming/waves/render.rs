@@ -236,70 +236,7 @@ pub fn program_edits(
     let occ = Occurrences::build(semantic, state);
     let mut edits = occ.edits(text, state, Span::new(0, text.len() as u32));
     edits.extend_from_slice(extra);
-    edits.extend(export_split_edits(semantic, state));
     edits
-}
-
-/// Babel's renamer SPLITS `export const a = 1, b = 2` the first time one
-/// of its bindings is renamed (`splitExportDeclaration`): the declaration
-/// loses its `export`, and `export { a as a, b as b }` (the names at that
-/// moment) follows it; the renamer's own traversal then renames the
-/// specifier's local of the binding it renames. The synthesized specifiers
-/// are never crawled, so a LATER rename of any of those bindings leaves
-/// them behind (16-findings #16 — reproduced, not fixed).
-fn export_split_edits(semantic: &Semantic<'_>, state: &RenameState) -> Vec<Replacement> {
-    use crate::rename::validated::RenameMode;
-    let nodes = semantic.nodes();
-    let text = semantic.source_text();
-    let mut out = Vec::new();
-    for a in state.applied() {
-        if a.mode
-            != (RenameMode::BabelRenamer {
-                splits_export: true,
-            })
-        {
-            continue;
-        }
-        let b = state.view().binding(a.binding);
-        let Some(export) = b.export_ancestor else {
-            continue;
-        };
-        let AstKind::ExportDeclaration(e) = nodes.kind(export) else {
-            continue;
-        };
-        let oxc_ast::ast::Declaration::VariableDeclaration(decl) = &e.declaration else {
-            continue;
-        };
-        let specs: Vec<String> = decl
-            .declarations
-            .iter()
-            .flat_map(|d| d.id.get_binding_identifiers())
-            .map(|id| {
-                let original = id.name.to_string();
-                if id.symbol_id.get() == Some(b.symbol) && a.new_name != original {
-                    format!("{} as {original}", a.new_name)
-                } else {
-                    original
-                }
-            })
-            .collect();
-        out.push(Replacement {
-            span: Span::new(e.span.start, decl.span.start),
-            text: String::new(),
-        });
-        let end = e.span.end;
-        if end > 0 && text.as_bytes()[end as usize - 1] == b';' {
-            out.push(Replacement {
-                span: Span::new(end - 1, end),
-                text: format!(
-                    ";
-export {{ {} }};",
-                    specs.join(", ")
-                ),
-            });
-        }
-    }
-    out
 }
 
 /// The statement-twin tier's private-name rewrites as edits of `text`

@@ -22,6 +22,10 @@
  *     export the same names with the same types, and every exported function
  *     called with no arguments must return a value of the same shape. A
  *     rename that breaks a binding, a scope or the module surface fails here.
+ *     STRICT: an export name is the module's API, so an output that exports
+ *     under any other name fails (finding #55 — the naming stage renamed
+ *     `export function createStore`; the `esm-exports` fixture holds every
+ *     export form).
  *
  * What it cannot see: the split tree and its run scaffold (the fixtures are
  * single-module libraries, not bundles), and model quality. Both belong to
@@ -180,41 +184,6 @@ function surfaceOf(file: string, label: string): string {
   return r.stdout.trim();
 }
 
-/**
- * Finding #55 (docs/rust-port/16-findings-queue.md): the naming stage renames
- * an ESM module's EXPORTED bindings (`export function createStore` becomes
- * `createStoreRenamed` under the stub), which changes the module's public
- * API. Known and open, so it is REPORTED, not failed — but only in its exact
- * shape: an output export `<k>Renamed` standing in for input export `<k>`
- * with the same type and result shape. Any other surface difference fails.
- * Delete this when #55 is fixed; the stage then holds the export surface
- * exactly.
- */
-function undoKnownExportRenames(
-  output: string,
-  input: string
-): { surface: string; renamedExports: string[] } {
-  const inKeys = new Set(Object.keys(JSON.parse(input)));
-  const out = JSON.parse(output) as Record<string, string>;
-  const renamedExports: string[] = [];
-  const mapped: Record<string, string> = {};
-  for (const [k, v] of Object.entries(out)) {
-    const base = k.replace(/Renamed(\(\))?$/, "$1");
-    if (base !== k && !inKeys.has(k) && inKeys.has(base)) {
-      if (!base.endsWith("()")) renamedExports.push(`${base} -> ${k}`);
-      mapped[base] = v;
-    } else {
-      mapped[k] = v;
-    }
-  }
-  const sorted = Object.fromEntries(
-    Object.keys(mapped)
-      .sort()
-      .map((k) => [k, mapped[k]])
-  );
-  return { surface: JSON.stringify(sorted), renamedExports };
-}
-
 /** Copy a file into an ESM scope so Node reads its `export`s as a module. */
 function asModule(file: string, dir: string): string {
   fs.mkdirSync(dir, { recursive: true });
@@ -285,16 +254,10 @@ async function checkPair(
       asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
       `${label} input v${version}`
     );
-    const raw = surfaceOf(
+    const got = surfaceOf(
       asModule(out, path.join(root, `boot-out-${version}`)),
       `${label} output v${version}`
     );
-    const { surface: got, renamedExports } = undoKnownExportRenames(raw, want);
-    if (renamedExports.length > 0) {
-      console.log(
-        `  KNOWN FINDING #55 (${label} v${version}): exported binding(s) renamed — the module's public API changed: ${renamedExports.join(", ")}`
-      );
-    }
     if (got !== want) {
       fail(
         `${label}: v${version}'s output boots with a different surface\n  input:  ${want}\n  output: ${got}`

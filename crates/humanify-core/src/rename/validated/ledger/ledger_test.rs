@@ -346,8 +346,10 @@ fn render_and_replay(source: &str, renames: &[(&str, &str)]) -> (String, String)
 
 /// Finding #49: the ledger replay IS the render. Every name-dependent form
 /// the renderer prints (a shorthand property expanded, `{ key: v = d }`
-/// collapsed, the specifier forms, babel's `export const` split) is
+/// collapsed, the specifier forms, a renamed `export default` id) is
 /// recorded, so the replay reproduces the rendered text byte for byte.
+/// (Babel's `export const` split is gone: an export name is never renamed,
+/// finding #55.)
 #[test]
 fn the_replay_reproduces_every_rendered_form() {
     let cases: &[(&str, &[(&str, &str)])] = &[
@@ -367,8 +369,8 @@ fn the_replay_reproduces_every_rendered_form() {
         ("const c = 1;\nexport { c };\n", &[("c", "count")]),
         ("const c = 1;\nexport { c as d };\n", &[("c", "d")]),
         (
-            "export const a = 1, b = 2;\nuse(a, b);\n",
-            &[("a", "first")],
+            "export default function f() {}\nuse(f);\n",
+            &[("f", "make")],
         ),
     ];
     for (source, renames) in cases {

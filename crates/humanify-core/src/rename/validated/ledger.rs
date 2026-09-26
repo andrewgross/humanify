@@ -11,8 +11,8 @@
 //! recorded only when it is not the final name: a shorthand property
 //! expanded to `key: name`, a specifier form), every other edit (the
 //! `{ key: v = d }` collapse, an aliased specifier collapsing onto its
-//! other side, the statement twins' private names, babel's `export const`
-//! split) is a stage-level text edit. So the replay reproduces the render
+//! other side, the statement twins' private names) is a stage-level text
+//! edit. So the replay reproduces the render
 //! exactly (finding #49: the old ledger spliced names only and never
 //! reproduced a shorthand collapse), and `outputSha256` pins the shipped
 //! text the whole chain must reach. Post-generate passes (reconcile, the

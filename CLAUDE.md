@@ -34,9 +34,9 @@ What the Rust-specific stages prove:
 - `e2e` — `scripts/e2e.ts`: the release binary on the committed e2e fixtures
   (fresh, then with `--prior-version`) against a stub LLM that names every
   identifier, run twice for byte-determinism, and every output imported by
-  Node and required to export the input's surface. It REPORTS finding #55
-  (exported bindings get renamed) in its exact shape and fails on anything
-  else.
+  Node and required to export the input's surface EXACTLY — an export name
+  is the module's API (finding #55, fixed; the `esm-exports` fixture holds
+  every ESM export form).
 
 `unit` finds **every** `*.test.ts` in `test/` and `experiments/` (the harness's
 own tests). `rust:unit` is `cargo test --workspace`, including the replays of
