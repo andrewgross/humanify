@@ -10,13 +10,24 @@
 //!   — undefined fields absent, compact, no trailing newline;
 //! - a read accepts `v === 1` and an object-typed `renames`; anything else
 //!   (missing, unparsable, other version) is a miss;
-//! - writes are atomic (`<target>.<pid>.tmp` + rename), so racing lanes at
-//!   worst write the same bytes twice;
-//! - only responses with at least one rename are written; errors are never
-//!   cached; a hit reports zero token usage (metrics reflect THIS run).
+//! - writes are atomic (`<target>.<pid>.tmp` + rename);
+//! - ONE KEY, ONE ANSWER (finding #57): requests with the same key are
+//!   single-flighted — the first goes to the model, every copy in flight
+//!   behind it waits and is served the recorded answer. The model answers
+//!   two copies of one prompt differently, and the cache can keep only one
+//!   of them: when both went live, each copy's function took its own answer
+//!   while the disk kept the last writer's, so a replay of the run handed
+//!   every copy that one answer and asked questions the live run never did
+//!   (64 misses on a 0-error 2.1.85→86 run);
+//! - every successful answer is written, an EMPTY one too (a retry that
+//!   came back `{}` is still the answer the run acted on — unrecorded, the
+//!   replay missed it); errors are never cached; a hit reports zero token
+//!   usage (metrics reflect THIS run).
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use humanify_model::js::{JsObject, JsValue, stringify};
 use humanify_model::llm::{
@@ -153,13 +164,19 @@ pub struct CacheStats {
     pub writes: usize,
 }
 
-/// The TS `CachedLLMProvider`: serve a request from disk when its key has
-/// an entry, else ask the inner provider and record a non-empty answer.
+/// A key's single-flight gate: an async lock the copies of one request
+/// queue on (FIFO, so the first dispatched is the one that asks).
+type KeyGate = Arc<tokio::sync::Mutex<()>>;
+
+/// Serve a request from disk when its key has an entry, else ask the inner
+/// provider and record the answer — one request per key at a time, so
+/// every copy of a request gets the answer the cache records.
 pub struct CachedProvider<P> {
     inner: P,
     cache: DiskCache,
     params: CacheKeyParams,
     log: Option<LogSink>,
+    in_flight: Mutex<HashMap<String, KeyGate>>,
     hits: AtomicUsize,
     misses: AtomicUsize,
     writes: AtomicUsize,
@@ -172,6 +189,7 @@ impl<P> CachedProvider<P> {
             cache,
             params,
             log,
+            in_flight: Mutex::new(HashMap::new()),
             hits: AtomicUsize::new(0),
             misses: AtomicUsize::new(0),
             writes: AtomicUsize::new(0),
@@ -189,12 +207,51 @@ impl<P> CachedProvider<P> {
     pub fn key_of(&self, call: &LlmCall) -> String {
         cache_key_of(&call.request, &self.params)
     }
-}
 
-impl<P: AsyncProvider> AsyncProvider for CachedProvider<P> {
-    async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
-        let key = self.key_of(call);
-        if let Some(entry) = self.cache.read(&key) {
+    fn gate_of(&self, key: &str) -> KeyGate {
+        let mut map = self.in_flight.lock().expect("the in-flight map lock");
+        map.entry(key.to_string()).or_default().clone()
+    }
+
+    /// Drop the key's gate once no other copy holds or waits on it (the map
+    /// and `gate` are the only two owners left).
+    fn release(&self, key: &str, gate: KeyGate) {
+        let mut map = self.in_flight.lock().expect("the in-flight map lock");
+        if Arc::strong_count(&gate) <= 2 {
+            map.remove(key);
+        }
+    }
+
+    fn record(&self, key: &str, response: &BatchRenameResponse) {
+        let entry = CacheEntry {
+            renames: response.renames.clone(),
+            finish_reason: response.finish_reason.clone(),
+            original_usage: response.usage.clone(),
+        };
+        match self.cache.write(key, &entry) {
+            Ok(()) => {
+                self.writes.fetch_add(1, Ordering::Relaxed);
+            }
+            // A cache write failure must never fail the run.
+            Err(err) => emit(
+                &self.log,
+                LlmLogEvent::Message {
+                    category: "processor".to_string(),
+                    message: format!("llm-cache: write failed for {key}: {err}"),
+                },
+            ),
+        }
+    }
+
+    async fn serve<'a>(
+        &'a self,
+        key: &str,
+        call: &'a LlmCall,
+    ) -> Result<BatchRenameResponse, LlmError>
+    where
+        P: AsyncProvider,
+    {
+        if let Some(entry) = self.cache.read(key) {
             self.hits.fetch_add(1, Ordering::Relaxed);
             return Ok(BatchRenameResponse {
                 renames: entry.renames,
@@ -205,27 +262,21 @@ impl<P: AsyncProvider> AsyncProvider for CachedProvider<P> {
         }
         self.misses.fetch_add(1, Ordering::Relaxed);
         let response = self.inner.suggest_all_names(call).await?;
-        if !response.renames.is_empty() {
-            let entry = CacheEntry {
-                renames: response.renames.clone(),
-                finish_reason: response.finish_reason.clone(),
-                original_usage: response.usage.clone(),
-            };
-            match self.cache.write(&key, &entry) {
-                Ok(()) => {
-                    self.writes.fetch_add(1, Ordering::Relaxed);
-                }
-                // A cache write failure must never fail the run.
-                Err(err) => emit(
-                    &self.log,
-                    LlmLogEvent::Message {
-                        category: "processor".to_string(),
-                        message: format!("llm-cache: write failed for {key}: {err}"),
-                    },
-                ),
-            }
-        }
+        self.record(key, &response);
         Ok(response)
+    }
+}
+
+impl<P: AsyncProvider> AsyncProvider for CachedProvider<P> {
+    async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
+        let key = self.key_of(call);
+        let gate = self.gate_of(&key);
+        let result = {
+            let _turn = gate.lock().await;
+            self.serve(&key, call).await
+        };
+        self.release(&key, gate);
+        result
     }
 
     fn cache_stats(&self) -> Option<CacheStats> {

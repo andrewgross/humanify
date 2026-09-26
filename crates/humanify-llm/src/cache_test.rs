@@ -168,9 +168,10 @@ fn zeroes_usage_on_hits_and_reports_counters() {
     assert_eq!((stats.hits, stats.misses, stats.writes), (1, 1, 1));
 }
 
-/// "does not cache empty responses or errors"
+/// Errors are never cached; an EMPTY answer is (finding #57: it is the
+/// answer the run acted on, and a replay must take the same path).
 #[test]
-fn does_not_cache_empty_responses_or_errors() {
+fn caches_empty_responses_but_never_errors() {
     let dir = tmp_dir("cache");
     let inner = FakeProvider::new();
     *inner.response.lock().unwrap() = BatchRenameResponse {
@@ -181,7 +182,7 @@ fn does_not_cache_empty_responses_or_errors() {
     let provider = cached(&inner, &dir, "m1");
     run(provider.suggest_all_names(&request("function f() {}"))).unwrap();
     run(provider.suggest_all_names(&request("function f() {}"))).unwrap();
-    assert_eq!(inner.calls(), 2, "empty responses are not cached");
+    assert_eq!(inner.calls(), 1, "an empty response is recorded");
     *inner.fail.lock().unwrap() = true;
     assert!(run(provider.suggest_all_names(&request("function h() {}"))).is_err());
     *inner.fail.lock().unwrap() = false;

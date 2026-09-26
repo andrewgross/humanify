@@ -47,7 +47,7 @@ impl AsyncProvider for ReplayMiss {
 /// The cache is optional in the TS (`--llm-cache` unset → the limited
 /// provider is returned bare).
 pub enum MaybeCached<P> {
-    Cached(CachedProvider<P>),
+    Cached(Box<CachedProvider<P>>),
     Plain(P),
 }
 
@@ -138,12 +138,12 @@ impl LlmClient<LiveStack> {
         );
         let limited = RateLimited::new(debug, options.rate, options.metrics);
         let provider = match options.cache {
-            Some((dir, params)) => MaybeCached::Cached(CachedProvider::new(
+            Some((dir, params)) => MaybeCached::Cached(Box::new(CachedProvider::new(
                 limited,
                 DiskCache::open(&dir)?,
                 params,
                 options.log,
-            )),
+            ))),
             None => MaybeCached::Plain(limited),
         };
         Ok(LlmClient::with_provider(provider))
