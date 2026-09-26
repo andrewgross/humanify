@@ -220,12 +220,24 @@ pub fn render_program_with(
     extra: &[Replacement],
 ) -> String {
     let view = TextView::build(semantic);
+    let edits = program_edits(semantic, state, extra);
+    view.pretty(Span::new(0, view.text.len() as u32), &edits, true)
+}
+
+/// The whole-text edit list [`render_program_with`] applies — the one
+/// list the rename ledger partitions (`rename::validated::ledger`), so a
+/// ledger replay is the render.
+pub fn program_edits(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    extra: &[Replacement],
+) -> Vec<Replacement> {
+    let text = semantic.source_text();
     let occ = Occurrences::build(semantic, state);
-    let span = Span::new(0, view.text.len() as u32);
-    let mut edits = occ.edits(view.text, state, span);
+    let mut edits = occ.edits(text, state, Span::new(0, text.len() as u32));
     edits.extend_from_slice(extra);
     edits.extend(export_split_edits(semantic, state));
-    view.pretty(span, &edits, true)
+    edits
 }
 
 /// Babel's renamer SPLITS `export const a = 1, b = 2` the first time one

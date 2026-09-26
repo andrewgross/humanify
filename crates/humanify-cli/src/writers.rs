@@ -83,10 +83,14 @@ pub fn write_split_ledger(output_dir: &Path, ledger: &JsValue) -> std::io::Resul
 }
 
 /// `RENAME_LEDGER_APPLIER`: the self-contained replay script written next
-/// to the ledger (plain Node, no humanify dependency).
+/// to the ledger (plain Node, no humanify dependency). The same algorithm
+/// as `rename::validated::ledger::apply_rename_ledger`: linear (ascending
+/// slices joined once — finding #48), every recorded edit applied, and the
+/// result checked against the ledger's `outputSha256` (finding #49).
 pub const RENAME_LEDGER_APPLIER: &str = r#"#!/usr/bin/env node
 // Apply this humanify rename ledger to its source snapshot, reproducing the
-// renamed output. Usage: node apply.mjs [outfile]  (stdout if no outfile).
+// naming stage's output byte for byte (checked against the ledger's
+// outputSha256). Usage: node apply.mjs [outfile]  (stdout if no outfile).
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import * as path from "node:path";
@@ -99,25 +103,39 @@ const ledger = JSON.parse(
 );
 
 const sha = (s) => createHash("sha256").update(s).digest("hex");
-// Apply one stage's entries to src (right-to-left splices), verifying the
-// snapshot hash first. The base ledger is stage 0; each post stage renames
-// the prior stage's output (reconcile / deferred-sweep coordinate spaces).
+// Apply one stage to src, verifying the snapshot hash first: every edit in
+// ascending order, the output assembled from the slices between them (one
+// pass, linear). An occurrence is [start, end] (the entry's finalName) or
+// [start, end, text]; a stage's `edits` are [start, end, text]. The base
+// ledger is stage 0; each post stage edits the prior stage's output.
 function applyStage(src, stage) {
   if (sha(src) !== stage.sourceSha256) {
     throw new Error("source does not match the stage's sourceSha256");
   }
   const edits = [];
   for (const e of stage.entries) {
-    for (const [s, en] of e.occurrences) edits.push([s, en, e.finalName]);
+    for (const [s, en, text] of e.occurrences) {
+      edits.push([s, en, text ?? e.finalName]);
+    }
   }
-  edits.sort((a, b) => b[0] - a[0]);
-  let out = src;
-  for (const [s, en, name] of edits) out = out.slice(0, s) + name + out.slice(en);
-  return out;
+  for (const edit of stage.edits ?? []) edits.push(edit);
+  edits.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const parts = [];
+  let pos = 0;
+  for (const [s, en, text] of edits) {
+    if (s < pos) throw new Error("overlapping edits");
+    parts.push(src.slice(pos, s), text);
+    pos = en;
+  }
+  parts.push(src.slice(pos));
+  return parts.join("");
 }
 
 let out = applyStage(source, ledger);
 for (const stage of ledger.post ?? []) out = applyStage(out, stage);
+if (ledger.outputSha256 && sha(out) !== ledger.outputSha256) {
+  throw new Error("the replay does not reproduce the recorded output");
+}
 const dest = process.argv[2];
 if (dest) {
   writeFileSync(dest, out);
@@ -127,14 +145,14 @@ if (dest) {
 }
 "#;
 
-/// `writeRenameLedger(dir, bundle)`: the ledger (`JSON.stringify`, the
-/// TS's UTF-16 offsets), its source snapshot, and the standalone applier.
+/// `--rename-ledger <dir>`: the ledger (compact JSON, JS string offsets),
+/// its source snapshot, and the standalone applier.
 pub fn write_rename_ledger(
     dir: &Path,
     bundle: &humanify_core::rename::validated::ledger::RenameLedgerBundle,
 ) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
-    std::fs::write(dir.join("rename-ledger.json"), bundle.to_ts_json())?;
+    std::fs::write(dir.join("rename-ledger.json"), bundle.to_json())?;
     std::fs::write(dir.join("source.js"), &bundle.source)?;
     std::fs::write(dir.join("apply.mjs"), RENAME_LEDGER_APPLIER)
 }

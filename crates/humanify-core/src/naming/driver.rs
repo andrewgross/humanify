@@ -350,6 +350,7 @@ pub fn run_naming<P: NameProvider>(
                     crate::rename::validated::ledger::LedgerStage {
                         source_sha256: l.source_sha256,
                         entries: l.entries,
+                        edits: l.edits,
                     },
                 )
             })
@@ -392,6 +393,10 @@ pub fn run_naming<P: NameProvider>(
     out.coverage_text = Some(format_coverage_summary(&coverage));
     out.coverage = Some(coverage);
     out.census = Some(census);
+    // The ledger pins the text its whole chain must reproduce.
+    if let Some(bundle) = out.rename_ledger.as_mut() {
+        bundle.ledger.output_sha256 = Some(crate::rename::validated::ledger::sha256_hex(&shipped));
+    }
     out.code = Some(shipped);
     Ok(out)
 }

@@ -44,7 +44,7 @@ pub mod lexer;
 pub mod resolve;
 pub mod step;
 
-use crate::babel_view::BabelLines;
+use crate::babel_view::DiffLines;
 use hunks::{HunkAnalysis, NoiseLineInfo, analyze_hunks, parse_normal_diff, prior_too_dissimilar};
 use resolve::{Resolution, collect_identifier_names, resolve_candidates};
 
@@ -246,7 +246,7 @@ enum Gate {
 /// Everything the gates read (`GateContext`).
 struct Ctx<'a, 's> {
     semantic: &'a Semantic<'s>,
-    lines: &'a BabelLines<'s>,
+    lines: &'a DiffLines<'s>,
     analysis: &'a HunkAnalysis,
     tainted: &'a BTreeSet<usize>,
     /// "line:col" → the binding resolved there (last occurrence wins).
@@ -690,7 +690,7 @@ pub fn reconcile_diff_noise(
         opts.skeleton_vote_tier,
     );
     let text = semantic.source_text();
-    let lines = BabelLines::new(text);
+    let lines = DiffLines::new(text);
     let resolution = resolve_candidates(semantic, state, &lines, &analysis.candidates);
     let mut position_bindings = HashMap::new();
     for occ in &resolution.occurrences {

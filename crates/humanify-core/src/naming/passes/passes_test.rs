@@ -624,6 +624,29 @@ fn sweeps_match_the_ts() {
     }
 }
 
+/// Finding #26: the permute's contexts are `split("\n")` lines, so the
+/// line of a reference must be counted the same way. A raw U+2028 in a
+/// string ahead of the family used to shift every context to the NEXT
+/// line (Babel's count), and the context evidence decided nothing.
+#[test]
+fn a_raw_line_separator_does_not_shift_the_permute_contexts() {
+    let row = rows_of("permute")
+        .into_iter()
+        .find(|r| r["text"].as_str().unwrap().contains("pbkdf2"))
+        .expect("the context-evidence case");
+    let head = "var s = \"a\u{2028}b\";\n";
+    let text = format!("{head}{}", row["text"].as_str().unwrap());
+    let prior = format!("{head}{}", row["prior"].as_str().unwrap());
+    let eligible = eligibility_for(&row, &[&text, &prior]);
+    let p = run_family_permute(&text, &prior, &eligible).expect("the permute runs");
+    let moves: Vec<Value> = p
+        .moves
+        .iter()
+        .map(|m| json!({"from": m.from, "to": m.to, "support": m.support}))
+        .collect();
+    assert_eq!(json!(moves), row["out"]["moves"]);
+}
+
 #[test]
 fn family_permute_matches_the_ts() {
     for row in rows_of("permute") {
