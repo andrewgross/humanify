@@ -95,6 +95,10 @@ Options:
                               keyed by byte position) + source snapshot + a
                               standalone apply.mjs, so the LLM-rename output can
                               be reproduced without re-running the model
+  --fast                      Post-parity performance mode: pipelined LLM
+                              dispatch and parallel stages. Deterministic (same
+                              input + same answers = same bytes), but not
+                              byte-equal to the default parity-faithful path
   --profile <path>            Write performance profile to JSON file (Chrome
                               Trace Event format, viewable at chrome://tracing
                               or ui.perfetto.dev)

@@ -87,6 +87,7 @@ pub struct CommandOptions {
     pub rename_ledger: Option<String>,
     pub stats_json: Option<String>,
     pub dump_artifacts: Option<String>,
+    pub fast: bool,
 }
 
 impl CommandOptions {
@@ -128,6 +129,7 @@ impl CommandOptions {
             rename_ledger: s("renameLedger"),
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
+            fast: v.bool("fast").unwrap_or(false),
         }
     }
 
@@ -311,6 +313,7 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
         }
     };
     let profiler = humanify_core::profiling::Profiler::new(opts.profile.is_some());
+    profiler.install_global();
     // buildProvider: the cache wrapper mkdirs its dir at construction.
     if let Some(dir) = &settings.llm_cache_dir
         && let Err(e) = std::fs::create_dir_all(dir)
@@ -507,9 +510,12 @@ fn pipeline_body(
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Ended, Crash> {
+    use humanify_core::profiling::phase;
+    let ph = phase("read+detect");
     let bundled_code = read_utf8(input)?;
     let (config, adapter, fossil_split) = detect_stage(&bundled_code, opts, switches, profiler)?;
     let prior = load_prior_version_code(opts, renderer)?;
+    drop(ph);
 
     // armRecorders: the diagnostics/dump recorders arrive with the stages
     // that feed them.
@@ -522,6 +528,7 @@ fn pipeline_body(
         .as_deref()
         .filter(|p| !p.is_empty())
         .map(Path::new);
+    let ph = phase("unpack+vendor");
     let unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
@@ -532,6 +539,8 @@ fn pipeline_body(
         profiler,
         renderer,
     )?;
+    drop(ph);
+    let ph = phase("library-detection");
     let (files_to_process, mixed_files) = if settings.skip_libraries {
         let filtered = filter_libraries(unpacked.files, adapter, profiler, renderer)?;
         (filtered.files_to_process, filtered.mixed_files)
@@ -549,7 +558,10 @@ fn pipeline_body(
         profiler,
         mixed_files: &mixed_files,
     };
+    drop(ph);
+    let ph = phase("format+naming");
     let last = naming.run(&files_to_process, &mut failures, renderer)?;
+    drop(ph);
     renderer.message(&format!(
         "Done! You can find your unminified code in {out_dir}"
     ));
@@ -580,6 +592,7 @@ fn pipeline_body(
             provider,
             namer_budget: split_namer_budget(settings),
         };
+        let _ph = phase("split");
         let span = profiler.pipeline_span("split");
         let records =
             crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
@@ -597,6 +610,7 @@ fn pipeline_body(
         path,
     }) = &last
     {
+        let _ph = phase("reports");
         let reports = RunReports {
             opts,
             outcome,
@@ -1195,6 +1209,7 @@ fn naming_config(
         },
         capture_dump: opts.dump_artifacts.is_some(),
         shingle_probe: switches.switch_on(Switch::ShingleProbe),
+        fast: opts.fast,
         tunables: {
             let d = WaveTunables::default();
             WaveTunables {

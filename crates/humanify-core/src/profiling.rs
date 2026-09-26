@@ -13,7 +13,7 @@ pub mod summary;
 pub mod trace_events;
 
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -214,6 +214,88 @@ impl Profiler {
                 input_file: input_file.map(str::to_string),
             },
         }
+    }
+}
+
+/// The thread id phase spans are recorded under (category "phase").
+pub const PHASE_TID: u32 = 4;
+
+/// The profiler the core's [`phase`] spans record into, when the CLI
+/// installed one (`--profile`). Core stages do not carry a `&Profiler`;
+/// this is the one ambient seam, and it only OBSERVES — nothing reads it
+/// back into a decision.
+static GLOBAL: RwLock<Option<(Instant, Arc<Mutex<Recorded>>)>> = RwLock::new(None);
+
+impl Profiler {
+    /// Route [`phase`] spans into this profiler (enabled profilers only).
+    pub fn install_global(&self) {
+        if self.enabled {
+            *GLOBAL.write().unwrap_or_else(PoisonError::into_inner) =
+                Some((self.start, Arc::clone(&self.recorded)));
+        }
+    }
+
+    /// Stop routing [`phase`] spans anywhere.
+    pub fn uninstall_global() {
+        *GLOBAL.write().unwrap_or_else(PoisonError::into_inner) = None;
+    }
+}
+
+/// This process's user+system CPU time in ms (Linux `/proc/self/stat`,
+/// USER_HZ = 100); None elsewhere.
+pub fn process_cpu_ms() -> Option<f64> {
+    let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+    // Fields after the parenthesised comm: state is field 3, utime 14, stime 15.
+    let rest = &stat[stat.rfind(')')? + 2..];
+    let mut f = rest.split(' ');
+    let utime: f64 = f.nth(11)?.parse().ok()?;
+    let stime: f64 = f.next()?.parse().ok()?;
+    Some((utime + stime) * 10.0)
+}
+
+/// An open phase span (see [`phase`]); recorded when dropped.
+pub struct Phase {
+    name: &'static str,
+    start_ms: f64,
+    cpu_start: Option<f64>,
+}
+
+/// Time a stage of the pipeline: a span named `name` (category "phase",
+/// tid [`PHASE_TID`]) from now until the guard drops, with the process CPU
+/// time spent meanwhile (`cpuMs`) and the average cores busy (`cores`) —
+/// the serial-vs-parallel split per stage. A no-op returning None unless a
+/// profiler is installed.
+pub fn phase(name: &'static str) -> Option<Phase> {
+    let guard = GLOBAL.read().unwrap_or_else(PoisonError::into_inner);
+    let (start, _) = guard.as_ref()?;
+    Some(Phase {
+        name,
+        start_ms: elapsed_ms(*start),
+        cpu_start: process_cpu_ms(),
+    })
+}
+
+impl Drop for Phase {
+    fn drop(&mut self) {
+        let guard = GLOBAL.read().unwrap_or_else(PoisonError::into_inner);
+        let Some((start, recorded)) = guard.as_ref() else {
+            return;
+        };
+        let end_ms = elapsed_ms(*start);
+        let mut meta = JsObject::new();
+        if let (Some(a), Some(b)) = (self.cpu_start, process_cpu_ms()) {
+            let wall = (end_ms - self.start_ms).max(1e-9);
+            meta.set("cpuMs", b - a);
+            meta.set("cores", ((b - a) / wall * 100.0).round() / 100.0);
+        }
+        lock(recorded).spans.push(ProfileSpan {
+            name: self.name.to_string(),
+            category: "phase".to_string(),
+            start_ms: JsNumber(self.start_ms),
+            end_ms: JsNumber(end_ms),
+            tid: PHASE_TID,
+            metadata: Some(meta),
+        });
     }
 }
 

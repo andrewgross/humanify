@@ -157,4 +157,31 @@ impl<P: AsyncProvider> NameProvider for LlmClient<P> {
             calls.iter().map(|call| provider.suggest_all_names(call)),
         ))
     }
+
+    /// Truly pipelined: a finished call's follow-ups start at once, while
+    /// the rest are still in flight (the stack's rate limiter still bounds
+    /// how many run). `on_done` runs on the runtime thread between polls.
+    fn run_pipelined(
+        &self,
+        initial: Vec<(usize, LlmCall)>,
+        on_done: &mut humanify_model::llm::OnCallDone<'_>,
+    ) {
+        use futures_util::stream::{FuturesUnordered, StreamExt};
+        let provider = &self.provider;
+        let start = |id: usize, call: LlmCall| async move {
+            let result = provider.suggest_all_names(&call).await;
+            (id, result)
+        };
+        self.runtime.block_on(async {
+            let mut in_flight = FuturesUnordered::new();
+            for (id, call) in initial {
+                in_flight.push(start(id, call));
+            }
+            while let Some((id, result)) = in_flight.next().await {
+                for (next_id, call) in on_done(id, result) {
+                    in_flight.push(start(next_id, call));
+                }
+            }
+        });
+    }
 }

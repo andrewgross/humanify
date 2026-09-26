@@ -30,6 +30,20 @@ fn surface() -> Value {
     serde_json::from_str(&text).expect("surface JSON")
 }
 
+/// `--fast` is Rust-only: declared, parsed, and listed in the help.
+#[test]
+fn the_fast_flag_parses() {
+    let root = program();
+    let argv: Vec<String> = ["in.js", "--fast"].iter().map(|s| s.to_string()).collect();
+    match root.parse(&argv) {
+        ParseOutcome::Action { opts, .. } => {
+            assert_eq!(opts.bool("fast"), Some(true));
+        }
+        other => panic!("--fast did not parse: {other:?}"),
+    }
+    assert!(root.help_information(&[]).contains("--fast"));
+}
+
 fn command_by_name<'a>(
     root: &'a crate::commander::CliCommand,
     name: &str,

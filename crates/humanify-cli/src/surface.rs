@@ -26,7 +26,7 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 /// classification itself) and `--inject-ts-hashes` (WP5.6e, 2026-09-25:
 /// the structuralSignature exemption ended; the Rust hashes are the only
 /// hashes, and a TS-era prior is re-keyed or refused loudly).
-pub const RUST_ONLY_OPTIONS: &[&str] = &[];
+pub const RUST_ONLY_OPTIONS: &[&str] = &["--fast"];
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -255,6 +255,13 @@ pub fn program() -> CliCommand {
             "Write a replayable rename ledger (every rename keyed by byte position) \
              + source snapshot + a standalone apply.mjs, so the LLM-rename output \
              can be reproduced without re-running the model",
+            None,
+        )
+        .option(
+            "--fast",
+            "Post-parity performance mode: pipelined LLM dispatch and parallel stages. \
+             Deterministic (same input + same answers = same bytes), but not \
+             byte-equal to the default parity-faithful path",
             None,
         )
         .option(

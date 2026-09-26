@@ -71,6 +71,8 @@ pub struct EraOptions<'o> {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`: the close pairs' shingle census lines.
     pub shingle_probe: bool,
+    /// `--fast` (see `NamingConfig::fast`).
+    pub fast: bool,
 }
 
 /// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
@@ -257,8 +259,10 @@ pub fn prior_era<P: NameProvider>(
 ) -> Result<NamingEra, String> {
     let semantic = stage.fresh.ingest.semantic();
     let graph = stage.fresh.graph;
+    let ph = crate::profiling::phase("era:transfer");
     let freeze = crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
     let (outcome, twins) = crate::rename::transfer::apply_prior_version(stage, &freeze)?;
+    drop(ph);
     let probe_lines = if opts.shingle_probe {
         shingle_probe_lines(stage)
     } else {
@@ -269,7 +273,9 @@ pub fn prior_era<P: NameProvider>(
         votes: outcome.votes_dump.clone(),
         ..capture_graph(graph, &outcome.rename)
     });
+    let ph = crate::profiling::phase("era:close-contexts");
     let close = close_contexts(stage, &outcome.fn_close_prior)?;
+    drop(ph);
     let pending = PendingCarry {
         matcher: outcome.carry.clone(),
         matched: outcome.matched_module_bindings.clone(),
@@ -298,7 +304,9 @@ pub fn prior_era<P: NameProvider>(
         private: outcome.private_renames,
         single_epoch: false,
     };
+    let ph = crate::profiling::phase("era:naming-graph");
     let naming = Naming::build(semantic, graph);
+    drop(ph);
     let mut era = run_era(
         &naming,
         start,
@@ -436,6 +444,7 @@ fn run_era<P: NameProvider>(
     let semantic = naming.semantic;
     let graph = naming.graph;
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
+    let ph = crate::profiling::phase("era:occurrences+rows");
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
     let single_epoch = start.single_epoch;
@@ -456,6 +465,7 @@ fn run_era<P: NameProvider>(
         params: opts.params.clone(),
         single_epoch: start.single_epoch,
         tunables: opts.tunables,
+        fast: opts.fast,
     };
     let fn_hashes: Vec<(String, String)> = graph
         .functions
@@ -463,6 +473,8 @@ fn run_era<P: NameProvider>(
         .map(|f| (f.session_id.clone(), f.structural_hash.clone()))
         .collect();
     let has_nodes = !graph.functions.is_empty() || !graph.module_bindings.is_empty();
+    drop(ph);
+    let ph = crate::profiling::phase("era:waves");
     let WaveOutcome {
         mut state,
         dispatches,
@@ -492,6 +504,8 @@ fn run_era<P: NameProvider>(
         waves,
         context_set_names,
     };
+    drop(ph);
+    let ph = crate::profiling::phase("era:library-prefix");
     let library_functions = library_function_rows(&library, graph);
     let eval_tainted = collect_eval_with_taint(semantic).tainted_functions;
     let library =
@@ -514,6 +528,8 @@ fn run_era<P: NameProvider>(
         capture: None,
         probe_lines: Vec::new(),
     };
+    drop(ph);
+    let ph = crate::profiling::phase("era:naming-floor");
     if opts.naming_floor {
         let taint = collect_eval_with_taint(semantic);
         let derivation = derive_expression_inner_names(semantic, &mut state, &eligible, &taint);
@@ -551,8 +567,11 @@ fn run_era<P: NameProvider>(
         })),
         matcher: p.matcher,
     });
+    drop(ph);
+    let ph = crate::profiling::phase("era:generate");
     let privates = private_rename_edits(semantic.source_text(), &start.private);
     let generated = render_program_with(semantic, &state, &privates);
+    drop(ph);
     // The ledger's base stage: the AST as the naming era left it (every
     // pass before `generate` — the floor and the pre-generate sweep
     // included), over the fresh text. Which scope OBJECTS the TS walk

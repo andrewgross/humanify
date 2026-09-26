@@ -197,9 +197,11 @@ pub fn run_split(
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<SplitRecords, String> {
     let mut trail = PlacementTrail::default();
+    let ph = humanify_core::profiling::phase("split:compute");
     let (outcome, prior_present, prompts) =
         split_before_commit(code, prior_carry, input, &mut trail, renderer)
             .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
+    drop(ph);
     let mut post_split = PostSplitRecords::default();
     let ended = match commit_and_finish(
         code,
@@ -340,6 +342,7 @@ fn commit_and_finish(
     let before = |e: String| Committed(false, e);
     let after = |e: String| Committed(true, e);
     let out = input.output_dir;
+    let ph = humanify_core::profiling::phase("split:write-tree");
     if let Some(source) = input.processed_source {
         remove_consumed_source_file(out, source, input.input_file);
     }
@@ -389,8 +392,11 @@ fn commit_and_finish(
         input_file: input.input_file,
         switches: finish_switches,
     };
+    drop(ph);
     let mut report = FinishReport::default();
+    let ph = humanify_core::profiling::phase("split:finish");
     let finished = finish_stage(&finish_input, &mut report);
+    drop(ph);
     for m in &report.messages {
         renderer.message(m);
     }

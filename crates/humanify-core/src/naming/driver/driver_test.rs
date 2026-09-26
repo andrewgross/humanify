@@ -262,6 +262,7 @@ fn ledger_config() -> super::NamingConfig {
         capture_dump: false,
         tunables: Default::default(),
         shingle_probe: false,
+        fast: false,
     }
 }
 
