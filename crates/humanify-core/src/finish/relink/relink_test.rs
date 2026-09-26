@@ -92,9 +92,7 @@ fn babel_reference_positions_only() {
     // Assignment targets (destructuring included) are constant violations
     // in Babel, not references; member properties and keys are not
     // references; update targets and for-in heads ARE. A shorthand VALUE is
-    // a reference too — the TS splices `.f` into it, breaking the syntax
-    // (reproduced; unreachable on real trees, which never shorthand a
-    // factory id).
+    // a reference too — it is EXPANDED (finding #29), see below.
     assert_eq!(
         relink(
             "lib_aaaa = 1; o.lib_aaaa; ({ lib_aaaa: 1 }); lib_bbbb++;\n",
@@ -107,7 +105,27 @@ fn babel_reference_positions_only() {
             "for (lib_aaaa in o); [lib_bbbb] = x; ({lib_aaaa} = y); ({lib_bbbb});\n",
             "a.js"
         ),
-        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst lib_bbbb = require(\"./pkg/axios.js\");\nfor (lib_aaaa.f in o); [lib_bbbb] = x; ({lib_aaaa} = y); ({lib_bbbb.f});\n"
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst lib_bbbb = require(\"./pkg/axios.js\");\nfor (lib_aaaa.f in o); [lib_bbbb] = x; ({lib_aaaa} = y); ({lib_bbbb: lib_bbbb.f});\n"
+    );
+}
+
+#[test]
+fn a_shorthand_property_value_is_expanded_not_broken() {
+    // Finding #29: splicing `.f` after a shorthand value wrote
+    // `({lib_aaaa.f})`, a syntax error. The shorthand is expanded so the
+    // key keeps its name and the value reads the thunk.
+    let out = relink("var o = ({lib_aaaa});\n", "a.js");
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nvar o = ({lib_aaaa: lib_aaaa.f});\n"
+    );
+    let allocator = oxc_allocator::Allocator::default();
+    assert!(super::parse_or_err(&allocator, &out).is_ok(), "{out}");
+    // Mixed with other properties and a default-valued pattern elsewhere.
+    let out = relink("f({a, lib_bbbb, b: lib_aaaa});\n", "a.js");
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst lib_bbbb = require(\"./pkg/axios.js\");\nf({a, lib_bbbb: lib_bbbb.f, b: lib_aaaa.f});\n"
     );
 }
 
@@ -154,7 +172,73 @@ fn a_parse_error_is_an_error_not_a_silent_pass() {
 }
 
 #[test]
-fn the_runtime_text_is_the_ts_constant() {
+fn the_runtime_exports_the_factory_and_interop_helpers() {
     assert!(BUN_RELINK_RUNTIME.starts_with("// Bun CJS/ESM factory helpers"));
-    assert!(BUN_RELINK_RUNTIME.ends_with("module.exports = { __commonJS, __esm };\n"));
+    assert!(
+        BUN_RELINK_RUNTIME
+            .ends_with("module.exports = { __commonJS, __esm, __toESM, __toCommonJS };\n")
+    );
+}
+
+#[test]
+fn a_body_naming_an_interop_helper_binds_it_from_the_shim() {
+    // Finding #51: the unpack rewrites a vendored body's reference to the
+    // bundle's __toESM / __toCommonJS to these names; the wrap binds them.
+    let out = wrap_extracted_factory(
+        "(exports, module) => { module.exports = __toESM(lib_aaaa(), 1).x + __toCommonJS({}).y; }",
+        "lib_bbbb.js",
+        &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst { __commonJS, __toESM, __toCommonJS } = require(\"./.humanify/__bun-runtime.js\");\nexports.f = __commonJS((exports, module) => { module.exports = __toESM(lib_aaaa.f(), 1).x + __toCommonJS({}).y; });\n"
+    );
+    // A body's OWN binding of the name is not the helper.
+    let out = wrap_extracted_factory(
+        "(exports) => { var __toESM = 1; exports.v = __toESM; }",
+        "lib_bbbb.js",
+        &lookup(&[]),
+    )
+    .unwrap();
+    assert!(out.starts_with("const { __commonJS } = require("), "{out}");
+}
+
+#[test]
+fn a_function_expression_body_wraps_like_an_arrow() {
+    // A factory body is an EXPRESSION; `function (…) {…}` read as a
+    // statement is a nameless declaration — a parse error that failed the
+    // whole post-split step on 2.1.216 (vendor/image-processor.js).
+    let out = wrap_extracted_factory(
+        "function (exports, module) { module.exports = __toESM(lib_aaaa()); }",
+        "lib_bbbb.js",
+        &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst { __commonJS, __toESM } = require(\"./.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) { module.exports = __toESM(lib_aaaa.f()); });\n"
+    );
+}
+
+#[test]
+fn the_shim_interop_helpers_behave_as_buns() {
+    // Bun's own definitions against the shim's, run by Node (the probe
+    // prints "same" or both result rows).
+    let dir = std::env::temp_dir().join(format!("humanify-shim-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("shim.js"), BUN_RELINK_RUNTIME).unwrap();
+    std::fs::write(dir.join("probe.js"), include_str!("interop_probe.js")).unwrap();
+    let out = std::process::Command::new("node")
+        .arg(dir.join("probe.js"))
+        .arg(dir.join("shim.js"))
+        .output()
+        .expect("node is on PATH (npm run check runs under it)");
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        "same\n",
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }

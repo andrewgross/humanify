@@ -43,6 +43,10 @@ use crate::modules::{
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
 
+mod scope;
+
+pub use scope::{TO_COMMON_JS, TO_ESM};
+
 /// The vendor folder (`split/layout.ts VENDOR_DIR`).
 pub const VENDOR_DIR: &str = "vendor";
 
@@ -197,6 +201,11 @@ pub struct BunUnpackOutcome {
     /// Every extracted module in BUNDLE order (the manifest is written in
     /// the prior release's order and drops the factory var).
     pub bundle_order: Vec<BundleOrderRow>,
+    /// Factories left in the app because their body reaches a bundle-scope
+    /// binding a vendor file cannot resolve (finding #51), closure included.
+    pub kept_in_app: usize,
+    /// Bun runtime-helper references rewritten to the shim's names.
+    pub helper_refs: usize,
 }
 
 /// One extracted module, in bundle order.
@@ -261,6 +270,8 @@ pub fn unpack_bun(
             llm_renamed: 0,
             rekey: None,
             bundle_order: Vec::new(),
+            kept_in_app: 0,
+            helper_refs: 0,
         })
     };
 
@@ -284,6 +295,21 @@ pub fn unpack_bun(
     let mut llm_renamed = 0;
     let mut prior = options.prior.take().unwrap_or_default();
     let mut rekey = None;
+    // Decided before anything is named: a factory that stays in the app is
+    // not a vendor module at all.
+    let mut helper_edits = Vec::new();
+    let mut kept_in_app = 0;
+    if let Some(c) = classification.as_mut() {
+        let plan =
+            scope::plan_bundle_scope_refs(code, &ingest, &c.factories, require_var.as_deref());
+        kept_in_app = plan.kept.len();
+        helper_edits = plan.helper_edits;
+        let mut index = 0;
+        c.factories.retain(|_| {
+            index += 1;
+            !plan.kept.contains(&(index - 1))
+        });
+    }
     if let Some(c) = classification.as_mut() {
         if let Some(entries) = &prior.ts_era {
             // A TS-era prior: re-key its names and order by CONTENT onto
@@ -336,8 +362,12 @@ pub fn unpack_bun(
     let mut files = Vec::new();
     let mut entries = Vec::new();
     let mut bundle_order = Vec::new();
+    // Vendored bodies also name the shim's runtime helpers; the runtime keeps
+    // the bundle's own.
+    let mut body_edits = plan.ref_edits.clone();
+    body_edits.extend(helper_edits.iter().cloned());
     for (module, module_plan) in modules.iter().zip(&plan.plans) {
-        let mut body = slice_with_edits(code, &plan.ref_edits, module.body_start, module.body_end);
+        let mut body = slice_with_edits(code, &body_edits, module.body_start, module.body_end);
         if let Some(req) = &require_var {
             body = rewrite_require_calls(&body, req);
         }
@@ -402,6 +432,8 @@ pub fn unpack_bun(
         llm_renamed,
         rekey,
         bundle_order,
+        kept_in_app,
+        helper_refs: helper_edits.len(),
     })
 }
 
