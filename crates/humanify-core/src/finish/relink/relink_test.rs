@@ -92,9 +92,7 @@ fn babel_reference_positions_only() {
     // Assignment targets (destructuring included) are constant violations
     // in Babel, not references; member properties and keys are not
     // references; update targets and for-in heads ARE. A shorthand VALUE is
-    // a reference too — the TS splices `.f` into it, breaking the syntax
-    // (reproduced; unreachable on real trees, which never shorthand a
-    // factory id).
+    // a reference too — it is EXPANDED (finding #29), see below.
     assert_eq!(
         relink(
             "lib_aaaa = 1; o.lib_aaaa; ({ lib_aaaa: 1 }); lib_bbbb++;\n",
@@ -107,7 +105,27 @@ fn babel_reference_positions_only() {
             "for (lib_aaaa in o); [lib_bbbb] = x; ({lib_aaaa} = y); ({lib_bbbb});\n",
             "a.js"
         ),
-        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst lib_bbbb = require(\"./pkg/axios.js\");\nfor (lib_aaaa.f in o); [lib_bbbb] = x; ({lib_aaaa} = y); ({lib_bbbb.f});\n"
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst lib_bbbb = require(\"./pkg/axios.js\");\nfor (lib_aaaa.f in o); [lib_bbbb] = x; ({lib_aaaa} = y); ({lib_bbbb: lib_bbbb.f});\n"
+    );
+}
+
+#[test]
+fn a_shorthand_property_value_is_expanded_not_broken() {
+    // Finding #29: splicing `.f` after a shorthand value wrote
+    // `({lib_aaaa.f})`, a syntax error. The shorthand is expanded so the
+    // key keeps its name and the value reads the thunk.
+    let out = relink("var o = ({lib_aaaa});\n", "a.js");
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nvar o = ({lib_aaaa: lib_aaaa.f});\n"
+    );
+    let allocator = oxc_allocator::Allocator::default();
+    assert!(super::parse_or_err(&allocator, &out).is_ok(), "{out}");
+    // Mixed with other properties and a default-valued pattern elsewhere.
+    let out = relink("f({a, lib_bbbb, b: lib_aaaa});\n", "a.js");
+    assert_eq!(
+        out,
+        "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst lib_bbbb = require(\"./pkg/axios.js\");\nf({a, lib_bbbb: lib_bbbb.f, b: lib_aaaa.f});\n"
     );
 }
 

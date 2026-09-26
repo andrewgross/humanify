@@ -78,9 +78,29 @@ pub(crate) fn parse_or_err<'a>(
     }
 }
 
-/// The free (unbound) Babel references whose name is a known factory id:
-/// (name, byte offset just after the identifier).
-fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<(String, usize)> {
+/// One free reference to a factory id.
+struct FactoryRef {
+    name: String,
+    /// Byte offset just after the identifier.
+    end: usize,
+    /// The value of a shorthand object property (`({lib_x})`): the splice
+    /// must expand it (`lib_x: lib_x.f`), since `({lib_x.f})` is a syntax
+    /// error (finding #29).
+    shorthand: bool,
+}
+
+/// Is this reference the VALUE of a shorthand object-literal property?
+/// (Shorthand assignment targets are constant violations, never here.)
+fn is_shorthand_property_value(
+    nodes: &oxc_semantic::AstNodes<'_>,
+    id: oxc_semantic::NodeId,
+) -> bool {
+    let parent = nodes.parent_id(id);
+    parent != id && matches!(nodes.kind(parent), AstKind::ObjectProperty(p) if p.shorthand)
+}
+
+/// The free (unbound) Babel references whose name is a known factory id.
+fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<FactoryRef> {
     let semantic = ingest.semantic();
     let nodes = semantic.nodes();
     let state = RenameState::new(semantic, Anchor::Generated);
@@ -104,7 +124,11 @@ fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<(String, usi
         {
             continue; // shadowed by a local binding
         }
-        refs.push((name.to_string(), ident.span.end as usize));
+        refs.push(FactoryRef {
+            name: name.to_string(),
+            end: ident.span.end as usize,
+            shorthand: is_shorthand_property_value(nodes, node.id()),
+        });
     }
     refs
 }
@@ -146,12 +170,17 @@ pub fn relink_factory_references(
     let at = header_insert_offset(&ingest, code);
     // Splice right-to-left so earlier offsets stay valid (a stable sort by
     // descending end, as the TS's `sort((a, b) => b.end - a.end)`).
-    refs.sort_by_key(|r| std::cmp::Reverse(r.1));
+    refs.sort_by_key(|r| std::cmp::Reverse(r.end));
     let mut spliced = code.to_string();
-    for (_, end) in &refs {
-        spliced.insert_str(*end, &format!(".{THUNK_PROP}"));
+    for r in &refs {
+        let splice = if r.shorthand {
+            format!(": {}.{THUNK_PROP}", r.name)
+        } else {
+            format!(".{THUNK_PROP}")
+        };
+        spliced.insert_str(r.end, &splice);
     }
-    let mut ids: Vec<&str> = refs.iter().map(|(n, _)| n.as_str()).collect();
+    let mut ids: Vec<&str> = refs.iter().map(|r| r.name.as_str()).collect();
     ids.sort_by(|a, b| cmp_utf16(a, b));
     ids.dedup();
     let lines: Vec<String> = ids
