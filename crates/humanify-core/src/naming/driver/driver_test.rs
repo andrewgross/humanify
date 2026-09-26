@@ -421,3 +421,46 @@ fn a_rename_onto_a_reexport_local_name_is_valid() {
     let changed = "import { urlAlphabet as a } from \"./url.js\";\nexport { otherName } from \"./url.js\";\nexport const f = () => a;\n";
     assert!(!output_valid(changed, &baseline));
 }
+
+/// Finding #56: a first-version run (no prior) names EVERY function, and
+/// each function context's used-identifiers Set used to COPY the module
+/// scope's names — functions x module names strings, 62 GB peak on the
+/// smallest bundle and a crash on 2.1.182. The Sets share the scope
+/// tables' snapshots, so what they hold grows with the input, not with
+/// its square.
+#[test]
+fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
+    use std::fmt::Write;
+    const TOP: usize = 400;
+    const FUNCTIONS: usize = 300;
+    let mut fresh = String::new();
+    for i in 0..TOP {
+        writeln!(fresh, "var t{i} = {i};").unwrap();
+    }
+    for i in 0..FUNCTIONS {
+        writeln!(fresh, "function f{i}(p) {{\n  return p + t{};\n}}", i % TOP).unwrap();
+    }
+    writeln!(fresh, "console.log(f0, t0);").unwrap();
+    let mut config = ledger_config();
+    config.emit_rename_ledger = false;
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh: &fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &SuffixProvider,
+    )
+    .expect("the stage runs");
+    assert!(
+        out.processor.completed_calls >= FUNCTIONS,
+        "every function was asked ({})",
+        out.processor.completed_calls
+    );
+    let held = out.waves.context_set_names;
+    assert!(
+        held < 10 * (TOP + FUNCTIONS),
+        "the context Sets hold {held} names for {FUNCTIONS} functions over {TOP} module names"
+    );
+}
