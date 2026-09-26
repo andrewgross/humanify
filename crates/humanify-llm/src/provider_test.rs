@@ -155,3 +155,60 @@ fn replay_only_client_answers_hits_and_fails_misses() {
     let stats = replay.cache_stats().unwrap();
     assert_eq!((stats.hits, stats.misses, stats.writes), (1, 1, 0));
 }
+
+/// Finding #57: a wave that carries the SAME request more than once (the
+/// same tiny callback in every AWS client, `$ => $.configure(q)`) used to
+/// send every copy live. The model answers copies differently, each copy's
+/// function took its own answer, and the cache — one entry per key — kept
+/// only the last writer, so a replay handed every copy that one answer and
+/// the run asked questions the live run never did. One key, one answer:
+/// the copies share the first answer, live and replay alike.
+#[test]
+fn identical_requests_in_one_wave_share_one_answer_and_replay_exactly() {
+    // Every request the server sees gets a DIFFERENT name.
+    let server = StubServer::start(
+        Duration::from_millis(20),
+        Arc::new(|i, _| StubResponse::ok(completion(Some(&format!(r#"{{"x":"name{i}"}}"#))))),
+    );
+    let dir = tmp_dir("provider");
+    let wave = || vec![call(0), call(1), call(0), call(2), call(0), call(1)];
+    let live_answers: Vec<_> = live(&server, 4, Some(dir.clone()))
+        .run_wave(wave())
+        .into_iter()
+        .map(|r| r.unwrap().renames)
+        .collect();
+    assert_eq!(server.requests(), 3, "one live request per distinct key");
+    assert_eq!(live_answers[0], live_answers[2]);
+    assert_eq!(live_answers[0], live_answers[4]);
+    assert_eq!(live_answers[1], live_answers[5]);
+    let replay = LlmClient::replay_only(&dir, params());
+    let replayed: Vec<_> = replay
+        .run_wave(wave())
+        .into_iter()
+        .map(|r| r.unwrap().renames)
+        .collect();
+    assert_eq!(
+        replayed, live_answers,
+        "the replay answers what the live run applied"
+    );
+    let stats = replay.cache_stats().unwrap();
+    assert_eq!((stats.misses, stats.writes), (0, 0));
+}
+
+/// An empty answer is still the answer the live run acted on (a retry
+/// that came back `{}`, finish "length"): it is recorded, so a replay
+/// takes the same path instead of failing on a miss.
+#[test]
+fn an_empty_answer_is_recorded_and_replays() {
+    let server = StubServer::start(
+        Duration::ZERO,
+        Arc::new(|_, _| StubResponse::ok(completion(Some("{}")))),
+    );
+    let dir = tmp_dir("provider");
+    let live_result = live(&server, 4, Some(dir.clone())).run_wave(vec![call(0)]);
+    assert!(live_result[0].as_ref().unwrap().renames.is_empty());
+    let replay = LlmClient::replay_only(&dir, params());
+    let replayed = replay.run_wave(vec![call(0)]);
+    assert!(replayed[0].as_ref().unwrap().renames.is_empty());
+    assert_eq!(replay.cache_stats().unwrap().misses, 0);
+}
