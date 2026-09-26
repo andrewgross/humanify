@@ -62,6 +62,7 @@ fn parses_numbers_once_into_numbers() {
         max_retries: Some("3".into()),
         max_free_retries: Some("2".into()),
         lane_threshold: Some("11".into()),
+        context_tokens: Some("131072".into()),
         ..cli()
     };
     let s = resolve_settings_with(&input, env_of(&[])).unwrap();
@@ -72,6 +73,7 @@ fn parses_numbers_once_into_numbers() {
     assert_eq!(s.max_retries_per_identifier, Some(3.0));
     assert_eq!(s.max_free_retries, Some(2.0));
     assert_eq!(s.lane_threshold, Some(11.0));
+    assert_eq!(s.context_tokens, Some(131_072.0));
 }
 
 #[test]

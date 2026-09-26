@@ -91,6 +91,12 @@ pub fn program() -> CliCommand {
         )
         .option("--max-tokens <n>", "Per-request completion token budget", None)
         .option(
+            "--context-tokens <n>",
+            "Model context window in tokens; sizes the batched split-naming \
+             prompts (default: 32768)",
+            None,
+        )
+        .option(
             "--ambiguity-probe <path>",
             "Write the matcher ambiguity probe JSON to this path (instrumentation)",
             None,
