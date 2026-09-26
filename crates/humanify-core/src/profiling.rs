@@ -258,6 +258,15 @@ pub struct Phase {
     name: &'static str,
     start_ms: f64,
     cpu_start: Option<f64>,
+    meta: JsObject,
+}
+
+impl Phase {
+    /// Attach a value to the span's metadata (the call structure of an LLM
+    /// round, say). Observation only.
+    pub fn note(&mut self, key: &str, value: impl Into<serde_json::Value>) {
+        self.meta.set(key, value);
+    }
 }
 
 /// Time a stage of the pipeline: a span named `name` (category "phase",
@@ -272,6 +281,7 @@ pub fn phase(name: &'static str) -> Option<Phase> {
         name,
         start_ms: elapsed_ms(*start),
         cpu_start: process_cpu_ms(),
+        meta: JsObject::new(),
     })
 }
 
@@ -282,7 +292,7 @@ impl Drop for Phase {
             return;
         };
         let end_ms = elapsed_ms(*start);
-        let mut meta = JsObject::new();
+        let mut meta = std::mem::take(&mut self.meta);
         if let (Some(a), Some(b)) = (self.cpu_start, process_cpu_ms()) {
             let wall = (end_ms - self.start_ms).max(1e-9);
             meta.set("cpuMs", b - a);

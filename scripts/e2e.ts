@@ -26,6 +26,10 @@
  *     under any other name fails (finding #55 — the naming stage renamed
  *     `export function createStore`; the `esm-exports` fixture holds every
  *     export form).
+ *  5. FAST — step 2 with `--fast` (docs/rust-port/20-fast-mode.md), twice:
+ *     the two trees must be byte-identical, and the output boots (step 4).
+ *     Fast mode may differ from the default path; it may never differ from
+ *     itself.
  *
  * What it cannot see: the split tree and its run scaffold (the fixtures are
  * single-module libraries, not bundles), and model quality. Both belong to
@@ -223,6 +227,8 @@ async function checkPair(
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
+  const fastA = path.join(root, "fast-a");
+  const fastB = path.join(root, "fast-b");
 
   await runBinary(
     [inputOf(name, pair.v1), "-o", fresh],
@@ -245,18 +251,27 @@ async function checkPair(
     `${label} prior (again)`
   );
   assertIdenticalTrees(prior, again, label);
+  const fastArgs = [...priorArgs, "--fast"];
+  await runBinary([...fastArgs, "-o", fastA], endpoint, `${label} fast`);
+  await runBinary(
+    [...fastArgs, "-o", fastB],
+    endpoint,
+    `${label} fast (again)`
+  );
+  assertIdenticalTrees(fastA, fastB, `${label} --fast`);
 
-  for (const [version, out] of [
-    [pair.v1, freshOut],
-    [pair.v2, path.join(prior, "index.js")]
+  for (const [version, out, tag] of [
+    [pair.v1, freshOut, "fresh"],
+    [pair.v2, path.join(prior, "index.js"), "prior"],
+    [pair.v2, path.join(fastA, "index.js"), "fast"]
   ] as const) {
     const want = surfaceOf(
       asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
       `${label} input v${version}`
     );
     const got = surfaceOf(
-      asModule(out, path.join(root, `boot-out-${version}`)),
-      `${label} output v${version}`
+      asModule(out, path.join(root, `boot-out-${tag}`)),
+      `${label} ${tag} output v${version}`
     );
     if (got !== want) {
       fail(
@@ -265,7 +280,7 @@ async function checkPair(
     }
   }
   console.log(
-    `  ${label}: fresh + prior ran, deterministic, boots with the input's surface`
+    `  ${label}: fresh + prior (+ --fast) ran, deterministic, boots with the input's surface`
   );
 }
 

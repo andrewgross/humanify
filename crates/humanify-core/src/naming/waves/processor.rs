@@ -1579,7 +1579,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         {
             let this: &Self = self;
             let provider = this.provider;
-            let _ph = crate::profiling::phase("waves:llm-pipelined");
+            let ph = crate::profiling::phase("waves:llm-pipelined");
             provider.run_pipelined(initial, &mut |id, result| {
                 if id < n_retries {
                     retry_results[id] = Some(result);
@@ -1597,6 +1597,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     None => Vec::new(),
                 }
             });
+            // The round's call structure (for the cold-run LLM model):
+            // retries are single calls; each lane is a chain.
+            if let Some(mut ph) = ph {
+                ph.note("retries", n_retries);
+                ph.note("chains", turns.clone());
+            }
         }
         records.sort_by_key(|(key, _)| *key);
         for (_, record) in records {
@@ -1931,7 +1937,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             calls.push(call);
         }
         let results = {
-            let _ph = crate::profiling::phase("waves:llm-dispatch");
+            let mut ph = crate::profiling::phase("waves:llm-dispatch");
+            if let Some(ph) = ph.as_mut() {
+                ph.note("calls", calls.len());
+            }
             self.provider.run_wave(calls)
         };
         let mut tally = Tally::default();
