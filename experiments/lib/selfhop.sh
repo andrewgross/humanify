@@ -61,6 +61,9 @@ MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
+source "$HERE/build-bin.sh"
+mkdir -p "$WORK"
+HUMANIFY_BIN=$(build_humanify "$REPO" "$WORK/selfhop-build.log") || exit 1
 
 selfhop() {
   local LEG="$1" KILL="$2" BASE OUT
@@ -74,7 +77,7 @@ selfhop() {
   rm -rf "$OUT"
   local ABLATE=()
   [[ "$KILL" == "1" ]] && ABLATE=(--disable "$FLAG")
-  NODE_OPTIONS="--max-old-space-size=14336" npx tsx "$REPO/src/index.ts" "$INPUT" \
+  "$HUMANIFY_BIN" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     --llm-cache "$CACHE" \

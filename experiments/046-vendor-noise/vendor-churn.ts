@@ -52,11 +52,11 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as t from "@babel/types";
 import {
-  parseSourceAst,
+  parseFileAst,
   traverse,
   clearBabelTraverseCache
-} from "../../src/babel-utils.js";
-import { serializePathTokens } from "../../src/analysis/structural-hash.js";
+} from "../lib/js/babel.js";
+import { serializePathTokens } from "../lib/js/structural-tokens.js";
 import type { NodePath } from "@babel/traverse";
 
 /** Sidecar metadata file inside vendor/, scored separately from library code. */
@@ -131,7 +131,7 @@ function analyzeFile(file: string): FileAnalysis | null {
     return null;
   }
   try {
-    const ast = parseSourceAst(code);
+    const ast = parseFileAst(code);
     if (!ast) return null;
     let out: FileAnalysis | null = null;
     traverse(ast, {

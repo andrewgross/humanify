@@ -133,51 +133,30 @@ describe("measurement owners", () => {
     );
   });
 
-  it("the matcher preflight can actually fail", () => {
-    // It ended on an echo: the one thing it can detect was advisory text an
-    // hour before anyone read it, and run.sh wrapped it in `|| true`.
-    const preflight = read("experiments/lib/matcher-preflight.sh");
+  it("the TS pipeline is gone: no living instrument launches src/index.ts", () => {
+    // The cutover (docs/rust-port/19-cutover.md) deleted the TS pipeline;
+    // every launch site runs the Rust binary. A living script naming the
+    // old entry point would launch nothing — or, from an old checkout, the
+    // wrong pipeline — and read as a scored run.
+    assert.ok(!fs.existsSync(path.join(REPO, "src")), "src/ must stay deleted");
+    // Code lines only: comments and tests may still NAME the old entry
+    // point to say it is gone.
+    const naming = livingFiles()
+      .filter((f) => !f.endsWith(".test.ts"))
+      .filter((f) =>
+        read(f)
+          .split("\n")
+          .filter((l) => !/^\s*(\/\/|\*|\/\*|#)/.test(l))
+          .some((l) => /tsx\s+\S*src\/(index|cli)\.ts/.test(l))
+      );
+    assert.deepStrictEqual(
+      naming,
+      [],
+      `launches the deleted TS pipeline: ${naming.join(", ")}`
+    );
     assert.ok(
-      /exit 1/.test(preflight),
-      "preflight must exit nonzero on change"
-    );
-    const runSh = read("experiments/034-eval-harness/run.sh");
-    assert.ok(
-      !/matcher-preflight\.sh"?\s*\|\|\s*true/.test(runSh),
-      "run.sh must not swallow the preflight verdict with || true"
-    );
-    // `|| true` was never the only way to swallow it: run.sh simply called
-    // the script and read nothing back, so the exit code this test asserts
-    // exists went nowhere. The guard passed while the defect it names was
-    // live through two validation runs (exp074-r1, exp076-r1).
-    assert.ok(
-      /PREFLIGHT_STATUS=\$\?/.test(runSh),
-      "run.sh must capture the preflight's exit status, not just call it"
-    );
-    assert.ok(
-      /PREFLIGHT_STATUS/.test(runSh) &&
-        /exit 1|abort|EXIT_ON_PREFLIGHT/.test(runSh),
-      "run.sh must act on a REGRESSED preflight rather than scoring anyway"
-    );
-  });
-
-  it("the preflight tells a broken matcher apart from a missing fixture", () => {
-    // Both frozen-worktree eval runs so far reported `REGRESSED mitt/nanoid/
-    // preact` when the real cause was that `test/e2e/fixtures/*/build/` is a
-    // gitignored build artifact that a fresh worktree does not have. A setup
-    // failure diagnosed as a matcher regression is worse than no check: it
-    // spends the reader's trust on a false alarm and hides the true state
-    // (the matcher went UNVERIFIED for those runs, and nothing said so).
-    const preflight = read("experiments/lib/matcher-preflight.sh");
-    assert.match(
-      preflight,
-      /UNBUILT|NOT VERIFIED/,
-      "preflight must have a distinct verdict for fixtures it cannot run"
-    );
-    assert.match(
-      preflight,
-      /exit 2/,
-      "cannot-run must exit differently from regressed so run.sh can tell them apart"
+      !fs.existsSync(path.join(REPO, "experiments/lib/matcher-preflight.sh")),
+      "the TS-matcher preflight is retired"
     );
   });
 
@@ -209,10 +188,11 @@ describe("measurement owners", () => {
     assert.match(r.stderr ?? "", /unknown flag --bogus/);
   });
 
-  it("score refuses to mix TS-scored and binary-scored cards in one label", () => {
-    // summarize totals EVERY card in a label; a --bin re-run into a TS label
-    // (or the reverse) would read as one run of one pipeline — the
-    // mixed-commit failure again, one axis over. Same override.
+  it("score refuses to add binary-scored cards to a TS-scored label", () => {
+    // summarize totals EVERY card in a label; a re-run into a pre-cutover TS
+    // label would read as one run of one pipeline — the mixed-commit failure
+    // again, one axis over. Same override. With or without --bin: the
+    // binary is the only pipeline now.
     const results = path.join(REPO, "experiments/034-eval-harness/results");
     const head = spawnSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: REPO,
@@ -220,9 +200,9 @@ describe("measurement owners", () => {
     }).stdout.trim();
     for (const [kind, flags, want] of [
       ["ts", ["--bin", "/nonexistent/humanify"], /TS program/],
-      ["rust-bin", [], /Rust binary/]
+      ["ts", [], /TS program/]
     ] as const) {
-      const label = `__owners-mixed-pipeline-${kind}-${process.pid}`;
+      const label = `__owners-mixed-pipeline-${kind}-${flags.length}-${process.pid}`;
       const dir = path.join(results, label);
       fs.mkdirSync(dir, { recursive: true });
       try {
@@ -247,12 +227,19 @@ describe("measurement owners", () => {
 
   it("score accepts the --bin flag family (flags, never env vars)", () => {
     const src = read("scripts/eval.ts");
-    for (const flag of ["--bin", "--warm-self-hop"]) {
-      assert.match(src, new RegExp(`"${flag}": "(bool|value)"`), flag);
-    }
+    assert.match(src, /"--bin": "value"/);
     const runSh = read("experiments/034-eval-harness/run.sh");
-    for (const flag of ["--bin", "--force-mixed", "--warm-self-hop"]) {
+    for (const flag of ["--bin", "--force-mixed"]) {
       assert.ok(runSh.includes(`    ${flag})`), `run.sh must parse ${flag}`);
+    }
+    // The warm self-hop always runs now, and the TS-matcher preflight is
+    // retired: neither keeps a flag.
+    for (const gone of ["--warm-self-hop", "--skip-preflight"]) {
+      assert.ok(!src.includes(`"${gone}"`), `eval.ts must not accept ${gone}`);
+      assert.ok(
+        !runSh.includes(`    ${gone})`),
+        `run.sh must not parse ${gone}`
+      );
     }
   });
 
@@ -279,10 +266,8 @@ describe("measurement owners", () => {
     for (const f of [
       "experiments/034-eval-harness/run.sh",
       "experiments/lib/neutrality.sh",
-      "experiments/lib/matcher-preflight.sh",
       "experiments/lib/gate.sh",
       "experiments/lib/selfhop.sh",
-      "experiments/lib/verify-counterfactual.ts",
       "scripts/eval.ts"
     ]) {
       assert.ok(
@@ -302,7 +287,6 @@ describe("measurement owners", () => {
     const scripts = [
       "experiments/034-eval-harness/run.sh",
       "experiments/lib/neutrality.sh",
-      "experiments/lib/matcher-preflight.sh",
       "experiments/lib/gate.sh",
       "experiments/lib/selfhop.sh"
     ];

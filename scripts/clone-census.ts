@@ -3,20 +3,25 @@
  * `census:clones`). `npm run census:clones -- --loose` — a periodic review
  * sweep that never fails.
  *
- * Detector #3 in the hunt for legacy/dead/twin code: point the pipeline's OWN
- * function-matching serializer at the pipeline's own source and report
+ * Detector #3 in the hunt for legacy/dead/twin code: point the name-masked
+ * serializer (experiments/lib/js/structural-tokens.ts — the TS pipeline's
+ * function-matching stream, kept by the harness at the cutover) at the
+ * repo's remaining TypeScript and report
  * copy-paste twins — structurally identical functions duplicated across
  * files. Past reviews found these by hand (`escapeRegExp` three times
  * verbatim; two near-verbatim statement-index builders); this makes the
  * finding mechanical, repeatable, and — for NEW cross-file twins — a gate.
  *
- * How it matches: every non-test `.ts` under the scan root (default `src/`;
- * override with `CLONE_CENSUS_ROOT` so tests can aim it at a fixture tree) is
+ * How it matches: every non-test `.ts` under the scan roots (default: the
+ * living TypeScript — scripts/, experiments/lib/, the 034 eval harness and
+ * test/, fixture and data dirs excluded; the pipeline itself is Rust since
+ * the cutover; override with `CLONE_CENSUS_ROOT` so tests can aim it at a
+ * fixture tree) is
  * parsed (@babel/parser, typescript plugin) and each module-level-ish
  * function — function declarations, arrow/function consts, class methods;
  * anything whose nearest enclosing function is the module itself — is
  * serialized with `serializePathTokens(path, { preserveLiterals: true })`
- * from `src/analysis/structural-hash.ts`. That is the exact stream
+ * from `experiments/lib/js/structural-tokens.ts`. That is the exact stream
  * `computeStructuralSignature` hashes: binding names are masked to
  * order-keyed slots (so twins with renamed locals still group) while
  * literals, property names, and free identifiers stay VERBATIM — the
@@ -66,13 +71,24 @@ import type { NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { serializePathTokens } from "../src/analysis/structural-hash.js";
-import { traverse } from "../src/babel-utils.js";
+import { traverse } from "../experiments/lib/js/babel.js";
+import { serializePathTokens } from "../experiments/lib/js/structural-tokens.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
-/** Scan root, injectable so a test can point the census at a fixture tree. */
-const ROOT_REL = process.env.CLONE_CENSUS_ROOT ?? "src";
-const ROOT = path.resolve(REPO, ROOT_REL);
+/** Scan roots; one root is injectable so a test can point the census at a
+ * fixture tree. */
+const DEFAULT_ROOTS = [
+  "scripts",
+  "experiments/lib",
+  "experiments/034-eval-harness",
+  "test"
+];
+const ROOTS_REL = process.env.CLONE_CENSUS_ROOT
+  ? [process.env.CLONE_CENSUS_ROOT]
+  : DEFAULT_ROOTS;
+const ROOT_REL = ROOTS_REL.join(", ");
+/** Directories never scanned: data, not code under review. */
+const SKIP_DIRS = new Set(["node_modules", "fixtures", "results", "parity"]);
 const STRICT_MIN_MASKED_LEN = 300;
 const LOOSE_MIN_MASKED_LEN = 150;
 const EXCERPT_LINES = 3;
@@ -89,29 +105,83 @@ interface AllowlistEntry {
 }
 
 /**
- * Accepted cross-file clone groups. The census's first run found six
- * cross-file groups; four were unified into shared helpers and these two
- * one-line idioms survived review.
+ * Accepted cross-file clone groups. The census's first run (over the TS
+ * pipeline) found six; four were unified and two one-line idioms were
+ * allowlisted — both went with src/ at the cutover.
+ *
+ * Retargeted at the harness at the cutover, its first run found the eight
+ * groups below, all in the 034 eval harness and all pre-existing. Two
+ * reasons, one per kind:
  */
+const KPI_SCORER =
+  "KPI scorer code (analyze.ts / trail-report.ts path): unify only together with a re-score of the committed labels proving byte-identical cards — the cutover's own proof covers these bytes as they are (docs/rust-port/19-cutover.md)";
+const ONE_OFF =
+  "one-off sizing/ceiling scripts from closed experiments — records of how a number was produced, not shared code; editing them rewrites the record";
 const ALLOWLIST: readonly AllowlistEntry[] = [
   {
     members: [
-      "src/debug.ts:DebugLoggerImpl.setOutput",
-      "src/verbose.ts:VerboseLogger.setOutput"
+      "experiments/034-eval-harness/ceiling-echo-web.ts:tokenize",
+      "experiments/034-eval-harness/diagnose-residual-shape.ts:tokenize",
+      "experiments/034-eval-harness/diff-ledger.ts:tokenize"
     ],
-    justification: "one-line idiom on independent classes, not a drift hazard"
+    justification: KPI_SCORER
   },
   {
     members: [
-      "src/rename/strategy-trail.ts:StrategyTrailRecorder.isEnabled",
-      "src/split/placement-trail.ts:PlacementTrailRecorder.isEnabled"
+      "experiments/034-eval-harness/build-constant-churn.ts:walkFiles",
+      "experiments/034-eval-harness/name-only-churn.ts:walkFiles"
     ],
-    justification: "one-line idiom on independent classes, not a drift hazard"
+    justification: KPI_SCORER
+  },
+  {
+    members: [
+      "experiments/034-eval-harness/ceiling-echo-web.ts:isPropertyPosition",
+      "experiments/034-eval-harness/diagnose-residual-shape.ts:isPropertyPosition",
+      "experiments/034-eval-harness/diff-ledger.ts:isPropertyPosition"
+    ],
+    justification: KPI_SCORER
+  },
+  {
+    members: [
+      "experiments/034-eval-harness/ceiling-lever1.ts:counts",
+      "experiments/034-eval-harness/residual-lever1.ts:counts"
+    ],
+    justification: ONE_OFF
+  },
+  {
+    members: [
+      "experiments/034-eval-harness/attribute-roots.ts:counted",
+      "experiments/034-eval-harness/simulate-root-inherit.ts:counted"
+    ],
+    justification: ONE_OFF
+  },
+  {
+    members: [
+      "experiments/034-eval-harness/attribute-roots.ts:isMintish",
+      "experiments/034-eval-harness/ceiling-family-rotation.ts:isMintish",
+      "experiments/034-eval-harness/residual-classify.ts:isMintish",
+      "experiments/034-eval-harness/simulate-root-inherit.ts:isMintish"
+    ],
+    justification: ONE_OFF
+  },
+  {
+    members: [
+      "experiments/034-eval-harness/attribute-roots.ts:words",
+      "experiments/034-eval-harness/ceiling-family-rotation.ts:words"
+    ],
+    justification: ONE_OFF
+  },
+  {
+    members: [
+      "experiments/034-eval-harness/ceiling-family-rotation.ts:tally",
+      "experiments/034-eval-harness/diagnose-residual-shape.ts:tally"
+    ],
+    justification: ONE_OFF
   }
 ];
 
 interface Member {
-  /** Path relative to the repo root, e.g. "src/split/module-detect.ts". */
+  /** Path relative to the repo root, e.g. "experiments/lib/diff.ts". */
   rel: string;
   line: number;
   name: string;
@@ -126,8 +196,9 @@ function listTsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listTsFiles(full));
-    else if (
+    if (entry.isDirectory()) {
+      if (!SKIP_DIRS.has(entry.name)) out.push(...listTsFiles(full));
+    } else if (
       entry.name.endsWith(".ts") &&
       !entry.name.endsWith(".test.ts") &&
       !entry.name.endsWith(".e2etest.ts")
@@ -428,8 +499,8 @@ function main(): void {
   if (process.argv.includes("--help")) {
     console.log(
       "clone-census: serialize every module-level function under the scan " +
-        "root (CLONE_CENSUS_ROOT, default src/) with the pipeline's own " +
-        "name-masked serializer and report byte-identical twins.\n" +
+        "roots (CLONE_CENSUS_ROOT, default the living TS) with the name-masked " +
+        "serializer and report byte-identical twins.\n" +
         "Default (strict, THE GATE): cross-file groups >= 300 masked chars " +
         "must be allowlisted or exit 1.\n" +
         "--loose (review, always exit 0): cutoff 150, plus literal-blurred " +
@@ -438,7 +509,9 @@ function main(): void {
     return;
   }
   const loose = process.argv.includes("--loose");
-  const files = listTsFiles(ROOT).map((f) => path.relative(REPO, f));
+  const files = ROOTS_REL.flatMap((r) =>
+    listTsFiles(path.resolve(REPO, r))
+  ).map((f) => path.relative(REPO, f));
   const members: Member[] = [];
   for (const rel of files) collectFile(rel, members, loose);
   if (loose) runLoose(members, files.length);

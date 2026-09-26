@@ -223,7 +223,7 @@ The gate was redefined (00-control §3, "5b self-hop gate") into two halves:
   (`invariants.ts coldRangeVerdict`). It says "not judged" rather than
   printing a verdict when the leg replayed a cache (`--llm-cache`) or ran on
   a version with no range on record.
-- **WARM** (`--warm-self-hop`, implied by `--bin`): the cold leg records into
+- **WARM** (always run): the cold leg records into
   a fresh cache dir. That dir starts empty, so the leg is still cold and every
   prompt is live. Then the leg runs again, replaying a scratch COPY of that
   cache. The whole tree must be byte-identical to the cold leg's, with **0
@@ -235,18 +235,23 @@ The gate was redefined (00-control §3, "5b self-hop gate") into two halves:
 Verdict in `results/<model>/<v>-self-hop.json`. It records `diffLines` (cold),
 `coldCache` (`none` / `fresh` / `seeded`), and a `warm` block.
 
-## Scoring a Rust binary (`--bin`, WP5.6f)
+## Scoring a Rust binary (the only pipeline since the cutover)
 
 ```bash
-npm run eval -- score rust-<sha>-a --bin target/release/humanify
+npm run eval -- score <label>                      # builds target/release/humanify
+npm run eval -- score <label> --bin <workspace>/target/release/humanify
 ```
 
+- **The binary is the pipeline.** The TS program the harness launched until
+  2026-09-26 is deleted (`docs/rust-port/19-cutover.md`); without `--bin`,
+  run.sh builds and scores this repo's own `target/release/humanify`, and a run
+  config that names no binary is refused.
 - **All three launch sites run the binary:** the rebase of each prior, the
   scored leg (run-pipeline.ts, via the run config's `command`), and the self-hop
-  (cold and warm). Without `--bin`, every launch is byte-identical to the
-  harness before the flag existed. `run-launch.test.ts` runs run.sh end to end
-  with a recording `npx`, checks the launches against a golden captured from the
-  pre-flag script, and checks every `--bin` guard below.
+  (cold and warm). `run-launch.test.ts` runs run.sh end to end with a recording
+  `npx`, checks the launches against a golden captured from the pre-cutover
+  run.sh under `--bin` (the command lines `rust-5b-c3b272f-a/-b` were scored
+  by), and checks every guard below.
 - **Provenance.** run.sh BUILDS the binary itself. It runs
   `cargo build --release --locked -p humanify-cli` in the cargo workspace
   that owns the path (`experiments/lib/pipeline-bin.ts`), so the label's commit
@@ -257,13 +262,13 @@ npm run eval -- score rust-<sha>-a --bin target/release/humanify
   sha256, commit, dirty) goes into the label's `pipeline.json`. Each pair's run
   manifest records the sha256 **as launched** and warns if it differs from the
   build, or if the build commit is not the run's. The dispatcher also refuses
-  to add binary cards to a TS-scored label, and the reverse.
+  to add binary cards to a pre-cutover TS-scored label.
 - **`--heap-mb` / `NODE_OPTIONS` are INERT** for the binary, because it is not a
   Node process. The run log says so, and the manifest's heap-headroom warning
   does not fire for binary runs.
-- **The matcher preflight tests the TS matcher** (`test/e2e/harness`), not the
-  binary. The run log says so, `preflight-status.json` records
-  `"covers":"ts-matcher"`, and the summary banner repeats it.
+- **The matcher preflight is retired** with the TS matcher it tested (the
+  cutover). Labels scored before it still carry `preflight-status.json`, and
+  the summary still reads it for them.
 - **No diagnostics trail yet.** The binary accepts `--diagnostics` but does not
   write it (its writer is being ported on `rust/unified-leftovers`). run.sh
   prints `NO DIAGNOSTICS TRAIL` and skips the report page, where it used to

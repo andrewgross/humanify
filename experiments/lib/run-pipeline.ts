@@ -64,11 +64,10 @@ interface RunConfig {
   prior: string;
   outputDir: string;
   repo: string;
-  /** The pipeline's flags, after the command head (`npx tsx src/index.ts`,
-   *  or the binary). */
+  /** The pipeline's flags, after the command head (the binary). */
   args: string[];
-  /** The argv head to spawn — written by `run.sh --bin` only. Absent means
-   *  the TS program, byte-identical to every run before the flag. */
+  /** The argv head to spawn: the binary run.sh built and recorded. Required
+   *  since the cutover (pipelineCommandOf refuses a config without it). */
   command?: string[];
   /** The binary's build record (pipeline-bin.ts), with `command`. */
   bin?: BinRecord;
@@ -215,8 +214,8 @@ async function main(): Promise<void> {
   const child = spawn(cmd, [...head, ...cfg.args], {
     cwd: cfg.repo,
     stdio: ["ignore", out, out],
-    // Inert for a binary (not a Node process) — kept identical so the TS
-    // launch is unchanged; run.sh says so in the run log.
+    // Inert for the binary (not a Node process) — the launch env every
+    // binary-scored reference ran with; run.sh says so in the run log.
     env: {
       ...process.env,
       NODE_OPTIONS: `--max-old-space-size=${cfg.heapMb}`

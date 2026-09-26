@@ -547,6 +547,8 @@ That is determinism with the model held fixed, which is the use rule 10 permits.
 
 ## 6. Cutover checklist after 5b
 
+**DONE 2026-09-26 — executed on `rust/cutover`; the ledger of every deletion, move and retirement is `19-cutover.md`.**
+
 **Can be deleted:**
 
 - `src/plugins/babel/` and the `babel-plugin-transform-beautifier` dependency;

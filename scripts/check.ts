@@ -19,7 +19,9 @@
  * scope. The fix is not a fourth command; it is one command with nothing
  * outside it.
  *
- * The whole set takes ~25s, so there was never a speed reason for the split.
+ * There was never a speed reason for the split. Since the cutover
+ * (docs/rust-port/19-cutover.md) the pipeline is the Rust binary; the TS
+ * stages cover the measurement harness that remains.
  *
  * ## The rule this file enforces
  *
@@ -56,17 +58,17 @@ interface Stage {
 const STAGES: readonly Stage[] = [
   {
     name: "typecheck",
-    why: "types compile",
+    why: "the harness TypeScript compiles (scripts/, test/, experiments/) — the pipeline itself is Rust since the cutover",
     run: "npm run typecheck"
   },
   {
     name: "lint",
-    why: "prettier + biome, including the complexity ceiling pre-commit enforces",
+    why: "prettier + biome over the living TypeScript, including the complexity ceiling pre-commit enforces",
     run: "npm run lint"
   },
   {
     name: "rust:fmt",
-    why: "rustfmt defaults across crates/ — the prettier analog for the Rust port (docs/rust-port/05-rust-toolchain.md §8); formatting drift never reaches review",
+    why: "rustfmt defaults across crates/ — the prettier analog for the pipeline (docs/rust-port/05-rust-toolchain.md §8); formatting drift never reaches review",
     run: "cargo fmt --all --check"
   },
   {
@@ -76,44 +78,49 @@ const STAGES: readonly Stage[] = [
   },
   {
     name: "knip",
-    why: "no dead exports or unused dependencies",
+    why: "no dead exports or unused dependencies in the harness TypeScript",
     run: "npm run knip"
   },
   {
     name: "knip:prod",
-    why: "no exports alive only because a test imports them — production dead code. Sat outside the gate until a burn-down found 3 dead functions (one a drifted duplicate of resolveSettings' levers) that plain knip could not see",
+    why: "no exports alive only because a test imports them — production dead code. Sat outside the gate until a burn-down found 3 dead functions that plain knip could not see",
     run: "npm run knip:prod"
   },
   {
     name: "census:clones",
-    why: "ADVISORY — potential duplication for Claude to review (an automated mini code-review, not a correctness verdict). Its first run found six groups that got unified; the two surviving one-line idioms are allowlisted in scripts/clone-census.ts. Act on findings: unify the code or allowlist with a justification",
+    why: "ADVISORY — potential duplication in the living TypeScript for Claude to review (an automated mini code-review, not a correctness verdict). Act on findings: unify the code or allowlist with a justification in scripts/clone-census.ts",
     run: "npm run census:clones",
     advisory: true
   },
   {
     name: "unit",
-    why: "EVERY *.test.ts in the repo — src/, test/, and experiments/*/lib/. Scoped to src/ alone until an audit found test/e2e/functional.test.ts (7 cases) and experiments/029-*/lib/*.test.ts (6 files, 469 lines) had never been run by anything",
+    why: "EVERY *.test.ts in the repo — test/ and experiments/ (the harness's own tests; the KPI scorer's owners among them)",
     run: "npm run test:unit"
   },
   {
     name: "rust:unit",
-    why: "every #[cfg(test)] and tests/ target in crates/ — the Rust half of what `unit` promises for TS. `cargo test` until cargo-nextest is installed where the gate runs (docs/rust-port/RUNBOOK.md)",
+    why: "every #[cfg(test)] and tests/ target in crates/ — the pipeline's unit and integration tests, the frozen test/parity goldens among them. `cargo test` until cargo-nextest is installed where the gate runs (docs/rust-port/RUNBOOK.md)",
     run: "cargo test --workspace"
   },
   {
-    name: "fingerprint",
-    why: "e2e fingerprint snapshots in test/e2e — cross-version matching behaviour",
-    run: "npm run test:fingerprint"
+    name: "rust:build",
+    why: "the RELEASE binary — the pipeline the eval scores and the stages below run. `--locked`, the build run.sh makes: a lockfile drift fails here, not an hour into an eval",
+    run: "cargo build --release --locked -p humanify-cli"
+  },
+  {
+    name: "rust:format-golden",
+    why: "the release binary's formatter replayed against test/parity/format-goldens.json — the TS beautifier's captured output, now the formatter's frozen spec — plus a planted perturbation that must be detected",
+    run: "scripts/format-golden.sh"
   },
   {
     name: "rust:parity",
-    why: "the parity differ proven able to fail (selftest: planted divergences detected) + committed fixture dumps compared — docs/rust-port/05-rust-toolchain.md §8, wired at WP0.3",
+    why: "the parity differ proven able to fail (selftest: planted divergences detected) — it compares two --dump-artifacts dumps of the binary, Rust against Rust",
     run: "tsx scripts/rust-parity.ts"
   },
   {
     name: "e2e",
-    why: "*.e2etest.ts against a real build — the suite that used to sit outside the gate",
-    run: "npm run test:e2e"
+    why: "the release binary end to end on the committed e2e fixtures (fresh + prior, stub LLM), deterministic, and every output booted under Node with the input's export surface (scripts/e2e.ts)",
+    run: "tsx scripts/e2e.ts"
   }
 ];
 
@@ -192,10 +199,10 @@ for (const { stage, outcome, ms } of results) {
           ? "REVIEW"
           : "skip";
   const time = outcome === "skipped" ? "" : `${(ms / 1000).toFixed(1)}s`;
-  console.log(`  ${mark.padEnd(5)} ${stage.name.padEnd(14)} ${time}`);
+  console.log(`  ${mark.padEnd(5)} ${stage.name.padEnd(20)} ${time}`);
 }
 for (let i = results.length; i < STAGES.length; i++) {
-  console.log(`  ---   ${STAGES[i].name.padEnd(14)} not reached`);
+  console.log(`  ---   ${STAGES[i].name.padEnd(20)} not reached`);
 }
 
 if (failed.length > 0) {

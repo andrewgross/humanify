@@ -8,23 +8,44 @@
 npm run check
 ```
 
-It runs all twelve stages — typecheck, lint (prettier + biome), rust:fmt,
-rust:clippy, knip, knip:prod, clone census, unit, rust:unit, fingerprint,
-rust:parity, e2e — and prints a summary saying which ran. The `census:clones` stage is
-ADVISORY: unreviewed potential-duplication prints `REVIEW` (never FAIL) —
-an automated mini code-review for Claude/agents to act on by unifying the
-code or allowlisting with a justification. All other stages are pass/fail.
-`check:all` and `test` are aliases of it. Nothing is outside it.
+It runs all thirteen stages — typecheck, lint (prettier + biome), rust:fmt,
+rust:clippy, knip, knip:prod, clone census, unit, rust:unit, rust:build,
+rust:format-golden, rust:parity, e2e — and prints a summary saying which ran.
+The `census:clones` stage is ADVISORY: unreviewed potential-duplication prints
+`REVIEW` (never FAIL) — an automated mini code-review for Claude/agents to act
+on by unifying the code or allowlisting with a justification. All other
+stages are pass/fail. `check:all` and `test` are aliases of it. Nothing is
+outside it.
 
-`unit` finds **every** `*.test.ts` in `src/`, `test/` and `experiments/*/lib/`.
-It was scoped to `src/` alone until an audit found 64 tests that no script ran:
-`test/e2e/functional.test.ts` and six files under
-`experiments/029-graph-clustering-split/lib/`.
+**The pipeline is the Rust binary** (`crates/`, built as
+`target/release/humanify`). The TypeScript pipeline (`src/`) was deleted at the
+cutover, 2026-09-26 — `docs/rust-port/19-cutover.md` is the ledger of what was
+deleted, moved or retired and why; tag `m4` is the last tree that has it. The
+TS that remains is the measurement harness (`scripts/`, `experiments/lib/`,
+the 034 eval harness, `test/`), and the TS stages cover exactly that.
+
+What the Rust-specific stages prove:
+
+- `rust:build` — the RELEASE binary, `--locked`, the build the eval runs.
+- `rust:format-golden` — that binary's formatter against
+  `test/parity/format-goldens.json` (the TS beautifier's captured bytes, now
+  the formatter's frozen spec), plus a planted perturbation that must be caught.
+- `rust:parity` — the dump differ's selftest (planted divergences detected).
+- `e2e` — `scripts/e2e.ts`: the release binary on the committed e2e fixtures
+  (fresh, then with `--prior-version`) against a stub LLM that names every
+  identifier, run twice for byte-determinism, and every output imported by
+  Node and required to export the input's surface. It REPORTS finding #55
+  (exported bindings get renamed) in its exact shape and fails on anything
+  else.
+
+`unit` finds **every** `*.test.ts` in `test/` and `experiments/` (the harness's
+own tests). `rust:unit` is `cargo test --workspace`, including the replays of
+the frozen `test/parity/` specs.
 
 There used to be three commands and none of them ran everything: `test:e2e` sat
 outside the documented gate entirely, and `knip` sat outside the one people
 actually ran — which is how `check:all` came to be red on main for two findings
-nobody had seen. The whole set takes ~25s, so the split was never about speed.
+nobody had seen. The split was never about speed.
 
 A subset is available for iteration and is **labelled PARTIAL** so it cannot be
 mistaken for a green gate:
@@ -40,14 +61,16 @@ what the gate covers.
 Individual stages, if you need to run one directly:
 
 ```bash
-npm run typecheck          # tsc --noEmit
-npm run lint               # prettier --check + biome check (src/, test/, scripts/)
-npm run test:unit          # EVERY *.test.ts: src/, test/, experiments/*/lib/
-npm run test:fingerprint   # e2e fingerprint snapshot tests
-npm run test:e2e           # *.e2etest.ts against a real build
-npm run knip               # dead code / unused exports
+npm run typecheck          # tsc --noEmit (the harness TS)
+npm run lint               # prettier --check + biome check (test/, scripts/, experiments/lib/)
+npm run test:unit          # EVERY *.test.ts: test/, experiments/
+npm run knip               # dead code / unused exports (knip.json)
 npm run knip:prod          # production-only dead code audit
 npm run census:clones      # cross-file twin functions vs allowlist (--loose = review sweep)
+cargo test --workspace     # rust:unit
+cargo build --release --locked -p humanify-cli   # rust:build
+scripts/format-golden.sh   # rust:format-golden (needs rust:build)
+npm run test:e2e           # e2e (needs rust:build)
 ```
 
 ## Validating cross-version changes
@@ -56,9 +79,8 @@ npm run census:clones      # cross-file twin functions vs allowlist (--loose = r
 
 ```bash
 npm run eval                     # lists the verbs, what each proves and CANNOT prove
-npm run eval -- score <label>    # cold scored run (wraps 034/run.sh)
+npm run eval -- score <label>    # cold scored run of the binary (wraps 034/run.sh)
 npm run eval -- neutrality <ref> # byte-identity gate for should-change-nothing edits
-npm run eval -- preflight        # matcher outcome-set check (fails loud now)
 npm run eval -- leaderboard ...  # compare labels
 ```
 
@@ -67,9 +89,9 @@ not listed there is not supported. The dispatcher owns the env folklore (bun
 on PATH, without which boot gates silently skip) and refuses to `score` into
 a label whose cards came from a different commit (`--force-mixed` overrides).
 `test/measurement-owners.test.ts` guards the stack: verdict files must be
-consumed by the summary, the preflight must be able to fail, statement
-extraction must route through the throwing owner, and a new changed-line
-counter in the living instrument set fails CI.
+consumed by the summary, no living instrument may launch the deleted TS
+pipeline, statement extraction must route through the throwing owner, and a
+new changed-line counter in the living instrument set fails CI.
 
 For any change that could affect deobfuscation output (naming, matching,
 splitting), the final gate on top of `npm run check` is the eval harness — it
@@ -98,8 +120,10 @@ Three things it will tell you that are easy to misread:
   Check `differing lines: 0` before reading "NOT NEUTRAL" as a regression.
 - a leg that exits non-zero having WRITTEN a tree is recorded and compared, not
   treated as a crash. The pipeline exits 1 on a rename-invariant failure.
-- the baseline leg runs in a detached git worktree, so **`src/` must not be
-  edited while a candidate leg is running**.
+- the baseline leg runs in a detached worktree, and each leg BUILDS its
+  own binary from its own commit (`experiments/lib/build-bin.sh`) — so
+  **`crates/` must not be edited while a candidate leg is building**. A
+  baseline ref from before the cutover has no binary that is the pipeline.
 
 Using the cache here is the use rule 10 permits: it forbids the cache for a
 verdict about LLM-dependent behaviour, and this is a verdict about determinism
@@ -151,41 +175,38 @@ What to do with a NOT NEUTRAL:
    manufacture a false FAILURE, never a false pass, so no merge gated on a
    NEUTRAL result is in doubt.
 
-Before scoring the four pairs it runs `experiments/lib/matcher-preflight.sh`
-(~5s, no LLM): the fingerprint matcher against real npm packages. It asserts the
-expected OUTCOME SET rather than a threshold, because zustand's
-`getState`/`getInitialState` are identical `() => variable` shapes that stay
-ambiguous by design — a permanently-red check is one nobody reads. A fixture
-moving between the pass list and the known-shortfall list is the signal.
-`--skip-preflight` skips it and says so.
+The matcher preflight (`matcher-preflight.sh`, the TS fingerprint matcher
+against real npm packages) is RETIRED with the TS matcher it tested; the Rust
+matcher's replacement is an open follow-up in `docs/rust-port/19-cutover.md`.
+`--skip-preflight` is refused as an unknown flag.
 
-`--heap-mb` (default 65536) sizes the pipeline's heap. The old 14336 was
-sized for cached runs; cold-by-default keeps far more naming state live and
-2.1.215→216 OOMs at 14 GB.
+`--heap-mb` is recorded in every run manifest but INERT: the binary is not a
+Node process. Run an eval ALONE — a parallel heavy job (a gate batch, another
+eval) has OOM-killed a rebase before and silently degraded a label to the
+archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
 
-**Scoring the Rust binary (`--bin`, WP5.6f).**
-`npm run eval -- score <label> --bin target/release/humanify` runs the
-binary at all three launch sites: the
-rebase, the scored leg and the self-hop. Without `--bin` every launch is
-byte-identical to the pre-flag harness, and `run-launch.test.ts` holds it to
-a golden. run.sh BUILDS the binary itself (`cargo build --release --locked`)
-and refuses one whose build commit is not the label's, is unknown, or came from a
-dirty tree. `--force-mixed` overrides that, and the dispatcher also refuses to
-mix TS and binary cards in one label. The label's `pipeline.json` and every
-run manifest record the binary's sha256 and build commit. `--heap-mb` is
-inert for it, and the matcher preflight still tests the TS matcher. Both are
-said in the run log. The binary formats natively (WP5.6d deleted the
-temporary `--ts-beautify-adapter`), and WP5.6e deleted `--inject-ts-hashes`:
-the binary reads no TS artifact and its hashes are its own. A TS-era prior is
-brought across (ledger re-derived, vendor names carried by content) or
-refused with a WARNING line. Details:
+**What the eval scores: the Rust binary, always.** `npm run eval -- score
+<label>` BUILDS `target/release/humanify` (`cargo build --release --locked`)
+and runs it at all three launch sites: the rebase, the scored leg and the
+self-hop. `--bin <path>` names a different binary (in some cargo workspace's
+`target/`). There is no TS mode — the cutover removed it, and a run config
+without a binary is refused. run.sh refuses a binary whose build commit is not
+the label's, is unknown, or came from a dirty tree; `--force-mixed` overrides
+that, and the dispatcher refuses to add binary cards to a pre-cutover TS
+label. The label's `pipeline.json` and every run manifest record the binary's
+sha256 and build commit, and `run-launch.test.ts` holds the launch lines
+byte-identical to the ones the binary-scored references ran with. The KPI
+scorer is unchanged by the cutover: `statementHash` moved byte-for-byte to
+`experiments/lib/js/`, proven by re-scoring three labels to byte-identical
+cards. A TS-era prior is brought across (ledger re-derived, vendor names
+carried by content) or refused with a WARNING line. Details:
 `experiments/034-eval-harness/README.md`, "Scoring a Rust binary".
 
 **The self-hop gate has two halves (00-control §3, 2026-09-25).** The COLD
 self-hop never reads 0: every cold run on record differs by 92–180 bundle
 lines, because the LLM re-rolls. That count must fall inside the range in
 `experiments/034-eval-harness/self-hop-reference.json` (2.1.216 only). The
-WARM self-hop (`--warm-self-hop`, implied by `--bin`) replays a scratch copy
+WARM self-hop (always run) replays a scratch copy
 of the cache the cold leg filled, and it must be byte-identical with 0 cache
 writes. This is determinism with the model held fixed, the cache use rule 10
 permits. The summary judges both, and says "not judged" when a leg ran on a
@@ -314,7 +335,7 @@ Never skip the red step. If the test passes before implementation, the test is n
 
 - Actively unify duplicated code. When two systems do similar things, extract shared functionality rather than duplicating with minor variations. Before writing new helpers, check if an existing one can be reused or generalized.
 - **[`docs/responsibility.md`](./docs/responsibility.md) says who owns which question** — name legality, applying a rename, counting changed lines, walking a tree, reading a ledger, reading a kill switch. Check it before writing a helper, and add a row when you create an owner. The dangerous duplication is not two functions that look alike; it is two that answer the same question DIFFERENTLY with nothing declaring the difference (a guard that read fields one producer never sets was dead for 11,094 accepts and reported as perfect precision).
-- **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run**, in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
-- Biome enforces cognitive complexity <= 15. Extract helpers to keep functions focused.
-- Unit tests are colocated as `*.test.ts` next to source files.
-- E2E fingerprint tests live in `test/e2e/` as `*.fptest.ts` with snapshots in `test/e2e/snapshots/`.
+- **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run** (Rust modules since the cutover), in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
+- Clippy enforces the complexity ceiling in the Rust pipeline; Biome enforces cognitive complexity <= 15 in the harness TS. Extract helpers to keep functions focused.
+- Rust unit tests sit beside their module as `<module>_test.rs` (or a crate's `tests/`); harness TS tests are colocated `*.test.ts`.
+- The e2e fixtures live in `test/e2e/fixtures/` (committed builds); `scripts/e2e.ts` runs the binary on them.

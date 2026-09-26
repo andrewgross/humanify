@@ -1,57 +1,24 @@
-# Parity fixtures
+# Frozen specs (formerly: parity fixtures)
 
-Committed TS-side artifact dumps (the 07 §2 catalog as implemented) cut at
-the oracle commit from the e2e fixture corpus, one per fixture — the
-`rust:parity` check stage's corpus (scripts/rust-parity.ts compares a
-`ts/` side against a `rust/` side when one exists; today only `ts/`).
+Every file here is DATA captured from the TypeScript pipeline before the
+cutover (2026-09-26, `docs/rust-port/19-cutover.md`) — its verdicts, bytes or
+decisions on a fixed input set. The Rust tests that replay them now treat them
+as the frozen SPEC of the behaviour they pin: a Rust change that moves one is a
+behaviour change, judged as such (by the eval), never "fixed" by editing the
+file to match.
 
-Cut 2026-09-19 at oracle-0294b28 from the fixture pairs' to-version runs
-(prior = the from-version's humanified output). The five fixtures whose
-full-pipeline run exited 0: mitt, nanoid, preact, r1b-synthetic,
-disambiguation. zustand's dump is from a run whose rename-invariant
-FAILED (a pre-existing export-const bug class, recorded in the WP0.4
-hand-back) — its dump is still a valid decision record for the hash and
-matching sections, which is what phases 1-2 compare.
+The TS probes that produced them (`*-probe.ts`, `*.mjs`, the capture hooks),
+the committed TS-side artifact dumps (`<fixture>/ts/`, all but the two input
+texts `ts/text/{prior,fresh}.js`, which `twins_test.rs` replays) and the
+TS-vs-Rust comparison modes are deleted: they ran the TS pipeline, which no longer exists.
+Git history at tag `m4` holds them, with the regeneration commands each
+recorded. They cannot be regenerated from this tree, and should not need to be.
 
-The cache-key vectors (R4) live beside this: cache-key-vectors.jsonl +
-its generator, and babel-counts.mjs (the WP1.2 counts table's Babel side).
+Which Rust test replays which file: grep the file name under `crates/` — every
+file here has at least one reader (the cutover swept the rest).
 
-## WP3.1 (validated rename) probes — 2026-09-24
+The one file with a gate stage of its own:
 
-Each probe runs the REAL TS function on a fixture set and freezes its
-verdicts; the Rust test named beside it replays the same inputs.
-
-| probe                                 | frozen at              | pins                                                                                                                                            | Rust test                                                                      |
-| ------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `wp31-scope-probe.mjs` (+ snippets)   | `wp31-scope-view.json` | Babel's scope model: scopes, binding maps in `Object.keys` order, kinds, owners, reference / violation paths with `path.scope`, globals         | `scope_view_matches_the_babel_probe`                                           |
-| `wp31-scope-bundle-probe.mjs`         | (bundle scale, /tmp)   | the same rows for a whole oracle text; compare with `humanify scope-view <text> <out>` byte for byte                                            | gate log `/work/rust-port/gates/wp3.1/`                                        |
-| `wp31-name-probe.mjs`                 | `wp31-names.json`      | RESERVED_WORDS, GLOBAL_BUILTINS, isValidIdentifier, isValidRenameTarget, isBunToken, isDecoratedDescriptive, isBelowFloorName, createIsEligible | `target_sets_match_the_ts_exactly`, `name_predicates_match_the_ts_truth_table` |
-| `wp31-rename-probe.mjs` (+ scenarios) | `wp31-rename.json`     | every validated-rename.test.ts / scope-era.test.ts case + predicate probes: each verdict and every binding's final name                         | `rename_scenarios_match_the_ts_probe`                                          |
-| `wp31-soundness-probe.mjs`            | `wp31-soundness.json`  | `isBindingEvalTaintFrozen` for every binding                                                                                                    | `eval_taint_freeze_matches_the_ts_probe`                                       |
-| `wp31-ledger-probe.mjs`               | `wp31-ledger.json`     | rename-ledger.test.ts cases: the TS ledger and Babel's generated output                                                                         | `ledgers_match_the_ts_probe_and_replay_to_its_output`                          |
-| `wp31-catch-var-capture-repro.mjs`    | —                      | a REAL TS capture (catch param renamed to a `var` in its own body is applied; runtime 5 → undefined)                                            | `the_catch_var_capture_is_reproduced_not_fixed`                                |
-
-Regenerate with `npx tsx test/parity/<probe> > test/parity/<frozen>` (the
-scope probe runs under plain `node`).
-
-## Library-freeze carry (#32) — 2026-09-25
-
-`library-carry-probe.ts` runs the REAL TS beautify with the function carry
-armed over synthetic snippets plus the gate regimes' raw texts
-(`library-carry-inputs.json`, copied from /work/lf/cases) and freezes the regions,
-the carry, the walk over the re-parsed text, the resolved library functions
-and the raw-tree walk into `library-carry.json`; the Rust tests are
-`libdetect::function_carry::function_carry_test`. Regenerate with
-`npx tsx test/parity/library-carry-probe.ts > test/parity/library-carry.json`.
-
-## WP5.6 (the native formatter, `core::format`) — 2026-09-25
-
-| file                  | what                                                                                                                                                                                          |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format-probe.ts`     | the TS side: `files <none\|full> <pairs.tsv>` (G1 = `transformWithPlugins(code, [])`, G2 = `createBabelPlugin()(code)`, a throw writes `<out>.error`); `snippets <cases.json>` writes goldens |
-| `format-cases.mjs`    | the golden inputs (`node format-cases.mjs > format-cases.json`): the beautifier's own spec, babel.test.ts, findings #42/#44/#45, the traversal engine's paths, ESM, comments, early errors    |
-| `format-goldens.json` | the formatter's FROZEN SPEC — `npx tsx format-probe.ts snippets format-cases.json` from a frozen tree; replayed by `format_test.rs` (rust:unit) and `humanify format-check`                   |
-| `format-fuzz.mjs`     | the differential fuzz corpus generator (`node format-fuzz.mjs <seed> <count>`, deterministic); probe it with `snippets`, check it with `humanify format-check` (optionally `--plant`)         |
-
-Regenerate the goldens only from a frozen tree of the commit the TS
-beautify is pinned at (`git worktree add --detach /work/<name> <sha>`).
+| file                  | what                                                                                                                                                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format-goldens.json` | the formatter's FROZEN SPEC — the TS beautifier's bytes (or error) per input case (the inputs are embedded). Replayed by `format_test.rs` (rust:unit) and by the release binary in the `rust:format-golden` stage |

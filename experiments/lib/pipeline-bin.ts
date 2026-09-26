@@ -1,7 +1,8 @@
 /**
- * WHICH PIPELINE scored a label — the TS program or a Rust binary — and, for
- * a binary, which commit it was built from. Owner of that question
- * (docs/responsibility.md).
+ * WHICH BINARY scored a label, and which commit it was built from. Owner of
+ * that question (docs/responsibility.md). The Rust binary is the only
+ * pipeline since the cutover (docs/rust-port/19-cutover.md); labels scored
+ * before it by the TS program say so in their pipeline.json.
  *
  *   npx tsx experiments/lib/pipeline-bin.ts <bin> <label-commit> [--force-mixed]
  *
@@ -23,21 +24,22 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** What run-pipeline.ts spawned before `--bin` existed — the default, kept
- *  byte-identical because every committed reference was scored by it. */
-export function tsPipelineCommand(repo: string): string[] {
-  return ["npx", "tsx", path.join(repo, "src/index.ts")];
-}
-
-/** The argv head a run config launches: its `command` (run.sh --bin), else
- *  the TS program. */
+/**
+ * The argv head a run config launches: its `command` — the binary run.sh
+ * built and recorded. Since the cutover there is no other pipeline: a config
+ * without one used to mean `npx tsx src/index.ts`, which is deleted, so it
+ * is refused rather than defaulted.
+ */
 export function pipelineCommandOf(cfg: {
   repo: string;
   command?: string[];
 }): string[] {
-  return cfg.command && cfg.command.length > 0
-    ? cfg.command
-    : tsPipelineCommand(cfg.repo);
+  if (!cfg.command || cfg.command.length === 0) {
+    throw new Error(
+      `no pipeline command in the run config (repo ${cfg.repo}): the TS program is gone — run.sh records the binary it built as \`command\``
+    );
+  }
+  return cfg.command;
 }
 
 /** What a label records about the binary that scored it. */

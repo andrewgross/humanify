@@ -3,19 +3,6 @@
 
 use crate::writers::{RENAME_LEDGER_APPLIER, write_rename_ledger};
 
-/// `apply.mjs` is the TS's `RENAME_LEDGER_APPLIER` template literal,
-/// byte for byte (unified.ts; the template's `\`` / `\${` escapes are the
-/// only transformation).
-#[test]
-fn the_ledger_applier_is_the_ts_template() {
-    let ts = include_str!("../../../src/commands/unified.ts");
-    let open = "const RENAME_LEDGER_APPLIER = `";
-    let start = ts.find(open).expect("the TS literal") + open.len();
-    let end = start + ts[start..].find("`;\n").expect("its end");
-    let literal = ts[start..end].replace("\\`", "`").replace("\\${", "${");
-    assert_eq!(RENAME_LEDGER_APPLIER, literal);
-}
-
 /// `writeRenameLedger(dir, bundle)`: `rename-ledger.json` (compact, no
 /// trailing newline), the source snapshot, the applier.
 #[test]

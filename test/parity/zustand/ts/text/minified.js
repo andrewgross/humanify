@@ -1,2 +1,0 @@
-const createStoreImpl=t=>{let e;const c=new Set,o=(t,o)=>{const r="function"==typeof t?t(e):t;if(!Object.is(r,e)){const t=e;e=o??("object"!=typeof r||null===r)?r:Object.assign({},e,r),c.forEach(c=>c(e,t))}},r=()=>e,n={setState:o,getState:r,getInitialState:()=>a,subscribe:t=>(c.add(t),()=>c.delete(t))},a=e=t(o,r,n);return n};export const createStore=t=>t?createStoreImpl(t):createStoreImpl;
-//# sourceMappingURL=terser-default.js.map
