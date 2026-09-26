@@ -34,11 +34,33 @@ the main checkout, read only; trees under `/tmp/eval-work/<label>/`):
   with the scorer at cd3a349 (a frozen worktree, `/work/cutover-proof-base`)
   and once with this branch's scorer; outputs under `/work/cutover-proof/`
   (`base/`, `new/`), log `/work/cutover-proof.log`;
-- PROOF-RESULT-PLACEHOLDER
+- **cards: 24/24 byte-identical to the committed originals** (12 pair cards ×
+  2 scorers), and base = new on every one;
+- **summaries: `summarize.ts` over copies of each label holding the re-scored
+  cards writes a `summary.json` byte-identical to the original — 3/3 labels,
+  both scorers.** Its printed table differs between the two runs only in the
+  `wrote <path>` line (the two checkouts' paths);
+- **leaderboard** over the three labels (novel 4,188 / realLn 416,377 on
+  every row): new and base output byte-identical
+  (`/work/cutover-proof/{new,base}/leaderboard.txt`).
 
 ## 3. Cold smoke on the new default
 
-SMOKE-RESULT-PLACEHOLDER
+`npm run eval -- score cutover-smoke --pairs '85->86'` — no `--bin`, so the
+harness built and scored `target/release/humanify` at the branch's first
+cutover commit (8c8c685, clean tree). Cold (`cache +0`, every prompt live),
+run alone, endpoint `http://192.168.1.234:8000/v1` (`openai/gpt-oss-20b`,
+low, concurrency 32). Label `cutover-smoke` (untracked, as every label).
+
+| check                 | result                                                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| rebase of 2.1.85      | ran (no "rebase FAILED")                                                                                                                  |
+| pipeline exit         | 0, errors []                                                                                                                              |
+| **novel / realLn**    | **787 / 78,791 — exactly the 5b references' (TS, A, B)**                                                                                  |
+| noise / reloc / mints | 1,495 / 654 / 14 — inside the bands 18-5b-eval-result.md judged by (TS 1,500 / 650 / 16)                                                  |
+| boot gate             | OK, both halves (`--version` 2.1.86, live prompt `boot-ok`)                                                                               |
+| cold self-hop         | 80 bundle lines — below the recorded 92–180 range, as the 5b runs were (TS 54, A 90, B 38); below is not a failure (18-5b-eval-result.md) |
+| warm self-hop         | OK — byte-identical tree, 0 cache writes, exit 0                                                                                          |
 
 ## 4. Importer inventory — every use of `src/` outside `src/`, and its disposition
 
