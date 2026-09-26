@@ -32,6 +32,13 @@
 #                          deleted at the cutover (docs/rust-port/19-cutover.md).
 #   --force-mixed          accept a --bin built from another/unknown commit or
 #                          a dirty tree (recorded, and warned on per pair)
+#   --pipeline-arg <arg>   append <arg> to EVERY pipeline launch (rebase,
+#                          scored leg, both self-hop legs), after the harness's
+#                          own flags; repeatable, order kept (e.g.
+#                          --pipeline-arg --fast --pipeline-arg relaxed). The
+#                          args are recorded in pipeline.json and every run
+#                          config. Without it the launches are byte-identical
+#                          to the golden (run-launch.test.ts).
 #
 # The self-hop always runs both halves (the 5b self-hop gate, 00-control §3):
 # the cold leg records into a fresh cache dir, then a warm leg replays a
@@ -65,6 +72,7 @@ INPUTS_OVERRIDE=""
 PRIORS_OVERRIDE=""
 BIN="$REPO/target/release/humanify"
 FORCE_MIXED=0
+PIPELINE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workdir)        WORK="$2"; shift ;;
@@ -81,6 +89,8 @@ while [[ $# -gt 0 ]]; do
     --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
     --bin)            BIN="$2"; shift ;;
     --force-mixed)    FORCE_MIXED=1 ;;
+    --pipeline-arg)   [[ $# -ge 2 ]] || { echo "run.sh: --pipeline-arg needs a value" >&2; exit 2; }
+                      PIPELINE_ARGS+=("$2"); shift ;;
     --*)            echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
     *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
                       MODEL="$1" ;;
@@ -123,11 +133,19 @@ echo "HEAP: --heap-mb / NODE_OPTIONS are INERT for the Rust binary (it is not a 
 echo "  the recorded heapMb is not a limit on it, and no heap-headroom warning applies."
 RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" \
   '{command:[$bin], bin:$rec}')
+# The extra pipeline args, as JSON (null when none: the default records stay
+# byte-identical to the golden).
+PIPELINE_ARGS_JSON=null
+if [[ ${#PIPELINE_ARGS[@]} -gt 0 ]]; then
+  PIPELINE_ARGS_JSON=$(printf '%s\n' "${PIPELINE_ARGS[@]}" | jq -R . | jq -cs .)
+  echo "PIPELINE ARGS (every launch): ${PIPELINE_ARGS[*]}"
+fi
 
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
-jq -cn --argjson bin "$BIN_JSON" \
-  '{pipeline:{kind:"rust-bin", bin:$bin}}' > "$RESULTS/pipeline.json"
+jq -cn --argjson bin "$BIN_JSON" --argjson extra "$PIPELINE_ARGS_JSON" \
+  '{pipeline:({kind:"rust-bin", bin:$bin}
+    + (if $extra == null then {} else {pipelineArgs:$extra} end))}' > "$RESULTS/pipeline.json"
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
@@ -213,6 +231,7 @@ for i in $(seq 0 $((npairs - 1))); do
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
         --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
+        ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
         PRIOR="$REBASE/.humanify/humanified.js"
@@ -243,7 +262,8 @@ for i in $(seq 0 $((npairs - 1))); do
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
-    --diagnostics "$WORK/$MODEL/$TO.diag.json" | jq -R . | jq -s .)
+    --diagnostics "$WORK/$MODEL/$TO.diag.json" \
+    ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} | jq -R . | jq -s .)
   jq -n \
     --arg pair "$PAIR" --arg version "$TO" --arg runLabel "$MODEL" \
     --arg resultsDir "$RESULTS" --arg input "$INPUT" --arg prior "$PRIOR" \
@@ -402,6 +422,7 @@ self_hop_leg() {
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
     "${@+"$@"}" \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \
+    ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} \
     > "$log" 2>&1
 }
 
