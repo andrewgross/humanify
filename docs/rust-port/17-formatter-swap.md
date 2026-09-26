@@ -5,6 +5,18 @@ references are as of 730eb99 — re-check before relying on one. -->
 
 # WP5.6 / phase 5b: the formatter swap
 
+## Amendment 2026-09-26 — the beautifier bugs are fixed (post-cutover)
+
+After the cutover the formatter owes CORRECTNESS, determinism and
+cross-version stability — not the deleted TS beautifier's bytes. Branch
+`fix/format-bugs` fixes every place the port reproduced a TS bug that changes
+a program's meaning or throws on valid input (findings #42, #44, #45, #46,
+plus five more of the same class found while fixing them — all listed in
+the #42 row of 16-findings-queue.md). `test/parity/format-goldens.json`
+stays the frozen spec: each golden whose bytes changed carries a `fixed`
+field with the old leg (`was`) and the reason (`why`), 18 of 151 cases.
+Every other case is byte-identical to the TS capture.
+
 ## Amendment 2026-09-25 — what WP5.6a/b's implementation overturned
 
 WP5.6a/b landed as `humanify-core::format` (branch `rust/wp5.6-format`;
@@ -55,7 +67,9 @@ fresh.js`. The raw bundles are in the corpus too (vs the TS probe).
    parser's attachment (`processComment` at each finish, the parenthesized
    `takeSurroundingComments`). Comment PRINTING is not ported: Babel prints
    an `@license` / `@preserve` comment even with `comments: false`, and
-   `format` refuses such a file (finding #46; none in any corpus).
+   `format` refused such a file (finding #46; none in any corpus). Since
+   2026-09-26 (fix/format-bugs) it prints them instead as a file HEADER,
+   in source order, after any `#!` line — see the amendment below.
 7. **Numbers:** a synthesized number prints through
    `humanify_model::js::number_to_string`, now `dragonbox_ecma` (pinned
    `=0.1.12`, the version oxc already locked) — one owner of

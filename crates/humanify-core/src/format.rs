@@ -1,9 +1,11 @@
 //! `core::format` — the native formatter: the TS stage-6 beautify
 //! (`src/plugins/babel/babel.ts` → `transformWithPlugins`, i.e. Babel's
 //! `transform()` with four plugins and `@babel/generator` 7.29.7)
-//! reproduced BYTE FOR BYTE, bugs included (finding #42; 00-control §3
-//! "beautifier bugs"), and the one owner of the Babel-shaped AST, its
-//! converter and its printer (the `using` desugar prints through it too).
+//! reproduced byte for byte EXCEPT where the TS changed a program's meaning
+//! or threw on valid input — those bugs are fixed (findings #42, #44, #45,
+//! #46; 00-control §3 "beautifier bugs"; each fixed golden records what it
+//! was) — and the one owner of the Babel-shaped AST, its converter and its
+//! printer (the `using` desugar prints through it too).
 //!
 //! The pipeline (plan of record: docs/rust-port/17-formatter-swap.md,
 //! WP5.6a + WP5.6b):
@@ -128,14 +130,7 @@ pub fn format_file(
     let root = converter.file(ingest.program)?;
     let mut tree = converter.tree;
     comments::attach(&mut tree, code, ingest.program, root)?;
-    if let Some(c) = comments::printable(&tree) {
-        // `shouldPrintComment` keeps `@license` / `@preserve` comments even
-        // with `comments: false`; printing comments is not ported.
-        return Err(format!(
-            "an @license/@preserve comment at {} would be printed (comment printing is not ported)",
-            c.start
-        ));
-    }
+    let licenses = comments::license_comments(&tree);
     let mut plugins = opts.plugins;
     if let Some(Plant::DropVisitor(bit)) = opts.plant {
         plugins = Plugins(plugins.0 & !bit);
@@ -156,9 +151,38 @@ pub fn format_file(
         printer.plant_rust_numbers();
     }
     Ok(Formatted {
-        text: printer.generate(root),
+        text: with_license_header(printer.generate(root), &licenses),
         library_carry,
     })
+}
+
+/// Finding #46: Babel keeps an `@license` / `@preserve` comment even with
+/// `comments: false`, printed where it was attached. Comment PRINTING is
+/// not ported, so the documented equivalent is a file HEADER: every such
+/// comment, in source order, one per line, before the program (after a
+/// `#!` line). The text survives; its position may move to the top — never
+/// into code, so the program's meaning cannot change.
+fn with_license_header(text: String, licenses: &[String]) -> String {
+    if licenses.is_empty() {
+        return text;
+    }
+    let header = licenses.join("\n");
+    let split = if text.starts_with("#!") {
+        text.find('\n').map_or(text.len(), |i| i + 1)
+    } else {
+        0
+    };
+    let (interpreter, program) = text.split_at(split);
+    let sep = if interpreter.is_empty() || interpreter.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    if program.is_empty() {
+        format!("{interpreter}{sep}{header}")
+    } else {
+        format!("{interpreter}{sep}{header}\n{program}")
+    }
 }
 
 /// `transformWithPlugins(code, plugins)` with the stage-6 settings: the
@@ -169,3 +193,6 @@ pub fn format(code: &str, opts: &FormatOptions) -> Result<String, String> {
 
 #[cfg(test)]
 mod format_test;
+
+#[cfg(test)]
+mod beautify_test;

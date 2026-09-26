@@ -9,18 +9,22 @@
 //! but its `Block`/`SwitchCase` exit visitors make those nodes "visited
 //! types" for `shouldVisit`.
 //!
-//! The visitors are ported line for line, their semantic bugs INCLUDED
-//! (findings #42, #44, #45; 00-control §3 "beautifier bugs"): `a ?? b;` becomes
-//! `if (!a) b;`; `void <number>` becomes `undefined` with no scope check;
-//! the `.concat` fold writes the COOKED string as the template's raw text
-//! and appends a string argument to it twice when the quasi's cooked
-//! value is non-empty; `Number(raw)` of a literal with a numeric
-//! separator is NaN.
+//! The visitors were ported line for line; since the cutover the formatter
+//! owes CORRECTNESS, not Babel's bytes, so the TS beautifier's semantic
+//! bugs are fixed here (findings #42, #44, #45; 00-control §3 "beautifier
+//! bugs"): `a ?? b;` becomes `if (a == null) b;` (was `if (!a) b;`);
+//! `void <number>` is kept where a scope declares `undefined`; the
+//! `.concat` fold builds a NEW template (never mutating the callee's, which
+//! folded an argument twice), escapes its raw text (a backtick, `${`, a
+//! backslash) and appends a string tail once; a labeled multi-declarator
+//! `var` is left whole (splitting it threw in a loop body and dropped the
+//! label elsewhere); a longer number keeps its parsed value (the TS's
+//! `Number(raw)` made a literal with a numeric separator NaN).
 
 use std::collections::HashSet;
 
 use super::ast::{Binary, Field, Kind, NodeId, Quasi, Tree};
-use super::template_raw::template_element_cooked;
+use super::template_raw::raw_for_string;
 use super::traverse::{Engine, Key, PathId, VisitFn, Visitor};
 
 type R<T> = Result<T, String>;
@@ -188,6 +192,25 @@ fn parent_of(e: &Engine<'_>, p: PathId) -> R<PathId> {
         .ok_or_else(|| "a visitor at the root".to_string())
 }
 
+/// A literal that runs no code: any literal but a template literal with
+/// expressions.
+fn is_inert_literal(k: &Kind) -> bool {
+    match k {
+        Kind::TemplateLiteral { expressions, .. } => expressions.is_empty(),
+        k => k.is_literal(),
+    }
+}
+
+/// A loop statement whose head expressions run once PER TURN (a for's
+/// test / update, a while's or do-while's test) or after the body (a
+/// do-while's test): code in its head must not be hoisted before it.
+fn is_loop_with_repeated_head(k: &Kind) -> bool {
+    matches!(
+        k,
+        Kind::ForStatement { .. } | Kind::WhileStatement { .. } | Kind::DoWhileStatement { .. }
+    )
+}
+
 fn is_expression_statement(k: &Kind) -> bool {
     matches!(k, Kind::ExpressionStatement { .. })
 }
@@ -218,7 +241,9 @@ fn block(e: &mut Engine<'_>, body: Vec<NodeId>) -> NodeId {
 
 // -- convertVoidToUndefined ----------------------------------------------------------
 
-/// `void <NumericLiteral>` → `undefined` (no scope check — finding #42).
+/// `void <NumericLiteral>` → `undefined`, unless a scope declares
+/// `undefined` (there the identifier is that binding, not the global —
+/// finding #42).
 fn convert_void_to_undefined(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     if let Kind::UnaryExpression {
@@ -226,6 +251,7 @@ fn convert_void_to_undefined(e: &mut Engine<'_>, p: PathId) -> R<()> {
         argument,
     } = e.kind(node)
         && matches!(e.kind(*argument), Kind::NumericLiteral { .. })
+        && !e.has_undefined_binding(p)
     {
         let id = e.build(Kind::Identifier {
             name: "undefined".into(),
@@ -251,15 +277,23 @@ fn flipped(op: &str) -> Option<&'static str> {
     })
 }
 
-/// A literal (template literals included) on the left of a comparison
-/// with a non-literal on the right swaps sides.
+/// A literal that runs no code (a template literal only without
+/// expressions) on the left of a comparison with a non-literal on the
+/// right swaps sides. A template with expressions stays put — swapping
+/// would run the right side's code first (the TS flipped any literal, so
+/// `` `${f()}` === g() `` ran `g` first) — and so does a regex under a
+/// RELATIONAL operator, where both sides are converted to primitives in
+/// source order (the regex's `toString` would run after the right side's
+/// `valueOf`); under `==` only one side is ever converted.
 fn flip_comparison(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     let Kind::BinaryExpression(b) = e.kind(node) else {
         return Ok(());
     };
     let (op, left, right) = (b.operator, b.left, b.right);
-    if e.kind(left).is_literal()
+    let relational = matches!(op, "<" | "<=" | ">" | ">=");
+    if is_inert_literal(e.kind(left))
+        && !(relational && matches!(e.kind(left), Kind::RegExpLiteral { .. }))
         && !e.kind(right).is_literal()
         && let Some(op) = flipped(op)
     {
@@ -277,8 +311,9 @@ fn flip_comparison(e: &mut Engine<'_>, p: PathId) -> R<()> {
 
 /// A numeric literal whose raw text contains `e` is replaced by a raw-less
 /// literal of `Number(raw)` (printed through `value + ""`): `5e3` → `5000`,
-/// and `0xe1` → `225` (the hex digit e counts). `Number()` rejects a
-/// numeric separator: `1_0e3` → NaN.
+/// and `0xe1` → `225` (the hex digit e counts). The parsed value is used,
+/// so a numeric separator keeps its number (`1_0e3` → `10000`; the TS's
+/// `Number(raw)` made it NaN).
 fn make_number_longer(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     let Kind::NumericLiteral {
@@ -291,7 +326,7 @@ fn make_number_longer(e: &mut Engine<'_>, p: PathId) -> R<()> {
     if !raw.contains('e') {
         return Ok(());
     }
-    let value = if raw.contains('_') { f64::NAN } else { *value };
+    let value = *value;
     let id = e.build(Kind::NumericLiteral { value, raw: None });
     e.replace_with(p, id)
 }
@@ -310,6 +345,12 @@ fn variable_declaration(e: &mut Engine<'_>, p: PathId) -> R<()> {
         return Ok(());
     }
     let pp = parent_of(e, p)?;
+    if e.path_is(pp, |k| matches!(k, Kind::LabeledStatement { .. })) {
+        // A labeled declaration stays whole (finding #44): splitting it
+        // lifts the declarations out of the label, which dropped the label
+        // and, as a loop's body, left a null body behind (a throw).
+        return Ok(());
+    }
     if e.path_is(pp, |k| matches!(k, Kind::ForStatement { .. }))
         && e.key(p) == Key::Field(Field::Init)
     {
@@ -386,7 +427,8 @@ fn for_statement(e: &mut Engine<'_>, p: PathId) -> R<()> {
 }
 
 /// The house patch: `a, b, c;` → `a; b; c;` and `return a, b;` →
-/// `a; return b;` — except in a for-loop's init / test / update.
+/// `a; return b;` — except in a loop's head (a for's init / test / update,
+/// a while's or do-while's test).
 fn sequence_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     let Kind::SequenceExpression { expressions } = e.kind(node).clone() else {
@@ -396,12 +438,9 @@ fn sequence_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     if !e.path_is(pp, Kind::is_statement) {
         return Ok(());
     }
-    if e.path_is(pp, |k| matches!(k, Kind::ForStatement { .. }))
-        && matches!(
-            e.key(p),
-            Key::Field(Field::Update | Field::Init | Field::Test)
-        )
-    {
+    // A loop head's sequence stays (the house patch skipped a for-loop's;
+    // a while / do-while test was hoisted too, running once — the TS bug).
+    if e.path_is(pp, is_loop_with_repeated_head) {
         return Ok(());
     }
     let (last, rest) = expressions.split_last().ok_or("an empty sequence")?;
@@ -410,8 +449,12 @@ fn sequence_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     e.replace_with(p, *last)
 }
 
-/// `a && b;` → `if (a) b;`; ANY other logical operator (`||` and `??`
-/// alike — finding #42) → `if (!a) b;`.
+/// `a && b;` → `if (a) b;`, `a || b;` → `if (!a) b;`, `a ?? b;` →
+/// `if (a == null) b;` (finding #42: the TS wrote `if (!a)`, which also
+/// runs `b` for `0` / `""` / `false`). `== null` is exactly the test `??`
+/// makes — true for null and undefined only (`document.all` aside, which
+/// Node does not have) — evaluates `a` once, and keeps `??` statements in
+/// the same `if` shape as the `&&` / `||` ones.
 fn logical_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     let Kind::LogicalExpression(b) = e.kind(node) else {
@@ -422,22 +465,30 @@ fn logical_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     if !e.path_is(pp, is_expression_statement) {
         return Ok(());
     }
-    let test = if op == "&&" {
-        left
-    } else {
-        e.build(Kind::UnaryExpression {
+    let test = match op {
+        "&&" => left,
+        "??" => {
+            let null = e.build(Kind::NullLiteral);
+            e.build(Kind::BinaryExpression(Binary {
+                operator: "==",
+                left,
+                right: null,
+            }))
+        }
+        _ => e.build(Kind::UnaryExpression {
             operator: "!",
             argument: left,
-        })
+        }),
     };
     let consequent = expression_statement(e, right);
     let stmt = build_if(e, test, consequent, None);
     e.replace_with(pp, stmt)
 }
 
-/// `!0` → `true`, `!<n>` → `false`; `void <literal>` → `undefined`
+/// `!0` → `true`, `!<n>` → `false`; `void <inert literal>` → `undefined`
 /// unless a scope declares `undefined`; a statement-level `void x` is
-/// split: `x;` before the statement, then `return;` / `undefined`.
+/// split: `x;` before the statement, then `return;` / `undefined` — not in
+/// a loop head, and (outside a return) not where `undefined` is local.
 fn unary_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     let Kind::UnaryExpression { operator, argument } = *e.kind(node) else {
@@ -454,7 +505,9 @@ fn unary_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
         return Ok(());
     }
     let arg_path = e.get(p, Field::Argument)?;
-    if e.path_is(arg_path, Kind::is_literal) {
+    // A template with expressions is not inert: `void `${f()}`` runs `f`
+    // (the TS dropped it); it takes the statement path below.
+    if e.path_is(arg_path, is_inert_literal) {
         if !e.has_undefined_binding(p) {
             let id = e.build(Kind::Identifier {
                 name: "undefined".into(),
@@ -464,21 +517,27 @@ fn unary_expression(e: &mut Engine<'_>, p: PathId) -> R<()> {
         return Ok(());
     }
     let pp = parent_of(e, p)?;
-    if !e.path_is(pp, Kind::is_statement) {
+    // Not out of a loop head (the TS hoisted a for-update's `void a()`
+    // before the loop, running it once).
+    if !e.path_is(pp, Kind::is_statement) || e.path_is(pp, is_loop_with_repeated_head) {
+        return Ok(());
+    }
+    let is_return = e.path_is(pp, |k| matches!(k, Kind::ReturnStatement { .. }));
+    // Where `undefined` is a local binding the `void` cannot be replaced,
+    // so it is not split either (the TS hoisted the argument AND kept the
+    // `void`, running it twice).
+    if !is_return && e.has_undefined_binding(p) {
         return Ok(());
     }
     let stmt = expression_statement(e, argument);
     e.insert_before(pp, vec![stmt])?;
-    if e.path_is(pp, |k| matches!(k, Kind::ReturnStatement { .. })) {
+    if is_return {
         e.remove(p)
     } else {
-        if !e.has_undefined_binding(p) {
-            let id = e.build(Kind::Identifier {
-                name: "undefined".into(),
-            });
-            e.replace_with(p, id)?;
-        }
-        Ok(())
+        let id = e.build(Kind::Identifier {
+            name: "undefined".into(),
+        });
+        e.replace_with(p, id)
     }
 }
 
@@ -579,8 +638,17 @@ fn if_statement(e: &mut Engine<'_>, p: PathId) -> R<()> {
 }
 
 /// (exit) `"s".concat(x)` → `` `s${x}` ``; `"a".concat("b")` → `"ab"`;
-/// `` `…`.concat(x) `` → `` `…${x}` ``; `` `…`.concat("s") `` appends to
-/// the last quasi's raw — TWICE when its cooked value is non-empty.
+/// `` `…`.concat(x) `` → `` `…${x}` ``; `` `…`.concat("s") `` → `` `…s` ``.
+///
+/// The fold always builds a NEW template (finding #45: the TS pushed onto
+/// the callee's template in place, so a call visited twice — a statement
+/// logical's `if` is built around the call before its children are
+/// visited — appended its argument twice and ran it twice). A string's
+/// text enters the template's raw ESCAPED ([`raw_for_string`]: the literal's
+/// own source escapes, a backtick and `${` escaped — finding #44's throw,
+/// and the TS's cooked-as-raw that lost backslashes), and a string tail is
+/// appended once (the TS appended it twice when the quasi's cooked value
+/// was non-empty).
 fn concat_call(e: &mut Engine<'_>, p: PathId) -> R<()> {
     let node = node_of(e, p)?;
     let Kind::CallExpression(c) = e.kind(node) else {
@@ -596,65 +664,58 @@ fn concat_call(e: &mut Engine<'_>, p: PathId) -> R<()> {
     if !e.kind(arg).is_expression() {
         return Ok(());
     }
-    if let Kind::StringLiteral { value, .. } = e.kind(object) {
-        let value = value.clone();
-        if let Kind::StringLiteral { value: tail, .. } = e.kind(arg) {
-            let joined = format!("{value}{tail}");
-            let s = e.build(Kind::StringLiteral {
-                value: joined,
-                raw: None,
-            });
-            return e.replace_with(p, s);
-        }
-        // `t.templateElement({ raw: value, cooked: value })`: the
-        // validator throws on a raw that would end the template and
-        // recomputes cooked from it (finding #44).
-        let cooked = template_element_cooked(&value)?;
-        let t = e.build(Kind::TemplateLiteral {
-            quasis: vec![
-                Quasi { raw: value, cooked },
-                Quasi {
-                    raw: String::new(),
-                    cooked: Some(String::new()),
-                },
-            ],
-            expressions: vec![arg],
-        });
-        return e.replace_with(p, t);
-    }
-    if !matches!(e.kind(object), Kind::TemplateLiteral { .. }) {
-        return Ok(());
-    }
     let tail = match e.kind(arg) {
-        Kind::StringLiteral { value, .. } => Some(value.clone()),
+        Kind::StringLiteral { value, raw } => Some((value.clone(), raw.clone())),
         _ => None,
     };
-    let Kind::TemplateLiteral {
-        quasis,
-        expressions,
-    } = e.tree.kind_mut(object)
-    else {
-        unreachable!("checked above");
-    };
-    let string_tail = tail.is_some();
-    match tail {
-        Some(tail) => {
-            let last = quasis.last_mut().ok_or("a template without quasis")?;
-            last.raw.push_str(&tail);
-            if last.cooked.as_deref().is_some_and(|c| !c.is_empty()) {
-                last.raw.push_str(&tail);
+    let folded = match e.kind(object).clone() {
+        Kind::StringLiteral { value, raw } => match tail {
+            Some((tail, _)) => Kind::StringLiteral {
+                value: format!("{value}{tail}"),
+                raw: None,
+            },
+            None => Kind::TemplateLiteral {
+                quasis: vec![
+                    Quasi {
+                        raw: raw_for_string(&value, raw.as_deref()),
+                        cooked: Some(value),
+                    },
+                    empty_quasi(),
+                ],
+                expressions: vec![arg],
+            },
+        },
+        Kind::TemplateLiteral {
+            mut quasis,
+            mut expressions,
+        } => {
+            match tail {
+                Some((tail, raw)) => {
+                    let last = quasis.last_mut().ok_or("a template without quasis")?;
+                    last.raw.push_str(&raw_for_string(&tail, raw.as_deref()));
+                    if let Some(cooked) = last.cooked.as_mut() {
+                        cooked.push_str(&tail);
+                    }
+                }
+                None => {
+                    quasis.push(empty_quasi());
+                    expressions.push(arg);
+                }
+            }
+            Kind::TemplateLiteral {
+                quasis,
+                expressions,
             }
         }
-        None => {
-            quasis.push(Quasi {
-                raw: String::new(),
-                cooked: Some(String::new()),
-            });
-            expressions.push(arg);
-        }
+        _ => return Ok(()),
+    };
+    let id = e.build(folded);
+    e.replace_with(p, id)
+}
+
+fn empty_quasi() -> Quasi {
+    Quasi {
+        raw: String::new(),
+        cooked: Some(String::new()),
     }
-    if string_tail {
-        e.replace_with(p, object)?;
-    }
-    e.replace_with(p, object)
 }
