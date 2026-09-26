@@ -176,7 +176,16 @@ impl NameProvider for LatencySim<'_> {
     fn run_pipelined(&self, initial: Vec<(usize, LlmCall)>, on_done: &mut OnCallDone<'_>) {
         let mut waiting: VecDeque<(usize, LlmCall)> = initial.into();
         let mut running: BinaryHeap<Finish> = BinaryHeap::new();
-        let mut in_flight: BTreeMap<u64, (usize, LlmCall)> = BTreeMap::new();
+        // Started calls: (driver id, the call until resolved, its result
+        // once resolved). Every unresolved started call is resolved in ONE
+        // inner batch when the next completion needs its result — the real
+        // requests (cache misses) run concurrently, not one by one.
+        type Slot = (
+            usize,
+            Option<LlmCall>,
+            Option<Result<BatchRenameResponse, LlmError>>,
+        );
+        let mut in_flight: BTreeMap<u64, Slot> = BTreeMap::new();
         let mut now = 0.0f64;
         let mut seq = 0u64;
         let mut busy = 0.0f64;
@@ -193,20 +202,34 @@ impl NameProvider for LatencySim<'_> {
                     kind = kind_of(&call);
                 }
                 running.push(Finish(now + l, seq));
-                in_flight.insert(seq, (id, call));
+                in_flight.insert(seq, (id, Some(call), None));
                 seq += 1;
             }
             let Some(Finish(t, s)) = running.pop() else {
                 break;
             };
             now = t;
-            let (id, call) = in_flight.remove(&s).expect("in flight");
-            let result = self
-                .inner
-                .run_wave(vec![call])
-                .pop()
-                .expect("one result per call");
-            waiting.extend(on_done(id, result));
+            if in_flight.get(&s).is_some_and(|slot| slot.2.is_none()) {
+                let pending: Vec<u64> = in_flight
+                    .iter()
+                    .filter(|(_, slot)| slot.2.is_none())
+                    .map(|(k, _)| *k)
+                    .collect();
+                let calls_now: Vec<LlmCall> = pending
+                    .iter()
+                    .map(|k| {
+                        in_flight
+                            .get_mut(k)
+                            .and_then(|slot| slot.1.take())
+                            .expect("unresolved")
+                    })
+                    .collect();
+                for (k, r) in pending.iter().zip(self.inner.run_wave(calls_now)) {
+                    in_flight.get_mut(k).expect("in flight").2 = Some(r);
+                }
+            }
+            let (id, _, result) = in_flight.remove(&s).expect("in flight");
+            waiting.extend(on_done(id, result.expect("resolved")));
         }
         self.report
             .lock()

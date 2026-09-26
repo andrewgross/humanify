@@ -182,7 +182,10 @@ bannerClassifications` (`libraryFunctions: []` on the four eval pairs —
 - **AST-bound stages** stayed sequential because oxc nodes are not `Sync`
   (the close tier's per-pair rows, the AST serializations): restructure to
   extract plain data first, then parallelize.
-- **Status 2026-09-26:** `--fast` (branch `perf/fast`, default off) ships the
-  first three — pipelined dispatch within a round, close contexts on the
-  pool, validate overlapped — all byte-identical to the default path.
-  Profile, constraint costs and the verdict commands: `20-fast-mode.md`.
+- **Status 2026-09-26:** `--fast` (branch `perf/fast`, default off) — the
+  exact tier (byte-identical: pipelined dispatch within a round, close
+  contexts on the pool, validate overlapped, the permute's prior index and
+  the prior graph built alongside) and the relaxed tier (`--fast relaxed`:
+  window-lanes, defer-shadowed; deterministic, judged by the eval). Profile,
+  constraint costs, the LLM latency simulator and the verdict commands:
+  `20-fast-mode.md`.
