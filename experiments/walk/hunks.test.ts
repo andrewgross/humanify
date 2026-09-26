@@ -80,6 +80,18 @@ describe("pickExamples", () => {
   });
 });
 
+describe("pickExamples on minified lines", () => {
+  it("skips a hunk whose lines are walls of minified code", () => {
+    const long = `x(${"a,".repeat(300)});`;
+    const minified = {
+      ...hunk([`-${long}`, `+${long.replace("x", "y")}`]),
+      file: "v.js"
+    };
+    assert.equal(classifyHunk(minified), "name-only");
+    assert.deepEqual(pickExamples([minified], ["name-only"], 5), []);
+  });
+});
+
 describe("tallyKinds", () => {
   it("counts changed lines per kind", () => {
     const t = tallyKinds(parseHunks(DIFF));

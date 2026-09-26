@@ -79,7 +79,10 @@ export function changedCount(h: Hunk): number {
 /** How readable an example is: a few changed lines, not a wall. */
 function readability(h: Hunk): number {
   const n = changedCount(h);
-  if (n < 2 || h.lines.length > 40) return -1;
+  // vendor/ keeps libraries as one minified line: unreadable as an example.
+  if (n < 2 || h.lines.length > 40 || h.lines.some((l) => l.length > 300)) {
+    return -1;
+  }
   return n <= 16 ? 100 - Math.abs(8 - n) : 50 - n;
 }
 
