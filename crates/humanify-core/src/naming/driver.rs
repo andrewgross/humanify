@@ -183,7 +183,7 @@ pub fn run_naming<P: NameProvider>(
         shingle_probe: config.shingle_probe,
         fast: config.fast,
     };
-    let era = match input.prior {
+    let run_era = || match input.prior {
         Some(prior) => match_prior_version(
             PriorMatchInput {
                 fresh: input.fresh,
@@ -192,9 +192,18 @@ pub fn run_naming<P: NameProvider>(
                 minifier: opts.minifier,
             },
             |stage| era::prior_era(stage, &opts, provider),
-        )?,
-        None => era::fresh_era(input.fresh, &opts, provider)?,
+        ),
+        None => era::fresh_era(input.fresh, &opts, provider),
     };
+    // `captureSemanticBaseline` reads only the fresh text: `--fast`
+    // measures it on a thread of its own while the era runs.
+    let (baseline, era) = if config.fast {
+        crate::par::beside(|| Some(validate::baseline_of(input.fresh)), run_era)
+    } else {
+        let era = run_era();
+        (None, era)
+    };
+    let era = era?;
     let NamingEra {
         generated,
         trail,
@@ -255,50 +264,57 @@ pub fn run_naming<P: NameProvider>(
     };
     // `captureSemanticBaseline` + the invariant checks on the generated
     // text: the post-generate passes need a valid output.
-    let ph = crate::profiling::phase("naming:validate");
-    let verdict = match validate::baseline_of(input.fresh) {
+    let ph = crate::profiling::phase("naming:validate+reconcile");
+    let verdict_of = |baseline: Option<validate::Baseline>| match baseline {
         Some(b) => validate::verdict(&generated, &b),
         // The fresh text itself does not parse: nothing can be validated.
         None => validate::Verdict::ParseFailed,
     };
-    out.output_valid = verdict == validate::Verdict::Valid;
-    out.verdict = Some(verdict);
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
     let trail = std::mem::take(&mut out.trail);
-
-    // -- the prior-diff reconcile --------------------------------------
-    drop(ph);
-    let ph = crate::profiling::phase("naming:prior-diff-reconcile");
-    let run_reconcile = config.reconcile_prior_diff && !config.source_map && out.output_valid;
-    let trail = match input.prior.filter(|_| run_reconcile) {
-        None => trail,
-        Some(prior) => {
-            let text = generated.clone();
-            match run_prior_diff_reconciliation(
-                &text,
-                prior,
-                &eligible,
-                trail,
-                config.emit_rename_ledger.then_some(if deferred {
-                    crate::naming::reconcile::step::LedgerWalk::AfterLaterParse
-                } else {
-                    crate::naming::reconcile::step::LedgerWalk::Live
-                }),
-            ) {
-                Ok(PriorDiffOutcome {
-                    result,
-                    code,
-                    trail,
-                    ledger,
-                }) => {
-                    ledger_stages.extend(ledger.map(|l| (text, l)));
-                    out.reconcile = Some(PassRun { result, code });
-                    trail
+    // -- the prior-diff reconcile (on a valid output only) -----------------
+    let reconcile_gates = config.reconcile_prior_diff && !config.source_map;
+    let ledger_walk = config.emit_rename_ledger.then_some(if deferred {
+        crate::naming::reconcile::step::LedgerWalk::AfterLaterParse
+    } else {
+        crate::naming::reconcile::step::LedgerWalk::Live
+    });
+    let reconcile = |prior: &str, trail: StrategyTrail| {
+        reconcile_pass(&generated, prior, &eligible, trail, ledger_walk)
+    };
+    let (verdict, reconciled, trail) = match input.prior.filter(|_| reconcile_gates) {
+        // `--fast`: the verdict (a re-parse of the generated text) runs
+        // beside a SPECULATIVE reconcile on a copy of the trail; an
+        // invalid output discards the speculation — the parity outcome.
+        Some(prior) if config.fast => {
+            let (verdict, (spec_trail, spec)) = crate::par::beside(
+                || verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh))),
+                || reconcile(prior, trail.clone()),
+            );
+            if verdict == validate::Verdict::Valid {
+                (verdict, spec, spec_trail)
+            } else {
+                (verdict, None, trail)
+            }
+        }
+        prior => {
+            let verdict =
+                verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh)));
+            match prior.filter(|_| verdict == validate::Verdict::Valid) {
+                Some(prior) => {
+                    let (trail, done) = reconcile(prior, trail);
+                    (verdict, done, trail)
                 }
-                Err((_, trail)) => trail,
+                None => (verdict, None, trail),
             }
         }
     };
+    out.output_valid = verdict == validate::Verdict::Valid;
+    out.verdict = Some(verdict);
+    if let Some((run, stage)) = reconciled {
+        ledger_stages.extend(stage.map(|l| (generated.clone(), l)));
+        out.reconcile = Some(run);
+    }
     let recon_code = out.reconcile.as_ref().and_then(|r| r.code.clone());
 
     drop(ph);
@@ -413,6 +429,31 @@ pub fn run_naming<P: NameProvider>(
     }
     out.code = Some(shipped);
     Ok(out)
+}
+
+/// The prior-diff reconcile over the generated text: the trail it hands
+/// on, and — when it ran — its result and its rename-ledger stage.
+type ReconcileRun = (
+    PassRun<ReconcileResult>,
+    Option<crate::rename::validated::ledger::RenameLedger>,
+);
+
+fn reconcile_pass(
+    generated: &str,
+    prior: &str,
+    eligible: &Eligibility,
+    trail: StrategyTrail,
+    ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
+) -> (StrategyTrail, Option<ReconcileRun>) {
+    match run_prior_diff_reconciliation(generated, prior, eligible, trail, ledger_walk) {
+        Ok(PriorDiffOutcome {
+            result,
+            code,
+            trail,
+            ledger,
+        }) => (trail, Some((PassRun { result, code }, ledger))),
+        Err((_, trail)) => (trail, None),
+    }
 }
 
 /// Add one pass's validated-rename claim counters to a run total.
