@@ -1,5 +1,8 @@
-//! The disk response cache (llm/cached-provider.ts) — the ONE owner of the
-//! cache's disk side: shard layout, entry format, read, atomic write. The
+//! The run's answer memo ([`AnswerMemo`], always on) and the disk response
+//! cache under it (llm/cached-provider.ts, optional) — the ONE owner of
+//! "which answer does a request get": one key, one answer for the whole
+//! run, with or without `--llm-cache`, and of the cache's disk side: shard
+//! layout, entry format, read, atomic write. The
 //! key is derived by `humanify_model::llm::cache_key_of` (its owner; see
 //! that module for why it lives in the model crate).
 //!
@@ -18,7 +21,11 @@
 //!   of them: when both went live, each copy's function took its own answer
 //!   while the disk kept the last writer's, so a replay of the run handed
 //!   every copy that one answer and asked questions the live run never did
-//!   (64 misses on a 0-error 2.1.85→86 run);
+//!   (64 misses on a 0-error 2.1.85→86 run). The single-flight and the
+//!   memo of recorded answers live in [`AnswerMemo`], NOT in the disk
+//!   layer: runs without a cache (production, the cold eval, the walks)
+//!   get the same one-answer-per-key guarantee, and later copies in the
+//!   same run are served from memory;
 //! - every successful answer is written, an EMPTY one too (a retry that
 //!   came back `{}` is still the answer the run acted on — unrecorded, the
 //!   replay missed it); errors are never cached; a hit reports zero token
@@ -164,43 +171,94 @@ pub struct CacheStats {
     pub writes: usize,
 }
 
+/// The run's answer-memo counters — present on EVERY stack, cache or not:
+/// `asked` requests went to the inner provider (one per distinct key that
+/// answered, plus a re-ask after each error), `shared` copies were served
+/// an answer recorded earlier in the run instead of asking again.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoStats {
+    pub asked: usize,
+    pub shared: usize,
+}
+
 /// A key's single-flight gate: an async lock the copies of one request
 /// queue on (FIFO, so the first dispatched is the one that asks).
 type KeyGate = Arc<tokio::sync::Mutex<()>>;
 
-/// Serve a request from disk when its key has an entry, else ask the inner
-/// provider and record the answer — one request per key at a time, so
-/// every copy of a request gets the answer the cache records.
-pub struct CachedProvider<P> {
+/// ONE KEY, ONE ANSWER for the whole run (finding #57): the first copy of a
+/// request asks the inner provider; every later copy — queued behind it in
+/// flight, or in a later wave — is served the answer the run recorded. The
+/// memo is in memory and ALWAYS on (production, the cold eval and the walks
+/// run without `--llm-cache`); the disk cache is an optional backing store
+/// under it: a key the memo lacks is looked up on disk before the model is
+/// asked, and every answer is written through. Errors are never recorded,
+/// so a later copy asks again.
+pub struct AnswerMemo<P> {
     inner: P,
-    cache: DiskCache,
+    disk: Option<DiskCache>,
     params: CacheKeyParams,
     log: Option<LogSink>,
     in_flight: Mutex<HashMap<String, KeyGate>>,
+    answers: Mutex<HashMap<String, BatchRenameResponse>>,
     hits: AtomicUsize,
     misses: AtomicUsize,
     writes: AtomicUsize,
+    asked: AtomicUsize,
+    shared: AtomicUsize,
 }
 
-impl<P> CachedProvider<P> {
-    pub fn new(inner: P, cache: DiskCache, params: CacheKeyParams, log: Option<LogSink>) -> Self {
-        CachedProvider {
+impl<P> AnswerMemo<P> {
+    /// A memo with no disk behind it (a run without `--llm-cache`).
+    pub fn in_memory(inner: P, params: CacheKeyParams) -> Self {
+        AnswerMemo::build(inner, None, params, None)
+    }
+
+    /// A memo backed by a disk cache.
+    pub fn on_disk(
+        inner: P,
+        cache: DiskCache,
+        params: CacheKeyParams,
+        log: Option<LogSink>,
+    ) -> Self {
+        AnswerMemo::build(inner, Some(cache), params, log)
+    }
+
+    fn build(
+        inner: P,
+        disk: Option<DiskCache>,
+        params: CacheKeyParams,
+        log: Option<LogSink>,
+    ) -> Self {
+        AnswerMemo {
             inner,
-            cache,
+            disk,
             params,
             log,
             in_flight: Mutex::new(HashMap::new()),
+            answers: Mutex::new(HashMap::new()),
             hits: AtomicUsize::new(0),
             misses: AtomicUsize::new(0),
             writes: AtomicUsize::new(0),
+            asked: AtomicUsize::new(0),
+            shared: AtomicUsize::new(0),
         }
     }
 
-    pub fn stats(&self) -> CacheStats {
-        CacheStats {
+    /// The disk cache's counters: `hits` are requests answered without the
+    /// model (from disk or from the memo), `misses` the ones that asked,
+    /// `writes` the entries written. None without a disk cache.
+    pub fn stats(&self) -> Option<CacheStats> {
+        self.disk.as_ref().map(|_| CacheStats {
             hits: self.hits.load(Ordering::Relaxed),
             misses: self.misses.load(Ordering::Relaxed),
             writes: self.writes.load(Ordering::Relaxed),
+        })
+    }
+
+    pub fn memo_stats(&self) -> MemoStats {
+        MemoStats {
+            asked: self.asked.load(Ordering::Relaxed),
+            shared: self.shared.load(Ordering::Relaxed),
         }
     }
 
@@ -222,13 +280,44 @@ impl<P> CachedProvider<P> {
         }
     }
 
-    fn record(&self, key: &str, response: &BatchRenameResponse) {
+    /// The answer this run already recorded for `key`, with zero usage
+    /// (metrics reflect what THIS run spent).
+    fn recorded(&self, key: &str) -> Option<BatchRenameResponse> {
+        let answers = self.answers.lock().expect("the answer memo lock");
+        answers.get(key).map(|r| BatchRenameResponse {
+            renames: r.renames.clone(),
+            finish_reason: r.finish_reason.clone(),
+            usage: Some(Usage::zero()),
+        })
+    }
+
+    fn remember(&self, key: &str, response: &BatchRenameResponse) {
+        let mut answers = self.answers.lock().expect("the answer memo lock");
+        answers.insert(key.to_string(), response.clone());
+    }
+
+    /// A disk hit (zero usage), remembered so later copies skip the disk.
+    fn read_disk(&self, key: &str) -> Option<BatchRenameResponse> {
+        let entry = self.disk.as_ref()?.read(key)?;
+        let response = BatchRenameResponse {
+            renames: entry.renames,
+            finish_reason: entry.finish_reason,
+            usage: Some(Usage::zero()),
+        };
+        self.remember(key, &response);
+        Some(response)
+    }
+
+    fn write_through(&self, key: &str, response: &BatchRenameResponse) {
+        let Some(disk) = &self.disk else {
+            return;
+        };
         let entry = CacheEntry {
             renames: response.renames.clone(),
             finish_reason: response.finish_reason.clone(),
             original_usage: response.usage.clone(),
         };
-        match self.cache.write(key, &entry) {
+        match disk.write(key, &entry) {
             Ok(()) => {
                 self.writes.fetch_add(1, Ordering::Relaxed);
             }
@@ -251,23 +340,25 @@ impl<P> CachedProvider<P> {
     where
         P: AsyncProvider,
     {
-        if let Some(entry) = self.cache.read(key) {
+        if let Some(response) = self.recorded(key) {
+            self.shared.fetch_add(1, Ordering::Relaxed);
             self.hits.fetch_add(1, Ordering::Relaxed);
-            return Ok(BatchRenameResponse {
-                renames: entry.renames,
-                finish_reason: entry.finish_reason,
-                // Zero spend: metrics reflect what THIS run cost.
-                usage: Some(Usage::zero()),
-            });
+            return Ok(response);
+        }
+        if let Some(response) = self.read_disk(key) {
+            self.hits.fetch_add(1, Ordering::Relaxed);
+            return Ok(response);
         }
         self.misses.fetch_add(1, Ordering::Relaxed);
+        self.asked.fetch_add(1, Ordering::Relaxed);
         let response = self.inner.suggest_all_names(call).await?;
-        self.record(key, &response);
+        self.write_through(key, &response);
+        self.remember(key, &response);
         Ok(response)
     }
 }
 
-impl<P: AsyncProvider> AsyncProvider for CachedProvider<P> {
+impl<P: AsyncProvider> AsyncProvider for AnswerMemo<P> {
     async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
         let key = self.key_of(call);
         let gate = self.gate_of(&key);
@@ -280,6 +371,10 @@ impl<P: AsyncProvider> AsyncProvider for CachedProvider<P> {
     }
 
     fn cache_stats(&self) -> Option<CacheStats> {
-        Some(self.stats())
+        self.stats()
+    }
+
+    fn memo_stats(&self) -> Option<MemoStats> {
+        Some(AnswerMemo::memo_stats(self))
     }
 }

@@ -121,7 +121,13 @@ fn client(url: &str) -> LlmClient<humanify_llm::provider::LiveStack> {
             retry_attempts: 0,
             ..RateLimitConfig::default()
         },
-        cache: None,
+        key_params: humanify_model::llm::CacheKeyParams {
+            model: "stub-model".to_string(),
+            temperature: Some(0.0),
+            max_tokens: None,
+            reasoning_effort: None,
+        },
+        cache_dir: None,
         metrics: None,
         log: None,
     })

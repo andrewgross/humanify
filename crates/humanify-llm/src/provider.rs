@@ -11,7 +11,7 @@ use humanify_model::llm::{
     RateLimitConfig,
 };
 
-use crate::cache::{CacheStats, CachedProvider, DiskCache};
+use crate::cache::{AnswerMemo, CacheStats, DiskCache, MemoStats};
 use crate::client::OpenAiClient;
 use crate::debug::{DebugProvider, LogSink};
 use crate::metrics::MetricsTracker;
@@ -26,6 +26,11 @@ pub trait AsyncProvider: Send + Sync {
 
     /// The disk cache's counters when this stack has a cache.
     fn cache_stats(&self) -> Option<CacheStats> {
+        None
+    }
+
+    /// The answer memo's counters when this stack has one.
+    fn memo_stats(&self) -> Option<MemoStats> {
         None
     }
 }
@@ -44,39 +49,21 @@ impl AsyncProvider for ReplayMiss {
     }
 }
 
-/// The cache is optional in the TS (`--llm-cache` unset → the limited
-/// provider is returned bare).
-pub enum MaybeCached<P> {
-    Cached(Box<CachedProvider<P>>),
-    Plain(P),
-}
-
-impl<P: AsyncProvider> AsyncProvider for MaybeCached<P> {
-    async fn suggest_all_names(&self, call: &LlmCall) -> Result<BatchRenameResponse, LlmError> {
-        match self {
-            MaybeCached::Cached(p) => p.suggest_all_names(call).await,
-            MaybeCached::Plain(p) => p.suggest_all_names(call).await,
-        }
-    }
-
-    fn cache_stats(&self) -> Option<CacheStats> {
-        match self {
-            MaybeCached::Cached(p) => p.cache_stats(),
-            MaybeCached::Plain(_) => None,
-        }
-    }
-}
-
-/// The live stack, in unified.ts `buildProvider` order.
-pub type LiveStack = MaybeCached<RateLimited<DebugProvider<OpenAiClient>>>;
+/// The live stack, in unified.ts `buildProvider` order. The answer memo is
+/// outermost on EVERY run (one key, one answer, finding #57); the disk
+/// cache, when `--llm-cache` is set, is its backing store.
+pub type LiveStack = AnswerMemo<RateLimited<DebugProvider<OpenAiClient>>>;
 
 /// Everything `buildProvider` resolves, as values (no env reads here).
 pub struct LiveOptions {
     pub config: LlmConfig,
     pub rate: RateLimitConfig,
-    /// `--llm-cache <dir>`; the key params are the TS's: the model, a
-    /// literal temperature 0, maxTokens and reasoningEffort as configured.
-    pub cache: Option<(std::path::PathBuf, CacheKeyParams)>,
+    /// The request key's params (the TS's: the model, a literal
+    /// temperature 0, maxTokens and reasoningEffort as configured) — the
+    /// memo keys by them on every run, the disk cache too when set.
+    pub key_params: CacheKeyParams,
+    /// `--llm-cache <dir>`: the memo's optional disk backing store.
+    pub cache_dir: Option<std::path::PathBuf>,
     pub metrics: Option<Arc<MetricsTracker>>,
     pub log: Option<LogSink>,
 }
@@ -111,14 +98,19 @@ impl<P: AsyncProvider> LlmClient<P> {
     pub fn cache_stats(&self) -> Option<CacheStats> {
         self.provider.cache_stats()
     }
+
+    /// The answer memo's counters (zeros for a stack without one).
+    pub fn memo_stats(&self) -> MemoStats {
+        self.provider.memo_stats().unwrap_or_default()
+    }
 }
 
-impl LlmClient<CachedProvider<ReplayMiss>> {
+impl LlmClient<AnswerMemo<ReplayMiss>> {
     /// A replay-only client over an existing cache directory: hits answer,
     /// misses fail with `CacheMiss`, and the cache is opened READ-ONLY (a
     /// standing cache is never written, even by accident).
     pub fn replay_only(dir: &Path, params: CacheKeyParams) -> Self {
-        LlmClient::with_provider(CachedProvider::new(
+        LlmClient::with_provider(AnswerMemo::on_disk(
             ReplayMiss,
             DiskCache::open_read_only(dir),
             params,
@@ -128,7 +120,8 @@ impl LlmClient<CachedProvider<ReplayMiss>> {
 }
 
 impl LlmClient<LiveStack> {
-    /// The live stack (`buildProvider`): cache → rate limit → debug → HTTP.
+    /// The live stack (`buildProvider`): memo (+ disk cache) → rate limit →
+    /// debug → HTTP.
     pub fn live(options: LiveOptions) -> std::io::Result<Self> {
         let http = OpenAiClient::new(options.config.clone(), options.log.clone());
         let debug = DebugProvider::new(
@@ -137,14 +130,14 @@ impl LlmClient<LiveStack> {
             options.log.clone(),
         );
         let limited = RateLimited::new(debug, options.rate, options.metrics);
-        let provider = match options.cache {
-            Some((dir, params)) => MaybeCached::Cached(Box::new(CachedProvider::new(
+        let provider = match options.cache_dir {
+            Some(dir) => AnswerMemo::on_disk(
                 limited,
                 DiskCache::open(&dir)?,
-                params,
+                options.key_params,
                 options.log,
-            ))),
-            None => MaybeCached::Plain(limited),
+            ),
+            None => AnswerMemo::in_memory(limited, options.key_params),
         };
         Ok(LlmClient::with_provider(provider))
     }

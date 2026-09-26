@@ -11,7 +11,7 @@ use humanify_model::llm::{
     Renames, Usage,
 };
 
-use crate::cache::{CacheEntry, CachedProvider, DiskCache};
+use crate::cache::{AnswerMemo, CacheEntry, DiskCache};
 use crate::provider::AsyncProvider;
 
 pub(crate) fn tmp_dir(tag: &str) -> std::path::PathBuf {
@@ -98,8 +98,8 @@ fn cached<'a>(
     inner: &'a FakeProvider,
     dir: &std::path::Path,
     model: &str,
-) -> CachedProvider<&'a FakeProvider> {
-    CachedProvider::new(inner, DiskCache::open(dir).unwrap(), params(model), None)
+) -> AnswerMemo<&'a FakeProvider> {
+    AnswerMemo::on_disk(inner, DiskCache::open(dir).unwrap(), params(model), None)
 }
 
 fn run<F: std::future::Future>(f: F) -> F::Output {
@@ -164,7 +164,7 @@ fn zeroes_usage_on_hits_and_reports_counters() {
     run(provider.suggest_all_names(&request("function f() {}"))).unwrap();
     let hit = run(provider.suggest_all_names(&request("function f() {}"))).unwrap();
     assert_eq!(hit.usage.and_then(|u| u.total_tokens).unwrap_or(0), 0);
-    let stats = provider.stats();
+    let stats = provider.stats().unwrap();
     assert_eq!((stats.hits, stats.misses, stats.writes), (1, 1, 1));
 }
 
