@@ -1,9 +1,12 @@
 # 20 — `--fast`: what parity cost, and how far past it the binary goes
 
-**STATUS (2026-09-26): code on branch `perf/fast`, default OFF. No verdict
-benchmark yet.** Every number below was taken on a busy machine (other heavy
-runs sharing it — the same phase read 4 s on one run and 33 s on another) and
-is an ESTIMATE. The verdict commands are at the end.
+**STATUS (2026-09-27): VERDICT BENCHMARKED on the idle box (binary built
+from `perf/fast` cf783fa1, rebased onto rust-port 507163d9+c4784295; sha
+7ec5910e…). Cold walls below are the verdict legs; the CPU-side numbers are
+the warm legs.** Bottom line: `--fast` wins ~20% of the pipeline's own CPU
+(byte-identical); cold end-to-end it LOSES — the server, not the client, is
+the bottleneck — and the lever that does pay cold is bigger naming windows
+(`--batch-size 25`, −9-11% cold).
 
 ## The question
 
@@ -89,24 +92,98 @@ prices the default schedule at effective concurrency 8.2.
 Both relaxed levers together: **sim 377 → 257 s** (−32% over exact, −48%
 over the default path), determinism holding (twice → 0 differing files).
 
-## Results so far (215→216; busy box — estimates, not verdicts)
+## VERDICT (idle box, 2026-09-27)
 
-| run                     | warm wall | sim LLM wall | vs default (bytes)          |
-| ----------------------- | --------: | -----------: | --------------------------- |
-| default                 |     249 s |        490 s | —                           |
-| `--fast` (exact)        |     134 s |        377 s | **0 differing files**       |
-| `--fast relaxed`        |     146 s |        257 s | 78 files differ (by design) |
-| `--fast relaxed` again  |     145 s |        257 s | 0 vs the first relaxed run  |
-| `--fast relaxed -c 64`  |         — |        219 s |                             |
-| `--fast relaxed -c 128` |         — |        203 s |                             |
+Binary `perf/fast` cf783fa1 (rebased onto rust-port 507163d9 — the cold-run
+memory fix #56 — plus c4784295, the in-memory dedup for uncached runs).
+Cold legs went LIVE to gpt-oss-20b :8000; warm legs replayed each pair's own
+cold cache (misses to the deterministic stub). Full log:
+`/work/perf-fast/verdict/summary.txt`; phase tables per leg beside it.
 
-The relaxed legs' warm walls are inflated: their 417 new prompts missed the
-cache and, until the simulator batched real requests (fixed after these
-runs), each went to the stub one at a time. A cold run is roughly the warm
-CPU plus the LLM schedule. Reading the sim
-relatively (it prices the default ~17% high), 215→216 cold goes from ~450 s
-today to roughly ~300 s exact and ~220 s relaxed; the verdict legs measure
-it.
+### Cold wall (the eval-shaped run: live LLM, no cache)
+
+| pair    | default | `--fast` | `--fast relaxed` | default + `--batch-size 25` |
+| ------- | ------: | -------: | ---------------: | --------------------------: |
+| 85→86   |   269 s |    369 s |            313 s |                   **239 s** |
+| 118→119 |   354 s |    496 s |            451 s |                   **321 s** |
+| 197→198 |   484 s |    660 s |            580 s |                             |
+| 215→216 |   483 s |    570 s |            498 s |                             |
+
+(batch-25 legs ran on 85→86 and 118→119 only.)
+
+**Pipelining LOSES cold, on every pair.** The simulator said −23…−39%; the
+real server took it back and more. Mechanism: vLLM's per-call latency grows
+with load (continuous batching — a bigger running batch steps slower per
+sequence), and the prompt is mostly PREFILL (86: ~3.2 M prompt tokens vs
+~0.1 M generated), so the server is throughput-bound and its throughput is
+the same either way. The turn barrier's bursty schedule feeds vLLM LARGE
+prefill batches; pipelined dispatch feeds it a steady trickle of small ones.
+Control: against a stub with load-INDEPENDENT latency (85→86, cold), default
+344 s vs exact 290 s — the client schedule itself saves ~16%; the real
+server's latency curve is what refunds it. Corollary: `-c` past the server's
+admission width buys nothing (observed running+waiting plateaus ~16-18).
+
+**The lever that pays cold is prompt-token amortization**: the naming
+prompt re-sends a function's whole context once per window of ~10
+identifiers; `--batch-size 25` cuts the number of windows ~2.5× and the
+context re-sends with them. 85→86: cold 269 → 239 s (LLM window 163 → 134
+s); 118→119: 354 → 321 s. batch 40 overshoots (more in-window collisions →
+retries: 256 s). It is DETERMINISTIC (a plain config flag) but
+decision-changing — it belongs in the relaxed tier's recipe, judged by the
+eval.
+
+### Warm wall (the pipeline's own CPU; LLM served instantly)
+
+| pair    | default | `--fast` |    Δ | `--fast relaxed` |
+| ------- | ------: | -------: | ---: | ---------------: |
+| 85→86   |    78.8 |     61.9 | −21% |             63.4 |
+| 118→119 |    88.5 |     73.7 | −17% |             79.4 |
+| 197→198 |   144.7 |    112.8 | −22% |            115.4 |
+| 215→216 |   155.0 |    121.5 | −22% |            124.7 |
+
+The relaxed tier costs ~2-6 s over exact warm (its extra CPU: one lane per
+window means more per-lane tails) while cutting the SIMULATED LLM wall
+407→227 / 708→432 / 716→343 / 663→369 s — worth nothing on THIS server
+(above), potentially real on one that keeps latency flat under load.
+
+### The determinism / byte-identity checks (all four pairs)
+
+- `warm-exact` vs `warm-exact2`: **0 files, 0 lines** ×4 — determinism.
+- `warm-relaxed` vs `warm-relaxed2`: **0 files, 0 lines** ×4 — determinism.
+- `warm-default` vs `warm-exact`: **0 files, 0 lines** ×4 — the exact tier
+  ships the default path's bytes.
+- `warm-default` vs `warm-relaxed`: differs, by design (2,124 / 3,514 /
+  4,446 / 2,966 files) — the relaxed tier is the eval's to judge.
+- Every warm default and exact leg: `cache+0`, exit 0. Warm relaxed legs
+  wrote 172/595/385/423 entries: legitimate — the seed merges the DEFAULT
+  cold leg's answers over relaxed's own (`cp -rn`), and the model re-rolls
+  across cold legs (exp052), so some downstream prompts are new; both
+  relaxed warm legs wrote the SAME count and shipped identical trees.
+
+### Answer to the question
+
+With parity off the table but determinism and quality kept:
+
+1. **The binary's own CPU is no longer the story: −22% warm**, byte-identical
+   (`--fast`), shipped behind the flag. The remaining serial CPU is decision
+   code (matching 22 s, transfer 14 s) whose parallelization changes
+   decisions — an eval-gated matching change, not a speed change.
+2. **Cold wall is SERVER-bound.** ~75-85% of a cold run is vLLM prefill of
+   naming prompts; the client schedule cannot beat the server's
+   throughput/latency curve (measured both ways above). The client-side
+   levers that remain:
+   - **bigger naming windows** (`--batch-size 25`): −9-11% cold,
+     deterministic, decision-changing → add to relaxed, eval it;
+   - **fewer identifiers asked** (naming floor / transfer coverage) — the
+     project's standing noise arc, which ALSO cuts cold wall linearly;
+   - **server-side**: more capacity or a serving config that holds latency
+     under load (ops, not code) — the one instrument that would make
+     pipelining pay (the stub control shows ~16% is there).
+3. **Peak RSS ~19 GB** on the biggest pair (down from the TS's 15-30 GB on a
+   64 GB heap); the eval heap flag is inert.
+
+Cold evals to judge quality (novel/realLn exact, reducible KPIs in band) —
+run by the coordinator, cold per rule 10:
 
 ## Why each change keeps determinism
 
@@ -164,34 +241,31 @@ exact vs default 0 files; relaxed twice 0 files.
 
 Rough ceiling with everything above: warm ~100 s, cold ~200 s on 215→216.
 
-## The verdict run (on "machine idle")
+## The verdict procedure (as run)
 
 ```bash
-cd /Users/andrewgross/Development/humanify/.claude/worktrees/<this lane>
-cargo build --release --locked -p humanify-cli
-cp target/release/humanify /work/perf-fast/humanify-verdict
-# per pair: cold default (seeds the cache), cold exact, cold relaxed (timing);
-# then warm default / exact / exact / relaxed / relaxed on a scratch copy of
-# the seed (the CPU timing and the determinism proof)
 /work/perf-fast/bench.sh /work/perf-fast/humanify-verdict /work/perf-fast/verdict
 cat /work/perf-fast/verdict/summary.txt
 python3 /work/perf-fast/phases.py /work/perf-fast/verdict/2.1.216-warm-relaxed.meta/profile.json
 ```
 
-Pass criteria: `warm-exact vs warm-exact2` and `warm-relaxed vs
-warm-relaxed2` 0 files on every pair (determinism); `warm-default vs
-warm-exact` 0 files (the exact tier is byte-identical); every warm default
-and exact leg `cache+0`; exit codes equal. `--warm-only` re-runs the warm
-legs.
+Per pair: cold default (seeds the cache), cold exact, cold relaxed (live
+endpoint — the timing legs); then warm default / exact / exact / relaxed /
+relaxed on a scratch copy of the seed (the CPU legs and the determinism
+proof). Pass criteria, all met: `warm-exact vs warm-exact2` and
+`warm-relaxed vs warm-relaxed2` 0 files ×4; `warm-default vs warm-exact`
+0 files ×4; every warm default and exact leg `cache+0`; every leg exit 0.
+`--warm-only` re-runs the warm legs. The batch-25 probe:
+`/work/perf-fast/probe-batch.sh 86:25 86:40 119:25`.
 
-The relaxed tier's QUALITY verdict is the cold eval against a cold control
-of the same commit (rule 10: when the candidate goes cold, so does the
-control), judged against `noise-bands.json`:
+The relaxed tier's QUALITY verdict is the cold eval (rule 10: the control
+goes cold with it), judged against `noise-bands.json`:
 
 ```bash
-npm run eval -- score perf-default-<sha>
-npm run eval -- score perf-relaxed-<sha> --pipeline-arg --fast=relaxed
-npx tsx experiments/034-eval-harness/leaderboard.ts main-2026-09-18 perf-default-<sha> perf-relaxed-<sha>
+npm run eval -- score perf-exact-cf783fa1
+npm run eval -- score perf-relaxed-cf783fa1 --pipeline-arg --fast=relaxed
+npm run eval -- score perf-batch25-cf783fa1 --pipeline-arg --batch-size 25
+npx tsx experiments/034-eval-harness/leaderboard.ts main-2026-09-18 perf-exact-cf783fa1 perf-relaxed-cf783fa1 perf-batch25-cf783fa1
 ```
 
 `--pipeline-arg` (scripts/eval.ts → run.sh) appends the argument to every
@@ -199,4 +273,5 @@ launch — rebase, scored leg and both self-hops — and records it in the
 label's `pipeline.json`; without it the launches are byte-identical to the
 golden (`run-launch.test.ts`). novel/realLn must be exact; noise, reloc and
 mints must sit inside their bands. A lever that fails can be dropped from
-`relaxed` on its own (`--fast relaxed:<the others>`).
+`relaxed` on its own (`--fast relaxed:<the others>`); the batch-25 probe
+composes as `--pipeline-arg --fast=relaxed --pipeline-arg --batch-size 25`.
