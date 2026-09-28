@@ -30,7 +30,13 @@
  *     --batch-size 10` (docs/rust-port/20-fast-mode.md §defaults): fresh
  *     and prior each run twice, byte-identical, and BOTH trees must equal
  *     the committed legacy goldens (test/golden/legacy-default/) — the
- *     pre-2026-09-28 binary's default path captured at 00e171f1, the proof
+ *     pre-2026-09-28 binary's default path (stashed at
+ *     /work/preflip-humanify-00e171f1), captured at 00e171f1 and
+ *     REGENERATED 2026-09-28: the original capture's bytes were not
+ *     reproducible even by its own source binary (const-vs-let on two
+ *     declarations; see /work/overnight-notes.md), so the goldens were
+ *     re-captured with this file's exact stub + invocation, twice each,
+ *     deterministic. The proof
  *     that `--sequential` still ships the old default's bytes — and the
  *     output boots (step 4). The DEFAULT schedule is the relaxed tier, so
  *     its determinism is step 3's assert (the old `--fast` legs are gone:
