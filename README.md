@@ -14,7 +14,7 @@ v2 highlights compared to v1:
 
 - Python not required anymore!
 - A lot of tests, the codebase is actually maintanable now
-- Renewed CLI tool `humanify` installable via npm
+- A native Rust pipeline, shipped as the `humanify` binary
 
 ### ➡️ Check out the [introduction blog post][blogpost] for in-depth explanation!
 
