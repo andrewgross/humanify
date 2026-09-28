@@ -27,3 +27,8 @@ test/parity/wp445-fixtures.json
 # banner offsets ARE the test input.
 test/parity/library-carry.json
 test/parity/library-carry-inputs.json
+
+# The e2e legacy-default goldens are the pre-flip binary's OUTPUT BYTES —
+# the standing --sequential == pre-flip-default proof (scripts/e2e.ts step 5).
+# A reformat breaks the proof, exactly like the test/parity fixtures above.
+test/golden/legacy-default/

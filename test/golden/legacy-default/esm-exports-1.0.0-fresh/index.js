@@ -25,7 +25,7 @@ export class Counter {
 export const version = "1.0.0";
 export const limit = 3;
 export const mode = "a";
-const oRenamed = (eRenamed) => eRenamed + aRenamed;
+const oRenamed = eRenamed => eRenamed + aRenamed;
 function iRenamed(eRenamed) {
   return [eRenamed, limit];
 }
