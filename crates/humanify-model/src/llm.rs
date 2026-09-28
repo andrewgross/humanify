@@ -409,10 +409,40 @@ pub struct LlmCall {
     pub user_prompt: String,
 }
 
+/// The completion callback of [`NameProvider::run_pipelined`]: handed each
+/// finished call's id and result, it returns the follow-up calls to start
+/// (each with a caller-chosen id).
+pub type OnCallDone<'a> =
+    dyn FnMut(usize, Result<BatchRenameResponse, LlmError>) -> Vec<(usize, LlmCall)> + 'a;
+
 /// The synchronous LLM seam (02 §7): one wave of calls in, one result per
 /// call out, same order. Implementations bound their own concurrency.
 pub trait NameProvider {
     fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>>;
+
+    /// Pipelined dispatch (`--fast`): start every `initial` call; as each
+    /// one finishes, hand its result to `on_done` and start the follow-ups
+    /// it returns, until nothing is in flight. COMPLETION ORDER IS NOT
+    /// DETERMINISTIC — a caller may only use it for work whose outcome is
+    /// independent of it (each follow-up depends on its own chain alone).
+    ///
+    /// The default is generational: every call of a generation runs as one
+    /// [`NameProvider::run_wave`], results are handed over in id order, and
+    /// the follow-ups form the next generation — the step barrier a
+    /// provider without real concurrency has anyway.
+    fn run_pipelined(&self, initial: Vec<(usize, LlmCall)>, on_done: &mut OnCallDone<'_>) {
+        let mut generation = initial;
+        while !generation.is_empty() {
+            generation.sort_by_key(|(id, _)| *id);
+            let (ids, calls): (Vec<usize>, Vec<LlmCall>) = generation.into_iter().unzip();
+            let results = self.run_wave(calls);
+            let mut next = Vec::new();
+            for (id, result) in ids.into_iter().zip(results) {
+                next.extend(on_done(id, result));
+            }
+            generation = next;
+        }
+    }
 }
 
 /// A borrowed provider is a provider — the pipeline holds `&dyn
@@ -420,6 +450,10 @@ pub trait NameProvider {
 impl<T: NameProvider + ?Sized> NameProvider for &T {
     fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
         (**self).run_wave(calls)
+    }
+
+    fn run_pipelined(&self, initial: Vec<(usize, LlmCall)>, on_done: &mut OnCallDone<'_>) {
+        (**self).run_pipelined(initial, on_done)
     }
 }
 

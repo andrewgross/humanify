@@ -347,6 +347,45 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(hop.warm.ok, false);
   });
 
+  it("--pipeline-arg reaches ALL THREE launch sites, appended once each, in order", () => {
+    const h = runHarness([
+      "--bin",
+      "<TMP>/shims/humanify",
+      "--force-mixed",
+      "--pipeline-arg",
+      "--fast",
+      "--pipeline-arg",
+      "relaxed"
+    ]);
+    assert.strictEqual(h.status, 0, h.stdout);
+    const bin = h.launches.split("\n").filter((l) => l.startsWith("humanify "));
+    // 4 rebases + cold + warm self-hop, each carrying the args once.
+    assert.strictEqual(bin.length, 6, h.launches);
+    for (const l of bin) {
+      assert.strictEqual(l.match(/--fast relaxed/g)?.length, 1, l);
+    }
+    // The scored legs' run configs carry them as trailing argv.
+    const cfgs = h.launches.match(/"--fast",\s*"relaxed"\s*\]/g);
+    assert.strictEqual(cfgs?.length, 4, h.launches);
+    // The label's pipeline record names them (a label scored with extra
+    // args must not read as the default pipeline).
+    assert.match(
+      h.results,
+      /pipeline\.json: .*"pipelineArgs":\["--fast","relaxed"\]/
+    );
+  });
+
+  it("--pipeline-arg without a value is refused before anything launches", () => {
+    const h = runHarness([
+      "--bin",
+      "<TMP>/shims/humanify",
+      "--force-mixed",
+      "--pipeline-arg"
+    ]);
+    assert.strictEqual(h.status, 2, h.stdout);
+    assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
+  });
+
   it("a --pairs subset self-hops the LAST SCORED pair, not pairs.json's last", () => {
     // It used to test pairs.json's last TO, which a subset never produced —
     // so `--pairs 85->86` silently ran no self-hop at all.

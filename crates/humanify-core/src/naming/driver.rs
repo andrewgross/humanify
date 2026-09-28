@@ -38,7 +38,9 @@ use humanify_model::stats::{
 
 use crate::naming::passes::census::MintedCensus;
 use crate::naming::passes::census_of_text;
-use crate::naming::passes::family_permute::{FamilyPermuteOutcome, run_family_permute};
+use crate::naming::passes::family_permute::{
+    FamilyPermuteOutcome, PriorMembers, run_family_permute, run_family_permute_with,
+};
 use crate::naming::passes::sweep::{SweepResult, run_deferred_sweep};
 use crate::naming::reconcile::ReconcileResult;
 use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
@@ -79,6 +81,8 @@ pub struct NamingConfig {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`.
     pub shingle_probe: bool,
+    /// `--fast [tier]` (docs/rust-port/20-fast-mode.md, `crate::fast`).
+    pub fast: crate::fast::FastTier,
 }
 
 impl NamingConfig {
@@ -177,19 +181,44 @@ pub fn run_naming<P: NameProvider>(
         capture: config.capture_dump,
         tunables: config.tunables,
         shingle_probe: config.shingle_probe,
+        fast: config.fast,
     };
-    let era = match input.prior {
+    let run_era = || match input.prior {
         Some(prior) => match_prior_version(
             PriorMatchInput {
                 fresh: input.fresh,
                 prior,
                 bundler: opts.bundler,
                 minifier: opts.minifier,
+                fast: config.fast.on(),
             },
             |stage| era::prior_era(stage, &opts, provider),
-        )?,
-        None => era::fresh_era(input.fresh, &opts, provider)?,
+        ),
+        None => era::fresh_era(input.fresh, &opts, provider),
     };
+    // `captureSemanticBaseline` reads only the fresh text, and the family
+    // permute's prior index only the prior text: `--fast` builds both on
+    // a thread of their own while the era runs.
+    let permute_may_run = !config.family_permute_disabled
+        && config.reconcile_prior_diff
+        && !config.source_map
+        && !config.emit_rename_ledger;
+    let ((baseline, mut prior_members), era) = if config.fast.on() {
+        crate::par::beside(
+            || {
+                let prior_members = input
+                    .prior
+                    .filter(|_| permute_may_run)
+                    .map(PriorMembers::of);
+                (Some(validate::baseline_of(input.fresh)), prior_members)
+            },
+            run_era,
+        )
+    } else {
+        let era = run_era();
+        ((None, None), era)
+    };
+    let era = era?;
     let NamingEra {
         generated,
         trail,
@@ -250,49 +279,61 @@ pub fn run_naming<P: NameProvider>(
     };
     // `captureSemanticBaseline` + the invariant checks on the generated
     // text: the post-generate passes need a valid output.
-    let verdict = match validate::baseline_of(input.fresh) {
+    let ph = crate::profiling::phase("naming:validate+reconcile");
+    let verdict_of = |baseline: Option<validate::Baseline>| match baseline {
         Some(b) => validate::verdict(&generated, &b),
         // The fresh text itself does not parse: nothing can be validated.
         None => validate::Verdict::ParseFailed,
     };
-    out.output_valid = verdict == validate::Verdict::Valid;
-    out.verdict = Some(verdict);
     let eligible = Eligibility::new(opts.bundler, opts.minifier);
     let trail = std::mem::take(&mut out.trail);
-
-    // -- the prior-diff reconcile --------------------------------------
-    let run_reconcile = config.reconcile_prior_diff && !config.source_map && out.output_valid;
-    let trail = match input.prior.filter(|_| run_reconcile) {
-        None => trail,
-        Some(prior) => {
-            let text = generated.clone();
-            match run_prior_diff_reconciliation(
-                &text,
-                prior,
-                &eligible,
-                trail,
-                config.emit_rename_ledger.then_some(if deferred {
-                    crate::naming::reconcile::step::LedgerWalk::AfterLaterParse
-                } else {
-                    crate::naming::reconcile::step::LedgerWalk::Live
-                }),
-            ) {
-                Ok(PriorDiffOutcome {
-                    result,
-                    code,
-                    trail,
-                    ledger,
-                }) => {
-                    ledger_stages.extend(ledger.map(|l| (text, l)));
-                    out.reconcile = Some(PassRun { result, code });
-                    trail
+    // -- the prior-diff reconcile (on a valid output only) -----------------
+    let reconcile_gates = config.reconcile_prior_diff && !config.source_map;
+    let ledger_walk = config.emit_rename_ledger.then_some(if deferred {
+        crate::naming::reconcile::step::LedgerWalk::AfterLaterParse
+    } else {
+        crate::naming::reconcile::step::LedgerWalk::Live
+    });
+    let reconcile = |prior: &str, trail: StrategyTrail| {
+        reconcile_pass(&generated, prior, &eligible, trail, ledger_walk)
+    };
+    let (verdict, reconciled, trail) = match input.prior.filter(|_| reconcile_gates) {
+        // `--fast`: the verdict (a re-parse of the generated text) runs
+        // beside a SPECULATIVE reconcile on a copy of the trail; an
+        // invalid output discards the speculation — the parity outcome.
+        Some(prior) if config.fast.on() => {
+            let (verdict, (spec_trail, spec)) = crate::par::beside(
+                || verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh))),
+                || reconcile(prior, trail.clone()),
+            );
+            if verdict == validate::Verdict::Valid {
+                (verdict, spec, spec_trail)
+            } else {
+                (verdict, None, trail)
+            }
+        }
+        prior => {
+            let verdict =
+                verdict_of(baseline.unwrap_or_else(|| validate::baseline_of(input.fresh)));
+            match prior.filter(|_| verdict == validate::Verdict::Valid) {
+                Some(prior) => {
+                    let (trail, done) = reconcile(prior, trail);
+                    (verdict, done, trail)
                 }
-                Err((_, trail)) => trail,
+                None => (verdict, None, trail),
             }
         }
     };
+    out.output_valid = verdict == validate::Verdict::Valid;
+    out.verdict = Some(verdict);
+    if let Some((run, stage)) = reconciled {
+        ledger_stages.extend(stage.map(|l| (generated.clone(), l)));
+        out.reconcile = Some(run);
+    }
     let recon_code = out.reconcile.as_ref().and_then(|r| r.code.clone());
 
+    drop(ph);
+    let ph = crate::profiling::phase("naming:deferred-sweep");
     // -- the deferred sweep -----------------------------------------------
     let trail = if deferred && out.output_valid {
         let text = recon_code.clone().unwrap_or_else(|| generated.clone());
@@ -363,6 +404,8 @@ pub fn run_naming<P: NameProvider>(
         }
     });
 
+    drop(ph);
+    let ph = crate::profiling::phase("naming:family-permute");
     // -- the family permute ------------------------------------------------
     let permute_eligible = config.reconcile_prior_diff
         && !config.source_map
@@ -374,7 +417,11 @@ pub fn run_naming<P: NameProvider>(
         && let Some(prior) = input.prior
     {
         let text = resolved;
-        if let Ok(p) = run_family_permute(&text, prior, &eligible) {
+        let permuted = match prior_members.take() {
+            Some(members) => run_family_permute_with(&text, members, &eligible),
+            None => run_family_permute(&text, prior, &eligible),
+        };
+        if let Ok(p) = permuted {
             add_claims(&mut out.claims, &p.claims);
             shipped = p.code.clone().unwrap_or(text);
             out.permute = Some(p);
@@ -383,6 +430,8 @@ pub fn run_naming<P: NameProvider>(
         }
     }
 
+    drop(ph);
+    let _ph = crate::profiling::phase("naming:census");
     // -- the census + coverage ----------------------------------------------
     let census = census_of_text(&shipped, &eligible)?;
     let mut coverage = build_coverage_summary(
@@ -399,6 +448,31 @@ pub fn run_naming<P: NameProvider>(
     }
     out.code = Some(shipped);
     Ok(out)
+}
+
+/// The prior-diff reconcile over the generated text: the trail it hands
+/// on, and — when it ran — its result and its rename-ledger stage.
+type ReconcileRun = (
+    PassRun<ReconcileResult>,
+    Option<crate::rename::validated::ledger::RenameLedger>,
+);
+
+fn reconcile_pass(
+    generated: &str,
+    prior: &str,
+    eligible: &Eligibility,
+    trail: StrategyTrail,
+    ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
+) -> (StrategyTrail, Option<ReconcileRun>) {
+    match run_prior_diff_reconciliation(generated, prior, eligible, trail, ledger_walk) {
+        Ok(PriorDiffOutcome {
+            result,
+            code,
+            trail,
+            ledger,
+        }) => (trail, Some((PassRun { result, code }, ledger))),
+        Err((_, trail)) => (trail, None),
+    }
 }
 
 /// Add one pass's validated-rename claim counters to a run total.
@@ -584,3 +658,6 @@ impl NamingOutcome {
 
 #[cfg(test)]
 mod driver_test;
+
+#[cfg(test)]
+mod fast_test;

@@ -482,6 +482,17 @@ pub struct FamilyPermuteOutcome {
 
 /// The prior side's members by hash (plain data; the prior parse is
 /// dropped before the fresh side is built, as the TS releases it).
+/// The prior text's members by structural hash — depends on the prior
+/// alone, so `--fast` builds it beside the naming era
+/// ([`PriorMembers::of`]) instead of after it.
+pub struct PriorMembers(Result<HashMap<String, Vec<MemberInfo>>, String>);
+
+impl PriorMembers {
+    pub fn of(prior_text: &str) -> PriorMembers {
+        PriorMembers(prior_by_hash(prior_text))
+    }
+}
+
 fn prior_by_hash(prior_text: &str) -> Result<HashMap<String, Vec<MemberInfo>>, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, prior_text);
@@ -502,7 +513,21 @@ pub fn run_family_permute(
     prior_text: &str,
     eligible: &Eligibility,
 ) -> Result<FamilyPermuteOutcome, String> {
-    let prior = prior_by_hash(prior_text)?;
+    let ph = crate::profiling::phase("permute:prior-by-hash");
+    let prior = PriorMembers::of(prior_text);
+    drop(ph);
+    run_family_permute_with(code, prior, eligible)
+}
+
+/// [`run_family_permute`] over a prior index built beforehand (the same
+/// value: [`PriorMembers::of`] the same prior text).
+pub fn run_family_permute_with(
+    code: &str,
+    prior: PriorMembers,
+    eligible: &Eligibility,
+) -> Result<FamilyPermuteOutcome, String> {
+    let prior = prior.0?;
+    let ph = crate::profiling::phase("permute:fresh-members");
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     if !ingest.errors.is_empty() {
@@ -511,6 +536,8 @@ pub fn run_family_permute(
     let semantic = ingest.semantic();
     let mut state = RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default());
     let fresh = by_hash(collect_members(semantic, &state)?);
+    drop(ph);
+    let ph = crate::profiling::phase("permute:plan+apply");
     let (to_apply, buckets) = plan_bucket_moves(&fresh, &prior, eligible);
     if to_apply.is_empty() {
         return Ok(FamilyPermuteOutcome {
@@ -526,6 +553,8 @@ pub fn run_family_permute(
             ..FamilyPermuteOutcome::default()
         });
     }
+    drop(ph);
+    let _ph = crate::profiling::phase("permute:render");
     Ok(FamilyPermuteOutcome {
         applied: moves.len(),
         buckets,

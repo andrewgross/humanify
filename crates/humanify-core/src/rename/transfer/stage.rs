@@ -60,21 +60,30 @@ pub(super) fn apply_prior_version(
     stage: &MatchStage<'_, '_>,
     freeze: &PreFreeze,
 ) -> Result<(TransferOutcome, TwinGateOutput), String> {
+    use crate::profiling::phase;
     let fresh_semantic = stage.fresh.ingest.semantic();
+    let ph = phase("transfer:side-rows");
     let fresh_rows = SideRows::build(
         stage.fresh.graph,
         fresh_semantic,
         stage.fresh.tables,
         stage.fresh.json,
     );
+    drop(ph);
+    let ph = phase("transfer:settle");
     let Settled {
         evidence,
         fresh_state,
         fn_state,
         binding_state,
     } = settle(stage, &fresh_rows, freeze)?;
+    drop(ph);
+    let ph = phase("transfer:gate-twins");
     let twin_output = gate_twins(stage, &evidence, &fn_state, &binding_state)?;
+    drop(ph);
+    let ph = phase("transfer:rows");
     let rows = Rows::build(stage.fresh.graph, fresh_semantic, fresh_state.view());
+    drop(ph);
     let graph = stage.fresh.graph;
     let n_fns = graph.functions.len();
     let n_bindings = graph.module_bindings.len();
@@ -132,8 +141,12 @@ pub(super) fn apply_prior_version(
         .iter()
         .map(|s| s.span)
         .collect();
+    let ph = phase("transfer:carry");
     let carry = super::carry::matcher_carry(stage.prior.ingest.text, &spans);
+    drop(ph);
+    let ph = phase("transfer:pipeline");
     let mut outcome = run_transfer_pipeline(run, &evidence, &twins, &fresh_rows);
+    drop(ph);
     outcome.counts.functions_matched = evidence.exact.iter().filter(|(_, p)| p.is_some()).count();
     outcome.counts.functions_already_named =
         evidence.exact.iter().filter(|(_, p)| p.is_none()).count();

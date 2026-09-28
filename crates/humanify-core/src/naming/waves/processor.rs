@@ -40,6 +40,7 @@ use super::jsset::{JsRecord, JsSet};
 use super::nodes::FnNode;
 use super::render::{FnPrinter, Occurrences};
 use super::used_set::{NameLayer, UsedSet};
+use crate::fast::Lever;
 use crate::graph::UnifiedGraph;
 use crate::naming::code_window::{FunctionCodeSelection, cap_context_code, select_function_code};
 use crate::naming::context::{ContextView, DeclView, ParentBinding, build_context};
@@ -106,6 +107,10 @@ pub struct WaveInputs<'a, 's> {
     /// `--batch-size` / `--max-retries` / `--max-free-retries` /
     /// `--lane-threshold`.
     pub tunables: WaveTunables,
+    /// `--fast [tier]`: any tier pipelines each round's LLM calls (a lane's
+    /// follow-up starts as soon as ITS answer lands, not when the round's
+    /// slowest does).
+    pub fast: crate::fast::FastTier,
 }
 
 /// One recorded dispatch (a prompts.jsonl row + its cache-key material).
@@ -299,6 +304,38 @@ struct LaneRun {
     strategy: usize,
 }
 
+/// A provider result, as the waves receive it.
+type LlmResult = Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>;
+
+/// Call outcomes counted while a round runs (commutative: added to the run
+/// in one step, whatever the completion order).
+#[derive(Default)]
+struct Tally {
+    completed: usize,
+    misses: usize,
+    errors: usize,
+}
+
+impl Tally {
+    /// A provider result as a lane reads it, counted.
+    fn map(&mut self, r: LlmResult) -> Result<(Renames, Option<String>), ()> {
+        match r {
+            Ok(resp) => {
+                self.completed += 1;
+                Ok((resp.renames, resp.finish_reason))
+            }
+            Err(e) => {
+                if e.kind == LlmErrorKind::CacheMiss {
+                    self.misses += 1;
+                } else {
+                    self.errors += 1;
+                }
+                Err(())
+            }
+        }
+    }
+}
+
 /// A retry task in a round.
 struct RetryRun {
     seed: RetrySeed,
@@ -346,6 +383,9 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     processor: ProcessorReport,
     /// Function row → its wave context (a function is dispatched once).
     fn_ctx: HashMap<usize, usize>,
+    /// `--fast relaxed:defer-shadowed`: the previous wave's round-B lanes,
+    /// riding with this wave's round A.
+    deferred: Vec<LaneRun>,
 }
 
 /// Run the LLM naming waves over the transfer stage's state
@@ -427,6 +467,7 @@ pub fn run_waves<P: NameProvider>(
         errors: 0,
         processor: ProcessorReport::default(),
         fn_ctx: HashMap::new(),
+        deferred: Vec::new(),
     };
     run.used = run.module_used_names();
     run.wave_loop();
@@ -512,7 +553,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let mut done: Vec<bool> = (0..n).map(|i| self.node_settled(i)).collect();
         let mut pending: Vec<usize> = (0..n).filter(|&i| !done[i]).collect();
         let mut seeds: Vec<RetrySeed> = Vec::new();
-        while !pending.is_empty() || !seeds.is_empty() {
+        while !pending.is_empty() || !seeds.is_empty() || !self.deferred.is_empty() {
             let members = self.wave_members(&pending, &done);
             for &m in &members {
                 done[m] = true;
@@ -555,7 +596,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     /// `settleWaveNodes`: nodes whose work fully resolved, in node order.
     fn settle_nodes(&mut self, live: &[RetrySeed]) {
-        let held: HashSet<usize> = live.iter().map(|s| self.ctxs[s.ctx].node_index).collect();
+        // A node settles once ALL its work is done: no live retry seed and
+        // no deferred shadowed pass.
+        let held: HashSet<usize> = live
+            .iter()
+            .map(|s| s.ctx)
+            .chain(self.deferred.iter().map(|l| l.ctx))
+            .map(|ctx| self.ctxs[ctx].node_index)
+            .collect();
         let due: Vec<usize> = self
             .settle
             .keys()
@@ -607,9 +655,13 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
         }
         let groups = self.group_by_proximity(&mb_nodes);
+        let setup_phase = crate::profiling::phase("waves:setup");
 
         // ---- round A ----------------------------------------------------
-        let mut lanes: Vec<LaneRun> = Vec::new();
+        // (`defer-shadowed`: the previous wave's round-B lanes first — they
+        // are earlier nodes, and their requests read the same state they
+        // would have read in their own round.)
+        let mut lanes: Vec<LaneRun> = std::mem::take(&mut self.deferred);
         // Functions with a main pass: (fn, ctx, all bindings) — the gate
         // waiters, in node order.
         let mut waiters: Vec<(usize, usize, Vec<BindingInfo>)> = Vec::new();
@@ -619,9 +671,13 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             // The task's traversal: a fresh path for every node under
             // the function, so every fresh-era scope inside it is
             // (re)crawled NOW — registration order, current names.
+            let ph = crate::profiling::phase("setup:recrawl");
             self.recrawl_inside(self.inp.graph.functions[f].span);
+            drop(ph);
             let row = &self.inp.rows.fns[f];
+            let ph = crate::profiling::phase("setup:owned-bindings");
             let all = collect_owned_binding_infos(&self.state, row);
+            drop(ph);
             match self.select_llm_bindings(f, &all) {
                 Err(reason) => {
                     self.settle
@@ -643,10 +699,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             .into_iter()
             .map(|seed| self.start_retry(seed))
             .collect();
+        drop(setup_phase);
         self.drive_round(lanes, retries);
         let mut rejections = self.barrier();
 
         // ---- the gate release: shadowed bindings, in node order ---------
+        let gate_phase = crate::profiling::phase("waves:gate-release");
         let mut lanes: Vec<LaneRun> = Vec::new();
         waiters.sort_by_key(|(_, ctx, _)| self.ctxs[*ctx].node_index);
         for (f, ctx, all) in waiters {
@@ -657,9 +715,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             self.settle
                 .insert(self.ctxs[ctx].node_index, Settle::FnDone(f, ctx));
         }
+        drop(gate_phase);
         // ---- round B -----------------------------------------------------
-        self.drive_round(lanes, Vec::new());
-        rejections.extend(self.barrier());
+        if self.inp.fast.lever(Lever::DeferShadowed) {
+            self.deferred = lanes;
+        } else {
+            self.drive_round(lanes, Vec::new());
+            rejections.extend(self.barrier());
+        }
         self.build_retry_seeds(rejections)
     }
 
@@ -772,7 +835,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         });
         let strategy = self.strategies.len() - 1;
         let session = self.inp.graph.functions[f].session_id.clone();
-        let n_lanes = compute_lane_count(names.len(), self.inp.tunables.lane_threshold);
+        let batch = self.inp.tunables.batch_size.max(1);
+        let n_lanes = if self.inp.fast.lever(Lever::WindowLanes) && names.len() > batch {
+            names.len().div_ceil(batch)
+        } else {
+            compute_lane_count(names.len(), self.inp.tunables.lane_threshold)
+        };
         if n_lanes > 0 {
             for (i, lane) in split_by_position(&names, n_lanes).into_iter().enumerate() {
                 lanes.push(LaneRun {
@@ -797,7 +865,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// `buildContext(fn)` at the current state, plus its used-identifiers
     /// Set registered for barrier-time reads.
     fn build_context(&mut self, f: usize) -> (FnContext, usize) {
+        let ph = crate::profiling::phase("setup:context-view");
         let view = self.context_view(f);
+        drop(ph);
+        let _ph = crate::profiling::phase("setup:build-context");
         let eligible = self.inp.eligible;
         let ctx = build_context(&view, &self.inp.ng.fn_call_sites[f], |n: &str| {
             eligible.is_eligible(n)
@@ -1459,7 +1530,17 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// Run every lane and retry of a round to completion, dispatching one
     /// call per active lane per turn (a lane's sequence is independent of
     /// the others: its reads are frozen for the round).
-    fn drive_round(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
+    fn drive_round(&mut self, lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
+        if self.inp.fast.on() {
+            self.drive_round_pipelined(lanes, retries);
+        } else {
+            self.drive_round_turns(lanes, retries);
+        }
+    }
+
+    /// The parity-faithful driver: turn by turn, every active lane's next
+    /// call dispatched together and the turn waiting for its slowest.
+    fn drive_round_turns(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
         self.run_retries(retries);
         loop {
             let mut active: Vec<(usize, LaneCall)> = Vec::new();
@@ -1486,13 +1567,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
             let requests: Vec<BatchRenameRequest> = active
                 .iter()
-                .map(|(i, call)| {
-                    let lr = &lanes[*i];
-                    match self.strategies[lr.strategy] {
-                        Strategy::Fn { .. } => self.fn_request(lr.strategy, lr.ctx, call),
-                        Strategy::Module { .. } => self.module_request(lr.strategy, call),
-                    }
-                })
+                .map(|(i, call)| self.lane_request(&lanes[*i], call))
                 .collect();
             let targets: Vec<(usize, String)> = active
                 .iter()
@@ -1504,6 +1579,126 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
         }
         self.collect_lanes(lanes);
+    }
+
+    /// `--fast`: the same round, PIPELINED. Every retry and every lane's
+    /// first call start at once; a lane's next call starts as soon as ITS
+    /// answer lands. Decision-neutral by construction — a lane reads only
+    /// the round's frozen state and its own claims (`batch.rs`), so its
+    /// call sequence does not depend on completion order — and everything
+    /// order-sensitive is put back into the turn driver's canonical order
+    /// before it is recorded: dispatch records by (turn, lane) with the
+    /// retries first, contention events by (finishing turn, lane), retry
+    /// entries in retry order ahead of the lanes' effects.
+    fn drive_round_pipelined(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
+        let n_retries = retries.len();
+        // (canonical order key, record): retries are turn 0, a lane's k-th
+        // call is turn k + 1.
+        let mut records: Vec<((usize, usize), DispatchRecord)> = Vec::new();
+        let mut initial: Vec<(usize, LlmCall)> = Vec::new();
+        for (r, run) in retries.iter().enumerate() {
+            let request = self.retry_request(run);
+            let (record, call) = self.prepare_dispatch(request, run.seed.ctx, &run.function_id);
+            records.push(((0, r), record));
+            initial.push((r, call));
+        }
+        let mut turns = vec![0usize; lanes.len()];
+        let mut finished: Vec<(usize, usize, Vec<ContentionEvent>)> = Vec::new();
+        for (i, lr) in lanes.iter_mut().enumerate() {
+            if let Some((record, call)) = self.step_lane(lr, 0, i, &mut finished) {
+                records.push(((1, i), record));
+                initial.push((n_retries + i, call));
+            }
+        }
+        let mut retry_results: Vec<Option<LlmResult>> = (0..n_retries).map(|_| None).collect();
+        let mut tally = Tally::default();
+        {
+            let this: &Self = self;
+            let provider = this.provider;
+            let ph = crate::profiling::phase("waves:llm-pipelined");
+            provider.run_pipelined(initial, &mut |id, result| {
+                if id < n_retries {
+                    retry_results[id] = Some(result);
+                    return Vec::new();
+                }
+                let i = id - n_retries;
+                let mapped = tally.map(result);
+                this.feed_lane(&mut lanes[i], mapped);
+                turns[i] += 1;
+                match this.step_lane(&mut lanes[i], turns[i], i, &mut finished) {
+                    Some((record, call)) => {
+                        records.push(((turns[i] + 1, i), record));
+                        vec![(id, call)]
+                    }
+                    None => Vec::new(),
+                }
+            });
+            // The round's call structure (for the cold-run LLM model):
+            // retries are single calls; each lane is a chain.
+            if let Some(mut ph) = ph {
+                ph.note("retries", n_retries);
+                ph.note("chains", turns.clone());
+            }
+        }
+        records.sort_by_key(|(key, _)| *key);
+        for (_, record) in records {
+            self.commit_record(record);
+        }
+        finished.sort_by_key(|(turn, lane, _)| (*turn, *lane));
+        for (_, _, events) in finished {
+            self.processor.contention.extend(events);
+        }
+        for (run, result) in retries.iter().zip(retry_results) {
+            let result = result.expect("every retry call completes");
+            let renames = match tally.map(result) {
+                Ok((renames, finish)) => {
+                    if let Some(report) = self.ctxs[run.seed.ctx].report.as_mut() {
+                        report.bump_retry_call(finish);
+                    }
+                    renames
+                }
+                Err(()) => Renames::default(),
+            };
+            self.collect_retry_entries(run, &renames);
+        }
+        self.apply_tally(tally);
+        self.collect_lanes(lanes);
+    }
+
+    /// One lane's next move at `turn` (reads frozen state only): its next
+    /// request, prepared for dispatch — or, when it has none, its tail
+    /// (`finish_lane`), with the contention events it raised filed under
+    /// (turn, lane) for the canonical order.
+    fn step_lane(
+        &self,
+        lr: &mut LaneRun,
+        turn: usize,
+        lane: usize,
+        finished: &mut Vec<(usize, usize, Vec<ContentionEvent>)>,
+    ) -> Option<(DispatchRecord, LlmCall)> {
+        if lr.lane.is_finished() {
+            return None;
+        }
+        match lr.lane.next_call() {
+            Some(call) => {
+                let request = self.lane_request(lr, &call);
+                Some(self.prepare_dispatch(request, lr.ctx, &lr.function_id))
+            }
+            None => {
+                self.finish_lane(lr);
+                let events = std::mem::take(&mut lr.lane.report.contention);
+                finished.push((turn, lane, events));
+                None
+            }
+        }
+    }
+
+    /// A lane call's request, by strategy.
+    fn lane_request(&self, lr: &LaneRun, call: &LaneCall) -> BatchRenameRequest {
+        match self.strategies[lr.strategy] {
+            Strategy::Fn { .. } => self.fn_request(lr.strategy, lr.ctx, call),
+            Strategy::Module { .. } => self.module_request(lr.strategy, call),
+        }
     }
 
     /// `processBatch`: one report per (node, phase) over its lanes, in
@@ -1773,47 +1968,67 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     ) -> Vec<Result<(Renames, Option<String>), ()>> {
         let mut calls = Vec::with_capacity(requests.len());
         for (request, (ctx, function_id)) in requests.into_iter().zip(targets) {
-            let system_prompt = render_system_prompt(&request);
-            let user_prompt = render_user_prompt(&request);
-            let cache_key = cache_key_of(&request, &self.inp.params);
-            let round = self.rounds.entry(function_id.clone()).or_insert(0);
-            *round += 1;
-            let record = DispatchRecord {
-                seq: self.dispatches.len() as u64,
-                function_id: function_id.clone(),
-                round: *round,
-                wave: self.ctxs[*ctx].wave,
-                request: request.clone(),
-                cache_key,
-                system_prompt: system_prompt.clone(),
-                user_prompt: user_prompt.clone(),
-                targets: self.dump_targets(*ctx),
-            };
-            self.dispatches.push(record);
-            calls.push(LlmCall {
-                request,
-                system_prompt,
-                user_prompt,
-            });
+            let (record, call) = self.prepare_dispatch(request, *ctx, function_id);
+            self.commit_record(record);
+            calls.push(call);
         }
-        self.provider
-            .run_wave(calls)
-            .into_iter()
-            .map(|r| match r {
-                Ok(resp) => {
-                    self.processor.completed_calls += 1;
-                    Ok((resp.renames, resp.finish_reason))
-                }
-                Err(e) => {
-                    if e.kind == LlmErrorKind::CacheMiss {
-                        self.misses += 1;
-                    } else {
-                        self.errors += 1;
-                    }
-                    Err(())
-                }
-            })
-            .collect()
+        let results = {
+            let mut ph = crate::profiling::phase("waves:llm-dispatch");
+            if let Some(ph) = ph.as_mut() {
+                ph.note("calls", calls.len());
+            }
+            self.provider.run_wave(calls)
+        };
+        let mut tally = Tally::default();
+        let mapped = results.into_iter().map(|r| tally.map(r)).collect();
+        self.apply_tally(tally);
+        mapped
+    }
+
+    /// A request's prompts, cache key and dump record (its `seq` and
+    /// `round` are assigned by [`Run::commit_record`], in dispatch order).
+    fn prepare_dispatch(
+        &self,
+        request: BatchRenameRequest,
+        ctx: usize,
+        function_id: &str,
+    ) -> (DispatchRecord, LlmCall) {
+        let system_prompt = render_system_prompt(&request);
+        let user_prompt = render_user_prompt(&request);
+        let cache_key = cache_key_of(&request, &self.inp.params);
+        let record = DispatchRecord {
+            seq: 0,
+            function_id: function_id.to_string(),
+            round: 0,
+            wave: self.ctxs[ctx].wave,
+            request: request.clone(),
+            cache_key,
+            system_prompt: system_prompt.clone(),
+            user_prompt: user_prompt.clone(),
+            targets: self.dump_targets(ctx),
+        };
+        let call = LlmCall {
+            request,
+            system_prompt,
+            user_prompt,
+        };
+        (record, call)
+    }
+
+    /// Record a dispatch in dispatch order: its `seq`, and its `round`
+    /// (the function id's call count so far).
+    fn commit_record(&mut self, mut record: DispatchRecord) {
+        let round = self.rounds.entry(record.function_id.clone()).or_insert(0);
+        *round += 1;
+        record.round = *round;
+        record.seq = self.dispatches.len() as u64;
+        self.dispatches.push(record);
+    }
+
+    fn apply_tally(&mut self, tally: Tally) {
+        self.processor.completed_calls += tally.completed;
+        self.misses += tally.misses;
+        self.errors += tally.errors;
     }
 
     /// `dumpTargetForWaveCtx`.
@@ -1847,6 +2062,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     /// `applyWaveBarrier` over every collected entry.
     fn barrier(&mut self) -> Vec<Rejection> {
+        let _ph = crate::profiling::phase("waves:barrier");
         let mut entries = std::mem::take(&mut self.entries);
         entries.sort_by(|a, b| {
             (a.node_index, a.phase, a.binding_index, a.seq).cmp(&(

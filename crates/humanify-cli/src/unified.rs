@@ -87,6 +87,20 @@ pub struct CommandOptions {
     pub rename_ledger: Option<String>,
     pub stats_json: Option<String>,
     pub dump_artifacts: Option<String>,
+    /// `--fast [tier]` as given: None (absent), Some("") (bare) or the tier.
+    pub fast: Option<String>,
+    pub simulate_llm_latency: Option<String>,
+}
+
+pub use humanify_core::fast::FastTier;
+
+impl CommandOptions {
+    /// The `--fast` tier, or the message for a bad value.
+    pub fn fast_tier(&self) -> Result<FastTier, String> {
+        self.fast
+            .as_deref()
+            .map_or(Ok(FastTier::Off), FastTier::parse)
+    }
 }
 
 impl CommandOptions {
@@ -128,6 +142,12 @@ impl CommandOptions {
             rename_ledger: s("renameLedger"),
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
+            fast: match v.get("fast") {
+                Some(serde_json::Value::Bool(true)) => Some(String::new()),
+                Some(serde_json::Value::String(s)) => Some(s.clone()),
+                _ => None,
+            },
+            simulate_llm_latency: s("simulateLlmLatency"),
         }
     }
 
@@ -223,6 +243,7 @@ pub fn check_flag_invariants(
         &opts.minifier,
         &SELECTABLE_MINIFIERS,
     ));
+    out.extend(opts.fast_tier().err());
     out
 }
 
@@ -311,6 +332,7 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
         }
     };
     let profiler = humanify_core::profiling::Profiler::new(opts.profile.is_some());
+    profiler.install_global();
     // buildProvider: the cache wrapper mkdirs its dir at construction.
     if let Some(dir) = &settings.llm_cache_dir
         && let Err(e) = std::fs::create_dir_all(dir)
@@ -446,9 +468,31 @@ fn run_pipeline(
         eprintln!("\x1b[31mFile {input} not found\x1b[0m");
         return Ok(Ended::Immediate(1));
     }
-    pipeline_body(
-        input, opts, settings, switches, provider, profiler, renderer,
-    )
+    let Some(sim_path) = &opts.simulate_llm_latency else {
+        return pipeline_body(
+            input, opts, settings, switches, provider, profiler, renderer,
+        );
+    };
+    // The instrument: the run's own answers, priced on a virtual clock
+    // with the rate limiter's slot count (crate::llm_sim).
+    let sim = crate::llm_sim::LatencySim::new(provider, settings.concurrency as usize);
+    let ended = pipeline_body(input, opts, settings, switches, &sim, profiler, renderer);
+    let report = sim.report();
+    renderer.message(&format!(
+        "LLM latency simulation: {} calls, simulated LLM wall {:.1}s (effective concurrency {:.1})",
+        report.calls,
+        report.wall_ms / 1000.0,
+        if report.wall_ms > 0.0 {
+            report.busy_ms / report.wall_ms
+        } else {
+            0.0
+        }
+    ));
+    let text = serde_json::to_string_pretty(&report.to_json()).expect("a report serializes");
+    if let Err(e) = std::fs::write(sim_path, text) {
+        renderer.message(&format!("Error: cannot write {sim_path}: {e}"));
+    }
+    ended
 }
 
 /// The split namer's prompt budget: `--context-tokens` (else the default
@@ -519,9 +563,12 @@ fn pipeline_body(
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Ended, Crash> {
+    use humanify_core::profiling::phase;
+    let ph = phase("read+detect");
     let bundled_code = read_utf8(input)?;
     let (config, adapter, fossil_split) = detect_stage(&bundled_code, opts, switches, profiler)?;
     let prior = load_prior_version_code(opts, renderer)?;
+    drop(ph);
 
     // armRecorders: the diagnostics/dump recorders arrive with the stages
     // that feed them.
@@ -534,6 +581,7 @@ fn pipeline_body(
         .as_deref()
         .filter(|p| !p.is_empty())
         .map(Path::new);
+    let ph = phase("unpack+vendor");
     let unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
@@ -544,6 +592,8 @@ fn pipeline_body(
         profiler,
         renderer,
     )?;
+    drop(ph);
+    let ph = phase("library-detection");
     let (files_to_process, mixed_files) = if settings.skip_libraries {
         let filtered = filter_libraries(unpacked.files, adapter, profiler, renderer)?;
         (filtered.files_to_process, filtered.mixed_files)
@@ -561,7 +611,10 @@ fn pipeline_body(
         profiler,
         mixed_files: &mixed_files,
     };
+    drop(ph);
+    let ph = phase("format+naming");
     let last = naming.run(&files_to_process, &mut failures, renderer)?;
+    drop(ph);
     renderer.message(&format!(
         "Done! You can find your unminified code in {out_dir}"
     ));
@@ -592,6 +645,7 @@ fn pipeline_body(
             provider,
             namer_budget: split_namer_budget(settings),
         };
+        let _ph = phase("split");
         let span = profiler.pipeline_span("split");
         let records =
             crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
@@ -609,6 +663,7 @@ fn pipeline_body(
         path,
     }) = &last
     {
+        let _ph = phase("reports");
         let reports = RunReports {
             opts,
             outcome,
@@ -1207,6 +1262,7 @@ fn naming_config(
         },
         capture_dump: opts.dump_artifacts.is_some(),
         shingle_probe: switches.switch_on(Switch::ShingleProbe),
+        fast: opts.fast_tier().unwrap_or_default(),
         tunables: {
             let d = WaveTunables::default();
             WaveTunables {
