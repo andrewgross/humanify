@@ -10,8 +10,9 @@
 //! Line math is the TS's exactly: lines are `code.split("\n")` (a `\r`
 //! stays on its line; a trailing newline makes an empty last line), counts
 //! are line counts, and the identifier-rescue search is a whole-token
-//! match over UTF-16 units (probe cases `crlf`, `trailing-newline`,
-//! `name-rescue-astral`, `empty-name` in test/parity/wp42-vectors.json).
+//! match over UTF-16 units (the `crlf`, `trailing-newline`,
+//! `name-rescue-astral`, `empty-name` cases are pinned by the unit tests;
+//! the TS probe vectors that carried them were retired 2026-09-28).
 //! The TS's `debug.log` lines are not reproduced (log-only; no output
 //! reads them).
 

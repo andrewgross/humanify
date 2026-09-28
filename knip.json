@@ -16,6 +16,5 @@
     "experiments/046-vendor-noise/vendor-churn.ts"
   ],
   "ignoreBinaries": ["scripts/rustfmt-staged.sh"],
-  "ignore": ["test/parity/**"],
   "ignoreExportsUsedInFile": true
 }

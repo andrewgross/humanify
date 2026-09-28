@@ -1,13 +1,16 @@
 //! The `--stats-json` shape gate (WPB.4 gate part 3):
 //!
-//! 1. every real stats file (the oracle-f7a707d runs + two main-2026-09-18
-//!    runs, committed as test/parity/wpb4-stats-*.json) parses STRICTLY and
-//!    re-serializes to the identical bytes — key order included;
-//! 2. the Rust record's shape equals the TS checker's view of
-//!    writeEvalStats' `stats` literal (test/parity/wpb4-stats-schema.json);
-//! 3. the TS writer's outputs on synthetic results (wpb4-vectors.json
+//! 1. the Rust record's shape equals the recorded
+//!    writeEvalStats' `stats` literal (test/parity/wpb4-stats-schema.json)
+//!    — the `--stats-json` layout the eval harness consumes;
+//! 2. the writer's outputs on synthetic results (wpb4-vectors.json
 //!    `writers.evalStats`) round-trip the same way, covering the omitted
-//!    optionals the real runs always set.
+//!    optionals real runs always set.
+//!
+//! (The six recorded TS-run files — test/parity/wpb4-stats-*.json, the
+//! oracle-f7a707d and main-2026-09-18 runs' own bytes — were retired
+//! 2026-09-28 with the other TS-capture replays; real-run strict parses
+//! are exercised by every eval the harness scores.)
 
 use crate::js::{JsValue, stringify_pretty};
 use crate::jsshape::JsType;
@@ -15,38 +18,6 @@ use crate::stats::EvalStats;
 
 fn repo(rel: &str) -> String {
     format!("{}/../../{rel}", env!("CARGO_MANIFEST_DIR"))
-}
-
-#[test]
-fn real_stats_files_round_trip_byte_for_byte() {
-    // test/parity/wpb4-stats-<run>.json (flat files: every test/parity
-    // subdirectory is a ts/rust dump fixture to the rust:parity stage).
-    let dir = repo("test/parity");
-    let mut names: Vec<_> = std::fs::read_dir(&dir)
-        .expect("fixture dir")
-        .map(|e| e.unwrap().path())
-        .filter(|p| {
-            let n = p.file_name().unwrap().to_string_lossy();
-            n.starts_with("wpb4-stats-") && n != "wpb4-stats-schema.json" && n.ends_with(".json")
-        })
-        .collect();
-    names.sort();
-    assert!(names.len() >= 6, "the committed fixtures");
-    for path in &names {
-        let text = std::fs::read_to_string(path).unwrap();
-        let stats = EvalStats::parse(&text)
-            .unwrap_or_else(|e| panic!("{}: strict parse failed: {e}", path.display()));
-        assert_eq!(
-            stats.to_file_text(),
-            text,
-            "{}: re-serialization differs",
-            path.display()
-        );
-    }
-    eprintln!(
-        "stats: {} real files round-trip byte-identical",
-        names.len()
-    );
 }
 
 #[test]

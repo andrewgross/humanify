@@ -166,8 +166,9 @@ fn reports_a_missing_api_key_instead_of_resolving_to_undefined() {
     );
 }
 
-// ---- beyond the TS unit tests: the throw ORDER and messages the scenario
-// gate (test/parity/wpb4-scenarios.json) compares end to end ----
+// ---- beyond the TS unit tests: the throw ORDER and messages (the
+// scenario gate that compared them end to end against the recorded TS
+// binary was retired 2026-09-28; the e2e covers the real invocations) ----
 
 #[test]
 fn an_empty_api_key_is_missing_like_the_ts_falsy_check() {

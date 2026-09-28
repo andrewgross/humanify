@@ -156,7 +156,6 @@ crates/
                      #   matching, naming, split/emit, finish
   humanify-llm/      # the OpenAI-compatible client and the response cache
   humanify-model/    # shared data types (ledgers, dumps, stats)
-  humanify-parity/   # the dump differ (`--dump-artifacts` A vs B)
 scripts/             # the gate (check.ts), the eval dispatcher (eval.ts),
                      #   the e2e stage, the webcrack shim
 experiments/         # the measurement harness (lib/, 034-eval-harness/) and
@@ -174,10 +173,9 @@ npm run check
 ```
 
 It covers the Rust pipeline (fmt, clippy, unit, the release build, the
-formatter's frozen goldens, the differ self-test, an end-to-end run of the
-binary on the committed fixtures with a boot check) and the TypeScript
-measurement harness (typecheck, lint, knip, unit). `CLAUDE.md` lists the
-stages.
+formatter's frozen goldens, an end-to-end run of the binary on the
+committed fixtures with a boot check) and the TypeScript measurement
+harness (typecheck, lint, knip, unit). `CLAUDE.md` lists the stages.
 
 ### Measuring a change
 

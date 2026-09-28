@@ -1,7 +1,8 @@
 //! Port of src/env-reads/analyze.test.ts and format.test.ts, fixture for
 //! fixture, plus the Babel-shape cases the translation onto oxc must hold
-//! (optional links, parens, write targets). The cross-binary corpus gate
-//! is test/parity/wpb4-env-reads.sh.
+//! (optional links, parens, write targets). (The cross-binary corpus gate,
+//! test/parity/wpb4-env-reads.sh, ran the retired TS binary; the report's
+//! shape is pinned by these tests and the golden help.)
 
 use crate::env_reads::{EnvReadsReport, analyze_env_reads, format_env_reads_report};
 

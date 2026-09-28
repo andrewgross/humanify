@@ -20,8 +20,8 @@
 //!
 //! clap cannot express these (it would need an override at every point), so
 //! the pipeline surface is this port, while the migration verbs keep clap.
-//! The surface gate (`surface_test.rs`) replays test/parity/wpb4-cli-surface.json,
-//! recorded from the REAL commander program, through this parser.
+//! The surface gate (`surface_test.rs`) drives this parser directly:
+//! the help goldens, the Rust-only flags, and the retired-option refusals.
 
 use serde_json::Value;
 

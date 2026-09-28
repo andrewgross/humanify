@@ -109,13 +109,8 @@ const STAGES: readonly Stage[] = [
   },
   {
     name: "rust:format-golden",
-    why: "the release binary's formatter replayed against test/parity/format-goldens.json — the TS beautifier's captured output, now the formatter's frozen spec — plus a planted perturbation that must be detected",
+    why: "the release binary's formatter replayed against test/parity/format-goldens.json — the formatter's frozen spec (the TS beautifier's captured bytes; the rust:parity dump-differ stage was retired 2026-09-28 with the other TS-parity instruments) — plus a planted perturbation that must be detected",
     run: "scripts/format-golden.sh"
-  },
-  {
-    name: "rust:parity",
-    why: "the parity differ proven able to fail (selftest: planted divergences detected) — it compares two --dump-artifacts dumps of the binary, Rust against Rust",
-    run: "tsx scripts/rust-parity.ts"
   },
   {
     name: "e2e",

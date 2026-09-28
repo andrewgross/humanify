@@ -5,10 +5,10 @@
 //! Prompts are an external contract with the disk cache (02 §7): a Rust
 //! leg replays a TS-populated cache only if every prompt is byte-identical,
 //! and the cache key alone cannot prove it (it sorts `usedNames`; the
-//! prompt shows the first 50 in SET ORDER — 07 §5). Gated byte-for-byte
-//! against every prompt of the four oracle pairs (`humanify prompt-gate`)
-//! and against probe vectors of every builder on adversarial inputs
-//! (test/parity/wp42-vectors.json).
+//! prompt shows the first 50 in SET ORDER — 07 §5). The TS-side prompt
+//! gate and probe vectors were retired with the other parity fixtures
+//! (2026-09-28): the builders are pinned by their unit tests and, end to
+//! end, by the e2e and eval runs.
 //!
 //! JS semantics reproduced, each one a TS expression:
 //! - `used_names` is a Set in insertion order; the prompt shows

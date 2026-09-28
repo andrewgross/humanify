@@ -1,7 +1,8 @@
 //! The console profile summary (TS: src/profiling/summary.ts). Its JS
 //! number text — `formatDuration`, `Number.prototype.toString`, `toFixed`
-//! — comes from the one owner, `humanify_model::js`. Byte-equal to the TS
-//! on the frozen vectors (test/parity/wpb5-profile-vectors.json).
+//! — comes from the one owner, `humanify_model::js`. (Was byte-equal to
+//! the TS on the frozen wpb5-profile vectors, retired 2026-09-28 with the
+//! other TS-capture replays; the unit tests pin the shapes.)
 
 use std::fmt::Write as _;
 

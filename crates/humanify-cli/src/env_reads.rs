@@ -18,8 +18,9 @@
 //! - the report sorts names and files with `localeCompare` (ICU order,
 //!   `humanify_model::js::locale_compare`), not bytes.
 //!
-//! Gate: test/parity/wpb4-env-reads.sh runs both binaries over a corpus and
-//! byte-compares the text and Markdown reports.
+//! (The corpus gate that byte-compared both binaries' text and Markdown
+//! reports — test/parity/wpb4-env-reads.sh — was a TS-parity instrument
+//! and was retired with it; env_reads_test pins the report's shape.)
 
 use std::path::Path;
 

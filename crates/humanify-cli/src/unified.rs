@@ -2,8 +2,9 @@
 //! configureUnifiedCommand's action + runPipeline + the report tail).
 //!
 //! Order is the TS order, because each step's failure mode is contract
-//! (14 §2) and the scenario gate (test/parity/wpb4-scenarios.json) compares
-//! them end to end against the TS binary:
+//! (14 §2) — the messages and their ORDER are the surface (the recorded
+//! scenario corpus that asserted them end to end was retired 2026-09-28;
+//! the e2e drives the real invocations):
 //!
 //! 1. flag invariants — every violation `Error: <msg>` on stderr, exit 1;
 //! 2. kill switches — `Error: <msg>`, exit 1;

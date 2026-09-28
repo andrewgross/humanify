@@ -864,8 +864,10 @@ pub fn format_duration(ms: f64) -> String {
 /// JS WhiteSpace + LineTerminator — the set `String.prototype.trim`
 /// strips (ECMA-262 §12.2/§12.3: TAB VT FF SP NBSP ZWNBSP, category Zs,
 /// LF CR LS PS). NOT `char::is_whitespace`: Unicode White_Space includes
-/// U+0085 (JS keeps it) and excludes U+FEFF (JS strips it). Pinned against
-/// every code point by wp42-vectors.json (WP4.2).
+/// U+0085 (JS keeps it) and excludes U+FEFF (JS strips it). The set was
+/// verified against every code point of the TS's when ported (WP4.2); the
+/// per-code-point fixture went with the retired probe vectors (2026-09-28)
+/// and the edge cases are pinned by js_test.
 pub fn is_js_whitespace(c: char) -> bool {
     matches!(
         c,

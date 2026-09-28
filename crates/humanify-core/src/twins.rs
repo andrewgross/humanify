@@ -29,9 +29,10 @@
 //! deterministic-order serialization implies byte-equality under any other
 //! fixed order (the reordering is applied identically to both sides), so
 //! the partition — and therefore the unique-tier join — is order-independent.
-//! The probe's frozen expectations (test/parity/wp23-probe.mjs →
-//! wp23-unique-twin-index.json) assert exactly that: counts, the
-//! bucket-size histogram, and sample-pair SPANS, never digest strings.
+//! The class-level invariants (counts, the bucket-size histogram, pair
+//! spans — never digest strings) held under the retired wp23 probe
+//! (frozen at the TS-era `wp23-unique-twin-index.json`, deleted
+//! 2026-09-28) and are exercised live by the unit tests.
 //!
 //! Anchors: the fresh side is the PRE-rename minified text (the graph the
 //! cascade runs on); the prior side is the from-version's humanified

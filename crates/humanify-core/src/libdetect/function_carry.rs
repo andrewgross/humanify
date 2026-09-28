@@ -23,8 +23,10 @@
 //!   ESTree tree in the same order); [`resolve_function_libraries`] replays
 //!   the walk over the re-parsed printed text and fails loud on a count or
 //!   per-ordinal type mismatch. The ordinal is taken over the OUTPUT tree,
-//!   never the raw one: flipComparisons reorders functions (the `reorder`
-//!   vector in test/parity/library-carry.json).
+//!   never the raw one: flipComparisons reorders functions (it once
+//!   swapped a template literal with expressions to the right, running
+//!   the other side's code first — the frozen `reorder` case, retired
+//!   with the library-carry.json probe 2026-09-28).
 //! - [`LibraryClassification::Consumed`] — a classification given as
 //!   keys (fresh span in UTF-8 bytes, sessionId, library), joined by the
 //!   function node's fresh span (the sessionId cross-checked). The TS-dump

@@ -1,14 +1,12 @@
 //! Name legality tables and the conflict ladder — src/llm/validation.ts,
 //! the DECORATION_WORDS owner.
 //!
-//! The three tables are pinned to the TS's in its order
-//! (validation_test::tables_equal_the_ts_tables, from
-//! test/parity/wp42-vectors.json). GLOBAL_BUILTINS is DERIVED in the TS —
+//! The tables are owned HERE (their TS-parity pin went with the retired
+//! wp42 probe vectors, 2026-09-28). GLOBAL_BUILTINS was DERIVED in the TS —
 //! `Object.keys` of the `globals` package's `builtin`, `nodeBuiltin` and
 //! `shared-node-browser` sets (globals@17.4.0, the version node_modules
-//! resolves) plus the curated host list — so a `globals` bump changes the
-//! TS table and the pin test goes red until this list is regenerated from
-//! the probe.
+//! resolved) plus the curated host list — frozen at the cutover; a
+//! globals bump no longer reaches this list.
 
 /// JavaScript reserved words that cannot be used as identifiers
 /// (keywords, strict-mode reserved words incl. `arguments`, literals, and

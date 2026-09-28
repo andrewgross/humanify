@@ -27,10 +27,6 @@ pub mod debug;
 pub mod metrics;
 pub mod provider;
 pub mod rate;
-/// The cache-key + replay golden: frozen TS dispatches replayed through
-/// the live key derivation and cache (test-only since the cutover).
-#[cfg(test)]
-mod replay_gate;
 
 pub use provider::{AsyncProvider, LlmClient};
 
@@ -44,7 +40,5 @@ mod metrics_test;
 mod provider_test;
 #[cfg(test)]
 mod rate_test;
-#[cfg(test)]
-mod replay_gate_test;
 #[cfg(test)]
 mod stub_server;

@@ -1,12 +1,10 @@
-//! Ported fixture-for-fixture from src/llm/prompts.test.ts, plus the probe
-//! vectors (every builder on adversarial inputs, recorded from the real TS)
-//! and byte-exact snapshots per prompt type.
+//! Ported fixture-for-fixture from src/llm/prompts.test.ts, plus byte-exact
+//! snapshots per prompt type (the TS probe vectors that also ran here were
+//! retired 2026-09-28).
 
-use humanify_model::js::JsValue;
 use humanify_model::llm::{BatchRenameRequest, CalleeSignature, RenameFailures, StrMap};
 
 use super::*;
-use crate::naming::{test_vectors, test_vectors_js};
 
 fn strs(v: &[&str]) -> Vec<String> {
     v.iter().map(|s| s.to_string()).collect()
@@ -67,16 +65,6 @@ fn retry(
 fn system_prompts_warn_about_globals() {
     assert!(BATCH_RENAME_SYSTEM_PROMPT.contains("global"));
     assert!(MODULE_LEVEL_RENAME_SYSTEM_PROMPT.contains("global"));
-}
-
-#[test]
-fn system_prompts_equal_the_ts_bytes() {
-    let v = test_vectors();
-    assert_eq!(BATCH_RENAME_SYSTEM_PROMPT, v["systemPrompts"]["batch"]);
-    assert_eq!(
-        MODULE_LEVEL_RENAME_SYSTEM_PROMPT,
-        v["systemPrompts"]["moduleLevel"]
-    );
 }
 
 // ---- buildBatchRenameRetryPrompt ----
@@ -373,176 +361,6 @@ fn render_takes_the_retry_path_only_with_failures() {
     assert!(render_user_prompt(&r).starts_with("Your previous rename suggestions"));
     // previousAttempt `|| {}`
     assert!(render_user_prompt(&r).contains("MISSING from your response: a"));
-}
-
-// ---- probe vectors: every builder, byte-exact ----
-//
-// Read through the JS-semantics parser (`JsValue`), not serde_json::Value:
-// the latter sorts object keys, and `alreadyRenamed`'s enumeration order
-// is part of the prompt bytes.
-
-fn field<'a>(v: &'a JsValue, key: &str) -> &'a JsValue {
-    v.as_object()
-        .and_then(|o| o.get(key))
-        .unwrap_or(&JsValue::Null)
-}
-
-fn items(v: &JsValue) -> &[JsValue] {
-    match v {
-        JsValue::Array(a) => a,
-        _ => panic!("expected an array, got {v:?}"),
-    }
-}
-
-fn text(v: &JsValue) -> &str {
-    v.as_str().unwrap()
-}
-
-fn opt_str(v: &JsValue) -> Option<String> {
-    v.as_str().map(str::to_string)
-}
-
-fn str_vec(v: &JsValue) -> Vec<String> {
-    items(v).iter().map(|s| text(s).to_string()).collect()
-}
-
-fn opt_vec(v: &JsValue) -> Option<Vec<String>> {
-    (*v != JsValue::Null).then(|| str_vec(v))
-}
-
-fn str_map(v: &JsValue) -> StrMap {
-    StrMap(
-        v.as_object()
-            .unwrap()
-            .entries()
-            .iter()
-            .map(|(k, v)| (k.clone(), text(v).to_string()))
-            .collect(),
-    )
-}
-
-fn opt_map(v: &JsValue) -> Option<StrMap> {
-    (*v != JsValue::Null).then(|| str_map(v))
-}
-
-fn array_record(v: &JsValue) -> ArrayRecord {
-    ArrayRecord(
-        v.as_object()
-            .unwrap()
-            .entries()
-            .iter()
-            .map(|(k, v)| (k.clone(), str_vec(v)))
-            .collect(),
-    )
-}
-
-fn fails(v: &JsValue) -> RenameFailures {
-    RenameFailures {
-        duplicates: str_vec(field(v, "duplicates")),
-        invalid: str_vec(field(v, "invalid")),
-        missing: str_vec(field(v, "missing")),
-        unchanged: str_vec(field(v, "unchanged")),
-    }
-}
-
-fn callees(v: &JsValue) -> Vec<CalleeSignature> {
-    items(v)
-        .iter()
-        .map(|c| CalleeSignature {
-            name: text(field(c, "name")).to_string(),
-            params: str_vec(field(c, "params")),
-            snippet: None,
-        })
-        .collect()
-}
-
-fn arg(args: &[JsValue], i: usize) -> &JsValue {
-    args.get(i).unwrap_or(&JsValue::Null)
-}
-
-fn eligibility(name: &str) -> fn(&str) -> bool {
-    match name {
-        "short" => |n| n.chars().map(char::len_utf16).sum::<usize>() <= 3,
-        "all" => |_| true,
-        "none" => |_| false,
-        other => panic!("unknown predicate {other}"),
-    }
-}
-
-fn module_input(a: &[JsValue]) -> ModuleLevelInput {
-    ModuleLevelInput {
-        declarations: str_vec(&a[0]),
-        assignment_context: array_record(&a[1]),
-        usage_examples: array_record(&a[2]),
-        identifiers: str_vec(&a[3]),
-        used_names: str_vec(&a[4]),
-        suggested_names: opt_map(arg(a, 6)),
-    }
-}
-
-fn run_retry_vector(fname: &str, a: &[JsValue]) -> String {
-    let (ids, used) = (str_vec(&a[1]), str_vec(&a[2]));
-    let (prev, f, renamed) = (str_map(&a[3]), fails(&a[4]), opt_map(arg(a, 6)));
-    let input = RetryInput {
-        code: text(&a[0]),
-        identifiers: &ids,
-        used_names: &used,
-        previous_attempt: &prev,
-        failures: &f,
-        prior_version_code: arg(a, 5).as_str(),
-        already_renamed: renamed.as_ref(),
-    };
-    if fname == "buildBatchRenameRetryBody" {
-        build_batch_rename_retry_body(&input)
-    } else {
-        build_batch_rename_retry_prompt(&input)
-    }
-}
-
-fn run_vector(fname: &str, a: &[JsValue]) -> String {
-    match fname {
-        "buildBatchRenamePrompt" => build_batch_rename_prompt(&BatchRenameRequest {
-            code: text(&a[0]).into(),
-            identifiers: str_vec(&a[1]),
-            used_names: str_vec(&a[2]),
-            callee_signatures: callees(&a[3]),
-            callsites: str_vec(&a[4]),
-            context_vars: opt_vec(arg(a, 5)),
-            prior_version_code: opt_str(arg(a, 6)),
-            prior_version_names: opt_vec(arg(a, 7)),
-            already_renamed: opt_map(arg(a, 8)),
-            prior_name_hints: opt_map(arg(a, 9)),
-            ..Default::default()
-        }),
-        "buildBatchRenameRetryPrompt" | "buildBatchRenameRetryBody" => run_retry_vector(fname, a),
-        "buildRenameResponseInstruction" => build_rename_response_instruction(&str_vec(&a[0])),
-        "buildModuleLevelRenamePrompt" => {
-            build_module_level_rename_prompt(&module_input(a), eligibility(text(&a[5])))
-        }
-        "buildModuleLevelRenameBody" => {
-            build_module_level_rename_body(&module_input(a), eligibility(text(&a[5])))
-        }
-        "buildModuleLevelRetryPrefix" => {
-            build_module_level_retry_prefix(&str_map(&a[0]), &fails(&a[1]))
-        }
-        other => panic!("unknown builder {other}"),
-    }
-}
-
-#[test]
-fn probe_vectors_match_the_ts_byte_for_byte() {
-    let v = test_vectors_js();
-    let cases = items(field(&v, "prompts"));
-    assert!(cases.len() >= 16);
-    for c in cases {
-        let got = run_vector(text(field(c, "fn")), items(field(c, "args")));
-        assert_eq!(
-            got,
-            text(field(c, "out")),
-            "case {}",
-            text(field(c, "name"))
-        );
-    }
 }
 
 // ---- snapshots, one per prompt type (inline; any byte change is loud) ----

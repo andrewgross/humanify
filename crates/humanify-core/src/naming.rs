@@ -19,8 +19,6 @@
 //!   retry policy the wave barrier and the coverage sweep share
 //!   (2026-09-28: the collision classes get one disclosed re-ask, the
 //!   unrecoverable classes stay loud).
-//! - `prompt_gate` (test-only) — the prompt builders replayed against
-//!   the frozen TS-captured fixture (test/parity/wp42-gate-fixture/).
 //! - [`js_record`] — the one owner of "what does `record[key]` read" for a
 //!   TS `Record<string, string>` (an absent key falls through to
 //!   Object.prototype — probed, see the module).
@@ -30,8 +28,6 @@ pub mod context;
 pub mod driver;
 pub mod js_record;
 pub mod passes;
-#[cfg(test)]
-mod prompt_gate;
 pub mod prompts;
 pub mod reask;
 pub mod reconcile;
@@ -39,26 +35,3 @@ pub mod report;
 pub mod snap;
 pub mod validation;
 pub mod waves;
-
-/// The WP4.2 probe vectors (test/parity/wp42-vectors.json), recorded from
-/// the real TS functions by test/parity/wp42-probe.ts.
-#[cfg(test)]
-fn test_vectors_text() -> String {
-    let path = format!(
-        "{}/../../test/parity/wp42-vectors.json",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
-}
-
-#[cfg(test)]
-pub(crate) fn test_vectors() -> serde_json::Value {
-    serde_json::from_str(&test_vectors_text()).unwrap()
-}
-
-/// The same vectors through the JS-semantics parser — object key ORDER
-/// preserved (serde_json::Value sorts keys).
-#[cfg(test)]
-pub(crate) fn test_vectors_js() -> humanify_model::js::JsValue {
-    humanify_model::js::JsValue::parse(&test_vectors_text()).unwrap()
-}

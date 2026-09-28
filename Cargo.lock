@@ -526,16 +526,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "humanify-parity"
-version = "0.0.0"
-dependencies = [
- "clap",
- "humanify-model",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "hyper"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

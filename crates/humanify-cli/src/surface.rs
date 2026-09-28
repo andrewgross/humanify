@@ -16,25 +16,15 @@ use crate::commander::CliCommand;
 use crate::util::{DEFAULT_CONCURRENCY, DEFAULT_LLM_TIMEOUT_MS};
 use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 
-/// Rust-only options: the TS program does not have them. Hidden from help,
-/// and named here so the surface gate reports them instead of passing over
-/// them.
-///
-/// The TS inputs that left: `--beautified-input` and
-/// `--ts-library-functions` (WP5.6d: the binary formats natively and
-/// carries the library classification itself) and `--inject-ts-hashes`
-/// (WP5.6e, 2026-09-25: the structuralSignature exemption ended; the Rust
-/// hashes are the only hashes, and a TS-era prior is re-keyed or refused
-/// loudly). `--fast [tier]` joined them 2026-09-28 — the naming schedule
-/// flipped to the relaxed tier by default (docs/rust-port/20-fast-mode.md
-/// §defaults) and the old conservative path became `--sequential`, with
-/// `--relaxed-levers` keeping the lever-sizing capability out of the
-/// user-facing surface.
-pub const RUST_ONLY_OPTIONS: &[&str] = &[
-    "--sequential",
-    "--relaxed-levers <levers>",
-    "--simulate-llm-latency <path>",
-];
+// Rust-only options' history (the list the retired TS-surface corpus used
+// to check went with it): the TS inputs that left at the cutover were
+// `--beautified-input` and `--ts-library-functions` (WP5.6d) and
+// `--inject-ts-hashes` (WP5.6e, 2026-09-25); `--fast [tier]` left
+// 2026-09-28 when the naming schedule flipped to the relaxed tier by
+// default (docs/rust-port/20-fast-mode.md §defaults) and the old
+// conservative path became `--sequential`. `--relaxed-levers` (the lever
+// sizing knob) stays deliberately OUT of the help;
+// `--simulate-llm-latency <path>` (the pacing replay) is listed.
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -308,22 +298,6 @@ pub fn help_text(command: &str) -> String {
         .find(|c| c.name == command)
         .unwrap_or_else(|| panic!("the program has no command {command}"))
         .help_information(&[root.name.as_str()])
-}
-
-/// A recorded usage-error envelope with each `{{help:<command>}}`
-/// placeholder replaced by that command's current help: the recorded
-/// corpora (test/parity/wpb4-cli-surface.json, wpb4-scenarios.json) keep
-/// commander's error lines, while the help's wording is the binary's own.
-pub fn expand_help_placeholders(text: &str) -> String {
-    let root = program();
-    let mut out = text.to_string();
-    for name in std::iter::once(&root.name).chain(root.commands.iter().map(|c| &c.name)) {
-        let placeholder = format!("{{{{help:{name}}}}}");
-        if out.contains(&placeholder) {
-            out = out.replace(&placeholder, &help_text(name));
-        }
-    }
-    out
 }
 
 /// `configureEnvReadsCommand`.

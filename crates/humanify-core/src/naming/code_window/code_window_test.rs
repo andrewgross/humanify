@@ -1,10 +1,7 @@
-//! Ported fixture-for-fixture from src/rename/code-window.test.ts, plus the
-//! probe vectors (line-math edges recorded from the real TS).
-
-use serde_json::Value;
+//! Ported fixture-for-fixture from src/rename/code-window.test.ts (the TS
+//! probe vectors that also ran here were retired 2026-09-28).
 
 use super::*;
-use crate::naming::test_vectors;
 
 fn make_lines(n: usize) -> String {
     (1..=n)
@@ -176,44 +173,4 @@ fn shows_an_identifier_whose_declaration_loc_is_outside_the_range() {
         ..sel(&code)
     });
     assert!(r.contains("qt"));
-}
-
-// ---- probe vectors ----
-
-fn opt_i64(v: &Value) -> Option<i64> {
-    v.as_i64()
-}
-
-/// Run one recorded `selectFunctionCode` input (vector or capture row
-/// shape: nulls for undefined).
-pub(crate) fn run_recorded_selection(s: &Value) -> String {
-    let anchors: Option<Vec<Option<i64>>> = s["anchorStartLines"]
-        .as_array()
-        .map(|a| a.iter().map(opt_i64).collect());
-    let names: Option<Vec<String>> = s["identifierNames"]
-        .as_array()
-        .map(|a| a.iter().map(|n| n.as_str().unwrap().to_string()).collect());
-    select_function_code(&FunctionCodeSelection {
-        code: s["code"].as_str().unwrap(),
-        session_id: s["sessionId"].as_str().unwrap(),
-        fn_start_line: opt_i64(&s["fnStartLine"]),
-        fn_end_line: opt_i64(&s["fnEndLine"]),
-        anchor_start_lines: anchors.as_deref(),
-        identifier_names: names.as_deref(),
-    })
-}
-
-#[test]
-fn probe_vectors_match_the_ts_byte_for_byte() {
-    let v = test_vectors();
-    let cases = v["codeWindow"].as_array().unwrap();
-    assert!(cases.len() >= 16);
-    for c in cases {
-        let got = match c["fn"].as_str().unwrap() {
-            "selectFunctionCode" => run_recorded_selection(&c["sel"]),
-            "capContextCode" => cap_context_code(c["code"].as_str().unwrap(), "s"),
-            other => panic!("{other}"),
-        };
-        assert_eq!(got, c["out"].as_str().unwrap(), "case {}", c["name"]);
-    }
 }

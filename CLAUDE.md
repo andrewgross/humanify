@@ -8,9 +8,12 @@
 npm run check
 ```
 
-It runs all thirteen stages — typecheck, lint (prettier + biome), rust:fmt,
+It runs all twelve stages — typecheck, lint (prettier + biome), rust:fmt,
 rust:clippy, knip, knip:prod, clone census, unit, rust:unit, rust:build,
-rust:format-golden, rust:parity, e2e — and prints a summary saying which ran.
+rust:format-golden, e2e — and prints a summary saying which ran. (The
+thirteenth, rust:parity — the dump differ's selftest — was retired
+2026-09-28 with the rest of the TS-parity scaffolding: the differ compared
+TS-side artifact dumps and, post-cutover, had no living caller.)
 The `census:clones` stage is ADVISORY: unreviewed potential-duplication prints
 `REVIEW` (never FAIL) — an automated mini code-review for Claude/agents to act
 on by unifying the code or allowlisting with a justification. All other
@@ -30,7 +33,6 @@ What the Rust-specific stages prove:
 - `rust:format-golden` — that binary's formatter against
   `test/parity/format-goldens.json` (the TS beautifier's captured bytes, now
   the formatter's frozen spec), plus a planted perturbation that must be caught.
-- `rust:parity` — the dump differ's selftest (planted divergences detected).
 - `e2e` — `scripts/e2e.ts`: the release binary on the committed e2e fixtures
   (fresh, then with `--prior-version`) against a stub LLM that names every
   identifier, run twice for byte-determinism, and every output imported by

@@ -1,26 +1,22 @@
-//! Profiling tests (WPB.5). Two layers:
-//!
-//! 1. `profiler.test.ts` + `trace-events.test.ts` ported case-for-case.
-//! 2. PARITY against the frozen TS probe (`test/parity/wpb5-profile-probe.ts`
-//!    → `test/parity/wpb5-profile-vectors.json`): for every frozen report,
-//!    the `--profile` file body (pretty JSON) and the console summary are
-//!    BYTE-equal to the TS's; percentiles and `formatDuration` likewise.
-//!    Three recorded strings are deliberate departures (finding #11, fixed):
-//!    `formatDuration` 59999 → "1m 0s" and 3599999 → "1h 0m", and the
-//!    `rich` summary's "p95: 1m 0s" (the TS printed "60.0s" / "59m 60s").
+//! Profiling tests (WPB.5): `profiler.test.ts` + `trace-events.test.ts`
+//! ported case-for-case. (The frozen TS-probe vectors — recorded reports
+//! whose trace bytes, console summaries, percentiles and `formatDuration`
+//! outputs had to equal the TS's — were retired 2026-09-28, taking with
+//! them the three deliberate departures of finding #11: `formatDuration`
+//! 59999 → "1m 0s" and 3599999 → "1h 0m", and the `rich` summary's
+//! "p95: 1m 0s" where the TS printed "60.0s" / "59m 60s".)
 
 use std::time::Duration;
 
 use humanify_model::profiling::{
     ConcurrencyCounts, ConcurrencySnapshot, JsNumber, JsObject, ProfileMeta, ProfileReport,
-    ProfileSpan,
+    ProfileSpan, RenameTiming, StageSummary,
 };
 use serde_json::{Value, json};
 
 use crate::profiling::{
     Profiler, compute_percentile, format_profile_summary, iso_from_unix_ms, to_trace_events,
 };
-use humanify_model::js::format_duration;
 
 // ---- layer 1a: profiler.test.ts --------------------------------------------
 
@@ -347,142 +343,69 @@ fn js_object_enumerates_index_keys_first_and_spread_keeps_position() {
     );
 }
 
-// ---- layer 2: frozen TS vectors ---------------------------------------------
+// ---- the console summary (the retained half of the retired wpb5 layer) ---
 
-const VECTORS: &str = include_str!("../../../test/parity/wpb5-profile-vectors.json");
-
-fn vectors() -> Value {
-    serde_json::from_str(VECTORS).expect("vectors parse")
-}
-
-/// One frozen report, deserialized straight from the text: going through
-/// `serde_json::Value` first would alphabetize the metadata keys (its map
-/// is a BTreeMap) and hide the order the trace must reproduce.
-#[derive(serde::Deserialize)]
-struct FrozenReport {
-    name: String,
-    report: ProfileReport,
-    bits: FrozenBits,
-    trace: String,
-    summary: String,
-}
-
-/// Every report float's IEEE bits (serde_json's parser can land 1 ulp off
-/// a 17-digit literal — porting lesson 8 — so the floats are patched in
-/// from their bit patterns after parsing).
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct FrozenBits {
-    spans: Vec<[String; 2]>,
-    snapshots: Vec<String>,
-    stages: Vec<String>,
-    rename_timing: Option<[String; 5]>,
-    total: String,
-}
-
-fn from_bits(hex: &str) -> JsNumber {
-    JsNumber(f64::from_bits(
-        u64::from_str_radix(hex, 16).expect("hex bits"),
-    ))
-}
-
-impl FrozenReport {
-    fn patch_exact_floats(&mut self) {
-        let (r, b) = (&mut self.report, &self.bits);
-        for (s, [start, end]) in r.spans.iter_mut().zip(&b.spans) {
-            s.start_ms = from_bits(start);
-            s.end_ms = from_bits(end);
-        }
-        for (s, t) in r.concurrency_snapshots.iter_mut().zip(&b.snapshots) {
-            s.time_ms = from_bits(t);
-        }
-        for (s, d) in r.stage_summaries.iter_mut().zip(&b.stages) {
-            s.duration_ms = from_bits(d);
-        }
-        if let (Some(t), Some([p50, p95, p99, min, max])) = (&mut r.rename_timing, &b.rename_timing)
-        {
-            t.p50 = from_bits(p50);
-            t.p95 = from_bits(p95);
-            t.p99 = from_bits(p99);
-            t.min_ms = from_bits(min);
-            t.max_ms = from_bits(max);
-        }
-        r.meta.total_duration_ms = from_bits(&b.total);
-    }
-}
-
-#[derive(serde::Deserialize)]
-struct Frozen {
-    reports: Vec<FrozenReport>,
-}
-
-fn frozen_reports() -> Vec<FrozenReport> {
-    let f: Frozen = serde_json::from_str(VECTORS).expect("vectors parse");
-    assert!(f.reports.len() >= 5);
-    f.reports
-        .into_iter()
-        .map(|mut r| {
-            r.patch_exact_floats();
-            r
-        })
-        .collect()
-}
-
+/// The summary block keeps finding #11's deliberate departures from the
+/// TS: `formatDuration` 59999ms → "1m 0s" and 3599999ms → "1h 0m" (the TS
+/// printed "60.0s" / "59m 60s"), and the stage lines carry the `[n spans]`
+/// marker on multi-span stages.
 #[test]
-fn trace_file_bytes_equal_ts_for_every_frozen_report() {
-    for r in frozen_reports() {
-        let rust = serde_json::to_string_pretty(&to_trace_events(&r.report)).unwrap();
-        assert_eq!(rust, r.trace, "trace for {}", r.name);
-    }
-}
-
-#[test]
-fn report_json_round_trips_byte_equal() {
-    for r in vectors()["reports"].as_array().unwrap() {
-        let report: ProfileReport = serde_json::from_value(r["report"].clone()).unwrap();
-        assert_eq!(
-            serde_json::to_value(&report).unwrap(),
-            r["report"],
-            "report {}",
-            r["name"]
-        );
-    }
-}
-
-#[test]
-fn summary_text_equals_ts_for_every_frozen_report() {
-    for r in frozen_reports() {
-        assert_eq!(
-            format_profile_summary(&r.report),
-            r.summary,
-            "summary for {}",
-            r.name
-        );
-    }
-}
-
-#[test]
-fn percentiles_and_durations_equal_ts() {
-    let v = vectors();
-    for c in v["percentile"].as_array().unwrap() {
-        let sorted: Vec<f64> = c["sorted"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|x| x.as_f64().unwrap())
-            .collect();
-        let p = c["p"].as_f64().unwrap();
-        assert_eq!(
-            compute_percentile(&sorted, p),
-            c["out"].as_f64().unwrap(),
-            "{c}"
-        );
-    }
-    for c in v["durations"].as_array().unwrap() {
-        assert_eq!(
-            format_duration(c["ms"].as_f64().unwrap()),
-            c["out"].as_str().unwrap(),
-            "{c}"
-        );
-    }
+fn summary_text_renders_the_report() {
+    let mut report = make_report(vec![], vec![]);
+    report.meta.total_duration_ms = JsNumber(65000.0);
+    report.stage_summaries = vec![
+        StageSummary {
+            name: "parse".to_string(),
+            duration_ms: JsNumber(5000.0),
+            span_count: 1,
+        },
+        StageSummary {
+            name: "naming".to_string(),
+            duration_ms: JsNumber(59999.0),
+            span_count: 3,
+        },
+    ];
+    report.rename_timing = Some(RenameTiming {
+        p50: JsNumber(10.0),
+        p95: JsNumber(59999.0),
+        p99: JsNumber(3599999.0),
+        min_ms: JsNumber(1.0),
+        max_ms: JsNumber(59999.0),
+        count: 7,
+    });
+    report.concurrency_snapshots = vec![
+        ConcurrencySnapshot {
+            time_ms: JsNumber(0.0),
+            in_flight: 10,
+            ready: 5,
+            blocked: 0,
+        },
+        ConcurrencySnapshot {
+            time_ms: JsNumber(500.0),
+            in_flight: 30,
+            ready: 5,
+            blocked: 0,
+        },
+    ];
+    let text = format_profile_summary(&report);
+    assert!(
+        text.starts_with(
+            "=== Performance Profile ===\nTotal duration: 1m 5s\n\nStage breakdown:\n"
+        ),
+        "{text}"
+    );
+    assert!(text.contains("naming"), "the longer stage first: {text}");
+    assert!(text.contains("  [3 spans]"), "multi-span marker: {text}");
+    assert!(
+        text.contains(
+            "Rename timing (7 functions):\n  p50: 10ms  p95: 1m 0s  p99: 1h 0m\n  min: 1ms  max: 1m 0s"
+        ),
+        "the finding-#11 departures: {text}"
+    );
+    assert!(
+        text.contains(
+            "Concurrency utilization:\n  avg in-flight: 20.0  max in-flight: 30\n  avg ready: 5.0  samples: 2"
+        ),
+        "{text}"
+    );
 }

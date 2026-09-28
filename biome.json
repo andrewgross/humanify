@@ -45,9 +45,7 @@
       "scripts/**",
       "!test/e2e/fixtures/**",
       "!test/golden/**",
-      "!test/e2e/output/**",
-      "!test/parity/**/text/*.js",
-      "!test/parity/wpb4-env-reads-cases.js"
+      "!test/e2e/output/**"
     ]
   }
 }
