@@ -26,11 +26,15 @@
  *     under any other name fails (finding #55 — the naming stage renamed
  *     `export function createStore`; the `esm-exports` fixture holds every
  *     export form).
- *  5. FAST — step 2 with `--fast` and with `--fast relaxed`
- *     (docs/rust-port/20-fast-mode.md), each twice: the two trees must be
- *     byte-identical, and the output boots (step 4). The exact tier must
- *     also equal step 2's tree; the relaxed tier may differ from the
- *     default path, never from itself.
+ *  5. SEQUENTIAL — the conservative naming schedule, `--sequential
+ *     --batch-size 10` (docs/rust-port/20-fast-mode.md §defaults): fresh
+ *     and prior each run twice, byte-identical, and BOTH trees must equal
+ *     the committed legacy goldens (test/golden/legacy-default/) — the
+ *     pre-2026-09-28 binary's default path captured at 00e171f1, the proof
+ *     that `--sequential` still ships the old default's bytes — and the
+ *     output boots (step 4). The DEFAULT schedule is the relaxed tier, so
+ *     its determinism is step 3's assert (the old `--fast` legs are gone:
+ *     `--fast` was deleted in the flip).
  *
  * What it cannot see: the split tree and its run scaffold (the fixtures are
  * single-module libraries, not bundles), and model quality. Both belong to
@@ -228,10 +232,6 @@ async function checkPair(
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
-  const fastA = path.join(root, "fast-a");
-  const fastB = path.join(root, "fast-b");
-  const relaxedA = path.join(root, "relaxed-a");
-  const relaxedB = path.join(root, "relaxed-b");
 
   await runBinary(
     [inputOf(name, pair.v1), "-o", fresh],
@@ -254,33 +254,58 @@ async function checkPair(
     `${label} prior (again)`
   );
   assertIdenticalTrees(prior, again, label);
-  const fastArgs = [...priorArgs, "--fast"];
-  await runBinary([...fastArgs, "-o", fastA], endpoint, `${label} fast`);
+  // The conservative schedule at the OLD batch size: byte-identical to the
+  // pre-flip default's committed goldens (see step 5 in the header).
+  const seqArgs = ["--sequential", "--batch-size", "10"];
+  const seqFreshA = path.join(root, "seq-fresh-a");
+  const seqFreshB = path.join(root, "seq-fresh-b");
+  const seqPriorA = path.join(root, "seq-prior-a");
+  const seqPriorB = path.join(root, "seq-prior-b");
+  const goldenDir = path.join(REPO, "test/golden/legacy-default");
   await runBinary(
-    [...fastArgs, "-o", fastB],
+    [inputOf(name, pair.v1), ...seqArgs, "-o", seqFreshA],
     endpoint,
-    `${label} fast (again)`
-  );
-  assertIdenticalTrees(fastA, fastB, `${label} --fast`);
-  assertIdenticalTrees(prior, fastA, `${label} --fast vs the default path`);
-  const relaxedArgs = [...priorArgs, "--fast", "relaxed"];
-  await runBinary(
-    [...relaxedArgs, "-o", relaxedA],
-    endpoint,
-    `${label} relaxed`
+    `${label} sequential fresh`
   );
   await runBinary(
-    [...relaxedArgs, "-o", relaxedB],
+    [inputOf(name, pair.v1), ...seqArgs, "-o", seqFreshB],
     endpoint,
-    `${label} relaxed (again)`
+    `${label} sequential fresh (again)`
   );
-  assertIdenticalTrees(relaxedA, relaxedB, `${label} --fast relaxed`);
+  assertIdenticalTrees(seqFreshA, seqFreshB, `${label} --sequential fresh`);
+  assertIdenticalTrees(
+    seqFreshA,
+    path.join(goldenDir, `${name}-${pair.v1}-fresh`),
+    `${label} --sequential fresh vs the pre-flip default's golden`
+  );
+  const seqFreshOut = path.join(seqFreshA, "index.js");
+  const seqPriorArgs = [
+    inputOf(name, pair.v2),
+    "--prior-version",
+    seqFreshOut,
+    ...seqArgs
+  ];
+  await runBinary(
+    [...seqPriorArgs, "-o", seqPriorA],
+    endpoint,
+    `${label} sequential prior`
+  );
+  await runBinary(
+    [...seqPriorArgs, "-o", seqPriorB],
+    endpoint,
+    `${label} sequential prior (again)`
+  );
+  assertIdenticalTrees(seqPriorA, seqPriorB, `${label} --sequential prior`);
+  assertIdenticalTrees(
+    seqPriorA,
+    path.join(goldenDir, `${name}-${pair.v1}-${pair.v2}`),
+    `${label} --sequential prior vs the pre-flip default's golden`
+  );
 
   for (const [version, out, tag] of [
     [pair.v1, freshOut, "fresh"],
     [pair.v2, path.join(prior, "index.js"), "prior"],
-    [pair.v2, path.join(fastA, "index.js"), "fast"],
-    [pair.v2, path.join(relaxedA, "index.js"), "relaxed"]
+    [pair.v2, path.join(seqPriorA, "index.js"), "sequential"]
   ] as const) {
     const want = surfaceOf(
       asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
@@ -297,7 +322,7 @@ async function checkPair(
     }
   }
   console.log(
-    `  ${label}: fresh + prior (+ --fast, --fast relaxed) ran, deterministic, boots with the input's surface`
+    `  ${label}: fresh + prior (+ --sequential, twice, vs the legacy goldens) ran, deterministic, boots with the input's surface`
   );
 }
 

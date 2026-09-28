@@ -483,7 +483,7 @@ pub struct FamilyPermuteOutcome {
 /// The prior side's members by hash (plain data; the prior parse is
 /// dropped before the fresh side is built, as the TS releases it).
 /// The prior text's members by structural hash — depends on the prior
-/// alone, so `--fast` builds it beside the naming era
+/// alone, so the fast schedule builds it beside the naming era
 /// ([`PriorMembers::of`]) instead of after it.
 pub struct PriorMembers(Result<HashMap<String, Vec<MemberInfo>>, String>);
 

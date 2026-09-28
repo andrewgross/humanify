@@ -187,7 +187,7 @@ fn a_fast_run_is_byte_identical_to_itself() {
 }
 
 /// With a prior: the prior match, the close contexts (mapped on the pool
-/// under `--fast`) and the speculative reconcile beside the verdict must
+/// under the fast schedule) and the speculative reconcile beside the verdict must
 /// ship the parity bytes too.
 #[test]
 fn with_a_prior_fast_ships_the_parity_bytes() {
@@ -229,6 +229,18 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
     );
 }
 
+/// The tier names this file's cases use, resolved directly (the CLI's tier
+/// strings went with `--fast`; the schedule is the relaxed tier by default
+/// and `--sequential` selects the exact one).
+fn tier_of(name: &str) -> crate::fast::FastTier {
+    use crate::fast::{FastTier, Levers};
+    match name.strip_prefix("relaxed:") {
+        Some(list) => FastTier::Relaxed(Levers::parse(list).expect("lever names")),
+        None if name == "relaxed" => FastTier::Relaxed(Levers::all()),
+        _ => FastTier::Exact,
+    }
+}
+
 fn run_tier(fresh: &str, tier: &str, provider: &dyn NameProvider) -> NamingOutcome {
     run_naming(
         &NamingInput {
@@ -236,7 +248,7 @@ fn run_tier(fresh: &str, tier: &str, provider: &dyn NameProvider) -> NamingOutco
             prior: None,
             library: None,
         },
-        &config_tier(crate::fast::FastTier::parse(tier).expect("a tier")),
+        &config_tier(tier_of(tier)),
         &provider,
     )
     .expect("the stage runs")

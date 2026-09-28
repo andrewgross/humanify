@@ -5,29 +5,33 @@ import { scoreArgs } from "../scripts/eval.js";
 /**
  * `eval score`'s flag parsing: what reaches run.sh. `--pipeline-arg` is the
  * one flag whose VALUE may itself start with `--` (it is a pipeline flag,
- * e.g. `--fast`), and it repeats in order — run-launch.test.ts proves run.sh
- * appends the args at every launch site.
+ * e.g. `--sequential`), and it repeats in order — run-launch.test.ts proves
+ * run.sh appends the args at every launch site.
  */
 describe("eval score argument passthrough", () => {
   it("passes --pipeline-arg values through in order, even when they look like flags", () => {
     const r = scoreArgs([
       "lbl",
       "--pipeline-arg",
-      "--fast",
+      "--sequential",
       "--pairs",
       "85->86",
       "--pipeline-arg",
-      "relaxed"
+      "--batch-size",
+      "--pipeline-arg",
+      "10"
     ]);
     assert.ok(typeof r !== "string", String(r));
     assert.strictEqual(r.label, "lbl");
     assert.deepStrictEqual(r.passthrough, [
       "--pipeline-arg",
-      "--fast",
+      "--sequential",
       "--pairs",
       "85->86",
       "--pipeline-arg",
-      "relaxed"
+      "--batch-size",
+      "--pipeline-arg",
+      "10"
     ]);
   });
 
@@ -41,7 +45,7 @@ describe("eval score argument passthrough", () => {
 
   it("still refuses a value flag given a flag as its value", () => {
     assert.match(
-      String(scoreArgs(["lbl", "--pairs", "--fast"])),
+      String(scoreArgs(["lbl", "--pairs", "--sequential"])),
       /--pairs needs a value/
     );
   });

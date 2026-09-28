@@ -26,8 +26,12 @@ use crate::naming::report::{
 use crate::naming::validation::{resolve_conflict, sanitize_identifier};
 use crate::rename::validated::target::is_valid_rename_target;
 
-/// Maximum identifiers per batch (halved on truncation).
-pub const DEFAULT_BATCH_SIZE: usize = 10;
+/// Maximum identifiers per batch (halved on truncation). 25 since the
+/// 2026-09-28 relaxed-default flip (docs/rust-port/20-fast-mode.md
+/// §defaults); the conservative `--sequential` schedule recovers the old
+/// 10 explicitly with `--batch-size 10` — the e2e gate pins that against
+/// the committed legacy goldens (test/golden/legacy-default/).
+pub const DEFAULT_BATCH_SIZE: usize = 25;
 /// The initial call plus ONE retry per identifier.
 pub const DEFAULT_MAX_RETRIES_PER_ID: u32 = 2;
 const DEFAULT_MAX_FREE_RETRIES: u32 = 100;

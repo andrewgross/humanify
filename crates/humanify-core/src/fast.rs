@@ -1,9 +1,15 @@
-//! `--fast [tier]` — the post-parity performance tiers
-//! (docs/rust-port/20-fast-mode.md). Both tiers are DETERMINISTIC: the same
+//! The naming schedule (docs/rust-port/20-fast-mode.md). Since the
+//! 2026-09-28 flip the DEFAULT is [`FastTier::Relaxed`] with every lever
+//! on — no flag selects it. `--sequential` (humanify-cli) selects
+//! [`FastTier::Exact`], the conservative schedule: the relaxed levers OFF,
+//! the byte-identical parallelization kept — the pre-flip default path's
+//! bytes at the same `--batch-size`. Individual levers stay selectable
+//! with the rust-only `--relaxed-levers <list>` (hidden from help; the
+//! `--pipeline-arg` sizing path). Both tiers are DETERMINISTIC: the same
 //! input and the same model answers give the same bytes, run after run.
 //!
 //! - [`FastTier::Exact`] only reorders or parallelizes work whose outcome
-//!   cannot depend on it: it ships the default path's bytes.
+//!   cannot depend on it: it ships the conservative path's bytes.
 //! - [`FastTier::Relaxed`] adds levers that may change decisions (which call
 //!   sees which names, how work is batched) — every change still merges in a
 //!   canonical, input-derived order, and its quality is the eval's verdict
@@ -75,13 +81,15 @@ impl Levers {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FastTier {
-    /// The parity-faithful default path.
+    /// The turn-driver path: no pipelining at all. Byte-identical to
+    /// [`FastTier::Exact`] (proven, e2e legacy goldens) and reachable
+    /// programmatically only — the CLI offers Exact as `--sequential`.
     #[default]
     Off,
-    /// Byte-identical to `Off`, faster.
+    /// Byte-identical to `Off`, faster: `--sequential`.
     Exact,
-    /// The exact tier plus these decision-changing levers
-    /// (`relaxed` = every lever, `relaxed:a,b` = a subset — for sizing).
+    /// The exact tier plus these decision-changing levers — the shipped
+    /// default (every lever) or a `--relaxed-levers` subset (for sizing).
     Relaxed(Levers),
 }
 
@@ -95,20 +103,6 @@ impl FastTier {
     pub fn lever(self, l: Lever) -> bool {
         matches!(self, FastTier::Relaxed(set) if set.has(l))
     }
-
-    /// `--fast`'s value: "" / "exact", "relaxed", "relaxed:<lever,...>".
-    pub fn parse(value: &str) -> Result<FastTier, String> {
-        match value {
-            "" | "exact" => Ok(FastTier::Exact),
-            "relaxed" => Ok(FastTier::Relaxed(Levers::all())),
-            v => match v.strip_prefix("relaxed:") {
-                Some(list) => Ok(FastTier::Relaxed(Levers::parse(list)?)),
-                None => Err(format!(
-                    "--fast must be one of: exact, relaxed, relaxed:<lever,...> (got \"{v}\")"
-                )),
-            },
-        }
-    }
 }
 
 #[cfg(test)]
@@ -116,16 +110,16 @@ mod fast_test {
     use super::*;
 
     #[test]
-    fn tiers_parse() {
-        assert_eq!(FastTier::parse(""), Ok(FastTier::Exact));
-        assert_eq!(FastTier::parse("exact"), Ok(FastTier::Exact));
-        let all = FastTier::parse("relaxed").unwrap();
-        assert!(Lever::ALL.iter().all(|&l| all.lever(l)));
-        let one = FastTier::parse("relaxed:window-lanes").unwrap();
-        assert!(one.lever(Lever::WindowLanes) && !one.lever(Lever::DeferShadowed));
-        assert!(FastTier::parse("relaxed:nope").is_err());
-        assert!(FastTier::parse("bogus").is_err());
+    fn levers_parse() {
+        let all = Levers::all();
+        assert!(Lever::ALL.iter().all(|&l| all.has(l)));
+        let one = Levers::parse("window-lanes").unwrap();
+        assert!(one.has(Lever::WindowLanes) && !one.has(Lever::DeferShadowed));
+        let both = Levers::parse("window-lanes,defer-shadowed").unwrap();
+        assert_eq!(both, all);
+        assert!(Levers::parse("nope").is_err());
         assert!(!FastTier::Exact.lever(Lever::WindowLanes));
         assert!(!FastTier::Off.on());
+        assert!(FastTier::Relaxed(Levers::all()).on());
     }
 }

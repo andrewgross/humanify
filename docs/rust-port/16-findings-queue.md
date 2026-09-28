@@ -189,3 +189,7 @@ bannerClassifications` (`libraryFunctions: []` on the four eval pairs —
   window-lanes, defer-shadowed; deterministic, judged by the eval). Profile,
   constraint costs, the LLM latency simulator and the verdict commands:
   `20-fast-mode.md`.
+- **Status 2026-09-28:** the defaults FLIPPED (see `20-fast-mode.md`'s
+  header note): the relaxed tier and `--batch-size 25` are the DEFAULT, no
+  flag; `--fast` is deleted and the old conservative path is
+  `--sequential`.

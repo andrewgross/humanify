@@ -71,7 +71,8 @@ pub struct EraOptions<'o> {
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`: the close pairs' shingle census lines.
     pub shingle_probe: bool,
-    /// `--fast [tier]` (see `NamingConfig::fast`).
+    /// The naming schedule (the relaxed tier by default; `--sequential`
+    /// the conservative one — see `NamingConfig::fast`).
     pub fast: crate::fast::FastTier,
 }
 
@@ -630,7 +631,7 @@ fn close_contexts(
     let prior_spans = stage.prior.spans;
     let prior_graph = stage.prior.graph;
     // One function's context: a pure read of plain data (the text view,
-    // the identifier index, the JSON, the graphs), so `--fast` maps it on
+    // the identifier index, the JSON, the graphs), so the fast schedule maps it on
     // the pool — results in input order, the first error first.
     let one = |(f, prior_id): (usize, &Option<String>)| {
         let Some(prior_id) = prior_id else {

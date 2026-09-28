@@ -69,7 +69,8 @@ pub struct PriorMatchInput<'t> {
     pub prior: &'t str,
     pub bundler: Option<&'t str>,
     pub minifier: Option<&'t str>,
-    /// `--fast`: build the prior side's graph on a thread of its own
+    /// The fast schedule (the relaxed default and `--sequential` alike):
+    /// build the prior side's graph on a thread of its own
     /// (from its own parse of the same text — the AST is not `Send`),
     /// beside the fresh side's. Byte-identical: a parse is deterministic.
     pub fast: bool,

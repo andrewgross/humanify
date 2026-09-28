@@ -87,19 +87,37 @@ pub struct CommandOptions {
     pub rename_ledger: Option<String>,
     pub stats_json: Option<String>,
     pub dump_artifacts: Option<String>,
-    /// `--fast [tier]` as given: None (absent), Some("") (bare) or the tier.
-    pub fast: Option<String>,
+    /// `--sequential`: the conservative naming schedule.
+    pub sequential: bool,
+    /// `--relaxed-levers <list>` (rust-only): a subset of the relaxed
+    /// levers; None = every lever.
+    pub relaxed_levers: Option<String>,
     pub simulate_llm_latency: Option<String>,
 }
 
-pub use humanify_core::fast::FastTier;
+pub use humanify_core::fast::{FastTier, Levers};
 
 impl CommandOptions {
-    /// The `--fast` tier, or the message for a bad value.
+    /// The naming schedule: the DEFAULT is the relaxed tier with every
+    /// lever on; `--sequential` selects the conservative one (the relaxed
+    /// levers OFF, the exact tier's byte-identical parallelization kept —
+    /// the pre-2026-09-28 default's bytes at the same `--batch-size`), and
+    /// `--relaxed-levers` sizes a subset. The error is a bad lever name or
+    /// the flags' contradiction; `run` refuses before anything launches.
     pub fn fast_tier(&self) -> Result<FastTier, String> {
-        self.fast
-            .as_deref()
-            .map_or(Ok(FastTier::Off), FastTier::parse)
+        if self.sequential {
+            return if self.relaxed_levers.is_some() {
+                Err("--sequential already turns the relaxed levers off; \
+                     --relaxed-levers has nothing to select"
+                    .to_string())
+            } else {
+                Ok(FastTier::Exact)
+            };
+        }
+        match self.relaxed_levers.as_deref() {
+            None => Ok(FastTier::Relaxed(Levers::all())),
+            Some(list) => Levers::parse(list).map(FastTier::Relaxed),
+        }
     }
 }
 
@@ -142,11 +160,8 @@ impl CommandOptions {
             rename_ledger: s("renameLedger"),
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
-            fast: match v.get("fast") {
-                Some(serde_json::Value::Bool(true)) => Some(String::new()),
-                Some(serde_json::Value::String(s)) => Some(s.clone()),
-                _ => None,
-            },
+            sequential: v.bool("sequential").unwrap_or(false),
+            relaxed_levers: s("relaxedLevers"),
             simulate_llm_latency: s("simulateLlmLatency"),
         }
     }

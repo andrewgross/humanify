@@ -35,7 +35,7 @@
 #   --pipeline-arg <arg>   append <arg> to EVERY pipeline launch (rebase,
 #                          scored leg, both self-hop legs), after the harness's
 #                          own flags; repeatable, order kept (e.g.
-#                          --pipeline-arg --fast --pipeline-arg relaxed). The
+#                          --pipeline-arg --sequential). The
 #                          args are recorded in pipeline.json and every run
 #                          config. Without it the launches are byte-identical
 #                          to the golden (run-launch.test.ts).

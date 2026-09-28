@@ -131,7 +131,7 @@ function parseFlags(
     }
     const v = args[++i];
     // A "repeat" flag's value is an argv for ANOTHER program, so it may
-    // itself start with "--" (`--pipeline-arg --fast`).
+    // itself start with "--" (`--pipeline-arg --sequential`).
     if (v === undefined || (kind === "value" && v.startsWith("--"))) {
       return `${a} needs a value`;
     }
@@ -162,7 +162,7 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
   "--bin": "value",
   // One argument appended to EVERY pipeline launch (rebase, scored leg,
   // both self-hop legs); repeatable, order kept — e.g. `--pipeline-arg
-  // --fast`. Recorded in the label's pipeline.json.
+  // --sequential`. Recorded in the label's pipeline.json.
   "--pipeline-arg": "repeat"
 };
 

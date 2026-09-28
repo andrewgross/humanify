@@ -336,6 +336,16 @@ impl CliCommand {
         self.add_option(o)
     }
 
+    /// A declared option that parses normally but is left out of the help:
+    /// an internal knob (the only current one is `--relaxed-levers`), not
+    /// part of the user-facing surface.
+    pub fn hidden_option(self, flags: &str, description: &str, default: Option<Value>) -> Self {
+        let mut o = CliOption::new(flags, description);
+        o.default_value = default;
+        o.hidden = true;
+        self.add_option(o)
+    }
+
     /// `.option(flags, description, fn, defaultValue)` for the counter.
     pub fn counter_option(self, flags: &str, description: &str, default: i64) -> Self {
         let mut o = CliOption::new(flags, description);

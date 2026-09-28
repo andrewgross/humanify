@@ -1,5 +1,17 @@
 # 20 — `--fast`: what parity cost, and how far past it the binary goes
 
+**STATUS (2026-09-28): SUPERSEDED in part — the DEFAULTS FLIPPED. The
+naming schedule's default is now the RELAXED tier (both levers on) and the
+default `--batch-size` is 25, both with no flag; the `--fast` flag is
+DELETED and the old conservative path is `--sequential` (relaxed levers
+off, the exact tier's byte-identical parallelization kept — the
+pre-flip default's bytes at the same `--batch-size`, pinned by the e2e
+gate against the committed legacy goldens `test/golden/legacy-default/`,
+captured from the pre-flip binary at 00e171f1). Individual levers stay
+selectable with the hidden rust-only `--relaxed-levers <list>`. The
+benchmarks and verdict below describe the pre-flip surface and remain the
+evidence the flip is based on.**
+
 **STATUS (2026-09-27): VERDICT BENCHMARKED on the idle box (binary built
 from `perf/fast` cf783fa1, rebased onto rust-port 507163d9+c4784295; sha
 7ec5910e…). Cold walls below are the verdict legs; the CPU-side numbers are
