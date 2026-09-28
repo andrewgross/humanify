@@ -116,6 +116,13 @@ warm self-hop byte-identical +0 writes. Leaderboard vs `main-2026-09-18`:
 profile is statistically indistinguishable from the reference. Bands caveat: measured at db1bbb6, not this commit
 (leaderboard prints it); no delta was outside a band, so the caveat does not bite here.
 
+**rust-relaxed-default-843826be** (the SHIPPED DEFAULT after Andrew's 2026-09-28 decision — relaxed
+levers on + `--batch-size` 25, no flags): exit 0 ×4, cache +0 ×4, warm self-hop byte-identical +0,
+cold self-hop 14 ln (dedup-era). Leaderboard vs `main-2026-09-18`: **novel 4,188 (=) / realLn 416,377 (=)
+byte-equal; noise 2,732 (=) EXACT; reloc 1,467 (=) EXACT; relocSt 352 (=); reorderLn 0 (=)**; noiseLn
+50,044 (~0±514); newName 3,576 (~0±15); mints 91 (~0±11); treeLn −1,050; vendorLn ~0±51. **The shipped
+default is eval-clean on its first cold run.**
+
 **perf-batch25-3478dabd** (`--pipeline-arg --batch-size --pipeline-arg 25`): exit 0 ×4, cache +0 ×4, warm self-hop
 byte-identical +0 writes, cold self-hop 6 ln (dedup-era, see below). Boots re-recorded on opus-4-1 ×4. Leaderboard vs
 `main-2026-09-18`: **novel 4,188 (=) / realLn 416,377 (=) byte-equal**; noise 2,729 (−3); noiseLn 49,437 (−578, in
@@ -138,14 +145,23 @@ answer between duplicate identical requests, and a self-hop is full of them, so 
 mechanism. **Follow-up: re-record the reference range on a dedup-era binary** (3 same-commit cold repeats) before
 any verdict leans on that range.
 
-## 8. What is left
+## 8. Decisions executed (2026-09-28) and what is left
 
-1. batch25 eval card (running) + its leaderboard row.
-2. `docs/rust-port/20-overnight-report.md` committed on rust-port (this file) after `npm run check` — the gate may
-   NOT run while the batch25 eval is on the box (heavy-run rule).
-3. Merge perf/fast (3478dabd) into rust-port; then the single cold eval of the merged tree if Andrew wants one label
-   for the cutover.
-4. **Merge rust-port → main: waits for Andrew's sign-off.**
-5. Parked: single-letter rename gap (§4); diverging-hops explanation (§2); wave-barrier redesign (deterministic
-   snapshot design needed); batch>25 window collisions; matcher-preflight replacement (19-cutover open item);
-   BOOT_GATE_MODEL default; self-hop reference range re-record.
+**Andrew's GO, executed:**
+
+- perf/fast merged into rust-port (00e171f1).
+- **The relaxed schedule + `--batch-size` 25 are the DEFAULT** (branch rust/relaxed-default, 3cd88da6; the
+  `--fast` flag deleted, no backwards compat). `--sequential` = the conservative schedule for debugging/
+  comparison, byte-identical to the pre-flip default (standing e2e goldens, test/golden/legacy-default/).
+- Cold eval of the shipped default: **eval-clean** (card above).
+- Pre-merge completeness sweep: NO unported TS behavior. Ledger corrections committed (cb5863fb): the five
+  src/dump rows backfilled, commands/unified.ts flipped parity-green (WP5.6e), REMAINING corrected to 702
+  LOC of which the ONLY genuinely unported behavior is rename/wave-profile.ts (86 LOC, `-vv` debug-log
+  formatting, nothing reads it). Open findings are backlog, not porting gaps.
+- **BOOT_GATE_MODEL default re-pinned to claude-opus-4-1** (ae80cf71; haiku-4-5-20251001 refused by the API).
+
+**Then: the merge rust-port → main — the TS→Rust swap.**
+
+**Left (post-swap backlog):** single-letter rename gap (§4); diverging-hops explanation (§2); wave-barrier
+redesign; matcher ground-truth verb (19-cutover §6); self-hop reference range re-record on a dedup-era
+binary; vendor fallback verification (#6); wave-profile's 86-LOC debug log (port or formally design out).
