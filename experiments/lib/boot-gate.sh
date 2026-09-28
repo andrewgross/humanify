@@ -38,7 +38,11 @@ export PATH="$HOME/.bun/bin:$PATH"
 # which model answers is irrelevant, so pin the cheapest one every walked
 # version still accepts. Probed 2026-09-18 on a 2.1.86 tree: sonnet-4-5,
 # haiku-4-5 and opus-4-1 all answered; the default did not.
-export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-haiku-4-5-20251001}"
+# 2026-09-28: haiku-4-5-20251001 (and sonnet-4-5, the haiku alias, sonnet-5) are
+# REFUSED by the API on the walked CLIs; opus-4-1 is the only model that still
+# answers (probed 2026-09-28 on the 2.1.85 tree, all perf/default labels
+# re-recorded with it).
+export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-opus-4-1}"
 
 # Fail NOW, at source time, rather than at the point a caller expected a check.
 if ! command -v bun >/dev/null 2>&1; then
