@@ -15,6 +15,10 @@
 //! - [`validation`] — reserved words, global builtins, identifier syntax,
 //!   the decoration ladder (src/llm/validation.ts — the DECORATION_WORDS
 //!   owner).
+//! - [`reask`] — what happens to a rejected rename suggestion: the ONE
+//!   retry policy the wave barrier and the coverage sweep share
+//!   (2026-09-28: the collision classes get one disclosed re-ask, the
+//!   unrecoverable classes stay loud).
 //! - `prompt_gate` (test-only) — the prompt builders replayed against
 //!   the frozen TS-captured fixture (test/parity/wp42-gate-fixture/).
 //! - [`js_record`] — the one owner of "what does `record[key]` read" for a
@@ -29,6 +33,7 @@ pub mod passes;
 #[cfg(test)]
 mod prompt_gate;
 pub mod prompts;
+pub mod reask;
 pub mod reconcile;
 pub mod report;
 pub mod snap;

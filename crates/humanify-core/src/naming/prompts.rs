@@ -432,11 +432,14 @@ fn identifier_profile(input: &ModuleLevelInput, id: &str) -> String {
 }
 
 /// The module-level prompt without its response-format tail
-/// (`buildModuleLevelRenameBody`). The used-names line lists only
-/// NON-eligible names (eligible ones are about to be renamed), first 200.
+/// (`buildModuleLevelRenameBody`). The used-names line lists only the
+/// NON-droppable names, first 200: `is_droppable` is the caller's
+/// eligibility predicate COMBINED with the taken-name test (a name this
+/// run already applied is never droppable — the collision fix,
+/// 2026-09-28), so an ask's avoid-list carries the names actually in use.
 pub fn build_module_level_rename_body(
     input: &ModuleLevelInput,
-    is_eligible: impl Fn(&str) -> bool,
+    is_droppable: impl Fn(&str) -> bool,
 ) -> String {
     let mut p = String::from(
         "Analyze these top-level module identifiers and suggest descriptive names.\n\n",
@@ -460,7 +463,7 @@ pub fn build_module_level_rename_body(
         .used_names
         .iter()
         .map(String::as_str)
-        .filter(|n| !is_eligible(n))
+        .filter(|n| !is_droppable(n))
         .take(MODULE_USED_NAMES_CAP)
         .collect();
     if !used.is_empty() {
@@ -472,14 +475,15 @@ pub fn build_module_level_rename_body(
     p
 }
 
-/// The module-level prompt (`buildModuleLevelRenamePrompt`).
+/// The module-level prompt (`buildModuleLevelRenamePrompt`). See
+/// [`build_module_level_rename_body`] for the `is_droppable` predicate.
 pub fn build_module_level_rename_prompt(
     input: &ModuleLevelInput,
-    is_eligible: impl Fn(&str) -> bool,
+    is_droppable: impl Fn(&str) -> bool,
 ) -> String {
     format!(
         "{}Respond with JSON mapping EVERY identifier to a new name:\n{}",
-        build_module_level_rename_body(input, is_eligible),
+        build_module_level_rename_body(input, is_droppable),
         mapping_template(&input.identifiers)
     )
 }
