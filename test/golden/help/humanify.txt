@@ -60,7 +60,7 @@ Options:
                                  rollup, esbuild, parcel, bun)
   --minifier <type>              Force minifier type (terser, esbuild, swc, bun,
                                  none)
-  --batch-size <n>               Identifiers per LLM batch (default: 10)
+  --batch-size <n>               Identifiers per LLM batch (default: 25)
   --max-retries <n>              Per-identifier LLM call limit, initial +
                                  retries (default: 2; further conflicts resolve
                                  by suffixing)
@@ -97,11 +97,14 @@ Options:
                                  keyed by byte position) + source snapshot + a
                                  standalone apply.mjs, so the LLM-rename output
                                  can be reproduced without re-running the model
-  --fast [tier]                  Post-parity performance tiers, both
-                                 deterministic (same input + same answers = same
-                                 bytes). `exact` (the default when bare) ships
-                                 the default path's bytes; `relaxed` may change
-                                 decisions (judged by the eval)
+  --sequential                   The conservative naming schedule: the relaxed
+                                 levers OFF (each naming window waits for the
+                                 previous one and for its own shadowed-binding
+                                 round), the byte-identical parallelization
+                                 kept. The DEFAULT is the relaxed schedule (both
+                                 levers on); --sequential ships the
+                                 pre-2026-09-28 default's bytes at the same
+                                 --batch-size — for debugging and comparison
   --simulate-llm-latency <path>  Instrument: price this run's LLM schedule with
                                  cold per-call latencies on a virtual clock and
                                  write the simulated LLM wall time to <path>

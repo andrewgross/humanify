@@ -197,7 +197,8 @@ pub fn run_naming<P: NameProvider>(
         None => era::fresh_era(input.fresh, &opts, provider),
     };
     // `captureSemanticBaseline` reads only the fresh text, and the family
-    // permute's prior index only the prior text: `--fast` builds both on
+    // permute's prior index only the prior text: the fast schedule (the
+    // relaxed default and `--sequential` alike) builds both on
     // a thread of their own while the era runs.
     let permute_may_run = !config.family_permute_disabled
         && config.reconcile_prior_diff
@@ -298,7 +299,7 @@ pub fn run_naming<P: NameProvider>(
         reconcile_pass(&generated, prior, &eligible, trail, ledger_walk)
     };
     let (verdict, reconciled, trail) = match input.prior.filter(|_| reconcile_gates) {
-        // `--fast`: the verdict (a re-parse of the generated text) runs
+        // The fast schedule: the verdict (a re-parse of the generated text) runs
         // beside a SPECULATIVE reconcile on a copy of the trail; an
         // invalid output discards the speculation — the parity outcome.
         Some(prior) if config.fast.on() => {

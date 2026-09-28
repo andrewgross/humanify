@@ -16,17 +16,25 @@ use crate::commander::CliCommand;
 use crate::util::{DEFAULT_CONCURRENCY, DEFAULT_LLM_TIMEOUT_MS};
 use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 
-/// Rust-only options: migration scaffolding the TS program does not have.
-/// Hidden from help, and named here so the surface gate reports them
-/// instead of passing over them.
+/// Rust-only options: the TS program does not have them. Hidden from help,
+/// and named here so the surface gate reports them instead of passing over
+/// them.
 ///
-/// NONE are left: the program surface is exactly the TS's. The three TS
-/// inputs are gone — `--beautified-input` and `--ts-library-functions`
-/// (WP5.6d: the binary formats natively and carries the library
-/// classification itself) and `--inject-ts-hashes` (WP5.6e, 2026-09-25:
-/// the structuralSignature exemption ended; the Rust hashes are the only
-/// hashes, and a TS-era prior is re-keyed or refused loudly).
-pub const RUST_ONLY_OPTIONS: &[&str] = &["--fast [tier]", "--simulate-llm-latency <path>"];
+/// The TS inputs that left: `--beautified-input` and
+/// `--ts-library-functions` (WP5.6d: the binary formats natively and
+/// carries the library classification itself) and `--inject-ts-hashes`
+/// (WP5.6e, 2026-09-25: the structuralSignature exemption ended; the Rust
+/// hashes are the only hashes, and a TS-era prior is re-keyed or refused
+/// loudly). `--fast [tier]` joined them 2026-09-28 — the naming schedule
+/// flipped to the relaxed tier by default (docs/rust-port/20-fast-mode.md
+/// §defaults) and the old conservative path became `--sequential`, with
+/// `--relaxed-levers` keeping the lever-sizing capability out of the
+/// user-facing surface.
+pub const RUST_ONLY_OPTIONS: &[&str] = &[
+    "--sequential",
+    "--relaxed-levers <levers>",
+    "--simulate-llm-latency <path>",
+];
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -178,7 +186,7 @@ pub fn program() -> CliCommand {
         )
         .option(
             "--batch-size <n>",
-            "Identifiers per LLM batch (default: 10)",
+            "Identifiers per LLM batch (default: 25)",
             None,
         )
         .option(
@@ -258,10 +266,20 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
-            "--fast [tier]",
-            "Post-parity performance tiers, both deterministic (same input + same \
-             answers = same bytes). `exact` (the default when bare) ships the \
-             default path's bytes; `relaxed` may change decisions (judged by the eval)",
+            "--sequential",
+            "The conservative naming schedule: the relaxed levers OFF (each \
+             naming window waits for the previous one and for its own \
+             shadowed-binding round), the byte-identical parallelization \
+             kept. The DEFAULT is the relaxed schedule (both levers on); \
+             --sequential ships the pre-2026-09-28 default's bytes at the \
+             same --batch-size — for debugging and comparison",
+            None,
+        )
+        // Rust-only, NOT in the help: a lever-sizing knob, not a user knob.
+        .hidden_option(
+            "--relaxed-levers <levers>",
+            "Comma-separated subset of the relaxed levers to turn on \
+             (default: every lever)",
             None,
         )
         .option(

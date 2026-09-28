@@ -353,25 +353,33 @@ describe("run.sh pipeline launches", () => {
       "<TMP>/shims/humanify",
       "--force-mixed",
       "--pipeline-arg",
-      "--fast",
+      "--sequential",
       "--pipeline-arg",
-      "relaxed"
+      "--batch-size",
+      "--pipeline-arg",
+      "10"
     ]);
     assert.strictEqual(h.status, 0, h.stdout);
     const bin = h.launches.split("\n").filter((l) => l.startsWith("humanify "));
     // 4 rebases + cold + warm self-hop, each carrying the args once.
     assert.strictEqual(bin.length, 6, h.launches);
     for (const l of bin) {
-      assert.strictEqual(l.match(/--fast relaxed/g)?.length, 1, l);
+      assert.strictEqual(
+        l.match(/--sequential --batch-size 10/g)?.length,
+        1,
+        l
+      );
     }
     // The scored legs' run configs carry them as trailing argv.
-    const cfgs = h.launches.match(/"--fast",\s*"relaxed"\s*\]/g);
+    const cfgs = h.launches.match(
+      /"--sequential",\s*"--batch-size",\s*"10"\s*\]/g
+    );
     assert.strictEqual(cfgs?.length, 4, h.launches);
     // The label's pipeline record names them (a label scored with extra
     // args must not read as the default pipeline).
     assert.match(
       h.results,
-      /pipeline\.json: .*"pipelineArgs":\["--fast","relaxed"\]/
+      /pipeline\.json: .*"pipelineArgs":\["--sequential","--batch-size","10"\]/
     );
   });
 

@@ -420,7 +420,8 @@ pub type OnCallDone<'a> =
 pub trait NameProvider {
     fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>>;
 
-    /// Pipelined dispatch (`--fast`): start every `initial` call; as each
+    /// Pipelined dispatch (the fast schedule — the relaxed default and
+    /// `--sequential` alike): start every `initial` call; as each
     /// one finishes, hand its result to `on_done` and start the follow-ups
     /// it returns, until nothing is in flight. COMPLETION ORDER IS NOT
     /// DETERMINISTIC — a caller may only use it for work whose outcome is

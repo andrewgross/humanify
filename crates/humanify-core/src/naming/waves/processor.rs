@@ -107,7 +107,8 @@ pub struct WaveInputs<'a, 's> {
     /// `--batch-size` / `--max-retries` / `--max-free-retries` /
     /// `--lane-threshold`.
     pub tunables: WaveTunables,
-    /// `--fast [tier]`: any tier pipelines each round's LLM calls (a lane's
+    /// The naming schedule: any non-Off tier pipelines each round's LLM
+    /// calls (a lane's
     /// follow-up starts as soon as ITS answer lands, not when the round's
     /// slowest does).
     pub fast: crate::fast::FastTier,
@@ -383,7 +384,7 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     processor: ProcessorReport,
     /// Function row → its wave context (a function is dispatched once).
     fn_ctx: HashMap<usize, usize>,
-    /// `--fast relaxed:defer-shadowed`: the previous wave's round-B lanes,
+    /// `defer-shadowed` (on by default): the previous wave's round-B lanes,
     /// riding with this wave's round A.
     deferred: Vec<LaneRun>,
 }
@@ -1581,7 +1582,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         self.collect_lanes(lanes);
     }
 
-    /// `--fast`: the same round, PIPELINED. Every retry and every lane's
+    /// The fast schedule (the relaxed default and `--sequential` alike):
+    /// the same round, PIPELINED. Every retry and every lane's
     /// first call start at once; a lane's next call starts as soon as ITS
     /// answer lands. Decision-neutral by construction — a lane reads only
     /// the round's frozen state and its own claims (`batch.rs`), so its

@@ -30,18 +30,27 @@ fn surface() -> Value {
     serde_json::from_str(&text).expect("surface JSON")
 }
 
-/// `--fast` is Rust-only: declared, parsed, and listed in the help.
+/// `--sequential` is Rust-only: declared, parsed, and listed in the help.
+/// `--relaxed-levers` is Rust-only too — and deliberately NOT in the help
+/// (a sizing knob, hidden from the user-facing surface).
 #[test]
-fn the_fast_flag_parses() {
+fn the_sequential_flag_parses() {
     let root = program();
-    let argv: Vec<String> = ["in.js", "--fast"].iter().map(|s| s.to_string()).collect();
+    let argv: Vec<String> = ["in.js", "--sequential"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     match root.parse(&argv) {
         ParseOutcome::Action { opts, .. } => {
-            assert_eq!(opts.bool("fast"), Some(true));
+            assert_eq!(opts.bool("sequential"), Some(true));
+            assert!(root.help_information(&[]).contains("--sequential"));
+            assert!(
+                !root.help_information(&[]).contains("--relaxed-levers"),
+                "the sizing knob stays hidden from the help"
+            );
         }
-        other => panic!("--fast did not parse: {other:?}"),
+        other => panic!("--sequential did not parse: {other:?}"),
     }
-    assert!(root.help_information(&[]).contains("--fast"));
 }
 
 fn parse_opts(argv: &[&str]) -> crate::commander::OptionValues {
@@ -52,20 +61,32 @@ fn parse_opts(argv: &[&str]) -> crate::commander::OptionValues {
     }
 }
 
-/// `--fast [mode]`: bare is the byte-identical tier, `relaxed` the tier
-/// allowed to change decisions (docs/rust-port/20-fast-mode.md).
+/// The naming schedule (docs/rust-port/20-fast-mode.md, flipped
+/// 2026-09-28): the DEFAULT is the relaxed tier, every lever on, no flag.
+/// `--sequential` is the conservative schedule (the relaxed levers OFF,
+/// the exact tier's byte-identical parallelization kept); the rust-only
+/// `--relaxed-levers` sizes a subset of them.
 #[test]
-fn the_fast_tier_is_an_optional_value() {
+fn the_naming_schedule_defaults_to_relaxed() {
     use crate::unified::{CommandOptions, FastTier};
+    use humanify_core::fast::Levers;
     let tier = |argv: &[&str]| CommandOptions::from_values(&parse_opts(argv)).fast_tier();
-    assert_eq!(tier(&["in.js"]), Ok(FastTier::Off));
-    assert_eq!(tier(&["in.js", "--fast"]), Ok(FastTier::Exact));
-    assert_eq!(tier(&["in.js", "--fast", "exact"]), Ok(FastTier::Exact));
-    let relaxed = FastTier::parse("relaxed");
-    assert!(matches!(relaxed, Ok(FastTier::Relaxed(_))));
-    assert_eq!(tier(&["in.js", "--fast", "relaxed"]), relaxed);
-    assert_eq!(tier(&["in.js", "--fast=relaxed"]), relaxed);
-    assert!(tier(&["in.js", "--fast", "bogus"]).is_err());
+    assert_eq!(tier(&["in.js"]), Ok(FastTier::Relaxed(Levers::all())));
+    assert_eq!(tier(&["in.js", "--sequential"]), Ok(FastTier::Exact));
+    let lanes = FastTier::Relaxed(Levers::parse("window-lanes").unwrap());
+    assert_eq!(
+        tier(&["in.js", "--relaxed-levers", "window-lanes"]),
+        Ok(lanes)
+    );
+    assert_eq!(
+        tier(&["in.js", "--relaxed-levers", "window-lanes,defer-shadowed"]),
+        Ok(FastTier::Relaxed(Levers::all()))
+    );
+    assert!(tier(&["in.js", "--relaxed-levers", "bogus"]).is_err());
+    assert!(
+        tier(&["in.js", "--sequential", "--relaxed-levers", "window-lanes"]).is_err(),
+        "--sequential has no relaxed levers to select"
+    );
 }
 
 #[test]
