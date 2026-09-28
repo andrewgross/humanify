@@ -1,6 +1,6 @@
 export function createStore(initialRenamed) {
   let stateRenamed = initialRenamed;
-  const listenersRenamed = [];
+  let listenersRenamed = [];
   function getCountRenamed() {
     return stateRenamed;
   }
@@ -38,7 +38,7 @@ export function createStore(initialRenamed) {
     listenersRenamed.push(listenerRenamed);
   }
   function unsubscribeRenamed(listenerRenamed) {
-    const idxRenamed = listenersRenamed.indexOf(listenerRenamed);
+    let idxRenamed = listenersRenamed.indexOf(listenerRenamed);
     if (idxRenamed >= 0) {
       listenersRenamed.splice(idxRenamed, 1);
     }
