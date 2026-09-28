@@ -189,3 +189,138 @@ fn the_default_batch_size_is_25() {
     assert_eq!(super::DEFAULT_BATCH_SIZE, 25);
     assert_eq!(super::WaveTunables::default().batch_size, 25);
 }
+
+/// The `late` drop (2026-09-28, log-proven 4/18 in the walk survivors): a
+/// suggestion the scope-safety check rejects at claim time used to stay in
+/// `valid`, so `classify`'s success short-circuit skipped it — no retry,
+/// no exhaustion, no last suggestion — and the id settled as identity,
+/// minified forever. It must flow into the retry lane with the duplicate
+/// failure preamble (the disclosed round-2 ask), like any other rejected
+/// suggestion.
+#[test]
+fn a_scope_rejected_suggestion_is_retried_not_dropped() {
+    let used = |_: &str| false;
+    // The scope check alone rejects `a → taken` (a `wouldReject` class the
+    // used-set check cannot see — e.g. a child-scope shadow).
+    let reject = |old: &str, new: &str| old == "a" && new == "taken";
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
+    let retry = lane.next_call().expect("a disclosed round-2 retry");
+    assert_eq!(retry.batch, names(&["a"]));
+    assert_eq!(retry.round, 2);
+    assert_eq!(retry.failures.duplicates, names(&["a"]));
+    assert_eq!(retry.prev.0, vec![("a".to_string(), "taken".to_string())]);
+    lane.feed(Ok((renames(&[("a", "fresh")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Rename {
+            old: "a".into(),
+            new: "fresh".into()
+        }]
+    );
+}
+
+/// The invalid-dead-end (log-proven 4/18): the resolution tail used to
+/// send a last suggestion that is a reserved word / global builtin
+/// (`self`) straight to identity, though `sanitizeIdentifier` exists for
+/// exactly that shape. Sanitize first, then the ladder decides.
+#[test]
+fn an_invalid_last_suggestion_is_sanitized_in_the_tail() {
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| false;
+    let e = env(&used, &reject);
+    // One call allowed (`--max-retries 1`): the invalid answer exhausts
+    // the id without a last_suggestion retry, so only the tail can name it.
+    let tunables = super::WaveTunables {
+        batch_size: 1,
+        max_retries: 1,
+        ..super::WaveTunables::default()
+    };
+    let mut lane = Lane::new(names(&["a"]), true).tuned(&tunables);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "self")]), None)), &e);
+    assert!(
+        lane.next_call().is_none(),
+        "an id with a suggestion is no straggler"
+    );
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Rename {
+            old: "a".into(),
+            new: "self_".into()
+        }],
+        "`self` sanitizes to `self_`, not identity"
+    );
+}
+
+/// The singleton all-failed window (log-proven: three `t → self` ask
+/// survivors): when a window's every id fails, the window is exhausted on
+/// the spot — nothing gets its round-2 — and the straggler pass excluded
+/// ids holding a suggestion, so an INVALID-failed id got no feedback ask
+/// at all. Such an id must be admitted to the straggler pass once: the
+/// model is told "self is not allowed" and answers again.
+#[test]
+fn an_all_failed_window_with_invalid_answers_gets_one_feedback_straggler() {
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| false;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["t"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("t", "self")]), None)), &e);
+    let straggler = lane.next_call().expect("one feedback straggler ask");
+    assert_eq!(straggler.batch, names(&["t"]));
+    assert_eq!(straggler.failures.invalid, names(&["t"]));
+    assert_eq!(
+        straggler.prev.0,
+        vec![("t".to_string(), "self".to_string())]
+    );
+    lane.feed(Ok((renames(&[("t", "totalValue")]), None)), &e);
+    assert!(
+        lane.next_call().is_none(),
+        "the feedback ask is bounded to one"
+    );
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Rename {
+            old: "t".into(),
+            new: "totalValue".into()
+        }]
+    );
+}
+
+/// The exhausted-through-round-2 id is NOT re-admitted: it had its
+/// disclosed retry already, so only the tail (sanitize + ladder) remains.
+#[test]
+fn an_invalid_id_exhausted_through_round_two_gets_no_straggler() {
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| false;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a", "t"]), true);
+    lane.next_call().unwrap();
+    // `a` succeeds; `t`'s invalid answer gets its round-2 in-window.
+    lane.feed(Ok((renames(&[("a", "alpha"), ("t", "self")]), None)), &e);
+    let retry = lane.next_call().expect("t's round-2");
+    assert_eq!(retry.batch, names(&["t"]));
+    lane.feed(Ok((renames(&[("t", "self")]), None)), &e);
+    assert!(lane.next_call().is_none(), "no straggler: t had its retry");
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![
+            LaneEffect::Rename {
+                old: "a".into(),
+                new: "alpha".into()
+            },
+            LaneEffect::Rename {
+                old: "t".into(),
+                new: "self_".into()
+            },
+        ]
+    );
+}

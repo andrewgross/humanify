@@ -316,6 +316,22 @@ impl RenameState {
             .collect()
     }
 
+    /// The CURRENT names of the bindings `scope` holds that were RENAMED
+    /// earlier in this run (the transfer, the waves — any applied rename),
+    /// in registration order: the names a same-scope ask must avoid. The
+    /// one owner of "what is named in this scope" — an ask's avoid-list
+    /// reads it (naming/waves/processor.rs) so a TAKEN name is never
+    /// dropped as eligible-and-about-to-be-renamed.
+    pub fn renamed_names_in(&self, scope: BScopeId) -> Vec<String> {
+        let mut entries: Vec<(u64, &String)> = self.maps[scope.0 as usize]
+            .iter()
+            .filter(|&(_, &(_, b))| self.names[b.0 as usize].is_some())
+            .map(|(n, &(o, _))| (o, n))
+            .collect();
+        entries.sort();
+        entries.into_iter().map(|(_, n)| n.clone()).collect()
+    }
+
     /// The version of `scope`'s table: unchanged between two reads exactly
     /// when [`RenameState::bindings_in`] reads the same entries — what a
     /// cached snapshot of the table keys on.

@@ -2951,14 +2951,31 @@
      "response": {
       "Kq_": "used"
      }
+    },
+    {
+     "request": {
+      "code": "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}",
+      "identifiers": [
+       "Kq_"
+      ],
+      "usedNames": [
+       "used",
+       "Kq_",
+       "f"
+      ],
+      "isRetry": true
+     },
+     "response": {
+      "Kq_": "usedRunner"
+     }
     }
    ],
    "out": {
-    "named": 0,
-    "skipped": 2,
+    "named": 1,
+    "skipped": 1,
     "groups": 1
    },
-   "output": "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}",
+   "output": "function f() {\n  var used = one();\n  var usedRunner = two();\n  return used + usedRunner;\n}",
    "trail": [
     {
      "start": 18,
@@ -2982,8 +2999,29 @@
       "newName": "used"
      },
      "anchor": "fresh"
+    },
+    {
+     "start": 66,
+     "end": 69,
+     "oldName": "Kq_",
+     "attempt": {
+      "strategy": "coverage-sweep",
+      "outcome": "applied",
+      "newName": "usedRunner"
+     },
+     "anchor": "fresh"
     }
-   ]
+   ],
+   "fixed": {
+    "was": {
+     "out": {
+      "named": 0,
+      "skipped": 2,
+      "groups": 1
+     }
+    },
+    "why": "target-in-scope rejection dropped the rename (no re-ask); the collision-retry fix (2026-09-28, fix/collision-retry) gives it ONE disclosed re-ask. The added call is that re-ask \u2014 Rust-spec, not TS-captured: the TS could not re-ask. Everything else in the row is the TS capture, unchanged."
+   }
   },
   {
    "kind": "sweep",
@@ -3090,14 +3128,30 @@
      "response": {
       "Q8": "sharedState"
      }
+    },
+    {
+     "request": {
+      "code": "var Q8 = two();",
+      "identifiers": [
+       "Q8"
+      ],
+      "usedNames": [
+       "sharedState",
+       "Q8"
+      ],
+      "isRetry": true
+     },
+     "response": {
+      "Q8": "counterState"
+     }
     }
    ],
    "out": {
-    "named": 1,
-    "skipped": 1,
+    "named": 2,
+    "skipped": 0,
     "groups": 2
    },
-   "output": "var sharedState = one();\nvar Q8 = two();\nlog(sharedState, Q8);",
+   "output": "var sharedState = one();\nvar counterState = two();\nlog(sharedState, counterState);",
    "trail": [
     {
      "start": 4,
@@ -3121,8 +3175,29 @@
       "newName": "sharedState"
      },
      "anchor": "fresh"
+    },
+    {
+     "start": 20,
+     "end": 22,
+     "oldName": "Q8",
+     "attempt": {
+      "strategy": "coverage-sweep",
+      "outcome": "applied",
+      "newName": "counterState"
+     },
+     "anchor": "fresh"
     }
-   ]
+   ],
+   "fixed": {
+    "was": {
+     "out": {
+      "named": 1,
+      "skipped": 1,
+      "groups": 2
+     }
+    },
+    "why": "target-in-scope rejection dropped the rename (no re-ask); the collision-retry fix (2026-09-28, fix/collision-retry) gives it ONE disclosed re-ask. The added call is that re-ask \u2014 Rust-spec, not TS-captured: the TS could not re-ask. Everything else in the row is the TS capture, unchanged."
+   }
   },
   {
    "kind": "sweep",

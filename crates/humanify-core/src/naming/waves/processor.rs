@@ -50,6 +50,7 @@ use crate::naming::prompts::{
     build_module_level_rename_prompt, build_module_level_retry_prefix, render_system_prompt,
     render_user_prompt,
 };
+use crate::naming::reask;
 use crate::naming::report::{
     ContentionEvent, IdentifierOutcome, Outcomes, ProcessorReport, RenameReport, ReportStrategy,
     ReportType, Status,
@@ -285,6 +286,9 @@ enum Strategy {
     Module {
         batch: Vec<usize>,
         windowed: Vec<String>,
+        /// The target scope's renamed names — the builder-side filter of
+        /// [`module_request`] reads the same droppable rule.
+        taken: Arc<HashSet<String>>,
     },
 }
 
@@ -294,6 +298,11 @@ struct FnContext {
     callee_signatures: Vec<CalleeSignature>,
     callsites: Vec<String>,
     context_vars: Option<Vec<String>>,
+    /// The names the covered scopes' bindings were RENAMED to earlier in
+    /// this run (`renamed_in` over the scope chain): a TAKEN name is never
+    /// droppable from an ask's avoid-list, however eligible it looks
+    /// (the collision fix, 2026-09-28).
+    taken: Arc<HashSet<String>>,
 }
 
 /// One lane in a round.
@@ -361,6 +370,9 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     /// table version it was taken at (a context built while the table is
     /// unchanged shares it).
     layers: HashMap<BScopeId, (u64, Arc<NameLayer>)>,
+    /// The same caching for each scope's RENAMED names (the taken-name
+    /// sets the avoid-lists read — refreshed when the table version bumps).
+    renamed_layers: HashMap<BScopeId, (u64, Arc<HashSet<String>>)>,
     /// The file's free names (`scope.globals`) — fixed for the run.
     globals_layer: Arc<NameLayer>,
     strategies: Vec<Strategy>,
@@ -452,6 +464,7 @@ pub fn run_waves<P: NameProvider>(
         ctxs: Vec::new(),
         sets: Vec::new(),
         layers: HashMap::new(),
+        renamed_layers: HashMap::new(),
         globals_layer,
         strategies: Vec::new(),
         entries: Vec::new(),
@@ -874,13 +887,19 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let ctx = build_context(&view, &self.inp.ng.fn_call_sites[f], |n: &str| {
             eligible.is_eligible(n)
         });
-        let layers = self.used_layers(f);
+        let chain = self.scope_chain(f);
+        let layers = self.used_layers(&chain);
+        let mut taken: HashSet<String> = HashSet::new();
+        for scope in chain {
+            taken.extend(self.renamed_in(scope).iter().cloned());
+        }
         self.sets.push(UsedSet::new(layers));
         (
             FnContext {
                 callee_signatures: ctx.callee_signatures,
                 callsites: ctx.callsites,
                 context_vars: ctx.context_vars,
+                taken: Arc::new(taken),
             },
             self.sets.len() - 1,
         )
@@ -919,25 +938,62 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         }
     }
 
-    /// The `usedIdentifiers` layers of function `f`'s context: each
-    /// non-program scope from its own outward (a graph-era scope reads its
-    /// retained table), the program's bindings, the file's free names.
-    fn used_layers(&mut self, f: usize) -> Vec<Arc<NameLayer>> {
-        let mut layers = Vec::new();
+    /// The function's scope chain, its own scope outward, ending with the
+    /// program scope — the scopes its context's used-identifier Set and
+    /// taken-name set both cover.
+    fn scope_chain(&self, f: usize) -> Vec<BScopeId> {
+        let mut chain = Vec::new();
         let mut cur = Some(self.inp.rows.fns[f].scope);
         while let Some(s) = cur {
             if s == self.program_scope {
                 break;
             }
+            chain.push(s);
+            cur = self.state.view().scope(s).parent;
+        }
+        chain.push(self.program_scope);
+        chain
+    }
+
+    /// The `usedIdentifiers` layers of a function context over `chain`:
+    /// each non-program scope from its own outward (a graph-era scope
+    /// reads its retained table), the program's bindings, the file's free
+    /// names.
+    fn used_layers(&mut self, chain: &[BScopeId]) -> Vec<Arc<NameLayer>> {
+        let mut layers = Vec::new();
+        for &s in chain {
             layers.push(match self.graph_era.get(&s) {
                 Some(era) => Arc::new(NameLayer::new(era.to_vec())),
                 None => self.table_layer(s),
             });
-            cur = self.state.view().scope(s).parent;
         }
         layers.push(self.table_layer(self.program_scope));
         layers.push(self.globals_layer.clone());
         layers
+    }
+
+    /// The scope's renamed names ([`RenameState::renamed_names_in`]) as a
+    /// membership set, cached by the table version — a rename or re-crawl
+    /// of the scope refreshes it, everything else shares it. The LIVE
+    /// table is read even where the used-set's layer is a graph-era
+    /// snapshot: for "is this name taken" the current table is the truth
+    /// (renames made through fresh-era objects do not reach the graph-era
+    /// snapshot, but they do take the name).
+    fn renamed_in(&mut self, scope: BScopeId) -> Arc<HashSet<String>> {
+        let version = self.state.table_version(scope);
+        if let Some((v, names)) = self.renamed_layers.get(&scope)
+            && *v == version
+        {
+            return names.clone();
+        }
+        let names: HashSet<String> = self
+            .state
+            .renamed_names_in(scope)
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let names = Arc::new(names);
+        self.renamed_layers.insert(scope, (version, names.clone()));
+        names
     }
 
     /// The current names of `scope`'s table, as a snapshot shared while
@@ -1043,6 +1099,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         else {
             unreachable!("a function strategy");
         };
+        let taken = &context.taken;
         let f = *f;
         let binding_map: HashMap<&str, &BindingInfo> =
             bindings.iter().map(|b| (b.name.as_str(), b)).collect();
@@ -1058,7 +1115,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         } else {
             full_code
         };
-        let windowed = self.windowed_used_names(f, remaining, &binding_map, &self.sets[*set]);
+        let windowed =
+            self.windowed_used_names(f, remaining, &binding_map, &self.sets[*set], taken);
         let used_for_prompt = if is_retry {
             build_retry_used_names(&windowed, &call.prev)
         } else {
@@ -1143,13 +1201,17 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         }
     }
 
-    /// `computeWindowedUsedNames`.
+    /// `computeWindowedUsedNames`. A name this run already APPLIED to a
+    /// covered binding is never droppable (`taken`): the avoid-list must
+    /// carry it whether or not it looks eligible — the model is otherwise
+    /// never told a natural name is in use.
     fn windowed_used_names(
         &self,
         f: usize,
         remaining: &[String],
         binding_map: &HashMap<&str, &BindingInfo>,
         set: &UsedSet,
+        taken: &HashSet<String>,
     ) -> Vec<String> {
         let batch_lines: Vec<u32> = remaining
             .iter()
@@ -1174,7 +1236,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     .map(|b| self.proximity_binding(b))
             },
             total,
-            |n| self.is_eligible(n),
+            |n| self.is_eligible(n) && !taken.contains(n),
         )
     }
 
@@ -1229,7 +1291,9 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     }
 
     /// `buildModuleBindingBatchCallbacks`: the windowed names are computed
-    /// ONCE, at construction, from the live usedNames.
+    /// ONCE, at construction, from the live usedNames. A name this run
+    /// already applied in the target scope is never droppable — the same
+    /// taken-name rule as the function path.
     fn module_strategy(&mut self, batch: &[usize]) -> usize {
         let lines: Vec<u32> = batch
             .iter()
@@ -1238,6 +1302,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let total = self.state.bindings_in(self.target_scope).len();
         let used = self.used.to_vec();
         let target = self.target_scope;
+        let taken = self.renamed_in(target);
         let windowed = get_proximate_used_names(
             &used,
             &lines,
@@ -1247,11 +1312,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     .map(|b| self.proximity_binding(b))
             },
             total,
-            |n| self.is_eligible(n),
+            |n| self.is_eligible(n) && !taken.contains(n),
         );
         self.strategies.push(Strategy::Module {
             batch: batch.to_vec(),
             windowed,
+            taken,
         });
         self.strategies.len() - 1
     }
@@ -1277,7 +1343,12 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     /// The module strategy's request.
     fn module_request(&self, strategy: usize, call: &LaneCall) -> BatchRenameRequest {
-        let Strategy::Module { batch, windowed } = &self.strategies[strategy] else {
+        let Strategy::Module {
+            batch,
+            windowed,
+            taken,
+        } = &self.strategies[strategy]
+        else {
             unreachable!("a module strategy");
         };
         let graph = self.inp.graph;
@@ -1324,7 +1395,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             suggested_names: Some(StrMap(dedup_record(suggested))),
         };
         let eligible = |n: &str| self.is_eligible(n);
-        let mut user = build_module_level_rename_prompt(&input, eligible);
+        // The builder-side filter shares the droppable rule the windowed
+        // list was built with: an applied name stays listed.
+        let droppable = |n: &str| eligible(n) && !taken.contains(n);
+        let mut user = build_module_level_rename_prompt(&input, droppable);
         let prev = StrMap(call.prev.0.clone());
         let mut body = None;
         if is_retry {
@@ -1332,7 +1406,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             user = format!("{prefix}\n{user}");
             body = Some(format!(
                 "{prefix}\n{}",
-                build_module_level_rename_body(&input, eligible)
+                build_module_level_rename_body(&input, droppable)
             ));
         }
         BatchRenameRequest {
@@ -1781,6 +1855,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             calls += lane.finish_reasons.len() as u64;
             finish_reasons.extend(lane.finish_reasons);
             remaining.extend(lane.remaining);
+            // The lane-repair counters (2026-09-28): the repaired `late`
+            // drop, the sanitized invalid finishes, the all-failed windows.
+            self.processor.late_rejections += lane.late_rejections;
+            self.processor.invalid_suggestion_finishes += lane.invalid_suggestion_finishes;
+            self.processor.all_failed_windows += lane.all_failed_windows;
         }
         let report = RenameReport {
             ty,
@@ -2081,7 +2160,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 continue;
             }
             let taken = self.live_has(entry.live, &entry.new);
-            let applied = !taken && self.apply(&entry, &entry.new.clone());
+            let (applied, reason) = if taken {
+                (false, None)
+            } else {
+                self.apply(&entry, &entry.new.clone())
+            };
             if applied {
                 self.winners.insert(entry.new.clone(), entry.old.clone());
                 if entry.suffix_on_reject {
@@ -2091,7 +2174,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
             if entry.suffix_on_reject {
                 let variant = resolve_conflict(&entry.new, |n| self.live_has(entry.live, n));
-                let ok = variant != entry.new && self.apply(&entry, &variant);
+                let (ok, _) = if variant != entry.new {
+                    self.apply(&entry, &variant)
+                } else {
+                    (false, None)
+                };
                 if ok {
                     self.processor.contention.push(ContentionEvent {
                         requested: entry.new.clone(),
@@ -2110,8 +2197,16 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 continue;
             }
             self.record_rejection_outcome(entry.ctx, &entry.old, &entry.new);
-            let winner_old = self.winners.get(&entry.new).cloned();
-            rejections.push(Rejection { entry, winner_old });
+            if reask::barrier_reask(taken, reason) {
+                let winner_old = self.winners.get(&entry.new).cloned();
+                rejections.push(Rejection { entry, winner_old });
+            } else {
+                // Unrecoverable (`no-binding`, `stale-binding`,
+                // `exported-name`): no re-ask can fix these — the applier's
+                // trail row keeps them loud, and the counter keeps them
+                // visible in the processor report.
+                self.processor.unrecoverable_rejections += 1;
+            }
         }
         rejections
     }
@@ -2136,16 +2231,19 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     }
 
     /// The entry's apply closure: `applyFunctionRename` /
-    /// `applyModuleRename` through `applyLlmRename`.
-    fn apply(&mut self, entry: &Entry, name: &str) -> bool {
+    /// `applyModuleRename` through `applyLlmRename`. The second half is
+    /// the validated applier's rejection reason — the barrier's re-ask
+    /// policy (`naming::reask`) reads it; `None` on success.
+    fn apply(&mut self, entry: &Entry, name: &str) -> (bool, Option<RejectionReason>) {
         match &entry.target {
             ApplyTarget::Fn { binding, set } => {
                 let (Some(b), CtxKind::Fn(f)) = (binding, &self.ctxs[entry.ctx].kind) else {
-                    return false;
+                    return (false, Some(RejectionReason::NoBinding));
                 };
                 let f = *f;
-                if !self.llm_rename(b.scope, &entry.old, name) {
-                    return false;
+                let (ok, reason) = self.llm_rename(b.scope, &entry.old, name);
+                if !ok {
+                    return (false, reason);
                 }
                 let span = self.state.view().binding(b.binding).id_span;
                 self.names.push(NameRecord {
@@ -2171,15 +2269,16 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     self.used.delete(&entry.old);
                     self.used.add(name);
                 }
-                true
+                (true, None)
             }
             ApplyTarget::Module { mb } => {
                 let Some(j) = *mb else {
-                    return false;
+                    return (false, Some(RejectionReason::NoBinding));
                 };
                 let scope = self.inp.rows.modules[j].scope;
-                if !self.llm_rename(scope, &entry.old, name) {
-                    return false;
+                let (ok, reason) = self.llm_rename(scope, &entry.old, name);
+                if !ok {
+                    return (false, reason);
                 }
                 let b = &self.inp.graph.module_bindings[j];
                 self.names.push(NameRecord {
@@ -2191,7 +2290,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 });
                 self.used.delete(&entry.old);
                 self.used.add(name);
-                true
+                (true, None)
             }
         }
     }
@@ -2205,8 +2304,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     }
 
     /// `applyLlmRename`: validated rename + the `llm` trail row on the
-    /// binding `scope.getBinding(old)` resolves (captured BEFORE).
-    fn llm_rename(&mut self, scope: BScopeId, old: &str, new: &str) -> bool {
+    /// binding `scope.getBinding(old)` resolves (captured BEFORE). Returns
+    /// the attempt and its rejection reason (None on success).
+    fn llm_rename(
+        &mut self,
+        scope: BScopeId,
+        old: &str,
+        new: &str,
+    ) -> (bool, Option<RejectionReason>) {
         let trail_binding = self.state.get_binding(scope, old);
         // Both captured BEFORE the rename: the count the guards saw
         // (`referencePaths + constantViolations`) and the scope's block.
@@ -2238,7 +2343,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             }
             self.state.record(b, old, row, false);
         }
-        attempt.applied
+        (attempt.applied, attempt.reason)
     }
 }
 

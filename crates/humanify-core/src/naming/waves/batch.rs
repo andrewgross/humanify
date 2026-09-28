@@ -131,6 +131,16 @@ pub struct LaneReport {
     pub remaining: Vec<String>,
     /// `resolveRemaining`'s collision decorations (contention events).
     pub contention: Vec<ContentionEvent>,
+    /// Suggestions the scope-safety check rejected at claim time that
+    /// flowed into the retry lane (the repaired `late` drop — 2026-09-28).
+    pub late_rejections: usize,
+    /// Resolution-tail finishes whose last suggestion was invalid and got
+    /// sanitized instead of identity.
+    pub invalid_suggestion_finishes: usize,
+    /// Windows whose every id failed (exhausted on the spot — the
+    /// all-failed rule; an INVALID failure there now gets the one
+    /// feedback straggler).
+    pub all_failed_windows: usize,
 }
 
 /// What a lane collects for the barrier.
@@ -286,10 +296,7 @@ impl Lane {
                         let list: Vec<String> = self
                             .exhausted
                             .iter()
-                            .filter(|n| {
-                                !self.renamed.contains(*n)
-                                    && self.states[*n].last_suggestion.is_none()
-                            })
+                            .filter(|n| !self.renamed.contains(*n) && self.straggler_eligible(n))
                             .cloned()
                             .collect();
                         self.stage = if list.is_empty() {
@@ -378,11 +385,19 @@ impl Lane {
         }
         self.report.finish_reasons.push(finish);
         let mut v = self.validate(&renames, &batch, env);
-        let (applied, late) = self.apply_valid(&v, env, round);
+        let (applied, late) = self.apply_valid(&mut v, env, round);
+        let late_rejected = !late.is_empty();
         v.duplicates.extend(late);
         let (next, exhausted) = self.classify(&batch, &v, &renames, &pending.claimed_before, env);
         self.exhausted.extend(exhausted);
-        if applied == 0 && next.len() == batch.len() {
+        // The all-failed exhaustion (`validThisCall === 0 && nextRetry.length
+        // === batchSizeBefore`): burn the window on the spot rather than
+        // re-asking — UNLESS the window produced `late` rejections
+        // (2026-09-28): those ids were never TOLD their name was taken, so
+        // they keep their disclosed round-2, bounded by `max_retries` (the
+        // second all-failed round exhausts them through attempts).
+        if applied == 0 && next.len() == batch.len() && !late_rejected {
+            self.report.all_failed_windows += 1;
             self.exhausted.extend(next);
             self.stage = Stage::NextWindow;
         } else if next.is_empty() {
@@ -409,8 +424,8 @@ impl Lane {
         };
         self.calls += 1;
         self.report.finish_reasons.push(finish);
-        let v = self.validate(&renames, &pending.batch, env);
-        self.apply_valid(&v, env, round);
+        let mut v = self.validate(&renames, &pending.batch, env);
+        self.apply_valid(&mut v, env, round);
         for name in &pending.batch {
             if let Some(s) = renames.get(name).filter(|s| !s.is_empty())
                 && let Some(state) = self.states.get_mut(name)
@@ -422,6 +437,18 @@ impl Lane {
 
     fn is_used(&self, name: &str, env: &LaneEnv<'_>) -> bool {
         (env.used)(name) || self.claimed.contains(name)
+    }
+
+    /// The straggler pass's admission rule: an id the model never answered
+    /// (the TS rule), plus — the 2026-09-28 fix — an INVALID-failed id
+    /// whose window died under the all-failed rule BEFORE its round-2
+    /// (`attempts < max_retries`): it never got the feedback ask
+    /// "that name is not allowed", and the tail can only sanitize it.
+    /// An id that exhausted THROUGH round-2 is not re-admitted.
+    fn straggler_eligible(&self, name: &str) -> bool {
+        let s = &self.states[name];
+        s.last_suggestion.is_none()
+            || (s.last_failure == Some(FailureReason::Invalid) && s.attempts < self.max_retries)
     }
 
     /// `validateBatchRenames`.
@@ -457,29 +484,42 @@ impl Lane {
         v
     }
 
-    /// `applyValidRenames`: the check-and-claim.
+    /// `applyValidRenames`: the check-and-claim. A suggestion the
+    /// scope-safety check rejects (`late`) is REMOVED from `valid` — the
+    /// 2026-09-28 fix: it used to stay in, and `classify`'s success
+    /// short-circuit then skipped the id (no retry, no exhaustion, no last
+    /// suggestion — a silent identity settle, log-proven 4/18). Removed,
+    /// it flows into the retry lane through `duplicates` with the
+    /// duplicate failure preamble, like any other rejected suggestion.
     fn apply_valid(
         &mut self,
-        v: &Validation,
+        v: &mut Validation,
         env: &LaneEnv<'_>,
         round: u64,
     ) -> (usize, Vec<String>) {
         let mut applied = 0;
         let mut late = Vec::new();
-        for (old, new) in &v.valid {
-            if self.is_used(new, env) || (env.would_reject)(old, new) {
-                late.push(old.clone());
+        let mut i = 0;
+        while i < v.valid.len() {
+            let (old, new) = v.valid[i].clone();
+            if self.is_used(&new, env) || (env.would_reject)(&old, &new) {
+                v.valid.remove(i);
+                late.push(old);
                 continue;
             }
-            self.claim(old, new);
-            let trail = self.states.get_mut(old).and_then(|s| {
-                s.record(Some(new), AttemptResult::Applied);
+            self.claim(&old, &new);
+            let trail = self.states.get_mut(&old).and_then(|s| {
+                s.record(Some(&new), AttemptResult::Applied);
                 s.trail.clone()
             });
             self.report
                 .outcomes
-                .set(old, IdentifierOutcome::renamed(new, round, trail));
+                .set(&old, IdentifierOutcome::renamed(&new, round, trail));
             applied += 1;
+            i += 1;
+        }
+        if !late.is_empty() {
+            self.report.late_rejections += late.len();
         }
         (applied, late)
     }
@@ -592,23 +632,33 @@ impl Lane {
         let round = self.report.finish_reasons.len() as u64 + 1;
         let mut left: Vec<String> = Vec::new();
         for name in &remaining {
-            let Some(suggested) = prev.get(name) else {
+            let Some(raw) = prev.get(name) else {
                 left.push(name.clone());
                 continue;
             };
-            if !is_valid_rename_target(suggested) || suggested == name {
+            // An INVALID last suggestion (a reserved word / global builtin,
+            // log-proven 4/18) is still evidence: sanitize it —
+            // `sanitizeIdentifier` exists for exactly this shape — instead
+            // of settling the id as identity. The ladder decides the rest.
+            let suggested = if is_valid_rename_target(raw) {
+                raw.clone()
+            } else {
+                self.report.invalid_suggestion_finishes += 1;
+                sanitize_identifier(raw)
+            };
+            if suggested == name.as_str() {
                 left.push(name.clone());
                 continue;
             }
-            let scope_rejected = (env.would_reject)(name, suggested);
-            if !snap_used(suggested) && !scope_rejected {
-                self.claim(name, suggested);
+            let scope_rejected = (env.would_reject)(name, &suggested);
+            if !snap_used(&suggested) && !scope_rejected {
+                self.claim(name, &suggested);
                 self.report
                     .outcomes
-                    .set(name, IdentifierOutcome::renamed(suggested, round, None));
+                    .set(name, IdentifierOutcome::renamed(&suggested, round, None));
                 continue;
             }
-            let resolved = resolve_conflict(suggested, snap_used);
+            let resolved = resolve_conflict(&suggested, snap_used);
             if (env.would_reject)(name, &resolved) {
                 left.push(name.clone());
                 continue;

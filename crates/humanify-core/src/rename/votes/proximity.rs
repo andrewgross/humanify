@@ -73,12 +73,20 @@ fn in_window(binding: Option<&ProximityBinding>, min_line: f64, max_line: f64) -
 /// TS `getProximateUsedNames`: the windowed usedNames, in insertion order
 /// (the TS returns a Set — well-known names first, then the preserved
 /// names in `all_used_names` order).
+///
+/// `is_droppable` keeps the TS's `isEligible` reading — a name the ask
+/// could itself rename is not worth the model's avoid-attention — with ONE
+/// extension (2026-09-28, the collision fix): the caller must NOT drop a
+/// name this run already APPLIED to a binding of the covered scopes
+/// (the caller combines eligibility with `RenameState::renamed_names_in`).
+/// An eligible-looking word that is taken is not "about to be renamed";
+/// dropping it is how the model was never told a natural name was in use.
 pub fn get_proximate_used_names<'a, S: AsRef<str>>(
     all_used_names: &'a [S],
     batch_lines: &[u32],
     scope_binding: impl Fn(&str) -> Option<ProximityBinding>,
     total_bindings: usize,
-    is_eligible: impl Fn(&str) -> bool,
+    is_droppable: impl Fn(&str) -> bool,
 ) -> Vec<String> {
     // The Set: insertion-ordered result + a membership index (the waves
     // call this per request over ~25k names — a linear `has` is quadratic).
@@ -95,7 +103,8 @@ pub fn get_proximate_used_names<'a, S: AsRef<str>>(
             push(&mut result, name);
         }
     }
-    let preserved: Vec<&str> = names.filter(|n| !is_eligible(n)).collect();
+    // (Renamed.) `preserved`: every name the ask may not silently reuse.
+    let preserved: Vec<&str> = names.filter(|n| !is_droppable(n)).collect();
     if total_bindings < WINDOWING_THRESHOLD {
         for name in preserved {
             push(&mut result, name);

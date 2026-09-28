@@ -225,4 +225,19 @@ pub struct ProcessorReport {
     pub contention: Vec<ContentionEvent>,
     /// The metrics' `completedCalls`: wave dispatches that resolved.
     pub completed_calls: usize,
+    /// Barrier rejections that did NOT seed a re-ask — the unrecoverable
+    /// classes (`no-binding`, `stale-binding`, `exported-name`): the
+    /// applier's trail row stays their loud record (2026-09-28, the
+    /// collision-retry fix).
+    pub unrecoverable_rejections: usize,
+    /// Lane suggestions the scope-safety check rejected at claim time and
+    /// sent to the retry lane (the repaired `late` drop — 2026-09-28;
+    /// counted so the fix's coverage stays measurable, rule 8).
+    pub late_rejections: usize,
+    /// Resolution-tail finishes whose last suggestion was invalid and got
+    /// sanitized (would have been identity before 2026-09-28).
+    pub invalid_suggestion_finishes: usize,
+    /// Batch windows whose every identifier failed (the all-failed
+    /// exhaustion rule) — the feedback-straggler fix's input class.
+    pub all_failed_windows: usize,
 }
