@@ -598,6 +598,32 @@ fn resolution_stats(
     }
 }
 
+/// The stats record's `reask` block (the 2026-09-29 schema bump): the
+/// 2026-09-28 collision-retry counters — the processor's lane half direct,
+/// the sweep's re-ask half summed over the pre-generate and deferred sweeps
+/// (both are sweeps; an absent one contributes zero).
+fn reask_stats(
+    processor: &ProcessorReport,
+    pre_sweep: Option<&SweepResult>,
+    deferred_sweep: Option<&SweepResult>,
+) -> humanify_model::stats::ReaskStats {
+    let mut reask = humanify_model::stats::ReaskStats {
+        unrecoverable_rejections: processor.unrecoverable_rejections as f64,
+        late_rejections: processor.late_rejections as f64,
+        invalid_suggestion_finishes: processor.invalid_suggestion_finishes as f64,
+        all_failed_windows: processor.all_failed_windows as f64,
+        sweep_reasked: 0.0,
+        sweep_reask_applied: 0.0,
+        sweep_reask_dropped: 0.0,
+    };
+    for sweep in [pre_sweep, deferred_sweep].into_iter().flatten() {
+        reask.sweep_reasked += sweep.reasked as f64;
+        reask.sweep_reask_applied += sweep.reask_applied as f64;
+        reask.sweep_reask_dropped += sweep.reask_dropped as f64;
+    }
+    reask
+}
+
 impl NamingOutcome {
     /// The `--stats-json` record's naming half (`writeEvalStats`, minus
     /// `vendorNaming` and `selection`, which other stages own).
@@ -653,6 +679,11 @@ impl NamingOutcome {
                 claims_recorded: c.claims_recorded as f64,
             },
             selection: None,
+            reask: Some(reask_stats(
+                &self.processor,
+                self.pre_sweep.as_ref(),
+                self.deferred_sweep.as_ref().map(|(_, run)| &run.result),
+            )),
         }
     }
 }

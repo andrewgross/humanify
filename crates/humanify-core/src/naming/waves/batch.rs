@@ -24,6 +24,7 @@ use crate::naming::report::{
     AttemptResult, ContentionEvent, IdentifierOutcome, Outcomes, RoundAttempt, Status,
 };
 use crate::naming::validation::{resolve_conflict, sanitize_identifier};
+use crate::rename::validated::RejectionReason;
 use crate::rename::validated::target::is_valid_rename_target;
 
 /// Maximum identifiers per batch (halved on truncation). 25 since the
@@ -107,6 +108,11 @@ struct IdState {
     free_retries: u32,
     last_suggestion: Option<String>,
     last_failure: Option<FailureReason>,
+    /// The scope-safety check's reason when THIS round's suggestion was
+    /// claim-rejected (the `late` flow) — cleared per round, carried on the
+    /// retry call for the ask trace. Recording only: the retry still rides
+    /// the duplicate failure preamble, so the flow is byte-unchanged.
+    last_rejection: Option<RejectionReason>,
     trail: Option<Vec<RoundAttempt>>,
 }
 
@@ -160,8 +166,13 @@ pub struct LaneEnv<'e> {
     /// Membership in the lane's base used-name set (the phase context's
     /// used identifiers + the module-level used names, frozen this round).
     pub used: &'e dyn Fn(&str) -> bool,
-    /// `wouldReject`: the full scope-safety check.
-    pub would_reject: &'e dyn Fn(&str, &str) -> bool,
+    /// `wouldReject`: the full scope-safety check — as the REASON it would
+    /// reject (None = the rename is safe; the lane bool-checks with
+    /// `.is_some()`). The reason is recorded on the claim-rejected id and
+    /// travels with its retry call (the 2026-09-29 reason thread), so the
+    /// ask trace can name the class instead of the generic duplicate
+    /// derivation; nothing in the flow reads it.
+    pub would_reject: &'e dyn Fn(&str, &str) -> Option<RejectionReason>,
     /// `transformSuggestion` (the prior-name snap), when the strategy has
     /// one.
     pub transform: Option<&'e Transform<'e>>,
@@ -175,6 +186,11 @@ pub struct LaneCall {
     pub round: u8,
     pub prev: JsRecord,
     pub failures: RenameFailures,
+    /// The call's per-id scope-safety rejections of the PREVIOUS round's
+    /// suggestions (`(id, reason)` in batch order) — nonempty only for a
+    /// retry seeded by the `late` flow. Carries the ask trace's true cause;
+    /// the request's failure lists (the prompt bytes) are unaffected.
+    pub rejections: Vec<(String, RejectionReason)>,
 }
 
 #[derive(Clone, Debug)]
@@ -266,9 +282,13 @@ impl Lane {
         self.finished
     }
 
-    fn prev_and_failures(&self, batch: &[String]) -> (JsRecord, RenameFailures) {
+    fn prev_and_failures(
+        &self,
+        batch: &[String],
+    ) -> (JsRecord, RenameFailures, Vec<(String, RejectionReason)>) {
         let mut prev = JsRecord::default();
         let mut f = RenameFailures::default();
+        let mut rejections = Vec::new();
         for name in batch {
             let s = &self.states[name];
             if let Some(sug) = &s.last_suggestion {
@@ -281,8 +301,11 @@ impl Lane {
                 Some(FailureReason::Unchanged) => f.unchanged.push(name.clone()),
                 None => {}
             }
+            if let Some(reason) = s.last_rejection {
+                rejections.push((name.clone(), reason));
+            }
         }
-        (prev, f)
+        (prev, f, rejections)
     }
 
     /// The next call, or None when the loop needs no more calls (then
@@ -312,7 +335,7 @@ impl Lane {
                 }
                 Stage::Window(batch) => {
                     let batch = batch.clone();
-                    let (prev, failures) = self.prev_and_failures(&batch);
+                    let (prev, failures, rejections) = self.prev_and_failures(&batch);
                     let round = if prev.is_empty() { 1 } else { 2 };
                     self.pending = Some(Pending {
                         batch: batch.clone(),
@@ -324,6 +347,7 @@ impl Lane {
                         round,
                         prev,
                         failures,
+                        rejections,
                     });
                 }
                 Stage::Straggler { list, next } => {
@@ -333,7 +357,7 @@ impl Lane {
                     }
                     let end = (*next + self.adaptive).min(list.len());
                     let batch = list[*next..end].to_vec();
-                    let (prev, failures) = self.prev_and_failures(&batch);
+                    let (prev, failures, rejections) = self.prev_and_failures(&batch);
                     self.pending = Some(Pending {
                         batch: batch.clone(),
                         straggler: true,
@@ -344,6 +368,7 @@ impl Lane {
                         round: 2,
                         prev,
                         failures,
+                        rejections,
                     });
                 }
             }
@@ -353,6 +378,14 @@ impl Lane {
     /// Consume the pending call's response (`Err` = the provider threw).
     pub fn feed(&mut self, response: Result<(Renames, Option<String>), ()>, env: &LaneEnv<'_>) {
         let pending = self.pending.take().expect("feed without a pending call");
+        // A fresh round: each id's `last_rejection` describes THIS round's
+        // claim rejection or nothing (apply_valid re-records below), so a
+        // later genuine duplicate cannot inherit a stale reason.
+        for name in &pending.batch {
+            if let Some(s) = self.states.get_mut(name) {
+                s.last_rejection = None;
+            }
+        }
         if pending.straggler {
             self.feed_straggler(&pending, response, env);
         } else {
@@ -502,7 +535,18 @@ impl Lane {
         let mut i = 0;
         while i < v.valid.len() {
             let (old, new) = v.valid[i].clone();
-            if self.is_used(&new, env) || (env.would_reject)(&old, &new) {
+            if self.is_used(&new, env) {
+                v.valid.remove(i);
+                late.push(old);
+                continue;
+            }
+            if let Some(reason) = (env.would_reject)(&old, &new) {
+                // The scope-safety REASON travels with the id into its
+                // round-2 (the ask trace names the class); the retry itself
+                // still rides the duplicate preamble — flow unchanged.
+                if let Some(s) = self.states.get_mut(&old) {
+                    s.last_rejection = Some(reason);
+                }
                 v.valid.remove(i);
                 late.push(old);
                 continue;
@@ -650,7 +694,7 @@ impl Lane {
                 left.push(name.clone());
                 continue;
             }
-            let scope_rejected = (env.would_reject)(name, &suggested);
+            let scope_rejected = (env.would_reject)(name, &suggested).is_some();
             if !snap_used(&suggested) && !scope_rejected {
                 self.claim(name, &suggested);
                 self.report
@@ -659,7 +703,7 @@ impl Lane {
                 continue;
             }
             let resolved = resolve_conflict(&suggested, snap_used);
-            if (env.would_reject)(name, &resolved) {
+            if (env.would_reject)(name, &resolved).is_some() {
                 left.push(name.clone());
                 continue;
             }

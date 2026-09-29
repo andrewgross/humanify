@@ -26,6 +26,7 @@
  *     <freshLedger.json> <priorLedger.json> <statsJson> <pairLabel>
  */
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { composeDiff } from "../037-noise-source-decomposition/diff-composition.js";
 import { decomposeVendorChurn } from "../046-vendor-noise/vendor-churn.js";
 import { buildConstantChurn } from "./build-constant-churn.js";
@@ -199,7 +200,7 @@ function churn(freshCode: string, priorCode: string) {
 
 /** Determinism breakdown from the pipeline's --stats-json coverage block. */
 // biome-ignore lint/suspicious/noExplicitAny: external stats JSON shape
-function determinism(stats: any) {
+export function determinism(stats: any) {
   const f = stats?.coverage?.functions ?? {};
   const mb = stats?.coverage?.moduleBindings ?? {};
   const deterministic =
@@ -341,4 +342,14 @@ function main() {
   console.log(JSON.stringify(scorecard, null, 2));
 }
 
-main();
+// Only when RUN, not when imported. `determinism` is exported so a guard can
+// pin the reader against synthetic stats (analyze.test.ts: the 2026-09-29
+// reask schema bump is additive only, and recorded scorecards stay
+// loadable), and a bare `main()` here meant importing this file executed
+// the CLI and threw on the missing argument. Same idiom as summarize.ts.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === path.resolve(import.meta.filename)
+) {
+  main();
+}

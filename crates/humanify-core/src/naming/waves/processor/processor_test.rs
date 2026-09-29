@@ -359,3 +359,101 @@ fn a_js_set_moves_a_renamed_member_to_the_end() {
         vec![("x".into(), "3".into()), ("y".into(), "2".into())]
     );
 }
+
+/// A provider for the late-rejection scenario: `e0` renames cleanly, and
+/// `p` suggests `taken` on the first ask — a name that shadows the child
+/// function's own binding, a class the lane's used-set check cannot see, so
+/// only the scope-safety check rejects it at claim time.
+struct LateProvider {
+    p_asks: RefCell<u32>,
+}
+
+impl LateProvider {
+    fn new() -> LateProvider {
+        LateProvider {
+            p_asks: RefCell::new(0),
+        }
+    }
+}
+
+impl humanify_model::llm::NameProvider for LateProvider {
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        calls
+            .into_iter()
+            .map(|c| {
+                let entries: Vec<(String, Option<String>)> = c
+                    .request
+                    .identifiers
+                    .iter()
+                    .map(|id| {
+                        let s = match id.as_str() {
+                            "e0" => "outerFn".to_string(),
+                            "p" => {
+                                let mut n = self.p_asks.borrow_mut();
+                                *n += 1;
+                                if *n == 1 {
+                                    "taken".to_string()
+                                } else {
+                                    "paramValue".to_string()
+                                }
+                            }
+                            other => format!("{other}Named"),
+                        };
+                        (id.clone(), Some(s))
+                    })
+                    .collect();
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: humanify_model::llm::Renames::from_entries(entries),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+/// The lane round-2 ask trace (2026-09-29): a suggestion the scope-safety
+/// check rejects at claim time (`shadows-child` — invisible to the used-set
+/// collision check) keeps its disclosed round-2 (the 2026-09-28 fix), and
+/// that retry's ask record now carries the REJECTION's class and code
+/// instead of the generic duplicate-failure derivation the writer falls
+/// back to. Recording only: the retry itself is byte-unchanged.
+#[test]
+fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
+    let fresh = "function e0(p) {\n\
+                 return function inner(taken) {\n  return taken + p;\n};\n\
+                 }\n\
+                 console.log(e0(1));\n";
+    let provider = LateProvider::new();
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &plain_config(),
+        &provider,
+    )
+    .expect("the stage runs");
+    let retry = out
+        .waves
+        .dispatches
+        .iter()
+        .find(|d| d.request.is_retry == Some(true) && d.request.identifiers == ["p"])
+        .expect("p's disclosed round-2");
+    assert!(
+        retry
+            .user_prompt
+            .contains("DO NOT suggest these names: taken"),
+        "the retry flow is unchanged — the duplicate preamble: {}",
+        retry.user_prompt
+    );
+    assert_eq!(retry.ask.cause, Some(RetryCause::NameTaken));
+    assert_eq!(retry.ask.detail.as_deref(), Some("shadows-child"));
+    assert_eq!(*provider.p_asks.borrow(), 2, "ask + one round-2, bounded");
+    let code = out.code.expect("shipped");
+    assert!(code.contains("paramValue"), "{code}");
+}

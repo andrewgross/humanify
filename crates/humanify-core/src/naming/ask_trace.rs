@@ -14,9 +14,14 @@
 //! together: a barrier/sweep re-ask records `reask::ReaskClass` as it was
 //! computed by the policy that seeded it, and a lane loop re-ask (which
 //! re-asks a rejected RESPONSE, not an applier rejection) records the one
-//! class its failure list maps to.
+//! class its failure list maps to — UNLESS the window's retries include a
+//! suggestion the scope-safety check rejected at claim time (the `late`
+//! flow): then the rejection's own class and code are recorded
+//! ([`AskSite::lane_reask`]), because the lane's duplicate failure is the
+//! generic view of a rejection whose reason it now knows.
 
 use crate::naming::reask::ReaskClass;
+use crate::rename::validated::RejectionReason;
 
 /// Why an ask happened — the one taxonomy.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -70,6 +75,12 @@ pub enum RetryCause {
     /// `ReaskClass::InvalidSuggestion` — the suggestion was not a legal
     /// rename target (`invalid-target`).
     InvalidSuggestion,
+    /// `ReaskClass::Unrecoverable` — no suggestion can fix the rejection.
+    /// The barrier/sweep never re-ask one; the LANE round-2 can carry one
+    /// (a late `exported-name` rides the duplicate preamble — the flow fix
+    /// is eval-gated), and its record must say unrecoverable, not the
+    /// generic NameTaken the failure lists derive.
+    Unrecoverable,
     /// The lane loop's `missing` failure — no suggestion for the id.
     Missing,
     /// The lane loop's `unchanged` failure — the model returned the name
@@ -83,6 +94,7 @@ impl RetryCause {
         match self {
             RetryCause::NameTaken => "NameTaken",
             RetryCause::InvalidSuggestion => "InvalidSuggestion",
+            RetryCause::Unrecoverable => "Unrecoverable",
             RetryCause::Missing => "Missing",
             RetryCause::Unchanged => "Unchanged",
         }
@@ -108,13 +120,13 @@ impl RetryCause {
 
 impl From<ReaskClass> for RetryCause {
     /// The vocabulary reuse: an applier-rejection re-ask's class is the
-    /// cause, verbatim (only the re-askable classes ever appear —
-    /// `Unrecoverable` re-asks nothing).
+    /// cause, verbatim. `Unrecoverable` appears only on the lane round-2
+    /// record (the barrier/sweep re-ask nothing of that class).
     fn from(class: ReaskClass) -> Self {
         match class {
             ReaskClass::NameTaken => RetryCause::NameTaken,
             ReaskClass::InvalidSuggestion => RetryCause::InvalidSuggestion,
-            ReaskClass::Unrecoverable => RetryCause::NameTaken,
+            ReaskClass::Unrecoverable => RetryCause::Unrecoverable,
         }
     }
 }
@@ -178,6 +190,35 @@ impl AskSite {
             prior: false,
             cause: Some(RetryCause::from(class)),
             detail: detail.map(str::to_string),
+        }
+    }
+
+    /// A lane round-2's site record. `rejections` is the call's per-id
+    /// scope-check rejections (the `late` flow — `(id, reason)` in batch
+    /// order, empty for a plain duplicate/invalid/missing retry): the
+    /// FIRST recorded rejection's reask class is the ask's cause and every
+    /// distinct reason code is the detail, in preference to the writer's
+    /// generic failure-list derivation (a late rejection IS a duplicate
+    /// failure to the flow, so the derivation alone cannot name the real
+    /// class — an export id would read NameTaken, the audit's mis-worded
+    /// round-2). Recording only: the retry flow is unchanged.
+    pub fn lane_reask(rejections: &[(String, RejectionReason)], phase: u8) -> AskSite {
+        match rejections.first() {
+            None => AskSite::fresh(phase),
+            Some(&(_, reason)) => {
+                let mut codes: Vec<&str> = Vec::new();
+                for &(_, r) in rejections {
+                    let code = r.as_str();
+                    if !codes.contains(&code) {
+                        codes.push(code);
+                    }
+                }
+                AskSite::reask(
+                    crate::naming::reask::class_of(reason),
+                    phase,
+                    Some(&codes.join(",")),
+                )
+            }
         }
     }
 }

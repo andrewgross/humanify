@@ -1,6 +1,7 @@
 //! The lane loop's decisions (processor.ts runBatchRenameLoop and its
 //! helpers; the processor.test.ts batch-loop cases in miniature).
 
+use crate::rename::validated::RejectionReason;
 use humanify_model::llm::Renames;
 
 use super::{Lane, LaneEffect, LaneEnv, compute_lane_count, split_by_position};
@@ -17,7 +18,10 @@ fn names(ns: &[&str]) -> Vec<String> {
     ns.iter().map(|s| s.to_string()).collect()
 }
 
-fn env<'e>(used: &'e dyn Fn(&str) -> bool, reject: &'e dyn Fn(&str, &str) -> bool) -> LaneEnv<'e> {
+fn env<'e>(
+    used: &'e dyn Fn(&str) -> bool,
+    reject: &'e dyn Fn(&str, &str) -> Option<RejectionReason>,
+) -> LaneEnv<'e> {
     LaneEnv {
         used,
         would_reject: reject,
@@ -41,7 +45,7 @@ fn lanes_split_by_count_and_position() {
 #[test]
 fn a_clean_answer_claims_every_name_in_one_call() {
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a", "b"]), true);
     let call = lane.next_call().expect("a call");
@@ -72,7 +76,7 @@ fn a_window_with_no_success_is_exhausted_without_a_retry() {
     // both from their suggestions over a SNAPSHOT that never sees `a`'s
     // claim — so `b` claims `x` too (the barrier sorts it out).
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a", "b"]), true);
     lane.next_call().unwrap();
@@ -100,7 +104,7 @@ fn a_window_with_no_success_is_exhausted_without_a_retry() {
 #[test]
 fn a_partial_success_retries_the_rest_in_round_two() {
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a", "b"]), true);
     lane.next_call().unwrap();
@@ -118,7 +122,7 @@ fn a_partial_success_retries_the_rest_in_round_two() {
 #[test]
 fn a_missing_answer_goes_to_the_straggler_pass_then_identity() {
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a"]), true);
     lane.next_call().unwrap();
@@ -137,7 +141,7 @@ fn a_missing_answer_goes_to_the_straggler_pass_then_identity() {
 #[test]
 fn a_used_suggestion_resolves_through_the_conflict_ladder() {
     let used = |n: &str| n == "taken";
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a"]), false);
     lane.next_call().unwrap();
@@ -162,7 +166,7 @@ fn a_used_suggestion_resolves_through_the_conflict_ladder() {
 fn the_configured_batch_size_and_retry_limit_shape_the_loop() {
     use super::WaveTunables;
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let tunables = WaveTunables {
         batch_size: 1,
@@ -202,7 +206,9 @@ fn a_scope_rejected_suggestion_is_retried_not_dropped() {
     let used = |_: &str| false;
     // The scope check alone rejects `a → taken` (a `wouldReject` class the
     // used-set check cannot see — e.g. a child-scope shadow).
-    let reject = |old: &str, new: &str| old == "a" && new == "taken";
+    let reject = |old: &str, new: &str| {
+        (old == "a" && new == "taken").then_some(RejectionReason::ShadowsChild)
+    };
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a"]), true);
     lane.next_call().unwrap();
@@ -224,6 +230,62 @@ fn a_scope_rejected_suggestion_is_retried_not_dropped() {
     );
 }
 
+/// The reason thread (2026-09-29, the 2026-09-28 audit's bool-only
+/// `would_reject`): the scope check's WHY reaches the retry CALL — the
+/// reason is recorded per id at claim time and carried on the round-2
+/// LaneCall for the ask trace — while the retry FLOW is byte-unchanged:
+/// the id still rides the duplicate failure preamble, so no prompt or ask
+/// sequence moves (output-neutral; the lane's wording fix awaits its cold
+/// eval).
+#[test]
+fn a_scope_rejected_suggestion_carries_its_reason_into_the_retry_call() {
+    let used = |_: &str| false;
+    // Two scope classes: `a → taken` shadows a child scope, `b → self` is
+    // an export name (unrecoverable — no fresh suggestion can fix it).
+    let reject = |old: &str, new: &str| match (old, new) {
+        ("a", "taken") => Some(RejectionReason::ShadowsChild),
+        ("b", "exported") => Some(RejectionReason::ExportedName),
+        _ => None,
+    };
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a", "b"]), true);
+    lane.next_call().unwrap();
+    lane.feed(
+        Ok((renames(&[("a", "taken"), ("b", "exported")]), None)),
+        &e,
+    );
+    let retry = lane.next_call().expect("a disclosed round-2 retry");
+    assert_eq!(
+        retry.failures.duplicates,
+        names(&["a", "b"]),
+        "the retry flow is unchanged: the duplicate preamble"
+    );
+    assert_eq!(
+        retry.rejections,
+        vec![
+            ("a".to_string(), RejectionReason::ShadowsChild),
+            ("b".to_string(), RejectionReason::ExportedName),
+        ],
+        "the scope check's reasons travel with the retry, in batch order"
+    );
+    lane.feed(Ok((renames(&[("a", "freshA"), ("b", "freshB")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![
+            LaneEffect::Rename {
+                old: "a".into(),
+                new: "freshA".into()
+            },
+            LaneEffect::Rename {
+                old: "b".into(),
+                new: "freshB".into()
+            },
+        ]
+    );
+}
+
 /// The invalid-dead-end (log-proven 4/18): the resolution tail used to
 /// send a last suggestion that is a reserved word / global builtin
 /// (`self`) straight to identity, though `sanitizeIdentifier` exists for
@@ -231,7 +293,7 @@ fn a_scope_rejected_suggestion_is_retried_not_dropped() {
 #[test]
 fn an_invalid_last_suggestion_is_sanitized_in_the_tail() {
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     // One call allowed (`--max-retries 1`): the invalid answer exhausts
     // the id without a last_suggestion retry, so only the tail can name it.
@@ -267,7 +329,7 @@ fn an_invalid_last_suggestion_is_sanitized_in_the_tail() {
 #[test]
 fn an_all_failed_window_with_invalid_answers_gets_one_feedback_straggler() {
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["t"]), true);
     lane.next_call().unwrap();
@@ -299,7 +361,7 @@ fn an_all_failed_window_with_invalid_answers_gets_one_feedback_straggler() {
 #[test]
 fn an_invalid_id_exhausted_through_round_two_gets_no_straggler() {
     let used = |_: &str| false;
-    let reject = |_: &str, _: &str| false;
+    let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a", "t"]), true);
     lane.next_call().unwrap();

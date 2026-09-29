@@ -1863,6 +1863,72 @@
           }
         ]
       }
+    },
+    {
+      "name": "reask",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "unrecoverableRejections",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "lateRejections",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "invalidSuggestionFinishes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "allFailedWindows",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "sweepReasked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "sweepReaskApplied",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "sweepReaskDropped",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
     }
   ]
 }

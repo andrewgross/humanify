@@ -1516,6 +1516,9 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 duplicates: ids,
                 ..RenameFailures::default()
             },
+            // The barrier seed's cause is threaded at its own dispatch
+            // (`run_retries` → `AskSite::reask`), not through the lane.
+            rejections: Vec::new(),
         };
         let mut request = match &self.strategies[r.strategy] {
             Strategy::Fn { .. } => self.fn_request(r.strategy, r.seed.ctx, &call),
@@ -1669,11 +1672,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 .collect();
             let targets: Vec<(usize, String, AskSite)> = active
                 .iter()
-                .map(|(i, _)| {
+                .map(|(i, call)| {
                     (
                         lanes[*i].ctx,
                         lanes[*i].function_id.clone(),
-                        AskSite::fresh(lanes[*i].phase),
+                        AskSite::lane_reask(&call.rejections, lanes[*i].phase),
                     )
                 })
                 .collect();
@@ -1789,7 +1792,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         match lr.lane.next_call() {
             Some(call) => {
                 let request = self.lane_request(lr, &call);
-                let site = AskSite::fresh(lr.phase);
+                // The site carries the round's scope-check rejections (the
+                // `late` flow) when there are any — else the writer derives
+                // the cause from the request's failure lists.
+                let site = AskSite::lane_reask(&call.rejections, lr.phase);
                 Some(self.prepare_dispatch(request, lr.ctx, &lr.function_id, site))
             }
             None => {
@@ -1980,9 +1986,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     .map(|b| (b.name.as_str(), b.scope))
                     .collect();
                 let reject = |old: &str, new: &str| {
+                    // The scope check's WHY (None = safe): the lane records
+                    // it on claim-rejected ids for the ask trace.
                     scopes
                         .get(old)
-                        .is_some_and(|&s| self.state.get_rename_rejection(s, old, new).is_some())
+                        .and_then(|&s| self.state.get_rename_rejection(s, old, new))
                 };
                 let transform = self.fn_transform(*fi);
                 let env = LaneEnv {
@@ -2000,8 +2008,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     .collect();
                 let target = self.target_scope;
                 let reject = |old: &str, new: &str| {
-                    names.contains(old)
-                        && self.state.get_rename_rejection(target, old, new).is_some()
+                    names
+                        .contains(old)
+                        .then(|| self.state.get_rename_rejection(target, old, new))
+                        .flatten()
                 };
                 let transform = self.module_transform(lr.strategy);
                 let env = LaneEnv {
