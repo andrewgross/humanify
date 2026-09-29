@@ -1,44 +1,9 @@
+> **Recovered 2026-09-29 from branch `071-...` before its deletion** (the
+> experiment lived on a worktree branch; conclusions are the record — code preserved as-is,
+> superseded by the Rust cutover where imports changed). STATUS header below is from its time; see
+> /work/post-cutover-notes.md for the 2026-09-29 recovery.
+
 # 071 — the dependencies our vendor detection cannot see
-
-> **STATUS (2026-08-14): the planned detector was REFUTED by its own
-> hand-check; a two-signal rebuild PASSES and is not yet wired.**
->
-> - As planned (seeds + graph rules, no stability): moved ~1,554 modules
->   but the mandatory 20-module hand-check found **60–70% false
->   positives** — app code (`render-help-dialog`,
->   `emergency-tip-component`, `fetch-claude-bootstrap`) filed as
->   third-party. Not shipped. Only `stableSince` shipped (an additive
->   ledger field; see the agent's branch).
-> - **Three findings**: (1) the planned wiring target is impossible —
->   `LibraryDetector` sees `__commonJS` factory files, a granularity at
->   which an `__esm` dependency does not exist; the owner must be the
->   split. (2) **Our vendor roster is contaminated** — it mixes real npm
->   ids with names our own vendor namer INVENTED (`http`,
->   `string-utils`, `config-processor`), so seeding on it matches
->   ordinary application English. (3) A leaf app module and a package
->   entry are indistinguishable in the import graph.
-> - **The escape route, proven 2026-08-14**: fossil extraction runs on
->   RAW shipped bundles — no LLM, no naming (3,273 modules from raw
->   2.1.86, identical to the processed count). 124 release bundles
->   profiled offline in one background pass.
-> - **Stability separates the classes decisively (raw basis)**:
->   dependencies survive a **median 124 releases** unchanged (98% ≥60),
->   app code **16** (17% ≥60). The undecidable middle behaves like
->   dependencies (median 124).
-> - **TRAP, cost a false start**: hashes from RAW bundles and from our
->   PROCESSED output are not comparable — our own transforms move them.
->   The first join read "0 releases" for every class. Classification and
->   stability must share one basis, and the runtime story (pipeline runs
->   on processed code; the profile is raw) still needs an answer —
->   either read prior raw inputs at runtime, or let `stableSince` accrue
->   in processed basis.
-> - **Two-signal rebuild (≥2 of: package vocabulary, graph position,
->   ≥60 releases stable; ANY app evidence vetoes)**: moves **644**
->   modules, leaves 2,629 in `src/`, and **20 of 20 hand-checked moves
->   are genuine dependencies** (AWS SDK credential providers, Azure MSAL
->   carrying its own version banner, lodash, base64/checksum helpers).
->   Conservative by construction — it declines the ambiguous middle.
-
 
 > **This is a BRIEF — a hypothesis, including its cautions.** Its Task 0
 > census is ALREADY EXECUTED (2026-08-14, `census.ts`); the numbers below
@@ -68,14 +33,14 @@ measured hidden churn UP (1,926 ln vs ~1,480), not down.
 Three independent signals, applied in order. Seeds from content markers,
 then two sound graph rules, then cross-version stability:
 
-| signal | rule | result |
-| --- | --- | --- |
-| content markers | app vocabulary vs package vocabulary | seeds: 829 app / 242 vendor |
-| graph rule 1 | a module importing app code is app (deps never import app) | — |
-| graph rule 2 | everything a dependency imports is a dependency | APP 1,562 / VENDOR 868 / UNKNOWN 843 |
-| graph rule 3 | imported ONLY by dependencies ⇒ dependency | — |
-| graph rule 4 | whole import closure is dependencies ⇒ package ENTRY (233 found) | APP 1,562 / VENDOR 1,089 / UNKNOWN 622 |
-| stability | structurally identical 2.1.86 → 2.1.216 (130 releases) | app 8.2% stable · vendor 85.9% · unknown 67.5% |
+| signal          | rule                                                             | result                                         |
+| --------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
+| content markers | app vocabulary vs package vocabulary                             | seeds: 829 app / 242 vendor                    |
+| graph rule 1    | a module importing app code is app (deps never import app)       | —                                              |
+| graph rule 2    | everything a dependency imports is a dependency                  | APP 1,562 / VENDOR 868 / UNKNOWN 843           |
+| graph rule 3    | imported ONLY by dependencies ⇒ dependency                       | —                                              |
+| graph rule 4    | whole import closure is dependencies ⇒ package ENTRY (233 found) | APP 1,562 / VENDOR 1,089 / UNKNOWN 622         |
+| stability       | structurally identical 2.1.86 → 2.1.216 (130 releases)           | app 8.2% stable · vendor 85.9% · unknown 67.5% |
 
 **The classes separate cleanly**: app code churns (92% changed over 130
 releases), dependencies do not (86% unchanged). The undecidables behave
@@ -171,3 +136,72 @@ Kill switch: `--disable esm-vendor-detection`.
    exp070-r1's 1,926 (the pre-fossil baseline is ~1,480 — beating THAT
    is what makes the whole fossil arc worth merging).
 4. App file count should land near ~1,900 (Andrew's ground truth).
+
+## STATUS (2026-08-14): BUILT AND REFUTED — the runtime cannot ground "app"
+
+The detector exists, is unit-tested, and was validated offline against the
+real 2.1.86 tree. **It does not meet the precision bar and is therefore NOT
+wired into the pipeline.** Nothing in `src/` classifies ESM dependencies;
+what shipped is the ledger field that makes a future detector possible.
+
+### Correction to the plan's wiring target
+
+The plan said to wire into `selectLibraryDetector` (stage 4). That is
+impossible, not merely awkward: `LibraryDetector.detectLibraries` takes
+`WebcrackFile[]`, and the bun unpack adapter extracts **`__commonJS`
+factories only** — an `__esm` dependency never becomes a file at that stage.
+ESM modules first become addressable at the SPLIT, where the fossil map is
+built. Any future detector's owner is the split, not the stage-4 registry.
+
+### What was measured (real 2.1.86 tree, 3,273 modules)
+
+| seeding                                                            |     moved | hand-check verdict                                                                                                                                                        |
+| ------------------------------------------------------------------ | --------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| provenance only (URLs, SPDX, `node_modules`, scoped specifiers)    |       236 | only 83 modules carry ANY provenance — minification strips banners                                                                                                        |
+| + vendor roster as-is (164 dirs)                                   | **1,554** | matches the census rollup (~1,510) but **~60-70% false positives** in a 20-module sample: `render-thinking-component`, `model-picker-component`, `is-non-control-message` |
+| + roster restricted to real npm ids (scoped/dotted), depth-1 reach |       274 | still **~30-40% false positives**: `fetch-claude-bootstrap`, `render-help-dialog/create-command-builder`, `emergency-tip-component`                                       |
+
+Two mechanisms found by validation, both now documented in the code:
+
+1. **The vendor roster is contaminated by our own inventions.** It holds real
+   npm ids (`@aws-sdk`, `bn.js`) beside names the vendor namer MADE UP for
+   unidentifiable factories (`http`, `string-utils`, `config-processor`).
+   Seeding on the latter matches ordinary application English.
+2. **Transitive reach is not a signal.** "A dependency's imports are
+   dependencies" marks **2,620 of 3,273 modules (80%)** when walked
+   transitively — the import graph is too dense. Depth-1 is the honest form.
+
+### Why it cannot be fixed by better graph rules
+
+**A leaf application module and a package entry are structurally identical**:
+both import only dependencies and are imported only by application code. The
+census separated them with app-vocabulary seeds (`claude|anthropic|…`) — fine
+for a census, useless in a pipeline that must work on any target — and with
+stability across 130 releases, which a live run cannot see. Strip those two
+and the graph alone cannot decide. The 30-40% residue is exactly that
+undecidable class, not a tuning failure.
+
+(The census was not clean either: its app seeds would have kept
+`anthropic-client.js` in `src/`, though `@anthropic-ai/sdk` is a real
+dependency. Both directions of that vocabulary are unsound.)
+
+### What shipped
+
+- **`stableSince` on every fossil ledger module** (`src/split/stable-split.ts`,
+  `fossil-assign.ts`, 3 tests): consecutive releases the module's structure
+  has held, carried through the cross-version match, reset on any change.
+  Nothing consumes it yet — it starts the clock so the one signal that DID
+  separate the classes (85.9% vs 8.2% over 130 releases) becomes available in
+  future hops rather than never.
+- **`lib/esm-vendor.ts` + tests, `validate.ts`** — kept as experiment
+  instruments, deliberately NOT in `src/`: an unwired mechanism in production
+  is the exp069 orphan, and this one would hide application code in
+  `vendor/` if anyone wired it as-is.
+
+### What to run
+
+**Nothing.** No pipeline behaviour changed (`stableSince` is an additive
+ledger field), so a scored run cannot measure this and should not be spent.
+exp070's merge decision stands unchanged — but the vendor fix that was
+supposed to mitigate its churn regression is NOT available, and that should
+be weighed before merging the relayout.
