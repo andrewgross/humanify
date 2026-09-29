@@ -306,6 +306,25 @@ pub struct ManifestEntry {
     /// entry literal declared (a present-but-undefined key keeps its slot).
     #[serde(rename = "hashOrdinal", skip_serializing_if = "Option::is_none")]
     pub hash_ordinal: Option<usize>,
+    /// This body's app-scope READS, as the finish bridges them through the
+    /// owner file's live accessor (finding #60). Absent when the body
+    /// reaches nothing outside itself but factories, the CJS wrapper's
+    /// names and the recognized runtime helpers.
+    #[serde(rename = "captures", skip_serializing_if = "Vec::is_empty", default)]
+    pub captures: Vec<ManifestCapture>,
+}
+
+/// One app-scope read a vendored body makes (finding #60): the raw
+/// (minified) name as it appears in the body. The split locates the
+/// binding by that name in the FRESH text (the beautified pre-rename
+/// runtime — still raw-named, statement-aligned with the shipped one),
+/// takes the post-rename name from the same slot of the shipped statement,
+/// and the finish rewrites the read to `require(<owner file>).<accessor>` —
+/// a LIVE getter read, so the reference stays the binding the bundle had,
+/// lazily required like the original `(init(), ns)` was.
+#[derive(Clone, Debug, Serialize)]
+pub struct ManifestCapture {
+    pub name: String,
 }
 
 /// The manifest (`BunModulesManifest`).

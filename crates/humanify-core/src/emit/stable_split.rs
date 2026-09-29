@@ -27,6 +27,10 @@ use super::align::AlignSwitches;
 use super::cjs::{RunnableInput, emit_runnable_cjs, wrapper_view};
 use super::load_order::{LoadOrderFacts, bundle_load_order_facts};
 use super::review::{review_split, statement_align_name};
+use crate::finish::relink::VendorBridge;
+use crate::modules::vendor_names::ManifestCapture;
+use crate::twins::fossil::declared_names as fossil_declared_names;
+use serde_json::Value;
 
 /// What the split is asked to do (`StableSplitOptions` + the runnable
 /// emit's switches).
@@ -45,6 +49,16 @@ pub struct SplitOptions<'a, 'n> {
     pub split_pure: bool,
     /// The placement trail (`--diagnostics`).
     pub trail: Option<&'a mut PlacementTrail>,
+    /// The unpack's vendor capture records (finding #60), read back from
+    /// the manifest: each names the raw binding a vendored body READS. The
+    /// split resolves each against the FRESH text (below) and its own
+    /// (renamed) statements and placement.
+    pub vendor_captures: &'a [ManifestCapture],
+    /// The FRESH text — the naming stage's input (the beautified,
+    /// pre-rename runtime), whose wrapper-body statements align 1:1 with
+    /// the shipped list renames only substitute names in. Required when
+    /// `vendor_captures` is non-empty.
+    pub vendor_fresh: Option<&'a str>,
 }
 
 /// `StableSplitStats`.
@@ -80,6 +94,10 @@ pub struct SplitOutcome {
     /// Per statement: span in the shipped text.
     pub spans: Vec<(u32, u32)>,
     pub facts: Vec<LoadOrderFacts>,
+    /// The vendor captures RESOLVED to (raw name, owner file, live
+    /// accessor name) — what the finishing stage's vendor bridge splices
+    /// (finding #60). Empty for review trees and declines.
+    pub vendor_bridges: Vec<VendorBridge>,
 }
 
 fn str_list(items: &[String]) -> JsValue {
@@ -256,6 +274,24 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
 
     drop(ph);
     let ph = phase("split:runnable-cjs");
+    // Vendor bridges (finding #60): resolve the unpack's capture records —
+    // raw names read by vendored bodies — against the FRESH text (the
+    // beautified pre-rename runtime, whose wrapper statements align 1:1
+    // with this split's renamed ones) and this split's placement. The
+    // owner files must export the accessors whether or not any app file
+    // references the binding, so the emit gets them as forced exports.
+    let vendor_bridges = resolve_vendor_bridges(
+        options.vendor_captures,
+        options.vendor_fresh,
+        &input.body,
+        &assignment,
+    )?;
+    let mut forced_exports: Vec<(String, String)> = vendor_bridges
+        .iter()
+        .map(|b| (b.file.clone(), b.accessor.clone()))
+        .collect();
+    forced_exports.sort();
+    forced_exports.dedup();
     let runnable = if options.split_pure {
         None
     } else {
@@ -274,9 +310,17 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             bundle_names: &names,
             facts: &facts,
             switches: options.align,
+            forced_exports: &forced_exports,
         }))
     };
     drop(ph);
+    // Only a runnable emit exports the accessors the bridges read; a
+    // declined or pure-review tree keeps its vendor bodies raw either way
+    // (the finish relinks nothing without a runnable list).
+    let vendor_bridges = match &runnable {
+        Some(Ok(_)) => vendor_bridges,
+        _ => Vec::new(),
+    };
     let mut outcome = SplitOutcome {
         files: Vec::new(),
         runnable: None,
@@ -288,6 +332,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         aliases: Vec::new(),
         spans: input.spans.clone(),
         facts: Vec::new(),
+        vendor_bridges,
     };
     match runnable {
         Some(Ok(tree)) => {
@@ -374,6 +419,86 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     outcome.ledger = JsValue::Object(ledger);
     outcome.facts = facts;
     Ok(outcome)
+}
+
+/// Resolve the unpack's vendor capture records (finding #60) against the
+/// FRESH text — the naming stage's input, so the captured RAW name is still
+/// there — and this split's own (renamed) statements and placement. The two
+/// statement lists align index-for-index (renaming substitutes names
+/// only), and renames preserve declaration order within a statement, so
+/// wherever the fresh statement declares the raw name, the shipped
+/// statement declares the accessor at the SAME position. The placement
+/// names the owner file.
+///
+/// Anything that does not resolve is a HARD error: an unresolved capture
+/// would leave a free name in a vendor file, the exact hole finding #51
+/// closed — better a failed split than a tree that lies.
+fn resolve_vendor_bridges(
+    captures: &[ManifestCapture],
+    fresh: Option<&str>,
+    body: &[Value],
+    assignment: &[String],
+) -> Result<Vec<VendorBridge>, String> {
+    if captures.is_empty() {
+        return Ok(Vec::new());
+    }
+    let fresh = fresh
+        .ok_or("vendor bridge: the manifest carries captures but the run has no fresh text")?;
+    let fresh_input = split_input(fresh)?;
+    let fresh_body = &fresh_input.body;
+    if fresh_body.len() != body.len() {
+        return Err(format!(
+            "vendor bridge: the fresh text has {} wrapper statements, the shipped code has {} — they no longer align",
+            fresh_body.len(),
+            body.len()
+        ));
+    }
+    let mut out = Vec::with_capacity(captures.len());
+    for c in captures {
+        // The raw name must belong to exactly ONE fresh wrapper statement:
+        // the wrapper is one scope, and its bindings are bundle-generated —
+        // a second declaration is a shape the bridge refuses.
+        let mut hits: Vec<(usize, usize)> = Vec::new();
+        for (si, stmt) in fresh_body.iter().enumerate() {
+            let names = fossil_declared_names(stmt);
+            if let Some(pos) = names.iter().position(|n| n == &c.name) {
+                hits.push((si, pos));
+            }
+        }
+        let [(si, pos)] = hits[..] else {
+            return Err(format!(
+                "vendor bridge: the app-scope read of '{}' matches {hits:?} fresh statements — expected exactly one",
+                c.name
+            ));
+        };
+        let fresh_names = fossil_declared_names(&fresh_body[si]);
+        let shipped_names = fossil_declared_names(&body[si]);
+        if shipped_names.len() != fresh_names.len() {
+            return Err(format!(
+                "vendor bridge: statement {si} declares {} names fresh but {} shipped",
+                fresh_names.len(),
+                shipped_names.len()
+            ));
+        }
+        let Some(accessor) = shipped_names.get(pos) else {
+            return Err(format!(
+                "vendor bridge: statement {si} lost the slot of '{}' across the rename",
+                c.name
+            ));
+        };
+        let Some(file) = assignment.get(si) else {
+            return Err(format!(
+                "vendor bridge: statement {si} (the home of '{}') has no placement",
+                c.name
+            ));
+        };
+        out.push(VendorBridge {
+            name: c.name.clone(),
+            file: file.clone(),
+            accessor: accessor.clone(),
+        });
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

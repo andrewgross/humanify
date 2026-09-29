@@ -110,6 +110,22 @@ const INTEROP_HELPERS: [&str; 2] = [TO_ESM, TO_COMMON_JS];
 /// unobservable).
 pub type FactoryLookup = BTreeMap<String, String>;
 
+/// One app-scope read the finish resolves (finding #60): the RAW name a
+/// vendored body reads, and where to read it — the owner file the split
+/// placed the declaring statement in, and the LIVE accessor name (the
+/// binding's post-rename name, exported by a getter so the read sees the
+/// binding's current value, exactly the way the split's own cross-file
+/// references read it).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VendorBridge {
+    /// The raw (minified) name as it appears in the vendor body.
+    pub name: String,
+    /// The declaring statement's owner file, relative to the tree root.
+    pub file: String,
+    /// The accessor the owner file exports for the binding.
+    pub accessor: String,
+}
+
 /// The property holding the memoizing thunk (`THUNK_PROP`).
 const THUNK_PROP: &str = "f";
 
@@ -260,13 +276,16 @@ fn free_interop_helpers(body: &str) -> Result<Vec<&'static str>, String> {
 
 /// `wrapExtractedFactory`: an extracted factory body (a raw
 /// `(exports, module) => {…}` expression) as a runnable CJS module
-/// exporting the memoizing thunk, its factory references re-bound and the
-/// interop helpers it names bound from the shim.
+/// exporting the memoizing thunk, its factory references re-bound, the
+/// interop helpers it names bound from the shim, and its app-scope reads
+/// (finding #60) re-written to lazy `require(<owner>).<accessor>` reads.
+/// Returns the written text and how many bridged reads it spliced.
 pub fn wrap_extracted_factory(
     body: &str,
     from_file: &str,
     lookup: &FactoryLookup,
-) -> Result<String, String> {
+    bridges: &[VendorBridge],
+) -> Result<(String, usize), String> {
     let rt = compute_relative_import_path(from_file, &bun_relink_runtime_filename());
     let mut bound = vec!["__commonJS"];
     bound.extend(free_interop_helpers(trim(body))?);
@@ -277,7 +296,86 @@ pub fn wrap_extracted_factory(
         bound.join(", "),
         trim(body)
     );
-    relink_factory_references(&wrapped, from_file, lookup)
+    let relinked = relink_factory_references(&wrapped, from_file, lookup)?;
+    apply_vendor_bridges(&relinked, from_file, bridges)
+}
+
+/// Rewrite a vendored file's app-scope reads (finding #60): every FREE
+/// reference the manifest recorded becomes
+/// `require(<owner file>).<accessor>` — a LIVE getter read through the
+/// owner module, lazily required at the read site like the bundle's own
+/// `(init(), ns)` was, which is what makes it survive require cycles
+/// unchanged. Returns the text and the number of spliced reads.
+fn apply_vendor_bridges(
+    code: &str,
+    from_file: &str,
+    bridges: &[VendorBridge],
+) -> Result<(String, usize), String> {
+    if bridges.is_empty() {
+        return Ok((code.to_string(), 0));
+    }
+    let allocator = Allocator::default();
+    let ingest = parse_or_err(&allocator, code)?;
+    let semantic = ingest.semantic();
+    let nodes = semantic.nodes();
+    let state = RenameState::new(semantic, Anchor::Generated);
+    let mut splices: Vec<(usize, usize, bool, String)> = Vec::new();
+    for node in nodes.iter() {
+        let AstKind::IdentifierReference(ident) = node.kind() else {
+            continue;
+        };
+        let name = ident.name.as_str();
+        let Some(bridge) = bridges.iter().find(|b| b.name == name) else {
+            continue;
+        };
+        // isReferencedIdentifier + the shadow check, as `factory_refs`:
+        // a local binding of the same name means the READ is not the
+        // captured one.
+        if is_babel_assignment_target(nodes, node.id()) {
+            continue;
+        }
+        if state
+            .get_binding(state.view().scope_of_node(node.id()), name)
+            .is_some()
+        {
+            continue;
+        }
+        // The splice introduces a `require` call — `require` must be FREE
+        // here (the wrap's own header already calls it free; a shadowing
+        // local would silently retarget it).
+        if state
+            .get_binding(state.view().scope_of_node(node.id()), "require")
+            .is_some()
+        {
+            return Err(format!(
+                "the bridged read of {name} sits in a scope that shadows `require`"
+            ));
+        }
+        let target = format!(
+            "require(\"{}\").{}",
+            compute_relative_import_path(from_file, &bridge.file),
+            bridge.accessor
+        );
+        splices.push((
+            ident.span.start as usize,
+            ident.span.end as usize,
+            is_shorthand_property_value(nodes, node.id()),
+            target,
+        ));
+    }
+    let count = splices.len();
+    // Right-to-left, so earlier offsets stay valid.
+    splices.sort_by_key(|(start, _, _, _)| std::cmp::Reverse(*start));
+    let mut out = code.to_string();
+    for (start, end, shorthand, target) in splices {
+        if shorthand {
+            let name = &code[start..end];
+            out.replace_range(start..end, &format!("{name}: {target}"));
+        } else {
+            out.replace_range(start..end, &target);
+        }
+    }
+    Ok((out, count))
 }
 
 #[cfg(test)]

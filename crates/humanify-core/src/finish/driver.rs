@@ -20,8 +20,8 @@ use super::carry::{CarryResult, carry_renames_into_bundle};
 use super::reconcile::{PostSplitInput, PostSplitResult, post_split_reconcile};
 
 use super::relink::{
-    BUN_RELINK_RUNTIME, FactoryLookup, bun_relink_runtime_filename, relink_factory_references,
-    wrap_extracted_factory,
+    BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, bun_relink_runtime_filename,
+    relink_factory_references, wrap_extracted_factory,
 };
 use super::scaffold::{detect_external_packages, read_utf8, write_runnable_scaffold};
 use super::vendor_inherit::VendorBodyInheritor;
@@ -46,6 +46,11 @@ pub struct FinishInput<'a> {
     /// The input bundle (its directory resolves installed versions).
     pub input_file: &'a Path,
     pub switches: FinishSwitches,
+    /// The run's resolved vendor bridges (finding #60): the vendor bodies'
+    /// app-scope reads as (raw name → owner file + live accessor), which
+    /// the split computed from the manifest's capture records. Empty for
+    /// review trees, declines and bundles without captures.
+    pub bridges: Vec<VendorBridge>,
 }
 
 /// The Bun manifest as the finish reads it (`BunModulesManifest`).
@@ -121,6 +126,7 @@ fn relink_bun_modules(
     manifest: &Manifest,
     split_files: &[String],
     prior_root: Option<&Path>,
+    bridges: &[VendorBridge],
     report: &mut FinishReport,
 ) -> Result<(), String> {
     let lookup: FactoryLookup = manifest
@@ -134,16 +140,26 @@ fn relink_bun_modules(
     }
     write_file(&runtime_path, BUN_RELINK_RUNTIME)?;
     let mut inherit = prior_root.map(VendorBodyInheritor::new);
+    let mut bridged_reads = 0usize;
     for (file_name, _) in &manifest.factories {
         let abs = output_dir.join(file_name);
         let body = read_utf8(&abs)?;
-        let rendered = wrap_extracted_factory(&body, file_name, &lookup)
+        let (rendered, bridged) = wrap_extracted_factory(&body, file_name, &lookup, bridges)
             .map_err(|e| format!("{file_name}: {e}"))?;
+        bridged_reads += bridged;
         let bytes = match inherit.as_mut() {
             Some(i) => i.bytes_for(file_name, rendered),
             None => rendered,
         };
         write_file(&abs, &bytes)?;
+    }
+    if bridged_reads > 0 {
+        report.messages.push(format!(
+            "Vendor bridge: {bridged_reads} app-scope read{} resolved through {} owner binding{}",
+            if bridged_reads == 1 { "" } else { "s" },
+            bridges.len(),
+            if bridges.len() == 1 { "" } else { "s" },
+        ));
     }
     if let Some(i) = &inherit {
         let s = i.stats();
@@ -184,6 +200,7 @@ pub fn finish_split_output(
             manifest,
             runnable,
             prior_root.as_deref(),
+            &input.bridges,
             report,
         )?;
         report.messages.push(format!(

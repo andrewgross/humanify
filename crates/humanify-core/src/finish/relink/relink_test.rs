@@ -3,13 +3,26 @@
 //! string was produced by the TS functions themselves
 //! (`relinkFactoryReferences` / `wrapExtractedFactory`, 2026-09-25).
 
-use super::{BUN_RELINK_RUNTIME, FactoryLookup, relink_factory_references, wrap_extracted_factory};
+use super::{
+    BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, relink_factory_references,
+    wrap_extracted_factory,
+};
 
 fn lookup(entries: &[(&str, &str)]) -> FactoryLookup {
     entries
         .iter()
         .map(|(id, file)| (id.to_string(), file.to_string()))
         .collect()
+}
+
+/// One finding-#60 bridge, hand-built (the split's resolution is exercised
+/// in the stable-split tests).
+fn bridge(name: &str, file: &str, accessor: &str) -> VendorBridge {
+    VendorBridge {
+        name: name.to_string(),
+        file: file.to_string(),
+        accessor: accessor.to_string(),
+    }
 }
 
 fn two() -> FactoryLookup {
@@ -139,10 +152,11 @@ fn a_leading_comment_keeps_the_header_at_the_first_statement() {
 
 #[test]
 fn wraps_a_factory_body_on_a_stable_exports_f() {
-    let out = wrap_extracted_factory(
+    let (out, _) = wrap_extracted_factory(
         "(exports, module) => { module.exports = 42; }",
         "lib_bbbb.js",
         &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+        &[],
     )
     .unwrap();
     assert_eq!(
@@ -153,10 +167,11 @@ fn wraps_a_factory_body_on_a_stable_exports_f() {
 
 #[test]
 fn a_wrapped_body_gets_its_cross_module_requires_first() {
-    let out = wrap_extracted_factory(
+    let (out, _) = wrap_extracted_factory(
         "  (exports, module) => { module.exports = lib_aaaa() + 1; }\n",
         "sub/lib_cccc.js",
         &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+        &[],
     )
     .unwrap();
     assert_eq!(
@@ -184,10 +199,11 @@ fn the_runtime_exports_the_factory_and_interop_helpers() {
 fn a_body_naming_an_interop_helper_binds_it_from_the_shim() {
     // Finding #51: the unpack rewrites a vendored body's reference to the
     // bundle's __toESM / __toCommonJS to these names; the wrap binds them.
-    let out = wrap_extracted_factory(
+    let (out, _) = wrap_extracted_factory(
         "(exports, module) => { module.exports = __toESM(lib_aaaa(), 1).x + __toCommonJS({}).y; }",
         "lib_bbbb.js",
         &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+        &[],
     )
     .unwrap();
     assert_eq!(
@@ -195,10 +211,11 @@ fn a_body_naming_an_interop_helper_binds_it_from_the_shim() {
         "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst { __commonJS, __toESM, __toCommonJS } = require(\"./.humanify/__bun-runtime.js\");\nexports.f = __commonJS((exports, module) => { module.exports = __toESM(lib_aaaa.f(), 1).x + __toCommonJS({}).y; });\n"
     );
     // A body's OWN binding of the name is not the helper.
-    let out = wrap_extracted_factory(
+    let (out, _) = wrap_extracted_factory(
         "(exports) => { var __toESM = 1; exports.v = __toESM; }",
         "lib_bbbb.js",
         &lookup(&[]),
+        &[],
     )
     .unwrap();
     assert!(out.starts_with("const { __commonJS } = require("), "{out}");
@@ -209,15 +226,75 @@ fn a_function_expression_body_wraps_like_an_arrow() {
     // A factory body is an EXPRESSION; `function (…) {…}` read as a
     // statement is a nameless declaration — a parse error that failed the
     // whole post-split step on 2.1.216 (vendor/image-processor.js).
-    let out = wrap_extracted_factory(
+    let (out, _) = wrap_extracted_factory(
         "function (exports, module) { module.exports = __toESM(lib_aaaa()); }",
         "lib_bbbb.js",
         &lookup(&[("lib_aaaa", "lib_aaaa.js")]),
+        &[],
     )
     .unwrap();
     assert_eq!(
         out,
         "const lib_aaaa = require(\"./lib_aaaa.js\");\nconst { __commonJS, __toESM } = require(\"./.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) { module.exports = __toESM(lib_aaaa.f()); });\n"
+    );
+}
+
+#[test]
+fn bridged_reads_require_the_owner_files_accessor_lazily() {
+    // Finding #60: a vendored body's app-scope read becomes a LAZY
+    // `require(<owner file>).<accessor>` — the accessor is the owner's live
+    // getter, and the require sits at the read site so the owner module is
+    // loaded no earlier than the read runs, as in the bundle.
+    let (out, bridged) = wrap_extracted_factory(
+        "(exports) => { exports.v = (initM(), ns).hi(); ({ ns }); }",
+        "vendor/lib_zzzz.js",
+        &lookup(&[]),
+        &[
+            bridge("initM", "src/app-ns.js", "initializeMetadataRenamed"),
+            bridge("ns", "src/app-ns.js", "metadataProviderConfigRenamed"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(bridged, 3, "both reads and the shorthand splice");
+    assert_eq!(
+        out,
+        concat!(
+            "const { __commonJS } = require(\"../.humanify/__bun-runtime.js\");\n",
+            "exports.f = __commonJS((exports) => ",
+            "{ exports.v = (require(\"../src/app-ns.js\").initializeMetadataRenamed(), require(\"../src/app-ns.js\").metadataProviderConfigRenamed).hi(); ",
+            "({ ns: require(\"../src/app-ns.js\").metadataProviderConfigRenamed }); });\n"
+        )
+    );
+}
+
+#[test]
+fn a_shadowed_bridge_name_or_require_scope_is_refused() {
+    // A local binding of the captured name means the read is NOT the
+    // captured one (left alone); a scope that shadows `require` would
+    // retarget the splice's require call — refused loudly, never silently.
+    let (out, _) = wrap_extracted_factory(
+        "(exports) => { var ns = 1; exports.v = ns; }",
+        "vendor/lib_zzzz.js",
+        &lookup(&[]),
+        &[bridge("ns", "src/app-ns.js", "nsRenamed")],
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        concat!(
+            "const { __commonJS } = require(\"../.humanify/__bun-runtime.js\");\n",
+            "exports.f = __commonJS((exports) => { var ns = 1; exports.v = ns; });\n"
+        )
+    );
+    assert!(
+        wrap_extracted_factory(
+            "(exports) => { var require = () => ({}); exports.v = ns.hi; }",
+            "vendor/lib_zzzz.js",
+            &lookup(&[]),
+            &[bridge("ns", "src/app-ns.js", "nsRenamed")],
+        )
+        .is_err(),
+        "a scope that shadows `require` cannot take a bridge"
     );
 }
 

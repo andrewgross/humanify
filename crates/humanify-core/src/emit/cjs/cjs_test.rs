@@ -59,6 +59,7 @@ fn replay(v: &Value) -> Result<(), String> {
         bundle_names: &names,
         facts: &facts,
         switches: AlignSwitches::default(),
+        forced_exports: &[],
     });
     match (got, v["declined"].as_str()) {
         (Err(rust), Some(ts)) if rust.reason == ts => {

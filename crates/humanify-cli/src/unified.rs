@@ -645,6 +645,7 @@ fn pipeline_body(
         && let Some(NamedFile {
             outcome,
             path: source,
+            fresh,
             ..
         }) = &last
         && let Some(code) = &outcome.code
@@ -660,6 +661,9 @@ fn pipeline_body(
             switches,
             provider,
             namer_budget: split_namer_budget(settings),
+            // Finding #60: the vendor bridge resolves the manifest's raw
+            // capture names against this PRE-RENAME text.
+            fresh: Some(fresh),
         };
         let _ph = phase("split");
         let span = profiler.pipeline_span("split");

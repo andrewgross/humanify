@@ -44,7 +44,7 @@ output, because they run once the tree looks finished:
 - **carry into bundle** (`finish::carry`) — writes names back into
   `.humanify/humanified.js`, which becomes the NEXT release's prior. Top-level
   renames must never carry: the export key is a string, and 238/238 drifted.
-- **finish on disk** — scaffold, bun factory relink, ledgers, eval stats.
+- **finish on disk** — scaffold, bun factory relink, ledgers, eval stats. The relink has two answers for a vendor body's out-of-body references (finding #51/#60): recognized Bun interop helpers are bound from `.humanify/__bun-runtime.js`, and app-scope READS recorded by the unpack's scope plan are bridged — a lazy `require(<owner file>).<accessor>` splice through the live getter the emit was forced to export. Writes and non-statement-level bindings keep the factory in the app; nothing else may leave a free name in a vendor file.
 
 After those, the run's REPORTS are written, in this order: `--diagnostics`
 (the naming report with the split's placement trail after the strategy

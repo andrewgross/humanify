@@ -142,6 +142,12 @@ pub struct RunnableInput<'a, 's> {
     pub bundle_names: &'s [Option<String>],
     pub facts: &'s [LoadOrderFacts],
     pub switches: AlignSwitches,
+    /// Owner files that must EXPORT a binding for a vendored body to read
+    /// (finding #60): (file, accessor name). A binding only cross-file
+    /// referenced from vendor/ would otherwise get no accessor line — the
+    /// emit's export set is driven by app-file references — leaving the
+    /// vendor bridge nothing to require.
+    pub forced_exports: &'s [(String, String)],
 }
 
 /// The emitted tree plus what the ledger records from it.
@@ -1588,6 +1594,16 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
         layout: None,
     };
     plan.plan_wrapper_context().map_err(with_aliases)?;
+    // Vendor bridges (finding #60): the owner files must export their
+    // captured bindings whether or not any app file references them.
+    for (file, name) in input.forced_exports {
+        let Some(f) = input.files.iter().position(|p| p == file) else {
+            return Err(with_aliases(format!(
+                "vendor bridge: no emitted file {file} to export {name} from"
+            )));
+        };
+        plan.exports.entry(f).or_default().insert(name.clone());
+    }
     plan.assert_load_time_acyclic().map_err(with_aliases)?;
     let by_file = ordered_indexes_by_file(&plan);
     let (emit_hashes, emit_names, emit_indexes) = record_emitted_layout(&plan, &by_file);

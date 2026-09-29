@@ -56,6 +56,10 @@ pub struct SplitStageInput<'a> {
     pub provider: &'a dyn NameProvider,
     /// How big one split-namer prompt may get (`--context-tokens`, `--max-tokens`).
     pub namer_budget: SplitNamerBudget,
+    /// The naming stage's input text (the beautified, pre-rename runtime) —
+    /// the vendor bridge's (finding #60) raw-name anchor. None when no
+    /// naming outcome exists.
+    pub fresh: Option<&'a str>,
 }
 
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
@@ -276,6 +280,7 @@ fn split_before_commit(
         renderer.message("Split naming: LLM-naming fresh module mints");
     }
     let switches = input.switches;
+    let vendor_captures = humanify_core::unpack::bun::read_vendor_captures(input.output_dir);
     let outcome = stable_split(
         code,
         SplitOptions {
@@ -292,6 +297,8 @@ fn split_before_commit(
             registrar_exemption_disabled: switches.switch_on(Switch::RegistrarExemption),
             split_pure: input.split_pure,
             trail: Some(trail),
+            vendor_captures: &vendor_captures,
+            vendor_fresh: input.fresh,
         },
     )?;
     report_namer(&namer, renderer);
@@ -393,6 +400,9 @@ fn commit_and_finish(
         prior_version: input.prior_version,
         input_file: input.input_file,
         switches: finish_switches,
+        // Finding #60: the vendor captures the split resolved to owner
+        // files + live accessor names, for the finish's vendor bridge.
+        bridges: outcome.vendor_bridges.clone(),
     };
     drop(ph);
     let mut report = FinishReport::default();
