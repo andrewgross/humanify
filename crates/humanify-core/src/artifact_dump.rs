@@ -952,6 +952,12 @@ fn request_material(r: &BatchRenameRequest) -> JsValue {
             JsValue::Object(x)
         }),
     );
+    o.insert_opt(
+        "priorRejects",
+        r.prior_rejects
+            .as_ref()
+            .map(humanify_model::llm::PriorRejects::to_js),
+    );
     o.insert_opt("promptBody", r.prompt_body.as_deref().map(JsValue::str));
     o.insert_opt("userPrompt", r.user_prompt.as_deref().map(JsValue::str));
     o.insert_opt("systemPrompt", r.system_prompt.as_deref().map(JsValue::str));

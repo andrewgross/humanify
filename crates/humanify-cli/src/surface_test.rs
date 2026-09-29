@@ -82,6 +82,29 @@ fn the_llm_latency_simulation_takes_a_path() {
     assert_eq!(opts.str("simulateLlmLatency"), Some("sim.json"));
 }
 
+/// `--rename-retries <n>` (2026-09-29): Rust-only but USER-FACING —
+/// declared, parsed, and listed in the help (unlike the hidden
+/// `--relaxed-levers`), next to the `--max-retries` cap it composes with.
+#[test]
+fn the_rename_retries_flag_parses_and_lists() {
+    let opts = parse_opts(&["in.js", "--rename-retries", "2"]);
+    assert_eq!(opts.str("renameRetries"), Some("2"));
+    let root = program();
+    let help = root.help_information(&[]);
+    assert!(
+        help.contains("--rename-retries <n>"),
+        "the budget flag is user-facing: {help}"
+    );
+    let max = help.find("--max-retries").expect("--max-retries is listed");
+    let rename = help
+        .find("--rename-retries")
+        .expect("--rename-retries is listed");
+    assert!(
+        max < rename,
+        "--rename-retries lists next to the cap it composes with"
+    );
+}
+
 fn golden_help(command: &str) -> String {
     let path = format!(
         "{}/../../test/golden/help/{command}.txt",

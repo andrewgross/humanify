@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 use humanify_model::llm::{
     BatchRenameRequest, CacheKeyParams, CalleeSignature, LlmCall, LlmErrorKind, NameProvider,
-    RenameFailures, Renames, StrMap, cache_key_of,
+    PriorReject, PriorRejects, RenameFailures, Renames, StrMap, cache_key_of,
 };
 use oxc_semantic::Semantic;
 use oxc_span::Span;
@@ -238,13 +238,15 @@ struct Entry {
     old: String,
     new: String,
     identity: bool,
-    suffix_on_reject: bool,
     ctx: usize,
     binding: Option<BindingInfo>,
     target: ApplyTarget,
     live: Live,
-    /// A retry entry's previous (collided) suggestion.
-    prev_name: Option<String>,
+    /// Every prior rejected suggestion of this identifier (the ACCUMULATED
+    /// disclosure each further re-ask carries), oldest first:
+    /// (suggestion, rejection code — None for a used-set collision).
+    /// Empty for a lane's first-round entry; nonempty marks a re-ask entry.
+    rejects: Vec<(String, Option<&'static str>)>,
 }
 
 /// A barrier rejection seeding a retry, with the re-ask cause it was
@@ -263,6 +265,9 @@ struct RetryItem {
     id: String,
     index: usize,
     prev_name: String,
+    /// The item's FULL reject history (prev_name is its last entry): the
+    /// retry's prompt discloses all of it.
+    rejects: Vec<(String, Option<&'static str>)>,
     target: ApplyTarget,
     binding: Option<BindingInfo>,
 }
@@ -1146,6 +1151,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 used_names: &used_for_prompt,
                 previous_attempt: &prev,
                 failures: &call.failures,
+                prior_rejects: call.prior_rejects.as_ref(),
                 prior_version_code: prior_context.as_deref(),
                 already_renamed: already.as_ref(),
             })
@@ -1159,6 +1165,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             is_retry: Some(is_retry),
             previous_attempt: is_retry.then(|| prev.clone()),
             failures: is_retry.then(|| call.failures.clone()),
+            prior_rejects: is_retry.then(|| call.prior_rejects.clone()).flatten(),
             system_prompt: None,
             user_prompt: None,
             prompt_body,
@@ -1417,7 +1424,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let prev = StrMap(call.prev.0.clone());
         let mut body = None;
         if is_retry {
-            let prefix = build_module_level_retry_prefix(&prev, &call.failures);
+            let prefix =
+                build_module_level_retry_prefix(&prev, &call.failures, call.prior_rejects.as_ref());
             user = format!("{prefix}\n{user}");
             body = Some(format!(
                 "{prefix}\n{}",
@@ -1433,6 +1441,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             is_retry: Some(is_retry),
             previous_attempt: is_retry.then_some(prev),
             failures: is_retry.then(|| call.failures.clone()),
+            prior_rejects: is_retry.then(|| call.prior_rejects.clone()).flatten(),
             system_prompt: Some(MODULE_LEVEL_RENAME_SYSTEM_PROMPT.to_string()),
             user_prompt: Some(user),
             prompt_body: body,
@@ -1501,12 +1510,27 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         }
     }
 
-    /// `executeWaveRetry`'s request.
+    /// `executeWaveRetry`'s request. The retry's prompt carries the
+    /// ACCUMULATED disclosure: `previous_attempt` holds each id's LAST
+    /// failed suggestion, `prior_rejects` every failed suggestion with
+    /// its rejection class — the second re-ask of a colliding identifier
+    /// names everything that already failed.
     fn retry_request(&self, r: &RetryRun) -> BatchRenameRequest {
         let ids: Vec<String> = r.seed.items.iter().map(|i| i.id.clone()).collect();
         let mut prev = JsRecord::default();
+        let mut prior = PriorRejects::default();
         for item in &r.seed.items {
             prev.set(&item.id, &item.prev_name);
+            prior.0.push((
+                item.id.clone(),
+                item.rejects
+                    .iter()
+                    .map(|(name, code)| PriorReject {
+                        name: name.clone(),
+                        invalid: *code == Some(RejectionReason::InvalidTarget.as_str()),
+                    })
+                    .collect(),
+            ));
         }
         let call = LaneCall {
             batch: ids.clone(),
@@ -1519,6 +1543,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             // The barrier seed's cause is threaded at its own dispatch
             // (`run_retries` → `AskSite::reask`), not through the lane.
             rejections: Vec::new(),
+            prior_rejects: Some(prior),
         };
         let mut request = match &self.strategies[r.strategy] {
             Strategy::Fn { .. } => self.fn_request(r.strategy, r.seed.ctx, &call),
@@ -1572,12 +1597,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 old: item.id.clone(),
                 new: candidate,
                 identity: false,
-                suffix_on_reject: true,
                 ctx: r.seed.ctx,
                 binding: item.binding.clone(),
                 target: item.target.clone(),
                 live,
-                prev_name: Some(item.prev_name.clone()),
+                rejects: item.rejects.clone(),
             });
         }
     }
@@ -1608,10 +1632,16 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             if let Some(w) = &winner_old {
                 seeds[i].winners.set(w, &entry.new);
             }
+            // The item's accumulated history: the entry's prior failures
+            // plus the one that just seeded this re-ask — every further
+            // retry discloses all of it.
+            let mut rejects = entry.rejects.clone();
+            rejects.push((entry.new.clone(), cause_code));
             seeds[i].items.push(RetryItem {
                 id: entry.old,
                 index: entry.binding_index,
                 prev_name: entry.new,
+                rejects,
                 target: entry.target,
                 binding: entry.binding,
             });
@@ -1954,16 +1984,18 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         }
     }
 
-    /// `recordWaveRetryGiveUp`'s outcome half.
-    fn record_retry_give_up(&mut self, ctx: usize, id: &str, prev: &str) {
+    /// `recordWaveRetryGiveUp`'s outcome half. `failed` is the suggestion
+    /// the LAST attempt made; `attempts` counts every ask the identifier
+    /// has had (the initial plus each disclosed re-ask).
+    fn record_retry_give_up(&mut self, ctx: usize, id: &str, failed: &str, attempts: u64) {
         if let Some(r) = self.ctxs[ctx].report.as_mut() {
             r.outcomes.set(
                 id,
                 IdentifierOutcome {
                     status: Status::Duplicate {
-                        conflicted_with: prev.to_string(),
-                        attempts: 2,
-                        suggestion: Some(prev.to_string()),
+                        conflicted_with: failed.to_string(),
+                        attempts,
+                        suggestion: Some(failed.to_string()),
                     },
                     trail: None,
                 },
@@ -2078,12 +2110,11 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 old,
                 new,
                 identity,
-                suffix_on_reject: false,
                 ctx: lr.ctx,
                 binding,
                 target,
                 live,
-                prev_name: None,
+                rejects: Vec::new(),
             });
         }
     }
@@ -2202,7 +2233,14 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         }
     }
 
-    /// `applyWaveBarrier` over every collected entry.
+    /// `applyWaveBarrier` over every collected entry. A rejected entry
+    /// runs the retry policy (`naming::reask`): a reaskable rejection
+    /// with budget left seeds another DISCLOSED re-ask (the accumulated
+    /// reject history travels on the entry, so every re-ask tells the
+    /// model everything that already failed); a re-ask entry whose budget
+    /// is spent — and a first-pass entry when re-asks are disabled
+    /// (`--rename-retries 0`) — takes the deterministic suffix ladder and
+    /// then the terminal give-up; unrecoverable classes stay loud.
     fn barrier(&mut self) -> Vec<Rejection> {
         let _ph = crate::profiling::phase("waves:barrier");
         let mut entries = std::mem::take(&mut self.entries);
@@ -2228,21 +2266,48 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             };
             if applied {
                 self.winners.insert(entry.new.clone(), entry.old.clone());
-                if entry.suffix_on_reject {
+                if !entry.rejects.is_empty() {
                     self.record_retry_outcome(entry.ctx, &entry.old, &entry.new);
                 }
                 continue;
             }
-            if entry.suffix_on_reject {
-                let variant = resolve_conflict(&entry.new, |n| self.live_has(entry.live, n));
-                let (ok, _) = if variant != entry.new {
+            let class = reask::barrier_class(reason);
+            // A first-pass rejection reads as a duplicate until its retry
+            // overwrites it (`recordWaveRejectionOutcome`).
+            let first_pass = entry.rejects.is_empty();
+            if first_pass {
+                self.record_rejection_outcome(entry.ctx, &entry.old, &entry.new);
+            }
+            if reask::reask_again(self.inp.tunables.reask_limit, entry.rejects.len(), class) {
+                let winner_old = self.winners.get(&entry.new).cloned();
+                rejections.push(Rejection {
+                    entry,
+                    winner_old,
+                    cause: class,
+                    cause_code: reason.map(RejectionReason::as_str),
+                });
+            } else if first_pass && !reask::should_reask(class) {
+                // Unrecoverable (`no-binding`, `stale-binding`,
+                // `exported-name`): no re-ask can fix these — the applier's
+                // trail row keeps them loud, and the counter keeps them
+                // visible in the processor report.
+                self.processor.unrecoverable_rejections += 1;
+            } else {
+                // The re-ask budget is spent (or disabled) and the class
+                // was reaskable: the deterministic suffix ladder, then the
+                // terminal give-up (identity bookkeeping). A re-ask entry
+                // was promised this ladder; a first-pass entry reaches it
+                // only when `--rename-retries 0` disabled the re-ask.
+                let suggestion = entry.new.clone();
+                let variant = resolve_conflict(&suggestion, |n| self.live_has(entry.live, n));
+                let (ok, _) = if variant != suggestion {
                     self.apply(&entry, &variant)
                 } else {
                     (false, None)
                 };
                 if ok {
                     self.processor.contention.push(ContentionEvent {
-                        requested: entry.new.clone(),
+                        requested: suggestion,
                         resolved_to: variant.clone(),
                         old_name: entry.old.clone(),
                         site: "wave",
@@ -2250,34 +2315,10 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     self.record_retry_outcome(entry.ctx, &entry.old, &variant);
                     self.winners.insert(variant, entry.old.clone());
                 } else {
-                    // Terminal give-up: identity bookkeeping.
                     self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
-                    let prev = entry.prev_name.clone().unwrap_or_default();
-                    self.record_retry_give_up(entry.ctx, &entry.old, &prev);
+                    let attempts = entry.rejects.len() as u64 + 1;
+                    self.record_retry_give_up(entry.ctx, &entry.old, &suggestion, attempts);
                 }
-                continue;
-            }
-            self.record_rejection_outcome(entry.ctx, &entry.old, &entry.new);
-            if reask::barrier_reask(taken, reason) {
-                let winner_old = self.winners.get(&entry.new).cloned();
-                // The ask-trace cause: the seeding rejection's class, as
-                // `barrier_reask` itself decided it (recording only).
-                let cause = match reason {
-                    Some(r) => reask::class_of(r),
-                    None => reask::ReaskClass::NameTaken,
-                };
-                rejections.push(Rejection {
-                    entry,
-                    winner_old,
-                    cause,
-                    cause_code: reason.map(RejectionReason::as_str),
-                });
-            } else {
-                // Unrecoverable (`no-binding`, `stale-binding`,
-                // `exported-name`): no re-ask can fix these — the applier's
-                // trail row keeps them loud, and the counter keeps them
-                // visible in the processor report.
-                self.processor.unrecoverable_rejections += 1;
             }
         }
         rejections

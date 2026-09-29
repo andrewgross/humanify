@@ -77,7 +77,8 @@ pub struct NamingConfig {
     /// [`era::EraCapture`] (observation only).
     pub capture_dump: bool,
     /// `batchSize` / `maxRetriesPerIdentifier` / `maxFreeRetries` /
-    /// `laneThreshold` (the defaults when unset).
+    /// `laneThreshold` (the defaults when unset) + the Rust-run re-ask
+    /// budget (`--rename-retries`, `naming::reask`'s default).
     pub tunables: crate::naming::waves::batch::WaveTunables,
     /// `--probe shingle-probe`.
     pub shingle_probe: bool,
@@ -351,6 +352,7 @@ pub fn run_naming<P: NameProvider>(
             &config.params,
             trail,
             config.emit_rename_ledger,
+            config.tunables.reask_limit,
         ) {
             Ok(o) => {
                 ledger_stages.extend(o.ledger.map(|l| (text.clone(), l)));

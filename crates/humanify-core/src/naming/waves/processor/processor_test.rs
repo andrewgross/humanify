@@ -170,23 +170,49 @@ fn a_module_collision_retry_discloses_and_lists_the_names_the_run_applied() {
         .iter()
         .filter(|d| d.request.is_retry == Some(true))
         .collect();
-    assert_eq!(retry.len(), 1, "exactly one re-ask for the collision");
-    let retry = retry[0];
+    assert_eq!(
+        retry.len(),
+        2,
+        "the stubborn loser runs the default budget out (two re-asks)"
+    );
+    let first = retry[0];
     assert!(
-        retry
+        first
             .user_prompt
             .contains("DO NOT suggest these names: eventHooks"),
         "the re-ask discloses the collision: {}",
-        retry.user_prompt
+        first.user_prompt
     );
     assert!(
-        retry.request.used_names.iter().any(|n| n == "q2Named"),
+        first.request.used_names.iter().any(|n| n == "q2Named"),
         "the re-ask's avoid-list must carry the sibling the run just named: {:?}",
-        retry.request.used_names
+        first.request.used_names
+    );
+    // The SECOND re-ask re-discloses the whole accumulated history: the
+    // MapProvider suggested `eventHooks` twice, so both disclosure lines
+    // are present (the do-not list dedups the repeated name).
+    let second = retry[1];
+    assert!(
+        second
+            .user_prompt
+            .contains("DO NOT suggest these names: eventHooks"),
+        "the second re-ask still blocklists the collided name: {}",
+        second.user_prompt
+    );
+    assert_eq!(
+        second
+            .user_prompt
+            .matches("but that conflicts with an existing name")
+            .count(),
+        2,
+        "every prior suggestion gets its own disclosure line: {}",
+        second.user_prompt
     );
     let code = out.code.expect("shipped");
     assert!(code.contains("eventHooks"), "{code}");
     assert!(code.contains("q2Named"), "{code}");
+    // The budget exhausted, the loser kept the deterministic decoration.
+    assert!(code.contains("eventHooksVal"), "{code}");
     // Exactly one binding won eventHooks; the loser got a fresh name.
     assert_ne!(code.matches("eventHooks").count(), 0);
 }
@@ -255,10 +281,12 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
     );
 }
 
-/// The ask-trace pin: the disclosed re-ask of the collision fix records
+/// The ask-trace pin: every disclosed re-ask of the collision fix records
 /// `retryCause: NameTaken` (the barrier's used-set collision had no
-/// applier code; the cause is the reask class verbatim) and is BOUNDED —
-/// no second re-ask for the same scope (`reask::REASK_LIMIT` is 1).
+/// applier code; the cause is the reask class verbatim) and the series is
+/// BOUNDED — no scope re-asks more than `reask::REASK_LIMIT` (2) times.
+/// The MapProvider is stubborn (it answers `eventHooks` on every ask of
+/// the colliding pair), so the loser runs the budget to exhaustion.
 #[test]
 fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
     let fresh = "var q1 = 1;\n\
@@ -281,13 +309,18 @@ fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
         .iter()
         .filter(|d| d.request.is_retry == Some(true))
         .collect();
-    assert_eq!(retry.len(), 1, "exactly one re-ask (REASK_LIMIT is 1)");
-    let ask = &retry[0].ask;
-    assert_eq!(ask.cause, Some(RetryCause::NameTaken));
-    assert!(
-        ask.detail.is_none(),
-        "a used-set collision has no applier code"
+    assert_eq!(
+        retry.len(),
+        2,
+        "the two re-asks of the default budget (REASK_LIMIT is 2)"
     );
+    for ask in retry.iter().map(|d| &d.ask) {
+        assert_eq!(ask.cause, Some(RetryCause::NameTaken));
+        assert!(
+            ask.detail.is_none(),
+            "a used-set collision has no applier code"
+        );
+    }
     // The lane-path re-asks (a round-2 `failures.duplicates` ask, not a
     // barrier seed) leave the cause for the writer to derive.
     let first_round = out
@@ -456,4 +489,208 @@ fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
     assert_eq!(*provider.p_asks.borrow(), 2, "ask + one round-2, bounded");
     let code = out.code.expect("shipped");
     assert!(code.contains("paramValue"), "{code}");
+}
+
+/// The accumulation pin (2026-09-29): a collision loser whose re-asks
+/// keep colliding gets the DEFAULT TWO disclosed re-asks, and the second
+/// re-ask discloses EVERY prior suggestion and why it was rejected — both
+/// failed names, each with its own conflict line, in the do-not-suggest
+/// block. After the budget exhausts, the deterministic decoration applies.
+struct RoundProvider {
+    /// Retry dispatches served so far (the answers differ per round).
+    retries: RefCell<usize>,
+}
+
+impl RoundProvider {
+    fn new() -> RoundProvider {
+        RoundProvider {
+            retries: RefCell::new(0),
+        }
+    }
+}
+
+impl humanify_model::llm::NameProvider for RoundProvider {
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        calls
+            .into_iter()
+            .map(|c| {
+                let entries: Vec<(String, Option<String>)> = c
+                    .request
+                    .identifiers
+                    .iter()
+                    .map(|id| {
+                        // First round: the q1/e0 collision. Re-ask 1
+                        // offers the sibling's applied name (taken);
+                        // re-ask 2 offers the winner's name again.
+                        let s = if c.request.is_retry != Some(true) {
+                            name_of(id)
+                        } else if *self.retries.borrow() == 0 {
+                            "q2Named".to_string()
+                        } else {
+                            "eventHooks".to_string()
+                        };
+                        (id.clone(), Some(s))
+                    })
+                    .collect();
+                if c.request.is_retry == Some(true) {
+                    *self.retries.borrow_mut() += 1;
+                }
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: humanify_model::llm::Renames::from_entries(entries),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn the_second_reask_discloses_every_prior_suggestion_and_is_bounded() {
+    let fresh = "var q1 = 1;\n\
+                 var q2 = 2;\n\
+                 function e0(p) {\n  return p + q1;\n}\n\
+                 console.log(e0(q2), q1, q2);\n";
+    let provider = RoundProvider::new();
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &plain_config(),
+        &provider,
+    )
+    .expect("the stage runs");
+    let retry: Vec<_> = out
+        .waves
+        .dispatches
+        .iter()
+        .filter(|d| d.request.is_retry == Some(true))
+        .collect();
+    assert_eq!(retry.len(), 2, "exactly the two re-asks of the budget");
+    assert_eq!(*provider.retries.borrow(), 2, "bounded: no third re-ask");
+    let second = retry[1];
+    let id = &second.request.identifiers[0];
+    // Every prior suggestion, oldest first, each with its reason.
+    for failed in ["eventHooks", "q2Named"] {
+        assert!(
+            second.user_prompt.contains(&format!(
+                "- \"{id}\" was suggested as \"{failed}\" but that conflicts with an existing name"
+            )),
+            "the {failed} failure disclosed: {}",
+            second.user_prompt
+        );
+    }
+    assert!(
+        second
+            .user_prompt
+            .contains("DO NOT suggest these names: eventHooks, q2Named"),
+        "the accumulated do-not-suggest block: {}",
+        second.user_prompt
+    );
+    // The first re-ask discloses only the one failure it knows about.
+    assert!(
+        retry[0]
+            .user_prompt
+            .contains("DO NOT suggest these names: eventHooks\n"),
+        "the first re-ask blocklists just the collided name: {}",
+        retry[0].user_prompt
+    );
+    assert!(
+        !retry[0].user_prompt.contains("q2Named\", "),
+        "the first re-ask cannot disclose a failure that has not happened: {}",
+        retry[0].user_prompt
+    );
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("eventHooksVal"),
+        "the exhausted budget falls back to the decoration: {code}"
+    );
+}
+
+#[test]
+fn a_single_reask_budget_restores_the_old_bounded_behavior() {
+    let fresh = "var q1 = 1;\n\
+                 var q2 = 2;\n\
+                 function e0(p) {\n  return p + q1;\n}\n\
+                 console.log(e0(q2), q1, q2);\n";
+    let mut config = plain_config();
+    config.tunables.reask_limit = 1;
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &MapProvider::new(),
+    )
+    .expect("the stage runs");
+    let retry: Vec<_> = out
+        .waves
+        .dispatches
+        .iter()
+        .filter(|d| d.request.is_retry == Some(true))
+        .collect();
+    assert_eq!(retry.len(), 1, "a single-reask budget: exactly one re-ask");
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("eventHooksVal"),
+        "the spent budget falls back to the decoration: {code}"
+    );
+}
+
+#[test]
+fn a_zero_reask_budget_gives_up_on_the_ladder_and_stays_counted() {
+    let fresh = "var q1 = 1;\n\
+                 var q2 = 2;\n\
+                 function e0(p) {\n  return p + q1;\n}\n\
+                 console.log(e0(q2), q1, q2);\n";
+    let mut config = plain_config();
+    config.tunables.reask_limit = 0;
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &MapProvider::new(),
+    )
+    .expect("the stage runs");
+    let retry: Vec<_> = out
+        .waves
+        .dispatches
+        .iter()
+        .filter(|d| d.request.is_retry == Some(true))
+        .collect();
+    assert!(
+        retry.is_empty(),
+        "a zero reask budget: a rejection never re-asks"
+    );
+    // The collision still resolves deterministically — the loser keeps a
+    // decorated variant of its suggestion — and the collision stays
+    // COUNTED: the ladder's repair is a recorded contention event, never
+    // an unrecoverable rejection.
+    let code = out.code.expect("shipped");
+    assert!(code.contains("eventHooks"), "{code}");
+    assert!(code.contains("eventHooksVal"), "{code}");
+    assert_eq!(
+        out.processor.unrecoverable_rejections, 0,
+        "a collision is not an unrecoverable rejection"
+    );
+    assert!(
+        out.processor
+            .contention
+            .iter()
+            .any(|e| e.requested == "eventHooks"
+                && e.resolved_to == "eventHooksVal"
+                && e.site == "wave"),
+        "the disabled re-ask still records the collision's repair: {:?}",
+        out.processor.contention
+    );
 }

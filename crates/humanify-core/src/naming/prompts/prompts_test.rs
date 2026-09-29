@@ -2,7 +2,9 @@
 //! snapshots per prompt type (the TS probe vectors that also ran here were
 //! retired 2026-09-28).
 
-use humanify_model::llm::{BatchRenameRequest, CalleeSignature, RenameFailures, StrMap};
+use humanify_model::llm::{
+    BatchRenameRequest, CalleeSignature, PriorReject, PriorRejects, RenameFailures, StrMap,
+};
 
 use super::*;
 
@@ -54,6 +56,7 @@ fn retry(
         used_names: &used,
         previous_attempt: prev,
         failures: f,
+        prior_rejects: None,
         prior_version_code: prior,
         already_renamed: renamed,
     })
@@ -185,22 +188,32 @@ fn module_body_caps_used_names() {
 
 #[test]
 fn module_prefix_renders_duplicate() {
-    let p =
-        build_module_level_retry_prefix(&map(&[("x", "config")]), &failures(&["x"], &[], &[], &[]));
+    let p = build_module_level_retry_prefix(
+        &map(&[("x", "config")]),
+        &failures(&["x"], &[], &[], &[]),
+        None,
+    );
     assert!(p.contains(r#""x" was suggested as "config""#));
     assert!(p.contains("conflicts"));
 }
 
 #[test]
 fn module_prefix_renders_unchanged() {
-    let p = build_module_level_retry_prefix(&map(&[("z", "z")]), &failures(&[], &[], &[], &["z"]));
+    let p = build_module_level_retry_prefix(
+        &map(&[("z", "z")]),
+        &failures(&[], &[], &[], &["z"]),
+        None,
+    );
     assert!(p.contains(r#""z" was returned as itself"#));
 }
 
 #[test]
 fn module_prefix_renders_invalid() {
-    let p =
-        build_module_level_retry_prefix(&map(&[("y", "delete")]), &failures(&[], &["y"], &[], &[]));
+    let p = build_module_level_retry_prefix(
+        &map(&[("y", "delete")]),
+        &failures(&[], &["y"], &[], &[]),
+        None,
+    );
     assert!(p.contains(r#""y" was suggested as "delete""#));
     assert!(p.contains("not allowed"));
 }
@@ -210,9 +223,109 @@ fn module_prefix_includes_do_not_suggest() {
     let p = build_module_level_retry_prefix(
         &map(&[("a", "badName")]),
         &failures(&["a"], &[], &[], &[]),
+        None,
     );
     assert!(p.contains("DO NOT suggest these names"));
     assert!(p.contains("badName"));
+}
+
+// ---- the accumulated re-ask disclosure (2026-09-29) ----
+
+fn rejects(id: &str, failed: &[&str], invalid: &[bool]) -> PriorRejects {
+    PriorRejects(vec![(
+        id.to_string(),
+        failed
+            .iter()
+            .zip(invalid)
+            .map(|(n, inv)| PriorReject {
+                name: n.to_string(),
+                invalid: *inv,
+            })
+            .collect(),
+    )])
+}
+
+/// Every prior suggestion of a re-asked id gets its OWN disclosure line
+/// and its own slot in the do-not-suggest block, oldest first — the
+/// second re-ask of a colliding identifier tells the model everything
+/// that already failed.
+#[test]
+fn an_accumulated_retry_discloses_every_prior_suggestion_in_order() {
+    let prior = rejects("q1", &["eventHooks", "q2Named"], &[false, false]);
+    let p = build_batch_rename_retry_prompt(&RetryInput {
+        code: "var q1 = 1;",
+        identifiers: &["q1".to_string()],
+        used_names: &["eventHooks".to_string()],
+        previous_attempt: &map(&[("q1", "q2Named")]),
+        failures: &failures(&["q1"], &[], &[], &[]),
+        prior_rejects: Some(&prior),
+        prior_version_code: None,
+        already_renamed: None,
+    });
+    let expected = "Your previous rename suggestions had issues:\n\
+                    - \"q1\" was suggested as \"eventHooks\" but that conflicts with an existing name\n\
+                    - \"q1\" was suggested as \"q2Named\" but that conflicts with an existing name\n";
+    assert!(
+        p.contains(expected),
+        "one line per failure, oldest first: {p}"
+    );
+    assert!(
+        p.contains("DO NOT suggest these names: eventHooks, q2Named\n"),
+        "the accumulated blocklist: {p}"
+    );
+}
+
+/// An accumulated entry that was rejected as an invalid target discloses
+/// ITS reason too (the same wording the lane round-2 uses).
+#[test]
+fn an_accumulated_invalid_suggestion_discloses_its_own_reason() {
+    let prior = rejects("a", &["taken", "delete"], &[false, true]);
+    let p = build_module_level_retry_prefix(
+        &map(&[("a", "delete")]),
+        &failures(&["a"], &[], &[], &[]),
+        Some(&prior),
+    );
+    assert!(
+        p.contains("- \"a\" was suggested as \"taken\" but that conflicts with an existing name\n"),
+        "{p}"
+    );
+    assert!(
+        p.contains(
+            "- \"a\" was suggested as \"delete\" which is not allowed (reserved word, global built-in, or invalid syntax)\n"
+        ),
+        "{p}"
+    );
+    assert!(
+        p.contains("DO NOT suggest these names: taken, delete\n"),
+        "{p}"
+    );
+}
+
+/// A single accumulated entry renders byte-identically to the legacy
+/// `previous_attempt` shape — the first re-ask's prompt is unchanged.
+#[test]
+fn a_single_prior_reject_renders_the_legacy_bytes() {
+    let prior = rejects("q1", &["eventHooks"], &[false]);
+    let with_prior = build_batch_rename_retry_prompt(&RetryInput {
+        code: "var q1 = 1;",
+        identifiers: &["q1".to_string()],
+        used_names: &["eventHooks".to_string()],
+        previous_attempt: &map(&[("q1", "eventHooks")]),
+        failures: &failures(&["q1"], &[], &[], &[]),
+        prior_rejects: Some(&prior),
+        prior_version_code: None,
+        already_renamed: None,
+    });
+    let legacy = retry(
+        "var q1 = 1;",
+        &["q1"],
+        &["eventHooks"],
+        &map(&[("q1", "eventHooks")]),
+        &failures(&["q1"], &[], &[], &[]),
+        None,
+        None,
+    );
+    assert_eq!(with_prior, legacy);
 }
 
 // ---- buildBatchRenameRetryPrompt alreadyRenamed context ----

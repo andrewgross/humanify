@@ -22,9 +22,11 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 // `--inject-ts-hashes` (WP5.6e, 2026-09-25); `--fast [tier]` left
 // 2026-09-28 when the naming schedule flipped to the relaxed tier by
 // default (docs/rust-port/20-fast-mode.md §defaults) and the old
-// conservative path became `--sequential`. `--relaxed-levers` (the lever
-// sizing knob) stays deliberately OUT of the help;
-// `--simulate-llm-latency <path>` (the pacing replay) is listed.
+// conservative path became `--sequential`. `--rename-retries <n>` (the
+// collision re-ask budget, 2026-09-29) is Rust-only too, but user-facing:
+// it is declared, parsed and listed like `--sequential`.
+// `--relaxed-levers` (the lever sizing knob) stays deliberately OUT of
+// the help; `--simulate-llm-latency <path>` (the pacing replay) is listed.
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -189,6 +191,11 @@ pub fn program() -> CliCommand {
         .option(
             "--max-retries <n>",
             "Per-identifier LLM call limit, initial + retries (default: 2; further conflicts resolve by suffixing)",
+            None,
+        )
+        .option(
+            "--rename-retries <n>",
+            "Name-conflict re-ask limit: how many times a rejected rename suggestion may be re-asked, each retry disclosing every failed suggestion (default: 2). Independent of --max-retries — a barrier/sweep collision re-ask consumes this budget, not the in-window call limit",
             None,
         )
         .option(

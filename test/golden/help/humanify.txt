@@ -68,6 +68,12 @@ Options:
   --max-retries <n>              Per-identifier LLM call limit, initial +
                                  retries (default: 2; further conflicts resolve
                                  by suffixing)
+  --rename-retries <n>           Name-conflict re-ask limit: how many times a
+                                 rejected rename suggestion may be re-asked,
+                                 each retry disclosing every failed suggestion
+                                 (default: 2). Independent of --max-retries — a
+                                 barrier/sweep collision re-ask consumes this
+                                 budget, not the in-window call limit
   --max-free-retries <n>         Cross-lane collision retry limit (default: 100)
   --lane-threshold <n>           Min bindings to enable parallel lanes (default:
                                  25)

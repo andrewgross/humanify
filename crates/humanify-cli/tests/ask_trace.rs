@@ -1,9 +1,9 @@
 //! The ask trace (`--dump-asks`) end to end: the stub-named collision
 //! fixture of the 2026-09-28 fix, read through the INSTRUMENT instead of
-//! the model — the re-ask appears with its recorded cause, is bounded at
-//! `reask::REASK_LIMIT`, and the whole log is deterministic run to run
-//! (the pipeline is completion-order-independent by design and the stub
-//! answers deterministically).
+//! the model — the re-asks appear with their recorded cause, are bounded
+//! at `reask::REASK_LIMIT` (2 since 2026-09-29), and the whole log is
+//! deterministic run to run (the pipeline is completion-order-independent
+//! by design and the stub answers deterministically).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
@@ -52,21 +52,37 @@ impl Drop for Scratch {
     }
 }
 
-/// The deterministic stub's answer: `q1` and `e0` both suggest
-/// `eventHooks` (the collision); everything else gets `<id>Named`.
+/// The deterministic stub's answer, keyed on the prompt's own
+/// disclosure: a first-round ask suggests `eventHooks` for the colliding
+/// pair (`q1` and `e0`), a retry with ONE failed suggestion disclosed
+/// (re-ask 1) offers the sibling's applied name `q2Named` — also taken —
+/// and a retry with the ACCUMULATED history (re-ask 2, two disclosed
+/// failures) offers `eventHooks` again. Every answer is a collision, so
+/// the loser runs the re-ask budget out, and the re-ask series only
+/// reaches round 2 if round 1's prompt actually disclosed its failure.
 fn answer(user: &str) -> String {
     let ids = user
         .lines()
-        .find_map(|l| l.strip_prefix("Identifiers to rename: "))
+        .find_map(|l| {
+            l.strip_prefix("Identifiers to rename: ")
+                .or_else(|| l.strip_prefix("Identifiers still needing names: "))
+        })
         .unwrap_or("");
+    let disclosed = user.matches(" was suggested as ").count();
     let entries: serde_json::Map<String, Value> = ids
         .split(", ")
         .filter(|s| !s.is_empty())
         .map(|id| {
-            let name = if id == "q1" || id == "e0" {
-                "eventHooks".to_string()
+            let name = if disclosed == 0 {
+                if id == "q1" || id == "e0" {
+                    "eventHooks".to_string()
+                } else {
+                    format!("{id}Named")
+                }
+            } else if disclosed == 1 {
+                "q2Named".to_string()
             } else {
-                format!("{id}Named")
+                "eventHooks".to_string()
             };
             (id.to_string(), Value::String(name))
         })
@@ -123,9 +139,16 @@ fn start_stub() -> String {
     url
 }
 
-fn run(dir: &Path, input: &str, out: &Path, asks: &Path, endpoint: &str) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_humanify"))
-        .current_dir(dir)
+fn run(
+    dir: &Path,
+    input: &str,
+    out: &Path,
+    asks: &Path,
+    endpoint: &str,
+    extra: &[&str],
+) -> std::process::Output {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_humanify"));
+    cmd.current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .args([
@@ -142,9 +165,11 @@ fn run(dir: &Path, input: &str, out: &Path, asks: &Path, endpoint: &str) -> std:
         .arg("-o")
         .arg(out)
         .arg("--dump-asks")
-        .arg(asks)
-        .output()
-        .unwrap()
+        .arg(asks);
+    for a in extra {
+        cmd.arg(a);
+    }
+    cmd.output().unwrap()
 }
 
 /// The parsed ask rows, in recording order.
@@ -158,10 +183,15 @@ fn rows(asks: &Path) -> Vec<Value> {
 
 /// One instrumented run of the collision fixture; returns the log's bytes.
 fn run_once(s: &Scratch, input: &str, run_i: usize) -> String {
+    run_with(s, input, run_i, &[])
+}
+
+/// [`run_once`] with extra CLI args.
+fn run_with(s: &Scratch, input: &str, run_i: usize, extra: &[&str]) -> String {
     let url = start_stub();
     let asks = s.0.join(format!("asks-{run_i}.jsonl"));
     let out = s.0.join(format!("out-{run_i}"));
-    let result = run(&s.0, input, &out, &asks, &url);
+    let result = run(&s.0, input, &out, &asks, &url, extra);
     let err = String::from_utf8_lossy(&result.stderr).into_owned();
     assert_eq!(result.status.code(), Some(0), "{err}");
     assert!(asks.exists(), "the flag wrote the log: {err}");
@@ -248,7 +278,9 @@ fn the_collision_reask_is_recorded_and_bounded() {
             "the re-asked scope {scope} was asked in the first round"
         );
     }
-    // BOUNDED at reask::REASK_LIMIT — no scope re-asks twice.
+    // BOUNDED at reask::REASK_LIMIT (2): no scope re-asks more than twice,
+    // and the fixture's stubborn loser (the stub's answers all collide)
+    // runs the budget to exhaustion — exactly two.
     let mut scopes: Vec<String> = retries
         .iter()
         .map(|r| field(r, "scope").as_str().unwrap_or_default().to_string())
@@ -258,7 +290,143 @@ fn the_collision_reask_is_recorded_and_bounded() {
     bounded.dedup();
     assert_eq!(
         scopes.len(),
-        bounded.len(),
-        "one re-ask per scope (REASK_LIMIT=1)"
+        2 * bounded.len(),
+        "exactly two re-asks per re-asked scope (REASK_LIMIT=2)"
+    );
+}
+
+/// The ACCUMULATED disclosure, end to end through the binary: the second
+/// re-ask's prompt names EVERY prior suggestion and why it was rejected
+/// (read from `--dump-artifacts` prompts.jsonl), and the ask log's
+/// per-scope `round` is the cumulative attempt number (initial 1, re-ask
+/// one 2, re-ask two 3).
+#[test]
+fn the_second_reask_prompt_carries_the_accumulated_blocklist() {
+    let s = Scratch::new("accumulated");
+    let input = s.0.join("bundle.js");
+    std::fs::write(&input, INPUT).unwrap();
+    let input = input.display().to_string();
+    let url = start_stub();
+    let asks = s.0.join("asks.jsonl");
+    let out = s.0.join("out");
+    let artifacts = s.0.join("artifacts");
+    let result = run(
+        &s.0,
+        &input,
+        &out,
+        &asks,
+        &url,
+        &["--dump-artifacts", artifacts.to_str().unwrap()],
+    );
+    let err = String::from_utf8_lossy(&result.stderr).into_owned();
+    assert_eq!(result.status.code(), Some(0), "{err}");
+
+    // Two disclosed re-asks of the loser's scope, in recording order.
+    let log = rows(&asks);
+    let mut retries: Vec<&Value> = log
+        .iter()
+        .filter(|r| field(r, "reason") == "retry")
+        .collect();
+    assert_eq!(retries.len(), 2, "the default budget's two re-asks");
+    retries.sort_by_key(|r| field(r, "seq").as_u64().unwrap_or_default());
+    assert_eq!(
+        field(retries[0], "round"),
+        Value::from(2u64),
+        "the first re-ask is the loser scope's second ask: {}",
+        serde_json::to_string(retries[0]).unwrap()
+    );
+    assert_eq!(
+        field(retries[1], "round"),
+        Value::from(3u64),
+        "the second re-ask is the loser scope's third ask (the cumulative attempt number): {}",
+        serde_json::to_string(retries[1]).unwrap()
+    );
+    let scope = field(retries[0], "scope").as_str().unwrap().to_string();
+    assert_eq!(
+        field(retries[1], "scope").as_str(),
+        Some(scope.as_str()),
+        "both re-asks retry the same colliding scope"
+    );
+
+    // The prompts: the second re-ask discloses the whole history.
+    let prompts_text =
+        std::fs::read_to_string(artifacts.join("prompts.jsonl")).expect("prompts.jsonl");
+    let retry_prompts: Vec<Value> = prompts_text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).expect("a JSONL row"))
+        .filter(|r: &Value| r["site"] == "naming" && r["isRetry"] == Value::Bool(true))
+        .collect();
+    assert_eq!(retry_prompts.len(), 2, "both re-asks recorded");
+    let second = &retry_prompts[1];
+    let user = second["userPrompt"].as_str().unwrap();
+    let id = second["identifiers"][0].as_str().unwrap();
+    for failed in ["eventHooks", "q2Named"] {
+        assert!(
+            user.contains(&format!(
+                "- \"{id}\" was suggested as \"{failed}\" but that conflicts with an existing name"
+            )),
+            "the {failed} failure disclosed: {user}"
+        );
+    }
+    assert!(
+        user.contains("DO NOT suggest these names: eventHooks, q2Named"),
+        "the accumulated do-not-suggest block: {user}"
+    );
+    // The budget exhausted: the loser keeps the deterministic decoration.
+    // (Without --split the passthrough adapter's `<out>/index.js` is
+    // rewritten in place with the shipped text.)
+    let shipped = std::fs::read_to_string(out.join("index.js")).expect("the shipped text");
+    assert!(
+        shipped.contains("eventHooksVal"),
+        "the suffix ladder settled the loser: {shipped}"
+    );
+}
+
+/// `--rename-retries <n>` sizes the budget: the default gives the
+/// collision loser TWO disclosed re-asks, `1` restores the old single
+/// re-ask, and `0` never re-asks — the colliding suggestion falls straight
+/// to the deterministic suffix ladder and the run still exits clean.
+#[test]
+fn the_rename_retries_flag_sizes_the_reask_budget() {
+    let s = Scratch::new("flag");
+    let input = s.0.join("bundle.js");
+    std::fs::write(&input, INPUT).unwrap();
+    let input = input.display().to_string();
+
+    let count = |run_i: usize, extra: &[&str]| {
+        let url = start_stub();
+        let asks = s.0.join(format!("asks-{run_i}.jsonl"));
+        let out = s.0.join(format!("out-{run_i}"));
+        let result = run(&s.0, &input, &out, &asks, &url, extra);
+        assert_eq!(
+            result.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        rows(&asks)
+            .into_iter()
+            .filter(|r| field(r, "reason") == "retry")
+            .count()
+    };
+    assert_eq!(count(0, &[]), 2, "the default budget is TWO re-asks");
+    assert_eq!(
+        count(1, &["--rename-retries", "1"]),
+        1,
+        "--rename-retries 1 restores the old single re-ask"
+    );
+    assert_eq!(
+        count(2, &["--rename-retries", "0"]),
+        0,
+        "--rename-retries 0 never re-asks"
+    );
+    // Disabled re-asks still resolve the collision: the deterministic
+    // decoration lands in the passthrough adapter's `<out>/index.js` and
+    // the run exits 0 (asserted inside `count`).
+    let shipped = std::fs::read_to_string(s.0.join("out-2/index.js")).expect("the shipped text");
+    assert!(
+        shipped.contains("eventHooksVal"),
+        "the suffix ladder settles the loser without any re-ask: {shipped}"
     );
 }

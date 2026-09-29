@@ -249,19 +249,32 @@ pub struct SweepResult {
     pub dispatches: Vec<SweepDispatch>,
     pub misses: usize,
     pub errors: usize,
-    /// Collision-class rejections that got the one disclosed re-ask
-    /// (`naming::reask`) — 0 on the TS-era frozen rows.
+    /// Re-ask dispatch targets, summed over the bounded re-ask rounds
+    /// (`naming::reask`, `--rename-retries`) — a target re-asked twice
+    /// counts twice.
     pub reasked: usize,
     /// Re-asked suggestions that applied.
     pub reask_applied: usize,
-    /// Re-asked suggestions rejected again (or left unanswered) — the
-    /// give-up half of the bounded retry.
+    /// Re-asked suggestions rejected again once the budget was spent (or
+    /// left unanswered) — the give-up half of the bounded retry.
     pub reask_dropped: usize,
 }
 
-/// A collision-class rejection worth ONE disclosed re-ask: the target, the
-/// suggestion the model made, and the applier's rejection (`naming::reask`
-/// classifies the reason; the ask trace records class + code).
+/// One pending re-ask's seed: the LAST suggestion the model made, the
+/// applier's rejection of it (class + code, for the ask site), and the
+/// ACCUMULATED reject history the next prompt must disclose.
+type SweepSeed = (
+    String,
+    crate::naming::reask::ReaskClass,
+    &'static str,
+    Vec<(String, &'static str)>,
+);
+
+/// One pending disclosed re-ask: the target, the LAST suggestion the
+/// model made, the applier's rejection of it (`naming::reask` classifies
+/// the reason; the ask trace records class + code), and the ACCUMULATED
+/// history of every suggestion that already failed — each further re-ask
+/// discloses all of it.
 struct SweepReask {
     target: MintedBinding,
     suggestion: String,
@@ -269,6 +282,18 @@ struct SweepReask {
     /// ask-trace site; nothing decides on it).
     class: crate::naming::reask::ReaskClass,
     code: &'static str,
+    /// Every prior rejected suggestion, oldest first: (name, code).
+    rejects: Vec<(String, &'static str)>,
+}
+
+/// The re-ask context one apply round runs under: the budget
+/// (`--rename-retries`), how many re-asks the round's targets have
+/// already had (0 on the sweep's first apply, k during re-ask round k),
+/// and each target's accumulated reject history.
+struct ReaskCtx<'c> {
+    limit: usize,
+    spent: usize,
+    carried: &'c HashMap<String, Vec<(String, &'static str)>>,
 }
 
 /// Apply one group's suggestions (`applyGroupResponse`). `renames[name]` is
@@ -279,12 +304,15 @@ struct SweepReask {
 /// The third return is the re-askable set: suggestions the validated
 /// applier rejected for a reason a disclosed re-ask can fix (the
 /// collision classes — `target-in-scope`, `target-visible`,
-/// `shadows-child`, `target-free-name`). Before the 2026-09-28 fix these
-/// were counted `skipped` and dropped — the minted name kept forever.
+/// `shadows-child`, `target-free-name`) while the identifier still has
+/// re-ask budget (`naming::reask::reask_again`). Before the 2026-09-28
+/// fix these were counted `skipped` and dropped — the minted name kept
+/// forever.
 fn apply_group_response(
     state: &mut RenameState,
     group: &SweepGroup,
     renames: &Renames,
+    reask: &ReaskCtx<'_>,
 ) -> (usize, usize, Vec<SweepReask>) {
     let (mut named, mut skipped) = (0, 0);
     let mut reasks = Vec::new();
@@ -327,13 +355,16 @@ fn apply_group_response(
         state.record(target.binding, &target.name, row, true);
         if let Some(r) = attempt.reason
             && let class = crate::naming::reask::class_of(r)
-            && crate::naming::reask::should_reask(class)
+            && crate::naming::reask::reask_again(reask.limit, reask.spent, class)
         {
+            let mut rejects = reask.carried.get(&target.name).cloned().unwrap_or_default();
+            rejects.push((new_name.clone(), r.as_str()));
             reasks.push(SweepReask {
                 target: target.clone(),
                 suggestion: new_name,
                 class,
                 code: r.as_str(),
+                rejects,
             });
         }
     }
@@ -342,9 +373,11 @@ fn apply_group_response(
 
 /// `sweepMintedNames`: force-name the minted survivors the deterministic
 /// floor left, one request per group, applied in group-build order. A
-/// suggestion rejected for a collision class gets ONE disclosed re-ask
-/// (the previous suggestion named and blocklisted — the same retry prompt
-/// shape the wave lanes use); a rejected re-ask gives up, recorded.
+/// suggestion rejected for a collision class gets the run's disclosed
+/// re-asks (default TWO, `--rename-retries`): each one names and
+/// blocklists EVERY suggestion that already failed — the same retry
+/// prompt shape the wave lanes use. A budget exhausted at a further
+/// collision gives up, recorded.
 pub fn sweep_minted_names<P: NameProvider>(
     semantic: &Semantic<'_>,
     state: &mut RenameState,
@@ -352,6 +385,7 @@ pub fn sweep_minted_names<P: NameProvider>(
     taint: &EvalWithTaint,
     provider: &P,
     params: &CacheKeyParams,
+    reask_limit: usize,
 ) -> SweepResult {
     let targets = collect_sweep_targets(semantic, state, eligible, taint);
     if targets.is_empty() {
@@ -391,18 +425,23 @@ pub fn sweep_minted_names<P: NameProvider>(
         });
     }
     let responses = provider.run_wave(calls);
-    let mut reasks: Vec<(usize, Vec<SweepReask>)> = Vec::new();
-    for (gi, (g, response)) in groups.iter().zip(responses).enumerate() {
+    let none: HashMap<String, Vec<(String, &'static str)>> = HashMap::new();
+    let first = ReaskCtx {
+        limit: reask_limit,
+        spent: 0,
+        carried: &none,
+    };
+    let mut reasks: Vec<SweepReask> = Vec::new();
+    for (g, response) in groups.iter().zip(responses) {
         match response {
             Ok(resp) => {
-                let (named, skipped, group_reasks) = apply_group_response(state, g, &resp.renames);
+                let (named, skipped, group_reasks) =
+                    apply_group_response(state, g, &resp.renames, &first);
                 result.named += named;
                 // A re-askable rejection is PENDING, not skipped — the
                 // re-ask decides, and its dropped half lands in `skipped`.
                 result.skipped += skipped - group_reasks.len();
-                if !group_reasks.is_empty() {
-                    reasks.push((gi, group_reasks));
-                }
+                reasks.extend(group_reasks);
             }
             Err(e) => {
                 if e.kind == LlmErrorKind::CacheMiss {
@@ -415,135 +454,181 @@ pub fn sweep_minted_names<P: NameProvider>(
         }
     }
     if !reasks.is_empty() {
-        sweep_reask(semantic, state, reasks, provider, params, &mut result);
+        sweep_reask(
+            semantic,
+            state,
+            reasks,
+            provider,
+            params,
+            reask_limit,
+            &mut result,
+        );
     }
     result
 }
 
-/// The sweep's ONE bounded re-ask per collision-rejected target. The retry
-/// request reuses the wave lanes' round-2 envelope (`is_retry` +
-/// `previous_attempt` + `failures.duplicates`), so the model sees
-/// "was suggested as X but that conflicts with an existing name" and a
-/// blocklist — the same disclosure the function waves give. The re-asked
-/// groups are REBUILT over the current state, so the code window and the
-/// used-names list show the names the first apply just landed.
+/// The sweep's bounded re-ask rounds for the collision-rejected targets —
+/// ONE round per loop iteration, until the budget (`--rename-retries`)
+/// exhausts or every re-asked suggestion settles. The retry request
+/// reuses the wave lanes' round-2 envelope (`is_retry` +
+/// `previous_attempt` + `failures.duplicates` + the accumulated
+/// `prior_rejects`), so the model sees every suggestion that failed and
+/// why, plus a blocklist — the same disclosure the function waves give.
+/// The re-asked groups are REBUILT over the current state each round, so
+/// the code window and the used-names list show the names the previous
+/// applies just landed. A further reaskable rejection once the budget is
+/// spent counts as dropped — never a loop.
 fn sweep_reask<P: NameProvider>(
     semantic: &Semantic<'_>,
     state: &mut RenameState,
-    reasks: Vec<(usize, Vec<SweepReask>)>,
+    mut pending: Vec<SweepReask>,
     provider: &P,
     params: &CacheKeyParams,
+    limit: usize,
     result: &mut SweepResult,
 ) {
-    // The re-asked target's suggestion AND its seeding rejection, as one
-    // record (the ask site carries the class; the codes go to its detail).
-    let seed_of: HashMap<String, (String, crate::naming::reask::ReaskClass, &'static str)> = reasks
-        .iter()
-        .flat_map(|(_, items)| items.iter())
-        .map(|r| {
-            (
-                r.target.name.clone(),
-                (r.suggestion.clone(), r.class, r.code),
-            )
-        })
-        .collect();
-    let targets: Vec<MintedBinding> = reasks
-        .into_iter()
-        .flat_map(|(_, items)| items.into_iter().map(|r| r.target))
-        .collect();
-    let fresh = build_groups(semantic, state, targets);
-    let mut calls = Vec::with_capacity(fresh.len());
-    let mut owners = Vec::with_capacity(fresh.len());
-    for g in &fresh {
-        let mut prev = crate::naming::waves::jsset::JsRecord::default();
-        let mut failures = humanify_model::llm::RenameFailures::default();
-        for t in &g.targets {
-            let (suggestion, ..) = seed_of
-                .get(&t.name)
-                .expect("every re-asked target carries its suggestion");
-            prev.set(&t.name, suggestion);
-            failures.duplicates.push(t.name.clone());
-        }
-        // The ask site: the group's targets were seeded by applier
-        // rejections — the class when they all agree (the usual case: one
-        // collision class), their codes in the detail. Recording only.
-        let seeded: Vec<(crate::naming::reask::ReaskClass, &'static str)> = g
-            .targets
+    // Re-asks each pending target has already had (loop iteration k is
+    // re-ask round k, so its applies run at spent = k).
+    let mut spent = 0usize;
+    while !pending.is_empty() {
+        spent += 1;
+        // The round's seeds: each target's last suggestion, its latest
+        // rejection (class + code, for the ask site), and the accumulated
+        // reject history the next prompt must disclose.
+        let seed_of: HashMap<String, SweepSeed> = pending
             .iter()
-            .map(|t| {
-                let (_, class, code) = seed_of.get(&t.name).expect("every target carries its seed");
-                (*class, *code)
+            .map(|r| {
+                (
+                    r.target.name.clone(),
+                    (r.suggestion.clone(), r.class, r.code, r.rejects.clone()),
+                )
             })
             .collect();
-        let mut codes: Vec<&str> = seeded.iter().map(|(_, c)| *c).collect();
-        codes.sort_unstable();
-        codes.dedup();
-        let uniform = seeded.iter().map(|(c, _)| *c).all(|c| c == seeded[0].0);
-        let ask = crate::naming::ask_trace::AskSite {
-            phase: 0,
-            prior: false,
-            cause: uniform.then_some(seeded[0].0.into()),
-            detail: Some(codes.join(",")),
-        };
-        let request = BatchRenameRequest {
-            code: g.code.clone(),
-            identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
-            used_names: crate::naming::waves::processor::build_retry_used_names(
-                &g.used_names,
-                &prev,
-            ),
-            is_retry: Some(true),
-            previous_attempt: Some(humanify_model::llm::StrMap(prev.0.clone())),
-            failures: Some(failures),
-            ..BatchRenameRequest::default()
-        };
-        let system_prompt = render_system_prompt(&request);
-        let user_prompt = render_user_prompt(&request);
-        result.dispatches.push(SweepDispatch {
-            cache_key: cache_key_of(&request, params),
-            system_prompt: system_prompt.clone(),
-            user_prompt: user_prompt.clone(),
-            targets: g
+        let carried: HashMap<String, Vec<(String, &'static str)>> = seed_of
+            .iter()
+            .map(|(k, (_, _, _, rejects))| (k.clone(), rejects.clone()))
+            .collect();
+        let targets: Vec<MintedBinding> = pending.into_iter().map(|r| r.target).collect();
+        let fresh = build_groups(semantic, state, targets);
+        let mut calls = Vec::with_capacity(fresh.len());
+        let mut owners = Vec::with_capacity(fresh.len());
+        for g in &fresh {
+            let mut prev = crate::naming::waves::jsset::JsRecord::default();
+            let mut failures = humanify_model::llm::RenameFailures::default();
+            let mut prior = humanify_model::llm::PriorRejects::default();
+            for t in &g.targets {
+                let (suggestion, _, _, rejects) = seed_of
+                    .get(&t.name)
+                    .expect("every re-asked target carries its suggestion");
+                prev.set(&t.name, suggestion);
+                failures.duplicates.push(t.name.clone());
+                prior.0.push((
+                    t.name.clone(),
+                    rejects
+                        .iter()
+                        .map(|(name, code)| humanify_model::llm::PriorReject {
+                            name: name.clone(),
+                            invalid: *code == "invalid-target",
+                        })
+                        .collect(),
+                ));
+            }
+            // The ask site: the group's targets were seeded by applier
+            // rejections — the class when they all agree (the usual case:
+            // one collision class), their codes in the detail. Recording
+            // only.
+            let seeded: Vec<(crate::naming::reask::ReaskClass, &'static str)> = g
                 .targets
                 .iter()
-                .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
-                .collect(),
-            request: request.clone(),
-            ask,
-        });
-        calls.push(LlmCall {
-            request,
-            system_prompt,
-            user_prompt,
-        });
-        owners.push(SweepGroup {
-            code: g.code.clone(),
-            used_names: g.used_names.clone(),
-            targets: g.targets.clone(),
-        });
-    }
-    let responses = provider.run_wave(calls);
-    for (narrow, response) in owners.into_iter().zip(responses) {
-        result.reasked += narrow.targets.len();
-        match response {
-            Ok(resp) => {
-                // Same validation; a further reaskable rejection is bounded
-                // away (one re-ask — never a loop) and counts as dropped.
-                let (named, dropped, _) = apply_group_response(state, &narrow, &resp.renames);
-                result.reask_applied += named;
-                result.reask_dropped += dropped;
-                result.named += named;
-                result.skipped += dropped;
-            }
-            Err(e) => {
-                if e.kind == LlmErrorKind::CacheMiss {
-                    result.misses += 1;
-                } else {
-                    result.errors += 1;
+                .map(|t| {
+                    let (_, class, code, _) =
+                        seed_of.get(&t.name).expect("every target carries its seed");
+                    (*class, *code)
+                })
+                .collect();
+            let mut codes: Vec<&str> = seeded.iter().map(|(_, c)| *c).collect();
+            codes.sort_unstable();
+            codes.dedup();
+            let uniform = seeded.iter().map(|(c, _)| *c).all(|c| c == seeded[0].0);
+            let ask = crate::naming::ask_trace::AskSite {
+                phase: 0,
+                prior: false,
+                cause: uniform.then_some(seeded[0].0.into()),
+                detail: Some(codes.join(",")),
+            };
+            let request = BatchRenameRequest {
+                code: g.code.clone(),
+                identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
+                used_names: crate::naming::waves::processor::build_retry_used_names(
+                    &g.used_names,
+                    &prev,
+                ),
+                is_retry: Some(true),
+                previous_attempt: Some(humanify_model::llm::StrMap(prev.0.clone())),
+                failures: Some(failures),
+                prior_rejects: Some(prior),
+                ..BatchRenameRequest::default()
+            };
+            let system_prompt = render_system_prompt(&request);
+            let user_prompt = render_user_prompt(&request);
+            result.dispatches.push(SweepDispatch {
+                cache_key: cache_key_of(&request, params),
+                system_prompt: system_prompt.clone(),
+                user_prompt: user_prompt.clone(),
+                targets: g
+                    .targets
+                    .iter()
+                    .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
+                    .collect(),
+                request: request.clone(),
+                ask,
+            });
+            calls.push(LlmCall {
+                request,
+                system_prompt,
+                user_prompt,
+            });
+            owners.push(SweepGroup {
+                code: g.code.clone(),
+                used_names: g.used_names.clone(),
+                targets: g.targets.clone(),
+            });
+        }
+        let responses = provider.run_wave(calls);
+        let ctx = ReaskCtx {
+            limit,
+            spent,
+            carried: &carried,
+        };
+        let mut next: Vec<SweepReask> = Vec::new();
+        for (narrow, response) in owners.into_iter().zip(responses) {
+            result.reasked += narrow.targets.len();
+            match response {
+                Ok(resp) => {
+                    // Same validation. A further reaskable rejection with
+                    // budget left seeds the next round (PENDING, not
+                    // dropped — the main body's rule); one without counts
+                    // as dropped (never a loop).
+                    let (named, rejected, reasks) =
+                        apply_group_response(state, &narrow, &resp.renames, &ctx);
+                    let dropped = rejected - reasks.len();
+                    result.reask_applied += named;
+                    result.reask_dropped += dropped;
+                    result.named += named;
+                    result.skipped += dropped;
+                    next.extend(reasks);
                 }
-                result.reask_dropped += narrow.targets.len();
+                Err(e) => {
+                    if e.kind == LlmErrorKind::CacheMiss {
+                        result.misses += 1;
+                    } else {
+                        result.errors += 1;
+                    }
+                    result.reask_dropped += narrow.targets.len();
+                }
             }
         }
+        pending = next;
     }
 }
 
@@ -561,6 +646,9 @@ pub struct DeferredSweepOutcome {
 /// `runDeferredSweep(code)`: the prior-aware sweep over its OWN parse of
 /// the shipping text (`anchor` = reconciled when the reconcile produced
 /// the text, else generated). Err when the text does not parse.
+/// `reask_limit` is the run's name-conflict re-ask budget
+/// (`--rename-retries`).
+#[allow(clippy::too_many_arguments)]
 pub fn run_deferred_sweep<P: NameProvider>(
     code: &str,
     anchor: Anchor,
@@ -569,6 +657,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     params: &CacheKeyParams,
     trail: StrategyTrail,
     ledger: bool,
+    reask_limit: usize,
 ) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -582,7 +671,15 @@ pub fn run_deferred_sweep<P: NameProvider>(
     let ph = crate::profiling::phase("sweep:names");
     let taint = collect_eval_with_taint(semantic);
     let mut state = RenameState::with_trail(semantic, anchor, trail);
-    let sweep = sweep_minted_names(semantic, &mut state, eligible, &taint, provider, params);
+    let sweep = sweep_minted_names(
+        semantic,
+        &mut state,
+        eligible,
+        &taint,
+        provider,
+        params,
+        reask_limit,
+    );
     drop(ph);
     let code = (sweep.named > 0).then(|| render_program(semantic, &state));
     let ledger = (ledger && code.is_some()).then(|| {

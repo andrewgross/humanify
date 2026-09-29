@@ -543,6 +543,7 @@ fn run_era<P: NameProvider>(
                 &taint,
                 provider,
                 opts.params,
+                opts.tunables.reask_limit,
             )
         });
         era.floor = Some(FloorCounts {

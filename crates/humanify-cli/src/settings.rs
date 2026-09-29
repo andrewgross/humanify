@@ -31,6 +31,7 @@ pub struct SettingsInput {
     pub max_retries: Option<String>,
     pub max_free_retries: Option<String>,
     pub lane_threshold: Option<String>,
+    pub rename_retries: Option<String>,
     pub llm_cache: Option<String>,
     pub reasoning_effort: Option<String>,
     pub max_tokens: Option<String>,
@@ -73,6 +74,9 @@ pub struct Settings {
     pub max_retries_per_identifier: Option<f64>,
     pub max_free_retries: Option<f64>,
     pub lane_threshold: Option<f64>,
+    /// `--rename-retries`: the name-conflict re-ask budget (None = the
+    /// `reask::REASK_LIMIT` default).
+    pub rename_retries: Option<f64>,
     pub skip_libraries: bool,
     pub levers: LeverSettings,
 }
@@ -148,6 +152,7 @@ pub fn resolve_settings_with(
     let max_retries_per_identifier = num(&opts.max_retries)?;
     let max_free_retries = num(&opts.max_free_retries)?;
     let lane_threshold = num(&opts.lane_threshold)?;
+    let rename_retries = num(&opts.rename_retries)?;
 
     Ok(Settings {
         endpoint,
@@ -165,6 +170,7 @@ pub fn resolve_settings_with(
         max_retries_per_identifier,
         max_free_retries,
         lane_threshold,
+        rename_retries,
         skip_libraries: opts.skip_libraries.unwrap_or(true),
         levers: LeverSettings {
             naming_floor,
