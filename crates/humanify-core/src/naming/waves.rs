@@ -2,7 +2,10 @@
 //! (processUnified, the wave loop, batching, per-node and wave retries,
 //! the straggler pass, free retries, conflict resolution, applying LLM
 //! renames through validated rename, the `llm` trail tier),
-//! `src/rename/wave-scheduler.ts`, `wave-profile.ts`, `coverage.ts`.
+//! `src/rename/wave-scheduler.ts`, `coverage.ts`. (`wave-profile.ts` is
+//! designed out, 2026-09-29: its one -vv line — the wave-structure profile —
+//! answered the barrier-scheduling go/no-go and nothing reads it; see
+//! PORTING.md's row.)
 //!
 //! - [`generate`] — `@babel/generator` output for a node of the
 //!   beautified text (pretty and compact), under an edit list;

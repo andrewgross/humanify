@@ -184,4 +184,5 @@ any verdict leans on that range.
 
 **Left (post-swap backlog):** single-letter rename gap (§4); diverging-hops explanation (§2); wave-barrier
 redesign; matcher ground-truth verb (19-cutover §6); self-hop reference range re-record on a dedup-era
-binary; vendor fallback verification (#6); wave-profile's 86-LOC debug log (port or formally design out).
+binary; vendor fallback verification (#6); wave-profile's 86-LOC debug log (port or formally design out —
+decided 2026-09-29: DESIGNED OUT, a -vv line nothing reads; PORTING.md's row).
