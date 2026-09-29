@@ -465,3 +465,49 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
         "the context Sets hold {held} names for {FUNCTIONS} functions over {TOP} module names"
     );
 }
+
+/// The `--stats-json` `reask` block (the 2026-09-29 schema bump): the
+/// 2026-09-28 collision-retry counters must reach the record — the
+/// processor's lane half direct, the sweep's re-ask half SUMMED over the
+/// pre-generate and deferred sweeps (both are sweeps).
+#[test]
+fn the_stats_reask_block_maps_the_processor_and_sweep_counters() {
+    let processor = crate::naming::report::ProcessorReport {
+        unrecoverable_rejections: 1,
+        late_rejections: 2,
+        invalid_suggestion_finishes: 3,
+        all_failed_windows: 4,
+        ..crate::naming::report::ProcessorReport::default()
+    };
+    let pre = crate::naming::passes::sweep::SweepResult {
+        reasked: 5,
+        reask_applied: 3,
+        reask_dropped: 2,
+        ..crate::naming::passes::sweep::SweepResult::default()
+    };
+    let deferred = crate::naming::passes::sweep::SweepResult {
+        reasked: 1,
+        reask_applied: 1,
+        ..crate::naming::passes::sweep::SweepResult::default()
+    };
+    let stats = super::reask_stats(&processor, Some(&pre), Some(&deferred));
+    assert_eq!(
+        stats,
+        humanify_model::stats::ReaskStats {
+            unrecoverable_rejections: 1.0,
+            late_rejections: 2.0,
+            invalid_suggestion_finishes: 3.0,
+            all_failed_windows: 4.0,
+            sweep_reasked: 6.0,
+            sweep_reask_applied: 4.0,
+            sweep_reask_dropped: 2.0,
+        }
+    );
+    // An absent sweep is zero, not an error.
+    let empty = super::reask_stats(
+        &crate::naming::report::ProcessorReport::default(),
+        None,
+        None,
+    );
+    assert_eq!(empty, humanify_model::stats::ReaskStats::default());
+}

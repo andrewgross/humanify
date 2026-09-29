@@ -10,7 +10,10 @@
 //! Two absent-is-not-zero rules are shape-load-bearing (contract 14 §5.2):
 //! `vendorNaming` is OMITTED when the namer was never asked, `renameClaims`
 //! is ALWAYS written (all-zero included), and `bindingResolutionStats` is
-//! always present, `null` when no binding matching ran.
+//! always present, `null` when no binding matching ran. The `reask` block
+//! (2026-09-29) is always written by the current writer and ABSENT on every
+//! recorded pre-2026-09-29 scorecard — strictly additive, so those files
+//! still strict-parse and re-emit byte-identically.
 //!
 //! Every record's key order was read from its TS construction site (cited)
 //! and is proven by the byte round trip over the oracle runs' stats files.
@@ -284,7 +287,26 @@ js_record! {
 pub use crate::pipeline::PipelineSelectionRecord;
 
 js_record! {
-    /// The whole `--stats-json` object (writeEvalStats' literal).
+    /// The 2026-09-28 collision-retry fixes' counters (ProcessorReport's
+    /// lane half + SweepResult's re-ask half, summed over the sweeps) —
+    /// added 2026-09-29 (the deliberate schema bump, fix/small-leftovers):
+    /// counters that exist but nothing could read are a floor nobody can
+    /// audit (rule 8).
+    pub struct ReaskStats {
+        unrecoverable_rejections: f64 = "unrecoverableRejections",
+        late_rejections: f64 = "lateRejections",
+        invalid_suggestion_finishes: f64 = "invalidSuggestionFinishes",
+        all_failed_windows: f64 = "allFailedWindows",
+        sweep_reasked: f64 = "sweepReasked",
+        sweep_reask_applied: f64 = "sweepReaskApplied",
+        sweep_reask_dropped: f64 = "sweepReaskDropped",
+    }
+}
+
+js_record! {
+    /// The whole `--stats-json` object (writeEvalStats' literal, plus the
+    /// 2026-09-29 `reask` addition — the one deliberate post-cutover bump,
+    /// nested so the top level stays byte-stable).
     pub struct EvalStats {
         coverage: Option<CoverageSummary> = "coverage",
         transfer_stats: Option<TransferStatsByTier> = "transferStats",
@@ -298,6 +320,11 @@ js_record! {
         vendor_naming: Option<VendorNamingStats> = "vendorNaming",
         rename_claims: RenameClaimStats = "renameClaims",
         selection: Option<PipelineSelectionRecord> = "selection",
+        /// The `reask` block. ALWAYS written on runs from this writer
+        /// (all-zero included); ABSENT on every pre-2026-09-29 recorded
+        /// scorecard, which must stay loadable — Option expresses exactly
+        /// that absent-is-not-zero state (contract 14 §5.2).
+        reask: Option<ReaskStats> = "reask",
     }
 }
 

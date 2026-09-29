@@ -52,6 +52,22 @@ fn record_shape_equals_the_ts_type() {
     );
 }
 
+/// The 2026-09-29 `reask` bump is ADDITIVE: a pre-bump text (no `reask`
+/// key) strict-parses under the new record and re-emits WITHOUT the block —
+/// absent stays absent. (The committed results/ scorecards are all TS-era
+/// files that predate even `bindingResolutionStats` and never
+/// strict-parsed; the writer-format proof is the four TS vectors in the
+/// round-trip test, the reader-format proof is 034's analyze.test.ts over a
+/// recorded card.)
+#[test]
+fn an_old_format_stats_text_stays_reask_absent() {
+    let v = vectors();
+    let text = v["writers"]["evalStats"][0]["text"].as_str().unwrap();
+    let stats = EvalStats::parse(text).unwrap();
+    assert!(stats.reask.is_none(), "the TS-era text predates the bump");
+    assert!(!stats.to_file_text().contains("\"reask\""));
+}
+
 fn vectors() -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(repo("test/parity/wpb4-vectors.json")).unwrap())
         .unwrap()
@@ -66,7 +82,10 @@ fn ts_writer_outputs_round_trip() {
         let stats = EvalStats::parse(text).unwrap();
         assert_eq!(stats.to_file_text(), text);
     }
-    assert_eq!(cases.len(), 4);
+    // 4 = the TS's recorded bytes (must stay byte-for-byte: old-format
+    // scorecards still strict-parse and re-emit unchanged); +1 = the
+    // Rust-added `reask` vector (2026-09-29, the deliberate schema bump).
+    assert_eq!(cases.len(), 5);
 }
 
 #[test]

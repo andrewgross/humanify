@@ -262,7 +262,7 @@ Writer: `src/commands/unified.ts:452-505` (`writeEvalStats`, called at
 `JSON.stringify(stats, null, 2)`. Top-level keys in order: `coverage,
 transferStats, priorVersionApplied, priorVersionAlreadyNamed,
 priorVersionBindingsApplied, namingFloor, closeMatchStats, resolutionStats,
-bindingResolutionStats, vendorNaming, renameClaims, selection`.
+bindingResolutionStats, vendorNaming, renameClaims, selection, reask`.
 
 - `coverage` → `functions`, `moduleBindings`, `identifiers` (same key set;
   `identifiers` adds `skippedBySkipList`), `llm` (`totalCalls, retries,
@@ -281,9 +281,19 @@ avgResponseTimeMs, totalTokens, inputTokens, outputTokens`), `elapsedMs`,
 - `selection` → `{bundler, bundlerTier, minifier, unpackAdapter}` (the
   PipelineSelectionRecord from `src/pipeline/selection-record.ts:4-11`,
   deterministic from the input's detection result plus overrides).
+- `reask` → `{unrecoverableRejections, lateRejections,
+invalidSuggestionFinishes, allFailedWindows, sweepReasked,
+sweepReaskApplied, sweepReaskDropped}` — the 2026-09-28 collision-retry
+  counters (ProcessorReport's lane half + SweepResult's re-ask half,
+  summed over the pre-generate and deferred sweeps). ADDED 2026-09-29,
+  the one deliberate post-cutover schema bump (branch fix/small-leftovers):
+  nested so the top level stays byte-stable.
 
 `renameClaims` is written even when all-zero; `vendorNaming` is dropped when
-the namer was never asked. Both facts are shape-load-bearing: a consumer
+the namer was never asked; `reask` is written even when all-zero by the
+current writer and is ABSENT on every pre-2026-09-29 scorecard — the bump
+is additive, those files stay loadable, and absent means "pre-bump file",
+not zero. All three facts are shape-load-bearing: a consumer
 must treat an absent `vendorNaming` as "never attempted", not as zeros.
 
 ### 5.3 `.humanify/placement-stats.json` and `stage-hashes.json`
