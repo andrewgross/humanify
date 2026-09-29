@@ -34,10 +34,27 @@ Both walks cold, same model, same machine, byte-determinism verified per hop. Ru
 
 Per-hop rust wall 106–768 s (ts 683–1,409 s); cold first hop 2,095 s / 6.4 GB; 30/30 hops exit 0, boot OK ×30.
 
-**Rust output is within ~1–2% of TS on every column.** Two hops diverge more than the rest and are flagged, not yet
-explained (walk-report §"Diverging hops"): 2.1.207→208 (realExBuild 50,656 vs 41,494 — the largest vendor churn hop)
-and 2.1.193→195 (diffLn 25,968 vs 23,558). 2.1.203→204 noise 148 vs 18. **Open follow-up**, not a merge blocker on the
-evidence so far: totals match, no column regresses systematically.
+**Rust output is within ~1–2% of TS on every column.** The three hops that diverged more are EXPLAINED
+(2026-09-29 read-only diagnosis over the trees + cards; full per-file accounting in /work/post-cutover-notes.md):
+
+- **2.1.193→195** (+2,410 diffLn): one OIDC library module rust kept HUMANIFIED in src (2,564 ln) while ts
+  classified it VENDOR — the whole gap is that one fileAddRemove decision, frozen by the carry for 30 hops.
+  Real first-party change scored identically (realExBuild −27).
+- **2.1.207→208** (+9,162 realExBuild): upstream re-serialized its bundler wrappers (arrow → function
+  expression) and repackaged the OIDC/AWS libraries. Rust holds those libraries in src as four
+  createModule-wrapped giant statements; the wrapper AST-type flip breaks the hash AND the head-text
+  repair, so the compositor charges each statement full mass on both sides. placement-independent KPIs
+  (novel 1,303/1,286; bundle realLn +2.7%) say both walks recovered the same real change. Measurement-surface
+  artifact, not a pipeline bug.
+- **2.1.203→204** (+130 noise): 56 ln naming (rust renamed a single-letter `h` import binding; ts's was
+  already semantic) + 76 ln reorder jitter. Ordinary rule-11 noise; bundle noiseLn was LOWER in rust at
+  this hop (612 vs 1,319).
+
+**The one real finding:** on identical cold input, the two pipelines classified a handful of large library
+modules differently (rust src / ts vendor: @aws-sdk/client-sts machinery, the OIDC/openid-client giant,
+the auth-token-manager wrapper split) — set at the cold hop and carried since. The divergence is in the
+vendor/factory EXTRACTION path (bun unpack adapter manifest + library-detection adapters), not the
+per-statement rule — open follow-up, MERGED with vendor fallback verification (#6 below).
 
 ## 3. Example diffs (what a cross-version diff looks like from each pipeline)
 
