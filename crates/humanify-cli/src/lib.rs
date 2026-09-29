@@ -10,6 +10,7 @@ pub mod failed_output;
 pub mod kill_switches;
 pub mod llm_sim;
 pub mod log;
+pub mod match_verb;
 pub mod output_validation;
 pub mod pipeline_config;
 pub mod progress;
@@ -59,6 +60,8 @@ pub fn pipeline_main(argv: &[String]) -> i32 {
 mod env_reads_test;
 #[cfg(test)]
 mod kill_switches_test;
+#[cfg(test)]
+mod match_verb_test;
 #[cfg(test)]
 mod settings_test;
 #[cfg(test)]

@@ -1,0 +1,517 @@
+{
+  "files": [
+    {
+      "close": {
+        "candidates": [
+          {
+            "fresh": {
+              "end": 134,
+              "start": 77,
+              "text": "fresh"
+            },
+            "outcome": "won",
+            "prior": {
+              "end": 128,
+              "start": 77,
+              "text": "prior"
+            },
+            "rank": 3,
+            "score": 0.9999999999999998,
+            "scoreBits": "0x3feffffffffffffe"
+          },
+          {
+            "fresh": {
+              "end": 241,
+              "start": 191,
+              "text": "fresh"
+            },
+            "outcome": "abstained:taken",
+            "prior": {
+              "end": 128,
+              "start": 77,
+              "text": "prior"
+            },
+            "rank": 8,
+            "score": 0.8017837257372731,
+            "scoreBits": "0x3fe9a8365810363e"
+          },
+          {
+            "fresh": {
+              "end": 282,
+              "start": 242,
+              "text": "fresh"
+            },
+            "outcome": "abstained:taken",
+            "prior": {
+              "end": 128,
+              "start": 77,
+              "text": "prior"
+            },
+            "rank": 6,
+            "score": 0.8838834764831843,
+            "scoreBits": "0x3fec48c6001f0abf"
+          },
+          {
+            "fresh": {
+              "end": 134,
+              "start": 77,
+              "text": "fresh"
+            },
+            "outcome": "abstained:taken",
+            "prior": {
+              "end": 234,
+              "start": 185,
+              "text": "prior"
+            },
+            "rank": 9,
+            "score": 0.8017837257372731,
+            "scoreBits": "0x3fe9a8365810363e"
+          },
+          {
+            "fresh": {
+              "end": 241,
+              "start": 191,
+              "text": "fresh"
+            },
+            "outcome": "won",
+            "prior": {
+              "end": 234,
+              "start": 185,
+              "text": "prior"
+            },
+            "rank": 2,
+            "score": 0.9999999999999999,
+            "scoreBits": "0x3fefffffffffffff"
+          },
+          {
+            "fresh": {
+              "end": 282,
+              "start": 242,
+              "text": "fresh"
+            },
+            "outcome": "abstained:taken",
+            "prior": {
+              "end": 234,
+              "start": 185,
+              "text": "prior"
+            },
+            "rank": 4,
+            "score": 0.944911182523068,
+            "scoreBits": "0x3fee3cb66051f5e0"
+          },
+          {
+            "fresh": {
+              "end": 134,
+              "start": 77,
+              "text": "fresh"
+            },
+            "outcome": "abstained:taken",
+            "prior": {
+              "end": 277,
+              "start": 235,
+              "text": "prior"
+            },
+            "rank": 7,
+            "score": 0.8838834764831843,
+            "scoreBits": "0x3fec48c6001f0abf"
+          },
+          {
+            "fresh": {
+              "end": 241,
+              "start": 191,
+              "text": "fresh"
+            },
+            "outcome": "abstained:taken",
+            "prior": {
+              "end": 277,
+              "start": 235,
+              "text": "prior"
+            },
+            "rank": 5,
+            "score": 0.944911182523068,
+            "scoreBits": "0x3fee3cb66051f5e0"
+          },
+          {
+            "fresh": {
+              "end": 282,
+              "start": 242,
+              "text": "fresh"
+            },
+            "outcome": "won",
+            "prior": {
+              "end": 277,
+              "start": 235,
+              "text": "prior"
+            },
+            "rank": 1,
+            "score": 1,
+            "scoreBits": "0x3ff0000000000000"
+          }
+        ],
+        "pairs": [
+          {
+            "alignedStatements": 1,
+            "fresh": {
+              "end": 134,
+              "start": 77,
+              "text": "fresh"
+            },
+            "hints": [],
+            "prior": {
+              "end": 128,
+              "start": 77,
+              "text": "prior"
+            },
+            "snaps": [],
+            "totalNewStatements": 1,
+            "transfers": [],
+            "verdict": "alignment"
+          },
+          {
+            "alignedStatements": 0,
+            "fresh": {
+              "end": 241,
+              "start": 191,
+              "text": "fresh"
+            },
+            "hints": [],
+            "prior": {
+              "end": 234,
+              "start": 185,
+              "text": "prior"
+            },
+            "snaps": [],
+            "totalNewStatements": 1,
+            "transfers": [],
+            "verdict": "uncorroborated"
+          },
+          {
+            "alignedStatements": 0,
+            "fresh": {
+              "end": 282,
+              "start": 242,
+              "text": "fresh"
+            },
+            "hints": [],
+            "prior": {
+              "end": 277,
+              "start": 235,
+              "text": "prior"
+            },
+            "snaps": [],
+            "totalNewStatements": 1,
+            "transfers": [],
+            "verdict": "uncorroborated"
+          }
+        ],
+        "schemaVersion": 1,
+        "skippedNew": 0,
+        "skippedOld": 0,
+        "stats": {
+          "corroboratedByAlignment": 1,
+          "corroboratedByShingles": 0,
+          "uncorroborated": 2
+        }
+      },
+      "freshText": "function keepExact(alpha, beta) {\n  return alpha + beta;\n}\nvar keepWrapper = function (one, two) {\n  return keepExact(one, two) + 1;\n};\nfunction keepRenamed(px, qy) {\n  return px * qy + 7;\n}\nfunction changedSmall(n) {\n  return n * 3 + 100;\n}\nfunction brandNew(a) {\n  return a - 1;\n}",
+      "functions": {
+        "ambiguous": [],
+        "bindingAmbiguous": [],
+        "bindingPairs": [],
+        "bindingStats": null,
+        "bindingUnmatched": [],
+        "fresh": [
+          {
+            "end": 58,
+            "id": "input.js:1:0",
+            "name": "keepExact",
+            "slice": "function keepExact(alpha, beta) {\n  return alpha + beta;\n}",
+            "start": 0
+          },
+          {
+            "end": 134,
+            "id": "input.js:4:18",
+            "name": "",
+            "slice": "function (one, two) {\n  return keepExact(one, two) + 1;\n}",
+            "start": 77
+          },
+          {
+            "end": 190,
+            "id": "input.js:7:0",
+            "name": "keepRenamed",
+            "slice": "function keepRenamed(px, qy) {\n  return px * qy + 7;\n}",
+            "start": 136
+          },
+          {
+            "end": 241,
+            "id": "input.js:10:0",
+            "name": "changedSmall",
+            "slice": "function changedSmall(n) {\n  return n * 3 + 100;\n}",
+            "start": 191
+          },
+          {
+            "end": 282,
+            "id": "input.js:13:0",
+            "name": "brandNew",
+            "slice": "function brandNew(a) {\n  return a - 1;\n}",
+            "start": 242
+          }
+        ],
+        "pairs": [
+          {
+            "fresh": 0,
+            "freshId": "input.js:1:0",
+            "prior": 0,
+            "priorId": "prior.js:1:0",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "fresh": 2,
+            "freshId": "input.js:7:0",
+            "prior": 2,
+            "priorId": "prior.js:7:0",
+            "tier": "structuralHashUnique"
+          }
+        ],
+        "prior": [
+          {
+            "end": 58,
+            "id": "prior.js:1:0",
+            "name": "keepExact",
+            "slice": "function keepExact(alpha, beta) {\n  return alpha + beta;\n}",
+            "start": 0
+          },
+          {
+            "end": 128,
+            "id": "prior.js:4:18",
+            "name": "",
+            "slice": "(one, two) => {\n  return keepExact(one, two) + 1;\n}",
+            "start": 77
+          },
+          {
+            "end": 184,
+            "id": "prior.js:7:0",
+            "name": "keepRenamed",
+            "slice": "function keepRenamed(xx, yy) {\n  return xx * yy + 7;\n}",
+            "start": 130
+          },
+          {
+            "end": 234,
+            "id": "prior.js:10:0",
+            "name": "changedSmall",
+            "slice": "function changedSmall(n) {\n  return n * 2 + 50;\n}",
+            "start": 185
+          },
+          {
+            "end": 277,
+            "id": "prior.js:13:0",
+            "name": "removedOld",
+            "slice": "function removedOld(z) {\n  return z * 9;\n}",
+            "start": 235
+          }
+        ],
+        "rejections": [
+          {
+            "candidates": null,
+            "kind": "unmatched",
+            "prior": 1
+          },
+          {
+            "candidates": null,
+            "kind": "unmatched",
+            "prior": 3
+          },
+          {
+            "candidates": null,
+            "kind": "unmatched",
+            "prior": 4
+          }
+        ],
+        "stats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 2,
+          "twoHopShapesResolved": 0,
+          "unmatched": 3
+        },
+        "unmatched": [1, 3, 4]
+      },
+      "path": "index.js",
+      "twins": {
+        "fresh": [
+          {
+            "end": 58,
+            "hash": "163f8bc4811d2c78",
+            "slice": "function keepExact(alpha, beta) {\n  return alpha + beta;\n}",
+            "start": 0
+          },
+          {
+            "end": 135,
+            "hash": "c5cadc2812a17cb3",
+            "slice": "var keepWrapper = function (one, two) {\n  return keepExact(one, two) + 1;\n};",
+            "start": 59
+          },
+          {
+            "end": 190,
+            "hash": "9fa63fe8af8bf36c",
+            "slice": "function keepRenamed(px, qy) {\n  return px * qy + 7;\n}",
+            "start": 136
+          },
+          {
+            "end": 241,
+            "hash": "c9875a0fc880d084",
+            "slice": "function changedSmall(n) {\n  return n * 3 + 100;\n}",
+            "start": 191
+          },
+          {
+            "end": 282,
+            "hash": "0453310832e1322f",
+            "slice": "function brandNew(a) {\n  return a - 1;\n}",
+            "start": 242
+          }
+        ],
+        "gates": {
+          "rows": [
+            {
+              "fresh": {
+                "end": 58,
+                "start": 0,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 58,
+                "start": 0,
+                "text": "prior"
+              },
+              "tier": "unique"
+            },
+            {
+              "fresh": {
+                "end": 190,
+                "start": 136,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 184,
+                "start": 130,
+                "text": "prior"
+              },
+              "tier": "unique"
+            }
+          ],
+          "stats": {
+            "bucketTwins": 0,
+            "candidates": 0,
+            "cascadeConflicts": 0,
+            "freshStatements": 5,
+            "moduleScopedAmbiguous": 0,
+            "moduleScopedTwins": 0,
+            "outerRefs": 0,
+            "pairs": 0,
+            "priorStatements": 5,
+            "privateRenames": 0,
+            "transferredTwins": 0,
+            "uniqueTwins": 2,
+            "vetoedCallee": 0,
+            "vetoedRole": 0,
+            "vetoedStructural": 0
+          }
+        },
+        "prior": [
+          {
+            "end": 58,
+            "hash": "163f8bc4811d2c78",
+            "slice": "function keepExact(alpha, beta) {\n  return alpha + beta;\n}",
+            "start": 0
+          },
+          {
+            "end": 129,
+            "hash": "4beea2d290ae0942",
+            "slice": "var keepWrapper = (one, two) => {\n  return keepExact(one, two) + 1;\n};",
+            "start": 59
+          },
+          {
+            "end": 184,
+            "hash": "9fa63fe8af8bf36c",
+            "slice": "function keepRenamed(xx, yy) {\n  return xx * yy + 7;\n}",
+            "start": 130
+          },
+          {
+            "end": 234,
+            "hash": "75e9ab41f6b18f65",
+            "slice": "function changedSmall(n) {\n  return n * 2 + 50;\n}",
+            "start": 185
+          },
+          {
+            "end": 277,
+            "hash": "47b31470251c0c71",
+            "slice": "function removedOld(z) {\n  return z * 9;\n}",
+            "start": 235
+          }
+        ]
+      }
+    }
+  ],
+  "meta": {
+    "adapter": "passthrough",
+    "bundler": "unknown",
+    "differences": [
+      "no library detection: every unpacked file is matched, where the pipeline only names the files the library filter kept",
+      "no naming: the transfer freeze is empty; matching does not read it"
+    ],
+    "input": "experiments/lib/match-truth/fixtures/new.js",
+    "minifier": "unknown",
+    "prior": "experiments/lib/match-truth/fixtures/prior.formatted.js"
+  },
+  "schemaVersion": 1,
+  "tool": "humanify match"
+}

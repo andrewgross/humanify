@@ -18,7 +18,8 @@
     "eval": "tsx scripts/eval.ts",
     "census:clones": "tsx scripts/clone-census.ts",
     "ask-trace": "tsx scripts/ask-trace.ts",
-    "diff-asks": "tsx scripts/diff-asks.ts"
+    "diff-asks": "tsx scripts/diff-asks.ts",
+    "match-truth": "tsx experiments/lib/match-truth/run.ts"
   },
   "type": "module",
   "keywords": [
