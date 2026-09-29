@@ -56,6 +56,10 @@ Options:
                                  this directory (instrumentation). Inert by
                                  construction: the run's decisions are unchanged
                                  (proven by neutrality).
+  --dump-asks <path>             Write the reason-labeled ask log (one JSONL row
+                                 per LLM ask: scope, identifiers, wave/round,
+                                 WHY it was asked) to this path. Recording only
+                                 — no decision reads it; off unless passed.
   --bundler <type>               Force bundler type (webpack, browserify,
                                  rollup, esbuild, parcel, bun)
   --minifier <type>              Force minifier type (terser, esbuild, swc, bun,

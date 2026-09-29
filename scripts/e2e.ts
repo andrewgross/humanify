@@ -51,10 +51,12 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
-import * as http from "node:http";
+import type * as http from "node:http";
 import type { AddressInfo } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
+
+import { startStubLlm, stubAnswer } from "./lib/stub-llm.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const BIN = path.join(REPO, "target/release/humanify");
@@ -70,54 +72,11 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
-/** Every identifier a naming prompt asks for, mapped to `<id>Renamed`. */
-export function stubAnswer(requestBody: string): string {
-  const out: Record<string, string> = {};
-  let parsed: { messages?: Array<{ content?: string }> };
-  try {
-    parsed = JSON.parse(requestBody);
-  } catch {
-    return "{}";
-  }
-  for (const m of parsed.messages ?? []) {
-    const hit = /Identifiers to rename: ([^\n]*)/.exec(m.content ?? "");
-    if (!hit) continue;
-    for (const id of hit[1].split(",").map((s) => s.trim())) {
-      if (/^[A-Za-z_$][\w$]*$/.test(id)) out[id] = `${id}Renamed`;
-    }
-  }
-  return JSON.stringify(out);
-}
+export { stubAnswer };
 
+/** The e2e stub — the shared module's, on an ephemeral port. */
 function startStub(): Promise<http.Server> {
-  const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (c) => {
-      body += c;
-    });
-    req.on("end", () => {
-      res.setHeader("content-type", "application/json");
-      res.end(
-        JSON.stringify({
-          id: "e2e",
-          object: "chat.completion",
-          created: 0,
-          model: "e2e-stub",
-          choices: [
-            {
-              index: 0,
-              finish_reason: "stop",
-              message: { role: "assistant", content: stubAnswer(body) }
-            }
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 }
-        })
-      );
-    });
-  });
-  return new Promise((resolve) =>
-    server.listen(0, "127.0.0.1", () => resolve(server))
-  );
+  return startStubLlm().then(({ server }) => server);
 }
 
 /**

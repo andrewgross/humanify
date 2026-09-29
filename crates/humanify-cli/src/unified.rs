@@ -88,6 +88,8 @@ pub struct CommandOptions {
     pub rename_ledger: Option<String>,
     pub stats_json: Option<String>,
     pub dump_artifacts: Option<String>,
+    /// `--dump-asks <path>`: the reason-labeled ask log.
+    pub dump_asks: Option<String>,
     /// `--sequential`: the conservative naming schedule.
     pub sequential: bool,
     /// `--relaxed-levers <list>` (rust-only): a subset of the relaxed
@@ -161,6 +163,7 @@ impl CommandOptions {
             rename_ledger: s("renameLedger"),
             stats_json: s("statsJson"),
             dump_artifacts: s("dumpArtifacts"),
+            dump_asks: s("dumpAsks"),
             sequential: v.bool("sequential").unwrap_or(false),
             relaxed_levers: s("relaxedLevers"),
             simulate_llm_latency: s("simulateLlmLatency"),
@@ -718,6 +721,18 @@ fn pipeline_body(
                 },
                 renderer,
             )?;
+        }
+        if let Some(dest) = &opts.dump_asks {
+            let n = humanify_core::artifact_dump::write_asks(
+                Path::new(dest),
+                &humanify_core::artifact_dump::AskInputs {
+                    outcome,
+                    split: split_sections.as_ref(),
+                    vendor_prompts: &unpacked.vendor_dispatched,
+                },
+            )
+            .map_err(Crash)?;
+            renderer.message(&format!("Ask log: {n} ask(s) → {dest}"));
         }
         reports.write_rename_ledger(renderer)?;
     }

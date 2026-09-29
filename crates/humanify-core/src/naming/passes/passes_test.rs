@@ -85,14 +85,41 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
     assert_eq!(r.reasked, 1, "the retry is recorded");
     assert_eq!(r.named, 1, "the re-asked suggestion applied");
     assert_eq!(r.skipped, 1, "the declined `f` stays skipped");
+    // The ask trace (`--dump-asks`): the first round carries no cause; the
+    // re-ask records the reask class and the applier's rejection code.
+    assert_eq!(r.dispatches.len(), 2, "both asks recorded");
+    assert_eq!(
+        r.dispatches[0].ask.cause, None,
+        "the first round is causeless"
+    );
+    assert_eq!(
+        r.dispatches[1].ask.cause,
+        Some(crate::naming::ask_trace::RetryCause::NameTaken)
+    );
+    assert_eq!(
+        r.dispatches[1].ask.detail.as_deref(),
+        Some("target-in-scope"),
+        "the seeding rejection's code is recorded"
+    );
+    assert_eq!(r.dispatches[1].request.is_retry, Some(true));
     let code = render_program(semantic, &state);
     assert!(
         code.contains("var usedRunner = two();"),
         "the retried name landed: {code}"
     );
+}
 
-    // Bounded: answer the SAME colliding name twice and the sweep gives up
-    // after the ONE re-ask — never a loop, and the give-up is recorded.
+/// Bounded: answer the SAME colliding name twice and the sweep gives up
+/// after the ONE re-ask — never a loop, and the give-up is recorded.
+#[test]
+fn a_stubborn_sweep_gives_up_after_one_reask() {
+    let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
     struct Stubborn {
         asks: std::cell::Cell<usize>,
     }

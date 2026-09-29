@@ -16,7 +16,9 @@
     "knip:prod": "knip --production --tags=-internal",
     "prepare": "husky",
     "eval": "tsx scripts/eval.ts",
-    "census:clones": "tsx scripts/clone-census.ts"
+    "census:clones": "tsx scripts/clone-census.ts",
+    "ask-trace": "tsx scripts/ask-trace.ts",
+    "diff-asks": "tsx scripts/diff-asks.ts"
   },
   "type": "module",
   "keywords": [

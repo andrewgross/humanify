@@ -165,6 +165,13 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
+            "--dump-asks <path>",
+            "Write the reason-labeled ask log (one JSONL row per LLM ask: \
+             scope, identifiers, wave/round, WHY it was asked) to this path. \
+             Recording only — no decision reads it; off unless passed.",
+            None,
+        )
+        .option(
             "--bundler <type>",
             &format!("Force bundler type ({})", names(&SELECTABLE_BUNDLERS)),
             None,

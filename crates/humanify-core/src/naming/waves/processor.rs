@@ -42,6 +42,7 @@ use super::render::{FnPrinter, Occurrences};
 use super::used_set::{NameLayer, UsedSet};
 use crate::fast::Lever;
 use crate::graph::UnifiedGraph;
+use crate::naming::ask_trace::AskSite;
 use crate::naming::code_window::{FunctionCodeSelection, cap_context_code, select_function_code};
 use crate::naming::context::{ContextView, DeclView, ParentBinding, build_context};
 use crate::naming::prompts::{
@@ -128,6 +129,9 @@ pub struct DispatchRecord {
     pub user_prompt: String,
     /// (sessionId, span) per target.
     pub targets: Vec<(String, Span)>,
+    /// The ask-trace site context (`--dump-asks`; recording only — no
+    /// decision reads it).
+    pub ask: AskSite,
 }
 
 /// One recorded name (the dump's `recordName`): the declaration identifier
@@ -243,10 +247,16 @@ struct Entry {
     prev_name: Option<String>,
 }
 
-/// A barrier rejection seeding a retry.
+/// A barrier rejection seeding a retry, with the re-ask cause it was
+/// admitted by (`naming::reask`) — recorded on the retry's ask site.
 struct Rejection {
     entry: Entry,
     winner_old: Option<String>,
+    /// The reask class the barrier computed (`barrier_reask`'s own inputs:
+    /// a used-set collision is `NameTaken` with no code).
+    cause: reask::ReaskClass,
+    /// The validated applier's rejection code, when it rejected.
+    cause_code: Option<&'static str>,
 }
 
 struct RetryItem {
@@ -263,6 +273,11 @@ struct RetrySeed {
     phase: u8,
     items: Vec<RetryItem>,
     winners: JsRecord,
+    /// Threading for the ask trace: the seeding rejection's cause (the
+    /// seed aggregates several rejections; the FIRST one's class and code
+    /// are recorded — recording only, no decision reads them).
+    cause: reask::ReaskClass,
+    cause_code: Option<&'static str>,
 }
 
 /// A deferred lifecycle settlement (with the node's wave context).
@@ -1568,7 +1583,13 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     fn build_retry_seeds(&self, rejections: Vec<Rejection>) -> Vec<RetrySeed> {
         let mut seeds: Vec<RetrySeed> = Vec::new();
         let mut index: HashMap<(usize, u8), usize> = HashMap::new();
-        for Rejection { entry, winner_old } in rejections {
+        for Rejection {
+            entry,
+            winner_old,
+            cause,
+            cause_code,
+        } in rejections
+        {
             let key = (entry.ctx, entry.phase);
             let i = *index.entry(key).or_insert_with(|| {
                 seeds.push(RetrySeed {
@@ -1576,6 +1597,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                     phase: entry.phase,
                     items: Vec::new(),
                     winners: JsRecord::default(),
+                    cause,
+                    cause_code,
                 });
                 seeds.len() - 1
             });
@@ -1644,9 +1667,15 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 .iter()
                 .map(|(i, call)| self.lane_request(&lanes[*i], call))
                 .collect();
-            let targets: Vec<(usize, String)> = active
+            let targets: Vec<(usize, String, AskSite)> = active
                 .iter()
-                .map(|(i, _)| (lanes[*i].ctx, lanes[*i].function_id.clone()))
+                .map(|(i, _)| {
+                    (
+                        lanes[*i].ctx,
+                        lanes[*i].function_id.clone(),
+                        AskSite::fresh(lanes[*i].phase),
+                    )
+                })
                 .collect();
             let results = self.dispatch(requests, &targets);
             for ((i, _), res) in active.into_iter().zip(results) {
@@ -1674,7 +1703,9 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         let mut initial: Vec<(usize, LlmCall)> = Vec::new();
         for (r, run) in retries.iter().enumerate() {
             let request = self.retry_request(run);
-            let (record, call) = self.prepare_dispatch(request, run.seed.ctx, &run.function_id);
+            let site = AskSite::reask(run.seed.cause, run.seed.phase, run.seed.cause_code);
+            let (record, call) =
+                self.prepare_dispatch(request, run.seed.ctx, &run.function_id, site);
             records.push(((0, r), record));
             initial.push((r, call));
         }
@@ -1758,7 +1789,8 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         match lr.lane.next_call() {
             Some(call) => {
                 let request = self.lane_request(lr, &call);
-                Some(self.prepare_dispatch(request, lr.ctx, &lr.function_id))
+                let site = AskSite::fresh(lr.phase);
+                Some(self.prepare_dispatch(request, lr.ctx, &lr.function_id, site))
             }
             None => {
                 self.finish_lane(lr);
@@ -1806,9 +1838,15 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         if !retries.is_empty() {
             let requests: Vec<BatchRenameRequest> =
                 retries.iter().map(|r| self.retry_request(r)).collect();
-            let targets: Vec<(usize, String)> = retries
+            let targets: Vec<(usize, String, AskSite)> = retries
                 .iter()
-                .map(|r| (r.seed.ctx, r.function_id.clone()))
+                .map(|r| {
+                    (
+                        r.seed.ctx,
+                        r.function_id.clone(),
+                        AskSite::reask(r.seed.cause, r.seed.phase, r.seed.cause_code),
+                    )
+                })
                 .collect();
             let results = self.dispatch(requests, &targets);
             for (r, res) in retries.iter().zip(results) {
@@ -2041,15 +2079,16 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     }
 
     /// Dispatch one turn's requests through the provider, recording each
-    /// (prompts.jsonl + cache-keys.jsonl).
+    /// (prompts.jsonl + cache-keys.jsonl). The targets carry the ask-trace
+    /// site (a lane's phase fresh, or a retry seed's recorded cause).
     fn dispatch(
         &mut self,
         requests: Vec<BatchRenameRequest>,
-        targets: &[(usize, String)],
+        targets: &[(usize, String, AskSite)],
     ) -> Vec<Result<(Renames, Option<String>), ()>> {
         let mut calls = Vec::with_capacity(requests.len());
-        for (request, (ctx, function_id)) in requests.into_iter().zip(targets) {
-            let (record, call) = self.prepare_dispatch(request, *ctx, function_id);
+        for (request, (ctx, function_id, site)) in requests.into_iter().zip(targets) {
+            let (record, call) = self.prepare_dispatch(request, *ctx, function_id, site.clone());
             self.commit_record(record);
             calls.push(call);
         }
@@ -2068,12 +2107,23 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
 
     /// A request's prompts, cache key and dump record (its `seq` and
     /// `round` are assigned by [`Run::commit_record`], in dispatch order).
+    /// `site` is the ask-trace context (phase and recorded re-ask cause);
+    /// the prior-context flag is derived from the ctx's kind here.
     fn prepare_dispatch(
         &self,
         request: BatchRenameRequest,
         ctx: usize,
         function_id: &str,
+        mut site: AskSite,
     ) -> (DispatchRecord, LlmCall) {
+        site.prior = match &self.ctxs[ctx].kind {
+            CtxKind::Fn(f) => self.inp.close[*f].is_some(),
+            CtxKind::Module(batch) => batch.iter().any(|&j| {
+                self.inp.suggested[j]
+                    .as_deref()
+                    .is_some_and(|s| !s.is_empty())
+            }),
+        };
         let system_prompt = render_system_prompt(&request);
         let user_prompt = render_user_prompt(&request);
         let cache_key = cache_key_of(&request, &self.inp.params);
@@ -2087,6 +2137,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             system_prompt: system_prompt.clone(),
             user_prompt: user_prompt.clone(),
             targets: self.dump_targets(ctx),
+            ask: site,
         };
         let call = LlmCall {
             request,
@@ -2199,7 +2250,18 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             self.record_rejection_outcome(entry.ctx, &entry.old, &entry.new);
             if reask::barrier_reask(taken, reason) {
                 let winner_old = self.winners.get(&entry.new).cloned();
-                rejections.push(Rejection { entry, winner_old });
+                // The ask-trace cause: the seeding rejection's class, as
+                // `barrier_reask` itself decided it (recording only).
+                let cause = match reason {
+                    Some(r) => reask::class_of(r),
+                    None => reask::ReaskClass::NameTaken,
+                };
+                rejections.push(Rejection {
+                    entry,
+                    winner_old,
+                    cause,
+                    cause_code: reason.map(RejectionReason::as_str),
+                });
             } else {
                 // Unrecoverable (`no-binding`, `stale-binding`,
                 // `exported-name`): no re-ask can fix these — the applier's

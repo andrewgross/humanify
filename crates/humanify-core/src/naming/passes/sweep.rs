@@ -234,6 +234,10 @@ pub struct SweepDispatch {
     pub cache_key: String,
     /// (target name, declaration span) in the anchored text.
     pub targets: Vec<(String, Span)>,
+    /// The ask-trace site (`--dump-asks`; recording only): phase 0, no
+    /// prior context; a re-ask dispatch records the reask class and the
+    /// rejection codes its targets were seeded by.
+    pub ask: crate::naming::ask_trace::AskSite,
 }
 
 /// `SweepResult` + the dispatch record.
@@ -255,11 +259,16 @@ pub struct SweepResult {
     pub reask_dropped: usize,
 }
 
-/// A collision-class rejection worth ONE disclosed re-ask: the target and
-/// the suggestion the model made (`naming::reask` classifies the reason).
+/// A collision-class rejection worth ONE disclosed re-ask: the target, the
+/// suggestion the model made, and the applier's rejection (`naming::reask`
+/// classifies the reason; the ask trace records class + code).
 struct SweepReask {
     target: MintedBinding,
     suggestion: String,
+    /// The rejection as reask.rs classified it (recorded on the re-ask's
+    /// ask-trace site; nothing decides on it).
+    class: crate::naming::reask::ReaskClass,
+    code: &'static str,
 }
 
 /// Apply one group's suggestions (`applyGroupResponse`). `renames[name]` is
@@ -316,13 +325,15 @@ fn apply_group_response(
             row = row.reason(r.as_str());
         }
         state.record(target.binding, &target.name, row, true);
-        if attempt
-            .reason
-            .is_some_and(|r| crate::naming::reask::should_reask(crate::naming::reask::class_of(r)))
+        if let Some(r) = attempt.reason
+            && let class = crate::naming::reask::class_of(r)
+            && crate::naming::reask::should_reask(class)
         {
             reasks.push(SweepReask {
                 target: target.clone(),
                 suggestion: new_name,
+                class,
+                code: r.as_str(),
             });
         }
     }
@@ -371,6 +382,7 @@ pub fn sweep_minted_names<P: NameProvider>(
                 .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
                 .collect(),
             request: request.clone(),
+            ask: crate::naming::ask_trace::AskSite::fresh(0),
         });
         calls.push(LlmCall {
             request,
@@ -423,10 +435,17 @@ fn sweep_reask<P: NameProvider>(
     params: &CacheKeyParams,
     result: &mut SweepResult,
 ) {
-    let suggestion_of: HashMap<String, String> = reasks
+    // The re-asked target's suggestion AND its seeding rejection, as one
+    // record (the ask site carries the class; the codes go to its detail).
+    let seed_of: HashMap<String, (String, crate::naming::reask::ReaskClass, &'static str)> = reasks
         .iter()
         .flat_map(|(_, items)| items.iter())
-        .map(|r| (r.target.name.clone(), r.suggestion.clone()))
+        .map(|r| {
+            (
+                r.target.name.clone(),
+                (r.suggestion.clone(), r.class, r.code),
+            )
+        })
         .collect();
     let targets: Vec<MintedBinding> = reasks
         .into_iter()
@@ -439,12 +458,33 @@ fn sweep_reask<P: NameProvider>(
         let mut prev = crate::naming::waves::jsset::JsRecord::default();
         let mut failures = humanify_model::llm::RenameFailures::default();
         for t in &g.targets {
-            let suggestion = suggestion_of
+            let (suggestion, ..) = seed_of
                 .get(&t.name)
                 .expect("every re-asked target carries its suggestion");
             prev.set(&t.name, suggestion);
             failures.duplicates.push(t.name.clone());
         }
+        // The ask site: the group's targets were seeded by applier
+        // rejections — the class when they all agree (the usual case: one
+        // collision class), their codes in the detail. Recording only.
+        let seeded: Vec<(crate::naming::reask::ReaskClass, &'static str)> = g
+            .targets
+            .iter()
+            .map(|t| {
+                let (_, class, code) = seed_of.get(&t.name).expect("every target carries its seed");
+                (*class, *code)
+            })
+            .collect();
+        let mut codes: Vec<&str> = seeded.iter().map(|(_, c)| *c).collect();
+        codes.sort_unstable();
+        codes.dedup();
+        let uniform = seeded.iter().map(|(c, _)| *c).all(|c| c == seeded[0].0);
+        let ask = crate::naming::ask_trace::AskSite {
+            phase: 0,
+            prior: false,
+            cause: uniform.then_some(seeded[0].0.into()),
+            detail: Some(codes.join(",")),
+        };
         let request = BatchRenameRequest {
             code: g.code.clone(),
             identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
@@ -469,6 +509,7 @@ fn sweep_reask<P: NameProvider>(
                 .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
                 .collect(),
             request: request.clone(),
+            ask,
         });
         calls.push(LlmCall {
             request,

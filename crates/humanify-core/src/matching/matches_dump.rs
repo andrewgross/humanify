@@ -101,6 +101,9 @@ pub struct MatchSections {
     pub twins: Value,
     /// twin-gates.json: the gates' per-proposal outcomes + stats.
     pub twin_gates: Value,
+    /// The gates' private-name rewrite sets — private-renames.json
+    /// (16-findings #27; empty on a fresh run).
+    pub private_renames: Vec<crate::twins::gates::PrivateRenameSet>,
     pub pair_count: usize,
     /// The two cascades' stats bags (their TS key order serializes).
     pub resolution_stats: crate::matching::cascade::ResolutionStats,
@@ -168,6 +171,7 @@ pub fn match_sections(
         matches_close,
         twins,
         twin_gates,
+        private_renames: twin_output.private_renames.clone(),
         pair_count,
         resolution_stats: function_result.resolution_stats.clone(),
         binding_resolution_stats: stage.binding_result.map(|r| r.resolution_stats.clone()),
@@ -228,3 +232,39 @@ fn unique_tier_json(
     });
     json!({"uniqueTwins": proposals.unique_twins, "pairs": pairs})
 }
+
+// ---------------------------------------------------------------------------
+// private-renames.json (16-findings #27)
+// ---------------------------------------------------------------------------
+
+use humanify_model::dump::{DUMP_SCHEMA_VERSION, PrivateRenameRow, PrivateRenamesFile};
+
+/// The twin gates' private-name rewrite sets as the dump file (16-findings
+/// #27: these rewrites had NO dump record — not a trail row, not a
+/// names.json row; private names are not scope bindings, so this file is
+/// their only record). One row per set, every rewritten node's fresh-text
+/// span in source order (the 07 §1 key space).
+pub fn private_renames_file(sets: &[crate::twins::gates::PrivateRenameSet]) -> PrivateRenamesFile {
+    PrivateRenamesFile {
+        schema_version: DUMP_SCHEMA_VERSION,
+        sets: sets
+            .iter()
+            .map(|s| PrivateRenameRow {
+                old_name: s.old_name.clone(),
+                new_name: s.new_name.clone(),
+                spans: s
+                    .node_spans
+                    .iter()
+                    .map(|sp| humanify_model::dump::SpanKey {
+                        text: "fresh".into(),
+                        start: i64::from(sp.start),
+                        end: i64::from(sp.end),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+#[cfg(test)]
+mod matches_dump_test;

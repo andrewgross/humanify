@@ -22,7 +22,11 @@
 //! - [`js_record`] — the one owner of "what does `record[key]` read" for a
 //!   TS `Record<string, string>` (an absent key falls through to
 //!   Object.prototype — probed, see the module).
+//! - [`ask_trace`] — the ask record's reason taxonomy ("why was this
+//!   identifier asked", `--dump-asks`): recording only, no decision reads
+//!   it; the re-ask causes reuse `reask`'s classes verbatim.
 
+pub mod ask_trace;
 pub mod code_window;
 pub mod context;
 pub mod driver;

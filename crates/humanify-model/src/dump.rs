@@ -354,6 +354,34 @@ pub struct NamesFile {
 }
 
 // ---------------------------------------------------------------------------
+// private-renames.json (prior runs; 16-findings #27)
+// ---------------------------------------------------------------------------
+
+/// One statement-twin private-name rewrite set (16-findings #27): the
+/// fresh text's `#oldName` PrivateIdentifier nodes — every span in
+/// `spans`, source order — the render rewrites to `#newName`. Private
+/// names are not scope bindings, so no trail row and no names.json row
+/// exists for them; this file is their only dump record.
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct PrivateRenameRow {
+    #[serde(rename = "oldName")]
+    pub old_name: String,
+    #[serde(rename = "newName")]
+    pub new_name: String,
+    /// The rewritten `#oldName` nodes: fresh-text byte spans, source order
+    /// (the 07 §1 key space — joinable with twin-gates.json by span).
+    pub spans: Vec<SpanKey>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct PrivateRenamesFile {
+    #[serde(rename = "schemaVersion")]
+    pub schema_version: u64,
+    #[serde(rename = "privateRenames")]
+    pub sets: Vec<PrivateRenameRow>,
+}
+
+// ---------------------------------------------------------------------------
 // placement.json
 // ---------------------------------------------------------------------------
 

@@ -3,10 +3,13 @@
 //! plus the wave-level pins for the collision-retry fix (2026-09-28): the
 //! avoid-lists must carry the names this run already applied, and a
 //! collision-class barrier rejection gets exactly one disclosed re-ask.
+//! The ask-trace pins (the `--dump-asks` record): every re-ask records its
+//! reask class, and the record is bounded — exactly one retry per scope.
 
 use std::cell::RefCell;
 
 use super::{build_retry_used_names, extract_retry_snippet};
+use crate::naming::ask_trace::RetryCause;
 use crate::naming::waves::jsset::{JsRecord, JsSet};
 
 /// The plain `--sequential`-shaped config the collision pins run under.
@@ -250,6 +253,51 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
         code.contains("var eventNameKey = eventHooks + p01Named;"),
         "{code}"
     );
+}
+
+/// The ask-trace pin: the disclosed re-ask of the collision fix records
+/// `retryCause: NameTaken` (the barrier's used-set collision had no
+/// applier code; the cause is the reask class verbatim) and is BOUNDED —
+/// no second re-ask for the same scope (`reask::REASK_LIMIT` is 1).
+#[test]
+fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
+    let fresh = "var q1 = 1;\n\
+                 var q2 = 2;\n\
+                 function e0(p) {\n  return p + q1;\n}\n\
+                 console.log(e0(q2), q1, q2);\n";
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &plain_config(),
+        &MapProvider::new(),
+    )
+    .expect("the stage runs");
+    let retry: Vec<_> = out
+        .waves
+        .dispatches
+        .iter()
+        .filter(|d| d.request.is_retry == Some(true))
+        .collect();
+    assert_eq!(retry.len(), 1, "exactly one re-ask (REASK_LIMIT is 1)");
+    let ask = &retry[0].ask;
+    assert_eq!(ask.cause, Some(RetryCause::NameTaken));
+    assert!(
+        ask.detail.is_none(),
+        "a used-set collision has no applier code"
+    );
+    // The lane-path re-asks (a round-2 `failures.duplicates` ask, not a
+    // barrier seed) leave the cause for the writer to derive.
+    let first_round = out
+        .waves
+        .dispatches
+        .iter()
+        .find(|d| d.request.is_retry != Some(true))
+        .expect("the first-round ask exists");
+    assert_eq!(first_round.ask.cause, None);
+    assert_eq!(first_round.ask.phase, 0);
 }
 
 #[test]

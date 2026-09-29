@@ -19,11 +19,16 @@
 //!
 //! Files: meta.json, text/{fresh,prior,minified,shipped,generated,
 //! reconciled}.js, functions.json, modules.json (Bun only), twins.json /
-//! twin-gates.json (prior only), partitions.json, matches.json,
-//! matches-close.json (when the close tier ran), transfers.json,
-//! transfers-mechanical.json, votes.json, prompts.jsonl, cache-keys.jsonl,
-//! names.json, placement.json, emit.json, tree-manifest.json,
-//! regions.json.
+//! twin-gates.json / private-renames.json (prior only), partitions.json,
+//! matches.json, matches-close.json (when the close tier ran),
+//! transfers.json, transfers-mechanical.json, votes.json, prompts.jsonl,
+//! cache-keys.jsonl, names.json, placement.json, emit.json,
+//! tree-manifest.json, regions.json.
+//!
+//! Separately, [`write_asks`] is the ask log (`--dump-asks <path>`): one
+//! JSONL row per LLM dispatch — the REASON an ask happened, never the
+//! model's answer — collected on every run and written only when the
+//! flag asks for it.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -162,6 +167,10 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
     if let Some(m) = capture.and_then(|c| c.matches.as_ref()) {
         write_twin_gates(&w, &m.twin_gates)?;
         write_twins(&w, &m.twins)?;
+        w.json(
+            "private-renames.json",
+            &crate::matching::matches_dump::private_renames_file(&m.private_renames),
+        )?;
     }
     write_partitions(&w, inp)?;
     write_matches(&w, inp)?;
@@ -579,13 +588,175 @@ pub enum Dispatch<'a> {
     },
 }
 
+/// What the ask log (`--dump-asks <path>`) reads: the run's dispatch
+/// collections, in the same recording order the dump's prompts rows use.
+/// The ask log is INDEPENDENT of `--dump-artifacts` — the dispatches are
+/// collected on every run (the dump only reads them).
+pub struct AskInputs<'a> {
+    pub outcome: &'a NamingOutcome,
+    pub split: Option<&'a SplitSections>,
+    pub vendor_prompts: &'a [LlmCall],
+}
+
+/// Write the reason-labeled ask log (`--dump-asks`): one JSONL row per LLM
+/// dispatch, in recording order. Recording only — no decision reads it,
+/// and it never runs unless the flag asks for it. Returns the row count.
+pub fn write_asks(path: &Path, inp: &AskInputs<'_>) -> Result<usize, String> {
+    let dispatches = the_dispatches(inp.outcome, inp.split, inp.vendor_prompts);
+    let rows = ask_rows(&dispatches);
+    let mut text = String::new();
+    for row in &rows {
+        text.push_str(&stringify(row));
+        text.push('\n');
+    }
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+    }
+    std::fs::write(path, text).map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(rows.len())
+}
+
+/// One ask-log row per dispatch, `seq` in recording order: WHY the ask
+/// happened ([`crate::naming::ask_trace`]'s taxonomy), what it asked, and
+/// the context it carried — never the model's answer.
+pub fn ask_rows(dispatches: &[Dispatch<'_>]) -> Vec<JsValue> {
+    use crate::naming::ask_trace::{AskScope, AskSite, prior_context_of, reason_of};
+    let num = |n: f64| JsValue::Number(n);
+    let mut rounds: HashMap<String, u64> = HashMap::new();
+    dispatches
+        .iter()
+        .enumerate()
+        .map(|(seq, d)| {
+            // (scope, site, kind, request, ask-clone, naming round, wave)
+            let (scope, site, kind, request, ask, round, wave) = match d {
+                Dispatch::Naming(r) => {
+                    let kind = if r.function_id.starts_with("module-binding-batch:") {
+                        AskScope::Module
+                    } else {
+                        AskScope::Fn
+                    };
+                    (
+                        r.function_id.as_str(),
+                        "naming",
+                        kind,
+                        &r.request,
+                        r.ask.clone(),
+                        r.round,
+                        Some(r.wave),
+                    )
+                }
+                Dispatch::Sweep(_, s) => (
+                    "coverage-sweep",
+                    "sweep",
+                    AskScope::Sweep,
+                    &s.request,
+                    s.ask.clone(),
+                    rounds_of(&mut rounds, "coverage-sweep"),
+                    None,
+                ),
+                Dispatch::Plain {
+                    function_id,
+                    site,
+                    call,
+                } => {
+                    let kind = if *site == "folders" {
+                        AskScope::Folders
+                    } else {
+                        AskScope::Vendor
+                    };
+                    (
+                        *function_id,
+                        *site,
+                        kind,
+                        &call.request,
+                        AskSite::fresh(0),
+                        rounds_of(&mut rounds, function_id),
+                        None,
+                    )
+                }
+            };
+            let is_retry = request.is_retry == Some(true);
+            let reason = reason_of(&ask, kind, request);
+            // A recorded cause (an applier-rejection seed) wins; a lane's
+            // round-2 is derived from its request's failure lists.
+            let cause = ask.cause.or_else(|| {
+                if is_retry {
+                    request
+                        .failures
+                        .as_ref()
+                        .and_then(crate::naming::ask_trace::RetryCause::of_failures)
+                } else {
+                    None
+                }
+            });
+            let scope_kind = match kind {
+                AskScope::Fn => "fn",
+                AskScope::Module => "module",
+                AskScope::Sweep => "sweep",
+                AskScope::Vendor => "vendor",
+                AskScope::Folders => "folders",
+            };
+            let variant = match (kind, is_retry) {
+                (AskScope::Fn, false) => "batch",
+                (AskScope::Fn, true) => "batch-retry",
+                (AskScope::Module, false) => "module",
+                (AskScope::Module, true) => "module-retry",
+                (AskScope::Sweep, false) => "batch",
+                (AskScope::Sweep, true) => "batch-retry",
+                (AskScope::Vendor, _) => "vendor",
+                (AskScope::Folders, _) => "folders",
+            };
+            let prior = ask.prior || prior_context_of(request);
+            let mut row = JsObject::new();
+            row.insert("seq", num(seq as f64));
+            row.insert("site", JsValue::str(site));
+            row.insert("scope", JsValue::str(scope));
+            row.insert("scopeKind", JsValue::str(scope_kind));
+            row.insert("reason", JsValue::str(reason.as_str()));
+            row.insert("isRetry", JsValue::Bool(is_retry));
+            if let Some(cause) = cause {
+                row.insert("retryCause", JsValue::str(cause.as_str()));
+            }
+            if let Some(detail) = &ask.detail {
+                row.insert("retryCauseDetail", JsValue::str(detail));
+            }
+            row.insert("priorContext", JsValue::Bool(prior));
+            if let Some(wave) = wave {
+                row.insert("wave", num(wave as f64));
+                row.insert("phase", num(ask.phase as f64));
+            }
+            row.insert("round", num(round as f64));
+            row.insert("identifiers", JsValue::str_array(&request.identifiers));
+            row.insert("usedNamesCount", num(request.used_names.len() as f64));
+            row.insert("promptVariant", JsValue::str(variant));
+            JsValue::Object(row)
+        })
+        .collect()
+}
+
+/// The dump's per-functionId round counter (a sweep's / a namer's rounds
+/// are its call count; the waves carry their own).
+fn rounds_of(rounds: &mut HashMap<String, u64>, function_id: &str) -> u64 {
+    let counted = rounds.entry(function_id.to_string()).or_insert(0);
+    *counted += 1;
+    *counted
+}
+
 /// The run's dispatches in the TS's recording order: the vendor namer
 /// (unpack), the naming waves, the sweeps (pre-generate, then the
 /// deferred one), the split's namers.
 fn run_dispatches<'a>(inp: &'a DumpInputs<'a>) -> Vec<Dispatch<'a>> {
-    let out = inp.outcome;
-    let mut d: Vec<Dispatch<'a>> = inp
-        .vendor_prompts
+    the_dispatches(inp.outcome, inp.split, inp.vendor_prompts)
+}
+
+/// [`run_dispatches`]'s body over the three collections both the dump and
+/// the ask log (`--dump-asks`) read.
+fn the_dispatches<'a>(
+    out: &'a NamingOutcome,
+    split: Option<&'a SplitSections>,
+    vendor_prompts: &'a [LlmCall],
+) -> Vec<Dispatch<'a>> {
+    let mut d: Vec<Dispatch<'a>> = vendor_prompts
         .iter()
         .map(|call| Dispatch::Plain {
             function_id: "vendor-namer",
@@ -605,7 +776,7 @@ fn run_dispatches<'a>(inp: &'a DumpInputs<'a>) -> Vec<Dispatch<'a>> {
             .iter()
             .map(move |x| Dispatch::Sweep(*a, x))
     }));
-    if let Some(split) = inp.split {
+    if let Some(split) = split {
         d.extend(split.prompts.iter().map(|(id, call)| Dispatch::Plain {
             function_id: id,
             site: "folders",
@@ -717,9 +888,11 @@ pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (S
 }
 
 /// `cacheKeyMaterialRow`'s request: the typed request flattened, Sets in
-/// their actual order, the callee `snippet` DROPPED (the oracle dump's
-/// shape — 16-findings #7), undefined fields absent; the TS object's keys
-/// in its literal order.
+/// their actual order, undefined fields absent; the TS object's keys in
+/// its literal order. The callee `snippet` IS carried (16-findings #7,
+/// fixed 2026-09-29): the TS dump dropped it even though the cache key
+/// hashes it, so 30–50% of rows per pair could not be re-derived from the
+/// dump — the row now matches the key material exactly.
 fn request_material(r: &BatchRenameRequest) -> JsValue {
     let mut o = JsObject::new();
     o.insert("code", JsValue::str(r.code.as_str()));
@@ -734,6 +907,7 @@ fn request_material(r: &BatchRenameRequest) -> JsValue {
                     let mut s = JsObject::new();
                     s.insert("name", JsValue::str(c.name.as_str()));
                     s.insert("params", JsValue::str_array(&c.params));
+                    s.insert_opt("snippet", c.snippet.as_deref().map(JsValue::str));
                     JsValue::Object(s)
                 })
                 .collect(),
