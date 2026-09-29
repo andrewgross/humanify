@@ -12,7 +12,14 @@
  *   harness's own TypeScript with it.
  *
  * The serializer is verbatim, options included; both callers pass only
- * `preserveLiterals`, so the other two options stay at their defaults (off).
+ * `preserveLiterals`, so `reExportLocalsVerbatim` stays at its default (off).
+ *
+ * The abandoned `privateNamesAsSlots` mode (per-class order-keyed `P=$n`
+ * slots — finding #5) was deleted 2026-09-29: no caller has passed it since
+ * output-validation.ts died at the cutover, and the Rust counterpart was
+ * removed 2026-09-25 (2f3362d0 — its per-class map was clobbered before any
+ * private token could read it, so it never changed a byte). Private tokens
+ * are verbatim, always (structural-tokens.test.ts pins the bytes).
  */
 import type { Binding, NodePath } from "@babel/traverse";
 import * as t from "@babel/types";
@@ -173,22 +180,12 @@ interface SerializeState {
   counter: number;
   preserveLiterals: boolean;
   /**
-   * When set, a class-private name serializes as an ORDER-KEYED SLOT
-   * (`P=$1`) instead of verbatim (`P=#f`), so a consistent private rename
-   * leaves the stream unchanged. Off by default because the same serializer
-   * produces `structuralHash`, which is used for cross-version MATCHING —
-   * changing it there changes emitted output and is a separate question.
-   */
-  privateNamesAsSlots?: boolean;
-  /** private name → its slot, first occurrence wins. */
-  privateSlots?: Map<string, string>;
-  /**
    * When set, the local of an `export { x } from "m"` specifier serializes
    * verbatim: it names a binding of ANOTHER module, not a reference here.
    * Resolved by name it read verbatim before a rename and as a slot after
    * one that gave a local binding the same name (finding #34). Off by
-   * default for the same reason as `privateNamesAsSlots` — the matching
-   * surface shares this serializer.
+   * default — the matching surface shares this serializer, and the Rust
+   * made this rule always-on instead (naming/driver/validate.rs).
    */
   reExportLocalsVerbatim?: boolean;
   /** True while serializing inside an `export … from` declaration. */
@@ -197,7 +194,6 @@ interface SerializeState {
 
 interface SerializeOptions {
   preserveLiterals?: boolean;
-  privateNamesAsSlots?: boolean;
   reExportLocalsVerbatim?: boolean;
 }
 
@@ -381,20 +377,10 @@ function serializeNode(
   if (t.isPrivateName(node)) {
     // Class-private names are member keys, not scope bindings; a nested
     // Identifier here must not resolve against same-named var bindings.
-    state.parts.push(privateNameToken(node.id.name, state));
+    state.parts.push(privateNameToken(node.id.name));
     return;
   }
   if (serializeLiteral(node, state)) return;
-
-  // Private names are CLASS-scoped, so each class gets its own slot numbering.
-  // Without this, `#f` in two different classes shares one slot, and renaming
-  // them to different names makes the output look like it has MORE distinct
-  // private names than the input — every later slot shifts. That is exactly
-  // what a live run reported: `P=$4` in the original became `P=$8`.
-  const outerPrivateSlots = state.privateSlots;
-  if (state.privateNamesAsSlots && t.isClass(node)) {
-    state.privateSlots = new Map();
-  }
 
   const outerInReExport = state.inReExport;
   if (
@@ -416,37 +402,26 @@ function serializeNode(
   }
   state.parts.push("}");
 
-  // Restore, so a nested class does not leak its numbering to the enclosing one.
-  state.privateSlots = outerPrivateSlots;
+  // Restore, so a nested `export … from` does not leak its verbatim-local
+  // rule to the enclosing declaration.
   state.inReExport = outerInReExport;
 }
 
 /**
- * How a private name appears in the stream.
+ * How a private name appears in the stream: VERBATIM (`P=#name`).
  *
- * Verbatim by default. Under `privateNamesAsSlots` it becomes a slot keyed by
- * the name's FIRST occurrence WITHIN ITS CLASS, which makes a consistent
- * rename (`#f` -> `#A` at the declaration and every use) stream-identical,
- * while a rename that COLLAPSES two fields into one still diverges — the
- * second field loses its own slot.
- *
- * Per-class, because private names are class-scoped: `#f` in class A and `#f`
- * in class B are unrelated, and the humanifier legitimately renames them to
- * different things.
- *
- * A partial rename cannot reach here: `#f` used without a declaration is a
- * SyntaxError, so anything that parsed has a complete one.
+ * Private names are member keys, not scope bindings — they are minifier-
+ * stable content, exactly like property keys, and the matching surface this
+ * serializer feeds relies on that. The order-keyed `P=$n` slot mode (which
+ * would have made a consistent private rename stream-identical) was the
+ * abandoned `privateNamesAsSlots` scheme: deleted 2026-09-29, its Rust
+ * counterpart removed 2026-09-25 when it proved dead (a non-class child
+ * clobbered the per-class map before any private token could read it).
+ * A partial rename cannot reach the stream anyway: `#f` used without a
+ * declaration is a SyntaxError, so anything that parsed has a complete one.
  */
-function privateNameToken(name: string, state: SerializeState): string {
-  if (!state.privateNamesAsSlots) return `P=#${name}`;
-  if (!state.privateSlots) state.privateSlots = new Map();
-  const slots = state.privateSlots;
-  let slot = slots.get(name);
-  if (slot === undefined) {
-    slot = `P=$${slots.size + 1}`;
-    slots.set(name, slot);
-  }
-  return slot;
+function privateNameToken(name: string): string {
+  return `P=#${name}`;
 }
 
 function serializeValue(
@@ -499,7 +474,6 @@ export function serializePathTokens(
     mapping: new Map(),
     counter: 0,
     preserveLiterals: options?.preserveLiterals ?? false,
-    privateNamesAsSlots: options?.privateNamesAsSlots,
     reExportLocalsVerbatim: options?.reExportLocalsVerbatim
   };
   serializeValue(path.node, null, "root", state);
