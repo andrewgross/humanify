@@ -1,0 +1,17 @@
+The matching stage run on its own (detect → unpack → format → graph → matching, then STOP before naming): every per-function and per-statement decision — matched-to-which, the tier that resolved it, the close tier's score, or unmatched — as one deterministic JSON dump. Fully cold: no LLM path exists in this verb. The ground-truth harness's instrument (experiments/092)
+
+Usage: humanify match [OPTIONS] --prior-version <PRIOR_VERSION> <INPUT>
+
+Arguments:
+  <INPUT>  The new version's file — minified or bundled, as the pipeline takes it
+
+Options:
+      --prior-version <PRIOR_VERSION>  The prior release's (humanified) text, as `--prior-version`
+  -o, --out <OUT>                      Write the dump here instead of stdout
+      --sequential                     The conservative schedule (the prior side built on this thread instead of its own). Byte-identical either way
+      --bundler <BUNDLER>              Force the bundler type (as the pipeline's flag)
+      --minifier <MINIFIER>            Force the minifier type (as the pipeline's flag)
+      --work-dir <WORK_DIR>            Where the unpack adapter writes its tree; default a temp dir that is removed afterwards
+      --keep-work-dir                  Keep the work dir even when it was a default temp dir
+      --webcrack-shim <WEBCRACK_SHIM>  The webcrack shim script (scripts/webcrack-shim.ts), required to unpack webpack/browserify bundles
+  -h, --help                           Print help

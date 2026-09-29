@@ -6,12 +6,13 @@
 //!   (contract 14 §1), parsed by `humanify_cli::commander` from the
 //!   declarations in `humanify_cli::surface`;
 //! - the stage VERBS below (`detect`, `unpack`, `libdetect`, `format`,
-//!   `format-check`) — one pipeline stage run on its own, for inspection
-//!   and for the gate (`format-check` replays the committed formatter
-//!   goldens, test/parity/format-goldens.json — the formatter's frozen
-//!   spec). Parsed by clap. `argv[1]` naming a verb selects clap; anything
-//!   else is the pipeline's (so an input file literally named like a verb
-//!   must be passed as `./<name>`).
+//!   `format-check`, `match`) — one pipeline stage run on its own, for
+//!   inspection and for the gate (`format-check` replays the committed
+//!   formatter goldens, test/parity/format-goldens.json — the formatter's
+//!   frozen spec; `match` is the ground-truth harness's instrument). Parsed
+//!   by clap. `argv[1]` naming a verb selects clap; anything else is the
+//!   pipeline's (so an input file literally named like a verb must be
+//!   passed as `./<name>`).
 //!
 //! The migration verbs that rebuilt one stage's rows from a TS dump for the
 //! parity gates were deleted at the cutover (docs/rust-port/19-cutover.md).
@@ -134,6 +135,44 @@ enum Command {
         #[arg(long)]
         plant: Option<String>,
     },
+    /// The matching stage run on its own (detect → unpack → format →
+    /// graph → matching, then STOP before naming): every per-function and
+    /// per-statement decision — matched-to-which, the tier that resolved
+    /// it, the close tier's score, or unmatched — as one deterministic
+    /// JSON dump. Fully cold: no LLM path exists in this verb. The
+    /// ground-truth harness's instrument (experiments/092).
+    Match {
+        /// The new version's file — minified or bundled, as the pipeline
+        /// takes it.
+        input: String,
+        /// The prior release's (humanified) text, as `--prior-version`.
+        #[arg(long)]
+        prior_version: String,
+        /// Write the dump here instead of stdout.
+        #[arg(short = 'o', long)]
+        out: Option<String>,
+        /// The conservative schedule (the prior side built on this thread
+        /// instead of its own). Byte-identical either way.
+        #[arg(long, default_value_t = false)]
+        sequential: bool,
+        /// Force the bundler type (as the pipeline's flag).
+        #[arg(long)]
+        bundler: Option<String>,
+        /// Force the minifier type (as the pipeline's flag).
+        #[arg(long)]
+        minifier: Option<String>,
+        /// Where the unpack adapter writes its tree; default a temp dir
+        /// that is removed afterwards.
+        #[arg(long)]
+        work_dir: Option<String>,
+        /// Keep the work dir even when it was a default temp dir.
+        #[arg(long, default_value_t = false)]
+        keep_work_dir: bool,
+        /// The webcrack shim script (scripts/webcrack-shim.ts), required
+        /// to unpack webpack/browserify bundles.
+        #[arg(long)]
+        webcrack_shim: Option<String>,
+    },
 }
 
 /// The stage verbs clap owns (every `Command` variant's kebab name).
@@ -210,6 +249,32 @@ fn main() {
             show,
             plant,
         }) => format_check_verb(&goldens, show, plant.as_deref()),
+        Some(Command::Match {
+            input,
+            prior_version,
+            out,
+            sequential,
+            bundler,
+            minifier,
+            work_dir,
+            keep_work_dir,
+            webcrack_shim,
+        }) => {
+            let args = humanify_cli::match_verb::MatchVerbArgs {
+                input: &input,
+                prior_version: &prior_version,
+                sequential,
+                bundler: bundler.as_deref(),
+                minifier: minifier.as_deref(),
+                webcrack_shim: webcrack_shim.as_deref(),
+                work_dir: work_dir.as_deref(),
+                keep_work_dir,
+            };
+            if let Err(e) = humanify_cli::match_verb::run_match(&args, out.as_deref()) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
         None => {
             // No subcommand: print help (commander's behavior with a
             // required argument is the same shape).
@@ -621,3 +686,37 @@ fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
 }
 
 use clap::CommandFactory;
+
+#[cfg(test)]
+mod help_golden_test {
+    use super::Cli;
+
+    /// The match verb's rendered help, pinned by a golden generated
+    /// deliberately with `humanify match --help > test/golden/help/match.txt`
+    /// (the commander surface's goldens are pinned by surface_test; the
+    /// clap verbs had no help pin — the instrument's surface is a contract
+    /// with the ground-truth harness, so it is pinned from the first day).
+    #[test]
+    fn match_help_matches_the_golden() {
+        use clap::CommandFactory;
+        let mut cmd = Cli::command()
+            .find_subcommand("match")
+            .expect("the match verb exists")
+            .clone();
+        // Rendered through the parent (as `humanify match --help` prints
+        // it), not standalone: the usage line carries the bin name.
+        cmd = cmd.bin_name("humanify match");
+        let help = cmd.render_help().to_string();
+        let golden = std::fs::read_to_string(format!(
+            "{}/../../test/golden/help/match.txt",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .expect("the committed golden");
+        assert_eq!(
+            help.trim_end(),
+            golden.trim_end(),
+            "help for match (regenerate the golden with \
+             `humanify match --help > test/golden/help/match.txt` after a deliberate change)"
+        );
+    }
+}

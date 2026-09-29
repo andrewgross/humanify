@@ -2,6 +2,7 @@
   "entry": [
     "scripts/*.ts!",
     "experiments/lib/*.ts!",
+    "experiments/lib/match-truth/*.ts!",
     "experiments/034-eval-harness/*.ts!",
     "experiments/walk/*.ts!",
     "experiments/055-residual-recount/real-ledger.ts!"

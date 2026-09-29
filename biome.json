@@ -45,7 +45,8 @@
       "scripts/**",
       "!test/e2e/fixtures/**",
       "!test/golden/**",
-      "!test/e2e/output/**"
+      "!test/e2e/output/**",
+      "!experiments/lib/match-truth/fixtures/**"
     ]
   }
 }

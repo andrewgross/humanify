@@ -151,9 +151,11 @@ const ALLOWLIST: readonly AllowlistEntry[] = [
   {
     members: [
       "experiments/034-eval-harness/attribute-roots.ts:counted",
-      "experiments/034-eval-harness/simulate-root-inherit.ts:counted"
+      "experiments/034-eval-harness/simulate-root-inherit.ts:counted",
+      "experiments/lib/match-truth/score.ts:countsOf"
     ],
-    justification: ONE_OFF
+    justification:
+      "the count-into-Map idiom (a 5-line multiset counter), three independent counters over three different domains — not one question answered twice"
   },
   {
     members: [

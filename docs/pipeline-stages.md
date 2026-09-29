@@ -61,7 +61,10 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
 - **Matching (8) was folded into "naming".** It is a separate question with its
   own failure modes: naming decides what a thing should be called, matching
   decides whether it is the same thing as last release. Most cross-version
-  noise is a matching failure, not a naming one.
+  noise is a matching failure, not a naming one. Stage 8 has its own
+  inspection verb since exp092: `humanify match` runs the stage cold (no
+  LLM path exists in it) and dumps every per-function/per-statement
+  decision — the ground-truth harness's instrument.
 - **Vendor (5) was absent entirely** — the rule-8 blind spot.
 - **Carry (post-placement) was absent**, and it is the only stage whose output
   is consumed by a _future_ run.

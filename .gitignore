@@ -37,6 +37,12 @@ split-output/
 experiments/034-eval-harness/results/*/*.log
 experiments/034-eval-harness/results/*/*.stdout
 
+# exp092 match ground-truth: the corpus cache (npm tarballs + extracted
+# builds, re-downloadable from the pinned versions) and the per-pair raw
+# match dumps. The committed scorecards under results/ are the reference.
+experiments/092-match-ground-truth/.corpus/
+experiments/092-match-ground-truth/.runs/
+
 # Local dev environment and host-specific planning notes: not project
 # infrastructure, not usable by anyone cloning this repo, and this repo is
 # public. Both were committed incidentally in an unrelated experiment commit
