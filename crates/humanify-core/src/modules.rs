@@ -244,12 +244,20 @@ pub struct FactoryRecord {
     pub name: Option<String>,
     /// Where the name came from — set by the naming cascade.
     pub name_source: Option<NameSource>,
+    /// The CONTAINER statement's span (the whole `var …;` this declarator
+    /// lives in) — extraction splices that statement out of the runtime, so
+    /// this is how the runtime-statement ordinals of finding #60's bridge
+    /// records are computed (container ordinal minus removed statements).
+    pub decl_stmt_span: Span,
 }
 
 /// The classification: the helper var + every factory, in source order.
 pub struct BunModuleClassification {
     pub helper_var: String,
     pub factories: Vec<FactoryRecord>,
+    /// The container's statement spans, in source order (the wrapper body's
+    /// or the program's) — the scope planner's container view.
+    pub container: Vec<Span>,
     /// WHERE each vendor name came from, once `name_cjs_factories` has run.
     /// Undefined until then — absent is not "all zero" (the TS note).
     pub name_counts: Option<FactoryNameCounts>,
@@ -685,6 +693,7 @@ pub fn classify_bun_modules<'a>(
                 banner_version: banner.as_ref().and_then(|b| b.version.clone()),
                 name: None,
                 name_source: None,
+                decl_stmt_span: stmt_span,
             });
         }
     }
@@ -692,6 +701,10 @@ pub fn classify_bun_modules<'a>(
     Some(BunModuleClassification {
         helper_var: helper.name,
         factories,
+        // The container's statement spans, in order — the scope planner
+        // locates a captured binding's declaring statement in this list
+        // (finding #60's bridge records).
+        container: container_stmts.clone(),
         name_counts: None,
     })
 }

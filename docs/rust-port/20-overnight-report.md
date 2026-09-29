@@ -50,11 +50,14 @@ Per-hop rust wall 106–768 s (ts 683–1,409 s); cold first hop 2,095 s / 6.4 G
   already semantic) + 76 ln reorder jitter. Ordinary rule-11 noise; bundle noiseLn was LOWER in rust at
   this hop (612 vs 1,319).
 
-**The one real finding:** on identical cold input, the two pipelines classified a handful of large library
+**The one real finding — FIXED 2026-09-29 (finding #60, branch `fix/vendor-classification-gap`):** on identical cold input, the two pipelines classified a handful of large library
 modules differently (rust src / ts vendor: @aws-sdk/client-sts machinery, the OIDC/openid-client giant,
 the auth-token-manager wrapper split) — set at the cold hop and carried since. The divergence is in the
 vendor/factory EXTRACTION path (bun unpack adapter manifest + library-detection adapters), not the
-per-statement rule — open follow-up, MERGED with vendor fallback verification (#6 below).
+per-statement rule — the trigger was finding #51's kept-in-app remedy cascading ONE ESM-pair read
+into whole library families; app-scope reads are now BRIDGED through their owner file (finding #60),
+so the factories are vendored and the reads stay runnable. Vendor fallback verification (#6 below)
+stays open separately — it was NOT the trigger.
 
 ## 3. Example diffs (what a cross-version diff looks like from each pipeline)
 

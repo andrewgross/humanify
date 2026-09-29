@@ -404,8 +404,14 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         }
     }
     sources.sort();
+    let captures: usize = outcome
+        .manifest
+        .iter()
+        .flat_map(|m| &m.factories)
+        .map(|f| f.captures.len())
+        .sum();
     println!(
-        "unpack: adapter=bun files={} sources={} llm-renamed={}{}",
+        "unpack: adapter=bun files={} sources={} llm-renamed={}{} kept-in-app={} captures={}",
         outcome.result.files.len(),
         sources
             .iter()
@@ -419,7 +425,9 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
                 " rekeyed-by-content={}/{} groups={}",
                 r.factories_joined, r.prior_entries, r.groups_joined
             ))
-            .unwrap_or_default()
+            .unwrap_or_default(),
+        outcome.kept_in_app,
+        captures,
     );
     if let Some(path) = &args.index {
         let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");

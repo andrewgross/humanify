@@ -31,9 +31,10 @@ use crate::modules::vendor_content::{
     RekeyStats, TsEraEntry, fresh_content_keys, prior_file_content_key, rekey_prior_by_content,
 };
 use crate::modules::vendor_names::{
-    BunModulesManifest, FileNameChooser, ManifestEntry, NameLookup, PriorManifestEntry,
-    VendorNamer, annotate_hash_ordinals, load_prior_manifest_factories, load_prior_vendor_names,
-    name_fallback_factories_with_llm, order_by_prior_manifest, stable_stem,
+    BunModulesManifest, FileNameChooser, ManifestCapture, ManifestEntry, NameLookup,
+    PriorManifestEntry, VendorNamer, annotate_hash_ordinals, load_prior_manifest_factories,
+    load_prior_vendor_names, name_fallback_factories_with_llm, order_by_prior_manifest,
+    stable_stem,
 };
 use crate::modules::wrapper::find_wrapper_function;
 use crate::modules::{
@@ -55,6 +56,37 @@ pub const BUN_MODULES_MANIFEST: &str = "_bun-modules.json";
 
 /// The runtime file's name (the leftover code outside every factory).
 pub const RUNTIME_FILE: &str = "runtime.js";
+
+/// The run's vendor capture records (finding #60), read back from the
+/// manifest the unpack wrote — the split resolves them against its own
+/// (renamed) statements and placement. Missing file, unreadable JSON or a
+/// pre-#60 manifest all read as "no captures".
+pub fn read_vendor_captures(output_dir: &Path) -> Vec<ManifestCapture> {
+    let Ok(text) = fs::read_to_string(bun_manifest_path(output_dir)) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let Some(entries) = value.get("factories").and_then(|f| f.as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries {
+        let Some(captures) = entry.get("captures").and_then(|c| c.as_array()) else {
+            continue;
+        };
+        for capture in captures {
+            let Some(name) = capture.get("name").and_then(|n| n.as_str()) else {
+                continue;
+            };
+            out.push(ManifestCapture {
+                name: name.to_string(),
+            });
+        }
+    }
+    out
+}
 
 /// The manifest's path within an output tree (`bunManifestPath`).
 pub fn bun_manifest_path(output_dir: &Path) -> PathBuf {
@@ -299,9 +331,17 @@ pub fn unpack_bun(
     // not a vendor module at all.
     let mut helper_edits = Vec::new();
     let mut kept_in_app = 0;
+    // Per RETAINED factory (extraction order): the manifest's capture
+    // records for its body's app-scope reads (finding #60).
+    let mut captures_by_module: Vec<Vec<ManifestCapture>> = Vec::new();
     if let Some(c) = classification.as_mut() {
-        let plan =
-            scope::plan_bundle_scope_refs(code, &ingest, &c.factories, require_var.as_deref());
+        let plan = scope::plan_bundle_scope_refs(
+            code,
+            &ingest,
+            &c.factories,
+            &c.container,
+            require_var.as_deref(),
+        );
         kept_in_app = plan.kept.len();
         helper_edits = plan.helper_edits;
         let mut index = 0;
@@ -309,6 +349,7 @@ pub fn unpack_bun(
             index += 1;
             !plan.kept.contains(&(index - 1))
         });
+        captures_by_module = manifest_captures(c, &plan.kept, plan.bridges);
     }
     if let Some(c) = classification.as_mut() {
         if let Some(entries) = &prior.ts_era {
@@ -366,7 +407,7 @@ pub fn unpack_bun(
     // the bundle's own.
     let mut body_edits = plan.ref_edits.clone();
     body_edits.extend(helper_edits.iter().cloned());
-    for (module, module_plan) in modules.iter().zip(&plan.plans) {
+    for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
         let mut body = slice_with_edits(code, &body_edits, module.body_start, module.body_end);
         if let Some(req) = &require_var {
             body = rewrite_require_calls(&body, req);
@@ -393,6 +434,10 @@ pub fn unpack_bun(
             banner_package: record.and_then(|r| r.banner_package.clone()),
             banner_version: record.and_then(|r| r.banner_version.clone()),
             hash_ordinal: None,
+            captures: captures_by_module
+                .get(module_index)
+                .cloned()
+                .unwrap_or_default(),
         });
     }
 
@@ -449,6 +494,39 @@ fn classify(code: &str, ingest: &Ingest<'_>) -> Option<BunModuleClassification> 
         wrapper.as_ref().map(|w| w.body_span),
         &tables,
     )
+}
+
+/// The manifest's capture records, per RETAINED factory (extraction order),
+/// from the scope plan's bridge records (finding #60): just the RAW name of
+/// each app-scope read. The pre-retain factory index becomes its retained
+/// position; WHERE the binding lives is the split's question, answered
+/// against the FRESH text (the beautified pre-rename runtime, whose
+/// statement list aligns 1:1 with the shipped one) — byte-space ordinals
+/// computed here would not survive the beautifier's multi-declarator split.
+fn manifest_captures(
+    c: &BunModuleClassification,
+    kept: &HashSet<usize>,
+    bridges: Vec<scope::BridgePlan>,
+) -> Vec<Vec<ManifestCapture>> {
+    // Pre-retain factory index → retained position (the retained list keeps
+    // the pre-retain order).
+    let pre_len = c.factories.len() + kept.len();
+    let mut pre_to_post = vec![usize::MAX; pre_len];
+    let mut post = 0usize;
+    for (i, slot) in pre_to_post.iter_mut().enumerate() {
+        if !kept.contains(&i) {
+            *slot = post;
+            post += 1;
+        }
+    }
+    let mut out: Vec<Vec<ManifestCapture>> = vec![Vec::new(); c.factories.len()];
+    for b in bridges {
+        let Some(&target) = pre_to_post.get(b.factory).filter(|&&t| t != usize::MAX) else {
+            continue; // a kept factory: the scope plan already withheld it
+        };
+        out[target].push(ManifestCapture { name: b.name });
+    }
+    out
 }
 
 /// factoryVar → record index; a duplicated var keeps the LAST record (the

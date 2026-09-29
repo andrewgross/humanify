@@ -1023,10 +1023,15 @@ const BUN_BUNDLE_SCOPE_REFS: &str = concat!(
 /// scale: every vendor file wrapped (`wrap_extracted_factory`), the runtime
 /// relinked (`relink_factory_references`) and the factory-helper shim
 /// written — then RUN by Node. Node's stdout, or its stderr as the error.
+///
+/// Finding #60's unit-scale bridge: no naming stage ran, so each capture's
+/// accessor keeps its raw name and the owner is the runtime itself; the
+/// harness gives the runtime the accessor exports the split's emit writes
+/// for the owner file in the pipeline.
 fn run_relinked(dir: &Path) -> Result<String, String> {
     use crate::finish::relink::{
-        BUN_RELINK_RUNTIME, FactoryLookup, bun_relink_runtime_filename, relink_factory_references,
-        wrap_extracted_factory,
+        BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, bun_relink_runtime_filename,
+        relink_factory_references, wrap_extracted_factory,
     };
     let entries = factories(&read_manifest(dir));
     let lookup: FactoryLookup = entries
@@ -1038,15 +1043,35 @@ fn run_relinked(dir: &Path) -> Result<String, String> {
             )
         })
         .collect();
+    let mut bridges: Vec<VendorBridge> = Vec::new();
+    let mut accessor_lines: Vec<String> = Vec::new();
+    for e in &entries {
+        for c in e["captures"].as_array().into_iter().flatten() {
+            let name = c["name"].as_str().expect("a capture name");
+            if !bridges.iter().any(|b| b.name == name) {
+                bridges.push(VendorBridge {
+                    name: name.to_string(),
+                    file: "runtime.js".to_string(),
+                    accessor: name.to_string(),
+                });
+                accessor_lines.push(format!(
+                    "Object.defineProperty(module.exports, \"{name}\", {{ get: () => {name}, enumerable: true, configurable: true }});"
+                ));
+            }
+        }
+    }
     for e in &entries {
         let file = s(e, "fileName");
         let body = fs::read_to_string(dir.join(file)).unwrap();
-        let wrapped = wrap_extracted_factory(&body, file, &lookup).unwrap();
+        let (wrapped, _) = wrap_extracted_factory(&body, file, &lookup, &bridges).unwrap();
         fs::write(dir.join(file), wrapped).unwrap();
     }
     let runtime = fs::read_to_string(dir.join("runtime.js")).unwrap();
-    let relinked = relink_factory_references(&runtime, "runtime.js", &lookup).unwrap();
-    fs::write(dir.join("runtime.js"), relinked).unwrap();
+    let mut relinked = relink_factory_references(&runtime, "runtime.js", &lookup).unwrap();
+    if !accessor_lines.is_empty() {
+        relinked = format!("{}\n{relinked}", accessor_lines.join("\n"));
+    }
+    fs::write(dir.join("runtime.js"), &relinked).unwrap();
     let shim = dir.join(bun_relink_runtime_filename());
     fs::create_dir_all(shim.parent().unwrap()).unwrap();
     fs::write(shim, BUN_RELINK_RUNTIME).unwrap();
@@ -1079,27 +1104,86 @@ fn a_vendor_body_never_references_a_bundle_scope_binding() {
     // Finding #51: only FACTORY references were rewritten and relinked, so
     // `u` (the bundle's __toESM) and `initM` / `Rq` / `ns` stayed free in
     // the vendor files — a ReferenceError the moment the factory ran.
+    // Finding #60: the `initM`/`ns` READS are now bridged through the
+    // owner file's live accessor, so the whole graph runs from vendor.
     let t = TempDir::new("scope-refs");
     unpack(BUN_BUNDLE_SCOPE_REFS, &t.0);
     assert_eq!(run_relinked(&t.0).as_deref(), Ok("[43,\"hi!\"]\n"));
 }
 
 #[test]
-fn runtime_helpers_come_from_the_shim_and_app_reaching_factories_stay_in_the_app() {
-    let t = TempDir::new("scope-refs-shape");
+fn app_scope_reads_are_vendored_with_capture_records() {
+    // Finding #60: a factory body's READ of a wrapper-scope binding (the
+    // ESM init + namespace pair is the shape real bundles hit — Bun's
+    // `require()` of an in-bundle ESM module, e.g. @aws-sdk/client-sts'
+    // machinery at 2.1.182) no longer keeps the factory in the app. The
+    // body is extracted to vendor and the read is recorded in the manifest
+    // as a capture of the RAW name — the split resolves the name against
+    // the fresh (pre-rename) text, takes the post-rename accessor from the
+    // aligned shipped statement, and the finish bridges the read through
+    // the owner file's live accessor.
+    let t = TempDir::new("scope-refs-bridge");
     unpack(BUN_BUNDLE_SCOPE_REFS, &t.0);
-    let entries = factories(&read_manifest(&t.0));
-    let bodies: Vec<String> = entries
-        .iter()
-        .map(|e| fs::read_to_string(t.0.join(s(e, "fileName"))).unwrap())
-        .collect();
-    // mod_b and mod_a are vendored; mod_a's `u(...)` now names the shim's
-    // helper. mod_c reaches an app ESM module, so it stays in the app — and
-    // so does mod_d, which depends on it.
-    assert_eq!(entries.len(), 2, "{bodies:?}");
-    assert!(bodies.iter().any(|b| b.contains("__toESM(")), "{bodies:?}");
-    assert!(!bodies.iter().any(|b| b.contains("u(")), "{bodies:?}");
+    let manifest = read_manifest(&t.0);
+    let entries = factories(&manifest);
+    assert_eq!(entries.len(), 4, "nothing stays in the app: {entries:?}");
     let runtime = fs::read_to_string(t.0.join("runtime.js")).unwrap();
-    assert!(runtime.contains("var mod_c=x("), "{runtime}");
-    assert!(runtime.contains("var mod_d=x("), "{runtime}");
+    assert!(!runtime.contains("var mod_c="), "{runtime}");
+    assert!(!runtime.contains("var mod_d="), "{runtime}");
+    // mod_a's __toESM capture still names the shim's helper.
+    assert!(
+        entries.iter().any(|e| {
+            fs::read_to_string(t.0.join(s(e, "fileName")))
+                .map(|b| b.contains("__toESM("))
+                .unwrap_or(false)
+        }),
+        "{entries:?}"
+    );
+    // mod_c: the ESM pair reads are captures of their raw names.
+    let mod_c = entries
+        .iter()
+        .find(|e| {
+            fs::read_to_string(t.0.join(s(e, "fileName")))
+                .map(|b| b.contains("__toCommonJS(ns)"))
+                .unwrap_or(false)
+        })
+        .expect("mod_c is vendored");
+    let mut captures: Vec<String> = mod_c["captures"]
+        .as_array()
+        .expect("mod_c records its app-scope reads")
+        .iter()
+        .map(|c| c["name"].as_str().expect("name").to_string())
+        .collect();
+    captures.sort();
+    assert_eq!(
+        captures,
+        vec!["initM".to_string(), "ns".to_string()],
+        "{entries:?}"
+    );
+}
+
+#[test]
+fn a_written_app_scope_binding_still_keeps_the_factory_in_the_app() {
+    // The bridge is READ-only: a body that WRITES a wrapper-scope binding
+    // cannot reach it through a get accessor, so the factory stays in the
+    // app (finding #51's sound floor) — and so does everything that
+    // references it.
+    const BUN_WRITE_CAPTURE: &str = concat!(
+        "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+        "var shared=1;\n",
+        "var mod_w=x((exports)=>{shared=2;exports.value=shared;});\n",
+        "var mod_r=x((exports)=>{exports.value=mod_w().value;});\n",
+        "console.log(mod_r().value);\n",
+    );
+    let t = TempDir::new("scope-refs-write");
+    unpack(BUN_WRITE_CAPTURE, &t.0);
+    // Every factory stays in the app, so nothing is extractable — the
+    // adapter falls to the passthrough floor and writes no manifest.
+    assert!(
+        !t.0.join("vendor/_bun-modules.json").exists(),
+        "no factory was extracted"
+    );
+    let index = fs::read_to_string(t.0.join("index.js")).unwrap();
+    assert!(index.contains("var mod_w=x("), "{index}");
+    assert!(index.contains("var mod_r=x("), "{index}");
 }
