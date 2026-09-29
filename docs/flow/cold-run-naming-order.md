@@ -3,7 +3,7 @@
 How the FIRST version of a bundle (a cold run, no prior version) is processed:
 how functions are ordered and queued for LLM naming.
 
-As of main a7566237 (2026-09-28). Default = relaxed schedule; --sequential
+As of main 799499a8 (2026-09-29). Default = relaxed schedule; --sequential
 shows the conservative variant.
 
 ## Walk-through: one function, graph entry to applied rename

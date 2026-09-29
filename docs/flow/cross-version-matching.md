@@ -1,6 +1,6 @@
 # Cross-version matching: how version N inherits version N-1's names
 
-As of main a7566237 (2026-09-28). Sources cited per node.
+As of main 799499a8 (2026-09-29). Sources cited per node.
 
 When humanify runs with `--prior-version`, it receives version N-1's humanified
 output alongside the fresh minified version N. Everything the pipeline does

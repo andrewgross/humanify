@@ -1,6 +1,6 @@
 # LLM calling: request shape, retry ladders, dedup, and answer validation
 
-As of main a7566237 (2026-09-28).
+As of main 799499a8 (2026-09-29).
 
 The naming waves (`naming::waves`) are the LLM's only large caller: every
 function's bindings and every module-binding group are asked for names in
@@ -166,7 +166,7 @@ flowchart TD
     direction TB
     SWAPP["Sweep answers apply one-by-one, straight through the validated-rename guards"]
     SWREJ{"Rejected by the guards? (a RejectionReason — e.g. target-in-scope, target-visible, exported-name)"}
-    SWDROP["CURRENT behavior: counted as skipped and left minified — NO re-ask, NO decoration, no identity repair. A conflict-retry is being added on branch fix/collision-retry (open at a7566237)"]
+    SWDROP["Since the 2026-09-28 fix: a name-taken guard rejection gets ONE disclosed re-ask (reason + the suggested name relayed; bounded at reask.rs REASK_LIMIT=1), then give-up is recorded. Second collisions and unrecoverable classes stay skipped-but-counted"]
     SWOK["Applied: named, counters updated"]
     SWAPP --> SWREJ
     SWREJ -->|"yes"| SWDROP
@@ -243,7 +243,7 @@ flowchart TD
 | BARRIER / WIN / BLOSE / REJOUT           | Barrier apply order; `recordWaveRejectionOutcome` (duplicate vs winner, attempts 1); retry seeds                                                                                                                                                       | `processor.rs:2066-2117 (barrier), 1806-1823, 1494-1520 (build_retry_seeds)`                                                                                                                                                                      |
 | BREASK                                   | One barrier retry in the next wave step; winners spread into already-renamed                                                                                                                                                                           | `processor.rs:699-703, 1382-1446 (retry_request at 1416-1446), 1731-1753`                                                                                                                                                                         |
 | BSUF / BGIVE                             | Retry entries get exactly one decoration attempt, then `recordWaveRetryGiveUp` (duplicate, attempts 2)                                                                                                                                                 | `processor.rs:2092-2109, 1834-1849`                                                                                                                                                                                                               |
-| SWAPP / SWREJ / SWDROP                   | The sweep's silent drop: a guard rejection is counted skipped, never re-asked — the site the in-progress `fix/collision-retry` branch addresses                                                                                                        | `passes/sweep.rs:267-295`; guards `validated.rs:64-94, 581+`                                                                                                                                                                                      |
+| SWAPP / SWREJ / SWDROP                   | The sweep's collision path: was a silent drop (never re-asked) until 2026-09-28; now one disclosed re-ask, bounded, counted                                                                                                                            | `passes/sweep.rs:267-295`; guards `validated.rs:64-94, 581+`                                                                                                                                                                                      |
 | REC ... RSKIP                            | Prior-diff reconcile: strict gates, consumer tier (>= 2 distinct hunk witnesses; >= 3 when the old name exists in the prior text), fixpoint rounds, held-then-relaxed last-resort round, skips recorded (never an LLM re-ask); all tiers on by default | `crates/humanify-core/src/naming/reconcile.rs:51-82, 292-337, 429-465 (witness counts), 562-666, 672-767`; defaults `reconcile/step.rs:45-58`                                                                                                     |
 | COUNT                                    | Outcomes + trails, finish reasons, Tally, contention, claim guards, memo/disk counters                                                                                                                                                                 | `batch.rs:113-123, 645-673`; `processor.rs:1806-1849, 312-338`; `validated.rs:120-141`; `cache.rs:167-182`                                                                                                                                        |
 
