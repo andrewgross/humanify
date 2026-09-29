@@ -107,6 +107,116 @@ test("the loose form blurs literals but keeps operators", () => {
 });
 
 // ---------------------------------------------------------------------------
+// The two walk-scale blind spots the 2026-09-29 number-blur study measured
+// on the claude-code 2.1.215 -> 2.1.216 runtime match (dump-runtime.json,
+// 60,466 reported pairs): treating a template literal as one opaque string
+// read every HUMAN name interpolated inside ${...} as a string-length
+// change (4,386 PHANTOM literal diffs), and a quote character inside a
+// regex literal desynced the string scanner (+55 phantoms).
+// ---------------------------------------------------------------------------
+
+test("template ${…} interpolations are CODE, not string content", () => {
+  // A consistent identifier rename must be erased inside interpolations:
+  // the human prior names the binding, the fresh side's is minified.
+  assert.equal(
+    canonical("function (count) {\n  return `${count} items`;\n}"),
+    canonical("function (totalShown) {\n  return `${totalShown} items`;\n}")
+  );
+  // The bijection is shared across the template boundary: the same
+  // identifier outside and inside an interpolation is one index.
+  assert.equal(
+    canonical("function (px) {\n  var msg = `got ${px}`;\n  return px;\n}"),
+    canonical(
+      "function (user) {\n  var msg = `got ${user}`;\n  return user;\n}"
+    )
+  );
+  // Braces nested inside an interpolation do not close it early.
+  assert.equal(
+    canonical("function (a) {\n  return `${({ k: a }).k} end`;\n}"),
+    canonical("function (b) {\n  return `${({ k: b }).k} end`;\n}")
+  );
+  // The quasi parts are still string content: a real difference there is
+  // a difference.
+  assert.notEqual(
+    canonical("function () {\n  return `a${1}x`;\n}"),
+    canonical("function () {\n  return `a${1}y`;\n}")
+  );
+});
+
+test("the loose form blurs each template quasi by length, interpolations as code", () => {
+  // The interpolated identifier's LENGTH no longer leaks into the string
+  // blur: `${x} done` and `${somethingLong} done` are the same function.
+  assert.equal(
+    lo("function (x) {\n  return `${x} done`;\n}"),
+    lo("function (userCount) {\n  return `${userCount} done`;\n}")
+  );
+  // A genuine quasi-length difference still fails the blur.
+  assert.notEqual(
+    lo("function (n) {\n  return `${n} aa`;\n}"),
+    lo("function (n) {\n  return `${n} aaaa`;\n}")
+  );
+});
+
+test("numeric literals are one token — a BigInt suffix is never an identifier", () => {
+  // `0n`'s trailing `n` was read as a fresh identifier of the bijection:
+  // when the fresh side happens to name a variable `n`, the suffix joined
+  // ITS index on one side and minted a new one on the other — the last 7
+  // phantom diffs the walk-scale check found after the template/regex
+  // fixes (all BigInt arithmetic).
+  assert.equal(
+    canonical(
+      "function (index) {\n  let counter = 21;\n  while (counter > 0n) {\n    counter--;\n  }\n}"
+    ),
+    canonical(
+      "function (n) {\n  let a = 21;\n  while (a > 0n) {\n    a--;\n  }\n}"
+    )
+  );
+  // The strict form keeps the literal's spelling; the loose form still
+  // blurs it to one `#`.
+  assert.equal(
+    canonical("function (x) {\n  return x + 1024n;\n}"),
+    "(_0) => {\n  return _0 + 1024n;\n}"
+  );
+  assert.equal(
+    lo("function (x) {\n  return x + 1024n;\n}"),
+    lo("function (x) {\n  return x + 999999n;\n}")
+  );
+});
+
+test("a regex containing a quote character does not desync the string scanner", () => {
+  // The quote inside the regex opened a "string" that swallowed real code,
+  // so a pure identifier rename read as differing literal content.
+  assert.equal(
+    canonical(
+      'function (px) {\n  var re = /"/;\n  return ("done " + px).replace(re, "x");\n}'
+    ),
+    canonical(
+      'function (user) {\n  var re = /"/;\n  return ("done " + user).replace(re, "x");\n}'
+    )
+  );
+  // Two DIFFERENT regexes must never read canonical-equal — the desync
+  // could erase a real difference that sits before the quote.
+  assert.notEqual(
+    canonical('function () {\n  var re = /a"x/;\n}'),
+    canonical('function () {\n  var re = /b"x/;\n}')
+  );
+  // `return /…/` is a regex (a keyword precedes it), not division.
+  assert.equal(
+    canonical('function (s) {\n  return /"\\d"/.test(s);\n}'),
+    canonical('function (str) {\n  return /"\\d"/.test(str);\n}')
+  );
+  // Division is still division: no regex scan after a value.
+  assert.notEqual(
+    canonical("function (a, b) {\n  return a / b;\n}"),
+    canonical("function (a, b) {\n  return a * b;\n}")
+  );
+  assert.equal(
+    canonical("function (total) {\n  return total / 2;\n}"),
+    canonical("function (sum) {\n  return sum / 2;\n}")
+  );
+});
+
+// ---------------------------------------------------------------------------
 // scoreMatchDump() on a hand-written dump — every number derivable by hand
 // ---------------------------------------------------------------------------
 
