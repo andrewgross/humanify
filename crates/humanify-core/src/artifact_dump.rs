@@ -677,8 +677,10 @@ pub fn ask_rows(dispatches: &[Dispatch<'_>]) -> Vec<JsValue> {
             };
             let is_retry = request.is_retry == Some(true);
             let reason = reason_of(&ask, kind, request);
-            // A recorded cause (an applier-rejection seed) wins; a lane's
-            // round-2 is derived from its request's failure lists.
+            // A recorded cause wins (an applier-rejection seed, or a lane
+            // round-2 seeded by the scope check — `AskSite::lane_reask`);
+            // otherwise a lane's round-2 is derived from its request's
+            // failure lists.
             let cause = ask.cause.or_else(|| {
                 if is_retry {
                     request

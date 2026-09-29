@@ -6,6 +6,7 @@ use humanify_model::llm::{BatchRenameRequest, RenameFailures};
 
 use super::{AskReason, AskScope, AskSite, RetryCause, prior_context_of, reason_of};
 use crate::naming::reask::ReaskClass;
+use crate::rename::validated::RejectionReason;
 
 #[test]
 fn the_reason_wire_names_are_stable_and_distinct() {
@@ -38,8 +39,11 @@ fn the_reason_wire_names_are_stable_and_distinct() {
 #[test]
 fn reask_classes_map_verbatim_to_causes() {
     // The vocabulary reuse is the point (naming::reask's classes, as_str'd):
-    // NameTaken/InvalidSuggestion survive; Unrecoverable never re-asks, so
-    // its mapping can never be read — the conversion must still compile.
+    // NameTaken/InvalidSuggestion survive. Unrecoverable never re-asks at
+    // the barrier/sweep (the only sites that re-ask an applier rejection),
+    // but the LANE round-2 can carry one (a late `exported-name` rides the
+    // duplicate preamble — its recorded cause must say unrecoverable, not
+    // the generic NameTaken the failure lists derive).
     assert_eq!(
         RetryCause::from(ReaskClass::NameTaken).as_str(),
         "NameTaken"
@@ -48,6 +52,41 @@ fn reask_classes_map_verbatim_to_causes() {
         RetryCause::from(ReaskClass::InvalidSuggestion).as_str(),
         "InvalidSuggestion"
     );
+    assert_eq!(
+        RetryCause::from(ReaskClass::Unrecoverable).as_str(),
+        "Unrecoverable"
+    );
+}
+
+/// The lane round-2 site derivation (2026-09-29): a retry whose ids include
+/// a scope-check rejection records THAT reason's class + code, in
+/// preference to the writer's generic failure-list derivation; mixed
+/// windows take the first recorded rejection's class and list every
+/// distinct code. Recording only — the retry flow is unchanged.
+#[test]
+fn lane_round2_sites_record_the_scope_rejections_class_and_codes() {
+    // No scope rejection in the window: the writer derives from failures.
+    assert_eq!(AskSite::lane_reask(&[], 0).cause, None);
+    let site = AskSite::lane_reask(&[("a".into(), RejectionReason::ShadowsChild)], 1);
+    assert_eq!(site.cause, Some(RetryCause::NameTaken));
+    assert_eq!(site.detail.as_deref(), Some("shadows-child"));
+    assert_eq!(site.phase, 1);
+    // Mixed classes: the FIRST entry's class decides; distinct codes all
+    // recorded, first-seen order.
+    let site = AskSite::lane_reask(
+        &[
+            ("a".into(), RejectionReason::ShadowsChild),
+            ("b".into(), RejectionReason::ExportedName),
+            ("c".into(), RejectionReason::ShadowsChild),
+        ],
+        0,
+    );
+    assert_eq!(site.cause, Some(RetryCause::NameTaken));
+    assert_eq!(site.detail.as_deref(), Some("shadows-child,exported-name"));
+    // An export id alone: unrecoverable — the truth, not NameTaken.
+    let site = AskSite::lane_reask(&[("x".into(), RejectionReason::ExportedName)], 0);
+    assert_eq!(site.cause, Some(RetryCause::Unrecoverable));
+    assert_eq!(site.detail.as_deref(), Some("exported-name"));
 }
 
 #[test]
