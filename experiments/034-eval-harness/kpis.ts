@@ -77,6 +77,20 @@ export interface Scorecard {
       nameOnlyFiles?: number;
       alias: number;
       reorder: number;
+      /**
+       * SOFT NOISE (advisory, additive — 2026-09-29): lines inside `real`
+       * whose statement pair is the same code modulo WRAPPER SPELLING — the
+       * packaging tool re-serializing `createModule((a,b) => {...})` as
+       * `createModule(function(a,b) {...})` (the 2.1.207→208 case: four
+       * files, 8,230 lines, exactly the mass the frozen rules bill to
+       * `real`). The charge STAYS inside `real` — every recorded number must
+       * keep computing as today — and this field lets the summary say "of
+       * which N are spelling-only". See diff-composition.ts's
+       * `wrapperSpellingKey` for the tight rule. Optional so cards scored
+       * before 2026-09-29 still parse; the summary prints a NOTE rather than
+       * presenting their missing measurement as 0.
+       */
+      spellingIdenticalLines?: number;
     };
     /**
      * The `vendor/` tree — a SEPARATE surface from `layout`, never folded into
@@ -150,6 +164,8 @@ export interface SummaryTotals {
   layoutChurnLines: number;
   layoutBuildConstantLines: number;
   layoutNameOnlyLines: number;
+  /** Advisory soft-noise total (see Scorecard.layout.spellingIdenticalLines). */
+  layoutSpellingIdenticalLines: number;
   layoutReal: number;
   layoutNoise: number;
   layoutNaming: number;

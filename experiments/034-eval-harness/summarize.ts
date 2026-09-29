@@ -135,6 +135,7 @@ function churnRow(
 export function summarizeCards(cards: Scorecard[]): {
   totals: SummaryTotals;
   treeChurnCards: number;
+  spellingCards: number;
 } {
   const totals: SummaryTotals = {
     stmts: 0,
@@ -151,6 +152,7 @@ export function summarizeCards(cards: Scorecard[]): {
     layoutChurnLines: 0,
     layoutBuildConstantLines: 0,
     layoutNameOnlyLines: 0,
+    layoutSpellingIdenticalLines: 0,
     layoutReal: 0,
     layoutNoise: 0,
     layoutNaming: 0,
@@ -161,6 +163,7 @@ export function summarizeCards(cards: Scorecard[]): {
     vendorReal: 0
   };
   let treeChurnCards = 0;
+  let spellingCards = 0;
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
     totals.unchangedClean += c.churn.statements.unchangedClean;
@@ -183,6 +186,9 @@ export function summarizeCards(cards: Scorecard[]): {
     if (c.churn.layout) {
       totals.layoutChurnLines += c.churn.layout.churnLines;
       totals.layoutBuildConstantLines += c.churn.layout.buildConstantLines ?? 0;
+      totals.layoutSpellingIdenticalLines +=
+        c.churn.layout.spellingIdenticalLines ?? 0;
+      if (c.churn.layout.spellingIdenticalLines !== undefined) spellingCards++;
       totals.layoutReal += c.churn.layout.real;
       totals.layoutNoise += c.churn.layout.noise;
       totals.layoutNaming += c.churn.layout.naming;
@@ -195,7 +201,7 @@ export function summarizeCards(cards: Scorecard[]): {
       totals.vendorReal += c.churn.vendor.real;
     }
   }
-  return { totals, treeChurnCards };
+  return { totals, treeChurnCards, spellingCards };
 }
 
 function main() {
@@ -204,7 +210,7 @@ function main() {
   const dir = path.join(import.meta.dirname, "results", model);
   const cards = loadScorecards(dir);
   if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
-  const { totals, treeChurnCards } = summarizeCards(cards);
+  const { totals, treeChurnCards, spellingCards } = summarizeCards(cards);
 
   // Whether the pipeline declared each run VALID, recorded by run.sh. Absent
   // for every result set produced before this existed — absent, not clean.
@@ -219,6 +225,14 @@ function main() {
       `NOTE: relocSt totals ${treeChurnCards} of ${cards.length} pairs — the ` +
         "rest recorded no tree churn, and their statements are missing from " +
         "the total rather than counted as zero."
+    );
+  }
+  const layoutCards = cards.filter((c) => c.churn.layout).length;
+  if (spellingCards !== layoutCards) {
+    banner.push(
+      `NOTE: spellingIdentical totals ${spellingCards} of the ${layoutCards} ` +
+        "scored pairs — the rest predate the field (2026-09-29), and their " +
+        "soft-noise mass is missing from the total rather than counted as zero."
     );
   }
 
@@ -333,7 +347,8 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
     pad("nameOnly", 9),
     pad("alias", 7),
     pad("reorder", 9),
-    pad("relocSt", 8)
+    pad("relocSt", 8),
+    pad("spell", 9)
   ].join(" ");
   console.log(head);
   console.log("-".repeat(head.length));
@@ -356,7 +371,8 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
       pad(l.nameOnlyLines ?? 0, 9),
       pad(l.alias, 7),
       pad(`${l.reorder} ${pct(l.reorder, l.churnLines)}`, 9),
-      pad(relocSt, 8)
+      pad(relocSt, 8),
+      pad(l.spellingIdenticalLines ?? 0, 9)
     ].join(" ");
   };
   console.log(
@@ -372,7 +388,8 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
         naming: totals.layoutNaming,
         nameOnlyLines: totals.layoutNameOnlyLines,
         alias: totals.layoutAlias,
-        reorder: totals.layoutReorder
+        reorder: totals.layoutReorder,
+        spellingIdenticalLines: totals.layoutSpellingIdenticalLines
       },
       totals.relocatedStatements
     )
@@ -386,6 +403,15 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
   console.log(
     "reorder = byte-identical statements emitted at a different position; " +
       "relocSt = statements that changed FILE (order-independent)"
+  );
+  // SOFT NOISE, stated about the real column rather than as a KPI: the number
+  // is computed and totalled but never moved out of `real`, so it can only be
+  // presented as a comment on the charge it qualifies. 8,230 of 51,880 real
+  // lines at 2.1.207->208 was spelling-only, not code change.
+  console.log(
+    `spell = SOFT noise inside real — of the ${totals.layoutReal} real lines ` +
+      `above, ${totals.layoutSpellingIdenticalLines} are spelling-only ` +
+      "(statement pairs identical modulo wrapper arrow<->function spelling)"
   );
 }
 

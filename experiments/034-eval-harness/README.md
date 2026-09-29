@@ -76,6 +76,18 @@ diff in **git lines** (`composeDiff`, shared with exp037's `diff-composition`):
 - **alias** — a changed `require` alias with an unchanged path.
 - **reorder** — byte-identical statements emitted at a different position. **The
   number nothing else measures.**
+- **spellingIdentical** (`spellingIdenticalLines`, added 2026-09-29) — **SOFT
+  noise**: statement pairs that are the same code modulo WRAPPER SPELLING — the
+  packaging tool re-serializing `createModule((a,b) => {...})` as
+  `createModule(function(a,b) {...})`. The wrapper's AST TYPE flips the KPI
+  hash, so no pairing tier can match the pair and both sides are charged FULL
+  mass inside `real` — the fake "+9,162 lines of real change" at 2.1.207→208.
+  The charge STANDS (every recorded number must keep computing as today); the
+  field reports it alongside, so the tree table can say of `real`: "of which N
+  are spelling-only". Validated on that hop: four files, 17 flips, 8,230 lines
+  — 16% of the pair's real mass was spelling (and 0 on the calm 213→214 and
+  busy 215→216 controls). Cards scored before 2026-09-29 carry no field; the
+  summary prints a NOTE for them instead of presenting a zero.
 
 Costs a few minutes per pair; `--no-layout` skips it.
 

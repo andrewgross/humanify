@@ -12,7 +12,16 @@
  *      the two statement texts), not whole-statement mass. Split out further:
  *      ALIAS churn when the statement is a `const x = require("...")` header line.
  *   3. hash present on only one side -> REAL change (added or removed lines).
+ *      A novel statement is first offered a tier-3 "edited version" repair
+ *      (masked head + >=50% token overlap -> only the edited lines charged).
  * Files present on only one side are counted whole (added/removed).
+ *
+ * SOFT NOISE (advisory, additive): statement pairs that fail every tier but
+ * are the same code modulo WRAPPER SPELLING (arrow vs function expression —
+ * a packaging-tool re-serialization) are reported in
+ * `spellingIdenticalLines` while keeping their `real` charge, so the frozen
+ * columns stay byte-identical and the breakdown can say how much of "real"
+ * is only spelling. See `wrapperSpellingKey` for the tight rule.
  *
  * Usage: npx tsx diff-composition.ts <priorSrcDir> <freshSrcDir> [label]
  */
@@ -158,6 +167,19 @@ export interface Tally {
   alias: number;
   reorder: number;
   fileAddRemove: number;
+  /**
+   * SOFT NOISE (advisory, 2026-09-29): lines charged to `real` above whose
+   * statement pair is identical code modulo WRAPPER SPELLING — the packaging
+   * tool re-serialized a wrapper from `createModule((a,b) => {...})` to
+   * `createModule(function(a,b) {...})`, so the wrapper's AST TYPE flips the
+   * statementHash (tier 2 cannot pair) and the keyword breaks the masked head
+   * (tier 3 cannot repair), and both sides are charged full mass as real
+   * change. This field reports that mass WITHOUT moving a single existing
+   * charge — Andrew's call (2026-09-29): upstream changed the source, so we
+   * keep replicating it, but the noise calc should be able to say how much of
+   * "real" is only spelling. See `wrapperSpellingKey` for the exact rule.
+   */
+  spellingIdenticalLines: number;
 }
 
 /**
@@ -175,8 +197,13 @@ export interface NoiseSample {
    * accounted for 450: the rest was name churn sitting inside statements whose
    * hash flipped, which this classifier charges to real change and no noise KPI
    * can see. Sampling it is how that mass gets measured instead of assumed.
+   *
+   * `spelling` is SOFT noise: the pair's charge stands inside `real` — the
+   * sample exists so the charge can be IDENTIFIED as a wrapper-spelling
+   * re-serialization (arrow vs function expression), not defended as genuine
+   * change. See `wrapperSpellingKey`.
    */
-  kind: "reorder" | "naming" | "alias" | "real";
+  kind: "reorder" | "naming" | "alias" | "real" | "spelling";
   file: string;
   /** git lines this instance charges. */
   lines: number;
@@ -275,6 +302,252 @@ function takeTwin(
   }
   if (bestIdx < 0 || bestScore < opts.minOverlap) return null;
   return { twin: bucket.splice(bestIdx, 1)[0], score: bestScore };
+}
+
+/**
+ * SOFT-NOISE DETECTOR (2026-09-29): is this statement a bundler wrapper whose
+ * head spells its function argument as an ARROW or as a FUNCTION EXPRESSION?
+ *
+ * The known case (2.1.207→208, four files named in
+ * docs/rust-port/20-overnight-report.md §2): upstream's packaging tool
+ * re-serialized `createModule((a,b) => {...})` into
+ * `createModule(function(a,b) {...})`. Identical code, different spelling —
+ * but the function argument's AST TYPE is part of `statementHash`, so tier 2
+ * sees two different hashes, and the `function` keyword breaks the masked head
+ * so tier 3 cannot repair the pair either. Both sides are therefore charged
+ * FULL mass as real change: the fake "+9,162 lines of real change".
+ *
+ * The category is DELIBERATELY TIGHT. A statement qualifies only when its
+ * first line is a sequence-callee call — `var x = (0, ns.method)(` — whose
+ * first argument is a function spelled one of these three ways:
+ *
+ *   `(a, b) => {`      parenthesized arrow
+ *   `a => {`           single-identifier arrow (the other 207 form)
+ *   `function (a, b) {`  function expression
+ *
+ * Everything else is refused, ON PURPOSE (a refusal is a false negative, never
+ * a false positive):
+ *
+ *   - direct calls `method(function (a) {` — never observed in a walk; widen
+ *     only when one is.
+ *   - `async` wrappers, generators (`function*`), default/destructured
+ *     parameters — the head must be exactly one of the three forms above.
+ *   - a `this`/`arguments` the wrapper's OWN scope can observe: an arrow
+ *     binds both lexically, so flipping its spelling CHANGES MEANING — a real
+ *     edit, not spelling. Occurrences behind a nested function or class are
+ *     bound there and do NOT refuse (the real giants nest whole classes that
+ *     use `this`; the wrapper itself must stay clean).
+ *   - any structural difference in the body: the pair is compared with
+ *     `statementHash` after the head is normalized, so a changed literal,
+ *     operator or node (!0 vs true included) refuses. Identifier names are
+ *     masked by the hash, exactly as in every other tier.
+ *   - a parse failure of the normalized text: the detector returns `null`
+ *     rather than touching a tally (unlike `statementsOf`, which is FATAL on
+ *     broken input — here the input file already parsed, so a failed reparse
+ *     means the normalization is wrong, and refusing is safe).
+ *
+ * Returns the WRAPPER FORM plus the hash of the text with the head rewritten
+ * to the canonical `function (params) {` spelling — two statements flagged as
+ * a spelling pair iff their keys share a hash and differ in form.
+ */
+interface WrapperSpellingKey {
+  form: "arrow" | "function";
+  /** statementHash of the statement with its wrapper head normalized. */
+  hash: string;
+}
+
+/** Sequence-callee call head: `var x = (0, ns.method)(`. No `;`/`{` may appear
+ * before it, so only the statement's own head can match — never a wrapper
+ * nested somewhere inside its body. */
+const SEQUENCE_CALL_HEAD = /^([^;{]*\)\()/;
+const WRAPPER_HEADS: Array<{
+  re: RegExp;
+  form: "arrow" | "function";
+}> = [
+  { re: /^function\s*\(([^()]*)\)\s*\{/, form: "function" },
+  { re: /^\(([^()]*)\)\s*=>\s*\{/, form: "arrow" },
+  { re: /^([A-Za-z_$][\w$]*)\s*=>\s*\{/, form: "arrow" }
+];
+
+/**
+ * Node types that BIND their own `this`/`arguments` (or, for classes, run
+ * their bodies under their own `this`). An occurrence behind one of these
+ * cannot observe the wrapper's binding, so the wrapper's spelling flip is
+ * semantics-preserving for it. Arrow functions are deliberately absent:
+ * they pass both through, so an arrow nested in the wrapper still observes
+ * the WRAPPER's binding.
+ */
+const LEXICAL_BINDERS = new Set([
+  "FunctionDeclaration",
+  "FunctionExpression",
+  "ObjectMethod",
+  "ClassMethod",
+  "ClassPrivateMethod",
+  "ClassDeclaration",
+  "ClassExpression",
+  "StaticBlock"
+]);
+
+/**
+ * Does a `this` or `arguments` occurrence in the WRAPPER's own lexical scope
+ * exist — one the arrow↔function flip would change the meaning of?
+ *
+ * The wrapper is the function expression at `offset` of the already-parsed
+ * normalized statement. Iterative (explicit stack) like `statementHash`, for
+ * the same reason: multi-thousand-line wrapper bodies. `x.arguments` (a
+ * property, not the binding) is skipped so a member access cannot force a
+ * refusal. Returns true => REFUSE the pair.
+ */
+function wrapperOwnsLexicalBindingUse(wrapper: t.FunctionExpression): boolean {
+  const stack: Array<{ node: t.Node; barrier: boolean }> = [
+    { node: wrapper, barrier: false }
+  ];
+  while (stack.length > 0) {
+    const { node, barrier } = stack.pop() as {
+      node: t.Node;
+      barrier: boolean;
+    };
+    if (!barrier) {
+      if (node.type === "ThisExpression") return true;
+      if (node.type === "Identifier" && node.name === "arguments") return true;
+    }
+    const nextBarrier = (child: t.Node) =>
+      LEXICAL_BINDERS.has(child.type) ? true : barrier;
+    const keys = t.VISITOR_KEYS[node.type] ?? [];
+    for (const k of keys) {
+      // Non-computed member property: an Identifier node that is NOT a
+      // reference to the `arguments` binding.
+      if (
+        k === "property" &&
+        (node.type === "MemberExpression" ||
+          node.type === "OptionalMemberExpression") &&
+        !(node as t.MemberExpression).computed
+      ) {
+        continue;
+      }
+      const child = (node as unknown as Record<string, unknown>)[k];
+      const push = (c: unknown) => {
+        if (Array.isArray(c)) {
+          for (const cc of c) push(cc);
+        } else if (
+          typeof c === "object" &&
+          c !== null &&
+          typeof (c as { type?: unknown }).type === "string"
+        ) {
+          stack.push({ node: c as t.Node, barrier: nextBarrier(c as t.Node) });
+        }
+      };
+      push(child);
+    }
+  }
+  return false;
+}
+
+function wrapperSpellingKey(s: Stmt): WrapperSpellingKey | null {
+  const firstLine = s.text.split("\n", 1)[0];
+  const call = SEQUENCE_CALL_HEAD.exec(firstLine);
+  if (!call) return null;
+  const afterCall = firstLine.slice(call[0].length);
+  let head: { re: RegExp; form: "arrow" | "function" } | null = null;
+  for (const h of WRAPPER_HEADS) {
+    if (h.re.test(afterCall)) {
+      head = h;
+      break;
+    }
+  }
+  if (!head) return null;
+  const m = head.re.exec(afterCall);
+  if (!m) return null; // unreachable (tested above); keeps TS happy
+  const rest =
+    firstLine.slice(call[0].length + m[0].length) +
+    s.text.slice(firstLine.length);
+  const normalized = call[0] + `function (${m[1]}) {` + rest;
+  let ast: ReturnType<typeof parseSync>;
+  try {
+    ast = parseSync(normalized, { sourceType: "unambiguous" });
+  } catch {
+    return null; // a broken normalization is a refusal, never a crash
+  }
+  if (!ast || ast.program.body.length !== 1) return null;
+  // The wrapper sits exactly at the offset where the canonical head was
+  // written; a `this`/`arguments` it can observe makes the flip a real
+  // semantic change — refuse (see the detector docstring).
+  const wrapper = findNodeAt(ast.program.body[0], call[0].length);
+  if (!wrapper || wrapper.type !== "FunctionExpression") return null;
+  if (wrapperOwnsLexicalBindingUse(wrapper as t.FunctionExpression))
+    return null;
+  return { form: head.form, hash: statementHash(ast.program.body[0]) };
+}
+
+/** First node in visitor order whose `start` is the given offset. */
+function findNodeAt(root: t.Node, offset: number): t.Node | null {
+  const stack: t.Node[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop() as t.Node;
+    if (node.start === offset) return node;
+    const keys = t.VISITOR_KEYS[node.type] ?? [];
+    for (const k of keys) {
+      const child = (node as unknown as Record<string, unknown>)[k];
+      if (Array.isArray(child)) {
+        for (const c of child) {
+          if (c && typeof c.type === "string") stack.push(c);
+        }
+      } else if (
+        typeof child === "object" &&
+        child !== null &&
+        typeof (child as { type?: unknown }).type === "string"
+      ) {
+        stack.push(child as t.Node);
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * The soft-noise pass: pair leftover fresh statements with leftover removed
+ * statements that are the same code modulo WRAPPER SPELLING (one side an
+ * arrow, the other a function expression — `wrapperSpellingKey` for the
+ * rule). Charges NOTHING to the existing columns; counts the mass the current
+ * rules already charged to `real` for those pairs into
+ * `tally.spellingIdenticalLines`, so the scoreboard stays byte-identical and
+ * the breakdown can say "of which N are spelling-only".
+ */
+function chargeSpellingTwins(
+  leftoverFresh: Stmt[],
+  leftoverRemoved: Stmt[],
+  tally: Tally,
+  sink?: NoiseSink
+): void {
+  const removedByKey = new Map<
+    string,
+    Array<{ key: WrapperSpellingKey; stmt: Stmt }>
+  >();
+  for (const r of leftoverRemoved) {
+    const key = wrapperSpellingKey(r);
+    if (!key) continue;
+    const list = removedByKey.get(key.hash) ?? [];
+    list.push({ key, stmt: r });
+    removedByKey.set(key.hash, list);
+  }
+  for (const s of leftoverFresh) {
+    const key = wrapperSpellingKey(s);
+    if (!key) continue;
+    const bucket = removedByKey.get(key.hash);
+    if (!bucket) continue;
+    const i = bucket.findIndex((e) => e.key.form !== key.form);
+    if (i < 0) continue; // same spelling on both sides is not a flip
+    const twin = bucket.splice(i, 1)[0].stmt;
+    const lines = s.lines.length + twin.lines.length;
+    tally.spellingIdenticalLines += lines;
+    keep(sink, {
+      kind: "spelling",
+      file: sink?.file ?? "",
+      lines,
+      priorText: twin.text,
+      freshText: s.text
+    });
+  }
 }
 
 function classifyFile(
@@ -382,6 +655,7 @@ function classifyFile(
     removedByHead.set(k, l);
   }
   const usedRemoved = new Set<Stmt>();
+  const tier3PairedFresh = new Set<Stmt>();
   for (const s of novelFresh) {
     const sw = tokenSet(s.text);
     let best: Stmt | null = null;
@@ -399,6 +673,7 @@ function classifyFile(
     }
     if (best && bestScore >= 0.5) {
       usedRemoved.add(best);
+      tier3PairedFresh.add(s);
       const e = editedLineCounts(s.text, best.text);
       tally.real += e.fresh + e.prior;
       // An EDITED pair: both sides exist, so its charged lines can be walked
@@ -431,6 +706,17 @@ function classifyFile(
       });
     }
   }
+
+  // 4. SOFT-NOISE pass (advisory, additive): among the statements just charged
+  // as one-sided real change, pair the ones that are the same code modulo
+  // WRAPPER SPELLING. Nothing already charged changes; the pair's mass is
+  // REPORTED so "of which N are spelling-only" can be said of `real`.
+  chargeSpellingTwins(
+    novelFresh.filter((s) => !tier3PairedFresh.has(s)),
+    removed.filter((s) => !usedRemoved.has(s)),
+    tally,
+    sink
+  );
 }
 
 /**
@@ -451,7 +737,8 @@ export function composeFile(
     naming: 0,
     alias: 0,
     reorder: 0,
-    fileAddRemove: 0
+    fileAddRemove: 0,
+    spellingIdenticalLines: 0
   };
   classifyFile(priorCode, freshCode, tally, undefined, {
     ...DEFAULTS,
@@ -481,7 +768,8 @@ export function composeDiff(
     naming: 0,
     alias: 0,
     reorder: 0,
-    fileAddRemove: 0
+    fileAddRemove: 0,
+    spellingIdenticalLines: 0
   };
 
   for (const f of freshFiles) {
@@ -542,7 +830,12 @@ function main() {
     `    reorder churn        ${String(tally.reorder).padStart(7)}  ${pct(tally.reorder)}%`
   );
   console.log(
-    `ROW|${label ?? ""}|${total}|${tally.real}|${tally.fileAddRemove}|${tally.naming}|${tally.alias}|${tally.reorder}`
+    `    spelling-identical   ${String(tally.spellingIdenticalLines).padStart(7)}  ` +
+      `${pct(tally.spellingIdenticalLines)}%  (soft noise: charged inside REAL, ` +
+      "wrapper arrow<->function flips)"
+  );
+  console.log(
+    `ROW|${label ?? ""}|${total}|${tally.real}|${tally.fileAddRemove}|${tally.naming}|${tally.alias}|${tally.reorder}|${tally.spellingIdenticalLines}`
   );
 }
 

@@ -273,6 +273,10 @@ function layoutChurn(priorSrc: string, freshSrc: string) {
     /** Line-level name-only churn — the honest naming number. See above. */
     nameOnlyLines: no.lines,
     nameOnlyFiles: no.files,
+    /** SOFT noise, reported INSIDE real and never subtracted from it
+     * (Scorecard.layout.spellingIdenticalLines): wrapper arrow<->function
+     * re-serializations — same code, different spelling. */
+    spellingIdenticalLines: t.spellingIdenticalLines,
     alias: t.alias,
     reorder: t.reorder
   };
