@@ -267,6 +267,7 @@ fn with_twin_sides_classified(
         bundler: None,
         minifier: None,
         fast: false,
+        same_program_check: true,
     };
     match_prior_version(input, |stage| {
         let freeze = crate::rename::transfer::library_freeze(stage, library, true)?;

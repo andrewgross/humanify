@@ -85,6 +85,7 @@ fn synthetic_pairs_match_the_ts_probe() {
             bundler: None,
             minifier: None,
             fast: false,
+            same_program_check: true,
         };
         let rows = match_prior_version(input, |stage| {
             let (outcome, _) = apply_prior_version(stage, &Default::default())?;
