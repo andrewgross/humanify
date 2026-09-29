@@ -255,7 +255,11 @@ impl MatchRun {
     /// vendor files are bare factory bodies — wrapped the way the split
     /// ships them, the dump's matching surface — with a wrap failure
     /// skipped and reported, never silently dropped), then the match
-    /// stage, stopped before naming — no LLM.
+    /// stage, stopped before naming — no LLM. In the multi-file regime a
+    /// MATCH-stage failure on this one file is also skipped and reported:
+    /// the close tier pairs each vendor file against the WHOLE tree's
+    /// unmatched prior functions, so one file's bad interaction must not
+    /// lose the dump (a single-file run still fails loudly).
     fn add_file(&mut self, ctx: &MatchContext<'_>, path: &str, text: &str) -> Result<(), String> {
         let MatchContext {
             args,
@@ -312,7 +316,15 @@ impl MatchRun {
                 }
                 Ok(section)
             },
-        )?;
+        );
+        let section = match section {
+            Ok(section) => section,
+            Err(error) if multi => {
+                self.skipped.push(json!({ "path": path, "error": error }));
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
         self.files.push(section);
         Ok(())
     }
@@ -323,8 +335,8 @@ impl MatchRun {
     /// and message (humanify_core::prior), ONCE instead of per call.
     fn hoisted_prior_block(&self) -> Result<Value, String> {
         let block = self.shared_prior.clone().ok_or_else(|| {
-            "every unpacked file failed to parse; no matching ran at all — \
-             see the parse errors loading them"
+            "every unpacked file failed; no matching ran at all — \
+             see the recorded parse and match errors"
                 .to_string()
         })?;
         let prior_count = block["functions"].as_array().map_or(0, |f| f.len());
@@ -373,8 +385,10 @@ fn dump_meta(
     }
     if !run.skipped.is_empty() {
         differences.push(format!(
-            "{} unpacked vendor file(s) failed to parse even after wrapping and \
-             are NOT in the dump; listed in meta.skippedFiles, never silently dropped",
+            "{} unpacked file(s) are NOT in the dump — a parse failure that \
+             survived the vendor wrap, or (multi-file trees) a match-stage failure \
+             whose whole-run cost would otherwise be lost to one bad interaction; \
+             listed in meta.skippedFiles with their errors, never silently dropped",
             run.skipped.len()
         ));
     }
