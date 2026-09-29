@@ -74,10 +74,10 @@ pub fn unpack_bundle(
                 p.carried_entries(),
                 names.len()
             ));
-        } else if p.ts_era.is_some() {
+        } else if p.stale_era.is_some() {
             renderer.message(&format!(
-                "Vendor names: the prior manifest is TS-era (no hashVersion {}): its {} entries \
-                 carry by CONTENT, never by hash bytes",
+                "Vendor names: the prior manifest is from another hash era (this run writes \
+                 hashVersion {}): its {} entries carry by CONTENT, never by hash bytes",
                 humanify_core::modules::FACTORY_HASH_VERSION,
                 p.carried_entries()
             ));

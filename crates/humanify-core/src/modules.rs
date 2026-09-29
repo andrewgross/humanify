@@ -282,17 +282,24 @@ pub fn is_inside_factory_body(span: Span, factories: &[FactoryRecord]) -> bool {
 }
 
 /// The version of the factory `structuralHash` bytes a vendor manifest
-/// carries (`hashVersion`). A manifest without it was written by the TS
-/// (its bytes are `bun-module-classification.ts`'s): its hashes never join
-/// the Rust's, so the carry-over re-keys it by CONTENT
-/// ([`vendor_content`]). 2 = [`factory_structural_hash`] (WP5.6e).
-pub const FACTORY_HASH_VERSION: u64 = 2;
+/// carries (`hashVersion`). A manifest stamped with ANY other version —
+/// the TS (no stamp; bytes are `bun-module-classification.ts`'s) or an
+/// older Rust hash era — never joins this run's hashes: the carry-over
+/// re-keys it by CONTENT ([`vendor_content`]).
+/// 2 = [`factory_structural_hash`] at WP5.6e (2026-09-25).
+/// 3 = exp093 (2026-09-29): MatchKey literals keep numbers EXACT — old
+///     buckets' hashes are a different era's bytes, re-derived, never
+///     silently matched (a number-free factory's bytes coincide across the
+///     era, so the version gate alone stands between a stale manifest and
+///     a half-carried prior).
+pub const FACTORY_HASH_VERSION: u64 = 3;
 
-/// The blurred structural hash of a factory body FUNCTION (arrow or
+/// The MatchKey structural hash of a factory body FUNCTION (arrow or
 /// function expression; None for anything else) under `tables` — the
 /// cross-version join key, via the same canonical serializer the function
-/// graph uses. The ONE owner: the classification and the content re-key
-/// ([`vendor_content`]) both hash through it.
+/// graph uses (strings blurred, numbers exact since exp093). The ONE
+/// owner: the classification and the content re-key ([`vendor_content`])
+/// both hash through it.
 pub fn factory_structural_hash(
     function: &oxc_ast::ast::Expression<'_>,
     tables: &SymbolTables,
@@ -307,7 +314,7 @@ pub fn factory_structural_hash(
     let mut de = serde_json::Deserializer::from_str(&estree);
     de.disable_recursion_limit();
     let body_json: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-    Some(canonical_serialize(&body_json, tables, LiteralPolicy::Blurred).hash)
+    Some(canonical_serialize(&body_json, tables, LiteralPolicy::MatchKey).hash)
 }
 
 /// `lib_<first 8 chars of structuralHash>` (hashFallbackName).

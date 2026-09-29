@@ -1,12 +1,17 @@
-//! Carry a TS-era prior's vendor names by CONTENT (WP5.6e; exp046/047:
+//! Carry a STALE-ERA prior's vendor names by CONTENT (WP5.6e; exp046/047:
 //! match vendor by content, never by path or hash bytes).
 //!
 //! A vendor manifest's `structuralHash` is the cross-release join key of
 //! the carry-over (`name_cjs_factories`) and of the manifest order
-//! (`order_by_prior_manifest`). The TS wrote those bytes with its own
-//! function; the Rust's never equal them, so a TS-written prior manifest
-//! (no `hashVersion`, [`super::FACTORY_HASH_VERSION`]) joins NOTHING by hash
-//! and every carried name would mint again.
+//! (`order_by_prior_manifest`). A prior manifest stamped with any
+//! `hashVersion` other than this run's ([`super::FACTORY_HASH_VERSION`]) —
+//! a TS-written one (no stamp; its bytes are `bun-module-classification.ts`
+//! 's own function's, which never equal the Rust's) or one from an older
+//! Rust hash era (exp093 bumped the version: the pre-exp093 blur-era bytes
+//! are a different era's) — joins NOTHING by hash, and every carried name
+//! would mint again. The version gate is all-or-nothing by design: a
+//! number-free factory's bytes coincide across the era, so a hash join of a
+//! mismatched manifest would silently half-carry.
 //!
 //! The re-key reads the prior tree itself: each prior entry's vendor FILE
 //! holds its factory function (the unpack wrote the raw body; the relink
@@ -15,13 +20,15 @@
 //! the relink's `.f`, and [`fresh_content_keys`] reads the fresh bundle's
 //! factory bodies with the unpack's own `require` rewrite — then BOTH sides
 //! hash the same form through [`vendor_content_key`]: the factory function
-//! alone, under the canonical blurred serializer, with every free
-//! identifier that is not a known global made a SLOT. Those are the
-//! references to the rest of the bundle — other factories (the fresh body's
-//! minified factory vars, the prior file's `lib_<hash8>` identifiers) and
-//! bundle-level helpers the unpack leaves free — whose spellings are
-//! release-specific either way. The key is symmetric by construction; it is
-//! not (and need not be) the classification's `structuralHash`.
+//! alone, under the canonical MatchKey serializer (strings blurred, numbers
+//! exact — both sides under THIS run's policy, so the key is
+//! era-independent), with every free identifier that is not a known global
+//! made a SLOT. Those are the references to the rest of the bundle — other
+//! factories (the fresh body's minified factory vars, the prior file's
+//! `lib_<hash8>` identifiers) and bundle-level helpers the unpack leaves
+//! free — whose spellings are release-specific either way. The key is
+//! symmetric by construction; it is not (and need not be) the
+//! classification's `structuralHash`.
 //!
 //! [`rekey_prior_by_content`] then translates the prior's names and
 //! manifest entries onto the FRESH structural hashes, group for group, and
@@ -227,12 +234,13 @@ pub fn prior_file_content_key(file_text: &str) -> Option<String> {
     }
 }
 
-/// One TS-era prior manifest entry, as the re-key reads it.
+/// One stale-era prior manifest entry, as the re-key reads it.
 #[derive(Clone, Debug)]
-pub struct TsEraEntry {
+pub struct StaleEraEntry {
     pub name: String,
-    /// The TS `structuralHash` (groups the prior's bundle-order ordinals).
-    pub ts_hash: String,
+    /// The prior era's `structuralHash` (groups the prior's bundle-order
+    /// ordinals).
+    pub era_hash: String,
     /// `hashOrdinal` (usize::MAX when absent — array order then).
     pub ordinal: usize,
     /// The vendor file's content key (None: unreadable / unrecognized).
@@ -250,7 +258,7 @@ pub struct RekeyStats {
     pub groups_joined: usize,
     pub factories_joined: usize,
     /// Prior content groups whose bundle order is not recoverable (several
-    /// TS hash groups under one key with differing names) — never carried.
+    /// era hash groups under one key with differing names) — never carried.
     pub prior_groups_ambiguous: usize,
 }
 
@@ -265,21 +273,24 @@ pub struct Rekeyed {
 
 /// Prefix of a prior entry's hash that joined nothing: it can never equal
 /// a Rust structural hash (16 lowercase hex).
-const UNJOINED: &str = "ts-era:";
+const UNJOINED: &str = "stale-era:";
 
-/// Translate a TS-era prior onto the fresh structural hashes by content.
+/// Translate a stale-era prior onto the fresh structural hashes by content.
 ///
 /// `fresh` is every classified factory in BUNDLE order: (structural hash,
 /// content key). `prior` is the prior manifest's entries in its array
 /// order (the order `order_by_prior_manifest` reads).
-pub fn rekey_prior_by_content(fresh: &[(String, Option<String>)], prior: &[TsEraEntry]) -> Rekeyed {
+pub fn rekey_prior_by_content(
+    fresh: &[(String, Option<String>)],
+    prior: &[StaleEraEntry],
+) -> Rekeyed {
     let mut stats = RekeyStats {
         prior_entries: prior.len(),
         prior_keyed: prior.iter().filter(|e| e.key.is_some()).count(),
         ..RekeyStats::default()
     };
     // Prior content groups, each resolved to its names in bundle order.
-    let mut groups: BTreeMap<&str, Vec<(usize, &TsEraEntry)>> = BTreeMap::new();
+    let mut groups: BTreeMap<&str, Vec<(usize, &StaleEraEntry)>> = BTreeMap::new();
     for (idx, e) in prior.iter().enumerate() {
         if let Some(k) = &e.key {
             groups.entry(k.as_str()).or_default().push((idx, e));
@@ -289,7 +300,7 @@ pub fn rekey_prior_by_content(fresh: &[(String, Option<String>)], prior: &[TsEra
     for (key, mut members) in groups {
         let one_ts_group = members
             .iter()
-            .all(|(_, e)| e.ts_hash == members[0].1.ts_hash);
+            .all(|(_, e)| e.era_hash == members[0].1.era_hash);
         let one_name = members.iter().all(|(_, e)| e.name == members[0].1.name);
         if !one_ts_group && !one_name {
             stats.prior_groups_ambiguous += 1;
@@ -338,7 +349,7 @@ pub fn rekey_prior_by_content(fresh: &[(String, Option<String>)], prior: &[TsEra
             name: e.name.clone(),
             structural_hash: match e.key.as_deref().and_then(|k| key_to_hash.get(k)) {
                 Some(h) => h.to_string(),
-                None => format!("{UNJOINED}{}", e.ts_hash),
+                None => format!("{UNJOINED}{}", e.era_hash),
             },
         })
         .collect();

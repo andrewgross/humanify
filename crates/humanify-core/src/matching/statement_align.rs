@@ -63,9 +63,11 @@
 //!
 //! The literal classes come from `hash::serialize`'s now-`pub(crate)`
 //! helpers (`string_literal_token`, `template_element_token`,
-//! `numeric_magnitude`, `volatile_literal_token`) — one owner, no copied
-//! regexes. `identifier_role` and the bare-position block unwrap remain
-//! local copies (KEEP-IN-SYNC with `hash::serialize`).
+//! `volatile_literal_token`) — one owner, no copied regexes. Numbers and
+//! bigints are EXACT under every mode (exp093: same as the canonical
+//! serializer — the magnitude buckets bridged 0 real pairs); only the
+//! string classes follow the mode. `identifier_role` and the bare-position
+//! block unwrap remain local copies (KEEP-IN-SYNC with `hash::serialize`).
 //!
 //! Digests are compared ACROSS sides here (prior hash == fresh hash is
 //! the alignment test), so this module leans on the same-walk-same-order
@@ -75,8 +77,8 @@
 //! streams do.
 //!
 //! Policies, all through the one walk:
-//! - unit hashes and the snap gate's definition hash: BLURRED literals
-//!   (`preserveLiterals: false`);
+//! - unit hashes and the snap gate's definition hash: strings blurred
+//!   (`preserveLiterals: false`), numbers and bigints EXACT (exp093);
 //! - switch-case pairing's test signature (TS `computeStructuralSignature`
 //!   :1013 = `hashAndMapPath(path, true)`) — `case "open"` and
 //!   `case "data"` blur to the same statement hash, so a reordered case
@@ -135,9 +137,7 @@ use serde_json::Value;
 
 use sha2::{Digest, Sha256};
 
-use crate::hash::serialize::{
-    SymbolTables, numeric_magnitude, string_literal_token, template_element_token,
-};
+use crate::hash::serialize::{SymbolTables, string_literal_token, template_element_token};
 
 use super::SHINGLE_SIMILARITY_FLOOR;
 use super::jaccard_similarity;
@@ -2181,13 +2181,14 @@ fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
     "slot"
 }
 
-/// The literal tokens under the VERBATIM policy the shingles run under —
-/// KEEP-IN-SYNC with `hash::serialize::literal_token` (same arms; `keep`
-/// is fixed true here) EXCEPT TemplateElement, which the TS pushes as TWO
-/// parts (`templateElementToken(...)` then `,tail=${node.tail}`) — the
-/// shingle stream keeps that token boundary where serialize.rs's hash
-/// walk merges it into one (the hash concatenates, so the merge is
-/// byte-identical there; k-gram windows are NOT).
+/// The literal tokens — KEEP-IN-SYNC with `hash::serialize::literal_token`
+/// (same arms; only the STRING classes follow `keep`, numbers and bigints
+/// are exact under every mode since exp093) EXCEPT TemplateElement, which
+/// the TS pushes as TWO parts (`templateElementToken(...)` then
+/// `,tail=${node.tail}`) — the shingle stream keeps that token boundary
+/// where serialize.rs's hash walk merges it into one (the hash
+/// concatenates, so the merge is byte-identical there; k-gram windows are
+/// NOT).
 fn literal_tokens(
     map: &serde_json::Map<String, Value>,
     node_type: &str,
@@ -2212,19 +2213,11 @@ fn literal_tokens(
                 return Some(vec![format!("R={pattern}/{flags}")]);
             }
             if let Some(bigint) = map.get("bigint").and_then(Value::as_str) {
-                return Some(vec![if keep {
-                    format!("B={bigint}")
-                } else {
-                    "B=0".to_string()
-                }]);
+                return Some(vec![format!("B={bigint}")]);
             }
             match map.get("value") {
                 Some(Value::String(v)) => Some(vec![string_literal_token(v, keep)]),
-                Some(Value::Number(n)) => Some(vec![if keep {
-                    format!("N={n}")
-                } else {
-                    numeric_magnitude(n.as_f64().unwrap_or(0.0))
-                }]),
+                Some(Value::Number(n)) => Some(vec![format!("N={n}")]),
                 // Booleans and null are NOT literal-classed in the TS
                 // either — babel's BooleanLiteral/NullLiteral fall through
                 // to the generic walk. But the generic walk must run over
@@ -2252,19 +2245,11 @@ fn literal_tokens(
         }
         "NumericLiteral" => {
             let value = map.get("value")?.as_f64()?;
-            Some(vec![if keep {
-                format!("N={value}")
-            } else {
-                numeric_magnitude(value)
-            }])
+            Some(vec![format!("N={value}")])
         }
         "BigIntLiteral" => {
             let value = map.get("value")?.as_str()?;
-            Some(vec![if keep {
-                format!("B={value}")
-            } else {
-                "B=0".to_string()
-            }])
+            Some(vec![format!("B={value}")])
         }
         "RegExpLiteral" => {
             let pattern = map.get("pattern")?.as_str()?;

@@ -3,7 +3,7 @@
 //! specific spellings; the re-key carries only exact group matches.
 
 use super::{
-    TsEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content, vendor_content_key,
+    StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content, vendor_content_key,
 };
 
 /// A fresh factory body: `REQ` is the bundle's require var, `qA`/`kC` are
@@ -56,10 +56,10 @@ fn content_and_known_globals_are_in_the_key() {
     assert_eq!(prior_file_content_key("var x = 1;"), None);
 }
 
-fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> TsEraEntry {
-    TsEraEntry {
+fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> StaleEraEntry {
+    StaleEraEntry {
         name: name.into(),
-        ts_hash: ts.into(),
+        era_hash: ts.into(),
         ordinal,
         key: key.map(String::from),
     }

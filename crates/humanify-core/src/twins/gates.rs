@@ -830,13 +830,13 @@ fn bridge_twin_slots(
     // comparison (statement-twin.ts :591-597) is the fallback that
     // reconciles it: privates blind to `P=#`, walks still align, and the
     // private ids themselves become transfers.
-    let mut fresh_out = canonical_serialize(fresh_stmt, fresh.tables, LiteralPolicy::Blurred);
-    let mut prior_out = canonical_serialize(prior_stmt, prior.tables, LiteralPolicy::Blurred);
+    let mut fresh_out = canonical_serialize(fresh_stmt, fresh.tables, LiteralPolicy::MatchKey);
+    let mut prior_out = canonical_serialize(prior_stmt, prior.tables, LiteralPolicy::MatchKey);
     if fresh_out.hash != prior_out.hash {
         let fresh_masked =
-            canonical_serialize_privates_blinded(fresh_stmt, fresh.tables, LiteralPolicy::Blurred);
+            canonical_serialize_privates_blinded(fresh_stmt, fresh.tables, LiteralPolicy::MatchKey);
         let prior_masked =
-            canonical_serialize_privates_blinded(prior_stmt, prior.tables, LiteralPolicy::Blurred);
+            canonical_serialize_privates_blinded(prior_stmt, prior.tables, LiteralPolicy::MatchKey);
         if fresh_masked.hash != prior_masked.hash {
             return false;
         }

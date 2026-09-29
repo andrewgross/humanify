@@ -8,10 +8,11 @@
 //! THE HASH OWNER. The TS hashes the statement with
 //! `hashPathWithMapping` (:977 structural-hash.ts) — the SAME
 //! rename-invariant serializer the function structural hash runs under
-//! (`hashAndMapPath(path, false)`: binding identifiers slotted, literals
-//! blurred, property names and free identifiers verbatim). The Rust
+//! (`hashAndMapPath(path, false)`: binding identifiers slotted, strings
+//! blurred, numbers exact, property names and free identifiers verbatim —
+//! [`LiteralPolicy::MatchKey`]). The Rust
 //! equivalent is `hash::serialize::canonical_serialize` under
-//! `LiteralPolicy::Blurred` over the statement's oxc ESTree JSON — NOT the
+//! `LiteralPolicy::MatchKey` over the statement's oxc ESTree JSON — NOT the
 //! split's `statement_hash` (that walk masks property names too and keeps
 //! literals verbatim, a different equivalence relation for a different
 //! consumer). Digests are never compared across sides; only equality within
@@ -363,7 +364,7 @@ fn wanted_statement_hashes(
         statement_usability(Some(Span::new(key.0, key.1)), line_starts).usable()
     });
     let hashes = crate::par::map_ordered(&found, |(_, node)| {
-        canonical_serialize(node, tables, LiteralPolicy::Blurred).hash
+        canonical_serialize(node, tables, LiteralPolicy::MatchKey).hash
     });
     found.into_iter().map(|(key, _)| key).zip(hashes).collect()
 }

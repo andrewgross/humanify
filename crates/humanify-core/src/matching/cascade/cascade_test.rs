@@ -626,7 +626,9 @@ fn rejects_singleton_match_with_contradicting_member_keys() {
 fn accepts_singleton_when_signal_is_one_sided() {
     with_sides(
         SINGLETON_V1,
-        "\n      var runner = function (y) {\n        for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }\n        return 2;\n      };\n    ",
+        // fixed:{was: `return 2;`, why: exp093 — numbers exact; same-number
+        // body keeps the pair a singleton candidate with a one-sided signal.}
+        "\n      var runner = function (y) {\n        for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }\n        return 1;\n      };\n    ",
         |old, new| {
             let result = old.match_fn(new, MatchOptions::default());
             assert_eq!(result.matches.len(), 1);
@@ -716,8 +718,15 @@ fn never_matches_two_old_functions_to_the_same_new_function() {
 /// [keyA1, keyA2, plain].
 #[test]
 fn demote_reparks_append_at_the_ambiguous_maps_end() {
-    let v1 = "\n      var o1 = { keyA: function() { return 1; } };\n      var o2 = { keyA: function() { return 2; } };\n      function plain() { return 1; }\n    ";
-    let v2 = "\n      var n1 = { keyA: function() { return 5; } };\n      var n2 = { keyB: function() { return 5; } };\n      var n3 = { keyC: function() { return 5; } };\n      function plainX() { return 1; }\n      function plainY() { return 1; }\n    ";
+    // fixed:{was: `return 1/2/1` vs `return 5/5/5` — the old fixture kept
+    // all six functions in ONE blur class via the number-magnitude buckets;
+    // exp093 made numbers exact, splitting the claims apart (demotes
+    // dropped to 0 and the order assertion went vacuous). Same-LENGTH
+    // strings hold the class together now: the twins differ by content but
+    // share the `__STR_1__` blurred class, so both still over-claim n1 and
+    // the demote re-park order stays what this test pins.}
+    let v1 = "\n      var o1 = { keyA: function() { return \"a\"; } };\n      var o2 = { keyA: function() { return \"b\"; } };\n      function plain() { return 1; }\n    ";
+    let v2 = "\n      var n1 = { keyA: function() { return \"c\"; } };\n      var n2 = { keyB: function() { return \"c\"; } };\n      var n3 = { keyC: function() { return \"c\"; } };\n      function plainX() { return 1; }\n      function plainY() { return 1; }\n    ";
     with_sides(v1, v2, |old, new| {
         let result = old.match_fn(new, MatchOptions::default());
         assert_eq!(
@@ -1226,7 +1235,12 @@ const SHAPES_V2: &str = "\n      function a() { return b(); }\n      function c(
 const MEMBERKEY_V1: &str = "\n      var store = {\n        getCount: function() { return 1; },\n        getLabel: function() { return 1; }\n      };\n    ";
 const MEMBERKEY_V2: &str = "\n      var s = {\n        getCount: function() { return 1; },\n        getLabel: function() { return 1; }\n      };\n    ";
 const SINGLETON_V1: &str = "\n      var api = {\n        run: function (x) {\n          for (let i = 0; i < 10; i++) { if (x > i) console.log(i); }\n          return 1;\n        }\n      };\n    ";
-const SINGLETON_V2: &str = "\n      var api = {\n        walk: function (y) {\n          for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }\n          return 2;\n        }\n      };\n    ";
+// fixed:{was: `return 2;`, why: exp093 made MatchKey numbers exact, so the
+// differing literal split the hash class and the pair stopped being a
+// singleton CANDIDATE at all — the gate under test never ran. Same number
+// now: the scenario keeps testing what it meant to (a singleton match
+// whose memberKeys `run`/`walk` contradict is REJECTED).}
+const SINGLETON_V2: &str = "\n      var api = {\n        walk: function (y) {\n          for (let j = 0; j < 10; j++) { if (y > j) console.log(j); }\n          return 1;\n        }\n      };\n    ";
 const INJECT_V1: &str =
     "\n      function a() { return 1; }\n      function b() { return 1; }\n    ";
 const INJECT_V2: &str = "\n      function x() { return 1; }\n    ";

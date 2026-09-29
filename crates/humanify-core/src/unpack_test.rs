@@ -908,7 +908,7 @@ fn a_ts_era_prior_carries_its_names_by_content() {
     let (_prior, prior_file) = ts_era_prior("tsera-content", |h| format!("{:0>16}", h.len()));
     let fresh = TempDir::new("tsera-content-fresh");
     let prior = load_prior_vendor(&prior_file).expect("a prior tree");
-    assert!(prior.ts_era.is_some(), "no hashVersion = TS era");
+    assert!(prior.stale_era.is_some(), "no hashVersion = TS era");
     let outcome = unpack_bun(
         SHIMS_REROLLED,
         &fresh.0,
@@ -924,7 +924,9 @@ fn a_ts_era_prior_carries_its_names_by_content() {
     );
     let rekey = outcome.rekey.expect("re-keyed");
     assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
-    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 2);
+    // fixed:{was: 2, why: exp093 bumped FACTORY_HASH_VERSION — MatchKey
+    // numbers are exact now, so the manifest's hash bytes are a new era's}.
+    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 3);
 }
 
 #[test]
@@ -936,6 +938,103 @@ fn a_ts_era_prior_never_joins_by_hash_bytes() {
         fs::remove_file(prior_tree.0.join(s(&f, "fileName"))).unwrap();
     }
     let fresh = TempDir::new("tsera-bytes-fresh");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: load_prior_vendor(&prior_file),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let names = names_in_bundle_order(&fresh.0, &outcome);
+    assert!(names.iter().all(|n| n.starts_with("lib_")), "{names:?}");
+}
+
+// ---- an OLDER `hashVersion` prior (exp093): the whole era machinery --------
+
+/// The vendor-manifest `hashVersion` the release BEFORE exp093 stamped (the
+/// number-magnitude-blur era). A manifest stamped with ANY version other
+/// than this run's must take the same never-by-hash path a TS manifest
+/// takes — carried by CONTENT, or not at all. The version gate is the only
+/// protection for the worst case: a number-free factory's hash bytes are
+/// IDENTICAL across the era boundary, so a stale manifest would silently
+/// hash-join its nameless/renamed entries whenever the bytes happen to
+/// collide, while its number-bearing entries (new bytes) silently mint —
+/// a half-carried prior with no warning.
+const PRIOR_ERA_HASH_VERSION: u64 = 2;
+
+/// A prior manifest stamped [`PRIOR_ERA_HASH_VERSION`]: the names a real run
+/// would have carried, and hashes left exactly as the current run computes
+/// them — the STRONGEST form of the gate test: the stored bytes are
+/// byte-joinable, and the era mismatch must refuse the join anyway.
+fn older_era_prior(tag: &str) -> (TempDir, PathBuf) {
+    let t = TempDir::new(tag);
+    unpack(SHIMS, &t.0);
+    let path = t.0.join("vendor/_bun-modules.json");
+    let mut manifest = read_manifest(&t.0);
+    manifest
+        .as_object_mut()
+        .unwrap()
+        .insert("hashVersion".into(), Value::from(PRIOR_ERA_HASH_VERSION));
+    for f in manifest["factories"].as_array_mut().unwrap() {
+        let name = match f.get("hashOrdinal").and_then(Value::as_u64) {
+            None => "dep-one",
+            Some(0) => "shim-a",
+            Some(_) => "shim-b",
+        };
+        f["name"] = Value::String(name.into());
+        f["nameSource"] = Value::String("carry-over".into());
+    }
+    fs::write(&path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
+    fs::create_dir_all(t.0.join(".humanify")).unwrap();
+    let prior_file = t.0.join(".humanify/humanified.js");
+    fs::write(&prior_file, "// prior").unwrap();
+    (t, prior_file)
+}
+
+#[test]
+fn an_older_hashversion_prior_is_rekeyed_by_content_never_by_hash() {
+    let (_prior, prior_file) = older_era_prior("older-era-content");
+    let prior = load_prior_vendor(&prior_file).expect("a prior tree");
+    // THE era gate: a version-mismatched manifest is never read by hash,
+    // even when its bytes would join (`names` stays None, the content
+    // re-key path takes over).
+    assert!(
+        prior.stale_era.is_some(),
+        "a hashVersion {} manifest must not hash-join under this run",
+        PRIOR_ERA_HASH_VERSION
+    );
+    assert!(prior.names.is_none(), "no hash-byte carry, ever");
+    let fresh = TempDir::new("older-era-content-fresh");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: Some(prior),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // The names still carried — via the CONTENT re-key, proven by its stats.
+    assert_eq!(
+        names_in_bundle_order(&fresh.0, &outcome),
+        vec!["dep-one", "shim-a", "shim-b"]
+    );
+    let rekey = outcome.rekey.expect("re-keyed by content");
+    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
+}
+
+#[test]
+fn an_older_hashversion_prior_without_content_mints_everything() {
+    // The bytes join, the version refuses, the vendor files are GONE: a
+    // hash-byte match is not a fallback — nothing carries, everything
+    // mints a fresh `lib_<hash>` name.
+    let (prior_tree, prior_file) = older_era_prior("older-era-mint");
+    for f in factories(&read_manifest(&prior_tree.0)) {
+        fs::remove_file(prior_tree.0.join(s(&f, "fileName"))).unwrap();
+    }
+    let fresh = TempDir::new("older-era-mint-fresh");
     let outcome = unpack_bun(
         SHIMS_REROLLED,
         &fresh.0,

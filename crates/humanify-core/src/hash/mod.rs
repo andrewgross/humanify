@@ -9,4 +9,6 @@ pub mod serialize;
 pub mod statement_hash;
 
 #[cfg(test)]
+mod serialize_test;
+#[cfg(test)]
 mod statement_hash_test;

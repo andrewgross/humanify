@@ -28,7 +28,7 @@ use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::modules::vendor_content::{
-    RekeyStats, TsEraEntry, fresh_content_keys, prior_file_content_key, rekey_prior_by_content,
+    RekeyStats, StaleEraEntry, fresh_content_keys, prior_file_content_key, rekey_prior_by_content,
 };
 use crate::modules::vendor_names::{
     BunModulesManifest, FileNameChooser, ManifestCapture, ManifestEntry, NameLookup,
@@ -111,16 +111,17 @@ pub struct PriorVendor {
     /// `loadPriorVendorNames`: structuralHash → the names its factories
     /// carried, in bundle order (the carry-over, ahead of the LLM). Keyed by
     /// THIS run's hash bytes: set for a current manifest, or after the
-    /// content re-key of a TS-era one.
+    /// content re-key of a stale-era one.
     pub names: Option<HashMap<String, Vec<String>>>,
     /// `loadPriorManifestFactories`: the entries in the order that release
     /// emitted them (the ordering pass).
     pub factories: Option<Vec<PriorManifestEntry>>,
-    /// A TS-era manifest (no `hashVersion` [`FACTORY_HASH_VERSION`]): its
+    /// A stale-era manifest (a `hashVersion` other than
+    /// [`FACTORY_HASH_VERSION`] — TS-written or an older Rust hash era): its
     /// entries with their vendor files' content keys, for the unpack to
     /// re-key against the fresh classification. `names` / `factories` are
-    /// then None — TS bytes never join the Rust's.
-    pub ts_era: Option<Vec<TsEraEntry>>,
+    /// then None — that era's bytes never join this run's.
+    pub stale_era: Option<Vec<StaleEraEntry>>,
 }
 
 impl PriorVendor {
@@ -134,7 +135,7 @@ impl PriorVendor {
 
     /// Prior entries the carry can use (the verbose line's count).
     pub fn carried_entries(&self) -> usize {
-        match (&self.names, &self.ts_era) {
+        match (&self.names, &self.stale_era) {
             (Some(names), _) => names.values().map(Vec::len).sum(),
             (None, Some(entries)) => entries.len(),
             (None, None) => 0,
@@ -144,10 +145,10 @@ impl PriorVendor {
 
 /// Load the prior release's vendor manifest (`loadPriorVendorNames` +
 /// `loadPriorManifestFactories`), era-aware: a manifest stamped with this
-/// run's `hashVersion` is read by hash; any other is TS-era and every
-/// entry's vendor file is read for its content key instead
-/// ([`crate::modules::vendor_content`]). None without a prior tree or a
-/// parseable manifest.
+/// run's `hashVersion` is read by hash; any other (no stamp, or an older
+/// version) is stale-era and every entry's vendor file is read for its
+/// content key instead ([`crate::modules::vendor_content`]). None without a
+/// prior tree or a parseable manifest.
 pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
     let root = find_prior_tree_root(prior_file)?;
     let text = fs::read_to_string(bun_manifest_path(&root)).ok()?;
@@ -160,19 +161,19 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
         return Some(PriorVendor {
             names: load_prior_vendor_names(&text),
             factories: load_prior_manifest_factories(&text),
-            ts_era: None,
+            stale_era: None,
         });
     }
     let rows = manifest.get("factories")?.as_array()?;
     let str_of =
         |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
-    let entries: Vec<(TsEraEntry, Option<String>)> = rows
+    let entries: Vec<(StaleEraEntry, Option<String>)> = rows
         .iter()
         .filter_map(|r| {
             Some((
-                TsEraEntry {
+                StaleEraEntry {
                     name: str_of(r, "name")?,
-                    ts_hash: str_of(r, "structuralHash")?,
+                    era_hash: str_of(r, "structuralHash")?,
                     ordinal: r
                         .get("hashOrdinal")
                         .and_then(serde_json::Value::as_u64)
@@ -191,7 +192,7 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
             .as_deref()
             .and_then(|f| fs::read_to_string(root.join(f)).ok())
             .and_then(|t| prior_file_content_key(&t));
-        TsEraEntry {
+        StaleEraEntry {
             key,
             ..entry.clone()
         }
@@ -199,7 +200,7 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
     Some(PriorVendor {
         names: None,
         factories: None,
-        ts_era: Some(keyed),
+        stale_era: Some(keyed),
     })
 }
 
@@ -228,7 +229,7 @@ pub struct BunUnpackOutcome {
     pub name_counts: Option<FactoryNameCounts>,
     /// How many factories the LLM pass renamed.
     pub llm_renamed: usize,
-    /// The content re-key of a TS-era prior manifest, when one ran.
+    /// The content re-key of a stale-era prior manifest, when one ran.
     pub rekey: Option<RekeyStats>,
     /// Every extracted module in BUNDLE order (the manifest is written in
     /// the prior release's order and drops the factory var).
@@ -352,9 +353,10 @@ pub fn unpack_bun(
         captures_by_module = manifest_captures(c, &plan.kept, plan.bridges);
     }
     if let Some(c) = classification.as_mut() {
-        if let Some(entries) = &prior.ts_era {
-            // A TS-era prior: re-key its names and order by CONTENT onto
-            // this run's structural hashes (modules::vendor_content).
+        if let Some(entries) = &prior.stale_era {
+            // A stale-era prior (TS or an older hashVersion): re-key its
+            // names and order by CONTENT onto this run's structural hashes
+            // (modules::vendor_content).
             let keys = fresh_content_keys(code, &c.factories, require_var.as_deref());
             let fresh: Vec<(String, Option<String>)> = c
                 .factories

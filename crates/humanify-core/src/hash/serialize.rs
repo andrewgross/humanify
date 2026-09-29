@@ -19,8 +19,10 @@
 //! - slots are keyed by the resolved SYMBOL (oxc's native identity — the
 //!   TS scheme's binding-keyed placeholder, made native);
 //! - free identifiers are verbatim (version-stable content);
-//! - literals per key family: blurred (volatile semver/ISO/hex-digest
-//!   classes, string length markers, numeric magnitudes) or verbatim;
+//! - literals per key family: numbers and bigints EXACT under every
+//!   policy; strings blurred (volatile semver/ISO/hex-digest classes,
+//!   length markers) under `MatchKey`, exact under `Verbatim`
+//!   ([`LiteralPolicy`] names the consumer families);
 //! - single-statement blocks at bare-statement positions unwrap;
 //! - class-private names stay verbatim (`P=#name`; the TS default mode).
 //!
@@ -36,11 +38,28 @@ use oxc_span::GetSpan;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-/// Which literal policy the walk runs under: blurred (`MatchKey`) or
-/// verbatim (`IdentityKey` / the declaration-body hash).
+/// Which literal policy the walk runs under — WHICH hash family the
+/// serialized identity serves. Every policy keeps NUMBERS and bigints
+/// EXACT (exp093, 2026-09-29: the number-magnitude buckets bridged 0 of
+/// 64,061 real matched pairs — 60,466 function pairs on the 2.1.215->216
+/// walk, 3,595 on the exp092 corpus, 0 statement twins — while a bucket
+/// edge manufactured the only known miss, so `numeric_magnitude` is gone);
+/// a policy's one remaining choice is the STRINGS:
+///
+/// - `MatchKey`: strings blurred (the volatile semver/ISO/hex-digest
+///   classes, the `__STR_<len>__` length markers) — the CROSS-VERSION
+///   families. Consumers: the function fingerprints (graph.rs's
+///   MatchKey), the module/factory fingerprints (modules.rs's
+///   `factory_structural_hash`, which the vendor content re-key also
+///   hashes through), the statement-context hash
+///   (matching/statement_context.rs), the twin gates (twins/gates.rs).
+/// - `Verbatim`: strings exact — the SAME-RELEASE families. Consumers:
+///   the IdentityKey / declaration-body hash (graph.rs), the naming
+///   validators' masked streams (naming/driver/validate.rs), vendor
+///   inherit (finish/vendor_inherit.rs).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum LiteralPolicy {
-    Blurred,
+    MatchKey,
     Verbatim,
 }
 
@@ -141,7 +160,7 @@ fn canonical_serialize_inner(
         label_slots: HashMap::new(),
         mapping: Vec::new(),
         counter: 0,
-        preserve_literals: policy == LiteralPolicy::Verbatim,
+        policy,
         blind_privates,
         parts: String::with_capacity(4096),
     };
@@ -159,7 +178,7 @@ struct State<'a> {
     label_slots: HashMap<String, String>,
     mapping: Vec<(String, Option<SymbolId>, String)>,
     counter: u32,
-    preserve_literals: bool,
+    policy: LiteralPolicy,
     blind_privates: bool,
     parts: String,
 }
@@ -228,7 +247,7 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
     }
 
     // Literals: the policy classes.
-    if let Some(token) = literal_token(map, &node_type, state.preserve_literals) {
+    if let Some(token) = literal_token(map, &node_type, state.policy) {
         state.parts.push_str(&token);
         return;
     }
@@ -376,12 +395,14 @@ fn serialize_identifier(
 }
 
 /// The literal token for one literal node, or None when not a literal
-/// (structural-hash.ts:712-741).
+/// (structural-hash.ts:712-741; numbers EXACT under every policy since
+/// exp093 — only the string classes still follow `keep`).
 fn literal_token(
     map: &serde_json::Map<String, Value>,
     node_type: &str,
-    keep: bool,
+    policy: LiteralPolicy,
 ) -> Option<String> {
+    let keep = policy == LiteralPolicy::Verbatim;
     match node_type {
         // oxc's ESTree emits the STANDARD name "Literal" for every literal
         // (babel names StringLiteral/NumericLiteral/BigIntLiteral/
@@ -405,19 +426,11 @@ fn literal_token(
                 return Some(format!("R={pattern}/{flags}"));
             }
             if let Some(bigint) = map.get("bigint").and_then(|v| v.as_str()) {
-                return Some(if keep {
-                    format!("B={bigint}")
-                } else {
-                    "B=0".to_string()
-                });
+                return Some(format!("B={bigint}"));
             }
             match map.get("value") {
                 Some(Value::String(v)) => Some(string_literal_token(v, keep)),
-                Some(Value::Number(n)) => Some(if keep {
-                    format!("N={n}")
-                } else {
-                    numeric_magnitude(n.as_f64().unwrap_or(0.0))
-                }),
+                Some(Value::Number(n)) => Some(format!("N={n}")),
                 // Booleans and null are NOT literal-classed in the TS
                 // either (babel's BooleanLiteral/NullLiteral fall through
                 // to the generic walk) — None keeps that parity.
@@ -430,19 +443,11 @@ fn literal_token(
         }
         "NumericLiteral" => {
             let value = map.get("value")?.as_f64()?;
-            Some(if keep {
-                format!("N={value}")
-            } else {
-                numeric_magnitude(value)
-            })
+            Some(format!("N={value}"))
         }
         "BigIntLiteral" => {
             let value = map.get("value")?.as_str()?;
-            Some(if keep {
-                format!("B={value}")
-            } else {
-                "B=0".to_string()
-            })
+            Some(format!("B={value}"))
         }
         "RegExpLiteral" => {
             let pattern = map.get("pattern")?.as_str()?;
@@ -461,8 +466,9 @@ fn literal_token(
     }
 }
 
-/// Literal tokens (structural-hash.ts:685-741): exact when preserving, else
-/// the volatile class or the length marker.
+/// Literal tokens (structural-hash.ts:685-741): the volatile class or the
+/// length marker — the STRING rules, untouched by exp093 (numbers are
+/// exact under every policy).
 pub(crate) fn volatile_literal_token(value: &str) -> Option<String> {
     if is_volatile_semver(value) {
         Some("__VOLATILE_SEMVER__".to_string())
@@ -497,13 +503,10 @@ pub(crate) fn template_element_token(raw: &str, keep: bool) -> String {
     )
 }
 
-/// Numeric magnitude (structural-hash.ts:719-723).
-pub(crate) fn numeric_magnitude(value: f64) -> String {
-    if value == 0.0 {
-        return "N=0".to_string();
-    }
-    format!("N={}", (value.abs() + 1.0).log10().floor() as i64)
-}
+// `numeric_magnitude` (structural-hash.ts:719-723) — DELETED by exp093
+// (2026-09-29): the magnitude buckets bridged 0 of 64,061 real matched
+// pairs while their edges manufactured the only known miss, so numbers
+// are exact under every [`LiteralPolicy`] now.
 
 /// Bare-statement positions (structural-hash.ts:748-758).
 fn is_bare_statement_position(parent: Option<&Value>, key: &str) -> bool {

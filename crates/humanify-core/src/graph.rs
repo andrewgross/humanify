@@ -337,7 +337,7 @@ fn entry_outputs(
         // The token stream (`parts`) is diagnostics only — dropped here,
         // on the pool (an outer function's stream contains every nested
         // one's; kept, they would total the bundle times its depth).
-        let out = canonical_serialize(row, tables, LiteralPolicy::Blurred);
+        let out = canonical_serialize(row, tables, LiteralPolicy::MatchKey);
         (
             out.hash,
             out.mapping,
