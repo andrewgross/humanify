@@ -1,0 +1,56 @@
+A: /work/exp093/m3/before/asks.jsonl — 2340 ask(s)
+B: /work/exp093/m3/after/asks.jsonl — 2342 ask(s)
+  folders: A 49 / B 49
+  fresh: A 781 / B 781
+  module-lane: A 877 / B 877
+  prior-hinted: A 407 / B 407
+  retry: A 2 / B 3
+  shadowed: A 151 / B 152
+  sweep: A 72 / B 72
+  vendor: A 1 / B 1
+IDENTICAL: no — only-in-A 15, only-in-B 17, changed 7
+
+— ONLY IN A (15) —
+  [sweep] coverage-sweep (round 57, sweep) [c7yRenamed, v7yRenamed, R7yRenamed, BT0Renamed, w7yRenamed, A7yRenamed, H7yRenamed, N7yRenamed]
+  [sweep] coverage-sweep (round 69, sweep) [f5fRenamed]
+  [naming] input.js:424010:2 (round 1, prior-hinted) [B, G, U, ze, Ke, Wn, pi, br, Yn, Wo, Tt, En, Qo, oi, Lt, Or, _o, Vr, Oo, Ns, vu]
+  [naming] input.js:550858:2:lane0 (round 1, prior-hinted) [Vbr, ALp, RLp, n7y, a7y, c7y, ILp, eia, Umn, f7y, m7y, zbr, Kbr, S7y, v7y, C7y, R7y, BT0, nia, w7y, A7y, oia, qLp]
+  [naming] input.js:550858:2:lane1 (round 1, prior-hinted) [iia, sia, I7y, D7y, H7y, O7y, qmn, P7y, L7y, M7y, N7y, G7y, zLp, KLp, bia, Y7y, VT0, zT0, V7y, z7y, KT0, m4o]
+  [naming] input.js:570851:2:lane0 (round 1, prior-hinted) [oma, ima, sma, ama, wib, iqo, sqo, aqo, lqo, lma, cqo, cma, uma, dma, uqo, pma, fma]
+  [naming] input.js:570851:2:lane1 (round 1, prior-hinted) [dqo, pqo, mma, hma, gma, fqo, mqo, gB0, gTr, xgn, _Tr, _ma, ygt, bgt, fBt, kgn]
+  [naming] input.js:598246:2:lane0 (round 1, prior-hinted) [Dbb, Hbb, Obb, Pbb, ZTa, Lbb, eEa, Mbb, tEa, Nbb, Fbb, $bb, nEa]
+  [naming] input.js:673859:2 (round 1, prior-hinted) [Xbt]
+  [naming] input.js:727604:2 (round 1, prior-hinted) [nSS, xKa, oSS, Jxr, sSS, iSS, Xxr, ZJe, DKa, HKa, OKa, PKa, LKa, MKa, NKa, FKa, $Ka, BKa, UKa, qKa, lSS]
+  [naming] input.js:763356:2 (round 1, prior-hinted) [vHS, EHS, CHS, CQf, wHS]
+  [naming] input.js:769761:4 (round 1, prior-hinted) [U, X, J, Y, Ie, he, He, et, Qr]
+  [naming] module-binding-batch:Ukf,wi,atS (round 1, module-lane) [Ukf, wi, atS]
+  [naming] module-binding-batch:hut,l0_,FTo,f0_,yud,Tud (round 1, module-lane) [hut, l0_, FTo, f0_, yud, Tud]
+  [vendor] vendor-namer (round 1, vendor) [lib_f68a4b52, lib_72ea3321, lib_0a164112, lib_42d28822, lib_3c486789, lib_07c5ba7d, lib_2038235b, lib_ca0c24ec, lib_7c601276, lib_cf246d4b, lib_b992629e, lib_4617e6dc, lib_a2ebc9f0, lib_7a0c7019, lib_53806f85, lib_90134f87, lib_8aa9d25b]
+
+— ONLY IN B (17) —
+  [sweep] coverage-sweep (round 57, sweep) [c7yRenamed, v7yRenamed, C7yRenamed, R7yRenamed, BT0Renamed, w7yRenamed, A7yRenamed, H7yRenamed, N7yRenamed, G7yRenamed]
+  [sweep] coverage-sweep (round 69, sweep) [a5fRenamed]
+  [naming] input.js:424010:2 (round 1, prior-hinted) [B, G, U, ze, Ke, pi, br, Yn, Tt, En, Qo, oi, Lt, Or, _o, Vr, Oo, Ns, vu]
+  [naming] input.js:550858:2 (round 1, shadowed) [Kbr]
+  [naming] input.js:550858:2:lane0 (round 1, prior-hinted) [DR, Vbr, ALp, RLp, n7y, a7y, c7y, ILp, eia, Umn, f7y, m7y, zbr, Kbr, S7y, v7y, C7y, R7y, BT0, nia, w7y, A7y, oia]
+  [naming] input.js:550858:2:lane1 (round 1, prior-hinted) [qLp, iia, sia, I7y, D7y, H7y, O7y, qmn, P7y, L7y, M7y, N7y, G7y, zLp, KLp, bia, Y7y, VT0, zT0, V7y, z7y, KT0, m4o]
+  [naming] input.js:551077:22 (round 2, retry=NameTaken retry) [oia]
+  [naming] input.js:570851:2:lane0 (round 1, prior-hinted) [ex, oma, ima, sma, ama, wib, iqo, sqo, aqo, lqo, lma, cqo, cma, uma, dma, uqo, pma]
+  [naming] input.js:570851:2:lane1 (round 1, prior-hinted) [fma, dqo, pqo, mma, hma, gma, fqo, mqo, gB0, gTr, xgn, _Tr, _ma, ygt, bgt, fBt, kgn]
+  [naming] input.js:598246:2:lane0 (round 1, prior-hinted) [Dbb, g$, Hbb, Obb, Pbb, ZTa, Lbb, eEa, Mbb, tEa, Nbb, Fbb, $bb, nEa]
+  [naming] input.js:673859:2 (round 1, prior-hinted) [QAf, Xbt]
+  [naming] input.js:727604:2 (round 1, prior-hinted) [nSS, NY, xKa, oSS, Jxr, sSS, iSS, Xxr, ZJe, DKa, HKa, OKa, PKa, LKa, MKa, NKa, FKa, $Ka, BKa, UKa, qKa, lSS]
+  [naming] input.js:763356:2 (round 1, prior-hinted) [vHS, vQf, EHS, CHS, CQf, wHS]
+  [naming] input.js:769761:4 (round 1, prior-hinted) [U, X, J, Y, Ie, he, et, Qr]
+  [naming] module-binding-batch:Ukf,wi (round 1, module-lane) [Ukf, wi]
+  [naming] module-binding-batch:hut,l0_,FTo,f0_,a0_,yud,Tud (round 1, module-lane) [hut, l0_, FTo, f0_, a0_, yud, Tud]
+  [vendor] vendor-namer (round 1, vendor) [lib_f68a4b52, lib_8e0348d4, lib_0a164112, lib_42d28822, lib_3c486789, lib_07c5ba7d, lib_2038235b, lib_ca0c24ec, lib_7c601276, lib_01604a80, lib_0af3f256, lib_4617e6dc, lib_a2ebc9f0, lib_e5a96daa, lib_53806f85, lib_90134f87, lib_8aa9d25b]
+
+— CHANGED (7) —
+  [naming] input.js:424349:13 (round 1, prior-hinted) [xn]: usedNamesCount 45253 → 45255
+  [naming] input.js:424837:4 (round 1, prior-hinted) [cl, V]: usedNamesCount 45231 → 45233
+  [naming] input.js:424886:23 (round 1, fresh) [mt]: usedNamesCount 45231 → 45233
+  [naming] input.js:425880:35 (round 1, fresh) [To]: usedNamesCount 45263 → 45265
+  [naming] input.js:426497:13 (round 1, fresh) [$n]: usedNamesCount 45260 → 45262
+  [naming] input.js:426623:13 (round 1, fresh) [we]: usedNamesCount 45226 → 45228
+  [naming] input.js:598246:2:lane1 (round 1, prior-hinted) [oEa, iEa, sEa, aEa, lEa, cEa, uEa, dEa, pEa, fEa, Bbb, Dzp, Nsx]: usedNamesCount 45146 → 45145

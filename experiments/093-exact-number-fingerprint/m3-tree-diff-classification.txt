@@ -1,0 +1,39 @@
+ 1008  renamed-lib-file
+  756  hash-era identifiers only (lib_ tokens / manifest lines)
+    3  src: contains non-hash lines (plain=4, lib=0)
+    1  other: contains non-hash lines (plain=560, lib=1052)
+    1  other: contains non-hash lines (plain=2, lib=0)
+    1  other: contains non-hash lines (plain=4, lib=0)
+    1  src: contains non-hash lines (plain=6, lib=0)
+    1  src: contains non-hash lines (plain=22, lib=0)
+    1  src: contains non-hash lines (plain=8, lib=0)
+    1  src: contains non-hash lines (plain=112, lib=0)
+    1  src: contains non-hash lines (plain=180, lib=0)
+    1  src: contains non-hash lines (plain=74, lib=0)
+    1  src: contains non-hash lines (plain=142, lib=0)
+    1  manifest (hashVersion + structuralHash)
+
+== files under other: contains non-hash lines (plain=560, lib=1052)
+   .humanify/humanified.js  {'lib': 1052, 'plain': 560}
+== files under other: contains non-hash lines (plain=2, lib=0)
+   .humanify/split-ledger.json  {'plain': 2}
+== files under other: contains non-hash lines (plain=4, lib=0)
+   .humanify/stage-hashes.json  {'plain': 4}
+== files under src: contains non-hash lines (plain=4, lib=0)
+   src/c0-renamed/c0-renamed.js  {'plain': 4}
+   src/get-farewell-message-val/clean-and-limit-title.js  {'plain': 4}
+   src/q0-renamed/build-request-description/format-uri.js  {'plain': 4}
+== files under src: contains non-hash lines (plain=6, lib=0)
+   src/create-permission-denied-error-shared/create-permission-denied-error.js  {'plain': 6}
+== files under src: contains non-hash lines (plain=22, lib=0)
+   src/fhsrenamed/fhsrenamed.js  {'plain': 22}
+== files under src: contains non-hash lines (plain=8, lib=0)
+   src/get-status-text/clear-domain-caches.js  {'plain': 8}
+== files under src: contains non-hash lines (plain=112, lib=0)
+   src/handle-fable-consent-flow/is-zero-flag.js  {'plain': 112}
+== files under src: contains non-hash lines (plain=180, lib=0)
+   src/isb-renamed/is-valid-token-node.js  {'plain': 180}
+== files under src: contains non-hash lines (plain=74, lib=0)
+   src/render-display-artifacts-panel/initialize75.js  {'plain': 74}
+== files under src: contains non-hash lines (plain=142, lib=0)
+   src/render-styled-or-link/render-styled-or-link.js  {'plain': 142}

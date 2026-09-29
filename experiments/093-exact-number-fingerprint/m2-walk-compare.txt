@@ -1,0 +1,19 @@
+== M2 before/after ==
+BEFORE: prior 63723 / fresh 64493 / pairs 60466 / ambiguous 923 / unmatchedPrior 2334
+AFTER: prior 63723 / fresh 64493 / pairs 60467 / ambiguous 922 / unmatchedPrior 2334
+pair identity: common 60465, LOST 1, GAINED 2
+pair tier shifts (before -> after):
+  enclosingStatement -> structuralHashUnique: 34
+  propagation -> structuralHashUnique: 19
+  calleeShapes -> structuralHashUnique: 4
+  interchangeable -> ordinal: 3
+  enclosingStatement -> memberKey: 2
+  ordinal -> structuralHashUnique: 1
+  memberKey -> structuralHashUnique: 1
+  interchangeable -> propagation: 1
+BEFORE pairs by tier: {"calleeHashes": 94, "calleeShapes": 333, "callerShapes": 36, "enclosingStatement": 12254, "interchangeable": 563, "memberKey": 6055, "ordinal": 444, "propagation": 3356, "shingleSimilarity": 62, "structuralHashUnique": 37269}
+BEFORE ambiguity candidates histogram: {"1": 8, "10": 12, "104": 10, "11": 4, "12": 1, "126": 1, "13": 15, "1392": 3, "14": 1, "16": 1, "169": 1, "18": 2, "19": 1, "2": 116, "207": 2, "24": 2, "241": 44, "26": 26, "27": 27, "3": 30, "33": 198, "35": 42, "4": 60, "42": 2, "442": 1, "5": 23, "51": 2, "55": 6, "6": 18, "60": 3, "630": 165, "65": 65, "7": 19, "7491": 2, "8": 10}
+AFTER pairs by tier: {"calleeHashes": 94, "calleeShapes": 329, "callerShapes": 36, "enclosingStatement": 12218, "interchangeable": 558, "memberKey": 6056, "ordinal": 446, "propagation": 3338, "shingleSimilarity": 62, "structuralHashUnique": 37330}
+AFTER ambiguity candidates histogram: {"1": 8, "10": 12, "104": 10, "11": 4, "12": 1, "126": 1, "13": 15, "1392": 3, "14": 1, "16": 1, "169": 1, "18": 2, "19": 1, "2": 114, "207": 2, "24": 2, "241": 44, "26": 26, "27": 27, "3": 30, "33": 198, "35": 42, "4": 60, "42": 2, "442": 1, "5": 23, "51": 2, "55": 6, "6": 18, "60": 3, "630": 165, "65": 65, "7": 21, "7491": 2, "8": 9}
+LOST pairs (prior_start, fresh_start, before-tier):
+   (9073217, 7663324) interchangeable
