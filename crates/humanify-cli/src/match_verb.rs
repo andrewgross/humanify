@@ -69,9 +69,12 @@ pub const MATCH_DUMP_SCHEMA_VERSION: u64 = 1;
 /// call (the same prior text, the same parse), so it is hoisted to the
 /// dump's top level ONCE (`prior.functions` / `prior.statements`); the
 /// per-file sections carry only their own fresh side and the decisions
-/// (whose prior indices reference the shared inventory). Repeating the
-/// prior inventories per section would embed ~64k rows per vendor file
-/// — hundreds of GB on the walk corpus.
+/// (whose prior indices reference the shared inventory). The per-call
+/// PRIOR-INDEXED blocks — each call's `unmatched`/`rejections` against
+/// the whole tree's prior (~63k rows each) and the close tier's
+/// `candidates` (~100k) — are dropped from the sections: repeating them
+/// per section would embed hundreds of GB on the walk corpus, and the
+/// scored ground truth reads the pairs and inventories only.
 pub const MATCH_DUMP_SCHEMA_VERSION_MULTI_FILE: u64 = 2;
 
 /// `humanify match`'s inputs (mirrors the pipeline flags it reuses).
@@ -352,7 +355,11 @@ fn dump_meta(
         differences.push(
             "multi-file raw-bundle dump (schemaVersion 2): the prior side is \
              hoisted to the top level once; per-file sections carry only their \
-             own fresh side, with prior indices referencing the shared inventory"
+             own fresh side, with prior indices referencing the shared inventory, \
+             and the per-call prior-indexed blocks (unmatched, rejections, close \
+             candidates) are dropped — against a whole-tree prior each section's \
+             copy runs to tens of MB; the scored ground truth reads pairs and \
+             inventories"
                 .to_string(),
         );
     }
@@ -462,8 +469,12 @@ fn slice_at(text: &str, span: oxc_span::Span) -> &str {
 /// unmatched, ambiguous, rejections, the stats bags), the close tier,
 /// and the statement twins. With `include_prior` (the single-file shape)
 /// the section embeds the prior inventories; the multi-file shape hoists
-/// them to the dump's top level and its sections carry only their own
-/// side.
+/// them to the dump's top level, its sections carry only their own side,
+/// and the per-call PRIOR-INDEXED blocks (unmatched, rejections, close
+/// candidates — against a whole-tree prior each call's copy runs to
+/// ~63k/100k rows, tens of MB, hundreds of GB on a walk corpus) are
+/// dropped: the ground truth the harness scores reads the pairs and the
+/// inventories.
 fn file_section(
     stage: &humanify_core::prior::MatchStage<'_, '_>,
     twins: &humanify_core::twins::gates::TwinGateOutput,
@@ -472,14 +483,23 @@ fn file_section(
     path: &str,
     include_prior: bool,
 ) -> Result<Value, String> {
+    let close = stage
+        .close_file
+        .map(|f| serde_json::to_value(f).expect("the close file serializes"))
+        .map(|mut close| {
+            if !include_prior {
+                close
+                    .as_object_mut()
+                    .expect("the close file is an object")
+                    .remove("candidates");
+            }
+            close
+        });
     Ok(json!({
         "path": path,
         "freshText": fresh_text,
         "functions": functions_section(stage, fresh_text, prior_text, include_prior),
-        "close": stage
-            .close_file
-            .map(|f| serde_json::to_value(f).expect("the close file serializes"))
-            .unwrap_or(Value::Null),
+        "close": close.unwrap_or(Value::Null),
         "twins": twins_section(stage, twins, fresh_text, prior_text, include_prior),
     }))
 }
@@ -525,11 +545,13 @@ fn functions_section(
     });
     if !include_prior {
         // The multi-file shape: the prior inventory lives ONCE at the
-        // dump's top level, never repeated per section.
-        functions
-            .as_object_mut()
-            .expect("functions is an object")
-            .remove("prior");
+        // dump's top level, never repeated per section — and the
+        // per-call prior-indexed blocks (this call's unmatched/rejections
+        // against the WHOLE tree's prior) are not carried at all.
+        let functions = functions.as_object_mut().expect("functions is an object");
+        functions.remove("prior");
+        functions.remove("unmatched");
+        functions.remove("rejections");
     }
     functions
 }

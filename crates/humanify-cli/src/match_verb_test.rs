@@ -473,6 +473,22 @@ fn a_multi_file_dump_hoists_the_prior_side_and_matches_every_file() {
             "sections carry no prior inventory: {}",
             section["path"]
         );
+        // No per-call PRIOR-INDEXED blocks either: against a whole-tree
+        // prior, every call's unmatched/rejections list ~the full prior
+        // inventory (63k rows) and close.candidates runs to ~100k rows —
+        // tens of MB per section, hundreds of GB on a walk corpus — while
+        // the scorer's ground truth reads pairs and inventories only.
+        assert!(
+            section["functions"].get("unmatched").is_none()
+                && section["functions"].get("rejections").is_none(),
+            "no per-call prior-indexed blocks in the multi-file shape: {}",
+            section["path"]
+        );
+        assert!(
+            section["close"].get("candidates").is_none(),
+            "no close.candidates in the multi-file shape: {}",
+            section["path"]
+        );
     }
     let prior_rows = dump["prior"]["functions"]
         .as_array()
