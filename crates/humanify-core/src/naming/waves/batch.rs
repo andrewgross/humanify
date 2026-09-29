@@ -17,7 +17,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use humanify_model::llm::{RenameFailures, Renames};
+use humanify_model::llm::{PriorRejects, RenameFailures, Renames};
 
 use super::jsset::JsRecord;
 use crate::naming::report::{
@@ -40,9 +40,10 @@ const DEFAULT_MAX_FREE_RETRIES: u32 = 100;
 pub const DEFAULT_LANE_THRESHOLD: usize = 25;
 
 /// The processor's tunables (`--batch-size`, `--max-retries`,
-/// `--max-free-retries`, `--lane-threshold`; createRenamePlugin's
-/// `batchSize` / `maxRetriesPerIdentifier` / `maxFreeRetries` /
-/// `laneThreshold`). The default is the TS's optionless run.
+/// `--max-free-retries`, `--lane-threshold`, `--rename-retries`;
+/// createRenamePlugin's `batchSize` / `maxRetriesPerIdentifier` /
+/// `maxFreeRetries` / `laneThreshold`, plus the Rust-run re-ask budget).
+/// The default is the TS's optionless run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WaveTunables {
     /// The lane's window size (halved on truncation from here).
@@ -54,6 +55,12 @@ pub struct WaveTunables {
     pub max_free_retries: Option<u32>,
     /// Bindings a function needs before its batch splits into lanes.
     pub lane_threshold: usize,
+    /// The name-conflict re-ask budget (`--rename-retries`): how many
+    /// times a barrier/sweep collision rejection may be re-asked with the
+    /// failed suggestions disclosed. NOT the lane's per-identifier call
+    /// cap (`max_retries`) — a collision re-ask rides its own wave-step
+    /// round and consumes no lane attempts.
+    pub reask_limit: usize,
 }
 
 impl Default for WaveTunables {
@@ -63,6 +70,7 @@ impl Default for WaveTunables {
             max_retries: DEFAULT_MAX_RETRIES_PER_ID,
             max_free_retries: None,
             lane_threshold: DEFAULT_LANE_THRESHOLD,
+            reask_limit: crate::naming::reask::REASK_LIMIT,
         }
     }
 }
@@ -191,6 +199,11 @@ pub struct LaneCall {
     /// retry seeded by the `late` flow. Carries the ask trace's true cause;
     /// the request's failure lists (the prompt bytes) are unaffected.
     pub rejections: Vec<(String, RejectionReason)>,
+    /// The ACCUMULATED rejected suggestions per id (the barrier re-ask's
+    /// disclosure; see [`PriorRejects`]) — None on every lane-driven call
+    /// (a lane round-2 re-asks a rejected RESPONSE and knows one
+    /// suggestion), set only by the barrier's retry seed.
+    pub prior_rejects: Option<PriorRejects>,
 }
 
 #[derive(Clone, Debug)]
@@ -348,6 +361,7 @@ impl Lane {
                         prev,
                         failures,
                         rejections,
+                        prior_rejects: None,
                     });
                 }
                 Stage::Straggler { list, next } => {
@@ -369,6 +383,7 @@ impl Lane {
                         prev,
                         failures,
                         rejections,
+                        prior_rejects: None,
                     });
                 }
             }

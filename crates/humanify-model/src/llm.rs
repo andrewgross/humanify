@@ -73,6 +73,102 @@ pub struct RenameFailures {
     pub unchanged: Vec<String>,
 }
 
+/// One previously rejected suggestion of a re-asked identifier (the
+/// ACCUMULATED disclosure a collision re-ask carries, 2026-09-29): the
+/// suggestion, and whether it was rejected as an invalid target rather
+/// than a name collision — each disclosed with its own reason.
+#[derive(Clone, Debug, Default, PartialEq, serde::Deserialize)]
+pub struct PriorReject {
+    pub name: String,
+    pub invalid: bool,
+}
+
+/// An insertion-ordered `Record<string, PriorReject[]>` (`StrMap`'s
+/// sibling): every failed suggestion per identifier, oldest first. The
+/// retry prompt renders one diagnostic line per entry and flattens the
+/// names into the do-not-suggest block; [`BatchRenameRequest::prior_rejects`]
+/// carries it as cache-key + prompt material.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PriorRejects(pub Vec<(String, Vec<PriorReject>)>);
+
+impl PriorRejects {
+    /// `record[id]` for an own key.
+    pub fn get(&self, id: &str) -> Option<&[PriorReject]> {
+        self.0
+            .iter()
+            .find(|(k, _)| k == id)
+            .map(|(_, v)| v.as_slice())
+    }
+
+    pub fn to_js(&self) -> JsValue {
+        JsValue::Object(
+            self.0
+                .iter()
+                .map(|(k, list)| {
+                    (
+                        k.clone(),
+                        JsValue::Array(
+                            list.iter()
+                                .map(|r| {
+                                    let mut o = JsObject::new();
+                                    o.insert("name", JsValue::str(&r.name));
+                                    o.insert("invalid", JsValue::Bool(r.invalid));
+                                    JsValue::Object(o)
+                                })
+                                .collect(),
+                        ),
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PriorRejects {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = JsValue::deserialize(deserializer)?;
+        let JsValue::Object(obj) = value else {
+            return Err(serde::de::Error::custom(
+                "expected an object of prior-reject lists",
+            ));
+        };
+        let one = |v: &JsValue| -> Result<Vec<PriorReject>, D::Error> {
+            let JsValue::Array(items) = v else {
+                return Err(serde::de::Error::custom("expected an array of rejects"));
+            };
+            items
+                .iter()
+                .map(|r| match r {
+                    JsValue::Object(fields) => {
+                        let name = fields
+                            .entries()
+                            .iter()
+                            .find(|(k, _)| k == "name")
+                            .and_then(|(_, v)| v.as_str().map(str::to_string))
+                            .ok_or_else(|| serde::de::Error::custom("a reject needs a name"))?;
+                        let invalid = fields
+                            .entries()
+                            .iter()
+                            .find(|(k, _)| k == "invalid")
+                            .and_then(|(_, v)| match v {
+                                JsValue::Bool(b) => Some(*b),
+                                _ => None,
+                            })
+                            .unwrap_or(false);
+                        Ok(PriorReject { name, invalid })
+                    }
+                    _ => Err(serde::de::Error::custom("a reject must be an object")),
+                })
+                .collect()
+        };
+        obj.entries()
+            .iter()
+            .map(|(k, v)| one(v).map(|list| (k.clone(), list)))
+            .collect::<Result<Vec<_>, _>>()
+            .map(PriorRejects)
+    }
+}
+
 /// One batch rename request (types.ts `BatchRenameRequest`). `None` is the
 /// TS `undefined` (the field is absent from the key material); an empty
 /// Vec is a present-but-empty array — they key differently.
@@ -92,6 +188,13 @@ pub struct BatchRenameRequest {
     pub previous_attempt: Option<StrMap>,
     #[serde(default)]
     pub failures: Option<RenameFailures>,
+    /// Every prior rejected suggestion per identifier, oldest first (the
+    /// accumulated do-not-suggest disclosure of a barrier/sweep re-ask;
+    /// `previous_attempt` still carries the LAST suggestion). None on a
+    /// lane round-2, which re-asks a rejected RESPONSE and knows one
+    /// suggestion per identifier.
+    #[serde(default)]
+    pub prior_rejects: Option<PriorRejects>,
     #[serde(default)]
     pub system_prompt: Option<String>,
     #[serde(default)]
@@ -161,8 +264,8 @@ fn failures_to_js(f: &RenameFailures) -> JsValue {
 
 impl BatchRenameRequest {
     /// The request half of the key material: the TS literal's sixteen
-    /// fields, `undefined` ones absent, the Set sorted by UTF-16 units
-    /// (`[...set].map(String).sort()`).
+    /// fields plus the Rust-run `priorRejects`, `undefined` ones absent,
+    /// the Set sorted by UTF-16 units (`[...set].map(String).sort()`).
     pub fn key_material(&self) -> JsValue {
         let mut used = self.used_names.clone();
         used.sort_by(|a, b| crate::js::cmp_utf16(a, b));
@@ -199,6 +302,10 @@ impl BatchRenameRequest {
             self.previous_attempt.as_ref().map(StrMap::to_js),
         );
         obj.insert_opt("failures", self.failures.as_ref().map(failures_to_js));
+        obj.insert_opt(
+            "priorRejects",
+            self.prior_rejects.as_ref().map(PriorRejects::to_js),
+        );
         obj.insert_opt("promptBody", opt_str(&self.prompt_body));
         obj.insert_opt("userPrompt", opt_str(&self.user_prompt));
         obj.insert_opt("systemPrompt", opt_str(&self.system_prompt));

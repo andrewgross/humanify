@@ -62,6 +62,7 @@ fn parses_numbers_once_into_numbers() {
         max_retries: Some("3".into()),
         max_free_retries: Some("2".into()),
         lane_threshold: Some("11".into()),
+        rename_retries: Some("2".into()),
         context_tokens: Some("131072".into()),
         ..cli()
     };
@@ -73,7 +74,26 @@ fn parses_numbers_once_into_numbers() {
     assert_eq!(s.max_retries_per_identifier, Some(3.0));
     assert_eq!(s.max_free_retries, Some(2.0));
     assert_eq!(s.lane_threshold, Some(11.0));
+    assert_eq!(s.rename_retries, Some(2.0));
     assert_eq!(s.context_tokens, Some(131_072.0));
+}
+
+/// `--rename-retries` (the name-conflict re-ask budget): unset means the
+/// `reask::REASK_LIMIT` default, and the resolved Settings value is the
+/// only hand-off the naming tunables read.
+#[test]
+fn rename_retries_defaults_to_none_and_parses_when_set() {
+    let unset = resolve_settings_with(&cli(), env_of(&[])).unwrap();
+    assert_eq!(unset.rename_retries, None);
+    let set = resolve_settings_with(
+        &SettingsInput {
+            rename_retries: Some("0".into()),
+            ..cli()
+        },
+        env_of(&[]),
+    )
+    .unwrap();
+    assert_eq!(set.rename_retries, Some(0.0));
 }
 
 #[test]

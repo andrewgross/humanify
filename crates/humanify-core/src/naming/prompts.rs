@@ -22,7 +22,7 @@
 //! - `record[key]` falls through to `Object.prototype` ([`js_record`]).
 
 use humanify_model::js::JsValue;
-use humanify_model::llm::{BatchRenameRequest, RenameFailures, StrMap};
+use humanify_model::llm::{BatchRenameRequest, PriorRejects, RenameFailures, StrMap};
 
 use super::js_record;
 
@@ -141,6 +141,11 @@ pub struct RetryInput<'a> {
     pub used_names: &'a [String],
     pub previous_attempt: &'a StrMap,
     pub failures: &'a RenameFailures,
+    /// The ACCUMULATED rejected suggestions per id (a barrier/sweep
+    /// re-ask's disclosure — every prior suggestion, each with its
+    /// reason); None on a lane round-2, which knows one suggestion per id
+    /// and reads it off `previous_attempt`.
+    pub prior_rejects: Option<&'a PriorRejects>,
     pub prior_version_code: Option<&'a str>,
     pub already_renamed: Option<&'a StrMap>,
 }
@@ -299,16 +304,34 @@ pub fn build_rename_response_instruction(identifiers: &[String]) -> String {
     )
 }
 
-/// The rejected-name block both retry renderers share: every truthy
-/// suggestion for a duplicate/unchanged/invalid name, deduplicated in
-/// first-seen order (a Set).
-fn render_rejected_names(prev: &StrMap, f: &RenameFailures) -> String {
+/// The rejected-name block both retry renderers share: every suggestion
+/// that failed, deduplicated in first-seen order (a Set). With the
+/// accumulated [`PriorRejects`] (a barrier/sweep re-ask) EVERY prior
+/// suggestion of each failed id is blocklisted, oldest first; without
+/// them (a lane round-2) the one suggestion `previous_attempt` carries.
+fn render_rejected_names(
+    prev: &StrMap,
+    f: &RenameFailures,
+    prior: Option<&PriorRejects>,
+) -> String {
     let mut rejected: Vec<String> = Vec::new();
+    let mut push = |s: &str| {
+        if !rejected.iter().any(|r| r == s) {
+            rejected.push(s.to_string());
+        }
+    };
     for name in f.duplicates.iter().chain(&f.unchanged).chain(&f.invalid) {
-        if let Some(s) = js_record::get_truthy(prev, name)
-            && !rejected.iter().any(|r| *r == *s)
-        {
-            rejected.push(s.into_owned());
+        match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
+            Some(list) => {
+                for r in list {
+                    push(&r.name);
+                }
+            }
+            None => {
+                if let Some(s) = js_record::get_truthy(prev, name) {
+                    push(&s);
+                }
+            }
         }
     }
     if rejected.is_empty() {
@@ -327,37 +350,65 @@ fn missing_line(f: &RenameFailures) -> String {
     )
 }
 
+/// One disclosure line for a rejected suggestion (the two renderers'
+/// shared wording — a barrier/sweep re-ask reuses it per ACCUMULATED
+/// entry, a lane round-2 once per id from `previous_attempt`).
+fn failure_line(name: &str, sug: &str, invalid: bool) -> String {
+    if invalid {
+        format!(
+            "- \"{name}\" was suggested as \"{sug}\" which is not allowed (reserved word, global built-in, or invalid syntax)\n"
+        )
+    } else {
+        format!(
+            "- \"{name}\" was suggested as \"{sug}\" but that conflicts with an existing name\n"
+        )
+    }
+}
+
 /// Failure diagnostics + rejected-name blocklist for function retries.
-fn render_retry_diagnostics(prev: &StrMap, f: &RenameFailures) -> String {
+/// With the accumulated [`PriorRejects`] every prior suggestion of a
+/// duplicate id gets its OWN line (the disclosure the re-ask budget
+/// carries across rounds, 2026-09-29); without them the lane round-2's
+/// single-suggestion shape renders as before.
+fn render_retry_diagnostics(
+    prev: &StrMap,
+    f: &RenameFailures,
+    prior: Option<&PriorRejects>,
+) -> String {
     let mut s = String::from("Your previous rename suggestions had issues:\n");
     for name in &f.duplicates {
-        s += &match js_record::get_truthy(prev, name) {
-            Some(sug) => format!(
-                "- \"{name}\" was suggested as \"{sug}\" but that conflicts with an existing name\n"
-            ),
-            None => format!("- \"{name}\" had a duplicate/conflicting name\n"),
-        };
+        match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
+            Some(list) => {
+                for r in list {
+                    s += &failure_line(name, &r.name, r.invalid);
+                }
+            }
+            None => {
+                s += &match js_record::get_truthy(prev, name) {
+                    Some(sug) => failure_line(name, &sug, false),
+                    None => format!("- \"{name}\" had a duplicate/conflicting name\n"),
+                };
+            }
+        }
     }
     for name in &f.unchanged {
         s += &format!("- \"{name}\" was returned as itself — you MUST suggest a DIFFERENT name\n");
     }
     for name in &f.invalid {
         s += &match js_record::get_truthy(prev, name) {
-            Some(sug) => format!(
-                "- \"{name}\" was suggested as \"{sug}\" which is not allowed (reserved word, global built-in, or invalid syntax)\n"
-            ),
+            Some(sug) => failure_line(name, &sug, true),
             None => format!("- \"{name}\" had an invalid suggested name\n"),
         };
     }
     s += &missing_line(f);
-    s + &render_rejected_names(prev, f)
+    s + &render_rejected_names(prev, f, prior)
 }
 
 /// The retry prompt without its response-format tail
 /// (`buildBatchRenameRetryBody`) — the request's `promptBody`, which is
 /// cache-key material.
 pub fn build_batch_rename_retry_body(i: &RetryInput<'_>) -> String {
-    let mut p = render_retry_diagnostics(i.previous_attempt, i.failures);
+    let mut p = render_retry_diagnostics(i.previous_attempt, i.failures, i.prior_rejects);
     p += &format!("\n{}", render_already_renamed(i.already_renamed));
     p += "\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n";
     p += &format!("```javascript\n{}\n```\n\n", i.code);
@@ -490,14 +541,28 @@ pub fn build_module_level_rename_prompt(
 
 /// The retry prefix prepended to a module-level prompt
 /// (`buildModuleLevelRetryPrefix`). Unlike the function retry, a
-/// duplicate/invalid name without a truthy suggestion gets NO line.
-pub fn build_module_level_retry_prefix(prev: &StrMap, f: &RenameFailures) -> String {
+/// duplicate/invalid name without a truthy suggestion gets NO line. With
+/// the accumulated [`PriorRejects`] (a barrier re-ask) every prior
+/// suggestion of a duplicate id gets its own line, oldest first — the
+/// disclosure the re-ask budget carries across rounds (2026-09-29).
+pub fn build_module_level_retry_prefix(
+    prev: &StrMap,
+    f: &RenameFailures,
+    prior: Option<&PriorRejects>,
+) -> String {
     let mut s = String::from("Your previous rename suggestions had issues:\n");
     for name in &f.duplicates {
-        if let Some(sug) = js_record::get_truthy(prev, name) {
-            s += &format!(
-                "- \"{name}\" was suggested as \"{sug}\" but that conflicts with an existing name\n"
-            );
+        match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
+            Some(list) => {
+                for r in list {
+                    s += &failure_line(name, &r.name, r.invalid);
+                }
+            }
+            None => {
+                if let Some(sug) = js_record::get_truthy(prev, name) {
+                    s += &failure_line(name, &sug, false);
+                }
+            }
         }
     }
     for name in &f.unchanged {
@@ -505,19 +570,19 @@ pub fn build_module_level_retry_prefix(prev: &StrMap, f: &RenameFailures) -> Str
     }
     for name in &f.invalid {
         if let Some(sug) = js_record::get_truthy(prev, name) {
-            s += &format!(
-                "- \"{name}\" was suggested as \"{sug}\" which is not allowed (reserved word, global built-in, or invalid syntax)\n"
-            );
+            s += &failure_line(name, &sug, true);
         }
     }
     s += &missing_line(f);
-    s += &render_rejected_names(prev, f);
+    s += &render_rejected_names(prev, f, prior);
     s + "\nPlease suggest DIFFERENT names for the remaining identifiers below:\n"
 }
 
 /// The user prompt the provider sends for `r`: a truthy `userPrompt`
 /// verbatim, else the retry prompt when `isRetry && failures`
-/// (`previousAttempt || {}`), else the first-round prompt.
+/// (`previousAttempt || {}`), else the first-round prompt. The retry
+/// prompt discloses the request's ACCUMULATED `priorRejects` when a
+/// barrier/sweep re-ask set them.
 pub fn render_user_prompt(r: &BatchRenameRequest) -> String {
     if let Some(user) = non_empty(r.user_prompt.as_deref()) {
         return user.to_string();
@@ -530,6 +595,7 @@ pub fn render_user_prompt(r: &BatchRenameRequest) -> String {
             used_names: &r.used_names,
             previous_attempt: r.previous_attempt.as_ref().unwrap_or(&empty),
             failures,
+            prior_rejects: r.prior_rejects.as_ref(),
             prior_version_code: r.prior_version_code.as_deref(),
             already_renamed: r.already_renamed.as_ref(),
         });

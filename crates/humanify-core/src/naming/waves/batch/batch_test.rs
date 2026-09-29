@@ -182,6 +182,13 @@ fn the_configured_batch_size_and_retry_limit_shape_the_loop() {
     assert_eq!(second.batch, names(&["b"]));
     // The default batch size is its own test (the_default_batch_size_is_25).
     assert_eq!(WaveTunables::default().lane_threshold, 25);
+    // The name-conflict re-ask budget defaults to reask.rs's TWO
+    // (`--rename-retries` sizes it; the lane loop itself never reads it).
+    assert_eq!(
+        WaveTunables::default().reask_limit,
+        crate::naming::reask::REASK_LIMIT
+    );
+    assert_eq!(WaveTunables::default().reask_limit, 2);
 }
 
 /// The default window is 25 identifiers (the 2026-09-28 relaxed-default

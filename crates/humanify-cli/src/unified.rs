@@ -71,6 +71,8 @@ pub struct CommandOptions {
     pub max_retries: Option<String>,
     pub max_free_retries: Option<String>,
     pub lane_threshold: Option<String>,
+    /// `--rename-retries <n>`: the name-conflict re-ask budget.
+    pub rename_retries: Option<String>,
     pub profile: Option<String>,
     pub prior_version: Option<String>,
     pub reconcile_prior_diff: Option<bool>,
@@ -146,6 +148,7 @@ impl CommandOptions {
             max_retries: s("maxRetries"),
             max_free_retries: s("maxFreeRetries"),
             lane_threshold: s("laneThreshold"),
+            rename_retries: s("renameRetries"),
             profile: s("profile"),
             prior_version: s("priorVersion"),
             reconcile_prior_diff: v.bool("reconcilePriorDiff"),
@@ -182,6 +185,7 @@ impl CommandOptions {
             max_retries: self.max_retries.clone(),
             max_free_retries: self.max_free_retries.clone(),
             lane_threshold: self.lane_threshold.clone(),
+            rename_retries: self.rename_retries.clone(),
             llm_cache: self.llm_cache.clone(),
             reasoning_effort: self.reasoning_effort.clone(),
             max_tokens: self.max_tokens.clone(),
@@ -1309,6 +1313,9 @@ fn naming_config(
                 lane_threshold: settings
                     .lane_threshold
                     .map_or(d.lane_threshold, |n| n as usize),
+                reask_limit: settings
+                    .rename_retries
+                    .map_or(d.reask_limit, |n| n as usize),
             }
         },
     }
