@@ -22,6 +22,7 @@ use oxc_semantic::{NodeId, Semantic};
 use oxc_span::{GetSpan, Span};
 
 use super::census::{MintedBinding, collect_minted_bindings};
+use crate::artifact_dump::{Dispatch, DispatchLog, RecordMode};
 use crate::ingest::Ingest;
 use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
 use crate::naming::code_window::MAX_CODE_LINES;
@@ -378,13 +379,17 @@ fn apply_group_response(
 /// blocklists EVERY suggestion that already failed — the same retry
 /// prompt shape the wave lanes use. A budget exhausted at a further
 /// collision gives up, recorded.
+#[allow(clippy::too_many_arguments)]
 pub fn sweep_minted_names<P: NameProvider>(
     semantic: &Semantic<'_>,
     state: &mut RenameState,
     eligible: &Eligibility,
     taint: &EvalWithTaint,
     provider: &P,
+    log: &mut DispatchLog,
+    anchor: crate::trail::Anchor,
     params: &CacheKeyParams,
+    window: usize,
     reask_limit: usize,
 ) -> SweepResult {
     let targets = collect_sweep_targets(semantic, state, eligible, taint);
@@ -396,35 +401,31 @@ pub fn sweep_minted_names<P: NameProvider>(
         groups: groups.len(),
         ..SweepResult::default()
     };
-    let mut calls = Vec::with_capacity(groups.len());
-    for g in &groups {
-        let request = BatchRenameRequest {
-            code: g.code.clone(),
-            identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
-            used_names: g.used_names.clone(),
-            ..BatchRenameRequest::default()
-        };
-        let system_prompt = render_system_prompt(&request);
-        let user_prompt = render_user_prompt(&request);
-        result.dispatches.push(SweepDispatch {
-            cache_key: cache_key_of(&request, params),
-            system_prompt: system_prompt.clone(),
-            user_prompt: user_prompt.clone(),
-            targets: g
-                .targets
-                .iter()
-                .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
-                .collect(),
-            request: request.clone(),
-            ask: crate::naming::ask_trace::AskSite::fresh(0),
-        });
-        calls.push(LlmCall {
-            request,
-            system_prompt,
-            user_prompt,
-        });
+    // One bounded window of rendered prompts at a time (finding #65) —
+    // the rows are recorded (and streamed) in group-build order either way.
+    let mut responses = Vec::with_capacity(groups.len());
+    for chunk in groups.chunks(window.max(1)) {
+        let mut calls = Vec::with_capacity(chunk.len());
+        for g in chunk {
+            let request = BatchRenameRequest {
+                code: g.code.clone(),
+                identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
+                used_names: g.used_names.clone(),
+                ..BatchRenameRequest::default()
+            };
+            calls.push(sweep_call(
+                &g.targets,
+                state,
+                request,
+                crate::naming::ask_trace::AskSite::fresh(0),
+                anchor,
+                log,
+                &mut result,
+                params,
+            ));
+        }
+        responses.extend(provider.run_wave(calls));
     }
-    let responses = provider.run_wave(calls);
     let none: HashMap<String, Vec<(String, &'static str)>> = HashMap::new();
     let first = ReaskCtx {
         limit: reask_limit,
@@ -459,12 +460,55 @@ pub fn sweep_minted_names<P: NameProvider>(
             state,
             reasks,
             provider,
+            log,
+            anchor,
             params,
+            window,
             reask_limit,
             &mut result,
         );
     }
     result
+}
+
+/// One sweep dispatch: its prompts for the provider, its row to the log AT
+/// COMMIT (finding #65 — no per-ask string survives the dispatch outside
+/// the tests' retaining log). Returns the call.
+#[allow(clippy::too_many_arguments)]
+fn sweep_call(
+    targets: &[MintedBinding],
+    state: &RenameState,
+    request: BatchRenameRequest,
+    ask: crate::naming::ask_trace::AskSite,
+    anchor: crate::trail::Anchor,
+    log: &mut DispatchLog,
+    result: &mut SweepResult,
+    params: &CacheKeyParams,
+) -> LlmCall {
+    let system_prompt = render_system_prompt(&request);
+    let user_prompt = render_user_prompt(&request);
+    if log.mode() != RecordMode::Off {
+        let dispatch = SweepDispatch {
+            cache_key: cache_key_of(&request, params),
+            system_prompt: system_prompt.clone(),
+            user_prompt: user_prompt.clone(),
+            targets: targets
+                .iter()
+                .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
+                .collect(),
+            request: request.clone(),
+            ask,
+        };
+        log.record(&Dispatch::Sweep(anchor, &dispatch));
+        if log.retains() {
+            result.dispatches.push(dispatch);
+        }
+    }
+    LlmCall {
+        request,
+        system_prompt,
+        user_prompt,
+    }
 }
 
 /// The sweep's bounded re-ask rounds for the collision-rejected targets —
@@ -478,12 +522,16 @@ pub fn sweep_minted_names<P: NameProvider>(
 /// the code window and the used-names list show the names the previous
 /// applies just landed. A further reaskable rejection once the budget is
 /// spent counts as dropped — never a loop.
+#[allow(clippy::too_many_arguments)]
 fn sweep_reask<P: NameProvider>(
     semantic: &Semantic<'_>,
     state: &mut RenameState,
     mut pending: Vec<SweepReask>,
     provider: &P,
+    log: &mut DispatchLog,
+    anchor: crate::trail::Anchor,
     params: &CacheKeyParams,
+    window: usize,
     limit: usize,
     result: &mut SweepResult,
 ) {
@@ -510,8 +558,9 @@ fn sweep_reask<P: NameProvider>(
             .collect();
         let targets: Vec<MintedBinding> = pending.into_iter().map(|r| r.target).collect();
         let fresh = build_groups(semantic, state, targets);
-        let mut calls = Vec::with_capacity(fresh.len());
         let mut owners = Vec::with_capacity(fresh.len());
+        let mut round_responses = Vec::with_capacity(fresh.len());
+        let mut round_calls = Vec::with_capacity(fresh.len());
         for g in &fresh {
             let mut prev = crate::naming::waves::jsset::JsRecord::default();
             let mut failures = humanify_model::llm::RenameFailures::default();
@@ -569,32 +618,23 @@ fn sweep_reask<P: NameProvider>(
                 prior_rejects: Some(prior),
                 ..BatchRenameRequest::default()
             };
-            let system_prompt = render_system_prompt(&request);
-            let user_prompt = render_user_prompt(&request);
-            result.dispatches.push(SweepDispatch {
-                cache_key: cache_key_of(&request, params),
-                system_prompt: system_prompt.clone(),
-                user_prompt: user_prompt.clone(),
-                targets: g
-                    .targets
-                    .iter()
-                    .map(|t| (t.name.clone(), state.view().binding(t.binding).id_span))
-                    .collect(),
-                request: request.clone(),
-                ask,
-            });
-            calls.push(LlmCall {
-                request,
-                system_prompt,
-                user_prompt,
-            });
+            round_calls.push(sweep_call(
+                &g.targets, state, request, ask, anchor, log, result, params,
+            ));
             owners.push(SweepGroup {
                 code: g.code.clone(),
                 used_names: g.used_names.clone(),
                 targets: g.targets.clone(),
             });
+            // One bounded window of rendered prompts at a time (finding #65).
+            if round_calls.len() == window.max(1) {
+                round_responses.extend(provider.run_wave(std::mem::take(&mut round_calls)));
+            }
         }
-        let responses = provider.run_wave(calls);
+        if !round_calls.is_empty() {
+            round_responses.extend(provider.run_wave(std::mem::take(&mut round_calls)));
+        }
+        let responses = round_responses;
         let ctx = ReaskCtx {
             limit,
             spent,
@@ -654,7 +694,9 @@ pub fn run_deferred_sweep<P: NameProvider>(
     anchor: Anchor,
     eligible: &Eligibility,
     provider: &P,
+    log: &mut DispatchLog,
     params: &CacheKeyParams,
+    prompt_window: usize,
     trail: StrategyTrail,
     ledger: bool,
     reask_limit: usize,
@@ -677,7 +719,10 @@ pub fn run_deferred_sweep<P: NameProvider>(
         eligible,
         &taint,
         provider,
+        log,
+        anchor,
         params,
+        prompt_window,
         reask_limit,
     );
     drop(ph);

@@ -44,9 +44,6 @@ pub struct Unpacked {
     /// The vendor namer's tally (`VendorNamingStats`) — all zero when the
     /// adapter never ran the LLM pass.
     pub vendor_naming: VendorNamingStats,
-    /// The vendor namer's calls in dispatch order (the dump's `vendor`
-    /// prompt site).
-    pub vendor_dispatched: Vec<humanify_model::llm::LlmCall>,
 }
 
 /// `unpackBundle`: run the selected adapter into `out_dir`. The Bun adapter
@@ -59,6 +56,7 @@ pub fn unpack_bundle(
     out_dir: &Path,
     adapter: UnpackAdapter,
     provider: &dyn NameProvider,
+    log: &mut humanify_core::artifact_dump::DispatchLog,
     prior_version: Option<&Path>,
     manifest_prior_order_disabled: bool,
     profiler: &Profiler,
@@ -83,7 +81,7 @@ pub fn unpack_bundle(
             ));
         }
     }
-    let mut namer = ProviderVendorNamer::new(provider);
+    let mut namer = ProviderVendorNamer::new(provider, log);
     let span = profiler.pipeline_span("unpack");
     let files = if adapter == UnpackAdapter::Bun {
         let outcome = bun::unpack_bun(
@@ -132,7 +130,6 @@ pub fn unpack_bundle(
     Ok(Unpacked {
         files,
         vendor_naming: namer.stats,
-        vendor_dispatched: namer.dispatched,
     })
 }
 

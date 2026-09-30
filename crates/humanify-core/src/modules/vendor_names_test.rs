@@ -733,7 +733,10 @@ fn replay_reads_the_sharded_entry_and_counts_misses() {
     )
     .unwrap();
     let client = humanify_llm::LlmClient::replay_only(&dir, key_params(None));
-    let mut namer = ProviderVendorNamer::new(&client);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(
+        humanify_model::llm::CacheKeyParams::default(),
+    );
+    let mut namer = ProviderVendorNamer::new(&client, &mut log);
     let answers = namer.name_batch(requests.clone());
     assert_eq!(answers[0].as_deref(), Some("js-yaml"));
     assert_eq!(answers[1], None, "an explicit null rename is a decline");
@@ -900,7 +903,10 @@ fn provider_namer_nulls_echoes_and_counts_outcomes() {
         ("lib_ccccdddd".to_string(), Some(String::new())),
         ("lib_eeeeffff".to_string(), Some("js-yaml".to_string())),
     ]));
-    let mut namer = ProviderVendorNamer::new(&provider);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(
+        humanify_model::llm::CacheKeyParams::default(),
+    );
+    let mut namer = ProviderVendorNamer::new(&provider, &mut log);
     let mut requests = two_requests();
     requests.push(VendorNameRequest {
         key: "lib_eeeeffff".to_string(),

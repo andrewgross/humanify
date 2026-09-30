@@ -446,7 +446,12 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         .llm_cache
         .as_ref()
         .map(|dir| humanify_llm::LlmClient::replay_only(Path::new(dir), args.key_params.clone()));
-    let mut provider_namer = client.as_ref().map(|c| ProviderVendorNamer::new(c));
+    // The unpack subcommand records no dump: an off log retains nothing
+    // per dispatch (finding #65).
+    let mut vendor_log = humanify_core::artifact_dump::DispatchLog::off(args.key_params.clone());
+    let mut provider_namer = client
+        .as_ref()
+        .map(|c| ProviderVendorNamer::new(c, &mut vendor_log));
     let mut recording = provider_namer.as_mut().map(|n| gate::RecordingNamer {
         inner: n as &mut dyn VendorNamer,
         batches: Vec::new(),

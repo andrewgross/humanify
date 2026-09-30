@@ -87,6 +87,14 @@ fn check_request(call: &LlmCall, want: &Value, key: &str, params: &CacheKeyParam
     assert_eq!(cache_key_of(&call.request, params), key);
 }
 
+/// The retaining test log (finding #65): the namer tests read the calls
+/// back out of it.
+fn split_log() -> crate::artifact_dump::DispatchLog {
+    crate::artifact_dump::DispatchLog::retain_for_tests(
+        humanify_model::llm::CacheKeyParams::default(),
+    )
+}
+
 #[test]
 fn every_ts_namer_request_and_answer_mapping_agrees() {
     let doc: Value = serde_json::from_str(VECTORS).expect("vectors");
@@ -112,7 +120,8 @@ fn every_ts_namer_request_and_answer_mapping_agrees() {
             answer: Some(answers),
             calls: RefCell::new(Vec::new()),
         };
-        let mut namer = ProviderSplitNamer::new(&provider);
+        let mut log = split_log();
+        let mut namer = ProviderSplitNamer::new(&provider, &mut log);
         let result = namer.name(&requests);
         let calls = provider.calls.borrow();
         assert_eq!(calls.len(), 1, "one batch = one provider call");
@@ -156,7 +165,7 @@ fn the_ts_reviser_request_and_map_agree() {
         ]),
         calls: RefCell::new(Vec::new()),
     };
-    let mut reviser = ProviderTreeReviser::new(&provider);
+    let mut reviser = ProviderTreeReviser::retaining(&provider);
     let out = reviser.revise(&folders);
     check_request(
         &provider.calls.borrow()[0],
@@ -173,7 +182,8 @@ fn a_provider_failure_is_all_none_and_an_empty_batch_calls_nothing() {
         answer: None,
         calls: RefCell::new(Vec::new()),
     };
-    let mut namer = ProviderSplitNamer::new(&provider);
+    let mut log = split_log();
+    let mut namer = ProviderSplitNamer::new(&provider, &mut log);
     let req = SplitNameRequest {
         kind: NameKind::File,
         mechanical_stem: "a".into(),
@@ -187,7 +197,7 @@ fn a_provider_failure_is_all_none_and_an_empty_batch_calls_nothing() {
     assert_eq!(namer.failed_batches, 1);
     assert!(namer.name(&[]).is_empty());
     assert_eq!(provider.calls.borrow().len(), 1);
-    let mut reviser = ProviderTreeReviser::new(&provider);
+    let mut reviser = ProviderTreeReviser::retaining(&provider);
     assert!(reviser.revise(&[]).is_empty());
     assert!(
         reviser
@@ -274,7 +284,8 @@ fn a_large_mint_set_is_many_bounded_requests_with_deterministic_boundaries() {
         let provider = EchoProvider {
             calls: RefCell::new(Vec::new()),
         };
-        let mut namer = ProviderSplitNamer::with_budget(&provider, budget);
+        let mut log = split_log();
+        let mut namer = ProviderSplitNamer::with_budget(&provider, &mut log, budget);
         let names = namer.name(&requests);
         let prompts: Vec<String> = provider
             .calls
@@ -354,7 +365,8 @@ fn one_failed_batch_falls_back_alone() {
         max_prompt_chars: usize::MAX,
         max_entries: 10,
     };
-    let mut namer = ProviderSplitNamer::with_budget(&SecondFails, budget);
+    let mut log = split_log();
+    let mut namer = ProviderSplitNamer::with_budget(&SecondFails, &mut log, budget);
     let names = namer.name(&requests);
     assert_eq!(namer.failed_batches, 1);
     assert!(names[..10].iter().all(Option::is_some));

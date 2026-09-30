@@ -84,6 +84,10 @@ pub struct NamingConfig {
     pub shingle_probe: bool,
     /// `--fast [tier]` (docs/rust-port/20-fast-mode.md, `crate::fast`).
     pub fast: crate::fast::FastTier,
+    /// How many rendered prompts may be alive at once (finding #65) — the
+    /// CLI sizes it over the rate limiter's `max_concurrent`
+    /// [`crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW`]).
+    pub prompt_window: usize,
 }
 
 impl NamingConfig {
@@ -167,6 +171,7 @@ pub fn run_naming<P: NameProvider>(
     input: &NamingInput<'_>,
     config: &NamingConfig,
     provider: &P,
+    log: &mut crate::artifact_dump::DispatchLog,
 ) -> Result<NamingOutcome, String> {
     let has_prior = input.prior.is_some();
     let deferred = config.sweep_deferred(has_prior);
@@ -183,8 +188,9 @@ pub fn run_naming<P: NameProvider>(
         tunables: config.tunables,
         shingle_probe: config.shingle_probe,
         fast: config.fast,
+        prompt_window: config.prompt_window,
     };
-    let run_era = || match input.prior {
+    let mut run_era = || match input.prior {
         Some(prior) => match_prior_version(
             PriorMatchInput {
                 fresh: input.fresh,
@@ -193,9 +199,9 @@ pub fn run_naming<P: NameProvider>(
                 minifier: opts.minifier,
                 fast: config.fast.on(),
             },
-            |stage| era::prior_era(stage, &opts, provider),
+            |stage| era::prior_era(stage, &opts, provider, log),
         ),
-        None => era::fresh_era(input.fresh, &opts, provider),
+        None => era::fresh_era(input.fresh, &opts, provider, log),
     };
     // `captureSemanticBaseline` reads only the fresh text, and the family
     // permute's prior index only the prior text: the fast schedule (the
@@ -349,7 +355,9 @@ pub fn run_naming<P: NameProvider>(
             anchor,
             &eligible,
             provider,
+            log,
             &config.params,
+            config.prompt_window,
             trail,
             config.emit_rename_ledger,
             config.tunables.reask_limit,

@@ -25,13 +25,18 @@
 //! cache-keys.jsonl, names.json, placement.json, emit.json,
 //! tree-manifest.json, regions.json.
 //!
-//! Separately, [`write_asks`] is the ask log (`--dump-asks <path>`): one
-//! JSONL row per LLM dispatch — the REASON an ask happened, never the
-//! model's answer — collected on every run and written only when the
-//! flag asks for it.
+//! Separately, [`DispatchLog`] is the run's per-dispatch recorder
+//! (finding #65): every dispatch site hands its row here the moment the
+//! dispatch is committed. `--dump-artifacts` streams prompts.jsonl +
+//! cache-keys.jsonl rows to part files as dispatches commit (no per-ask
+//! string survives its row); `--dump-asks` retains the small ask rows for
+//! the end-of-run log; a run with NEITHER flag retains nothing per ask —
+//! the dispatch records the run used to accumulate for the whole run were
+//! the ~99GB holder of a full-bundle fresh run.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
 
 use humanify_model::dump::{
     EmitLayoutFile, FunctionsFile, MatchPair, MatchRejection, MatchesCloseFile, NamesFile,
@@ -42,6 +47,7 @@ use humanify_model::llm::{BatchRenameRequest, CacheKeyParams, LlmCall, StrMap, c
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+use crate::naming::ask_trace::{AskScope, AskSite};
 use crate::naming::driver::NamingOutcome;
 use crate::naming::passes::sweep::SweepDispatch;
 use crate::naming::report::diagnostics::AnchorTexts;
@@ -59,9 +65,6 @@ pub struct SplitSections {
     pub statement_family: Vec<((u32, u32), String)>,
     /// emit.json: the emitted layout that won.
     pub emit: EmitLayoutFile,
-    /// The split namers' calls in dispatch order, with their functionId
-    /// (`split-namer` / `tree-reviser`).
-    pub prompts: Vec<(&'static str, LlmCall)>,
     /// placement.json (`PlacementTrail::placement_json`).
     pub placement: JsValue,
     /// The split's input (the shipped text).
@@ -82,9 +85,6 @@ pub struct DumpInputs<'a> {
     pub fresh: &'a str,
     pub outcome: &'a NamingOutcome,
     pub split: Option<&'a SplitSections>,
-    /// The vendor namer's calls (the `vendor` site), dispatch order.
-    pub vendor_prompts: &'a [LlmCall],
-    pub params: &'a CacheKeyParams,
     /// The processed file's library comment regions (its mixed-file
     /// detection), MINIFIED-text byte offsets.
     pub comment_regions: &'a [crate::libdetect::CommentRegion],
@@ -207,9 +207,9 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
             ),
         },
     )?;
-    let (prompts, keys) = dispatch_rows(&run_dispatches(inp), inp.params);
-    w.text("prompts.jsonl", &prompts)?;
-    w.text("cache-keys.jsonl", &keys)?;
+    // prompts.jsonl + cache-keys.jsonl are NOT written here: their rows
+    // were streamed by the run's `DispatchLog` as dispatches committed
+    // (finding #65) and assembled into this dir at the log's close.
     let names = crate::naming::driver::dump::names_table(
         &out.trail,
         &out.waves.names,
@@ -588,24 +588,426 @@ pub enum Dispatch<'a> {
     },
 }
 
-/// What the ask log (`--dump-asks <path>`) reads: the run's dispatch
-/// collections, in the same recording order the dump's prompts rows use.
-/// The ask log is INDEPENDENT of `--dump-artifacts` — the dispatches are
-/// collected on every run (the dump only reads them).
-pub struct AskInputs<'a> {
-    pub outcome: &'a NamingOutcome,
-    pub split: Option<&'a SplitSections>,
-    pub vendor_prompts: &'a [LlmCall],
+/// What each dispatch site does with a committed dispatch (finding #65).
+/// The modes are the CLI flags: `Off` is a run with neither dump flag —
+/// nothing per ask survives the dispatch; `Asks` is `--dump-asks` — the
+/// small ask row is retained for the end-of-run log, never the prompt
+/// text; `Full` is `--dump-artifacts` (and the test log, which retains
+/// the records) — the prompt and key rows are written AT COMMIT, so no
+/// per-ask string is held past its row either.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RecordMode {
+    Off,
+    Asks,
+    Full,
 }
 
-/// Write the reason-labeled ask log (`--dump-asks`): one JSONL row per LLM
-/// dispatch, in recording order. Recording only — no decision reads it,
-/// and it never runs unless the flag asks for it. Returns the row count.
-pub fn write_asks(path: &Path, inp: &AskInputs<'_>) -> Result<usize, String> {
-    let dispatches = the_dispatches(inp.outcome, inp.split, inp.vendor_prompts);
-    let rows = ask_rows(&dispatches);
+/// The run's per-dispatch recorder. Every site hands its dispatch here the
+/// moment it is committed; row order is commit order, which is the dump's
+/// own concatenation order (the vendor namer, the naming sites, the
+/// split's namers — the stages never interleave). The waves' pipelined
+/// rounds are the one deferral: their records commit at the round's
+/// canonical sort, so a round's `Full` records live until then (a round,
+/// never the run).
+pub struct DispatchLog {
+    params: CacheKeyParams,
+    /// `--dump-asks`: the ask rows, in commit order (vendor rows first —
+    /// [`Self::begin_named_file`] keeps only those when a new file starts).
+    asks: Option<Vec<JsValue>>,
+    vendor_asks: Option<usize>,
+    /// `--dump-artifacts`: the two JSONL part files. None keeps no rows.
+    rows: Option<LogRows>,
+    /// Tests read the dispatches back out of the sites' own vectors; the
+    /// production modes never retain one.
+    retain: bool,
+    seq: u64,
+    rounds: HashMap<String, u64>,
+}
+
+impl DispatchLog {
+    /// A run with neither dump flag: every [`Self::record`] is a no-op and
+    /// no per-ask memory is retained anywhere.
+    pub fn off(params: CacheKeyParams) -> Self {
+        DispatchLog {
+            params,
+            asks: None,
+            vendor_asks: None,
+            rows: None,
+            retain: false,
+            seq: 0,
+            rounds: HashMap::new(),
+        }
+    }
+
+    /// `--dump-asks`: the ask rows only.
+    pub fn asks(params: CacheKeyParams) -> Self {
+        let mut log = Self::off(params);
+        log.asks = Some(Vec::new());
+        log
+    }
+
+    /// `--dump-artifacts`: the part files opened in `dir` now (the dump's
+    /// other files are still written once, at the end).
+    pub fn dump(params: CacheKeyParams, dir: &Path) -> std::io::Result<Self> {
+        std::fs::create_dir_all(dir)?;
+        let rows = LogRows::open(dir)?;
+        let mut log = Self::off(params);
+        log.asks = Some(Vec::new());
+        log.rows = Some(rows);
+        Ok(log)
+    }
+
+    /// The name of the site a dispatch belongs to (its dump row's `site`).
+    fn site_of(d: &Dispatch<'_>) -> &'static str {
+        match d {
+            Dispatch::Naming(_) => "naming",
+            Dispatch::Sweep(_, _) => "sweep",
+            Dispatch::Plain { site, .. } => site,
+        }
+    }
+
+    /// The mode the dispatch sites prepare their records for.
+    pub fn mode(&self) -> RecordMode {
+        if self.rows.is_some() || self.retain {
+            RecordMode::Full
+        } else if self.asks.is_some() {
+            RecordMode::Asks
+        } else {
+            RecordMode::Off
+        }
+    }
+
+    /// Whether the sites retain the dispatches in their own vectors (the
+    /// tests' log — production modes never do).
+    pub fn retains(&self) -> bool {
+        self.retain
+    }
+
+    /// The tests' log: full records retained by the sites, rows collected
+    /// in memory as the byte-identity oracle.
+    pub fn retain_for_tests(params: CacheKeyParams) -> Self {
+        let mut log = Self::asks(params);
+        log.retain = true;
+        log.rows = Some(LogRows::in_memory());
+        log
+    }
+
+    fn wants_rows(&self) -> bool {
+        self.rows.is_some()
+    }
+
+    /// Record one committed dispatch: its prompt/key row (the dump) and/or
+    /// its ask row (the ask log), in commit order.
+    pub fn record(&mut self, d: &Dispatch<'_>) {
+        if self.mode() == RecordMode::Off {
+            return;
+        }
+        let round = round_of(d, &mut self.rounds);
+        let seq = self.next_seq();
+        if self.asks.is_some() {
+            let parts = ask_parts_rounded(d, round);
+            if let Some(asks) = &mut self.asks {
+                asks.push(ask_row(seq, &parts));
+            }
+        }
+        if self.wants_rows() {
+            let (prompt, key) = prompt_rows(seq, round, d, &self.params);
+            let site = Self::site_of(d);
+            if let Some(rows) = &mut self.rows {
+                rows.write(site, &prompt, &key);
+            }
+        }
+    }
+
+    /// Record one committed NAMING dispatch whose material the waves could
+    /// not retain (the `Asks` mode's slim round records — never the prompt
+    /// text): its ask row alone.
+    pub fn record_ask_parts(&mut self, parts: &AskRowParts) {
+        if self.asks.is_some() {
+            let seq = self.next_seq();
+            if let Some(asks) = &mut self.asks {
+                asks.push(ask_row(seq, parts));
+            }
+        }
+    }
+
+    /// The TS dump's LAST-FILE rule: a run that names several files dumps
+    /// only the last one's naming rows, so each file's naming section
+    /// starts from the vendor rows' seq again. The vendor rows themselves
+    /// (written before any file is named) are kept.
+    pub fn begin_named_file(&mut self) {
+        if self.mode() == RecordMode::Off {
+            return;
+        }
+        if let Some(rows) = &mut self.rows {
+            rows.begin_named_file();
+        }
+        let base = match self.vendor_asks {
+            Some(len) => len,
+            None => {
+                let len = self.asks.as_ref().map_or(0, Vec::len);
+                self.vendor_asks = Some(len);
+                len
+            }
+        };
+        if let Some(asks) = &mut self.asks {
+            asks.truncate(base);
+        }
+        self.seq = base as u64;
+    }
+
+    /// The ask rows so far (the `--dump-asks` log's content).
+    pub fn ask_rows(&self) -> &[JsValue] {
+        self.asks.as_deref().unwrap_or(&[])
+    }
+
+    /// The tests' in-memory rows: (prompts.jsonl, cache-keys.jsonl) per
+    /// dispatch, in commit order.
+    pub fn memory_rows(&self) -> &[(String, String)] {
+        self.rows.as_ref().map_or(&[][..], |r| r.memory())
+    }
+
+    fn next_seq(&mut self) -> u64 {
+        let seq = self.seq;
+        self.seq += 1;
+        seq
+    }
+
+    /// Assemble the dump's prompts.jsonl + cache-keys.jsonl from their
+    /// parts (kept even when the run wrote zero rows: both files hold one
+    /// newline, `writePrompts`' empty case). An error here is the same
+    /// error `write_artifact_dump` would have reported. Idempotent.
+    pub fn close(&mut self) -> Result<(), String> {
+        match self.rows.take() {
+            Some(rows) => rows.close(),
+            None => Ok(()),
+        }
+    }
+
+    /// Drop the part files without assembling them — the failed-run rule:
+    /// a run whose dump was never written leaves no dump files behind
+    /// (exactly the TS behavior).
+    pub fn discard(&mut self) {
+        if let Some(rows) = self.rows.take() {
+            rows.discard();
+        }
+    }
+}
+
+/// Where the `Full` mode's prompt/key rows go: the dump's part files
+/// (`--dump-artifacts`) or, for the tests' log, memory (`vendor_len` =
+/// the same vendor/naming split the part files make).
+enum LogRows {
+    Files(LogFiles),
+    Memory {
+        rows: Vec<(String, String)>,
+        /// Where the vendor rows end (frozen at the first named file) —
+        /// the same vendor/naming split the part files make.
+        vendor_base: Option<usize>,
+    },
+}
+
+impl LogRows {
+    fn open(dir: &Path) -> std::io::Result<Self> {
+        Ok(LogRows::Files(LogFiles::open(dir)?))
+    }
+
+    fn in_memory() -> Self {
+        LogRows::Memory {
+            rows: Vec::new(),
+            vendor_base: None,
+        }
+    }
+
+    fn write(&mut self, site: &str, prompt: &str, key: &str) {
+        match self {
+            LogRows::Files(files) => files.write(site, prompt, key),
+            LogRows::Memory { rows, .. } => {
+                rows.push((prompt.to_string(), key.to_string()));
+            }
+        }
+    }
+
+    fn begin_named_file(&mut self) {
+        match self {
+            LogRows::Files(files) => files.begin_named_file(),
+            LogRows::Memory { rows, vendor_base } => match vendor_base {
+                Some(len) => rows.truncate(*len),
+                None => *vendor_base = Some(rows.len()),
+            },
+        }
+    }
+
+    fn memory(&self) -> &[(String, String)] {
+        match self {
+            LogRows::Files(_) => &[],
+            LogRows::Memory { rows, .. } => rows,
+        }
+    }
+
+    fn close(self) -> Result<(), String> {
+        match self {
+            LogRows::Files(files) => files.close(),
+            LogRows::Memory { .. } => Ok(()),
+        }
+    }
+
+    fn discard(self) {
+        if let LogRows::Files(files) = self {
+            files.discard();
+        }
+    }
+}
+
+/// The dump's two JSONL files, as two parts each: the vendor rows (every
+/// row that precedes the named files) and the current file's naming rows
+/// — truncated by [`DispatchLog::begin_named_file`], so a multi-file run
+/// dumps the last file's rows exactly as the TS's last-file dump did.
+/// [`LogFiles::close`] concatenates the parts into prompts.jsonl and
+/// cache-keys.jsonl.
+struct LogFiles {
+    dir: PathBuf,
+    vendor: Pair,
+    /// None once a re-create failed (the run keeps going; the error
+    /// surfaces at close, like any dump write error).
+    naming: Option<Pair>,
+    rows: u64,
+    error: Option<String>,
+}
+
+/// One part pair: the prompts file and the cache-keys file.
+struct Pair {
+    prompts: BufWriter<std::fs::File>,
+    keys: BufWriter<std::fs::File>,
+}
+
+impl Pair {
+    fn create(dir: &Path, suffix: &str) -> std::io::Result<Pair> {
+        let prompts = BufWriter::new(std::fs::File::create(
+            dir.join(format!("prompts.jsonl{suffix}")),
+        )?);
+        let keys = BufWriter::new(std::fs::File::create(
+            dir.join(format!("cache-keys.jsonl{suffix}")),
+        )?);
+        Ok(Pair { prompts, keys })
+    }
+
+    fn write(&mut self, prompt: &str, key: &str) {
+        let _ = self.prompts.write_all(prompt.as_bytes());
+        let _ = self.prompts.write_all(b"\n");
+        let _ = self.keys.write_all(key.as_bytes());
+        let _ = self.keys.write_all(b"\n");
+    }
+
+    fn flush(&mut self, what: &str) -> Result<(), String> {
+        self.prompts
+            .flush()
+            .map_err(|e| format!("write prompts.jsonl{what}: {e}"))?;
+        self.keys
+            .flush()
+            .map_err(|e| format!("write cache-keys.jsonl{what}: {e}"))?;
+        Ok(())
+    }
+}
+
+impl LogFiles {
+    fn open(dir: &Path) -> std::io::Result<LogFiles> {
+        Ok(LogFiles {
+            dir: dir.to_path_buf(),
+            vendor: Pair::create(dir, ".vendorpart")?,
+            naming: Some(Pair::create(dir, ".namingpart")?),
+            rows: 0,
+            error: None,
+        })
+    }
+
+    fn write(&mut self, site: &str, prompt: &str, key: &str) {
+        match site {
+            "vendor" => self.vendor.write(prompt, key),
+            _ => {
+                if let Some(naming) = self.naming.as_mut() {
+                    naming.write(prompt, key);
+                }
+            }
+        }
+        self.rows += 1;
+    }
+
+    fn begin_named_file(&mut self) {
+        if self.error.is_some() {
+            return;
+        }
+        self.naming = match Pair::create(&self.dir, ".namingpart") {
+            Ok(pair) => Some(pair),
+            Err(e) => {
+                self.error = Some(e.to_string());
+                None
+            }
+        };
+    }
+
+    /// Remove the part files, no assembly.
+    fn discard(self) {
+        let LogFiles { dir, .. } = self;
+        for name in ["prompts", "cache-keys"] {
+            let _ = std::fs::remove_file(dir.join(format!("{name}.jsonl.vendorpart")));
+            let _ = std::fs::remove_file(dir.join(format!("{name}.jsonl.namingpart")));
+        }
+    }
+
+    fn close(self) -> Result<(), String> {
+        if let Some(e) = self.error {
+            return Err(e);
+        }
+        let LogFiles {
+            dir,
+            mut vendor,
+            naming,
+            rows,
+            ..
+        } = self;
+        let mut naming = naming.ok_or("the naming part writer failed mid-run")?;
+        vendor.flush(".vendorpart")?;
+        vendor.flush(".vendorpart")?;
+        naming.flush(".namingpart")?;
+        drop(vendor);
+        drop(naming);
+        if rows == 0 {
+            std::fs::write(dir.join("prompts.jsonl"), "\n")
+                .map_err(|e| format!("write prompts.jsonl: {e}"))?;
+            std::fs::write(dir.join("cache-keys.jsonl"), "\n")
+                .map_err(|e| format!("write cache-keys.jsonl: {e}"))?;
+        } else {
+            concat(&dir, "prompts.jsonl")?;
+            concat(&dir, "cache-keys.jsonl")?;
+        }
+        let _ = std::fs::remove_file(dir.join("prompts.jsonl.vendorpart"));
+        let _ = std::fs::remove_file(dir.join("cache-keys.jsonl.vendorpart"));
+        let _ = std::fs::remove_file(dir.join("prompts.jsonl.namingpart"));
+        let _ = std::fs::remove_file(dir.join("cache-keys.jsonl.namingpart"));
+        Ok(())
+    }
+}
+
+/// `final = .vendorpart ++ .namingpart`, streamed (the parts are large).
+fn concat(dir: &Path, name: &str) -> Result<(), String> {
+    use std::io::copy;
+    let mut out =
+        std::fs::File::create(dir.join(name)).map_err(|e| format!("write {name}: {e}"))?;
+    for part in [".vendorpart", ".namingpart"] {
+        let mut r = std::fs::File::open(dir.join(format!("{name}{part}")))
+            .map_err(|e| format!("read {name}{part}: {e}"))?;
+        copy(&mut r, &mut out).map_err(|e| format!("assemble {name}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Write the reason-labeled ask log (`--dump-asks`): the ask rows the run
+/// recorded, in commit order. Recording only — no decision reads it, and
+/// no row exists unless the flag asks for it. Returns the row count.
+pub fn write_ask_rows(path: &Path, rows: &[JsValue]) -> Result<usize, String> {
     let mut text = String::new();
-    for row in &rows {
+    for row in rows {
         text.push_str(&stringify(row));
         text.push('\n');
     }
@@ -616,187 +1018,227 @@ pub fn write_asks(path: &Path, inp: &AskInputs<'_>) -> Result<usize, String> {
     Ok(rows.len())
 }
 
+/// One ask-log row's material — small enough to retain for a whole run:
+/// WHY the ask happened (`naming::ask_trace`'s taxonomy), what it asked,
+/// and the context it carried. Never the prompt text, never the model's
+/// answer — the `Asks` mode builds this at PREPARE time so an ask is
+/// recorded without ever materializing the prompt (finding #65).
+pub struct AskRowParts {
+    site: &'static str,
+    scope: String,
+    scope_kind: &'static str,
+    reason: crate::naming::ask_trace::AskReason,
+    is_retry: bool,
+    /// A recorded cause wins (an applier-rejection seed, or a lane round-2
+    /// seeded by the scope check — `AskSite::lane_reask`); otherwise a
+    /// lane's round-2 is derived from the request's failure lists.
+    retry_cause: Option<crate::naming::ask_trace::RetryCause>,
+    retry_cause_detail: Option<String>,
+    prior: bool,
+    wave: Option<u64>,
+    phase: u8,
+    round: u64,
+    identifiers: Vec<String>,
+    used_names_count: usize,
+    variant: &'static str,
+}
+
+impl AskRowParts {
+    /// The row's fields, resolved one dispatch at a time.
+    pub fn of(
+        site: &'static str,
+        kind: crate::naming::ask_trace::AskScope,
+        scope: String,
+        wave: Option<u64>,
+        round: u64,
+        ask: &AskSite,
+        request: &BatchRenameRequest,
+    ) -> AskRowParts {
+        use crate::naming::ask_trace::{prior_context_of, reason_of};
+        let is_retry = request.is_retry == Some(true);
+        let reason = reason_of(ask, kind, request);
+        let retry_cause = ask.cause.or_else(|| {
+            if is_retry {
+                request
+                    .failures
+                    .as_ref()
+                    .and_then(crate::naming::ask_trace::RetryCause::of_failures)
+            } else {
+                None
+            }
+        });
+        let scope_kind = match kind {
+            AskScope::Fn => "fn",
+            AskScope::Module => "module",
+            AskScope::Sweep => "sweep",
+            AskScope::Vendor => "vendor",
+            AskScope::Folders => "folders",
+        };
+        let variant = match (kind, is_retry) {
+            (AskScope::Fn, false) => "batch",
+            (AskScope::Fn, true) => "batch-retry",
+            (AskScope::Module, false) => "module",
+            (AskScope::Module, true) => "module-retry",
+            (AskScope::Sweep, false) => "batch",
+            (AskScope::Sweep, true) => "batch-retry",
+            (AskScope::Vendor, _) => "vendor",
+            (AskScope::Folders, _) => "folders",
+        };
+        AskRowParts {
+            site,
+            scope,
+            scope_kind,
+            reason,
+            is_retry,
+            retry_cause,
+            retry_cause_detail: ask.detail.clone(),
+            prior: ask.prior || prior_context_of(request),
+            wave,
+            phase: ask.phase,
+            round,
+            identifiers: request.identifiers.clone(),
+            used_names_count: request.used_names.len(),
+            variant,
+        }
+    }
+
+    /// The scope the round counter counts (the ask row's `scope`).
+    pub fn scope(&self) -> &str {
+        self.scope.as_str()
+    }
+
+    /// The round, assigned at commit (the functionId's call count so far).
+    pub fn set_round(&mut self, round: u64) {
+        self.round = round;
+    }
+}
+
+/// One ask-log row, the TS writer's keys in order.
+pub fn ask_row(seq: u64, parts: &AskRowParts) -> JsValue {
+    let num = |n: f64| JsValue::Number(n);
+    let mut row = JsObject::new();
+    row.insert("seq", num(seq as f64));
+    row.insert("site", JsValue::str(parts.site));
+    row.insert("scope", JsValue::str(parts.scope.as_str()));
+    row.insert("scopeKind", JsValue::str(parts.scope_kind));
+    row.insert("reason", JsValue::str(parts.reason.as_str()));
+    row.insert("isRetry", JsValue::Bool(parts.is_retry));
+    if let Some(cause) = parts.retry_cause {
+        row.insert("retryCause", JsValue::str(cause.as_str()));
+    }
+    if let Some(detail) = &parts.retry_cause_detail {
+        row.insert("retryCauseDetail", JsValue::str(detail));
+    }
+    row.insert("priorContext", JsValue::Bool(parts.prior));
+    if let Some(wave) = parts.wave {
+        row.insert("wave", num(wave as f64));
+        row.insert("phase", num(parts.phase as f64));
+    }
+    row.insert("round", num(parts.round as f64));
+    row.insert("identifiers", JsValue::str_array(&parts.identifiers));
+    row.insert("usedNamesCount", num(parts.used_names_count as f64));
+    row.insert("promptVariant", JsValue::str(parts.variant));
+    JsValue::Object(row)
+}
+
 /// One ask-log row per dispatch, `seq` in recording order: WHY the ask
 /// happened ([`crate::naming::ask_trace`]'s taxonomy), what it asked, and
-/// the context it carried — never the model's answer.
+/// the context it carried — never the model's answer. The bulk form (the
+/// tests' oracle); a run records its rows through [`DispatchLog::record`].
 pub fn ask_rows(dispatches: &[Dispatch<'_>]) -> Vec<JsValue> {
-    use crate::naming::ask_trace::{AskScope, AskSite, prior_context_of, reason_of};
-    let num = |n: f64| JsValue::Number(n);
     let mut rounds: HashMap<String, u64> = HashMap::new();
     dispatches
         .iter()
         .enumerate()
         .map(|(seq, d)| {
-            // (scope, site, kind, request, ask-clone, naming round, wave)
-            let (scope, site, kind, request, ask, round, wave) = match d {
-                Dispatch::Naming(r) => {
-                    let kind = if r.function_id.starts_with("module-binding-batch:") {
-                        AskScope::Module
-                    } else {
-                        AskScope::Fn
-                    };
-                    (
-                        r.function_id.as_str(),
-                        "naming",
-                        kind,
-                        &r.request,
-                        r.ask.clone(),
-                        r.round,
-                        Some(r.wave),
-                    )
-                }
-                Dispatch::Sweep(_, s) => (
-                    "coverage-sweep",
-                    "sweep",
-                    AskScope::Sweep,
-                    &s.request,
-                    s.ask.clone(),
-                    rounds_of(&mut rounds, "coverage-sweep"),
-                    None,
-                ),
-                Dispatch::Plain {
-                    function_id,
-                    site,
-                    call,
-                } => {
-                    let kind = if *site == "folders" {
-                        AskScope::Folders
-                    } else {
-                        AskScope::Vendor
-                    };
-                    (
-                        *function_id,
-                        *site,
-                        kind,
-                        &call.request,
-                        AskSite::fresh(0),
-                        rounds_of(&mut rounds, function_id),
-                        None,
-                    )
-                }
-            };
-            let is_retry = request.is_retry == Some(true);
-            let reason = reason_of(&ask, kind, request);
-            // A recorded cause wins (an applier-rejection seed, or a lane
-            // round-2 seeded by the scope check — `AskSite::lane_reask`);
-            // otherwise a lane's round-2 is derived from its request's
-            // failure lists.
-            let cause = ask.cause.or_else(|| {
-                if is_retry {
-                    request
-                        .failures
-                        .as_ref()
-                        .and_then(crate::naming::ask_trace::RetryCause::of_failures)
-                } else {
-                    None
-                }
-            });
-            let scope_kind = match kind {
-                AskScope::Fn => "fn",
-                AskScope::Module => "module",
-                AskScope::Sweep => "sweep",
-                AskScope::Vendor => "vendor",
-                AskScope::Folders => "folders",
-            };
-            let variant = match (kind, is_retry) {
-                (AskScope::Fn, false) => "batch",
-                (AskScope::Fn, true) => "batch-retry",
-                (AskScope::Module, false) => "module",
-                (AskScope::Module, true) => "module-retry",
-                (AskScope::Sweep, false) => "batch",
-                (AskScope::Sweep, true) => "batch-retry",
-                (AskScope::Vendor, _) => "vendor",
-                (AskScope::Folders, _) => "folders",
-            };
-            let prior = ask.prior || prior_context_of(request);
-            let mut row = JsObject::new();
-            row.insert("seq", num(seq as f64));
-            row.insert("site", JsValue::str(site));
-            row.insert("scope", JsValue::str(scope));
-            row.insert("scopeKind", JsValue::str(scope_kind));
-            row.insert("reason", JsValue::str(reason.as_str()));
-            row.insert("isRetry", JsValue::Bool(is_retry));
-            if let Some(cause) = cause {
-                row.insert("retryCause", JsValue::str(cause.as_str()));
-            }
-            if let Some(detail) = &ask.detail {
-                row.insert("retryCauseDetail", JsValue::str(detail));
-            }
-            row.insert("priorContext", JsValue::Bool(prior));
-            if let Some(wave) = wave {
-                row.insert("wave", num(wave as f64));
-                row.insert("phase", num(ask.phase as f64));
-            }
-            row.insert("round", num(round as f64));
-            row.insert("identifiers", JsValue::str_array(&request.identifiers));
-            row.insert("usedNamesCount", num(request.used_names.len() as f64));
-            row.insert("promptVariant", JsValue::str(variant));
-            JsValue::Object(row)
+            let round = round_of(d, &mut rounds);
+            let parts = ask_parts_rounded(d, round);
+            ask_row(seq as u64, &parts)
         })
         .collect()
 }
 
+/// [`AskRowParts::of`] from any committed dispatch, `round` already
+/// counted by [`round_of`] (the waves carry their own; every other site
+/// counts rounds per functionId).
+fn ask_parts_rounded(d: &Dispatch<'_>, round: u64) -> AskRowParts {
+    use crate::naming::ask_trace::AskScope;
+    match d {
+        Dispatch::Naming(r) => {
+            let kind = if r.function_id.starts_with("module-binding-batch:") {
+                AskScope::Module
+            } else {
+                AskScope::Fn
+            };
+            AskRowParts::of(
+                "naming",
+                kind,
+                r.function_id.clone(),
+                Some(r.wave),
+                r.round,
+                &r.ask,
+                &r.request,
+            )
+        }
+        Dispatch::Sweep(_, s) => AskRowParts::of(
+            "sweep",
+            AskScope::Sweep,
+            "coverage-sweep".to_string(),
+            None,
+            round,
+            &s.ask,
+            &s.request,
+        ),
+        Dispatch::Plain {
+            function_id,
+            site,
+            call,
+        } => AskRowParts::of(
+            site,
+            if *site == "folders" {
+                AskScope::Folders
+            } else {
+                AskScope::Vendor
+            },
+            function_id.to_string(),
+            None,
+            round,
+            &AskSite::fresh(0),
+            &call.request,
+        ),
+    }
+}
+
 /// The dump's per-functionId round counter (a sweep's / a namer's rounds
-/// are its call count; the waves carry their own).
+/// are their call count; the waves carry their own).
 fn rounds_of(rounds: &mut HashMap<String, u64>, function_id: &str) -> u64 {
     let counted = rounds.entry(function_id.to_string()).or_insert(0);
     *counted += 1;
     *counted
 }
 
-/// The run's dispatches in the TS's recording order: the vendor namer
-/// (unpack), the naming waves, the sweeps (pre-generate, then the
-/// deferred one), the split's namers.
-fn run_dispatches<'a>(inp: &'a DumpInputs<'a>) -> Vec<Dispatch<'a>> {
-    the_dispatches(inp.outcome, inp.split, inp.vendor_prompts)
-}
-
-/// [`run_dispatches`]'s body over the three collections both the dump and
-/// the ask log (`--dump-asks`) read.
-fn the_dispatches<'a>(
-    out: &'a NamingOutcome,
-    split: Option<&'a SplitSections>,
-    vendor_prompts: &'a [LlmCall],
-) -> Vec<Dispatch<'a>> {
-    let mut d: Vec<Dispatch<'a>> = vendor_prompts
-        .iter()
-        .map(|call| Dispatch::Plain {
-            function_id: "vendor-namer",
-            site: "vendor",
-            call,
-        })
-        .collect();
-    d.extend(out.waves.dispatches.iter().map(Dispatch::Naming));
-    d.extend(out.pre_sweep.iter().flat_map(|s| {
-        s.dispatches
-            .iter()
-            .map(|x| Dispatch::Sweep(Anchor::Fresh, x))
-    }));
-    d.extend(out.deferred_sweep.iter().flat_map(|(a, s)| {
-        s.result
-            .dispatches
-            .iter()
-            .map(move |x| Dispatch::Sweep(*a, x))
-    }));
-    if let Some(split) = split {
-        d.extend(split.prompts.iter().map(|(id, call)| Dispatch::Plain {
-            function_id: id,
-            site: "folders",
-            call,
-        }));
+/// One dispatch's dump round: the waves carry their own (the processor's
+/// counter); every other site counts per functionId.
+fn round_of(d: &Dispatch<'_>, rounds: &mut HashMap<String, u64>) -> u64 {
+    match d {
+        Dispatch::Naming(r) => r.round,
+        Dispatch::Sweep(..) => rounds_of(rounds, "coverage-sweep"),
+        Dispatch::Plain { function_id, .. } => rounds_of(rounds, function_id),
     }
-    d
 }
 
-/// prompts.jsonl + cache-keys.jsonl (`recordPrompt` + `writePrompts` +
-/// `writeCacheKeys`): one row per dispatch, `seq` in recording order,
-/// `round` counted per functionId across every site.
-pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (String, String) {
-    let mut prompts = String::new();
-    let mut keys = String::new();
-    let mut rounds: HashMap<String, u64> = HashMap::new();
+/// One dispatch's prompts.jsonl row and cache-keys.jsonl row
+/// (`recordPrompt`, `writePrompts`, `writeCacheKeys`): the row the `Full`
+/// mode streams at commit ([`DispatchLog::record`]) — `seq` is its
+/// recording index, `round` counted per functionId across every site.
+pub fn prompt_rows(
+    seq: u64,
+    round: u64,
+    d: &Dispatch<'_>,
+    params: &CacheKeyParams,
+) -> (String, String) {
     let num = |n: f64| JsValue::Number(n);
-    for (seq, d) in dispatches.iter().enumerate() {
+    {
         let (function_id, site, request, system, user, cache_key) = match d {
             Dispatch::Naming(r) => (
                 r.function_id.as_str(),
@@ -826,13 +1268,6 @@ pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (S
                 call.user_prompt.as_str(),
                 cache_key_of(&call.request, params),
             ),
-        };
-        let counted = rounds.entry(function_id.to_string()).or_insert(0);
-        *counted += 1;
-        // The waves count their own rounds (the processor's counter).
-        let round = match d {
-            Dispatch::Naming(r) => r.round,
-            _ => *counted,
         };
         let target = |sid: &str, start: u32, end: u32, text: &str| {
             let mut t = JsObject::new();
@@ -872,17 +1307,32 @@ pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (S
         if let Dispatch::Sweep(a, _) = d {
             row.insert("targetsText", JsValue::str(a.as_str()));
         }
-        prompts.push_str(&stringify(&JsValue::Object(row)));
-        prompts.push('\n');
+        let prompt = stringify(&JsValue::Object(row));
         let mut key = JsObject::new();
         key.insert("seq", num(seq as f64));
         key.insert("params", params_json(params));
         key.insert("request", request_material(request));
         key.insert("cacheKey", JsValue::str(cache_key.as_str()));
-        keys.push_str(&stringify(&JsValue::Object(key)));
+        let key = stringify(&JsValue::Object(key));
+        (prompt, key)
+    }
+}
+
+/// prompts.jsonl + cache-keys.jsonl, every row in recording order — the
+/// bulk form (the tests' byte-identity oracle; a run streams its rows
+/// through [`DispatchLog::record`]). `${lines.join("\n")}\n`: no rows is
+/// one newline.
+pub fn dispatch_rows(dispatches: &[Dispatch<'_>], params: &CacheKeyParams) -> (String, String) {
+    let mut prompts = String::new();
+    let mut keys = String::new();
+    let mut rounds: HashMap<String, u64> = HashMap::new();
+    for (seq, d) in dispatches.iter().enumerate() {
+        let (prompt, key) = prompt_rows(seq as u64, round_of(d, &mut rounds), d, params);
+        prompts.push_str(&prompt);
+        prompts.push('\n');
+        keys.push_str(&key);
         keys.push('\n');
     }
-    // `${lines.join("\n")}\n`: no rows is one newline.
     if dispatches.is_empty() {
         return ("\n".to_string(), "\n".to_string());
     }

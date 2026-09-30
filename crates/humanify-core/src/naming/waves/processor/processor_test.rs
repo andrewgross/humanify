@@ -11,6 +11,7 @@ use std::cell::RefCell;
 use super::{build_retry_used_names, extract_retry_snippet};
 use crate::naming::ask_trace::RetryCause;
 use crate::naming::waves::jsset::{JsRecord, JsSet};
+use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 
 /// The plain `--sequential`-shaped config the collision pins run under.
 fn plain_config() -> crate::naming::driver::NamingConfig {
@@ -34,7 +35,14 @@ fn plain_config() -> crate::naming::driver::NamingConfig {
         tunables: Default::default(),
         shingle_probe: false,
         fast: crate::fast::FastTier::Off,
+        prompt_window: DEFAULT_PROMPT_WINDOW,
     }
+}
+
+/// The retaining test log (finding #65): the full records stay readable by
+/// the pins, and the streamed rows land in its in-memory oracle.
+fn retain_log() -> crate::artifact_dump::DispatchLog {
+    crate::artifact_dump::DispatchLog::retain_for_tests(plain_config().params)
 }
 
 /// A provider answering every requested identifier through `name_of`
@@ -118,6 +126,7 @@ fn a_later_waves_prompt_lists_the_names_earlier_waves_applied() {
         },
         &plain_config(),
         &MapProvider::new(),
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let late = out
@@ -162,6 +171,7 @@ fn a_module_collision_retry_discloses_and_lists_the_names_the_run_applied() {
         },
         &plain_config(),
         &MapProvider::new(),
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let retry: Vec<_> = out
@@ -250,6 +260,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
         },
         &plain_config(),
         &provider,
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let a_asks = *provider.a_asks.borrow();
@@ -301,6 +312,7 @@ fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
         },
         &plain_config(),
         &MapProvider::new(),
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let retry: Vec<_> = out
@@ -469,6 +481,7 @@ fn a_late_rejected_suggestions_round2_records_the_rejections_cause_and_code() {
         },
         &plain_config(),
         &provider,
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let retry = out
@@ -563,6 +576,7 @@ fn the_second_reask_discloses_every_prior_suggestion_and_is_bounded() {
         },
         &plain_config(),
         &provider,
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let retry: Vec<_> = out
@@ -628,6 +642,7 @@ fn a_single_reask_budget_restores_the_old_bounded_behavior() {
         },
         &config,
         &MapProvider::new(),
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let retry: Vec<_> = out
@@ -660,6 +675,7 @@ fn a_zero_reask_budget_gives_up_on_the_ladder_and_stays_counted() {
         },
         &config,
         &MapProvider::new(),
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let retry: Vec<_> = out

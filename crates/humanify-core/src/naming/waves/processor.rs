@@ -20,7 +20,7 @@
 //! barrier's apply order are fixed: those are reproduced exactly; the
 //! dispatch order is not a decision input (the dump's `seq`).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use humanify_model::llm::{
@@ -40,9 +40,10 @@ use super::jsset::{JsRecord, JsSet};
 use super::nodes::FnNode;
 use super::render::{FnPrinter, Occurrences};
 use super::used_set::{NameLayer, UsedSet};
+use crate::artifact_dump::{AskRowParts, Dispatch, DispatchLog, RecordMode};
 use crate::fast::Lever;
 use crate::graph::UnifiedGraph;
-use crate::naming::ask_trace::AskSite;
+use crate::naming::ask_trace::{AskScope, AskSite};
 use crate::naming::code_window::{FunctionCodeSelection, cap_context_code, select_function_code};
 use crate::naming::context::{ContextView, DeclView, ParentBinding, build_context};
 use crate::naming::prompts::{
@@ -114,7 +115,15 @@ pub struct WaveInputs<'a, 's> {
     /// follow-up starts as soon as ITS answer lands, not when the round's
     /// slowest does).
     pub fast: crate::fast::FastTier,
+    /// How many rendered prompts may be alive at once (in flight plus the
+    /// backfill headroom — finding #65's bounded prompt window; the
+    /// rate limiter's slot count plus headroom, never the whole round).
+    pub window: usize,
 }
+
+/// The prompt window when nothing configures it (tests; the CLI sizes it
+/// over the rate limiter's `max_concurrent`).
+pub const DEFAULT_PROMPT_WINDOW: usize = 64;
 
 /// One recorded dispatch (a prompts.jsonl row + its cache-key material).
 #[derive(Clone, Debug)]
@@ -160,6 +169,13 @@ pub struct WaveOutcome {
     /// Name strings the function contexts' used-identifier Sets hold at
     /// the end of the run — the memory bound's observable (finding #56).
     pub context_set_names: usize,
+    /// The most rendered prompts alive at once over the run (in flight,
+    /// plus the round's not-yet-committed records) — finding #65's
+    /// observable, bounded by the run's `window`.
+    pub peak_live_dispatches: usize,
+    /// [`Self::peak_live_dispatches`]' byte total: every alive prompt's
+    /// system + user + request-code lengths.
+    pub peak_live_prompt_bytes: u64,
 }
 
 impl WaveOutcome {
@@ -180,8 +196,88 @@ impl WaveOutcome {
             waves: 0,
             processor: ProcessorReport::default(),
             context_set_names: 0,
+            peak_live_dispatches: 0,
+            peak_live_prompt_bytes: 0,
         }
     }
+}
+
+/// What [`Run::prepare_dispatch`] keeps for the recorder besides the call:
+/// the mode's material (finding #65 — `Off` keeps nothing, the `Asks` mode
+/// keeps the ask row's small fields, `Full` keeps the record that streams
+/// at commit).
+#[allow(clippy::large_enum_variant)] // the pipeline's per-dispatch record —
+// heap-heavy strings either way; a box would add an indirection to the
+// tests' retained dispatches for nothing.
+enum Prepared {
+    Full(DispatchRecord),
+    Ask(AskRowParts),
+    /// The dump-streaming run's pipelined record: only the REPLAY SOURCE
+    /// survives the round (a round can hold ten thousand dispatches at
+    /// ~2MB of prompt material each — finding #65); the record is
+    /// rebuilt at the round's canonical commit, byte-identical because
+    /// every read it makes is the round's frozen state.
+    Replay(Replay),
+    None,
+}
+
+/// A replayed record's rebuild source: the small call material.
+struct Replay {
+    ctx: usize,
+    function_id: String,
+    site: AskSite,
+    source: ReplaySource,
+}
+
+enum ReplaySource {
+    Retry(usize),
+    Lane { lane: usize, call: LaneCall },
+}
+
+/// One not-yet-started item of a pipelined round, in dispatch order: the
+/// retries first, then the lanes' first calls (finding #65's backfill —
+/// an item's request is BUILT when a window slot frees, never upfront).
+enum Backlog {
+    Retry(usize),
+    Lane(usize),
+}
+
+/// A round's in-flight window gauge: how many rendered prompts are alive
+/// and how many bytes they hold (each call's system + user + request-code
+/// lengths), with the peak seen — the pipelined round's memory bound.
+#[derive(Default)]
+struct InFlight {
+    live: usize,
+    bytes: u64,
+    /// id → its byte total (a completion frees it before `on_done` sees it).
+    pending: HashMap<usize, u64>,
+    peak: usize,
+    peak_bytes: u64,
+}
+
+impl InFlight {
+    fn push(&mut self, id: usize, call: &LlmCall) {
+        let bytes = prompt_bytes(call);
+        self.pending.insert(id, bytes);
+        self.live += 1;
+        self.bytes += bytes;
+        self.peak = self.peak.max(self.live);
+        self.peak_bytes = self.peak_bytes.max(self.bytes);
+    }
+
+    fn complete(&mut self, id: usize) {
+        if let Some(bytes) = self.pending.remove(&id) {
+            self.live -= 1;
+            self.bytes -= bytes;
+        }
+    }
+}
+
+/// A rendered call's held bytes: its two prompts plus the request's code —
+/// the material that made a full round of them the 99GB holder's
+/// second-biggest term (finding #65).
+fn prompt_bytes(call: &LlmCall) -> u64 {
+    (call.system_prompt.len() + call.user_prompt.len() + call.request.code.len()) as u64
 }
 
 /// The per-node wave bookkeeping (`WaveNodeCtx`).
@@ -374,7 +470,7 @@ struct RetryRun {
 }
 
 /// The mutable run.
-struct Run<'a, 's, 'p, P: NameProvider> {
+struct Run<'a, 's, 'p, 'l, P: NameProvider> {
     inp: &'a WaveInputs<'a, 's>,
     provider: &'p P,
     state: RenameState,
@@ -407,11 +503,17 @@ struct Run<'a, 's, 'p, P: NameProvider> {
     fresh_scopes: Vec<(u32, u32, BScopeId)>,
     wave: u64,
     // dump
+    /// The run's per-dispatch recorder (finding #65): rows stream at
+    /// commit; the tests' log is the only one that retains records.
+    log: &'l mut DispatchLog,
+    /// The retained records — the tests' log only (empty in production).
     dispatches: Vec<DispatchRecord>,
     rounds: HashMap<String, u64>,
     names: Vec<NameRecord>,
     misses: usize,
     errors: usize,
+    /// The run's peak in-flight rendered prompts (finding #65's gauge).
+    peak_live: (usize, u64),
     // reports
     processor: ProcessorReport,
     /// Function row → its wave context (a function is dispatched once).
@@ -422,10 +524,11 @@ struct Run<'a, 's, 'p, P: NameProvider> {
 }
 
 /// Run the LLM naming waves over the transfer stage's state
-/// (`processUnified`).
+/// (`processUnified`). `log` is the run's per-dispatch recorder.
 pub fn run_waves<P: NameProvider>(
     inp: &WaveInputs<'_, '_>,
     provider: &P,
+    log: &mut DispatchLog,
     state: RenameState,
     fn_state: Vec<Lifecycle>,
     binding_state: Vec<Lifecycle>,
@@ -475,6 +578,7 @@ pub fn run_waves<P: NameProvider>(
     let mut run = Run {
         inp,
         provider,
+        log,
         state,
         fn_state,
         binding_state,
@@ -499,6 +603,7 @@ pub fn run_waves<P: NameProvider>(
         names: Vec::new(),
         misses: 0,
         errors: 0,
+        peak_live: (0, 0),
         processor: ProcessorReport::default(),
         fn_ctx: HashMap::new(),
         deferred: Vec::new(),
@@ -517,8 +622,11 @@ pub fn run_waves<P: NameProvider>(
         }
     }
     let context_set_names = run.context_set_names();
+    let peak_live = run.peak_live;
     WaveOutcome {
         context_set_names,
+        peak_live_dispatches: peak_live.0,
+        peak_live_prompt_bytes: peak_live.1,
         state: run.state,
         fn_state: run.fn_state,
         binding_state: run.binding_state,
@@ -531,7 +639,7 @@ pub fn run_waves<P: NameProvider>(
     }
 }
 
-impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
+impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
     fn context_set_names(&self) -> usize {
         let mut seen: HashSet<*const NameLayer> = HashSet::new();
         let shared: usize = self
@@ -1696,21 +1804,29 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             if active.is_empty() {
                 break;
             }
-            let requests: Vec<BatchRenameRequest> = active
-                .iter()
-                .map(|(i, call)| self.lane_request(&lanes[*i], call))
-                .collect();
-            let targets: Vec<(usize, String, AskSite)> = active
-                .iter()
-                .map(|(i, call)| {
-                    (
-                        lanes[*i].ctx,
-                        lanes[*i].function_id.clone(),
-                        AskSite::lane_reask(&call.rejections, lanes[*i].phase),
-                    )
-                })
-                .collect();
-            let results = self.dispatch(requests, &targets);
+            // The turn's dispatch, one bounded window at a time (finding
+            // #65): requests are built and prompts rendered per window,
+            // results collected in lane order — the turn still waits for
+            // its slowest call before any lane is fed, exactly as before.
+            let window = self.inp.window.max(1);
+            let mut results = Vec::with_capacity(active.len());
+            for chunk in active.chunks(window) {
+                let requests: Vec<BatchRenameRequest> = chunk
+                    .iter()
+                    .map(|(i, call)| self.lane_request(&lanes[*i], call))
+                    .collect();
+                let targets: Vec<(usize, String, AskSite)> = chunk
+                    .iter()
+                    .map(|(i, call)| {
+                        (
+                            lanes[*i].ctx,
+                            lanes[*i].function_id.clone(),
+                            AskSite::lane_reask(&call.rejections, lanes[*i].phase),
+                        )
+                    })
+                    .collect();
+                results.extend(self.dispatch(requests, &targets));
+            }
             for ((i, _), res) in active.into_iter().zip(results) {
                 self.feed_lane(&mut lanes[i], res);
             }
@@ -1719,35 +1835,55 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     }
 
     /// The fast schedule (the relaxed default and `--sequential` alike):
-    /// the same round, PIPELINED. Every retry and every lane's
-    /// first call start at once; a lane's next call starts as soon as ITS
-    /// answer lands. Decision-neutral by construction — a lane reads only
-    /// the round's frozen state and its own claims (`batch.rs`), so its
-    /// call sequence does not depend on completion order — and everything
-    /// order-sensitive is put back into the turn driver's canonical order
-    /// before it is recorded: dispatch records by (turn, lane) with the
-    /// retries first, contention events by (finishing turn, lane), retry
-    /// entries in retry order ahead of the lanes' effects.
+    /// the same round, PIPELINED — through a BOUNDED window of rendered
+    /// prompts (finding #65). The retries and the lanes' first calls form
+    /// a backlog in dispatch order; only the first `window` are prepared
+    /// now, and each completion starts backlog items (and the finished
+    /// lane's follow-up, which needs its answer) as slots free — a round's
+    /// rendered prompts never sit in memory all at once. A lane's next
+    /// call still starts as soon as ITS answer lands.
+    ///
+    /// Decision-neutral by construction — a lane reads only the round's
+    /// frozen state and its own claims (`batch.rs`), so its call sequence
+    /// depends neither on completion order nor on when its first call was
+    /// started — and everything order-sensitive is put back into the turn
+    /// driver's canonical order before it is recorded: dispatch records by
+    /// (turn, lane) with the retries first, contention events by
+    /// (finishing turn, lane), retry entries in retry order ahead of the
+    /// lanes' effects.
     fn drive_round_pipelined(&mut self, mut lanes: Vec<LaneRun>, retries: Vec<RetryRun>) {
         let n_retries = retries.len();
-        // (canonical order key, record): retries are turn 0, a lane's k-th
-        // call is turn k + 1.
-        let mut records: Vec<((usize, usize), DispatchRecord)> = Vec::new();
+        let window = self.inp.window.max(1);
+        // (canonical order key, prepared record): retries are turn 0, a
+        // lane's k-th call is turn k + 1.
+        let mut records: Vec<((usize, usize), Prepared)> = Vec::new();
+        // The not-yet-started work, in dispatch order.
+        let mut backlog: VecDeque<Backlog> = (0..n_retries)
+            .map(Backlog::Retry)
+            .chain((0..lanes.len()).map(Backlog::Lane))
+            .collect();
+        let mut in_flight = InFlight::default();
         let mut initial: Vec<(usize, LlmCall)> = Vec::new();
-        for (r, run) in retries.iter().enumerate() {
-            let request = self.retry_request(run);
-            let site = AskSite::reask(run.seed.cause, run.seed.phase, run.seed.cause_code);
-            let (record, call) =
-                self.prepare_dispatch(request, run.seed.ctx, &run.function_id, site);
-            records.push(((0, r), record));
-            initial.push((r, call));
-        }
-        let mut turns = vec![0usize; lanes.len()];
         let mut finished: Vec<(usize, usize, Vec<ContentionEvent>)> = Vec::new();
-        for (i, lr) in lanes.iter_mut().enumerate() {
-            if let Some((record, call)) = self.step_lane(lr, 0, i, &mut finished) {
-                records.push(((1, i), record));
-                initial.push((n_retries + i, call));
+        let mut turns = vec![0usize; lanes.len()];
+        {
+            let this: &Self = self;
+            while in_flight.live + initial.len() < window {
+                let Some(item) = backlog.pop_front() else {
+                    break;
+                };
+                if let Some((id, call)) = this.start_backlog_item(
+                    item,
+                    n_retries,
+                    &mut lanes,
+                    &retries,
+                    &mut records,
+                    &mut finished,
+                ) {
+                    in_flight.push(id, &call);
+                    initial.push((id, call));
+                }
+                // A lane with no first call finished now: keep filling.
             }
         }
         let mut retry_results: Vec<Option<LlmResult>> = (0..n_retries).map(|_| None).collect();
@@ -1757,33 +1893,55 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
             let provider = this.provider;
             let ph = crate::profiling::phase("waves:llm-pipelined");
             provider.run_pipelined(initial, &mut |id, result| {
+                in_flight.complete(id);
+                let mut out: Vec<(usize, LlmCall)> = Vec::new();
                 if id < n_retries {
                     retry_results[id] = Some(result);
-                    return Vec::new();
-                }
-                let i = id - n_retries;
-                let mapped = tally.map(result);
-                this.feed_lane(&mut lanes[i], mapped);
-                turns[i] += 1;
-                match this.step_lane(&mut lanes[i], turns[i], i, &mut finished) {
-                    Some((record, call)) => {
-                        records.push(((turns[i] + 1, i), record));
-                        vec![(id, call)]
+                } else {
+                    let i = id - n_retries;
+                    let mapped = tally.map(result);
+                    this.feed_lane(&mut lanes[i], mapped);
+                    turns[i] += 1;
+                    if let Some((prepared, call)) =
+                        this.step_lane(&mut lanes[i], turns[i], i, &mut finished)
+                    {
+                        records.push(((turns[i] + 1, i), prepared));
+                        out.push((id, call));
                     }
-                    None => Vec::new(),
                 }
+                // The backfill: render and start backlog items as slots
+                // free — never sit on the whole round's rendered prompts.
+                while in_flight.live + out.len() < window {
+                    let Some(item) = backlog.pop_front() else {
+                        break;
+                    };
+                    if let Some((next_id, call)) = this.start_backlog_item(
+                        item,
+                        n_retries,
+                        &mut lanes,
+                        &retries,
+                        &mut records,
+                        &mut finished,
+                    ) {
+                        in_flight.push(next_id, &call);
+                        out.push((next_id, call));
+                    }
+                }
+                out
             });
             // The round's call structure (for the cold-run LLM model):
             // retries are single calls; each lane is a chain.
             if let Some(mut ph) = ph {
                 ph.note("retries", n_retries);
                 ph.note("chains", turns.clone());
+                ph.note("window", window);
             }
         }
         records.sort_by_key(|(key, _)| *key);
-        for (_, record) in records {
-            self.commit_record(record);
+        for (_, prepared) in records {
+            self.commit_prepared(prepared, &retries, &lanes);
         }
+        self.note_live(in_flight.peak, in_flight.peak_bytes);
         finished.sort_by_key(|(turn, lane, _)| (*turn, *lane));
         for (_, _, events) in finished {
             self.processor.contention.extend(events);
@@ -1805,6 +1963,45 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         self.collect_lanes(lanes);
     }
 
+    /// Prepare one backlog item's first call for the pipelined window
+    /// (finding #65: its request is BUILT here, when a slot frees — never
+    /// upfront). A lane with no first call finishes now (its contention
+    /// events filed under (0, lane)) and frees its slot.
+    fn start_backlog_item(
+        &self,
+        item: Backlog,
+        n_retries: usize,
+        lanes: &mut [LaneRun],
+        retries: &[RetryRun],
+        records: &mut Vec<((usize, usize), Prepared)>,
+        finished: &mut Vec<(usize, usize, Vec<ContentionEvent>)>,
+    ) -> Option<(usize, LlmCall)> {
+        match item {
+            Backlog::Retry(r) => {
+                let run = &retries[r];
+                let request = self.retry_request(run);
+                let site = AskSite::reask(run.seed.cause, run.seed.phase, run.seed.cause_code);
+                let site = self.site_with_prior(site, run.seed.ctx);
+                let (prepared, call) = self.prepare_pipelined(
+                    request,
+                    run.seed.ctx,
+                    &run.function_id,
+                    site,
+                    ReplaySource::Retry(r),
+                );
+                records.push(((0, r), prepared));
+                Some((r, call))
+            }
+            Backlog::Lane(i) => match self.step_lane(&mut lanes[i], 0, i, finished) {
+                Some((prepared, call)) => {
+                    records.push(((1, i), prepared));
+                    Some((n_retries + i, call))
+                }
+                None => None,
+            },
+        }
+    }
+
     /// One lane's next move at `turn` (reads frozen state only): its next
     /// request, prepared for dispatch — or, when it has none, its tail
     /// (`finish_lane`), with the contention events it raised filed under
@@ -1815,7 +2012,7 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         turn: usize,
         lane: usize,
         finished: &mut Vec<(usize, usize, Vec<ContentionEvent>)>,
-    ) -> Option<(DispatchRecord, LlmCall)> {
+    ) -> Option<(Prepared, LlmCall)> {
         if lr.lane.is_finished() {
             return None;
         }
@@ -1826,7 +2023,17 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
                 // `late` flow) when there are any — else the writer derives
                 // the cause from the request's failure lists.
                 let site = AskSite::lane_reask(&call.rejections, lr.phase);
-                Some(self.prepare_dispatch(request, lr.ctx, &lr.function_id, site))
+                let site = self.site_with_prior(site, lr.ctx);
+                Some(self.prepare_pipelined(
+                    request,
+                    lr.ctx,
+                    &lr.function_id,
+                    site,
+                    ReplaySource::Lane {
+                        lane,
+                        call: call.clone(),
+                    },
+                ))
             }
             None => {
                 self.finish_lane(lr);
@@ -1872,19 +2079,26 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     /// The barrier retries of a round: one call each.
     fn run_retries(&mut self, retries: Vec<RetryRun>) {
         if !retries.is_empty() {
-            let requests: Vec<BatchRenameRequest> =
-                retries.iter().map(|r| self.retry_request(r)).collect();
-            let targets: Vec<(usize, String, AskSite)> = retries
-                .iter()
-                .map(|r| {
-                    (
-                        r.seed.ctx,
-                        r.function_id.clone(),
-                        AskSite::reask(r.seed.cause, r.seed.phase, r.seed.cause_code),
-                    )
-                })
-                .collect();
-            let results = self.dispatch(requests, &targets);
+            // The bounded window: requests are built (and prompts rendered)
+            // one window at a time — a fresh run's retry seeds are thousands
+            // of dispatches (finding #65).
+            let window = self.inp.window.max(1);
+            let mut results = Vec::with_capacity(retries.len());
+            for chunk in retries.chunks(window) {
+                let requests: Vec<BatchRenameRequest> =
+                    chunk.iter().map(|r| self.retry_request(r)).collect();
+                let targets: Vec<(usize, String, AskSite)> = chunk
+                    .iter()
+                    .map(|r| {
+                        (
+                            r.seed.ctx,
+                            r.function_id.clone(),
+                            AskSite::reask(r.seed.cause, r.seed.phase, r.seed.cause_code),
+                        )
+                    })
+                    .collect();
+                results.extend(self.dispatch(requests, &targets));
+            }
             for (r, res) in retries.iter().zip(results) {
                 let renames = match res {
                     Ok((renames, finish)) => {
@@ -2129,10 +2343,17 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
     ) -> Vec<Result<(Renames, Option<String>), ()>> {
         let mut calls = Vec::with_capacity(requests.len());
         for (request, (ctx, function_id, site)) in requests.into_iter().zip(targets) {
-            let (record, call) = self.prepare_dispatch(request, *ctx, function_id, site.clone());
-            self.commit_record(record);
+            let (prepared, call) = self.prepare_dispatch(request, *ctx, function_id, site.clone());
+            // The replay sources belong to the pipelined path only; this
+            // commit is immediate.
+            self.commit_prepared_immediate(prepared);
             calls.push(call);
         }
+        // The gauge: every call of one run_wave is alive until it returns
+        // (the callers chunk at the window, so this stays bounded).
+        let live = calls.len();
+        let bytes = calls.iter().map(prompt_bytes).sum();
+        self.note_live(live, bytes);
         let results = {
             let mut ph = crate::profiling::phase("waves:llm-dispatch");
             if let Some(ph) = ph.as_mut() {
@@ -2146,17 +2367,19 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         mapped
     }
 
-    /// A request's prompts, cache key and dump record (its `seq` and
-    /// `round` are assigned by [`Run::commit_record`], in dispatch order).
-    /// `site` is the ask-trace context (phase and recorded re-ask cause);
-    /// the prior-context flag is derived from the ctx's kind here.
+    /// A request's prompts and the recorder's material for it (the mode
+    /// decides what survives the dispatch — finding #65; the call itself
+    /// always carries the rendered prompts, dropped once dispatched). The
+    /// record's `seq` and `round` are assigned by the commit, in dispatch
+    /// order. `site` is the ask-trace context (phase and recorded re-ask
+    /// cause); the prior-context flag is derived from the ctx's kind here.
     fn prepare_dispatch(
         &self,
         request: BatchRenameRequest,
         ctx: usize,
         function_id: &str,
         mut site: AskSite,
-    ) -> (DispatchRecord, LlmCall) {
+    ) -> (Prepared, LlmCall) {
         site.prior = match &self.ctxs[ctx].kind {
             CtxKind::Fn(f) => self.inp.close[*f].is_some(),
             CtxKind::Module(batch) => batch.iter().any(|&j| {
@@ -2167,35 +2390,182 @@ impl<'a, 's, 'p, P: NameProvider> Run<'a, 's, 'p, P> {
         };
         let system_prompt = render_system_prompt(&request);
         let user_prompt = render_user_prompt(&request);
-        let cache_key = cache_key_of(&request, &self.inp.params);
-        let record = DispatchRecord {
-            seq: 0,
-            function_id: function_id.to_string(),
-            round: 0,
-            wave: self.ctxs[ctx].wave,
-            request: request.clone(),
-            cache_key,
-            system_prompt: system_prompt.clone(),
-            user_prompt: user_prompt.clone(),
-            targets: self.dump_targets(ctx),
-            ask: site,
+        let prepared = match self.log.mode() {
+            RecordMode::Off => Prepared::None,
+            RecordMode::Asks => {
+                let kind = if function_id.starts_with("module-binding-batch:") {
+                    AskScope::Module
+                } else {
+                    AskScope::Fn
+                };
+                Prepared::Ask(AskRowParts::of(
+                    "naming",
+                    kind,
+                    function_id.to_string(),
+                    Some(self.ctxs[ctx].wave),
+                    0,
+                    &site,
+                    &request,
+                ))
+            }
+            RecordMode::Full => {
+                let cache_key = cache_key_of(&request, &self.inp.params);
+                Prepared::Full(DispatchRecord {
+                    seq: 0,
+                    function_id: function_id.to_string(),
+                    round: 0,
+                    wave: self.ctxs[ctx].wave,
+                    request: request.clone(),
+                    cache_key,
+                    system_prompt: system_prompt.clone(),
+                    user_prompt: user_prompt.clone(),
+                    targets: self.dump_targets(ctx),
+                    ask: site,
+                })
+            }
         };
         let call = LlmCall {
             request,
             system_prompt,
             user_prompt,
         };
-        (record, call)
+        (prepared, call)
     }
 
-    /// Record a dispatch in dispatch order: its `seq`, and its `round`
-    /// (the function id's call count so far).
+    /// Record a dispatch in dispatch order: its `seq`, its `round` (the
+    /// function id's call count so far), and its dump/ask rows (the
+    /// log streams them; only the tests' log retains the record).
     fn commit_record(&mut self, mut record: DispatchRecord) {
         let round = self.rounds.entry(record.function_id.clone()).or_insert(0);
         *round += 1;
         record.round = *round;
-        record.seq = self.dispatches.len() as u64;
-        self.dispatches.push(record);
+        if self.log.mode() == RecordMode::Full {
+            self.log.record(&Dispatch::Naming(&record));
+        }
+        if self.log.retains() {
+            record.seq = self.dispatches.len() as u64;
+            self.dispatches.push(record);
+        }
+    }
+
+    /// The `Asks` mode's commit: the ask row's round is counted here (the
+    /// same per-functionId counter), then the row is handed to the log —
+    /// no prompt text anywhere in the path.
+    fn commit_ask_parts(&mut self, parts: &mut AskRowParts) {
+        let round = self.rounds.entry(parts.scope().to_string()).or_insert(0);
+        *round += 1;
+        parts.set_round(*round);
+        self.log.record_ask_parts(parts);
+    }
+
+    /// The immediate commit of the turn driver's path (the record was
+    /// prepared for this very moment; no replay source exists).
+    fn commit_prepared_immediate(&mut self, prepared: Prepared) {
+        match prepared {
+            Prepared::Full(record) => self.commit_record(record),
+            Prepared::Ask(mut parts) => self.commit_ask_parts(&mut parts),
+            Prepared::Replay(_) => unreachable!("the turn driver never replays"),
+            Prepared::None => {}
+        }
+    }
+
+    /// Commit whatever [`Self::prepare_dispatch`] or
+    /// [`Self::prepare_pipelined`] kept for a dispatch. `retries` and
+    /// `lanes` are the round's own locals — a [`Prepared::Replay`] reads
+    /// them back to rebuild its record (the pipelined path only).
+    fn commit_prepared(&mut self, prepared: Prepared, retries: &[RetryRun], lanes: &[LaneRun]) {
+        match prepared {
+            Prepared::Full(record) => self.commit_record(record),
+            Prepared::Ask(mut parts) => self.commit_ask_parts(&mut parts),
+            Prepared::Replay(replay) => {
+                let record = self.rebuild_record(&replay, retries, lanes);
+                self.commit_record(record);
+            }
+            Prepared::None => {}
+        }
+    }
+
+    /// Rebuild a replayed dispatch's record at its canonical commit —
+    /// the same pure functions over the same frozen state that prepared
+    /// it, so the row's bytes are the prepared record's bytes.
+    fn rebuild_record(
+        &self,
+        replay: &Replay,
+        retries: &[RetryRun],
+        lanes: &[LaneRun],
+    ) -> DispatchRecord {
+        let request = match &replay.source {
+            ReplaySource::Retry(r) => self.retry_request(&retries[*r]),
+            ReplaySource::Lane { lane, call } => self.lane_request(&lanes[*lane], call),
+        };
+        let system_prompt = render_system_prompt(&request);
+        let user_prompt = render_user_prompt(&request);
+        let cache_key = cache_key_of(&request, &self.inp.params);
+        DispatchRecord {
+            seq: 0,
+            function_id: replay.function_id.clone(),
+            round: 0,
+            wave: self.ctxs[replay.ctx].wave,
+            request,
+            cache_key,
+            system_prompt,
+            user_prompt,
+            targets: self.dump_targets(replay.ctx),
+            ask: replay.site.clone(),
+        }
+    }
+
+    /// The ask-trace site with its prior-context flag derived from the
+    /// ctx's kind (the one input [`Self::prepare_dispatch`] sets).
+    fn site_with_prior(&self, mut site: AskSite, ctx: usize) -> AskSite {
+        site.prior = match &self.ctxs[ctx].kind {
+            CtxKind::Fn(f) => self.inp.close[*f].is_some(),
+            CtxKind::Module(batch) => batch.iter().any(|&j| {
+                self.inp.suggested[j]
+                    .as_deref()
+                    .is_some_and(|s| !s.is_empty())
+            }),
+        };
+        site
+    }
+
+    /// A pipelined call's prepared record: in the tests' retaining mode
+    /// the full record (it is read back out); in a dump-streaming run
+    /// only the replay source — the canonical commit is at the round's
+    /// end, and no per-ask material may sit out the round (finding #65).
+    fn prepare_pipelined(
+        &self,
+        request: BatchRenameRequest,
+        ctx: usize,
+        function_id: &str,
+        site: AskSite,
+        source: ReplaySource,
+    ) -> (Prepared, LlmCall) {
+        if self.log.mode() == RecordMode::Full && !self.log.retains() {
+            let system_prompt = render_system_prompt(&request);
+            let user_prompt = render_user_prompt(&request);
+            let prepared = Prepared::Replay(Replay {
+                ctx,
+                function_id: function_id.to_string(),
+                site,
+                source,
+            });
+            return (
+                prepared,
+                LlmCall {
+                    request,
+                    system_prompt,
+                    user_prompt,
+                },
+            );
+        }
+        self.prepare_dispatch(request, ctx, function_id, site)
+    }
+
+    /// Fold a dispatch's live material into the run's peak gauge
+    /// (finding #65's observable — bounded by the run's window).
+    fn note_live(&mut self, live: usize, bytes: u64) {
+        self.peak_live = (self.peak_live.0.max(live), self.peak_live.1.max(bytes));
     }
 
     fn apply_tally(&mut self, tally: Tally) {

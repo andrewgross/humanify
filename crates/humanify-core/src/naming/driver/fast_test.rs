@@ -11,6 +11,8 @@ use humanify_model::llm::{
 };
 
 use super::{NamingConfig, NamingInput, NamingOutcome, run_naming};
+use crate::artifact_dump::{Dispatch, ask_rows, dispatch_rows};
+use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 
 /// Answers every identifier with one of three words (by its first
 /// letter), so names collide inside a function and lanes retry. Pipelined
@@ -103,7 +105,33 @@ fn config_tier(fast: crate::fast::FastTier) -> NamingConfig {
         },
         shingle_probe: false,
         fast,
+        prompt_window: DEFAULT_PROMPT_WINDOW,
     }
+}
+
+/// The retaining test log (finding #65): the full records stay readable
+/// for the fingerprints, and the streamed rows land in its in-memory
+/// oracle (the bulk builders' byte-identity comparison).
+fn retain_log() -> crate::artifact_dump::DispatchLog {
+    crate::artifact_dump::DispatchLog::retain_for_tests(
+        config_tier(crate::fast::FastTier::Off).params,
+    )
+}
+
+/// One run over the fixture under `cfg`'s window, through the retaining
+/// log.
+fn run_cfg(fresh: &str, cfg: &NamingConfig, provider: &dyn NameProvider) -> NamingOutcome {
+    run_naming(
+        &NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        cfg,
+        &provider,
+        &mut retain_log(),
+    )
+    .expect("the stage runs")
 }
 
 /// A program with one function big enough for four lanes, a few small
@@ -129,16 +157,7 @@ fn fixture() -> String {
 }
 
 fn run(fresh: &str, fast: bool, provider: &LifoProvider) -> NamingOutcome {
-    run_naming(
-        &NamingInput {
-            fresh,
-            prior: None,
-            library: None,
-        },
-        &config(fast),
-        provider,
-    )
-    .expect("the stage runs")
+    run_cfg(fresh, &config(fast), provider)
 }
 
 /// What a run decided and recorded, in comparable form.
@@ -206,6 +225,9 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
         )
         .replace("console.log(f(4));", "console.log(f(4));\nconsole.log(1);");
     let run_with = |fast: bool| {
+        // A fresh log per leg (the reconcile test reads the outcomes, not
+        // the accumulated rows).
+        let mut log = retain_log();
         run_naming(
             &NamingInput {
                 fresh: &fresh,
@@ -214,6 +236,7 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
             },
             &config(fast),
             &LifoProvider::default(),
+            &mut log,
         )
         .expect("the stage runs")
     };
@@ -242,16 +265,7 @@ fn tier_of(name: &str) -> crate::fast::FastTier {
 }
 
 fn run_tier(fresh: &str, tier: &str, provider: &dyn NameProvider) -> NamingOutcome {
-    run_naming(
-        &NamingInput {
-            fresh,
-            prior: None,
-            library: None,
-        },
-        &config_tier(tier_of(tier)),
-        &provider,
-    )
-    .expect("the stage runs")
+    run_cfg(fresh, &config_tier(tier_of(tier)), provider)
 }
 
 /// Answers like [`LifoProvider`] but runs every pipelined round
@@ -316,4 +330,225 @@ fn defer_shadowed_saves_rounds() {
         deferred.rounds.get(),
         exact.rounds.get()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Finding #65: the bounded rendered-prompt window, and the per-dispatch
+// log's modes
+// ---------------------------------------------------------------------------
+
+/// A two-slot window ships the unbounded round's bytes — and never has
+/// more than two rendered prompts alive. The pipelined round is
+/// completion-order-independent BY DESIGN, and the window only changes
+/// when a lane's first call is STARTED (its material is frozen), so the
+/// dispatch records, their canonical order and the output cannot move.
+#[test]
+fn a_bounded_prompt_window_ships_the_unbounded_rounds_bytes() {
+    let fresh = fixture();
+    let mut unbounded = config_tier(tier_of("relaxed"));
+    unbounded.prompt_window = usize::MAX;
+    let wide = run_cfg(&fresh, &unbounded, &LifoProvider::default());
+    assert!(
+        wide.waves.peak_live_dispatches > 10,
+        "the fixture fills an unbounded round (peak {})",
+        wide.waves.peak_live_dispatches
+    );
+    let mut bounded = config_tier(tier_of("relaxed"));
+    bounded.prompt_window = 2;
+    let narrow = run_cfg(&fresh, &bounded, &LifoProvider::default());
+    assert_eq!(
+        fingerprint(&narrow),
+        fingerprint(&wide),
+        "the window changes dispatch timing only"
+    );
+    assert!(
+        narrow.waves.peak_live_dispatches <= 2,
+        "the bound holds: peak {} > window 2",
+        narrow.waves.peak_live_dispatches
+    );
+    // The fingerprint equality is also the backfill's proof: a refill
+    // that never fired would silently drop every lane that never got a
+    // slot, and the ask set — and the bytes — could not match.
+}
+
+/// The log's streamed rows are BYTE-IDENTICAL to the bulk builders over
+/// the same dispatches (the frozen dump format), and the ask rows match
+/// the bulk ask builder — the two halves of finding #65's fix.
+#[test]
+fn the_log_streams_the_bulk_builders_bytes() {
+    let fresh = fixture();
+    let mut log = retain_log();
+    let out = run_naming(
+        &NamingInput {
+            fresh: &fresh,
+            prior: None,
+            library: None,
+        },
+        &config_tier(tier_of("relaxed")),
+        &LifoProvider::default(),
+        &mut log,
+    )
+    .expect("the stage runs");
+    assert!(
+        out.waves.dispatches.len() > 10,
+        "the fixture dispatches enough to compare"
+    );
+    // The bulk form over the retained dispatches, in the dump's own
+    // recording order (the waves, then the pre-generate sweep).
+    let mut dispatches: Vec<Dispatch<'_>> =
+        out.waves.dispatches.iter().map(Dispatch::Naming).collect();
+    let sweep: Vec<Dispatch<'_>> = out
+        .pre_sweep
+        .as_ref()
+        .map(|s| {
+            s.dispatches
+                .iter()
+                .map(|d| Dispatch::Sweep(crate::trail::Anchor::Fresh, d))
+                .collect()
+        })
+        .unwrap_or_default();
+    dispatches.extend(sweep);
+    let params = config_tier(crate::fast::FastTier::Off).params;
+    let (prompts, keys) = dispatch_rows(&dispatches, &params);
+    let mut streamed = (String::new(), String::new());
+    for (p, k) in log.memory_rows() {
+        streamed.0.push_str(p);
+        streamed.0.push('\n');
+        streamed.1.push_str(k);
+        streamed.1.push('\n');
+    }
+    assert_eq!(streamed.0, prompts, "prompts.jsonl, row for row");
+    assert_eq!(streamed.1, keys, "cache-keys.jsonl, row for row");
+    let asks = ask_rows(&dispatches);
+    assert_eq!(log.ask_rows(), asks, "asks.jsonl, row for row");
+}
+
+/// A run with neither dump flag retains NOTHING per ask (finding #65: the
+/// accumulated records were the ~99GB holder) — no records, no ask rows,
+/// no prompt rows; `--dump-asks` alone keeps the ask rows but never a
+/// prompt.
+#[test]
+fn the_off_log_retains_nothing_and_the_asks_log_keeps_rows_only() {
+    let fresh = fixture();
+    let params = config_tier(crate::fast::FastTier::Off).params;
+    let mut off = crate::artifact_dump::DispatchLog::off(params.clone());
+    let out = run_naming(
+        &NamingInput {
+            fresh: &fresh,
+            prior: None,
+            library: None,
+        },
+        &config_tier(tier_of("relaxed")),
+        &LifoProvider::default(),
+        &mut off,
+    )
+    .expect("the stage runs");
+    assert!(
+        out.waves.dispatches.is_empty(),
+        "no flag: no dispatch record survives its round"
+    );
+    assert!(off.ask_rows().is_empty(), "no ask rows either");
+    assert!(off.memory_rows().is_empty(), "no prompt rows either");
+
+    let mut asks = crate::artifact_dump::DispatchLog::asks(params);
+    let out = run_naming(
+        &NamingInput {
+            fresh: &fresh,
+            prior: None,
+            library: None,
+        },
+        &config_tier(tier_of("relaxed")),
+        &LifoProvider::default(),
+        &mut asks,
+    )
+    .expect("the stage runs");
+    assert!(
+        out.waves.dispatches.is_empty(),
+        "the asks mode never retains a record"
+    );
+    assert!(
+        !asks.ask_rows().is_empty(),
+        "the ask rows are there for the log"
+    );
+    assert!(
+        asks.memory_rows().is_empty(),
+        "the asks mode keeps no prompt material"
+    );
+    assert!(asks.ask_rows().len() > 10, "the fixture dispatched");
+}
+
+/// A dump-streaming run (`--dump-artifacts`, real part files) ships the
+/// SAME prompts.jsonl + cache-keys.jsonl bytes as the bulk builders over
+/// a retaining run's dispatches — the pipelined rounds' records were
+/// REBUILT at their canonical commit ([`Prepared::Replay`], finding #65),
+/// so this is the rebuild's byte-identity proof.
+#[test]
+fn a_dump_streaming_run_replays_the_prepared_records_bytes() {
+    let fresh = fixture();
+    let params = config_tier(crate::fast::FastTier::Off).params;
+    // The bulk oracle: the same fixture through the retaining log.
+    let retained = run_cfg(
+        &fresh,
+        &config_tier(tier_of("relaxed")),
+        &LifoProvider::default(),
+    );
+    let mut dispatches: Vec<Dispatch<'_>> = retained
+        .waves
+        .dispatches
+        .iter()
+        .map(Dispatch::Naming)
+        .collect();
+    if let Some(sweep) = &retained.pre_sweep {
+        dispatches.extend(
+            sweep
+                .dispatches
+                .iter()
+                .map(|d| Dispatch::Sweep(crate::trail::Anchor::Fresh, d)),
+        );
+    }
+    let (prompts, keys) = dispatch_rows(&dispatches, &params);
+
+    // The streaming run: its pipelined records exist only as replay
+    // sources, and the rows are written to real files at commit.
+    let dir = std::env::temp_dir().join(format!("humanify-dump65-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    let mut log = crate::artifact_dump::DispatchLog::dump(params, &dir).expect("open parts");
+    let streamed = run_naming(
+        &NamingInput {
+            fresh: &fresh,
+            prior: None,
+            library: None,
+        },
+        &config_tier(tier_of("relaxed")),
+        &LifoProvider::default(),
+        &mut log,
+    )
+    .expect("the stage runs");
+    assert!(
+        streamed.waves.dispatches.is_empty(),
+        "the dump mode retains no record"
+    );
+    log.close().expect("assemble");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("prompts.jsonl")).expect("prompts.jsonl"),
+        prompts,
+        "the replayed rows are the prepared rows"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("cache-keys.jsonl")).expect("cache-keys.jsonl"),
+        keys
+    );
+    for part in [
+        "prompts.jsonl.vendorpart",
+        "prompts.jsonl.namingpart",
+        "cache-keys.jsonl.vendorpart",
+        "cache-keys.jsonl.namingpart",
+    ] {
+        assert!(
+            !dir.join(part).exists(),
+            "close removes the part files ({part})"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

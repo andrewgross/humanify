@@ -54,8 +54,13 @@ pub struct SplitStageInput<'a> {
     pub fossil: bool,
     pub switches: &'a SwitchState,
     pub provider: &'a dyn NameProvider,
+    /// The run's per-dispatch recorder (finding #65): the `folders` site's
+    /// rows stream at commit.
+    pub log: &'a mut humanify_core::artifact_dump::DispatchLog,
     /// How big one split-namer prompt may get (`--context-tokens`, `--max-tokens`).
     pub namer_budget: SplitNamerBudget,
+    /// The rendered-prompt window (finding #65).
+    pub prompt_window: usize,
     /// The naming stage's input text (the beautified, pre-rename runtime) —
     /// the vendor bridge's (finding #60) raw-name anchor. None when no
     /// naming outcome exists.
@@ -65,7 +70,7 @@ pub struct SplitStageInput<'a> {
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
 /// `--prior-version`.
 fn load_prior_split_ledger(
-    input: &SplitStageInput<'_>,
+    input: &mut SplitStageInput<'_>,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Option<StableSplitLedger>, String> {
     let discovered = input.prior_version.and_then(find_split_ledger_path);
@@ -157,12 +162,7 @@ pub struct PostSplitRecords {
     pub claims: humanify_core::rename::validated::RenameClaimStats,
 }
 
-fn split_dump(
-    code: &str,
-    outcome: &SplitOutcome,
-    trail: &PlacementTrail,
-    prompts: Vec<(&'static str, humanify_model::llm::LlmCall)>,
-) -> SplitSections {
+fn split_dump(code: &str, outcome: &SplitOutcome, trail: &PlacementTrail) -> SplitSections {
     let hashes: Vec<String> = outcome
         .ledger
         .as_object()
@@ -189,7 +189,6 @@ fn split_dump(
         emit: humanify_core::emit::emit_dump::layout_rows(&outcome.layout, &outcome.spans, |p| {
             aliases.get(p).map(|a| a.to_string())
         }),
-        prompts,
     }
 }
 
@@ -197,12 +196,12 @@ fn split_dump(
 pub fn run_split(
     code: &str,
     prior_carry: Option<&PriorCarry>,
-    input: &SplitStageInput<'_>,
+    input: &mut SplitStageInput<'_>,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<SplitRecords, String> {
     let mut trail = PlacementTrail::default();
     let ph = humanify_core::profiling::phase("split:compute");
-    let (outcome, prior_present, prompts) =
+    let (outcome, prior_present) =
         split_before_commit(code, prior_carry, input, &mut trail, renderer)
             .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
     drop(ph);
@@ -238,7 +237,7 @@ pub fn run_split(
             renderer.message("Split tree already written; a post-split step failed after commit")
         }
     }
-    let dump = split_dump(code, &outcome, &trail, prompts);
+    let dump = split_dump(code, &outcome, &trail);
     Ok(SplitRecords {
         ended,
         trail,
@@ -251,17 +250,20 @@ pub fn run_split(
 fn split_before_commit(
     code: &str,
     prior_carry: Option<&PriorCarry>,
-    input: &SplitStageInput<'_>,
+    input: &mut SplitStageInput<'_>,
     trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<(SplitOutcome, bool, NamerCalls), String> {
+) -> Result<(SplitOutcome, bool), String> {
     let ph = humanify_core::profiling::phase("split:load-prior-ledger");
     let prior = load_prior_split_ledger(input, renderer)?;
     drop(ph);
     // Fresh release: LLM-named folders/files; warm fossil hops: LLM-named
     // fresh module mints; inherited layout is never renamed.
-    let mut namer = ProviderSplitNamer::with_budget(input.provider, input.namer_budget);
-    let mut reviser = ProviderTreeReviser::new(input.provider);
+    let mut namer = ProviderSplitNamer::with_budget(input.provider, input.log, input.namer_budget);
+    namer.window = input.prompt_window;
+    // The tree reviser keeps its (single) call and records it AFTER the
+    // split — it runs last, so its rows land in dispatch order either way.
+    let mut reviser = ProviderTreeReviser::retaining(input.provider);
     let regime = if input.fossil {
         Regime::Fossil
     } else if prior.is_some() {
@@ -307,33 +309,29 @@ fn split_before_commit(
             "Runnable emit declined: {reason} — writing byte-exact review tree instead"
         ));
     }
-    // The `folders` prompt site in dispatch order: the file/folder namer's
-    // calls, then the tree reviser's one (it runs last).
-    let prompts = namer
-        .dispatched
-        .into_iter()
-        .map(|c| ("split-namer", c))
-        .chain(reviser.dispatched.into_iter().map(|c| ("tree-reviser", c)))
-        .collect();
-    Ok((outcome, prior.is_some(), prompts))
+    for call in reviser.take_recorded() {
+        input
+            .log
+            .record(&humanify_core::artifact_dump::Dispatch::Plain {
+                function_id: "tree-reviser",
+                site: "folders",
+                call: &call,
+            });
+    }
+    Ok((outcome, prior.is_some()))
 }
 
 /// The split namer's batch outcome (finding #39: its failures used to be
 /// debug-log only, which hid that it had never named a fossil mint).
 fn report_namer(namer: &ProviderSplitNamer<'_>, renderer: &mut dyn ProgressRenderer) {
-    if namer.dispatched.is_empty() {
+    if namer.calls == 0 {
         return;
     }
     renderer.message(&format!(
         "Split naming: {} prompts, {} failed, {} names proposed",
-        namer.dispatched.len(),
-        namer.failed_batches,
-        namer.proposals
+        namer.calls, namer.failed_batches, namer.proposals
     ));
 }
-
-/// The split namers' calls with their functionId, dispatch order.
-type NamerCalls = Vec<(&'static str, humanify_model::llm::LlmCall)>;
 
 /// A failure after (`true`) or before (`false`) the commit point.
 struct Committed(bool, String);
@@ -344,7 +342,7 @@ fn commit_and_finish(
     prior_carry: Option<&PriorCarry>,
     outcome: &SplitOutcome,
     prior_present: bool,
-    input: &SplitStageInput<'_>,
+    input: &mut SplitStageInput<'_>,
     post_split: &mut PostSplitRecords,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(), Committed> {

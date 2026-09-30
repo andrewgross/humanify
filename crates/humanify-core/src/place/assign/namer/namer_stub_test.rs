@@ -148,6 +148,14 @@ fn mints(n: usize) -> Vec<SplitNameRequest> {
         .collect()
 }
 
+/// The retaining test log (finding #65): the namer tests read the calls
+/// back out of it.
+fn split_log() -> crate::artifact_dump::DispatchLog {
+    crate::artifact_dump::DispatchLog::retain_for_tests(
+        humanify_model::llm::CacheKeyParams::default(),
+    )
+}
+
 #[test]
 fn one_unbounded_prompt_is_refused_and_every_mint_falls_back() {
     let seen: Seen = Arc::default();
@@ -157,7 +165,8 @@ fn one_unbounded_prompt_is_refused_and_every_mint_falls_back() {
         max_prompt_chars: usize::MAX,
         max_entries: usize::MAX,
     };
-    let mut namer = ProviderSplitNamer::with_budget(&provider, unbounded);
+    let mut log = split_log();
+    let mut namer = ProviderSplitNamer::with_budget(&provider, &mut log, unbounded);
     let names = namer.name(&mints(200));
     assert_eq!(namer.dispatched.len(), 1);
     assert_eq!(namer.failed_batches, 1);
@@ -171,7 +180,8 @@ fn context_sized_batches_all_fit_and_every_answer_is_applied() {
     let url = start(seen.clone());
     let provider = client(&url);
     let budget = SplitNamerBudget::for_model(CONTEXT_TOKENS, COMPLETION_TOKENS);
-    let mut namer = ProviderSplitNamer::with_budget(&provider, budget);
+    let mut log = split_log();
+    let mut namer = ProviderSplitNamer::with_budget(&provider, &mut log, budget);
     let requests = mints(200);
     let names = namer.name(&requests);
     let seen = seen.lock().unwrap();

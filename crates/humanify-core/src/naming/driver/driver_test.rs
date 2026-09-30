@@ -5,6 +5,7 @@ use oxc_allocator::Allocator;
 
 use crate::naming::waves::generate::TextView;
 use crate::naming::waves::graph_ext::build_naming_graph;
+use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 
 /// The naming graph's call sites per function session id, over `text`
 /// parsed as the driver parses it (unambiguous).
@@ -263,7 +264,14 @@ fn ledger_config() -> super::NamingConfig {
         tunables: Default::default(),
         shingle_probe: false,
         fast: crate::fast::FastTier::Off,
+        prompt_window: DEFAULT_PROMPT_WINDOW,
     }
+}
+
+/// The retaining test log (finding #65): the ledger tests read the
+/// outcomes; a couple read the dispatch records.
+fn retain_log() -> crate::artifact_dump::DispatchLog {
+    crate::artifact_dump::DispatchLog::retain_for_tests(ledger_config().params)
 }
 
 /// `--rename-ledger` (plugin.ts `buildRenameLedgerBundle`): the base stage
@@ -287,6 +295,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
             },
             &ledger_config(),
             &SuffixProvider,
+            &mut retain_log(),
         )
         .expect("the stage runs");
         let bundle = out.rename_ledger.as_ref().expect("a ledger in ledger mode");
@@ -315,6 +324,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
         },
         &ledger_config(),
         &SuffixProvider,
+        &mut retain_log(),
     )
     .expect("the stage runs");
     let shipped = out.code.as_deref().expect("shipped");
@@ -339,6 +349,7 @@ fn the_rename_ledger_replays_the_fresh_text_to_the_shipped_code() {
         },
         &config,
         &SuffixProvider,
+        &mut retain_log(),
     )
     .expect("the stage runs");
     assert!(out.rename_ledger.is_none());
@@ -361,6 +372,7 @@ fn the_llm_ref_count_counts_each_reference_once() {
             },
             &ledger_config(),
             &SuffixProvider,
+            &mut retain_log(),
         )
         .expect("the stage runs");
         let counts: Vec<Option<u32>> = out
@@ -452,6 +464,7 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
         },
         &config,
         &SuffixProvider,
+        &mut retain_log(),
     )
     .expect("the stage runs");
     assert!(
