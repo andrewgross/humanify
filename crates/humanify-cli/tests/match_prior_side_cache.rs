@@ -168,7 +168,10 @@ fn the_prior_side_is_built_once_and_the_dump_bytes_hold() {
     let golden_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/match_prior_side_cache.golden.json");
     let actual = normalized(&multi);
-    if std::env::var("MATCH_PIN_WRITE_GOLDEN").is_ok() {
+    // The regeneration switch reads env through the crate's ONE reader
+    // (`humanify_cli::env`, WP1.1's rule — clippy's disallowed-methods
+    // list has no exemption for tests).
+    if humanify_cli::env::get("MATCH_PIN_WRITE_GOLDEN", None).is_some() {
         std::fs::write(&golden_path, &actual).expect("write the golden");
         panic!(
             "golden written to {} — un-set MATCH_PIN_WRITE_GOLDEN and re-run",

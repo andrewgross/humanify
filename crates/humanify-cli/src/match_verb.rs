@@ -44,6 +44,17 @@
 //! pipeline never hits this: the library filter hands it the whole
 //! program's files).
 //!
+//! The prior SIDE is likewise the run's, not the call's: it is built
+//! ONCE per verb invocation (`humanify_core::prior::with_prior_match_side`)
+//! and every file's match stage borrows it. The per-call rebuild the
+//! single-call design did — the whole 33MB prior re-parsed and its ~63k
+//! function index rebuilt per file, twice per file in the fast schedule
+//! — cost ~23s per file against the revalidation corpus, turning a
+//! multi-file run into the 12h re-validation of finding #68 where the
+//! actual comparison work is milliseconds per file. Byte-identical per
+//! call either way (a parse is deterministic); the parse-count pin
+//! holds it.
+//!
 //! The dump is the ground-truth harness's whole input: each side's
 //! function and statement inventories carry their source SLICE, so the
 //! harness computes its ground truth from the same rows the matcher
@@ -84,8 +95,11 @@ pub struct MatchVerbArgs<'a> {
     pub input: &'a str,
     /// `--prior-version`: the prior release's (humanified) text.
     pub prior_version: &'a str,
-    /// `--sequential`: the conservative schedule (the prior side built on
-    /// this thread instead of its own). Byte-identical either way.
+    /// `--sequential`: accepted, and now INERT — the flag chose which
+    /// thread built the per-call prior side, and the prior side is no
+    /// longer per-call (built once per run, [`match_dump`]). Kept so the
+    /// flag's documented byte-identity contract stays honest: it never
+    /// changed the dump's bytes and it still cannot.
     pub sequential: bool,
     /// `--bundler <type>` override, as the pipeline's flag.
     pub bundler: Option<&'a str>,
@@ -160,18 +174,38 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     let multi = candidates.len() > 1;
 
     // Stages 6-8 per candidate: format, then the match stage, then stop —
-    // no naming, no LLM.
-    let ctx = MatchContext {
-        args,
-        prior: &prior,
-        bundler: &bundler,
-        minifier: &minifier,
-        multi,
-    };
+    // no naming, no LLM. The PRIOR side is built ONCE for the whole run
+    // (`with_prior_match_side`) and every file's stage borrows it: the
+    // per-file reparse the single-call design did (~14s × 2 per file in
+    // the fast schedule, against a ~33MB prior) turned minutes of
+    // matching on a multi-file work dir into hours of rebuilding the
+    // same index — and the parse-count pin (tests/match_prior_side_cache)
+    // holds the amortization in place.
     let mut run = MatchRun::default();
-    for (path, text) in &candidates {
-        run.add_file(&ctx, path, text)?;
-    }
+    let built = humanify_core::prior::with_prior_match_side(&prior, |side| {
+        let ctx = MatchContext {
+            prior: &prior,
+            bundler: &bundler,
+            minifier: &minifier,
+            multi,
+            side,
+        };
+        if multi {
+            // The hoisted prior block — the ONE copy of the prior
+            // inventories the multi-file dump carries, built from the
+            // run's shared prior side (identical rows to every call's
+            // prior side; one build instead of a first-call capture).
+            run.shared_prior = Some(json!({
+                "functions": function_rows(side.graph, &prior),
+                "statements": statement_rows(side.inventory, &prior),
+            }));
+        }
+        for (path, text) in &candidates {
+            run.add_file(&ctx, path, text)?;
+        }
+        Ok(())
+    });
+    built?;
     if owned && !args.keep_work_dir {
         let _ = std::fs::remove_dir_all(&work_dir);
     }
@@ -229,25 +263,29 @@ fn collect_candidates(
 
 /// The per-file matching loop's accumulation: the sections built, the
 /// vendor files wrapped (the raw-bundle regime), the ones skipped with
-/// their errors, the hoisted prior block, and the union of every file's
-/// matched prior indices (the multi-file same-program check's input).
+/// their errors, the hoisted prior block, whether ANY file reached the
+/// matching stage (the all-failed dump error's condition), and the union
+/// of every file's matched prior indices (the multi-file same-program
+/// check's input).
 #[derive(Default)]
 struct MatchRun {
     files: Vec<Value>,
     wrapped: Vec<String>,
     skipped: Vec<Value>,
     shared_prior: Option<Value>,
+    matched_any: bool,
     matched_prior: std::collections::HashSet<u64>,
 }
 
-/// What every per-file matching call reads from the run: the verb's
-/// flags and the shared prior facts (multi = the raw-bundle regime).
-struct MatchContext<'a> {
-    args: &'a MatchVerbArgs<'a>,
+/// What every per-file matching call reads from the run: the shared
+/// prior side (built once for the whole run) and the run's facts
+/// (multi = the raw-bundle regime).
+struct MatchContext<'a, 's> {
     prior: &'a str,
     bundler: &'a str,
     minifier: &'a str,
     multi: bool,
+    side: &'a humanify_core::prior::StageSide<'a, 's>,
 }
 
 impl MatchRun {
@@ -260,13 +298,18 @@ impl MatchRun {
     /// the close tier pairs each vendor file against the WHOLE tree's
     /// unmatched prior functions, so one file's bad interaction must not
     /// lose the dump (a single-file run still fails loudly).
-    fn add_file(&mut self, ctx: &MatchContext<'_>, path: &str, text: &str) -> Result<(), String> {
+    fn add_file(
+        &mut self,
+        ctx: &MatchContext<'_, '_>,
+        path: &str,
+        text: &str,
+    ) -> Result<(), String> {
         let MatchContext {
-            args,
             prior,
             bundler,
             minifier,
             multi,
+            side,
         } = *ctx;
         let fresh = if path.starts_with("vendor/") {
             match wrapped_factory_text(text, path) {
@@ -287,27 +330,19 @@ impl MatchRun {
             )?
             .text
         };
-        let section = humanify_core::prior::match_prior_version(
-            humanify_core::prior::PriorMatchInput {
-                fresh: &fresh,
-                prior,
-                bundler: Some(bundler),
-                minifier: Some(minifier),
-                fast: !args.sequential,
-                same_program_check: !multi,
-            },
+        // The prior side is the run's shared state: this file's stage
+        // borrows it (`match_stage_with_prior`), never rebuilds it.
+        let section = humanify_core::prior::match_stage_with_prior(
+            &fresh,
+            Some(bundler),
+            Some(minifier),
+            *side,
+            !multi,
             |stage| {
                 let freeze = humanify_core::rename::transfer::library_freeze(stage, None, false)?;
                 let twins = humanify_core::rename::transfer::statement_twins(stage, &freeze)?;
-                // The prior side is one owner's deterministic build over
-                // the same text in every call: capture it once, hoisted.
-                if self.shared_prior.is_none() {
-                    self.shared_prior = Some(json!({
-                        "functions": function_rows(stage.prior.graph, prior),
-                        "statements": statement_rows(stage.prior.inventory, prior),
-                    }));
-                }
                 let section = file_section(stage, &twins, &fresh, prior, path, !multi)?;
+                self.matched_any = true;
                 if multi {
                     for pair in section["functions"]["pairs"].as_array().expect("pairs") {
                         self.matched_prior
@@ -334,11 +369,15 @@ impl MatchRun {
     /// pairs against the shared prior inventory — the same owner formula
     /// and message (humanify_core::prior), ONCE instead of per call.
     fn hoisted_prior_block(&self) -> Result<Value, String> {
-        let block = self.shared_prior.clone().ok_or_else(|| {
-            "every unpacked file failed; no matching ran at all — \
-             see the recorded parse and match errors"
-                .to_string()
-        })?;
+        if !self.matched_any {
+            return Err("every unpacked file failed; no matching ran at all — \
+                 see the recorded parse and match errors"
+                .to_string());
+        }
+        let block = self
+            .shared_prior
+            .clone()
+            .expect("a multi run built the prior block");
         let prior_count = block["functions"].as_array().map_or(0, |f| f.len());
         humanify_core::prior::assert_prior_looks_like_same_program(
             prior_count,

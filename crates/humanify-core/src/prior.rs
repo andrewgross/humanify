@@ -55,7 +55,6 @@ use crate::graph::Eligibility;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::matching::alternation::{self, GraphSide, prepare_binding_matching};
-use crate::matching::build_fingerprint_index;
 use crate::matching::cascade::{
     MatchOptions, Side, assign_interchangeable_pools, match_functions, resolve_ambiguous_by_ordinal,
 };
@@ -85,11 +84,15 @@ pub struct PriorMatchInput<'t> {
     pub same_program_check: bool,
 }
 
-/// One side of the match stage, all borrowed from [`with_match_stage`]'s
-/// locals: the parse, its program JSON, the symbol tables, the graph and
-/// its statement contexts, the session-id spans, the function fingerprint
-/// index, the alternation's graph view, the wrapper, and the twins'
-/// statement inventory (with the statement values the gates walk).
+/// One side of the match stage, all borrowed from the frame that built
+/// it ([`match_prior_version`]'s locals, or the prior side a whole run
+/// holds via [`with_prior_match_side`]): the parse, its program JSON, the
+/// symbol tables, the graph and its statement contexts, the session-id
+/// spans, the function fingerprint index, the alternation's graph view,
+/// the wrapper, and the twins' statement inventory (with the statement
+/// values the gates walk). All references — `Copy`, so a built side is
+/// passed around freely within its owning frame's lifetime.
+#[derive(Clone, Copy)]
 pub struct StageSide<'a, 's> {
     pub ingest: &'a Ingest<'s>,
     pub json: &'a Value,
@@ -129,7 +132,12 @@ pub struct MatchStage<'a, 's> {
 /// function cascade with propagation, the alternation with the prepared
 /// binding setup, the tail tiers on the FUNCTION result only, the close
 /// tier, the same-program sanity check.
-#[allow(clippy::too_many_lines)]
+///
+/// This is the SINGLE-CALL entry: it builds BOTH sides per call. Callers
+/// matching many fresh files against the SAME prior (the match verb's
+/// multi-file dumps) build the prior side once instead —
+/// [`with_prior_match_side`] + [`match_stage_with_prior`] — which is
+/// byte-identical per call (a parse is deterministic).
 pub fn match_prior_version<T>(
     input: PriorMatchInput<'_>,
     consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
@@ -202,38 +210,131 @@ pub fn match_prior_version<T>(
             prior_parts,
         )
     };
-    let SideParts {
-        tables: fresh_tables,
-        graph: fresh_graph,
-        ctx: fresh_ctx,
-        spans: fresh_spans,
-    } = fresh_parts;
-    let SideParts {
-        tables: prior_tables,
-        graph: prior_graph,
-        ctx: prior_ctx,
-        spans: prior_spans,
-    } = prior_parts;
-    let ph = phase("prior:index");
 
+    // ── each side's dependents (index, graph view, wrapper, twins) ───────
+    // The prior side's graph/parts may come from the side thread's parse
+    // while its ingest is this thread's re-parse of the same text; both
+    // parses are deterministic, so the built pieces are identical either
+    // way.
+    let ph = phase("prior:index");
+    let prior_deps = build_side_dependents(
+        &prior_ingest,
+        &prior_json,
+        &prior_parts.graph,
+        &prior_parts.tables,
+        "prior",
+    )?;
+    let fresh_deps = build_side_dependents(
+        &fresh_ingest,
+        &fresh_json,
+        &fresh_parts.graph,
+        &fresh_parts.tables,
+        "fresh",
+    )?;
+    drop(ph);
+    run_match_stage(
+        stage_side(&fresh_ingest, &fresh_json, &fresh_parts, &fresh_deps),
+        stage_side(&prior_ingest, &prior_json, &prior_parts, &prior_deps),
+        same_program_check,
+        consume,
+    )
+}
+
+/// Build the prior side ONCE — one parse of `prior`, one graph, one
+/// fingerprint index, one wrapper, one twins inventory — and hold it for
+/// a whole run of any number of fresh files: `run` receives the built
+/// side and calls [`match_stage_with_prior`] per file.
+///
+/// The amortization this owns: against a ~33MB prior the build is ~14
+/// seconds, and the single-call design the match verb grew from redid it
+/// per file — twice per file in the fast schedule — turning minutes of
+/// actual matching into hours of rebuilding the same index on a
+/// multi-file work dir. Byte-identical to per-call building: a parse is
+/// deterministic, so one parse's side IS every call's side.
+///
+/// Rust lifetime reality, why a callback: the side's pieces borrow from
+/// the frame that builds them (oxc's AST lives in the frame's allocator;
+/// [`FingerprintIndex`](crate::matching::FingerprintIndex) borrows the
+/// graph), so the side cannot be a self-contained struct that outlives
+/// this function — `run` is the frame.
+pub fn with_prior_match_side<T>(
+    prior: &str,
+    run: impl FnOnce(&StageSide<'_, '_>) -> Result<T, String>,
+) -> Result<T, String> {
+    use crate::profiling::phase;
+    let ph = phase("prior:build-prior-side");
+    let allocator = Allocator::default();
+    let ingest = parse_prior(&allocator, prior)?;
+    let json = crate::ingest::program_estree_json(ingest.program);
+    // The prior side's eligibility is ALL bindings (prior-version.ts:284-288).
+    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All);
+    let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "prior")?;
+    drop(ph);
+    run(&stage_side(&ingest, &json, &parts, &deps))
+}
+
+/// ONE fresh file's match stage against a pre-built prior side — the
+/// per-call half of [`match_prior_version`], for callers that hold the
+/// prior side across files via [`with_prior_match_side`]. Byte-identical
+/// to `match_prior_version` on the same texts; `same_program_check`
+/// keeps its per-call semantics (callers amortizing the check across
+/// files against one prior — the match verb's multi-file dumps — pass
+/// false and run the identical assert over the union of their pairs).
+pub fn match_stage_with_prior<T>(
+    fresh: &str,
+    bundler: Option<&str>,
+    minifier: Option<&str>,
+    prior: StageSide<'_, '_>,
+    same_program_check: bool,
+    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
+) -> Result<T, String> {
+    use crate::profiling::phase;
+    let ph = phase("prior:build-fresh-side");
+    let allocator = Allocator::default();
+    let ingest = parse_side(&allocator, fresh, "input.js")?;
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let parts = build_side_parts(
+        &ingest,
+        &json,
+        "input.js",
+        Eligibility::SkipSet { bundler, minifier },
+    );
+    let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "fresh")?;
+    drop(ph);
+    run_match_stage(
+        stage_side(&ingest, &json, &parts, &deps),
+        prior,
+        same_program_check,
+        consume,
+    )
+}
+
+/// The match stage's shared tail — everything after both sides are fully
+/// built (the per-side builds are [`build_side_dependents`]). The flow
+/// mirrors the TS matchAndApplyFunctions (prior-version.ts :524-596):
+/// the initial function cascade with propagation, the alternation with
+/// the prepared binding setup, the tail tiers on the FUNCTION result
+/// only, the close tier, the same-program sanity check.
+fn run_match_stage<T>(
+    fresh: StageSide<'_, '_>,
+    prior: StageSide<'_, '_>,
+    same_program_check: bool,
+    consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
+) -> Result<T, String> {
     // ── matchAndApplyFunctions (prior-version.ts:524-596) ────────────────
     // The initial function cascade (propagation on), the alternation with
     // the prepared binding setup, then the tail tiers on the FUNCTION
     // result; both cascades' final rows are captured (:584-592).
-    let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
-    let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
-    let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
-    let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
-    let setup = prepare_binding_matching(&prior_graph, &fresh_graph);
-    drop(ph);
+    use crate::profiling::phase;
     let ph = phase("prior:match-cascade");
+    let setup = prepare_binding_matching(prior.graph, fresh.graph);
     let initial = {
         let _ph = phase("match:functions");
         match_functions(
-            &prior_index,
-            &fresh_index,
-            &prior_ctx,
-            &fresh_ctx,
+            prior.index,
+            fresh.index,
+            prior.ctx,
+            fresh.ctx,
             MatchOptions {
                 enable_propagation: true,
                 ..MatchOptions::default()
@@ -242,12 +343,12 @@ pub fn match_prior_version<T>(
     };
     let outcome = alternation::alternate_function_and_binding_matching(
         initial,
-        &prior_index,
-        &fresh_index,
-        &prior_ctx,
-        &fresh_ctx,
-        &prior_side,
-        &fresh_side,
+        prior.index,
+        fresh.index,
+        prior.ctx,
+        fresh.ctx,
+        prior.graph_side,
+        fresh.graph_side,
         setup.as_ref(),
     );
     // The WP2.1 probe's tracing surface: the last reference-identity
@@ -267,8 +368,8 @@ pub fn match_prior_version<T>(
     let mut function_result = outcome.function_result;
     // The last tiers (prior-version.ts:566-573): ordinal pairing, then the
     // certified interchangeable pools — after every evidence source.
-    let old_side = Side::new(&prior_index, &prior_ctx);
-    let new_side = Side::new(&fresh_index, &fresh_ctx);
+    let old_side = Side::new(prior.index, prior.ctx);
+    let new_side = Side::new(fresh.index, fresh.ctx);
     resolve_ambiguous_by_ordinal(&mut function_result, &old_side, &new_side);
     assign_interchangeable_pools(&mut function_result, &old_side, &new_side);
 
@@ -281,18 +382,18 @@ pub fn match_prior_version<T>(
     let fn_matches_for_close = function_result.matches.to_hash_map();
     let (close_file, close_pairs) = crate::matching::close_dump::close_dump_with_context(
         &crate::matching::close_dump::CloseDumpSides {
-            prior_graph: &prior_graph,
-            fresh_graph: &fresh_graph,
-            prior_semantic: prior_ingest.semantic(),
-            fresh_semantic: fresh_ingest.semantic(),
-            prior_tables: &prior_tables,
-            fresh_tables: &fresh_tables,
-            prior_index: &prior_index,
-            fresh_index: &fresh_index,
+            prior_graph: prior.graph,
+            fresh_graph: fresh.graph,
+            prior_semantic: prior.ingest.semantic(),
+            fresh_semantic: fresh.ingest.semantic(),
+            prior_tables: prior.tables,
+            fresh_tables: fresh.tables,
+            prior_index: prior.index,
+            fresh_index: fresh.index,
             fn_matches: &fn_matches_for_close,
         },
-        &prior_json,
-        &fresh_json,
+        prior.json,
+        fresh.json,
     )?;
     // The TS's same-program sanity check (:624) — a prior sharing nearly no
     // structural hashes with the new version is a wrong file, not an
@@ -303,64 +404,14 @@ pub fn match_prior_version<T>(
     // the identical assert at their own granularity.
     if same_program_check {
         crate::prior::assert_prior_looks_like_same_program(
-            prior_graph.functions.len(),
+            prior.graph.functions.len(),
             function_result.unmatched.len(),
         )?;
     }
 
-    drop(ph);
-    let ph = phase("prior:twin-inventories");
-    // ── the twins' inventories (WP2.3) ───────────────────────────────────
-    let prior_wrapper = crate::modules::wrapper::find_wrapper_function(
-        prior_ingest.program,
-        prior_ingest.semantic(),
-    );
-    let fresh_wrapper = crate::modules::wrapper::find_wrapper_function(
-        fresh_ingest.program,
-        fresh_ingest.semantic(),
-    );
-    let (prior_inventory, prior_values) = crate::twins::statement_inventory_from_json(
-        &prior_json,
-        prior_wrapper.as_ref().map(|w| w.body_span),
-        "prior",
-        Some(&prior_graph),
-        true,
-    )?;
-    let (fresh_inventory, fresh_values) = crate::twins::statement_inventory_from_json(
-        &fresh_json,
-        fresh_wrapper.as_ref().map(|w| w.body_span),
-        "fresh",
-        Some(&fresh_graph),
-        true,
-    )?;
-
     let stage = MatchStage {
-        fresh: StageSide {
-            ingest: &fresh_ingest,
-            json: &fresh_json,
-            tables: &fresh_tables,
-            graph: &fresh_graph,
-            ctx: &fresh_ctx,
-            spans: &fresh_spans,
-            index: &fresh_index,
-            graph_side: &fresh_side,
-            wrapper: fresh_wrapper.as_ref(),
-            inventory: &fresh_inventory,
-            inventory_values: &fresh_values,
-        },
-        prior: StageSide {
-            ingest: &prior_ingest,
-            json: &prior_json,
-            tables: &prior_tables,
-            graph: &prior_graph,
-            ctx: &prior_ctx,
-            spans: &prior_spans,
-            index: &prior_index,
-            graph_side: &prior_side,
-            wrapper: prior_wrapper.as_ref(),
-            inventory: &prior_inventory,
-            inventory_values: &prior_values,
-        },
+        fresh,
+        prior,
         function_result: &function_result,
         binding_result: outcome.binding_result.as_ref(),
         binding_setup: setup.as_ref(),
@@ -461,6 +512,75 @@ pub(crate) struct SideParts {
     pub(crate) ctx: StatementContexts,
     /// session id → row span, functions then bindings.
     pub(crate) spans: HashMap<String, oxc_span::Span>,
+}
+
+/// The pieces of one side that depend ONLY on that side — nothing a
+/// fresh file changes: the function fingerprint index and the
+/// alternation's graph view (both borrowing the side's graph), the
+/// wrapper function, and the twins' statement inventory (with the
+/// statement values the gates walk). Built beside [`SideParts`], these
+/// are the prior side's cacheable half: hold them once per run and every
+/// fresh file's stage borrows them.
+struct SideDependents<'g> {
+    index: crate::matching::FingerprintIndex<'g>,
+    graph_side: GraphSide<'g>,
+    wrapper: Option<crate::modules::wrapper::WrapperFunction>,
+    inventory: crate::twins::SideInventory,
+    inventory_values: Vec<Value>,
+}
+
+/// Build one side's dependents (see [`SideDependents`]) from its parse,
+/// program JSON and built parts. `anchor` names the side in the twins'
+/// inventory ("prior" / "fresh").
+fn build_side_dependents<'g>(
+    ingest: &Ingest<'_>,
+    program_json: &Value,
+    graph: &'g crate::graph::UnifiedGraph,
+    tables: &SymbolTables,
+    anchor: &'static str,
+) -> Result<SideDependents<'g>, String> {
+    let index = crate::matching::build_fingerprint_index(graph, ingest.semantic(), tables);
+    let graph_side = GraphSide::build(graph, ingest.semantic());
+    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+    let (inventory, inventory_values) = crate::twins::statement_inventory_from_json(
+        program_json,
+        wrapper.as_ref().map(|w| w.body_span),
+        anchor,
+        Some(graph),
+        true,
+    )?;
+    Ok(SideDependents {
+        index,
+        graph_side,
+        wrapper,
+        inventory,
+        inventory_values,
+    })
+}
+
+/// Assemble the stage's view of one side from the frame that owns its
+/// pieces (the ingest, the program JSON, the built parts and the built
+/// dependents — all must share the frame, since the index borrows the
+/// graph and the ingest borrows the frame's allocator).
+fn stage_side<'a, 's>(
+    ingest: &'a Ingest<'s>,
+    json: &'a Value,
+    parts: &'a SideParts,
+    deps: &'a SideDependents<'a>,
+) -> StageSide<'a, 's> {
+    StageSide {
+        ingest,
+        json,
+        tables: &parts.tables,
+        graph: &parts.graph,
+        ctx: &parts.ctx,
+        spans: &parts.spans,
+        index: &deps.index,
+        graph_side: &deps.graph_side,
+        wrapper: deps.wrapper.as_ref(),
+        inventory: &deps.inventory,
+        inventory_values: &deps.inventory_values,
+    }
 }
 
 /// Build one side: the Bun classification, the unified graph, the

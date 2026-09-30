@@ -151,8 +151,8 @@ enum Command {
         /// Write the dump here instead of stdout.
         #[arg(short = 'o', long)]
         out: Option<String>,
-        /// The conservative schedule (the prior side built on this thread
-        /// instead of its own). Byte-identical either way.
+        /// Accepted, now inert: the prior side is built once per run, so
+        /// there is no thread schedule to choose. Never changed the dump.
         #[arg(long, default_value_t = false)]
         sequential: bool,
         /// Force the bundler type (as the pipeline's flag).
