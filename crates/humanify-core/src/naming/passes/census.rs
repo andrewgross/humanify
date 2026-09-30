@@ -7,6 +7,14 @@
 //! under their CURRENT names (a renamed binding sits at the end of its
 //! map), each binding once. The floor passes consume the same list, so the
 //! order is a decision input (which candidate is attempted first).
+//!
+//! Since 2026-09-30 (Andrew) single letters count as minted: the census's
+//! `total` includes them, so the no-minified-leftovers meter can finally
+//! SEE the ~70 single-letter sites finding #62 measured at 2.1.216. Their
+//! provenance split (model-chosen / asked-kept / never-processed) is a
+//! RUN-level join over this walk's survivors and the run's outcome records
+//! — it lives in `naming::report::coverage::single_letter_split`, because
+//! the records live with the driver, not with this text-local walk.
 
 use std::collections::HashSet;
 
@@ -99,6 +107,12 @@ fn classify(semantic: &Semantic<'_>, state: &RenameState, binding: BindingId) ->
 /// `derivationSource(exprPath)`: the name a class/function expression's
 /// inner id would take — assignment target, declarator id, or object
 /// property key (current names) — unless that name is itself minted.
+/// Target selection, deliberately KEPT strict through the 2026-09-30
+/// single-letter change: a single-letter derivation source (`const e =
+/// function f(){}`) is mint-shaped now, so the class-id floor does not
+/// unify `f` onto `e` — the inner id falls through to the coverage sweep
+/// instead, which can still answer `e` for it (a single-letter ANSWER is
+/// acceptable; a single-letter DERIVATION is not a descriptive name).
 pub fn derivation_source(
     semantic: &Semantic<'_>,
     state: &RenameState,

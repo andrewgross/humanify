@@ -481,6 +481,48 @@
                       "kind": "string"
                     }
                   }
+                },
+                {
+                  "name": "singleLetters",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "total",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "modelChosen",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "askedKept",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "neverAsked",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
                 }
               ]
             }

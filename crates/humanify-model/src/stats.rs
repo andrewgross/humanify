@@ -79,6 +79,24 @@ js_record! {
 }
 
 js_record! {
+    /// The single-letter survivors' provenance split (2026-09-30, Andrew's
+    /// single-letter decision): of the minted leftovers the census counts,
+    /// which single letters have a RECORDED decision behind them —
+    /// `modelChosen` (a tier deliberately APPLIED the letter; carried,
+    /// protected from re-rolling) or `askedKept` (the model was asked and
+    /// the letter stayed) — and which have no record at all
+    /// (`neverAsked`, the real gap class finding #64 named). Joined by
+    /// NAME against the run's outcome records (`report::coverage`'s
+    /// `single_letter_split`), so `neverAsked` is a LOWER BOUND.
+    pub struct SingleLetterSplit {
+        total: f64 = "total",
+        model_chosen: f64 = "modelChosen",
+        asked_kept: f64 = "askedKept",
+        never_asked: f64 = "neverAsked",
+    }
+}
+
+js_record! {
     /// `MintedCensus`, in `summarizeCensus`'s return-literal order.
     pub struct MintedCensus {
         total: f64 = "total",
@@ -90,6 +108,7 @@ js_record! {
         zero_ref_expr_ids: f64 = "zeroRefExprIds",
         names: Option<Vec<String>> = "names",
         decorated_names: Option<Vec<String>> = "decoratedNames",
+        single_letters: Option<SingleLetterSplit> = "singleLetters",
     }
 }
 

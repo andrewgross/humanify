@@ -466,6 +466,101 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
     );
 }
 
+/// Andrew's 2026-09-30 decision, end to end: single letters are
+/// processed like every other name, and the minted census SPLITS their
+/// provenance so the moved numbers stay interpretable. Three survivors in
+/// one run, one per class:
+///
+/// - `i` — the model DELIBERATELY answered a letter for `Kq_`; it lands
+///   (carried, protected from re-rolling): `model-chosen`.
+/// - `j` — asked by the waves AND the sweep, declined both times: it
+///   stays `j` with a record on both sides: `asked, kept`.
+/// - `x` — lives in `keep`, the eval-tainted function (skipped by the
+///   waves pre-emptively, excluded from the sweep targets by the taint
+///   freeze): no record anywhere: `never processed` — the real-gap class
+///   finding #64 named.
+#[test]
+fn the_census_splits_single_letter_survivors_by_provenance() {
+    struct MeterProvider;
+    impl humanify_model::llm::NameProvider for MeterProvider {
+        fn run_wave(
+            &self,
+            calls: Vec<humanify_model::llm::LlmCall>,
+        ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>>
+        {
+            calls
+                .into_iter()
+                .map(|c| {
+                    let renames: Vec<(String, Option<String>)> = c
+                        .request
+                        .identifiers
+                        .iter()
+                        .map(|id| {
+                            let answer = if id == "Kq_" {
+                                Some("i".to_string())
+                            } else if id.encode_utf16().count() == 1 {
+                                None // the model declines to rename a single letter
+                            } else {
+                                Some(format!("{id}Named"))
+                            };
+                            (id.clone(), answer)
+                        })
+                        .collect();
+                    Ok(humanify_model::llm::BatchRenameResponse {
+                        renames: humanify_model::llm::Renames::from_entries(renames),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    let fresh = "function one() {\n  var Kq_ = start();\n  var j = Kq_ + 1;\n  return Kq_ * j;\n}\nfunction keep() {\n  var x = 1;\n  eval(\"x\");\n  return x;\n}\nconsume(one, keep);\n";
+    let mut config = ledger_config();
+    config.emit_rename_ledger = false;
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &MeterProvider,
+    )
+    .expect("the stage runs");
+    let code = out.code.as_deref().expect("shipped");
+    assert!(code.contains("var i = start();"), "landed: {code}");
+    assert!(
+        code.contains("var j = i + 1;"),
+        "kept with a record: {code}"
+    );
+    assert!(code.contains("var x = 1;"), "never reached: {code}");
+
+    let census = out
+        .coverage
+        .as_ref()
+        .and_then(|c| c.minted_census.as_ref())
+        .expect("a minted census");
+    let letters = census
+        .single_letters
+        .as_ref()
+        .expect("the provenance split");
+    assert_eq!(
+        letters.total, 3.0,
+        "i, j and x all survive as single letters"
+    );
+    assert_eq!(letters.model_chosen, 1.0);
+    assert_eq!(letters.asked_kept, 1.0);
+    assert_eq!(letters.never_asked, 1.0);
+    // The printed coverage block names the classes, so a run's output can
+    // be read without the JSON.
+    let text = out.coverage_text.as_deref().expect("coverage printed");
+    assert!(text.contains("Single-letter:"), "{text}");
+    assert!(text.contains("Model-chosen:"), "{text}");
+    assert!(text.contains("Asked, kept:"), "{text}");
+    assert!(text.contains("Never processed:"), "{text}");
+}
+
 /// The `--stats-json` `reask` block (the 2026-09-29 schema bump): the
 /// 2026-09-28 collision-retry counters must reach the record — the
 /// processor's lane half direct, the sweep's re-ask half SUMMED over the

@@ -4,12 +4,16 @@
 //! reconciled — else generated — output).
 //!
 //! Targeting is STRICTER than the census (`is_sweep_target`: short, no
-//! embedded word, not CONSTANT_CASE — or a camel half-mint), carried
-//! identities are exempt, and eval/with-frozen bindings are never swept.
-//! Targets group by the node whose code frames them (their own function /
-//! class, else the enclosing function, else the declaring statement); one
-//! request per group, every prompt pre-built; responses are applied in
-//! group-build order, so completion order never decides a conflict.
+//! embedded word, not CONSTANT_CASE — or a camel half-mint; single
+//! letters are targets since 2026-09-30 — Andrew: never-asked loop
+//! counters must be visible to the pass whose job is never-asked names),
+//! carried identities are exempt, and eval/with-frozen bindings are never
+//! swept. Targets group by the node whose code frames them (their own
+//! function / class, else the enclosing function, else the declaring
+//! statement); one request per group, every prompt pre-built; responses
+//! are applied in group-build order, so completion order never decides a
+//! conflict. The ANSWER filter is `rename::floor::is_sweep_answer_acceptable`
+//! — junk shapes stay refused, but a single-letter answer may land.
 
 use std::collections::HashMap;
 
@@ -29,7 +33,9 @@ use crate::naming::prompts::{render_system_prompt, render_user_prompt};
 use crate::naming::waves::generate::TextView;
 use crate::naming::waves::render::{Occurrences, program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{is_bun_token, is_half_mint_head, is_wordless_mint_shape};
+use crate::rename::floor::{
+    is_bun_token, is_half_mint_head, is_sweep_answer_acceptable, is_wordless_mint_shape,
+};
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier};
@@ -37,7 +43,9 @@ use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier};
 /// Longest a minted survivor is after stripping trailing `_`/`$`.
 const MAX_SWEEP_LENGTH: usize = 4;
 
-/// `isSweepTarget`: a genuine minified survivor worth force-naming.
+/// `isSweepTarget`: a genuine minified survivor worth force-naming — the
+/// WHO GETS ASKED question (see `rename::floor`'s module doc for the
+/// target-vs-answer split). Single letters qualify since 2026-09-30.
 pub fn is_sweep_target(name: &str) -> bool {
     if !is_bun_token(name) {
         return false;
@@ -318,7 +326,9 @@ fn apply_group_response(
     let mut reasks = Vec::new();
     for target in &group.targets {
         let suggestion = renames.get(&target.name).filter(|s| !s.is_empty());
-        let Some(new_name) = suggestion.filter(|s| *s != target.name && !is_bun_token(s)) else {
+        let Some(new_name) =
+            suggestion.filter(|s| *s != target.name && is_sweep_answer_acceptable(s))
+        else {
             skipped += 1;
             let reason = match suggestion {
                 Some(s) if s != target.name => "still-below-floor",
