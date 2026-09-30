@@ -22,6 +22,7 @@ use oxc_allocator::Allocator;
 use serde_json::Value;
 
 use super::library::{LibraryOutcome, run_library_prefix_pass};
+use crate::artifact_dump::DispatchLog;
 use crate::graph::UnifiedGraph;
 use crate::libdetect::function_carry::{
     LibraryClassification, LibraryFunctionKey, classify_library_functions, library_function_rows,
@@ -74,6 +75,8 @@ pub struct EraOptions<'o> {
     /// The naming schedule (the relaxed tier by default; `--sequential`
     /// the conservative one — see `NamingConfig::fast`).
     pub fast: crate::fast::FastTier,
+    /// The rendered-prompt window (finding #65; `NamingConfig::prompt_window`).
+    pub prompt_window: usize,
 }
 
 /// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
@@ -151,6 +154,10 @@ pub struct WaveRecords {
     pub waves: u64,
     /// [`WaveOutcome::context_set_names`].
     pub context_set_names: usize,
+    /// [`WaveOutcome::peak_live_dispatches`] (finding #65's gauge).
+    pub peak_live_dispatches: usize,
+    /// [`WaveOutcome::peak_live_prompt_bytes`].
+    pub peak_live_prompt_bytes: u64,
 }
 
 /// `applyPriorVersionIfPresent`'s stats (stats.json / the coverage).
@@ -257,6 +264,7 @@ pub fn prior_era<P: NameProvider>(
     stage: &MatchStage<'_, '_>,
     opts: &EraOptions<'_>,
     provider: &P,
+    log: &mut DispatchLog,
 ) -> Result<NamingEra, String> {
     let semantic = stage.fresh.ingest.semantic();
     let graph = stage.fresh.graph;
@@ -315,6 +323,7 @@ pub fn prior_era<P: NameProvider>(
         Some((prior, pending)),
         opts,
         provider,
+        log,
     );
     era.capture = capture;
     era.probe_lines = probe_lines;
@@ -382,6 +391,7 @@ pub fn fresh_era<P: NameProvider>(
     fresh: &str,
     opts: &EraOptions<'_>,
     provider: &P,
+    log: &mut DispatchLog,
 ) -> Result<NamingEra, String> {
     let allocator = Allocator::default();
     let ingest = crate::prior::parse_side(&allocator, fresh, "input.js")?;
@@ -424,7 +434,7 @@ pub fn fresh_era<P: NameProvider>(
     };
     let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
-    let mut era = run_era(&naming, start, freeze.library, None, opts, provider);
+    let mut era = run_era(&naming, start, freeze.library, None, opts, provider, log);
     era.capture = capture;
     Ok(era)
 }
@@ -437,6 +447,7 @@ fn run_era<P: NameProvider>(
     prior: Option<(PriorStats, PendingCarry)>,
     opts: &EraOptions<'_>,
     provider: &P,
+    log: &mut DispatchLog,
 ) -> NamingEra {
     let (prior, pending) = match prior {
         Some((stats, pending)) => (Some(stats), Some(pending)),
@@ -467,6 +478,7 @@ fn run_era<P: NameProvider>(
         single_epoch: start.single_epoch,
         tunables: opts.tunables,
         fast: opts.fast,
+        window: opts.prompt_window,
     };
     let fn_hashes: Vec<(String, String)> = graph
         .functions
@@ -485,11 +497,14 @@ fn run_era<P: NameProvider>(
         waves,
         processor,
         context_set_names,
+        peak_live_dispatches,
+        peak_live_prompt_bytes,
         ..
     } = if has_nodes {
         run_waves(
             &inputs,
             provider,
+            log,
             start.rename,
             start.fn_state,
             start.binding_state,
@@ -504,6 +519,8 @@ fn run_era<P: NameProvider>(
         errors,
         waves,
         context_set_names,
+        peak_live_dispatches,
+        peak_live_prompt_bytes,
     };
     drop(ph);
     let ph = crate::profiling::phase("era:library-prefix");
@@ -542,7 +559,10 @@ fn run_era<P: NameProvider>(
                 &eligible,
                 &taint,
                 provider,
+                log,
+                crate::trail::Anchor::Fresh,
                 opts.params,
+                opts.prompt_window,
                 opts.tunables.reask_limit,
             )
         });

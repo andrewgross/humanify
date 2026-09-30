@@ -17,6 +17,7 @@ use std::collections::HashSet;
 
 use humanify_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
 
+use crate::artifact_dump::{Dispatch, DispatchLog};
 use crate::modules::vendor_names::unique_case_insensitive_name;
 
 /// `SplitNameRequest.kind`.
@@ -327,11 +328,19 @@ pub fn split_namer_batches(
     out
 }
 
-/// `createSplitNamer` over a [`NameProvider`]. Every dispatched call is
-/// kept (`dispatched`) so a gate can compare its bytes with the oracle's.
+/// `createSplitNamer` over a [`NameProvider`]. Every dispatched call's
+/// row goes to the log at commit (the `folders` site, finding #65); the
+/// calls themselves are kept (`dispatched`) only by the tests' retaining
+/// log, so a gate can compare their bytes with the oracle's.
 pub struct ProviderSplitNamer<'p> {
     provider: &'p dyn NameProvider,
+    log: &'p mut DispatchLog,
+    /// The rendered-prompt window (finding #65).
+    pub window: usize,
     budget: SplitNamerBudget,
+    /// Every dispatched call (the count the run's report prints — the
+    /// calls themselves only live in the tests' retaining log).
+    pub calls: usize,
     pub dispatched: Vec<LlmCall>,
     /// Batches whose provider call failed (all their entries fell back).
     pub failed_batches: usize,
@@ -340,17 +349,37 @@ pub struct ProviderSplitNamer<'p> {
 }
 
 impl<'p> ProviderSplitNamer<'p> {
-    pub fn new(provider: &'p dyn NameProvider) -> Self {
-        ProviderSplitNamer::with_budget(provider, SplitNamerBudget::default())
+    pub fn new(provider: &'p dyn NameProvider, log: &'p mut DispatchLog) -> Self {
+        ProviderSplitNamer::with_budget(provider, log, SplitNamerBudget::default())
     }
 
-    pub fn with_budget(provider: &'p dyn NameProvider, budget: SplitNamerBudget) -> Self {
+    pub fn with_budget(
+        provider: &'p dyn NameProvider,
+        log: &'p mut DispatchLog,
+        budget: SplitNamerBudget,
+    ) -> Self {
         ProviderSplitNamer {
             provider,
+            log,
+            window: usize::MAX,
             budget,
+            calls: 0,
             dispatched: Vec::new(),
             failed_batches: 0,
             proposals: 0,
+        }
+    }
+
+    /// The `folders` site's row, recorded at commit.
+    fn record(&mut self, call: &LlmCall) {
+        self.calls += 1;
+        self.log.record(&Dispatch::Plain {
+            function_id: "split-namer",
+            site: "folders",
+            call,
+        });
+        if self.log.retains() {
+            self.dispatched.push(call.clone());
         }
     }
 }
@@ -388,8 +417,17 @@ impl SplitNamer for ProviderSplitNamer<'_> {
         if calls.is_empty() {
             return Vec::new();
         }
-        self.dispatched.extend(calls.iter().cloned());
-        let mut results = self.provider.run_wave(calls).into_iter();
+        // The rendered-prompt window (finding #65): the calls stream
+        // through in batches, never all rendered at once.
+        let window = self.window.max(1);
+        let mut results = Vec::with_capacity(calls.len());
+        for chunk in calls.chunks(window) {
+            for call in chunk {
+                self.record(call);
+            }
+            results.extend(self.provider.run_wave(chunk.to_vec()));
+        }
+        let mut results = results.into_iter();
         let mut out = Vec::with_capacity(requests.len());
         for (range, keys) in batches.into_iter().zip(&keys) {
             let batch = &requests[range];
@@ -406,18 +444,27 @@ impl SplitNamer for ProviderSplitNamer<'_> {
     }
 }
 
-/// `createTreeReviser` over a [`NameProvider`].
+/// `createTreeReviser` over a [`NameProvider`]. It makes ONE call per
+/// split, so it KEEPS the call (no accumulation risk) and the caller
+/// records it to the log after the split — the reviser runs last, so the
+/// row lands in dispatch order either way (finding #65).
 pub struct ProviderTreeReviser<'p> {
     provider: &'p dyn NameProvider,
     pub dispatched: Vec<LlmCall>,
 }
 
 impl<'p> ProviderTreeReviser<'p> {
-    pub fn new(provider: &'p dyn NameProvider) -> Self {
+    /// The reviser that records to the run's log through its caller.
+    pub fn retaining(provider: &'p dyn NameProvider) -> Self {
         ProviderTreeReviser {
             provider,
             dispatched: Vec::new(),
         }
+    }
+
+    /// The calls waiting to be recorded, taken.
+    pub fn take_recorded(&mut self) -> Vec<LlmCall> {
+        std::mem::take(&mut self.dispatched)
     }
 }
 

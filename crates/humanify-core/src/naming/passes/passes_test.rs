@@ -80,8 +80,18 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
         asks: std::cell::Cell::new(0),
     };
     let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
-        semantic, &mut state, &eligible, &taint, &provider, &params, 2,
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &provider,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
     );
     assert_eq!(provider.asks.get(), 2, "exactly one re-ask (it applied)");
     assert_eq!(r.reasked, 1, "the retry is recorded");
@@ -148,8 +158,18 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
         asks: std::cell::Cell::new(0),
     };
     let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
-        semantic, &mut state, &eligible, &taint, &stubborn, &params, 2,
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &stubborn,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
     );
     assert_eq!(
         stubborn.asks.get(),
@@ -237,8 +257,18 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
         asks: std::cell::Cell::new(0),
     };
     let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
-        semantic, &mut state, &eligible, &taint, &provider, &params, 2,
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &provider,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
     );
     assert_eq!(provider.asks.get(), 3, "bounded: no third re-ask");
     assert_eq!(r.reasked, 2, "one re-ask round each");
@@ -295,8 +325,19 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
         asked: std::cell::RefCell::new(Vec::new()),
     };
     let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+
     let r = sweep_minted_names(
-        semantic, &mut state, &eligible, &taint, &provider, &params, 2,
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &provider,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
     );
     let asked: Vec<String> = provider.asked.borrow().iter().flatten().cloned().collect();
     assert!(
@@ -356,13 +397,18 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         }
     }
     let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+
     let r = sweep_minted_names(
         semantic,
         &mut state,
         &eligible,
         &taint,
         &LetterAnswer,
+        &mut log,
+        Anchor::Fresh,
         &params,
+        usize::MAX,
         2,
     );
     assert_eq!(r.named, 2, "the letter answer applied");
@@ -386,13 +432,18 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         "the carried `i` is not a target again: {:?}",
         again.iter().map(|t| t.name.clone()).collect::<Vec<_>>()
     );
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+
     let r2 = sweep_minted_names(
         semantic,
         &mut state,
         &eligible,
         &taint,
         &LetterAnswer,
+        &mut log,
+        Anchor::Fresh,
         &params,
+        usize::MAX,
         2,
     );
     assert_eq!(
@@ -443,7 +494,20 @@ fn sweep_junk_answers_are_still_refused() {
         }
     }
     let mut state = RenameState::new(semantic, Anchor::Fresh);
-    let r = sweep_minted_names(semantic, &mut state, &eligible, &taint, &Junk, &params, 2);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+
+    let r = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &Junk,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
+    );
     assert_eq!(r.named, 0, "no junk answer applied");
     assert_eq!(r.skipped, 2);
     assert_eq!(render_program(semantic, &state), text, "nothing applied");
@@ -525,7 +589,19 @@ fn the_sweep_reask_budget_is_configurable() {
         asks: std::cell::Cell::new(0),
     };
     let mut state = RenameState::new(semantic, Anchor::Fresh);
-    let r = sweep_minted_names(semantic, &mut state, &eligible, &taint, &one, &params, 1);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+    let r = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &one,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        1,
+    );
     assert_eq!(one.asks.get(), 2, "a single-reask budget is the old bound");
     assert_eq!(r.reasked, 1);
     assert_eq!(r.reask_dropped, 1, "the give-up is still recorded");
@@ -534,7 +610,19 @@ fn the_sweep_reask_budget_is_configurable() {
         asks: std::cell::Cell::new(0),
     };
     let mut state = RenameState::new(semantic, Anchor::Fresh);
-    let r = sweep_minted_names(semantic, &mut state, &eligible, &taint, &zero, &params, 0);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+    let r = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &zero,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        0,
+    );
     assert_eq!(zero.asks.get(), 1, "a zero budget never re-asks");
     assert_eq!(r.reasked, 0);
     assert_eq!(r.reask_dropped, 0);

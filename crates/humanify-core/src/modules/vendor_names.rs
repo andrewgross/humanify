@@ -30,6 +30,8 @@ use sha2::{Digest, Sha256};
 
 use humanify_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
 
+use crate::artifact_dump::{Dispatch, DispatchLog};
+
 use super::{FactoryRecord, NameSource, hash_fallback_name, is_hash_fallback_name};
 
 // ---------------------------------------------------------------------------
@@ -1056,17 +1058,20 @@ fn classify_proposal(
 
 pub struct ProviderVendorNamer<'p> {
     provider: &'p dyn NameProvider,
+    /// The run's per-dispatch recorder: the `vendor` site's row goes here
+    /// at commit (finding #65); only the tests' log retains the call.
+    log: &'p mut DispatchLog,
     /// The per-outcome tally.
     pub stats: VendorNamingStats,
-    /// Every call, in dispatch order — the artifact dump's `vendor` site
-    /// (recorded before the provider answers, as `recordPromptDump` is).
+    /// Every call, in dispatch order — the tests' retaining log only.
     pub dispatched: Vec<LlmCall>,
 }
 
 impl<'p> ProviderVendorNamer<'p> {
-    pub fn new(provider: &'p dyn NameProvider) -> Self {
+    pub fn new(provider: &'p dyn NameProvider, log: &'p mut DispatchLog) -> Self {
         ProviderVendorNamer {
             provider,
+            log,
             stats: VendorNamingStats::default(),
             dispatched: Vec::new(),
         }
@@ -1084,7 +1089,16 @@ impl VendorNamer for ProviderVendorNamer<'_> {
             user_prompt: request.code.clone(),
             request,
         };
-        self.dispatched.push(call.clone());
+        // The `vendor` site's row, recorded before the provider answers
+        // (as `recordPromptDump` is) — streamed, never accumulated.
+        self.log.record(&Dispatch::Plain {
+            function_id: "vendor-namer",
+            site: "vendor",
+            call: &call,
+        });
+        if self.log.retains() {
+            self.dispatched.push(call.clone());
+        }
         match self.provider.run_wave(vec![call]).pop() {
             Some(Ok(response)) => requests
                 .iter()

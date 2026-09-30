@@ -31,6 +31,7 @@ use std::sync::{Arc, Mutex};
 
 use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use humanify_core::naming::waves::batch::WaveTunables;
+use humanify_core::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 use humanify_core::unpack::select_unpack_adapter;
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
@@ -518,6 +519,11 @@ fn run_pipeline(
     ended
 }
 
+/// How much backfill headroom the prompt window keeps beyond the outer
+/// concurrency bound (finding #65): enough that a slow request never
+/// starves the rate limiter.
+const PROMPT_WINDOW_HEADROOM: usize = 16;
+
 /// The split namer's prompt budget: `--context-tokens` (else the default
 /// model context) less the `--max-tokens` completion reserve (finding #39).
 fn split_namer_budget(settings: &Settings) -> SplitNamerBudget {
@@ -604,12 +610,34 @@ fn pipeline_body(
         .as_deref()
         .filter(|p| !p.is_empty())
         .map(Path::new);
+    // The run's per-dispatch recorder (finding #65): `--dump-artifacts`
+    // streams prompts.jsonl + cache-keys.jsonl rows to part files as the
+    // dispatches commit; `--dump-asks` retains the small ask rows;
+    // WITHOUT either flag nothing per ask survives its dispatch — the
+    // accumulated dispatch records were the ~99GB holder of a full-bundle
+    // fresh run.
+    let naming_config = naming_config(settings, &config, opts, switches);
+    let mut dispatch_log = match opts.dump_artifacts.as_deref() {
+        Some(dir) => humanify_core::artifact_dump::DispatchLog::dump(
+            naming_config.params.clone(),
+            Path::new(dir),
+        )
+        .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?,
+        None => {
+            if opts.dump_asks.is_some() {
+                humanify_core::artifact_dump::DispatchLog::asks(naming_config.params.clone())
+            } else {
+                humanify_core::artifact_dump::DispatchLog::off(naming_config.params.clone())
+            }
+        }
+    };
     let ph = phase("unpack+vendor");
     let unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
         adapter,
         provider,
+        &mut dispatch_log,
         prior_path,
         switches.switch_on(Switch::ManifestPriorOrder),
         profiler,
@@ -626,9 +654,11 @@ fn pipeline_body(
 
     // Stages 6-9 per file.
     let mut failures = Failures::default();
-    let naming = NamingRun {
+    let prompt_window = naming_config.prompt_window;
+    let mut naming = NamingRun {
         opts,
-        config: naming_config(settings, &config, opts, switches),
+        config: naming_config,
+        log: &mut dispatch_log,
         prior: prior.as_deref(),
         provider,
         profiler,
@@ -657,7 +687,7 @@ fn pipeline_body(
         }) = &last
         && let Some(code) = &outcome.code
     {
-        let split = crate::split_stage::SplitStageInput {
+        let mut split = crate::split_stage::SplitStageInput {
             output_dir: Path::new(out_dir),
             input_file: Path::new(input),
             processed_source: Some(source),
@@ -667,15 +697,21 @@ fn pipeline_body(
             fossil: fossil_split,
             switches,
             provider,
+            log: &mut dispatch_log,
             namer_budget: split_namer_budget(settings),
+            prompt_window,
             // Finding #60: the vendor bridge resolves the manifest's raw
             // capture names against this PRE-RENAME text.
             fresh: Some(fresh),
         };
         let _ph = phase("split");
         let span = profiler.pipeline_span("split");
-        let records =
-            crate::split_stage::run_split(code, outcome.prior_carry.as_ref(), &split, renderer)?;
+        let records = crate::split_stage::run_split(
+            code,
+            outcome.prior_carry.as_ref(),
+            &mut split,
+            renderer,
+        )?;
         span.end(Some(humanify_model::profiling::JsObject::new().with(
             "stable",
             matches!(records.ended, crate::split_stage::SplitEnded::Complete),
@@ -716,34 +752,51 @@ fn pipeline_body(
                 .filter(|(p, _)| p == path)
                 .flat_map(|(_, m)| m.regions.iter().cloned())
                 .collect();
+            // The streamed dispatch rows are the dump's prompts.jsonl +
+            // cache-keys.jsonl: assemble them exactly when the dump itself
+            // is written (an invalid output keeps the TS behavior — no
+            // dump files at all — by discarding the parts).
+            if outcome.coverage.is_some() {
+                dispatch_log.close().map_err(Crash)?;
+            } else {
+                dispatch_log.discard();
+            }
             reports.write_dump(
                 &DumpContext {
                     dir,
                     output_dir: Path::new(out_dir),
                     minified: &bundled_code,
                     prior: prior.as_deref(),
-                    vendor_prompts: &unpacked.vendor_dispatched,
                     flags: dump_flags(opts, settings, &config),
-                    params: &naming.config.params,
                     regions: &regions,
                 },
                 renderer,
             )?;
         }
+        // The naming waves' memory gauge (finding #65): the peak count of
+        // rendered prompts alive at once over the run, against its bound.
+        let peak = &outcome.waves;
+        if peak.peak_live_dispatches > 0 {
+            renderer.message(&format!(
+                "LLM prompt window: peak {} prompt(s) alive, {:.0} MB (window {})",
+                peak.peak_live_dispatches,
+                peak.peak_live_prompt_bytes as f64 / (1024.0 * 1024.0),
+                prompt_window
+            ));
+        }
         if let Some(dest) = &opts.dump_asks {
-            let n = humanify_core::artifact_dump::write_asks(
+            let n = humanify_core::artifact_dump::write_ask_rows(
                 Path::new(dest),
-                &humanify_core::artifact_dump::AskInputs {
-                    outcome,
-                    split: split_sections.as_ref(),
-                    vendor_prompts: &unpacked.vendor_dispatched,
-                },
+                dispatch_log.ask_rows(),
             )
             .map_err(Crash)?;
             renderer.message(&format!("Ask log: {n} ask(s) → {dest}"));
         }
         reports.write_rename_ledger(renderer)?;
     }
+    // No named file: the dump flags wrote nothing today, and the streamed
+    // parts go the same way.
+    dispatch_log.discard();
     Ok(Ended::Done(failures.close(renderer)))
 }
 
@@ -769,9 +822,7 @@ struct DumpContext<'a> {
     output_dir: &'a Path,
     minified: &'a str,
     prior: Option<&'a str>,
-    vendor_prompts: &'a [humanify_model::llm::LlmCall],
     flags: humanify_model::js::JsValue,
-    params: &'a humanify_model::llm::CacheKeyParams,
     regions: &'a [humanify_core::libdetect::CommentRegion],
 }
 
@@ -898,8 +949,6 @@ impl RunReports<'_> {
                 fresh: self.fresh,
                 outcome: self.outcome,
                 split: self.split,
-                vendor_prompts: ctx.vendor_prompts,
-                params: ctx.params,
                 comment_regions: ctx.regions,
                 extra_trail: &self.post_split.trail,
             },
@@ -992,6 +1041,8 @@ struct NamedFile {
 struct NamingRun<'a> {
     opts: &'a CommandOptions,
     config: NamingConfig,
+    /// The run's per-dispatch recorder (finding #65).
+    log: &'a mut humanify_core::artifact_dump::DispatchLog,
     prior: Option<&'a str>,
     provider: &'a dyn NameProvider,
     profiler: &'a humanify_core::profiling::Profiler,
@@ -1006,7 +1057,7 @@ impl NamingRun<'_> {
     /// Every file named; the last one's outcome (what the split reads) and
     /// its path.
     fn run(
-        &self,
+        &mut self,
         files: &[humanify_core::unpack::UnpackedFile],
         failures: &mut Failures,
         renderer: &mut dyn ProgressRenderer,
@@ -1071,11 +1122,14 @@ impl NamingRun<'_> {
     }
 
     fn name_one(
-        &self,
+        &mut self,
         formatted: &str,
         library: Option<&humanify_core::libdetect::function_carry::LibraryClassification>,
         renderer: &mut dyn ProgressRenderer,
     ) -> Result<NamingOutcome, Crash> {
+        // Every file's naming rows start a fresh dump section (the TS
+        // dump's last-file rule — finding #65).
+        self.log.begin_named_file();
         let outcome = run_naming(
             &NamingInput {
                 fresh: formatted,
@@ -1084,6 +1138,7 @@ impl NamingRun<'_> {
             },
             &self.config,
             &self.provider,
+            self.log,
         )?;
         // buildRenameLedgerBundle's self-check (non-fatal: the ledger is a
         // diagnostic artifact): replayed, it must reproduce the shipped code.
@@ -1302,6 +1357,16 @@ fn naming_config(
         capture_dump: opts.dump_artifacts.is_some(),
         shingle_probe: switches.switch_on(Switch::ShingleProbe),
         fast: opts.fast_tier().unwrap_or_default(),
+        // The rendered-prompt window (finding #65): every in-flight call
+        // plus a backfill headroom over the provider stack's outer
+        // concurrency bound (build_provider's), never the whole round.
+        prompt_window: DEFAULT_PROMPT_WINDOW.max(
+            (settings.concurrency
+                + settings
+                    .module_concurrency
+                    .unwrap_or(f64::from(MAX_DEFAULT_MODULE_CONCURRENCY))) as usize
+                + PROMPT_WINDOW_HEADROOM,
+        ),
         tunables: {
             let d = WaveTunables::default();
             WaveTunables {
