@@ -4,10 +4,11 @@
 
 use humanify_model::js::{format_duration, to_fixed};
 use humanify_model::stats::{
-    CoverageSummary, IdentifierCounts, LlmCoverage, RenameCounts, SingleLetterSplit,
+    BindingProvenance as StatsBindingProvenance, CoverageSummary, IdentifierCounts, LlmCoverage,
+    ProvenanceSplit, RenameCounts,
 };
 
-use super::{RenameReport, ReportStrategy, ReportType, SkipReasons, Status};
+use super::{RenameReport, ReportStrategy, ReportType, SkipReasons};
 use crate::naming::passes::census::MintedCensus;
 use crate::rename::floor::is_single_letter;
 use crate::trail::StrategyTrail;
@@ -140,87 +141,114 @@ pub fn census_record(c: &MintedCensus) -> humanify_model::stats::MintedCensus {
         zero_ref_expr_ids: c.zero_ref_expr_ids as f64,
         names: Some(c.names.clone()),
         decorated_names: Some(c.decorated_names.clone()),
+        provenance: None,
         single_letters: None,
+        binding_provenance: None,
     }
 }
 
-/// The single-letter survivors' provenance split (Andrew's 2026-09-30
-/// decision): of the minted leftovers the census counts, which single
-/// letters have a RECORDED decision behind them — `model_chosen` (some
-/// tier APPLIED the letter as a name: the rename reports' `Renamed`
-/// outcomes and the trail's `final_name`, the carried rule's population)
-/// or `asked_kept` (asked about and kept: the reports' non-`Renamed`
-/// outcomes under that name, the trail's rows under its old name) — and
-/// which have NO record anywhere (`never_asked`, the real gap finding #62
-/// was blind to and #64 named).
+/// The survivors' provenance split — the TREE-WALK half of the 2026-09-30
+/// provenance meter, generalized from the single-letter special case
+/// (finding #62's monitor, kept as the returned single-letter slice): of
+/// the minted leftovers the census counts, which have a RECORDED decision
+/// behind them — `model_chosen` (some tier APPLIED the surviving name:
+/// the reports' `Renamed` outcomes and the trail's `final_name`s), or
+/// `asked_kept` (asked about and kept: the ask-lane rows' names, the
+/// reports' non-`Renamed` outcomes) — and which have no record anywhere
+/// (`never_asked`, the real gap finding #64 named) or whose retry budget
+/// died still-unrenamed (`exhausted`, supplied by the run).
 ///
-/// The outcome records ARE the provenance — this joins them by NAME
-/// (ask-time name for the reports, old/final name for the trail), because
-/// identity systems (spans) do not survive the generate/reconcile/render
-/// boundary. Consequence, declared: a letter with a record on ANY
-/// same-named binding classifies every same-named survivor as decided, so
-/// `never_asked` is a LOWER BOUND on the true never-processed population.
-/// It is a meter — no decision reads it (the row in
-/// docs/responsibility.md says so).
-pub fn single_letter_split(
+/// This joins the run's records BY NAME because binding identity (the
+/// declaration spans) does not survive the generate/reconcile/render
+/// boundary: a record on ANY same-named binding classifies every
+/// same-named survivor as decided, so `never_asked` here is a LOWER
+/// BOUND. The exact, per-binding half is the sweep's own
+/// `bindingProvenance` — the two blocks are both kept and the difference
+/// is declared in their docs. This is a meter — no decision reads it (the
+/// row in docs/responsibility.md says so).
+pub fn survivor_provenance_split(
     census: &MintedCensus,
     reports: &[RenameReport],
     trail: &StrategyTrail,
-) -> SingleLetterSplit {
-    let survivors: Vec<&String> = census
-        .names
-        .iter()
-        .filter(|n| is_single_letter(n))
-        .collect();
-    let total = survivors.len();
-    if total == 0 {
-        return SingleLetterSplit {
-            total: 0.0,
-            model_chosen: 0.0,
-            asked_kept: 0.0,
-            never_asked: 0.0,
-        };
-    }
-    let letters: std::collections::HashSet<&str> = survivors.iter().map(|n| n.as_str()).collect();
-    let mut chosen: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
-    for entry in trail.entries() {
-        if let Some(final_name) = entry.final_name.as_ref()
-            && letters.contains(final_name.as_str())
-        {
-            chosen.insert(final_name.clone());
+    exhausted: &[String],
+) -> (ProvenanceSplit, ProvenanceSplit) {
+    let decided = crate::naming::passes::sweep::DecidedNames::of(trail, reports, exhausted);
+    let class_of = |name: &str| -> Option<Class> {
+        if decided.renamed_to.contains(name) {
+            Some(Class::ModelChosen)
+        } else if decided.exhausted.contains(name) {
+            Some(Class::Exhausted)
+        } else if decided.asked.contains(name) {
+            Some(Class::AskedKept)
+        } else {
+            None
         }
-        if letters.contains(entry.old_name.as_str()) {
-            asked.insert(entry.old_name.clone());
+    };
+    let mut all = ClassCounts::default();
+    let mut letters = ClassCounts::default();
+    for name in census.names.iter() {
+        all.total += 1;
+        let class = class_of(name).unwrap_or(Class::NeverAsked);
+        all.bump(class);
+        if is_single_letter(name) {
+            letters.total += 1;
+            letters.bump(class);
         }
     }
-    for report in reports {
-        for (name, outcome) in report.outcomes.iter() {
-            if !letters.contains(name.as_str()) {
-                continue;
-            }
-            if let Status::Renamed { new_name, .. } = &outcome.status
-                && letters.contains(new_name.as_str())
-            {
-                chosen.insert(new_name.clone());
-            } else {
-                asked.insert(name.clone());
-            }
+    (all.into_split(), letters.into_split())
+}
+
+/// The split's classes, in the priority the join reads them.
+#[derive(Clone, Copy)]
+enum Class {
+    ModelChosen,
+    AskedKept,
+    Exhausted,
+    NeverAsked,
+}
+
+#[derive(Default)]
+struct ClassCounts {
+    total: usize,
+    model_chosen: usize,
+    asked_kept: usize,
+    exhausted: usize,
+    never_asked: usize,
+}
+
+impl ClassCounts {
+    fn bump(&mut self, class: Class) {
+        match class {
+            Class::ModelChosen => self.model_chosen += 1,
+            Class::AskedKept => self.asked_kept += 1,
+            Class::Exhausted => self.exhausted += 1,
+            Class::NeverAsked => self.never_asked += 1,
         }
     }
-    let model_chosen = survivors
-        .iter()
-        .filter(|n| chosen.contains(n.as_str()))
-        .count();
-    let asked_kept = survivors
-        .iter()
-        .filter(|n| !chosen.contains(n.as_str()) && asked.contains(n.as_str()))
-        .count();
-    SingleLetterSplit {
-        total: total as f64,
-        model_chosen: model_chosen as f64,
-        asked_kept: asked_kept as f64,
-        never_asked: (total - model_chosen - asked_kept) as f64,
+    fn into_split(self) -> ProvenanceSplit {
+        ProvenanceSplit {
+            total: self.total as f64,
+            model_chosen: self.model_chosen as f64,
+            asked_kept: self.asked_kept as f64,
+            exhausted: self.exhausted as f64,
+            never_asked: self.never_asked as f64,
+        }
+    }
+}
+
+/// The in-stage per-binding classification (`naming::passes::sweep`'s
+/// `BindingProvenance`) as the stats record.
+pub fn binding_provenance_record(
+    p: &crate::naming::passes::sweep::BindingProvenance,
+) -> StatsBindingProvenance {
+    StatsBindingProvenance {
+        join: if p.joined { "by-name" } else { "per-binding" }.to_string(),
+        total: p.total as f64,
+        renamed: p.renamed as f64,
+        model_chosen: p.model_chosen as f64,
+        asked_kept: p.asked_kept as f64,
+        exhausted: p.exhausted as f64,
+        never_asked: p.never_asked as f64,
     }
 }
 
@@ -345,6 +373,31 @@ fn format_minted_census(c: &humanify_model::stats::MintedCensus, width: usize) -
     ] {
         push_count_line(&mut lines, label, count, c.total, width);
     }
+    if let Some(p) = &c.provenance
+        && p.total > 0.0
+    {
+        lines.push(format!(
+            " {}{} total",
+            pad_end("Provenance:", width),
+            fmt(p.total)
+        ));
+        push_count_line(&mut lines, "Model-chosen:", p.model_chosen, p.total, width);
+        push_count_line(&mut lines, "Asked, kept:", p.asked_kept, p.total, width);
+        push_count_line(
+            &mut lines,
+            "Retries exhausted:",
+            p.exhausted,
+            p.total,
+            width,
+        );
+        push_count_line(
+            &mut lines,
+            "Never processed:",
+            p.never_asked,
+            p.total,
+            width,
+        );
+    }
     if let Some(sl) = &c.single_letters
         && sl.total > 0.0
     {
@@ -363,9 +416,41 @@ fn format_minted_census(c: &humanify_model::stats::MintedCensus, width: usize) -
         push_count_line(&mut lines, "Asked, kept:", sl.asked_kept, sl.total, width);
         push_count_line(
             &mut lines,
+            "Retries exhausted:",
+            sl.exhausted,
+            sl.total,
+            width,
+        );
+        push_count_line(
+            &mut lines,
             "Never processed:",
             sl.never_asked,
             sl.total,
+            width,
+        );
+    }
+    if let Some(b) = &c.binding_provenance {
+        lines.push(format!(
+            " {}{} total ({} join)",
+            pad_end("Binding provenance:", width),
+            fmt(b.total),
+            b.join
+        ));
+        push_count_line(&mut lines, "Renamed:", b.renamed, b.total, width);
+        push_count_line(&mut lines, "Model-chosen:", b.model_chosen, b.total, width);
+        push_count_line(&mut lines, "Asked, kept:", b.asked_kept, b.total, width);
+        push_count_line(
+            &mut lines,
+            "Retries exhausted:",
+            b.exhausted,
+            b.total,
+            width,
+        );
+        push_count_line(
+            &mut lines,
+            "Never processed:",
+            b.never_asked,
+            b.total,
             width,
         );
     }

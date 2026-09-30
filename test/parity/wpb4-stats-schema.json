@@ -483,6 +483,56 @@
                   }
                 },
                 {
+                  "name": "provenance",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "total",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "modelChosen",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "askedKept",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "exhausted",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "neverAsked",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
                   "name": "singleLetters",
                   "optional": true,
                   "nullable": false,
@@ -507,6 +557,80 @@
                       },
                       {
                         "name": "askedKept",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "exhausted",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "neverAsked",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "bindingProvenance",
+                  "optional": true,
+                  "nullable": false,
+                  "type": {
+                    "kind": "object",
+                    "props": [
+                      {
+                        "name": "join",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "string"
+                        }
+                      },
+                      {
+                        "name": "total",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "renamed",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "modelChosen",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "askedKept",
+                        "optional": false,
+                        "nullable": false,
+                        "type": {
+                          "kind": "number"
+                        }
+                      },
+                      {
+                        "name": "exhausted",
                         "optional": false,
                         "nullable": false,
                         "type": {

@@ -6,7 +6,10 @@
 //!    (the LLM sweep defers when a prior version is present);
 //! 2. `generate` — [`crate::naming::waves::render::render_program`];
 //! 3. the prior-diff reconcile — [`crate::naming::reconcile`] (WP4.4);
-//! 4. the deferred, prior-aware coverage sweep — [`sweep`];
+//! 4. the deferred, prior-aware coverage sweep — [`sweep`] (targeting is
+//!    the decision LEDGER since 2026-09-30, per binding in-era, joined by
+//!    name across the text boundary in the deferred half — see that
+//!    module's doc);
 //! 5. the family permutation over the final text — [`family_permute`];
 //! 6. the minted census of the shipped text — [`census`].
 //!

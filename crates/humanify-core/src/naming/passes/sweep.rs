@@ -1,21 +1,38 @@
-//! The LLM coverage sweep over the minted survivors — TS:
-//! `src/rename/coverage-sweep.ts` (targeting, grouping, requests, apply)
-//! and `src/rename/sweep-step.ts` (the deferred, prior-aware sweep over the
-//! reconciled — else generated — output).
+//! The LLM coverage sweep — TS: `src/rename/coverage-sweep.ts` (targeting,
+//! grouping, requests, apply) and `src/rename/sweep-step.ts` (the deferred,
+//! prior-aware sweep over the reconciled — else generated — output).
 //!
-//! Targeting is STRICTER than the census (`is_sweep_target`: short, no
-//! embedded word, not CONSTANT_CASE — or a camel half-mint; single
-//! letters are targets since 2026-09-30 — Andrew: never-asked loop
-//! counters must be visible to the pass whose job is never-asked names),
-//! carried identities are exempt, and eval/with-frozen bindings are never
-//! swept. Targets group by the node whose code frames them (their own
+//! TARGETING IS A LEDGER LOOKUP (2026-09-30, Andrew's provenance decision:
+//! "move from finding things that look like packed names to just looking
+//! up if we already renamed that item"). A binding is a target when it is
+//! eligible, not a convention carve-out (`rename::floor::
+//! is_convention_carveout`), not eval/with-frozen, NOT renamed this run
+//! (applied or carried) and has no recorded LLM-ask decision
+//! (`rename::validated`'s decision ledger). There is NO minted-shape gate:
+//! a never-asked descriptive name is a target too — missing things that
+//! LOOK correct was the point. A binding whose retry budget EXHAUSTED
+//! while still unrenamed stays a target (it is exactly the thing that is
+//! not properly renamed); a model-kept or renamed one is never re-targeted
+//! (the p2sBytes-class re-roll ends).
+//!
+//! The DEFERRED sweep parses a new text (reconciled — else generated), so
+//! per-binding identity from the naming era does not reach it: spans do
+//! not survive the generate/reconcile boundary. Its ledger consults
+//! [`DecidedNames`] — the run's decisions joined BY NAME, the one key
+//! that does survive. That join is APPROXIMATE by construction (a decided
+//! record on ANY same-named binding classifies every same-named survivor
+//! as decided): the in-era sweep is exact per binding, the deferred half
+//! is the declared approximation, and the same split runs through the
+//! coverage meter (`naming::report::coverage`).
+//!
+//! Targets group by the node whose code frames them (their own
 //! function / class, else the enclosing function, else the declaring
 //! statement); one request per group, every prompt pre-built; responses
 //! are applied in group-build order, so completion order never decides a
 //! conflict. The ANSWER filter is `rename::floor::is_sweep_answer_acceptable`
 //! — junk shapes stay refused, but a single-letter answer may land.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use humanify_model::llm::{
     BatchRenameRequest, CacheKeyParams, LlmCall, LlmErrorKind, NameProvider, Renames, cache_key_of,
@@ -25,7 +42,7 @@ use oxc_ast::AstKind;
 use oxc_semantic::{NodeId, Semantic};
 use oxc_span::{GetSpan, Span};
 
-use super::census::{MintedBinding, collect_minted_bindings};
+use super::census::{MintedBinding, collect_eligible_bindings};
 use crate::artifact_dump::{Dispatch, DispatchLog, RecordMode};
 use crate::ingest::Ingest;
 use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
@@ -34,52 +51,112 @@ use crate::naming::prompts::{render_system_prompt, render_user_prompt};
 use crate::naming::waves::generate::TextView;
 use crate::naming::waves::render::{Occurrences, program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{
-    is_bun_token, is_half_mint_head, is_sweep_answer_acceptable, is_wordless_mint_shape,
-};
+use crate::rename::floor::{is_convention_carveout, is_sweep_answer_acceptable};
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier};
 
-/// Longest a minted survivor is after stripping trailing `_`/`$`.
-const MAX_SWEEP_LENGTH: usize = 4;
-
-/// `isSweepTarget`: a genuine minified survivor worth force-naming — the
-/// WHO GETS ASKED question (see `rename::floor`'s module doc for the
-/// target-vs-answer split). Single letters qualify since 2026-09-30.
-pub fn is_sweep_target(name: &str) -> bool {
-    if !is_bun_token(name) {
-        return false;
-    }
-    if !name.is_empty() && name.bytes().all(|b| b == b'_' || b == b'$') {
-        return false;
-    }
-    if is_half_mint_head(name) {
-        return true;
-    }
-    if !is_wordless_mint_shape(name) {
-        return false;
-    }
-    // `name.replace(/[_$]+$/, "").length` — UTF-16 units.
-    name.trim_end_matches(['_', '$']).encode_utf16().count() <= MAX_SWEEP_LENGTH
+/// The run's rename decisions, keyed by NAME — the join the DEFERRED
+/// sweep consults because per-binding identity does not cross the
+/// generate/reconcile text boundary (spans are anchored per text; only
+/// the name string survives). The declared approximation: a record on ANY
+/// same-named binding excludes every same-named candidate, so a
+/// never-asked survivor sharing its name with an asked one is missed
+/// HERE (never in the in-era sweep, which is per-binding exact).
+#[derive(Clone, Debug, Default)]
+pub struct DecidedNames {
+    /// Names some tier APPLIED this run (the trail's `final_name`s and
+    /// the reports' `Renamed{newName}`s) — the bindings wearing them in
+    /// the later text are the renamed ones.
+    pub renamed_to: HashSet<String>,
+    /// Names an LLM ask settled without a rename (declined / same-name /
+    /// junk) — the trail's ask-lane rows' `old_name`s plus every report
+    /// outcome's ask-time name.
+    pub asked: HashSet<String>,
+    /// Names whose retry budget died still-unrenamed — they STAY targets.
+    pub exhausted: HashSet<String>,
 }
 
-/// `collectSweepTargets`.
+impl DecidedNames {
+    /// Build the join from the run's records. Only LLM-ask rows count as
+    /// asks (`Tier::Llm` / `Tier::CoverageSweep`): deterministic lanes
+    /// (floor, transfer, reconcile) leave their leftovers for the sweep.
+    pub fn of(
+        trail: &StrategyTrail,
+        reports: &[crate::naming::report::RenameReport],
+        exhausted: &[String],
+    ) -> DecidedNames {
+        let mut d = DecidedNames {
+            exhausted: exhausted.iter().cloned().collect(),
+            ..DecidedNames::default()
+        };
+        for entry in trail.entries() {
+            let asked = entry.attempts.iter().any(|a| {
+                a.outcome != Outcome::Vote && matches!(a.tier, Tier::Llm | Tier::CoverageSweep)
+            });
+            if asked {
+                d.asked.insert(entry.old_name.clone());
+            }
+            if let Some(final_name) = entry.final_name.as_ref() {
+                d.renamed_to.insert(final_name.clone());
+            }
+        }
+        for report in reports {
+            for (name, outcome) in report.outcomes.iter() {
+                d.asked.insert(name.clone());
+                if let crate::naming::report::Status::Renamed { new_name, .. } = &outcome.status {
+                    d.renamed_to.insert(new_name.clone());
+                }
+            }
+        }
+        d
+    }
+}
+
+/// `collectSweepTargets` — the ledger lookup, per binding. `decided` is
+/// the cross-text name join; `None` means this state holds the records
+/// itself (the in-era sweep — exact per binding).
 pub fn collect_sweep_targets(
     semantic: &Semantic<'_>,
     state: &RenameState,
     eligible: &Eligibility,
     taint: &EvalWithTaint,
+    decided: Option<&DecidedNames>,
 ) -> Vec<MintedBinding> {
-    collect_minted_bindings(semantic, state, eligible)
+    collect_eligible_bindings(semantic, state, eligible)
         .entries
         .into_iter()
-        .filter(|e| {
-            is_sweep_target(&e.name)
-                && !state.is_eval_taint_frozen(e.binding, taint)
-                && !state.is_carried(e.binding)
-        })
+        .filter(|e| is_sweep_candidate(state, taint, decided, e))
         .collect()
+}
+
+/// The WHO GETS ASKED question, 2026-09-30 answer (the name is deliberate:
+/// the 2026-09-30-morning `is_sweep_target` SHAPE predicate this replaces
+/// is gone): not the name's shape — the binding's LEDGER. Never re-ask:
+/// renamed (applied or carried), decided (an ask settled it), convention
+/// carve-outs, eval/with-frozen soundness. Always ask: never-asked and
+/// retry-exhausted-still-unrenamed bindings, whatever their names look
+/// like.
+fn is_sweep_candidate(
+    state: &RenameState,
+    taint: &EvalWithTaint,
+    decided: Option<&DecidedNames>,
+    e: &MintedBinding,
+) -> bool {
+    if is_convention_carveout(&e.name) || state.is_eval_taint_frozen(e.binding, taint) {
+        return false;
+    }
+    if state.is_renamed(e.binding) || state.is_decided(e.binding) {
+        return false;
+    }
+    if let Some(d) = decided {
+        // The cross-text name join: approximate by construction (see
+        // `DecidedNames`). Exhausted names fall through on purpose.
+        if d.renamed_to.contains(&e.name) || d.asked.contains(&e.name) {
+            return false;
+        }
+    }
+    true
 }
 
 /// A statement kind — Babel's `Statement` alias over oxc node kinds.
@@ -249,6 +326,31 @@ pub struct SweepDispatch {
     pub ask: crate::naming::ask_trace::AskSite,
 }
 
+/// The per-binding provenance classification of one sweep's state at the
+/// END of its run (the exact, in-stage half of the coverage meter —
+/// `bindingProvenance` in the stats). Universe: every eligible,
+/// non-carve-out, non-frozen binding, because those are exactly the
+/// bindings the ledger could have decided.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BindingProvenance {
+    /// True when the classification consulted [`DecidedNames`] for
+    /// bindings with no record in the sweep's own state — the deferred
+    /// sweep's declared approximation (identity does not cross the text
+    /// boundary); false for the in-era sweep's exact per-binding counts.
+    pub joined: bool,
+    pub total: usize,
+    /// Renamed to a descriptive name this run.
+    pub renamed: usize,
+    /// Carried: a below-floor name deliberately applied (the exp066 rule).
+    pub model_chosen: usize,
+    /// Asked, terminal keep (declined / same-name / junk).
+    pub asked_kept: usize,
+    /// Retry budget exhausted still-unrenamed — still targets.
+    pub exhausted: usize,
+    /// No record anywhere: nothing asked, nothing applied.
+    pub never_asked: usize,
+}
+
 /// `SweepResult` + the dispatch record.
 #[derive(Clone, Debug, Default)]
 pub struct SweepResult {
@@ -267,6 +369,13 @@ pub struct SweepResult {
     /// Re-asked suggestions rejected again once the budget was spent (or
     /// left unanswered) — the give-up half of the bounded retry.
     pub reask_dropped: usize,
+    /// The per-binding provenance classification of the sweep's state at
+    /// the end of its run (the meter's exact, in-stage half).
+    pub provenance: Option<BindingProvenance>,
+    /// Current names of the state's retry-exhausted still-unrenamed
+    /// bindings — feeds the run-level name joins (`DecidedNames`, the
+    /// survivor split).
+    pub exhausted_names: Vec<String>,
 }
 
 /// One pending re-ask's seed: the LAST suggestion the model made, the
@@ -305,10 +414,13 @@ struct ReaskCtx<'c> {
     carried: &'c HashMap<String, Vec<(String, &'static str)>>,
 }
 
-/// Apply one group's suggestions (`applyGroupResponse`). `renames[name]` is
-/// the OWN entry (`Renames::get`): a JS object read would fall through to
-/// Object.prototype, unreachable here — no sweep target is shaped like an
-/// Object.prototype key (every one has a lowercase word run).
+/// Apply one group's suggestions (`applyGroupResponse`). `renames[name]`
+/// reads the OWN entry (`Renames::get`, a plain list — no prototype
+/// chain). That matters NOW: under the ledger targeting a target can be
+/// named like an Object.prototype key (`var constructor = 1` is a legal
+/// binding, and never-asked names are targets whatever they look like);
+/// the TS's `renames[name]` would have fallen through to the prototype —
+/// the old shape gate protected it only by accident.
 ///
 /// The third return is the re-askable set: suggestions the validated
 /// applier rejected for a reason a disclosed re-ask can fix (the
@@ -364,31 +476,88 @@ fn apply_group_response(
             row = row.reason(r.as_str());
         }
         state.record(target.binding, &target.name, row, true);
-        if let Some(r) = attempt.reason
-            && let class = crate::naming::reask::class_of(r)
-            && crate::naming::reask::reask_again(reask.limit, reask.spent, class)
-        {
-            let mut rejects = reask.carried.get(&target.name).cloned().unwrap_or_default();
-            rejects.push((new_name.clone(), r.as_str()));
-            reasks.push(SweepReask {
-                target: target.clone(),
-                suggestion: new_name,
-                class,
-                code: r.as_str(),
-                rejects,
-            });
+        if let Some(r) = attempt.reason {
+            let class = crate::naming::reask::class_of(r);
+            if crate::naming::reask::reask_again(reask.limit, reask.spent, class) {
+                let mut rejects = reask.carried.get(&target.name).cloned().unwrap_or_default();
+                rejects.push((new_name.clone(), r.as_str()));
+                reasks.push(SweepReask {
+                    target: target.clone(),
+                    suggestion: new_name,
+                    class,
+                    code: r.as_str(),
+                    rejects,
+                });
+            } else if crate::naming::reask::should_reask(class) {
+                // The budget died on a class a re-ask could have fixed:
+                // the identifier is STILL not properly renamed — the
+                // ledger keeps it targetable (later rounds, later runs).
+                state.mark_exhausted(target.binding);
+            }
         }
     }
     (named, skipped, reasks)
 }
 
-/// `sweepMintedNames`: force-name the minted survivors the deterministic
-/// floor left, one request per group, applied in group-build order. A
-/// suggestion rejected for a collision class gets the run's disclosed
-/// re-asks (default TWO, `--rename-retries`): each one names and
-/// blocklists EVERY suggestion that already failed — the same retry
-/// prompt shape the wave lanes use. A budget exhausted at a further
-/// collision gives up, recorded.
+/// Classify the state's bindings by provenance — the meter's per-binding
+/// half. `decided` (the deferred sweep's name join) classifies bindings
+/// the state itself has no record for; when it is `None` every class
+/// comes from this state's own ledger.
+fn classify_bindings(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    eligible: &Eligibility,
+    taint: &EvalWithTaint,
+    decided: Option<&DecidedNames>,
+) -> BindingProvenance {
+    let mut p = BindingProvenance {
+        joined: decided.is_some(),
+        ..BindingProvenance::default()
+    };
+    for e in collect_eligible_bindings(semantic, state, eligible).entries {
+        if is_convention_carveout(&e.name) || state.is_eval_taint_frozen(e.binding, taint) {
+            continue;
+        }
+        p.total += 1;
+        if state.is_carried(e.binding) {
+            p.model_chosen += 1;
+        } else if state.is_renamed(e.binding) {
+            p.renamed += 1;
+        } else if state.is_decided(e.binding) {
+            p.asked_kept += 1;
+        } else if state.is_exhausted(e.binding) {
+            p.exhausted += 1;
+        } else if let Some(d) = decided {
+            // Same priority as the name join's exclusions, plus the
+            // below-floor read that splits carried (model-chosen) names
+            // from descriptively renamed ones.
+            if d.renamed_to.contains(&e.name) {
+                if crate::rename::floor::is_below_floor_name(&e.name) {
+                    p.model_chosen += 1;
+                } else {
+                    p.renamed += 1;
+                }
+            } else if d.exhausted.contains(&e.name) {
+                p.exhausted += 1;
+            } else if d.asked.contains(&e.name) {
+                p.asked_kept += 1;
+            } else {
+                p.never_asked += 1;
+            }
+        } else {
+            p.never_asked += 1;
+        }
+    }
+    p
+}
+
+/// `sweepMintedNames`: force-name the bindings no pass decided, one
+/// request per group, applied in group-build order. A suggestion rejected
+/// for a collision class gets the run's disclosed re-asks (default TWO,
+/// `--rename-retries`): each one names and blocklists EVERY suggestion
+/// that already failed — the same retry prompt shape the wave lanes use.
+/// A budget exhausted at a further collision gives up, recorded — and the
+/// ledger keeps the identifier targetable (it is not properly renamed).
 #[allow(clippy::too_many_arguments)]
 pub fn sweep_minted_names<P: NameProvider>(
     semantic: &Semantic<'_>,
@@ -401,10 +570,17 @@ pub fn sweep_minted_names<P: NameProvider>(
     params: &CacheKeyParams,
     window: usize,
     reask_limit: usize,
+    decided: Option<&DecidedNames>,
 ) -> SweepResult {
-    let targets = collect_sweep_targets(semantic, state, eligible, taint);
+    let targets = collect_sweep_targets(semantic, state, eligible, taint, decided);
     if targets.is_empty() {
-        return SweepResult::default();
+        // Nothing to ask — but the meter still classifies the state: an
+        // empty target set IS the finding (everything has a record).
+        return SweepResult {
+            provenance: Some(classify_bindings(semantic, state, eligible, taint, decided)),
+            exhausted_names: state.exhausted_names(),
+            ..SweepResult::default()
+        };
     }
     let groups = build_groups(semantic, state, targets);
     let mut result = SweepResult {
@@ -478,7 +654,11 @@ pub fn sweep_minted_names<P: NameProvider>(
             &mut result,
         );
     }
-    result
+    SweepResult {
+        provenance: Some(classify_bindings(semantic, state, eligible, taint, decided)),
+        exhausted_names: state.exhausted_names(),
+        ..result
+    }
 }
 
 /// One sweep dispatch: its prompts for the provider, its row to the log AT
@@ -697,7 +877,9 @@ pub struct DeferredSweepOutcome {
 /// the shipping text (`anchor` = reconciled when the reconcile produced
 /// the text, else generated). Err when the text does not parse.
 /// `reask_limit` is the run's name-conflict re-ask budget
-/// (`--rename-retries`).
+/// (`--rename-retries`); `decided` is the run's decision ledger joined BY
+/// NAME — the approximation that stands in for per-binding identity
+/// across the text boundary (see [`DecidedNames`]).
 #[allow(clippy::too_many_arguments)]
 pub fn run_deferred_sweep<P: NameProvider>(
     code: &str,
@@ -710,6 +892,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     trail: StrategyTrail,
     ledger: bool,
     reask_limit: usize,
+    decided: &DecidedNames,
 ) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -734,6 +917,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
         params,
         prompt_window,
         reask_limit,
+        Some(decided),
     );
     drop(ph);
     let code = (sweep.named > 0).then(|| render_program(semantic, &state));

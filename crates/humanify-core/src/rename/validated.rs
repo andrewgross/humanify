@@ -211,11 +211,32 @@ pub struct RenameOutcome {
     pub trail: StrategyTrail,
     pub claims: RenameClaimStats,
     pub opt_outs: TrailOptOuts,
+    /// The CURRENT names of bindings whose LLM retry budget died while
+    /// they were still unrenamed (the decision ledger's [`Decision::Exhausted`]
+    /// rows, minus any a later pass went on to rename). The deferred sweep
+    /// joins these BY NAME to keep the identifiers sweep targets — the one
+    /// identity that survives the generate/reconcile text boundary.
+    pub exhausted_names: Vec<String>,
+}
+
+/// One binding's ask-ledger state (the decision ledger, 2026-09-30:
+/// Andrew's provenance targeting — "look up whether we already renamed
+/// the item" replaces "does the name look packed").
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Decision {
+    /// The binding was asked this run and settled on a TERMINAL outcome
+    /// without a rename (the model declined, answered the same name, or
+    /// every suggestion was junk). Do not ask again this run.
+    Kept,
+    /// The ask happened but the retry budget died while the name was still
+    /// unrenamed (a collision no disclosed re-ask could fix). The binding
+    /// is NOT properly renamed — it stays a sweep target.
+    Exhausted,
 }
 
 /// The rename state of one parsed text: the Babel scope view, the name
-/// overlay, the current scope maps, the carried-names registry and the
-/// trail. The ONLY writer of names.
+/// overlay, the current scope maps, the carried-names registry, the ask
+/// ledger and the trail. The ONLY writer of names.
 pub struct RenameState {
     view: BabelScopes,
     anchor: Anchor,
@@ -230,6 +251,12 @@ pub struct RenameState {
     next_order: u64,
     /// `carriedNames`: bindings whose APPLIED name is below the floor.
     carried: BTreeSet<BindingId>,
+    /// The decision ledger: per binding, whether an LLM ask settled it
+    /// this run. Written by the ask lanes (the waves' `Tier::Llm` rows,
+    /// the sweep's `Tier::CoverageSweep` rows — NOT the deterministic
+    /// floor/transfer/reconcile rows, whose leftovers the sweep exists to
+    /// re-ask). Read by the sweep's target selection.
+    decisions: BTreeMap<BindingId, Decision>,
     claims: RenameClaimStats,
     applied: Vec<AppliedRename>,
     trail: StrategyTrail,
@@ -271,6 +298,7 @@ impl RenameState {
             maps,
             next_order,
             carried: BTreeSet::new(),
+            decisions: BTreeMap::new(),
             claims: trail.claims,
             applied: Vec::new(),
             trail,
@@ -431,6 +459,63 @@ impl RenameState {
     /// WITHOUT a rename (the binding cascade's same-name settle).
     pub fn record_carried(&mut self, binding: BindingId) {
         self.carried.insert(binding);
+    }
+
+    // -- the decision ledger --------------------------------------------------
+
+    /// Whether an LLM ask settled this binding this run on a terminal
+    /// keep (declined / same-name / junk). The sweep's target selection
+    /// reads this: a decided binding is never re-asked.
+    pub fn is_decided(&self, binding: BindingId) -> bool {
+        self.decisions.get(&binding) == Some(&Decision::Kept)
+    }
+
+    /// Whether this binding's LLM retry budget died while it was still
+    /// unrenamed — it is NOT properly renamed and STAYS a sweep target.
+    pub fn is_exhausted(&self, binding: BindingId) -> bool {
+        self.decisions.get(&binding) == Some(&Decision::Exhausted)
+    }
+
+    /// The ledger's rows (binding, decision) — the meter's read.
+    pub fn decisions(&self) -> impl Iterator<Item = (BindingId, Decision)> + '_ {
+        self.decisions.iter().map(|(b, d)| (*b, *d))
+    }
+
+    /// The CURRENT names of the retry-exhausted still-unrenamed bindings.
+    /// The one cross-text hand-off the ledger has: the deferred sweep
+    /// joins these BY NAME to keep the identifiers targets, and the
+    /// coverage meter's survivor split reads them as the `exhausted`
+    /// class.
+    pub fn exhausted_names(&self) -> Vec<String> {
+        self.decisions
+            .iter()
+            .filter(|(b, d)| **d == Decision::Exhausted && !self.is_renamed(**b))
+            .map(|(b, _)| self.name_of(*b).to_string())
+            .collect()
+    }
+
+    /// The retry-budget give-up (the wave barrier's and the sweep's
+    /// shared last resort): overrides an ask mark so the identifier
+    /// remains targetable.
+    pub fn mark_exhausted(&mut self, binding: BindingId) {
+        self.decisions.insert(binding, Decision::Exhausted);
+    }
+
+    /// The wave barrier's identity bookkeeping: an identifier the lane
+    /// ASKED about and kept (the model answered the same name, nothing
+    /// could be applied): a terminal keep, recorded without a trail row.
+    pub fn mark_asked(&mut self, binding: BindingId) {
+        if self.decisions.get(&binding) != Some(&Decision::Exhausted) {
+            self.decisions.insert(binding, Decision::Kept);
+        }
+    }
+
+    /// Whether any tier APPLIED a rename to this binding this run, or it
+    /// is carried (a deliberately applied below-floor name). "Already
+    /// renamed" is the ledger's first half; the sweep never re-targets a
+    /// renamed binding.
+    pub fn is_renamed(&self, binding: BindingId) -> bool {
+        self.applied.iter().any(|r| r.binding == binding) || self.carried.contains(&binding)
     }
 
     pub fn applied_renames(&self) -> &[AppliedRename] {
@@ -795,7 +880,13 @@ impl RenameState {
     }
 
     /// Record a non-rename outcome (a vote, an abstain, a caller-shaped
-    /// rejection) for a binding — the trail's only other writer.
+    /// rejection) for a binding — the trail's only other writer. An
+    /// LLM-ASK row (`Tier::Llm`, `Tier::CoverageSweep`) also writes the
+    /// decision ledger: the binding was asked, and (unless a retry budget
+    /// later overrides it with [`RenameState::mark_exhausted`]) it is not
+    /// to be asked again this run. Deterministic rows (floor, transfer,
+    /// reconcile, votes) do NOT — the sweep exists to re-ask their
+    /// leftovers.
     pub fn record(
         &mut self,
         binding: BindingId,
@@ -803,6 +894,15 @@ impl RenameState {
         attempt: Attempt,
         post_pass: bool,
     ) {
+        // The ledger half: an LLM-ask row marks the binding kept, unless a
+        // retry budget already exhausted it (that mark is terminal — the
+        // identifier stays targetable, later rows cannot flip it back).
+        if attempt.outcome != Outcome::Vote
+            && matches!(attempt.tier, Tier::Llm | Tier::CoverageSweep)
+            && self.decisions.get(&binding) != Some(&Decision::Exhausted)
+        {
+            self.decisions.insert(binding, Decision::Kept);
+        }
         let target = self.trail_target(binding);
         if post_pass {
             self.trail.record_post_pass(target, old_name, attempt);
@@ -824,6 +924,7 @@ impl RenameState {
             })
             .collect();
         symbol_names.sort_by_key(|(s, _)| s.index());
+        let exhausted_names = self.exhausted_names();
         let mut trail = self.trail;
         trail.claims = self.claims;
         RenameOutcome {
@@ -832,6 +933,7 @@ impl RenameState {
             trail,
             claims: self.claims,
             opt_outs: self.opt_outs,
+            exhausted_names,
         }
     }
 }
