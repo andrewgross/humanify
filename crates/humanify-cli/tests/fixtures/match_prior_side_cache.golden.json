@@ -1,0 +1,924 @@
+{
+  "files": [
+    {
+      "close": null,
+      "freshText": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick0: function (v) {\n      return v + 0;\n    }\n  };\n});",
+      "functions": {
+        "ambiguous": [],
+        "bindingAmbiguous": [],
+        "bindingPairs": [],
+        "bindingStats": null,
+        "bindingUnmatched": [],
+        "fresh": [
+          {
+            "end": 198,
+            "id": "input.js:4:23",
+            "name": "",
+            "slice": "function (exports, module) {\n  module.exports = {\n    pick0: function (v) {\n      return v + 0;\n    }\n  };\n}",
+            "start": 90
+          },
+          {
+            "end": 191,
+            "id": "input.js:6:11",
+            "name": "",
+            "slice": "function (v) {\n      return v + 0;\n    }",
+            "start": 151
+          }
+        ],
+        "pairs": [
+          {
+            "fresh": 0,
+            "freshId": "input.js:4:23",
+            "prior": 0,
+            "priorId": "prior.js:4:23",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "fresh": 1,
+            "freshId": "input.js:6:11",
+            "prior": 1,
+            "priorId": "prior.js:6:11",
+            "tier": "structuralHashUnique"
+          }
+        ],
+        "stats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 2,
+          "twoHopShapesResolved": 0,
+          "unmatched": 4
+        }
+      },
+      "path": "vendor/lib_f427067b.js",
+      "twins": {
+        "fresh": [
+          {
+            "end": 66,
+            "hash": "df0f6518afd197a2",
+            "slice": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");",
+            "start": 0
+          },
+          {
+            "end": 200,
+            "hash": "19824aaf36a4c3a9",
+            "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick0: function (v) {\n      return v + 0;\n    }\n  };\n});",
+            "start": 67
+          }
+        ],
+        "gates": {
+          "rows": [
+            {
+              "fresh": {
+                "end": 66,
+                "start": 0,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 66,
+                "start": 0,
+                "text": "prior"
+              },
+              "tier": "unique"
+            },
+            {
+              "fresh": {
+                "end": 200,
+                "start": 67,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 200,
+                "start": 67,
+                "text": "prior"
+              },
+              "tier": "unique"
+            }
+          ],
+          "stats": {
+            "bucketTwins": 0,
+            "candidates": 0,
+            "cascadeConflicts": 0,
+            "freshStatements": 2,
+            "moduleScopedAmbiguous": 0,
+            "moduleScopedTwins": 0,
+            "outerRefs": 0,
+            "pairs": 0,
+            "priorStatements": 4,
+            "privateRenames": 0,
+            "transferredTwins": 0,
+            "uniqueTwins": 2,
+            "vetoedCallee": 0,
+            "vetoedRole": 0,
+            "vetoedStructural": 0
+          }
+        }
+      }
+    },
+    {
+      "close": null,
+      "freshText": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick1: function (v) {\n      return v + 1;\n    }\n  };\n});",
+      "functions": {
+        "ambiguous": [],
+        "bindingAmbiguous": [],
+        "bindingPairs": [],
+        "bindingStats": null,
+        "bindingUnmatched": [],
+        "fresh": [
+          {
+            "end": 198,
+            "id": "input.js:4:23",
+            "name": "",
+            "slice": "function (exports, module) {\n  module.exports = {\n    pick1: function (v) {\n      return v + 1;\n    }\n  };\n}",
+            "start": 90
+          },
+          {
+            "end": 191,
+            "id": "input.js:6:11",
+            "name": "",
+            "slice": "function (v) {\n      return v + 1;\n    }",
+            "start": 151
+          }
+        ],
+        "pairs": [
+          {
+            "fresh": 0,
+            "freshId": "input.js:4:23",
+            "prior": 2,
+            "priorId": "prior.js:11:23",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "fresh": 1,
+            "freshId": "input.js:6:11",
+            "prior": 3,
+            "priorId": "prior.js:13:11",
+            "tier": "structuralHashUnique"
+          }
+        ],
+        "stats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 2,
+          "twoHopShapesResolved": 0,
+          "unmatched": 4
+        }
+      },
+      "path": "vendor/lib_3f46e8c1.js",
+      "twins": {
+        "fresh": [
+          {
+            "end": 66,
+            "hash": "df0f6518afd197a2",
+            "slice": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");",
+            "start": 0
+          },
+          {
+            "end": 200,
+            "hash": "453e1e132ac380d0",
+            "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick1: function (v) {\n      return v + 1;\n    }\n  };\n});",
+            "start": 67
+          }
+        ],
+        "gates": {
+          "rows": [
+            {
+              "fresh": {
+                "end": 66,
+                "start": 0,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 66,
+                "start": 0,
+                "text": "prior"
+              },
+              "tier": "unique"
+            },
+            {
+              "fresh": {
+                "end": 200,
+                "start": 67,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 334,
+                "start": 201,
+                "text": "prior"
+              },
+              "tier": "unique"
+            }
+          ],
+          "stats": {
+            "bucketTwins": 0,
+            "candidates": 0,
+            "cascadeConflicts": 0,
+            "freshStatements": 2,
+            "moduleScopedAmbiguous": 0,
+            "moduleScopedTwins": 0,
+            "outerRefs": 0,
+            "pairs": 0,
+            "priorStatements": 4,
+            "privateRenames": 0,
+            "transferredTwins": 0,
+            "uniqueTwins": 2,
+            "vetoedCallee": 0,
+            "vetoedRole": 0,
+            "vetoedStructural": 0
+          }
+        }
+      }
+    },
+    {
+      "close": null,
+      "freshText": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick2: function (v) {\n      return v + 2;\n    }\n  };\n});",
+      "functions": {
+        "ambiguous": [],
+        "bindingAmbiguous": [],
+        "bindingPairs": [],
+        "bindingStats": null,
+        "bindingUnmatched": [],
+        "fresh": [
+          {
+            "end": 198,
+            "id": "input.js:4:23",
+            "name": "",
+            "slice": "function (exports, module) {\n  module.exports = {\n    pick2: function (v) {\n      return v + 2;\n    }\n  };\n}",
+            "start": 90
+          },
+          {
+            "end": 191,
+            "id": "input.js:6:11",
+            "name": "",
+            "slice": "function (v) {\n      return v + 2;\n    }",
+            "start": 151
+          }
+        ],
+        "pairs": [
+          {
+            "fresh": 0,
+            "freshId": "input.js:4:23",
+            "prior": 4,
+            "priorId": "prior.js:18:23",
+            "tier": "structuralHashUnique"
+          },
+          {
+            "fresh": 1,
+            "freshId": "input.js:6:11",
+            "prior": 5,
+            "priorId": "prior.js:20:11",
+            "tier": "structuralHashUnique"
+          }
+        ],
+        "stats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 2,
+          "twoHopShapesResolved": 0,
+          "unmatched": 4
+        }
+      },
+      "path": "vendor/lib_e6fc799d.js",
+      "twins": {
+        "fresh": [
+          {
+            "end": 66,
+            "hash": "df0f6518afd197a2",
+            "slice": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");",
+            "start": 0
+          },
+          {
+            "end": 200,
+            "hash": "d031f3b1ed645884",
+            "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick2: function (v) {\n      return v + 2;\n    }\n  };\n});",
+            "start": 67
+          }
+        ],
+        "gates": {
+          "rows": [
+            {
+              "fresh": {
+                "end": 66,
+                "start": 0,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 66,
+                "start": 0,
+                "text": "prior"
+              },
+              "tier": "unique"
+            },
+            {
+              "fresh": {
+                "end": 200,
+                "start": 67,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 468,
+                "start": 335,
+                "text": "prior"
+              },
+              "tier": "unique"
+            }
+          ],
+          "stats": {
+            "bucketTwins": 0,
+            "candidates": 0,
+            "cascadeConflicts": 0,
+            "freshStatements": 2,
+            "moduleScopedAmbiguous": 0,
+            "moduleScopedTwins": 0,
+            "outerRefs": 0,
+            "pairs": 0,
+            "priorStatements": 4,
+            "privateRenames": 0,
+            "transferredTwins": 0,
+            "uniqueTwins": 2,
+            "vetoedCallee": 0,
+            "vetoedRole": 0,
+            "vetoedStructural": 0
+          }
+        }
+      }
+    },
+    {
+      "close": {
+        "pairs": [],
+        "schemaVersion": 1,
+        "skippedNew": 0,
+        "skippedOld": 0,
+        "stats": {
+          "corroboratedByAlignment": 0,
+          "corroboratedByShingles": 0,
+          "uncorroborated": 0
+        }
+      },
+      "freshText": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");\nexports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick3: function (v) {\n      return v + 3;\n    }\n  };\n});",
+      "functions": {
+        "ambiguous": [],
+        "bindingAmbiguous": [],
+        "bindingPairs": [],
+        "bindingStats": null,
+        "bindingUnmatched": [],
+        "fresh": [
+          {
+            "end": 198,
+            "id": "input.js:4:23",
+            "name": "",
+            "slice": "function (exports, module) {\n  module.exports = {\n    pick3: function (v) {\n      return v + 3;\n    }\n  };\n}",
+            "start": 90
+          },
+          {
+            "end": 191,
+            "id": "input.js:6:11",
+            "name": "",
+            "slice": "function (v) {\n      return v + 3;\n    }",
+            "start": 151
+          }
+        ],
+        "pairs": [],
+        "stats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 0,
+          "twoHopShapesResolved": 0,
+          "unmatched": 6
+        }
+      },
+      "path": "vendor/lib_5ca0c1bc.js",
+      "twins": {
+        "fresh": [
+          {
+            "end": 66,
+            "hash": "df0f6518afd197a2",
+            "slice": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");",
+            "start": 0
+          },
+          {
+            "end": 200,
+            "hash": "911d1e6539eeae2e",
+            "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick3: function (v) {\n      return v + 3;\n    }\n  };\n});",
+            "start": 67
+          }
+        ],
+        "gates": {
+          "rows": [
+            {
+              "fresh": {
+                "end": 66,
+                "start": 0,
+                "text": "fresh"
+              },
+              "outcome": "abstained:no-candidacy",
+              "prior": {
+                "end": 66,
+                "start": 0,
+                "text": "prior"
+              },
+              "tier": "unique"
+            }
+          ],
+          "stats": {
+            "bucketTwins": 0,
+            "candidates": 0,
+            "cascadeConflicts": 0,
+            "freshStatements": 2,
+            "moduleScopedAmbiguous": 0,
+            "moduleScopedTwins": 0,
+            "outerRefs": 0,
+            "pairs": 0,
+            "priorStatements": 4,
+            "privateRenames": 0,
+            "transferredTwins": 0,
+            "uniqueTwins": 1,
+            "vetoedCallee": 0,
+            "vetoedRole": 0,
+            "vetoedStructural": 0
+          }
+        }
+      }
+    },
+    {
+      "close": {
+        "pairs": [],
+        "schemaVersion": 1,
+        "skippedNew": 0,
+        "skippedOld": 0,
+        "stats": {
+          "corroboratedByAlignment": 0,
+          "corroboratedByShingles": 0,
+          "uncorroborated": 0
+        }
+      },
+      "freshText": "import { createRequire as Glq } from \"node:module\";\nvar m6 = Glq(import.meta.url);\nvar x = (I, A) => () => (A || I((A = {\n  exports: {}\n}).exports, A), A.exports);\nvar run = lib_f427067b().pick0(1);",
+      "functions": {
+        "ambiguous": [],
+        "bindingAmbiguous": [],
+        "bindingPairs": [],
+        "bindingStats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 0,
+          "twoHopShapesResolved": 0,
+          "unmatched": 1
+        },
+        "bindingUnmatched": [],
+        "fresh": [
+          {
+            "end": 162,
+            "id": "input.js:3:8",
+            "name": "",
+            "slice": "(I, A) => () => (A || I((A = {\n  exports: {}\n}).exports, A), A.exports)",
+            "start": 91
+          },
+          {
+            "end": 162,
+            "id": "input.js:3:18",
+            "name": "",
+            "slice": "() => (A || I((A = {\n  exports: {}\n}).exports, A), A.exports)",
+            "start": 101
+          }
+        ],
+        "pairs": [],
+        "stats": {
+          "calleeHashesResolved": 0,
+          "calleeShapesResolved": 0,
+          "callerShapesResolved": 0,
+          "crossedContainerRevoked": 0,
+          "enclosingStatementResolved": 0,
+          "enclosingStmtAbstain": {
+            "countMismatch": 0,
+            "countMismatchLocal": 0,
+            "countMismatchSpanning": 0,
+            "noHashIsStatement": 0,
+            "noHashOther": 0,
+            "noHashTooLong": 0,
+            "noNewHolders": 0,
+            "partnerFiltered": 0,
+            "reached": 0,
+            "reachedSpanBuckets": {
+              "1-9": 0,
+              "10-24": 0,
+              "100-199": 0,
+              "200-499": 0,
+              "25-49": 0,
+              "50-99": 0,
+              "500+": 0,
+              "unknown": 0
+            },
+            "resolvedLocal": 0,
+            "resolvedSpanning": 0,
+            "spanningParentAgrees": 0,
+            "spanningParentDisagrees": 0,
+            "spanningParentUnknown": 0
+          },
+          "identityResolved": 0,
+          "injectivityDemoted": 0,
+          "interchangeableResolved": 0,
+          "memberKeyResolved": 0,
+          "ordinalResolved": 0,
+          "propagationByRung": {
+            "externalRefs": 0,
+            "matchedCallee": 0,
+            "matchedCaller": 0,
+            "scopeOrdinal": 0,
+            "scopeParent": 0
+          },
+          "propagationResolved": 0,
+          "shingleSimilarityResolved": 0,
+          "shingleUnconsultable": 0,
+          "singletonRejected": 0,
+          "singletonUnguarded": 0,
+          "stillAmbiguous": 0,
+          "structuralHashUnique": 0,
+          "twoHopShapesResolved": 0,
+          "unmatched": 6
+        }
+      },
+      "path": "runtime.js",
+      "twins": {
+        "fresh": [
+          {
+            "end": 51,
+            "hash": "d1e342ff072b65bd",
+            "slice": "import { createRequire as Glq } from \"node:module\";",
+            "start": 0
+          },
+          {
+            "end": 82,
+            "hash": "3b29279d054e4a74",
+            "slice": "var m6 = Glq(import.meta.url);",
+            "start": 52
+          },
+          {
+            "end": 163,
+            "hash": "c6dfbce279a9acc5",
+            "slice": "var x = (I, A) => () => (A || I((A = {\n  exports: {}\n}).exports, A), A.exports);",
+            "start": 83
+          },
+          {
+            "end": 198,
+            "hash": "7ffcb9eda63bf8c1",
+            "slice": "var run = lib_f427067b().pick0(1);",
+            "start": 164
+          }
+        ],
+        "gates": {
+          "rows": [],
+          "stats": {
+            "bucketTwins": 0,
+            "candidates": 0,
+            "cascadeConflicts": 0,
+            "freshStatements": 4,
+            "moduleScopedAmbiguous": 0,
+            "moduleScopedTwins": 0,
+            "outerRefs": 0,
+            "pairs": 0,
+            "priorStatements": 4,
+            "privateRenames": 0,
+            "transferredTwins": 0,
+            "uniqueTwins": 0,
+            "vetoedCallee": 0,
+            "vetoedRole": 0,
+            "vetoedStructural": 0
+          }
+        }
+      }
+    }
+  ],
+  "meta": {
+    "adapter": "bun",
+    "bundler": "bun",
+    "differences": [
+      "no library detection: every unpacked file is matched, where the pipeline only names the files the library filter kept",
+      "no naming: the transfer freeze is empty; matching does not read it",
+      "multi-file raw-bundle dump (schemaVersion 2): the prior side is hoisted to the top level once; per-file sections carry only their own fresh side, with prior indices referencing the shared inventory, and the per-call prior-indexed blocks (unmatched, rejections, close candidates) are dropped — against a whole-tree prior each section's copy runs to tens of MB; the scored ground truth reads pairs and inventories",
+      "4 vendor factory file(s) wrapped the way the split ships them (exports.f = __commonJS(body)) — a raw unpack tree's bare factory bodies do not parse standalone; listed in meta.wrappedFactoryFiles"
+    ],
+    "input": "<input>",
+    "minifier": "unknown",
+    "prior": "<prior>",
+    "wrappedFactoryFiles": [
+      "vendor/lib_f427067b.js",
+      "vendor/lib_3f46e8c1.js",
+      "vendor/lib_e6fc799d.js",
+      "vendor/lib_5ca0c1bc.js"
+    ]
+  },
+  "prior": {
+    "functions": [
+      {
+        "end": 198,
+        "id": "prior.js:4:23",
+        "name": "",
+        "slice": "function (exports, module) {\n  module.exports = {\n    pick0: function (v) {\n      return v + 0;\n    }\n  };\n}",
+        "start": 90
+      },
+      {
+        "end": 191,
+        "id": "prior.js:6:11",
+        "name": "",
+        "slice": "function (v) {\n      return v + 0;\n    }",
+        "start": 151
+      },
+      {
+        "end": 332,
+        "id": "prior.js:11:23",
+        "name": "",
+        "slice": "function (exports, module) {\n  module.exports = {\n    pick1: function (v) {\n      return v + 1;\n    }\n  };\n}",
+        "start": 224
+      },
+      {
+        "end": 325,
+        "id": "prior.js:13:11",
+        "name": "",
+        "slice": "function (v) {\n      return v + 1;\n    }",
+        "start": 285
+      },
+      {
+        "end": 466,
+        "id": "prior.js:18:23",
+        "name": "",
+        "slice": "function (exports, module) {\n  module.exports = {\n    pick2: function (v) {\n      return v + 2;\n    }\n  };\n}",
+        "start": 358
+      },
+      {
+        "end": 459,
+        "id": "prior.js:20:11",
+        "name": "",
+        "slice": "function (v) {\n      return v + 2;\n    }",
+        "start": 419
+      }
+    ],
+    "statements": [
+      {
+        "end": 66,
+        "hash": "df0f6518afd197a2",
+        "slice": "const {\n  __commonJS\n} = require(\"../.humanify/__bun-runtime.js\");",
+        "start": 0
+      },
+      {
+        "end": 200,
+        "hash": "19824aaf36a4c3a9",
+        "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick0: function (v) {\n      return v + 0;\n    }\n  };\n});",
+        "start": 67
+      },
+      {
+        "end": 334,
+        "hash": "453e1e132ac380d0",
+        "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick1: function (v) {\n      return v + 1;\n    }\n  };\n});",
+        "start": 201
+      },
+      {
+        "end": 468,
+        "hash": "d031f3b1ed645884",
+        "slice": "exports.f = __commonJS(function (exports, module) {\n  module.exports = {\n    pick2: function (v) {\n      return v + 2;\n    }\n  };\n});",
+        "start": 335
+      }
+    ]
+  },
+  "schemaVersion": 2,
+  "tool": "humanify match"
+}
