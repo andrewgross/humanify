@@ -199,6 +199,7 @@ pub fn run_naming<P: NameProvider>(
                 bundler: opts.bundler,
                 minifier: opts.minifier,
                 fast: config.fast.on(),
+                same_program_check: true,
             },
             |stage| era::prior_era(stage, &opts, provider, log),
         ),

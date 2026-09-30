@@ -74,6 +74,14 @@ pub struct PriorMatchInput<'t> {
     /// (from its own parse of the same text — the AST is not `Send`),
     /// beside the fresh side's. Byte-identical: a parse is deterministic.
     pub fast: bool,
+    /// Run the same-program sanity check ([`assert_prior_looks_like_same_program`])
+    /// on THIS call. Every file of a multi-file work dir is matched against
+    /// the whole prior tree, so the check's granularity is the dump, not
+    /// the call: the one caller that amortizes it across files (the match
+    /// verb) turns the per-call check off and runs the same assert over
+    /// the union of every file's pairs. Semantics are byte-identical for
+    /// every other caller (the pipeline always passes true).
+    pub same_program_check: bool,
 }
 
 /// One side of the match stage, all borrowed from [`with_match_stage`]'s
@@ -130,6 +138,7 @@ pub fn match_prior_version<T>(
         prior,
         bundler,
         minifier,
+        same_program_check,
         fast,
     } = input;
 
@@ -288,10 +297,15 @@ pub fn match_prior_version<T>(
     // structural hashes with the new version is a wrong file, not an
     // aggressive refactor. Fails the dump loudly instead of transferring
     // nothing (the pipeline throws; the dump cannot proceed past it).
-    crate::prior::assert_prior_looks_like_same_program(
-        prior_graph.functions.len(),
-        function_result.unmatched.len(),
-    )?;
+    // Callers amortizing the check across many files against the SAME
+    // prior (the match verb's multi-file dumps) opt out per call and run
+    // the identical assert at their own granularity.
+    if same_program_check {
+        crate::prior::assert_prior_looks_like_same_program(
+            prior_graph.functions.len(),
+            function_result.unmatched.len(),
+        )?;
+    }
 
     drop(ph);
     let ph = phase("prior:twin-inventories");
