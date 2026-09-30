@@ -9,13 +9,22 @@
 use humanify_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
 use oxc_allocator::Allocator;
 
-use super::sweep::{collect_sweep_targets, sweep_minted_names};
+use super::sweep::{DecidedNames, collect_sweep_targets, run_deferred_sweep, sweep_minted_names};
 use crate::ingest::Ingest;
 use crate::modules::soundness::collect_eval_with_taint;
 use crate::naming::waves::render::render_program;
 use crate::rename::eligibility::Eligibility;
 use crate::rename::validated::RenameState;
+use crate::rename::validated::scopes::BScopeId;
 use crate::trail::Anchor;
+
+/// The scope a name is registered in (a helper for these tests' setup).
+fn scope_holding(state: &RenameState, name: &str) -> BScopeId {
+    (0..state.view().scopes.len())
+        .map(|i| BScopeId(i as u32))
+        .find(|s| state.binding_in(*s, name).is_some())
+        .unwrap_or_else(|| panic!("no scope holds {name:?}"))
+}
 
 /// The coverage-sweep collision retry (2026-09-28 fix): a sweep suggestion
 /// rejected for a name-collision class (`target-in-scope` here — the
@@ -92,11 +101,15 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     assert_eq!(provider.asks.get(), 2, "exactly one re-ask (it applied)");
     assert_eq!(r.reasked, 1, "the retry is recorded");
     assert_eq!(r.named, 1, "the re-asked suggestion applied");
-    assert_eq!(r.skipped, 1, "the declined `f` stays skipped");
+    // 2026-09-30 provenance targeting: the never-asked descriptive `used`
+    // is a target too (the sweep no longer gates on the name's shape), and
+    // the provider declines it — so `f` and `used` both stay skipped.
+    assert_eq!(r.skipped, 2);
     // The ask trace (`--dump-asks`): the first round carries no cause; the
     // re-ask records the reask class and the applier's rejection code.
     assert_eq!(r.dispatches.len(), 2, "both asks recorded");
@@ -170,6 +183,7 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     assert_eq!(
         stubborn.asks.get(),
@@ -269,6 +283,7 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     assert_eq!(provider.asks.get(), 3, "bounded: no third re-ask");
     assert_eq!(r.reasked, 2, "one re-ask round each");
@@ -278,9 +293,11 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
 }
 
 /// Andrew's 2026-09-30 decision: the single-letter exemption is GONE. A
-/// never-asked `i` is a sweep TARGET now (before, `SHORT_WORDS` made it
-/// invisible to `is_sweep_target` — exactly the pass whose job is
+/// never-asked `i` is a sweep TARGET (before, `SHORT_WORDS` made it
+/// invisible to the minted-shape walk — exactly the pass whose job is
 /// never-asked names, finding #62), so it gets asked and can be named.
+/// Under the same day's provenance targeting the letter needs no shape
+/// argument at all: no record, no rename — target.
 #[test]
 fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
     let text = "function f() {\n  var i = 0;\n  return i + 1;\n}";
@@ -338,6 +355,7 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     let asked: Vec<String> = provider.asked.borrow().iter().flatten().cloned().collect();
     assert!(
@@ -410,6 +428,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     assert_eq!(r.named, 2, "the letter answer applied");
     let code = render_program(semantic, &state);
@@ -426,7 +445,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
     // the SAME state (what a later sweep round in the run would see) must
     // not include the applied letter, and a second sweep dispatch asks
     // nothing at all.
-    let again = collect_sweep_targets(semantic, &state, &eligible, &taint);
+    let again = collect_sweep_targets(semantic, &state, &eligible, &taint, None);
     assert!(
         again.iter().all(|t| t.name != "i"),
         "the carried `i` is not a target again: {:?}",
@@ -445,6 +464,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     assert_eq!(
         (r2.named, r2.dispatches.len()),
@@ -507,6 +527,7 @@ fn sweep_junk_answers_are_still_refused() {
         &params,
         usize::MAX,
         2,
+        None,
     );
     assert_eq!(r.named, 0, "no junk answer applied");
     assert_eq!(r.skipped, 2);
@@ -525,31 +546,237 @@ fn sweep_junk_answers_are_still_refused() {
     );
 }
 
-/// Finding #64's never-asked class, checked: does a destructure VALUE
-/// slot (`y` in `const [y, setSelected] = ...` — the half the 2026-09-28
-/// fix never reached) enter the sweep's targeting now that single letters
-/// are minted? The walk must reach it: the sweep's never-asked detection
-/// IS its target collection.
+/// Finding #64's never-asked class, generalized by Andrew's 2026-09-30
+/// provenance decision: the sweep targets bindings that were never asked
+/// ANYWHERE, whatever their name looks like. The real-tree exemplar is
+/// `Ye` in `[Ye, setSelectedIndex]` (is-item-or-disabled-header.js, 2.1.213
+/// walk trees) — a MULTI-LETTER destructure value slot no ask window ever
+/// covered. `setSelected` here stands for the half that WAS decided: the
+/// pass records a wave rename for it before the sweep runs, so the LEDGER
+/// (not the shape) is what keeps it out.
 #[test]
-fn a_destructure_value_slot_is_a_sweep_target() {
-    let text = "function f() {\n  const [y, setSelected] = use();\n  return y + setSelected;\n}";
+fn a_never_asked_destructure_value_slot_is_a_sweep_target_even_when_descriptive() {
+    let text = "function f() {\n  const [valueSlot, setValueSlot] = use();\n  return valueSlot + setValueSlot;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    // The setter half was decided by a wave: the model renamed it.
+    let scope = scope_holding(&state, "valueSlot");
+    let setter = state.get_binding(scope, "setValueSlot").expect("setter");
+    let applied = state.attempt_validated_rename(
+        crate::rename::validated::RenameRequest {
+            scope,
+            old_name: "setValueSlot",
+            new_name: "setSelected",
+            expected: None,
+        },
+        crate::rename::validated::TrailSpec::CallerRecords {
+            tier: crate::trail::Tier::Llm,
+        },
+    );
+    assert!(applied.applied, "the wave rename landed");
+    state.record(
+        setter,
+        "setValueSlot",
+        crate::trail::Attempt::new(crate::trail::Tier::Llm, crate::trail::Outcome::Applied)
+            .proposed("setSelected"),
+        false,
+    );
+    let targets = collect_sweep_targets(semantic, &state, &eligible, &taint, None);
+    let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        names.contains(&"valueSlot"),
+        "the never-asked value slot reaches the sweep whatever its name looks like: {names:?}"
+    );
+    assert!(
+        !names.contains(&"setSelected") && !names.contains(&"setValueSlot"),
+        "the renamed half is out by the LEDGER, not by shape: {names:?}"
+    );
+}
+
+/// Andrew's 2026-09-30 provenance targeting, the churn half: a binding the
+/// model was already asked about is NOT re-targeted (the p2sBytes-class
+/// re-roll ends), and neither is one renamed this run — while an identifier
+/// whose retry budget EXHAUSTED still-unrenamed remains a target (it is
+/// exactly the thing that is not properly renamed).
+#[test]
+fn decided_bindings_are_not_retargeted_but_exhausted_ones_are() {
+    let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  var Och_ = three();\n  return used + Kq_ + Och_;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let f_scope = scope_holding(&state, "Kq_");
+    // `used` was renamed this run.
+    let used = state.get_binding(f_scope, "used").expect("used");
+    let applied = state.attempt_validated_rename(
+        crate::rename::validated::RenameRequest {
+            scope: f_scope,
+            old_name: "used",
+            new_name: "usedValue",
+            expected: None,
+        },
+        crate::rename::validated::TrailSpec::CallerRecords {
+            tier: crate::trail::Tier::Llm,
+        },
+    );
+    assert!(applied.applied);
+    state.record(
+        used,
+        "used",
+        crate::trail::Attempt::new(crate::trail::Tier::Llm, crate::trail::Outcome::Applied)
+            .proposed("usedValue"),
+        false,
+    );
+    // `Kq_` was asked and the model declined — a terminal keep.
+    let kq = state.get_binding(f_scope, "Kq_").expect("Kq_");
+    state.record(
+        kq,
+        "Kq_",
+        crate::trail::Attempt::new(crate::trail::Tier::Llm, crate::trail::Outcome::Abstained)
+            .reason("llm-declined"),
+        false,
+    );
+    // `Och_` was asked, every suggestion collided, the budget died.
+    let och = state.get_binding(f_scope, "Och_").expect("Och_");
+    state.record(
+        och,
+        "Och_",
+        crate::trail::Attempt::new(crate::trail::Tier::Llm, crate::trail::Outcome::Rejected)
+            .proposed("taken")
+            .reason("target-in-scope"),
+        false,
+    );
+    state.mark_exhausted(och);
+    let targets = collect_sweep_targets(semantic, &state, &eligible, &taint, None);
+    let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        !names.contains(&"usedValue") && !names.contains(&"used"),
+        "a rename applied this run is not re-asked: {names:?}"
+    );
+    assert!(
+        !names.contains(&"Kq_"),
+        "a model-kept name is not re-asked — the p2sBytes churn ends: {names:?}"
+    );
+    assert!(
+        names.contains(&"Och_"),
+        "a retry-exhausted identifier is STILL a target: {names:?}"
+    );
+}
+
+/// The convention carve-outs stay carve-outs under provenance targeting:
+/// all-underscore (`_`, `__`) and `$`-only names are deliberate
+/// placeholders, never asked, never counted as missed.
+#[test]
+fn convention_carveouts_are_never_sweep_targets() {
+    let text = "function f() {\n  var _ = one();\n  var __ = two();\n  var $ = three();\n  return _ + __ + $;\n}";
     let eligible = Eligibility::new(Some("bun"), Some("bun"));
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
     let state = RenameState::new(semantic, Anchor::Fresh);
-    let targets = collect_sweep_targets(semantic, &state, &eligible, &taint);
+    let targets = collect_sweep_targets(semantic, &state, &eligible, &taint, None);
     let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
+    for out in ["_", "__", "$"] {
+        assert!(
+            !names.contains(&out),
+            "the {out:?} carve-out is never a target: {names:?}"
+        );
+    }
+}
+
+/// The deferred sweep parses a NEW text (reconciled-or-generated), so
+/// per-binding identity from the naming era does not reach it. Its ledger
+/// join is BY NAME — the one identity that survives the text boundary —
+/// and it must respect the same rule: decided names are skipped, exhausted
+/// and never-asked names are asked.
+#[test]
+fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
+    let text = "var Kq_ = one();\nvar kept_ = two();\nvar Och_ = three();\nvar renamed = four();\nfunction f() { return Kq_ + kept_ + Och_ + renamed; }";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let params = humanify_model::llm::CacheKeyParams::default();
+    struct Declining {
+        asked: std::cell::RefCell<Vec<String>>,
+    }
+    impl NameProvider for Declining {
+        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+            calls
+                .into_iter()
+                .map(|c| {
+                    self.asked
+                        .borrow_mut()
+                        .extend(c.request.identifiers.iter().cloned());
+                    Ok(BatchRenameResponse {
+                        renames: Renames::default(),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    let provider = Declining {
+        asked: std::cell::RefCell::new(Vec::new()),
+    };
+    let decided = DecidedNames {
+        renamed_to: ["renamed".to_string()].into_iter().collect(),
+        asked: ["kept_".to_string()].into_iter().collect(),
+        exhausted: ["Och_".to_string()].into_iter().collect(),
+    };
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+    let out = run_deferred_sweep(
+        text,
+        Anchor::Generated,
+        &eligible,
+        &provider,
+        &mut log,
+        &params,
+        usize::MAX,
+        crate::trail::StrategyTrail::enabled(),
+        false,
+        2,
+        &decided,
+    )
+    .expect("the sweep parses its text");
+    let asked = provider.asked.borrow().clone();
     assert!(
-        names.contains(&"y"),
-        "the destructure value slot `y` reaches the sweep: {names:?}"
+        asked.iter().any(|n| n == "Kq_"),
+        "the never-asked name is asked: {asked:?}"
     );
-    // `setSelected` is a descriptive name, never a target — the gap was
-    // only ever the VALUE half of the pair.
     assert!(
-        !names.contains(&"setSelected"),
-        "the named half stays out of the targets: {names:?}"
+        asked.iter().any(|n| n == "Och_"),
+        "the retry-exhausted name is still a target: {asked:?}"
+    );
+    assert!(
+        !asked.iter().any(|n| n == "kept_"),
+        "the decided-kept name is skipped: {asked:?}"
+    );
+    assert!(
+        !asked.iter().any(|n| n == "renamed"),
+        "the renamed-by-era name is skipped: {asked:?}"
+    );
+    // The deferred sweep's classification declares the by-name join.
+    let provenance = out.sweep.provenance.as_ref().expect("the classification");
+    assert!(provenance.joined);
+    assert_eq!(
+        provenance.total, 5,
+        "Kq_, kept_, Och_, renamed and f (the callees are free refs)"
+    );
+    assert_eq!(provenance.renamed, 1, "`renamed`, by name");
+    // `kept_` joins as decided by name; `Kq_`, `Och_` and `f` were RE-ASKED
+    // by this sweep's own dispatches and the decline terminal-keeps them —
+    // the newest record this run wins over the join's class.
+    assert_eq!(provenance.asked_kept, 4);
+    assert_eq!(provenance.exhausted, 0);
+    assert_eq!(
+        provenance.never_asked, 0,
+        "this sweep asked every target it had"
     );
 }
 
@@ -601,6 +828,7 @@ fn the_sweep_reask_budget_is_configurable() {
         &params,
         usize::MAX,
         1,
+        None,
     );
     assert_eq!(one.asks.get(), 2, "a single-reask budget is the old bound");
     assert_eq!(r.reasked, 1);
@@ -622,12 +850,13 @@ fn the_sweep_reask_budget_is_configurable() {
         &params,
         usize::MAX,
         0,
+        None,
     );
     assert_eq!(zero.asks.get(), 1, "a zero budget never re-asks");
     assert_eq!(r.reasked, 0);
     assert_eq!(r.reask_dropped, 0);
     assert_eq!(
-        r.skipped, 2,
-        "the declined `f` and the rejected `Kq_` both stay skipped-but-counted"
+        r.skipped, 3,
+        "the declined `f` and `used` plus the rejected `Kq_` stay skipped-but-counted"
     );
 }

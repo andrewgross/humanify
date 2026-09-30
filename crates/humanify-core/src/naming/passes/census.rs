@@ -8,13 +8,18 @@
 //! map), each binding once. The floor passes consume the same list, so the
 //! order is a decision input (which candidate is attempted first).
 //!
-//! Since 2026-09-30 (Andrew) single letters count as minted: the census's
-//! `total` includes them, so the no-minified-leftovers meter can finally
-//! SEE the ~70 single-letter sites finding #62 measured at 2.1.216. Their
-//! provenance split (model-chosen / asked-kept / never-processed) is a
-//! RUN-level join over this walk's survivors and the run's outcome records
-//! — it lives in `naming::report::coverage::single_letter_split`, because
-//! the records live with the driver, not with this text-local walk.
+//! TWO universes read this walk (2026-09-30, Andrew's provenance decision):
+//! the MINTED walk (`collect_minted_bindings`, `is_bun_token`-gated) is the
+//! no-minified-leftovers METER's population; the ELIGIBLE walk
+//! (`collect_eligible_bindings` — minted shape NOT asked) is the coverage
+//! sweep's candidate universe, decided by the LEDGER instead of by shape
+//! (`sweep::collect_sweep_targets`). Since 2026-09-30 single letters count
+//! as minted, so the meter finally sees the ~70 single-letter sites
+//! finding #62 measured at 2.1.216. The survivors' provenance split
+//! (model-chosen / asked-kept / exhausted / never-processed) is a run-level
+//! join over this walk's output and the run's outcome records — it lives
+//! in `naming::report::coverage::survivor_provenance_split`, because the
+//! records live with the driver, not with this text-local walk.
 
 use std::collections::HashSet;
 
@@ -157,6 +162,35 @@ pub fn collect_minted_bindings(
     state: &RenameState,
     eligible: &Eligibility,
 ) -> MintedWalk {
+    collect_bindings(semantic, state, eligible, true)
+}
+
+/// The provenance walk (2026-09-30, Andrew's decision): every eligible
+/// binding under its CURRENT name — NO minted-shape gate. The sweep's
+/// candidate universe is decided by the LEDGER (renamed? asked?
+/// exhausted?), not by what the name looks like, so its walk must be the
+/// unfiltered binding census; the minted walk above stays the
+/// minted-leftovers METER's own universe.
+pub fn collect_eligible_bindings(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    eligible: &Eligibility,
+) -> MintedWalk {
+    collect_bindings(semantic, state, eligible, false)
+}
+
+/// The one walk behind both: scopes in traversal order, each scope's
+/// bindings in `Object.entries` order under their CURRENT names (a
+/// renamed binding sits at the end of its map), each binding once.
+/// `minted_only` keeps the census's `is_bun_token` gate (the
+/// no-minified-leftovers meter's population); `false` is the sweep's
+/// ledger universe.
+fn collect_bindings(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    eligible: &Eligibility,
+    minted_only: bool,
+) -> MintedWalk {
     let view = state.view();
     let occ = Occurrences::build(semantic, state);
     let mut seen: HashSet<BindingId> = HashSet::new();
@@ -170,7 +204,7 @@ pub fn collect_minted_bindings(
             if !seen.insert(binding) {
                 continue;
             }
-            if !eligible.is_eligible(&name) || !is_bun_token(&name) {
+            if !eligible.is_eligible(&name) || (minted_only && !is_bun_token(&name)) {
                 continue;
             }
             let family = classify(semantic, state, binding);

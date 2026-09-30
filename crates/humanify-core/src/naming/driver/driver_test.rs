@@ -479,6 +479,42 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
     );
 }
 
+/// The survivor split of
+/// `the_census_splits_single_letter_survivors_by_provenance`'s fixture:
+/// three survivors, one per class — `i` (model-chosen), `j` (asked, kept),
+/// `x` (never processed). All three are single letters, so the general
+/// split and its single-letter slice assert the same numbers.
+fn assert_survivor_split(p: &humanify_model::stats::ProvenanceSplit) {
+    assert_eq!(p.total, 3.0, "i, j and x all survive");
+    assert_eq!(p.model_chosen, 1.0, "the deliberately applied i");
+    assert_eq!(p.asked_kept, 1.0, "the declined j");
+    assert_eq!(p.exhausted, 0.0);
+    assert_eq!(
+        p.never_asked, 1.0,
+        "the taint-hidden x — finding #64's class"
+    );
+}
+
+/// The same fixture's in-stage per-binding classification: the eval-taint
+/// rule keeps `x` and every module-level name out of the universe
+/// (protected, not missed), leaving `i` (carried) and `j` (asked, kept) —
+/// neverAsked ZERO: the sweep asked everything that had no record.
+fn assert_binding_split(b: &humanify_model::stats::BindingProvenance) {
+    assert_eq!(b.join, "per-binding");
+    assert_eq!(
+        b.total, 2.0,
+        "i and j — the eval-taint rule keeps the rest out"
+    );
+    assert_eq!(
+        b.renamed, 0.0,
+        "the waves' fn renames sit in the frozen module scope"
+    );
+    assert_eq!(b.model_chosen, 1.0, "the carried i");
+    assert_eq!(b.asked_kept, 1.0, "the declined j");
+    assert_eq!(b.exhausted, 0.0);
+    assert_eq!(b.never_asked, 0.0);
+}
+
 /// Andrew's 2026-09-30 decision, end to end: single letters are
 /// processed like every other name, and the minted census SPLITS their
 /// provenance so the moved numbers stay interpretable. Three survivors in
@@ -556,23 +592,35 @@ fn the_census_splits_single_letter_survivors_by_provenance() {
         .as_ref()
         .and_then(|c| c.minted_census.as_ref())
         .expect("a minted census");
-    let letters = census
-        .single_letters
-        .as_ref()
-        .expect("the provenance split");
-    assert_eq!(
-        letters.total, 3.0,
-        "i, j and x all survive as single letters"
+    // The single-letter slice: i, j and x all survive as single letters.
+    assert_survivor_split(census.single_letters.as_ref().expect("the slice"));
+    // The GENERAL provenance block (2026-09-30): every census survivor has
+    // a class now, not just the letters — same three survivors here (all
+    // single letters in this fixture), so the slice equals the whole.
+    assert_survivor_split(census.provenance.as_ref().expect("the general split"));
+    // The in-stage PER-BINDING half — exact (a fresh run's era sweep holds
+    // its own records, `join: "per-binding"`). Eval-taint is SOUNDNESS,
+    // not provenance: a binding frozen by `keep`'s eval site — `x`, and
+    // every module-level name the taint rule protects (`one`, `keep`)
+    // — is deliberately OUTSIDE the universe (protected, not missed).
+    assert_binding_split(
+        census
+            .binding_provenance
+            .as_ref()
+            .expect("the classification"),
     );
-    assert_eq!(letters.model_chosen, 1.0);
-    assert_eq!(letters.asked_kept, 1.0);
-    assert_eq!(letters.never_asked, 1.0);
     // The printed coverage block names the classes, so a run's output can
     // be read without the JSON.
     let text = out.coverage_text.as_deref().expect("coverage printed");
+    assert!(text.contains("Provenance:"), "{text}");
     assert!(text.contains("Single-letter:"), "{text}");
+    assert!(text.contains("Binding provenance:"), "{text}");
+    assert!(text.contains("(per-binding join)"), "{text}");
     assert!(text.contains("Model-chosen:"), "{text}");
     assert!(text.contains("Asked, kept:"), "{text}");
+    // `Retries exhausted:` follows the printed block's zero-suppression
+    // rule (`push_count_line` skips empty classes) — it is pinned by the
+    // JSON blocks above, not by this fixture's text.
     assert!(text.contains("Never processed:"), "{text}");
 }
 

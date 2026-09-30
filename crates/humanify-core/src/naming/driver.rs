@@ -41,12 +41,12 @@ use crate::naming::passes::census_of_text;
 use crate::naming::passes::family_permute::{
     FamilyPermuteOutcome, PriorMembers, run_family_permute, run_family_permute_with,
 };
-use crate::naming::passes::sweep::{SweepResult, run_deferred_sweep};
+use crate::naming::passes::sweep::{DecidedNames, SweepResult, run_deferred_sweep};
 use crate::naming::reconcile::ReconcileResult;
 use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
 use crate::naming::report::coverage::{
-    CoverageInputs, build_coverage_summary, census_record, format_coverage_summary,
-    single_letter_split,
+    CoverageInputs, binding_provenance_record, build_coverage_summary, census_record,
+    format_coverage_summary, survivor_provenance_split,
 };
 use crate::naming::report::{ProcessorReport, RenameReport};
 use crate::prior::{PriorMatchInput, match_prior_version};
@@ -237,6 +237,7 @@ pub fn run_naming<P: NameProvider>(
         library_functions,
         floor,
         pre_sweep,
+        exhausted_names: era_exhausted,
         prior,
         function_count,
         fn_hashes,
@@ -351,6 +352,11 @@ pub fn run_naming<P: NameProvider>(
         } else {
             Anchor::Generated
         };
+        // The run's decision ledger joined BY NAME: per-binding identity
+        // does not cross the generate/reconcile text boundary, so the
+        // deferred sweep's provenance targeting consults the name join —
+        // the declared approximation (naming::passes::sweep::DecidedNames).
+        let decided = DecidedNames::of(&trail, &out.reports, &era_exhausted);
         match run_deferred_sweep(
             &text,
             anchor,
@@ -362,6 +368,7 @@ pub fn run_naming<P: NameProvider>(
             trail,
             config.emit_rename_ledger,
             config.tunables.reask_limit,
+            &decided,
         ) {
             Ok(o) => {
                 ledger_stages.extend(o.ledger.map(|l| (text.clone(), l)));
@@ -451,10 +458,37 @@ pub fn run_naming<P: NameProvider>(
         &coverage_inputs(&out, function_count, &library),
     );
     let mut record = census_record(&census);
-    // The single-letter provenance split (2026-09-30): the outcome records
-    // ARE the provenance — `single_letter_split` joins the census's
-    // survivors against the run's reports and trail.
-    record.single_letters = Some(single_letter_split(&census, &out.reports, &out.trail));
+    // The provenance meter (2026-09-30, Andrew's decision). The outcome
+    // records ARE the provenance. Two halves, declared different:
+    // - `survivor_provenance_split` — the TREE-WALK join of the census's
+    //   shipped-text survivors against the run's records, BY NAME (spans
+    //   do not cross the text boundary): the printed approximation.
+    // - `binding_provenance` — the sweep's own IN-STAGE classification,
+    //   per binding where identity exists; the deferred sweep's variant
+    //   flags `joined: true` for the by-name rows.
+    let mut exhausted: Vec<String> = era_exhausted.clone();
+    exhausted.extend(
+        out.pre_sweep
+            .as_ref()
+            .into_iter()
+            .flat_map(|s| s.exhausted_names.iter().cloned()),
+    );
+    exhausted.extend(
+        out.deferred_sweep
+            .as_ref()
+            .into_iter()
+            .flat_map(|(_, run)| run.result.exhausted_names.iter().cloned()),
+    );
+    let (survivors, letters) =
+        survivor_provenance_split(&census, &out.reports, &out.trail, &exhausted);
+    record.provenance = Some(survivors);
+    record.single_letters = Some(letters);
+    record.binding_provenance = out
+        .deferred_sweep
+        .as_ref()
+        .and_then(|(_, run)| run.result.provenance.as_ref())
+        .or_else(|| out.pre_sweep.as_ref().and_then(|s| s.provenance.as_ref()))
+        .map(binding_provenance_record);
     coverage.minted_census = Some(record);
     out.coverage_text = Some(format_coverage_summary(&coverage));
     out.coverage = Some(coverage);

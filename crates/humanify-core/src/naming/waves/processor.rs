@@ -2688,6 +2688,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
                     let attempts = entry.rejects.len() as u64 + 1;
                     self.record_retry_give_up(entry.ctx, &entry.old, &suggestion, attempts);
+                    // The decision ledger: the budget died before a name
+                    // could land — the identifier is still not properly
+                    // renamed and STAYS a sweep target (the mark overrides
+                    // the identity keep recorded above).
+                    if let Some(b) = entry.binding.as_ref() {
+                        self.state.mark_exhausted(b.binding);
+                    }
                 }
             }
         }
@@ -2711,6 +2718,9 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             function_id: self.inp.graph.functions[f].session_id.clone(),
         });
         self.ctxs[ctx].names.set(name, name);
+        // The decision ledger: asked and kept — the sweep must not
+        // re-ask it this run (2026-09-30 provenance targeting).
+        self.state.mark_asked(b.binding);
     }
 
     /// The entry's apply closure: `applyFunctionRename` /

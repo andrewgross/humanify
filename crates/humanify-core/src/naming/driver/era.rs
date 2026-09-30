@@ -197,6 +197,10 @@ pub struct NamingEra {
     pub floor: Option<FloorCounts>,
     /// The pre-generate coverage sweep (fresh-anchored), when it ran.
     pub pre_sweep: Option<SweepResult>,
+    /// The era state's retry-exhausted still-unrenamed names (the wave
+    /// barrier's give-ups): the deferred sweep keeps these sweep targets
+    /// by joining them by name across the text boundary.
+    pub exhausted_names: Vec<String>,
     pub prior: Option<PriorStats>,
     pub function_count: usize,
     /// sessionId → the function's structural hash (the report's).
@@ -538,6 +542,7 @@ fn run_era<P: NameProvider>(
         library_functions,
         floor: None,
         pre_sweep: None,
+        exhausted_names: Vec::new(),
         prior,
         function_count: graph.functions.len(),
         fn_hashes,
@@ -564,6 +569,9 @@ fn run_era<P: NameProvider>(
                 opts.params,
                 opts.prompt_window,
                 opts.tunables.reask_limit,
+                // The in-era sweep holds the records itself: per-binding
+                // exact, no cross-text join.
+                None,
             )
         });
         era.floor = Some(FloorCounts {
@@ -619,7 +627,9 @@ fn run_era<P: NameProvider>(
     });
     era.generated = Some(generated);
     era.claims = state.claim_stats();
-    era.trail = state.finish().trail;
+    let outcome = state.finish();
+    era.trail = outcome.trail;
+    era.exhausted_names = outcome.exhausted_names;
     era
 }
 /// The pending close-matched functions' prior-version context: the prior

@@ -13,18 +13,21 @@
 //! TWO distinct questions live here, and every consumer must know which
 //! one it is asking (docs/responsibility.md, the `rename::floor` row):
 //!
-//! - WHO GETS ASKED — does this name look minifier-minted, so the naming
-//!   passes should process it? ([`is_bun_token`]: the census walk, the
-//!   sweep's target collection, the class-id floor's derivation filter.)
-//!   Since 2026-09-30 (Andrew) single letters count as minted: the ten
-//!   letters a/b/e/i/j/k/n/t/x/y left `SHORT_WORDS`, because the
-//!   exemption made a never-asked `i` invisible to the coverage sweep —
-//!   exactly the pass whose job is never-asked names (finding #62).
+//! - WHO GETS ASKED — since 2026-09-30 (Andrew's provenance decision)
+//!   this is NOT a name-shape question for the coverage sweep anymore:
+//!   the sweep targets bindings by LEDGER (renamed? asked? exhausted? —
+//!   `rename::validated`'s decision ledger, joined by name across the
+//!   text boundary), and the ONLY shape exception left in its target
+//!   path is [`is_convention_carveout`] (`_`, `__`, `$`-only: deliberate
+//!   placeholders, not un-renamed code). [`is_bun_token`] still answers
+//!   the shape question where shape IS the question: the minted-census
+//!   METER's population, the class-id floor's derivation filter, vote
+//!   candidacy, and the below-floor/carried rules.
 //! - WHAT ANSWER MAY LAND — may the model's suggestion become the new
-//!   name? ([`is_sweep_answer_acceptable`]: the sweep's answer filter.) A
-//!   single letter passes: "we can produce a single character output name
-//!   if necessary for a loop" — junk shapes (`a1b`, `_`-tails, `$`)
-//!   stay refused.
+//!   name? ([`is_sweep_answer_acceptable`]: the sweep's answer filter.)
+//!   This stays a STRING question by nature ("is this candidate junk?"),
+//!   unchanged by the provenance decision: a single letter passes, junk
+//!   shapes (`a1b`, `_`-tails, `$`) stay refused.
 
 /// Short words that are real names, not mints (`SHORT_WORDS`). The ten
 /// single letters a/b/e/i/j/k/n/t/x/y left this list 2026-09-30 (Andrew:
@@ -154,6 +157,17 @@ pub fn is_single_letter(name: &str) -> bool {
 /// two-letter non-words — but accepts a single letter.
 pub fn is_sweep_answer_acceptable(name: &str) -> bool {
     !is_bun_token(name) || is_single_letter(name)
+}
+
+/// A deliberate convention placeholder: all-underscore (`_`, `__`) or
+/// `$`-only. The ONE name-shape exception that survives in the coverage
+/// sweep's target path under the 2026-09-30 provenance decision — these
+/// are intentional discards (a `_` catch, a minifier's `$` temp), never
+/// "not properly renamed", so asking the model about them would only
+/// mint noise. The list is deliberately this short; every entry is a
+/// convention, not a heuristic.
+pub fn is_convention_carveout(name: &str) -> bool {
+    !name.is_empty() && name.bytes().all(|b| b == b'_' || b == b'$')
 }
 
 /// `isWordlessMintShape`: no 3-letter lowercase word run and not a

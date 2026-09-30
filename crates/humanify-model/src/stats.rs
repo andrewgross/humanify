@@ -79,19 +79,47 @@ js_record! {
 }
 
 js_record! {
-    /// The single-letter survivors' provenance split (2026-09-30, Andrew's
-    /// single-letter decision): of the minted leftovers the census counts,
-    /// which single letters have a RECORDED decision behind them —
-    /// `modelChosen` (a tier deliberately APPLIED the letter; carried,
-    /// protected from re-rolling) or `askedKept` (the model was asked and
-    /// the letter stayed) — and which have no record at all
-    /// (`neverAsked`, the real gap class finding #64 named). Joined by
-    /// NAME against the run's outcome records (`report::coverage`'s
-    /// `single_letter_split`), so `neverAsked` is a LOWER BOUND.
-    pub struct SingleLetterSplit {
+    /// The survivors' provenance split (2026-09-30, Andrew's provenance
+    /// decision): of the minted leftovers the census counts, which have a
+    /// RECORDED decision behind them — `modelChosen` (a tier deliberately
+    /// APPLIED the surviving name; carried, protected from re-rolling),
+    /// `askedKept` (asked, terminal keep), `exhausted` (the retry budget
+    /// died still-unrenamed — the sweep keeps them targets) — and which
+    /// have no record at all (`neverAsked`, the real gap class finding
+    /// #64 named). The tree-walk split is joined by NAME against the
+    /// run's outcome records (`report::coverage`'s
+    /// `survivor_provenance_split`), so `neverAsked` is a lower bound
+    /// there; the in-stage per-binding block (`bindingProvenance`) is
+    /// exact. The `singleLetters` block is the SINGLE-LETTER SLICE of
+    /// this split — finding #62's monitor.
+    pub struct ProvenanceSplit {
         total: f64 = "total",
         model_chosen: f64 = "modelChosen",
         asked_kept: f64 = "askedKept",
+        exhausted: f64 = "exhausted",
+        never_asked: f64 = "neverAsked",
+    }
+}
+
+js_record! {
+    /// The in-stage, PER-BINDING provenance classification
+    /// (`naming::passes::sweep::classify_bindings`) — the exact half of
+    /// the meter, computed inside the sweep where binding identity
+    /// exists: of every eligible, non-carve-out, non-frozen binding,
+    /// how many were renamed / carried (model-chosen below-floor
+    /// applies) / asked-and-kept / retry-exhausted / never asked at all.
+    /// `join` declares how unmarked bindings were classified:
+    /// `"per-binding"` (the in-era sweep — every class from its own
+    /// ledger) or `"by-name"` (the deferred sweep's DECLARED
+    /// approximation — identity does not cross the generate/reconcile
+    /// text boundary, so its unmarked rows read the by-name join).
+    pub struct BindingProvenance {
+        join: String = "join",
+        total: f64 = "total",
+        renamed: f64 = "renamed",
+        model_chosen: f64 = "modelChosen",
+        asked_kept: f64 = "askedKept",
+        exhausted: f64 = "exhausted",
         never_asked: f64 = "neverAsked",
     }
 }
@@ -108,7 +136,9 @@ js_record! {
         zero_ref_expr_ids: f64 = "zeroRefExprIds",
         names: Option<Vec<String>> = "names",
         decorated_names: Option<Vec<String>> = "decoratedNames",
-        single_letters: Option<SingleLetterSplit> = "singleLetters",
+        provenance: Option<ProvenanceSplit> = "provenance",
+        single_letters: Option<ProvenanceSplit> = "singleLetters",
+        binding_provenance: Option<BindingProvenance> = "bindingProvenance",
     }
 }
 

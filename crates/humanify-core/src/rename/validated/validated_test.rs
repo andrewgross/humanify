@@ -21,7 +21,7 @@ use crate::rename::validated::test_support::with_semantic;
 use crate::rename::validated::{
     RejectionReason, RenameAttempt, RenameRequest, RenameState, TrailSpec,
 };
-use crate::trail::{Anchor, Outcome, Tier};
+use crate::trail::{Anchor, Attempt, Outcome, Tier};
 
 // ---------------------------------------------------------------------------
 // The scenario replay
@@ -688,4 +688,99 @@ fn a_reexport_binds_no_local() {
         program_attempt("export * as ns from \"m\";", "ns", "y"),
         no_binding
     );
+}
+
+// ---------------------------------------------------------------------------
+// The decision ledger (2026-09-30, Andrew's provenance targeting)
+// ---------------------------------------------------------------------------
+
+/// The sweep targets bindings by LEDGER, not by name shape: an LLM-ask row
+/// (`Tier::Llm`, `Tier::CoverageSweep`) marks the binding DECIDED for the
+/// rest of the run; a deterministic floor row does NOT (the sweep exists to
+/// re-ask floor leftovers); an exhausted retry OVERRIDES the ask mark —
+/// the identifier is still not properly renamed.
+#[test]
+fn llm_ask_rows_mark_a_binding_decided_floor_rows_do_not() {
+    program_state(
+        "var Kq_ = one(); var O_ = two(); var Bo_ = three();",
+        |state| {
+            let p = state.view().program_scope();
+            let kq = state.binding_in(p, "Kq_").expect("Kq_");
+            let o = state.binding_in(p, "O_").expect("O_");
+            let bo = state.binding_in(p, "Bo_").expect("Bo_");
+            // A wave ask the model declined (llm_rename's row shape).
+            state.record(
+                kq,
+                "Kq_",
+                Attempt::new(Tier::Llm, Outcome::Abstained).reason("llm-declined"),
+                false,
+            );
+            // A wave rejection the retry budget could not fix.
+            state.record(
+                o,
+                "O_",
+                Attempt::new(Tier::Llm, Outcome::Rejected)
+                    .proposed("taken")
+                    .reason("target-in-scope"),
+                false,
+            );
+            state.mark_exhausted(o);
+            // A deterministic class-id-floor skip.
+            state.record(
+                bo,
+                "Bo_",
+                Attempt::new(Tier::ClassIdFloor, Outcome::Abstained).reason("no-derivation-source"),
+                true,
+            );
+            assert!(
+                state.is_decided(kq),
+                "the declined ask is a terminal decision"
+            );
+            assert!(
+                !state.is_decided(o),
+                "an exhausted retry is still unrenamed — still a target"
+            );
+            assert!(state.is_exhausted(o));
+            assert!(
+                !state.is_decided(bo),
+                "a deterministic floor row is not an ask"
+            );
+            // A vote is testimony, not an ask.
+            state.record(
+                bo,
+                "Bo_",
+                Attempt::new(Tier::VoteSuggest, Outcome::Vote),
+                false,
+            );
+            assert!(!state.is_decided(bo), "votes are not asks");
+        },
+    );
+}
+
+/// A decided binding is dropped from `finish()`'s exhausted-name export:
+/// only the still-unrenamed retry give-ups travel (the deferred sweep's
+/// name join keeps them targets).
+#[test]
+fn finish_hands_on_the_exhausted_names() {
+    with_semantic("var Kq_ = one(); var O_ = two();", true, |semantic| {
+        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let p = state.view().program_scope();
+        let kq = state.binding_in(p, "Kq_").expect("Kq_");
+        let o = state.binding_in(p, "O_").expect("O_");
+        state.record(
+            kq,
+            "Kq_",
+            Attempt::new(Tier::Llm, Outcome::Abstained).reason("llm-declined"),
+            false,
+        );
+        state.record(
+            o,
+            "O_",
+            Attempt::new(Tier::Llm, Outcome::Rejected).reason("target-in-scope"),
+            false,
+        );
+        state.mark_exhausted(o);
+        let outcome = state.finish();
+        assert_eq!(outcome.exhausted_names, vec!["O_".to_string()]);
+    });
 }
