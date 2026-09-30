@@ -46,6 +46,7 @@ use crate::naming::reconcile::ReconcileResult;
 use crate::naming::reconcile::step::{PriorDiffOutcome, run_prior_diff_reconciliation};
 use crate::naming::report::coverage::{
     CoverageInputs, build_coverage_summary, census_record, format_coverage_summary,
+    single_letter_split,
 };
 use crate::naming::report::{ProcessorReport, RenameReport};
 use crate::prior::{PriorMatchInput, match_prior_version};
@@ -441,7 +442,12 @@ pub fn run_naming<P: NameProvider>(
         &out.reports,
         &coverage_inputs(&out, function_count, &library),
     );
-    coverage.minted_census = Some(census_record(&census));
+    let mut record = census_record(&census);
+    // The single-letter provenance split (2026-09-30): the outcome records
+    // ARE the provenance — `single_letter_split` joins the census's
+    // survivors against the run's reports and trail.
+    record.single_letters = Some(single_letter_split(&census, &out.reports, &out.trail));
+    coverage.minted_census = Some(record);
     out.coverage_text = Some(format_coverage_summary(&coverage));
     out.coverage = Some(coverage);
     out.census = Some(census);

@@ -3,10 +3,14 @@
 //! the TS construction order); the printed block is what the CLI shows.
 
 use humanify_model::js::{format_duration, to_fixed};
-use humanify_model::stats::{CoverageSummary, IdentifierCounts, LlmCoverage, RenameCounts};
+use humanify_model::stats::{
+    CoverageSummary, IdentifierCounts, LlmCoverage, RenameCounts, SingleLetterSplit,
+};
 
-use super::{RenameReport, ReportStrategy, ReportType, SkipReasons};
+use super::{RenameReport, ReportStrategy, ReportType, SkipReasons, Status};
 use crate::naming::passes::census::MintedCensus;
+use crate::rename::floor::is_single_letter;
+use crate::trail::StrategyTrail;
 
 /// The inputs `buildCoverageSummary` reads besides the reports.
 #[derive(Clone, Copy, Debug, Default)]
@@ -136,6 +140,87 @@ pub fn census_record(c: &MintedCensus) -> humanify_model::stats::MintedCensus {
         zero_ref_expr_ids: c.zero_ref_expr_ids as f64,
         names: Some(c.names.clone()),
         decorated_names: Some(c.decorated_names.clone()),
+        single_letters: None,
+    }
+}
+
+/// The single-letter survivors' provenance split (Andrew's 2026-09-30
+/// decision): of the minted leftovers the census counts, which single
+/// letters have a RECORDED decision behind them — `model_chosen` (some
+/// tier APPLIED the letter as a name: the rename reports' `Renamed`
+/// outcomes and the trail's `final_name`, the carried rule's population)
+/// or `asked_kept` (asked about and kept: the reports' non-`Renamed`
+/// outcomes under that name, the trail's rows under its old name) — and
+/// which have NO record anywhere (`never_asked`, the real gap finding #62
+/// was blind to and #64 named).
+///
+/// The outcome records ARE the provenance — this joins them by NAME
+/// (ask-time name for the reports, old/final name for the trail), because
+/// identity systems (spans) do not survive the generate/reconcile/render
+/// boundary. Consequence, declared: a letter with a record on ANY
+/// same-named binding classifies every same-named survivor as decided, so
+/// `never_asked` is a LOWER BOUND on the true never-processed population.
+/// It is a meter — no decision reads it (the row in
+/// docs/responsibility.md says so).
+pub fn single_letter_split(
+    census: &MintedCensus,
+    reports: &[RenameReport],
+    trail: &StrategyTrail,
+) -> SingleLetterSplit {
+    let survivors: Vec<&String> = census
+        .names
+        .iter()
+        .filter(|n| is_single_letter(n))
+        .collect();
+    let total = survivors.len();
+    if total == 0 {
+        return SingleLetterSplit {
+            total: 0.0,
+            model_chosen: 0.0,
+            asked_kept: 0.0,
+            never_asked: 0.0,
+        };
+    }
+    let letters: std::collections::HashSet<&str> = survivors.iter().map(|n| n.as_str()).collect();
+    let mut chosen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut asked: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for entry in trail.entries() {
+        if let Some(final_name) = entry.final_name.as_ref()
+            && letters.contains(final_name.as_str())
+        {
+            chosen.insert(final_name.clone());
+        }
+        if letters.contains(entry.old_name.as_str()) {
+            asked.insert(entry.old_name.clone());
+        }
+    }
+    for report in reports {
+        for (name, outcome) in report.outcomes.iter() {
+            if !letters.contains(name.as_str()) {
+                continue;
+            }
+            if let Status::Renamed { new_name, .. } = &outcome.status
+                && letters.contains(new_name.as_str())
+            {
+                chosen.insert(new_name.clone());
+            } else {
+                asked.insert(name.clone());
+            }
+        }
+    }
+    let model_chosen = survivors
+        .iter()
+        .filter(|n| chosen.contains(n.as_str()))
+        .count();
+    let asked_kept = survivors
+        .iter()
+        .filter(|n| !chosen.contains(n.as_str()) && asked.contains(n.as_str()))
+        .count();
+    SingleLetterSplit {
+        total: total as f64,
+        model_chosen: model_chosen as f64,
+        asked_kept: asked_kept as f64,
+        never_asked: (total - model_chosen - asked_kept) as f64,
     }
 }
 
@@ -259,6 +344,30 @@ fn format_minted_census(c: &humanify_model::stats::MintedCensus, width: usize) -
         (f.var_other, "var/other:"),
     ] {
         push_count_line(&mut lines, label, count, c.total, width);
+    }
+    if let Some(sl) = &c.single_letters
+        && sl.total > 0.0
+    {
+        lines.push(format!(
+            " {}{} total",
+            pad_end("Single-letter:", width),
+            fmt(sl.total)
+        ));
+        push_count_line(
+            &mut lines,
+            "Model-chosen:",
+            sl.model_chosen,
+            sl.total,
+            width,
+        );
+        push_count_line(&mut lines, "Asked, kept:", sl.asked_kept, sl.total, width);
+        push_count_line(
+            &mut lines,
+            "Never processed:",
+            sl.never_asked,
+            sl.total,
+            width,
+        );
     }
     lines
 }

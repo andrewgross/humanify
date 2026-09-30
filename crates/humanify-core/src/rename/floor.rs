@@ -3,17 +3,39 @@
 //! rule records a binding when an APPLIED name is below the floor). WP4.5
 //! owns the rest of minted-census.ts and extends this module.
 //!
-//! Pinned to the TS by `test/parity/wp31-names.json`. Two JS-isms carried
-//! over on purpose: `name.length` counts UTF-16 code units (so `é` is a
-//! length-1 name), and `toLowerCase()` is Unicode lowercasing.
+//! Pinned to the TS by `test/parity/wp31-names.json` — post-cutover the
+//! pin is OURS to re-cut (the TS that froze it is deleted); the letters'
+//! rows were re-cut 2026-09-30 with the single-letter decision below. Two
+//! JS-isms carried over on purpose: `name.length` counts UTF-16 code units
+//! (so `é` is a length-1 name), and `toLowerCase()` is Unicode
+//! lowercasing.
+//!
+//! TWO distinct questions live here, and every consumer must know which
+//! one it is asking (docs/responsibility.md, the `rename::floor` row):
+//!
+//! - WHO GETS ASKED — does this name look minifier-minted, so the naming
+//!   passes should process it? ([`is_bun_token`]: the census walk, the
+//!   sweep's target collection, the class-id floor's derivation filter.)
+//!   Since 2026-09-30 (Andrew) single letters count as minted: the ten
+//!   letters a/b/e/i/j/k/n/t/x/y left `SHORT_WORDS`, because the
+//!   exemption made a never-asked `i` invisible to the coverage sweep —
+//!   exactly the pass whose job is never-asked names (finding #62).
+//! - WHAT ANSWER MAY LAND — may the model's suggestion become the new
+//!   name? ([`is_sweep_answer_acceptable`]: the sweep's answer filter.) A
+//!   single letter passes: "we can produce a single character output name
+//!   if necessary for a loop" — junk shapes (`a1b`, `_`-tails, `$`)
+//!   stay refused.
 
-/// Short words that are real names, not mints (`SHORT_WORDS`).
+/// Short words that are real names, not mints (`SHORT_WORDS`). The ten
+/// single letters a/b/e/i/j/k/n/t/x/y left this list 2026-09-30 (Andrew:
+/// "remove the limit on single character names not being processed" —
+/// `is_bun_token` treats them as minted now); the real two/three-letter
+/// words stay.
 const SHORT_WORDS: &[&str] = &[
-    "a", "abs", "add", "arg", "b", "cb", "col", "ctx", "cwd", "db", "del", "dir", "e", "end",
-    "env", "err", "ext", "fn", "fs", "get", "gid", "go", "has", "i", "id", "idx", "io", "ip", "j",
-    "k", "key", "len", "log", "map", "max", "min", "msg", "n", "now", "num", "obj", "ok", "os",
-    "out", "pid", "pos", "raw", "req", "res", "row", "run", "sep", "set", "str", "sum", "t", "tag",
-    "ui", "uid", "url", "val", "x", "y",
+    "abs", "add", "arg", "cb", "col", "ctx", "cwd", "db", "del", "dir", "end", "env", "err", "ext",
+    "fn", "fs", "get", "gid", "go", "has", "id", "idx", "io", "ip", "key", "len", "log", "map",
+    "max", "min", "msg", "now", "num", "obj", "ok", "os", "out", "pid", "pos", "raw", "req", "res",
+    "row", "run", "sep", "set", "str", "sum", "tag", "ui", "uid", "url", "val",
 ];
 
 /// Domain stems a mint-shaped head is allowed to carry (`DOMAIN_STEMS`).
@@ -80,7 +102,12 @@ fn has_mint_head(name: &str) -> bool {
     }
 }
 
-/// `isBunToken`: the shape of a minifier-minted token.
+/// `isBunToken`: the shape of a minifier-minted token — the WHO GETS
+/// ASKED question. The census walk and the sweep's target collection read
+/// it to decide what to process (single letters included since 2026-09-30,
+/// Andrew: the old `SHORT_WORDS` exemption made never-asked letters
+/// invisible to the sweep, finding #62); the carried rule and the vote
+/// candidacy read it through [`is_below_floor_name`].
 pub fn is_bun_token(name: &str) -> bool {
     if name.contains('$') || name.ends_with('_') {
         return true;
@@ -105,8 +132,28 @@ pub fn is_decorated_descriptive(name: &str) -> bool {
 }
 
 /// `isBelowFloorName`: minted-shaped and not a decorated descriptive name.
+/// Since 2026-09-30 this includes single letters — so a deliberately
+/// APPLIED letter is recorded CARRIED (validated rename's exp066 rule) and
+/// the sweep cannot re-roll it within the run.
 pub fn is_below_floor_name(name: &str) -> bool {
     is_bun_token(name) && !is_decorated_descriptive(name)
+}
+
+/// A single alphabetic character (UTF-16 length 1) — the one mint shape
+/// that can still be a deliberate NAME: a loop counter `i`, a coordinate
+/// `x`, a catch parameter `e`. Andrew, 2026-09-30: producing a single
+/// character output name is allowed "if necessary for a loop".
+pub fn is_single_letter(name: &str) -> bool {
+    js_len(name) == 1 && name.chars().next().is_some_and(char::is_alphabetic)
+}
+
+/// WHAT ANSWER MAY LAND: may the model's suggestion for a sweep target
+/// become its new name? (`naming::passes::sweep`'s answer filter — see
+/// the module doc for the target-vs-answer split.) Refuses re-minted
+/// junk — `$`-bearing tokens, `_`-tails, `a1b`-shaped mint heads,
+/// two-letter non-words — but accepts a single letter.
+pub fn is_sweep_answer_acceptable(name: &str) -> bool {
+    !is_bun_token(name) || is_single_letter(name)
 }
 
 /// `isWordlessMintShape`: no 3-letter lowercase word run and not a

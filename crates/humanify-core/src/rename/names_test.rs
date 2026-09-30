@@ -60,6 +60,56 @@ fn name_predicates_match_the_ts_truth_table() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// Andrew's 2026-09-30 decision: the single-letter exemption is GONE. The
+/// ten letters (a, b, e, i, j, k, n, t, x, y) leave `SHORT_WORDS`, so they
+/// are mint-SHAPED like every other minifier token — the census and the
+/// coverage sweep can see a never-asked `i` (the exemption made it
+/// invisible to the pass whose job is never-asked names, finding #62) —
+/// while a single letter stays an acceptable ANSWER (a loop counter may
+/// legitimately land as `i`). The letters' truth-table rows in
+/// test/parity/wp31-names.json are re-cut with this change: post-cutover
+/// the pin is ours (the TS that froze it is deleted).
+#[test]
+fn single_letters_are_minted_but_acceptable_sweep_answers() {
+    use crate::rename::floor::{is_single_letter, is_sweep_answer_acceptable};
+
+    // WHO GETS ASKED: every single letter is mint-shaped now.
+    for name in [
+        "a", "b", "e", "i", "j", "k", "n", "t", "x", "y", "z", "Q", "é",
+    ] {
+        assert!(is_bun_token(name), "{name:?} is minted shape");
+        assert!(is_below_floor_name(name), "{name:?} is below the floor");
+        assert!(is_single_letter(name), "{name:?} is a single letter");
+    }
+    // The real short words stay real.
+    for name in [
+        "get", "set", "ctx", "err", "fn", "id", "ok", "db", "abs", "url",
+    ] {
+        assert!(!is_bun_token(name), "{name:?} is a real short word");
+    }
+    // A letter with the conflict ladder's tail is a plain mint both sides
+    // of the change (it was `is_bun_token` via the trailing `_` before).
+    assert!(is_bun_token("x_"));
+    assert!(!is_single_letter("x_"));
+
+    // WHAT ANSWER MAY LAND: junk is refused, a single letter is not junk.
+    for name in ["i", "x", "Q"] {
+        assert!(
+            is_sweep_answer_acceptable(name),
+            "{name:?}: a loop counter may land as a single letter"
+        );
+    }
+    for name in ["count", "getValue", "MAX_SIZE", "ctx"] {
+        assert!(is_sweep_answer_acceptable(name), "{name:?} is a real name");
+    }
+    for name in ["a1b", "x_", "Kq$", "zz", "q7", "do7Function"] {
+        assert!(
+            !is_sweep_answer_acceptable(name),
+            "{name:?}: the sweep refuses re-minted junk"
+        );
+    }
+}
+
 #[test]
 fn wordless_mint_shape_and_half_mint_head() {
     use crate::rename::floor::{is_half_mint_head, is_wordless_mint_shape};

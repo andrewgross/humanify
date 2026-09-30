@@ -9,7 +9,7 @@
 use humanify_model::llm::{BatchRenameResponse, LlmCall, LlmError, NameProvider, Renames};
 use oxc_allocator::Allocator;
 
-use super::sweep::sweep_minted_names;
+use super::sweep::{collect_sweep_targets, sweep_minted_names};
 use crate::ingest::Ingest;
 use crate::modules::soundness::collect_eval_with_taint;
 use crate::naming::waves::render::render_program;
@@ -245,6 +245,248 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
     assert_eq!(r.reask_dropped, 1, "the give-up is recorded");
     assert_eq!(r.named, 0);
     assert_eq!(render_program(semantic, &state), text, "nothing applied");
+}
+
+/// Andrew's 2026-09-30 decision: the single-letter exemption is GONE. A
+/// never-asked `i` is a sweep TARGET now (before, `SHORT_WORDS` made it
+/// invisible to `is_sweep_target` — exactly the pass whose job is
+/// never-asked names, finding #62), so it gets asked and can be named.
+#[test]
+fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
+    let text = "function f() {\n  var i = 0;\n  return i + 1;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
+    struct Naming {
+        asked: std::cell::RefCell<Vec<Vec<String>>>,
+    }
+    impl NameProvider for Naming {
+        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+            calls
+                .into_iter()
+                .map(|c| {
+                    self.asked.borrow_mut().push(c.request.identifiers.clone());
+                    let renames: Vec<(String, Option<String>)> = c
+                        .request
+                        .identifiers
+                        .iter()
+                        .map(|id| {
+                            let answer = match id.as_str() {
+                                "i" => "index",
+                                "f" => "handler",
+                                _ => panic!("unexpected sweep target {id:?}"),
+                            };
+                            (id.clone(), Some(answer.to_string()))
+                        })
+                        .collect();
+                    Ok(BatchRenameResponse {
+                        renames: Renames::from_entries(renames),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    let provider = Naming {
+        asked: std::cell::RefCell::new(Vec::new()),
+    };
+    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let r = sweep_minted_names(
+        semantic, &mut state, &eligible, &taint, &provider, &params, 2,
+    );
+    let asked: Vec<String> = provider.asked.borrow().iter().flatten().cloned().collect();
+    assert!(
+        asked.iter().any(|id| id == "i"),
+        "the loop counter `i` is asked: {asked:?}"
+    );
+    assert_eq!(r.named, 2, "both targets named");
+    let code = render_program(semantic, &state);
+    assert!(
+        code.contains("var index = 0;"),
+        "the letter's answer landed: {code}"
+    );
+    assert!(code.contains("function handler("), "{code}");
+}
+
+/// The other half of the decision: a single letter is an acceptable
+/// ANSWER. The model answering `i` for a mint target lands (a loop
+/// counter may keep its letter), and the exp066 carried rule now covers
+/// the APPLIED letter — `is_below_floor_name("i")` is true after the
+/// `SHORT_WORDS` change — so `validated` marks it carried and the sweep
+/// cannot re-roll it later in the run.
+#[test]
+fn a_single_letter_answer_lands_and_is_marked_carried() {
+    let text = "function f() {\n  var Kq_ = two();\n  return Kq_;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
+    struct LetterAnswer;
+    impl NameProvider for LetterAnswer {
+        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+            calls
+                .into_iter()
+                .map(|c| {
+                    let renames: Vec<(String, Option<String>)> = c
+                        .request
+                        .identifiers
+                        .iter()
+                        .map(|id| {
+                            let answer = match id.as_str() {
+                                "Kq_" => "i",
+                                "f" => "handler",
+                                _ => panic!("unexpected sweep target {id:?}"),
+                            };
+                            (id.clone(), Some(answer.to_string()))
+                        })
+                        .collect();
+                    Ok(BatchRenameResponse {
+                        renames: Renames::from_entries(renames),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let r = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &LetterAnswer,
+        &params,
+        2,
+    );
+    assert_eq!(r.named, 2, "the letter answer applied");
+    let code = render_program(semantic, &state);
+    assert!(
+        code.contains("var i = two();"),
+        "the single-letter answer landed: {code}"
+    );
+    assert_eq!(
+        state.carried_count(),
+        1,
+        "the deliberately applied `i` is carried — the sweep must not re-roll it"
+    );
+    // And the carried protection is real: a fresh target collection over
+    // the SAME state (what a later sweep round in the run would see) must
+    // not include the applied letter, and a second sweep dispatch asks
+    // nothing at all.
+    let again = collect_sweep_targets(semantic, &state, &eligible, &taint);
+    assert!(
+        again.iter().all(|t| t.name != "i"),
+        "the carried `i` is not a target again: {:?}",
+        again.iter().map(|t| t.name.clone()).collect::<Vec<_>>()
+    );
+    let r2 = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &LetterAnswer,
+        &params,
+        2,
+    );
+    assert_eq!(
+        (r2.named, r2.dispatches.len()),
+        (0, 0),
+        "the applied letter is never re-asked within the run"
+    );
+}
+
+/// The answer filter keeps its PURPOSE — refusing re-minted junk — now
+/// that single letters pass: `a1b`-shaped mint heads and `_`-tails are
+/// still refused as still-below-floor, never applied.
+#[test]
+fn sweep_junk_answers_are_still_refused() {
+    let text = "function f() {\n  var Kq_ = two();\n  return Kq_;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
+    struct Junk;
+    impl NameProvider for Junk {
+        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+            calls
+                .into_iter()
+                .map(|c| {
+                    let renames: Vec<(String, Option<String>)> = c
+                        .request
+                        .identifiers
+                        .iter()
+                        .map(|id| {
+                            let answer = match id.as_str() {
+                                "Kq_" => "a1b",
+                                "f" => "x_",
+                                _ => panic!("unexpected sweep target {id:?}"),
+                            };
+                            (id.clone(), Some(answer.to_string()))
+                        })
+                        .collect();
+                    Ok(BatchRenameResponse {
+                        renames: Renames::from_entries(renames),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let r = sweep_minted_names(semantic, &mut state, &eligible, &taint, &Junk, &params, 2);
+    assert_eq!(r.named, 0, "no junk answer applied");
+    assert_eq!(r.skipped, 2);
+    assert_eq!(render_program(semantic, &state), text, "nothing applied");
+    let reasons: Vec<&str> = state
+        .trail()
+        .entries()
+        .iter()
+        .flat_map(|e| &e.attempts)
+        .filter_map(|a| a.reason.as_deref())
+        .collect();
+    assert_eq!(
+        reasons,
+        ["still-below-floor", "still-below-floor"],
+        "both junk answers are refused as still-below-floor"
+    );
+}
+
+/// Finding #64's never-asked class, checked: does a destructure VALUE
+/// slot (`y` in `const [y, setSelected] = ...` — the half the 2026-09-28
+/// fix never reached) enter the sweep's targeting now that single letters
+/// are minted? The walk must reach it: the sweep's never-asked detection
+/// IS its target collection.
+#[test]
+fn a_destructure_value_slot_is_a_sweep_target() {
+    let text = "function f() {\n  const [y, setSelected] = use();\n  return y + setSelected;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let state = RenameState::new(semantic, Anchor::Fresh);
+    let targets = collect_sweep_targets(semantic, &state, &eligible, &taint);
+    let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        names.contains(&"y"),
+        "the destructure value slot `y` reaches the sweep: {names:?}"
+    );
+    // `setSelected` is a descriptive name, never a target — the gap was
+    // only ever the VALUE half of the pair.
+    assert!(
+        !names.contains(&"setSelected"),
+        "the named half stays out of the targets: {names:?}"
+    );
 }
 
 /// `--rename-retries 1` restores the pre-2026-09-29 single-reask bound
