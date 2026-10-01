@@ -10,17 +10,18 @@
   experiment's own signal** (33 ask rows of 2,342, every one enumerated and
   attributed below; the largest single cause is a pair the change made
   MORE correct). All four measurements (M1–M4) below, before/after.
-- **Vendor-inclusive M2 is PENDING the coordinator**: the
-  `fix/match-instrument-scale` branch (match verb reading raw-bundle
-  vendor files) had not merged to origin/main at measurement time
-  (checked at finish: origin/main still `0c5860d9`), so M2 ran
-  runtime-only exactly as the number-blur study did. One number below
-  (the vendor-side matching deltas inside `vendor/`) will need the same
-  A/B once that verb capability lands; nothing in the runtime-side
-  numbers can change by extending coverage, but the vendor side is
-  currently UNMEASURED between eras (M3's vendor tree diff shows only the
-  predicted hash-identifier class moved there, which bounds any vendor
-  matching delta tightly — see M3).
+- **Vendor-inclusive M2: DONE 2026-10-01 — see
+  [ADDENDUM.md](./ADDENDUM.md).** Same method, whole-tree fresh side
+  (82,152 rows), post-cutover prior, both policies on identical input.
+  Verdict: the LAND recommendation is strengthened. Vendor is nearly
+  INVARIANT under the number policy (229 pairs on both legs, 6 swapped —
+  every swap a blur-mispair corrected to a true twin; ambiguity −18 of
+  171,942, 0 new); runtime gains much more against the post-cutover prior
+  than the original M2 saw (+461 pairs, the mirror's initializer-closure
+  families the buckets had merged into non-matchable 226/626-candidate
+  classes). The 229 vendor-pair count against a POST-CUTOVER prior retires
+  findings #68's "re-read the 229" follow-up: the wrapper-shape hypothesis
+  is dead, vendor ownership stays with content keys (exp046/047).
 - Evidence base: `/work/number-blur-study/README.md` (the number-blur
   study, 2026-09-29). Measurement artifacts: `/work/exp093/`
   (`m1/`, `m2/`, `m3/` with the dumps, compacted stats, comparisons).
