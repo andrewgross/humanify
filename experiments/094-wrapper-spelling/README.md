@@ -2,11 +2,14 @@
 
 ## STATUS
 
-- **State: CENSUS DONE + PROTOTYPE ON THIS BRANCH (`exp094-wrapper-spelling`),
-  not merged.** The prototype is DECISION-CHANGING (a MatchKey-serializer
-  rule), so it joins the batched gpt-oss eval queue; until that eval lands,
-  the numbers below are stub-/fixture-proven at the matcher level, not
-  cold-eval-proven at the naming level.
+- **State: CUT 1 MERGED on main (`exp094-wrapper-spelling`); CUT 2 — the
+  statement-hash mirror — DONE on branch `exp094b-statement-spelling`
+  (2026-10-02), fixture-proven (statement recall 2/3 → 3/3), pending the
+  same batched gpt-oss eval.** Cut 2 is DECISION-CHANGING (statement
+  identity feeds the split's placement/carry paths), so it joins cut 1 in
+  the batched eval queue; until that eval lands, the numbers below are
+  stub-/fixture-proven at the matcher level, not cold-eval-proven at the
+  naming level.
 - **Andrew's call (2026-10-02):** "Let's see if we can find a way to
   RELIABLY compare the arrow vs function forms."
 - **What this resolves:** exp092's lead 1 (the wrapper-spelling matcher
@@ -158,14 +161,14 @@ and compared equal — iff ALL of:
 
 ## Where each surface implements it
 
-| surface                                                                                                                                                      | implements?                                | notes                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **pipeline hash, MatchKey families** (`hash::serialize` — function MatchKey, statement-context hash, statement-align, twin gates, `factory_structural_hash`) | **YES (this branch)**                      | `arrow_serializes_as_function`: a SAFE arrow serializes under the `FunctionExpression` token. Only the ARROW's bytes change — a safe function expression's stream was already the unified spelling (oxc gives both forms the same field set; the type token was the only difference), so the function-side conditions ride in the bytes themselves. Red/green in `hash/serialize_test.rs` (5 tests: unification, refusals, binders, Verbatim split, emission). |
-| **pipeline hash, `Verbatim` policy** (IdentityKey, naming validators, vendor inherit)                                                                        | NO, deliberately                           | Verbatim answers a SAME-RELEASE identity question ("the exact same declaration bytes"); there a spelling difference IS a difference.                                                                                                                                                                                                                                                                                                                           |
-| **pipeline `statement_hash`** (STATEMENT_HASH_VERSION 2 — split inheritance, statement twins, family permute, placement ledger)                              | NO — recommended follow-up                 | The wrapper's STATEMENT still splits classes at 2.1.207→208 (fixture: statement recall stays 2/3). The same arrow-token rule there unifies it, at the cost of bumping STATEMENT_HASH_VERSION to 3 and re-keying every split ledger. See follow-ups.                                                                                                                                                                                                            |
-| **measurement soft-noise detector** (`diff-composition.ts` → now `experiments/lib/js/wrapper-spelling.ts`)                                                   | YES (shared rule extracted)                | The detector's local walk was MOVED to the shared owner so three consumers cannot drift; the exp037 pins (incl. the walk-tree 8,230) reproduce exactly, and the shared rule adds the class-field-initializer binder + the extends/computed-key tightening. Advisory `spellingIdenticalLines` semantics unchanged.                                                                                                                                              |
-| **match ground truth** (`match-truth/canonical.ts`)                                                                                                          | YES (soundness fix)                        | The unconditional head erasure MANUFACTURED ground truth for a `this`/`arguments`-loaded pair — against the instrument's own "never manufactures" contract. The erasure now consults the same shared rule; a refusal may only MISS ground truth, the designed error direction.                                                                                                                                                                                 |
-| **measurement CHARGE** (tier-2/tier-3 of composeDiff)                                                                                                        | NO — Andrew's standing 2026-09-29 decision | The +9,162-style charge stands; the advisory field reports the mass. Making tier 3 head-tolerant would re-derive every recorded label (backlog item 12's caveat); the exact pre-derivation number is now known (below).                                                                                                                                                                                                                                        |
+| surface                                                                                                                                                      | implements?                                            | notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **pipeline hash, MatchKey families** (`hash::serialize` — function MatchKey, statement-context hash, statement-align, twin gates, `factory_structural_hash`) | **YES (this branch)**                                  | `arrow_serializes_as_function`: a SAFE arrow serializes under the `FunctionExpression` token. Only the ARROW's bytes change — a safe function expression's stream was already the unified spelling (oxc gives both forms the same field set; the type token was the only difference), so the function-side conditions ride in the bytes themselves. Red/green in `hash/serialize_test.rs` (5 tests: unification, refusals, binders, Verbatim split, emission).                                                                                                                                                                                                                                                                                                                            |
+| **pipeline hash, `Verbatim` policy** (IdentityKey, naming validators, vendor inherit)                                                                        | NO, deliberately                                       | Verbatim answers a SAME-RELEASE identity question ("the exact same declaration bytes"); there a spelling difference IS a difference.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **pipeline `statement_hash`** (STATEMENT_HASH_VERSION 3 since exp094b — split inheritance, statement twins, family permute, placement ledger)                | **YES (exp094b, branch `exp094b-statement-spelling`)** | The SAME rule, the SAME shared module (`hash::wrapper_spelling`, extracted from serialize.rs so both Rust hash arms read one predicate): a SAFE arrow's node line walks under the FunctionExpression token, and the function-head fields (`async`, `generator`) ride in the statement stream's node content — that stream hashes no scalars, so without the fields the flip's function-side conditions could not hold there (and v2 hashed `function`, `async function` and `function*` as ONE class, a coarseness the mirror fixes rather than imports). Fixture: statement recall 2/3 → 3/3. The version bump re-keys every split ledger; any stale era re-derives from the prior text through the proven bijection (`place::ledger::rederive_stale_era_hashes`, widened from TS-only). |
+| **measurement soft-noise detector** (`diff-composition.ts` → now `experiments/lib/js/wrapper-spelling.ts`)                                                   | YES (shared rule extracted)                            | The detector's local walk was MOVED to the shared owner so three consumers cannot drift; the exp037 pins (incl. the walk-tree 8,230) reproduce exactly, and the shared rule adds the class-field-initializer binder + the extends/computed-key tightening. Advisory `spellingIdenticalLines` semantics unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **match ground truth** (`match-truth/canonical.ts`)                                                                                                          | YES (soundness fix)                                    | The unconditional head erasure MANUFACTURED ground truth for a `this`/`arguments`-loaded pair — against the instrument's own "never manufactures" contract. The erasure now consults the same shared rule; a refusal may only MISS ground truth, the designed error direction.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **measurement CHARGE** (tier-2/tier-3 of composeDiff)                                                                                                        | NO — Andrew's standing 2026-09-29 decision             | The +9,162-style charge stands; the advisory field reports the mass. Making tier 3 head-tolerant would re-derive every recorded label (backlog item 12's caveat); the exact pre-derivation number is now known (below).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## The A/B
 
@@ -174,18 +177,37 @@ and compared equal — iff ALL of:
 Regenerating the committed two-version fixture with the branch's binary
 (`exp092` README's recipe):
 
-| measure                           | main's binary     | exp094 binary                                                            |
-| --------------------------------- | ----------------- | ------------------------------------------------------------------------ |
-| must-match functions              | 3                 | 3                                                                        |
-| matched at `structuralHashUnique` | **2**             | **3** — the wrapper-spelling pair now matches at the STRICTEST tier      |
-| missed must-pairs                 | 1 (`keepWrapper`) | **0**                                                                    |
-| statement twins proposed          | 2/3               | 2/3 (unchanged — the statement_hash family deliberately not yet unified) |
+| measure                           | main's binary     | exp094 binary (cut 1)                 | exp094b binary (cut 2)                       |
+| --------------------------------- | ----------------- | ------------------------------------- | -------------------------------------------- |
+| must-match functions              | 3                 | 3                                     | 3                                            |
+| matched at `structuralHashUnique` | **2**             | **3** — matches at the STRICTEST tier | 3                                            |
+| missed must-pairs                 | 1 (`keepWrapper`) | **0**                                 | 0                                            |
+| statement twins proposed          | 2/3               | 2/3 (deliberately not yet unified)    | **3/3** — the statement arm mirrors the rule |
 
 The negative case (the reliability proof) is pinned in the Rust tests and
 in the corpus censuses: a `this`/`arguments`/`new.target`/generator/id/
 concise-body flip REFUSES — the pair stays unmatched — and the walk corpus
 contains **zero** such refused pairs, so on real data the rule separates
 nothing real.
+
+### Cut 2's two-arms-agree check (exp094b): the statement arm on the frozen walk
+
+`statement-arm-check.ts` (raw data `out-stmt/`) runs main's binary and the
+exp094b binary over the same hop's files, reads each dump's per-statement
+twins hashes, and diffs the unique-tier hash joins — the statement twin's
+own proposal join — between the two eras:
+
+| measure                                                | flip hop 2.1.207→2.1.208 (the 4 census files)                                                                                                                                                  | quiet hops 2.1.199→200 and 2.1.215→216 (150-file stride samples each) |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| GAINED joins (merged only under the statement arm)     | **17** — exactly the census's 17 flips                                                                                                                                                         | **0** on both hops                                                    |
+| every gained pair a rule-accepted flip                 | **17/17** (verified per pair: the two statements' function signatures differ by exactly N safe arrows → N plain same-async functions; every UNSAFE/generator/named occurrence count-identical) | —                                                                     |
+| LOST joins (the async/generator head-field tightening) | **0**                                                                                                                                                                                          | **0**                                                                 |
+
+So the two arms AGREE on the population: the statement arm merges exactly
+the flips the rule accepts and refuses everything the MatchKey arm refuses
+(the shared predicate refuses in both), and the head-field tightening —
+which fixes v2 hashing `function` / `async function` / `function*` as one
+class — splits no join anywhere measured.
 
 ### Ground-truth mirror: the corpus must-set is UNCHANGED by the soundness fix
 
@@ -245,32 +267,45 @@ correctly left charged.
   `fixed:{was: 3}` note).
 - No OTHER persisted artifact stores canonical-serializer hashes: the
   function fingerprints, statement contexts, twin gates and close-tier keys
-  are all recomputed from the two trees each run. The split ledger
-  (`STATEMENT_HASH_VERSION`) and the frozen KPI `statementHash` (the
-  harness copy in `experiments/lib/js/`) are UNTOUCHED — recorded labels
-  stay comparable on the measurement side.
+  are all recomputed from the two trees each run. The frozen KPI
+  `statementHash` (the harness copy in `experiments/lib/js/`) is UNTOUCHED
+  by BOTH cuts — recorded labels stay comparable on the measurement side
+  (the scorer computes its own hashes from the emitted trees with that
+  frozen copy; it never reads the binary's statement hashes).
+- **Cut 2 (exp094b) re-keys the split ledger**: `STATEMENT_HASH_VERSION`
+  2 → 3. A stale-era ledger — the TS's v1, or the previous Rust era's v2 —
+  is REFUSED by every hash reader and re-derived from the prior text
+  through the proven bijection (`place::ledger::rederive_stale_era_hashes`,
+  widened from TS-only to any recorded era; a class MERGE across the era
+  fails the bijection and refuses loudly, never half-carries).
 - Matching behavior changes (the point): the wrapper pair matches, so names
-  carry instead of being re-asked. **Decision-changing → joins the batched
+  carry instead of being re-asked; and (cut 2) the wrapper STATEMENT twins,
+  so the split inheritance and the name votes that read it stop splitting
+  at a re-packaging hop. **Decision-changing → both cuts join the batched
   gpt-oss eval queue** with the other pending lanes; the eval's judgment
   (noise down, novel/realLn unmoved, bands respected) is the final gate for
   main.
 
 ## Recommendation
 
-**GO, in three cuts, the first on this branch:**
+**GO, in three cuts — cuts 1 and 2 landed:**
 
-1. **Land the MatchKey unification** (this branch) after the batched eval
-   passes. It is the smallest decisive surface — one rule in one serializer
-   fixes the matcher miss, the twin gates, the statement contexts and the
-   factory hash at once — with the safety halves proven (unit-negative
-   tests + zero refused pairs in the census + receiver inspection for the
-   observability residual).
+1. **Land the MatchKey unification** (cut 1 — MERGED on main with the
+   batched eval still pending). It is the smallest decisive surface — one
+   rule in one serializer fixes the matcher miss, the twin gates, the
+   statement contexts and the factory hash at once — with the safety halves
+   proven (unit-negative tests + zero refused pairs in the census +
+   receiver inspection for the observability residual).
 2. **Mirror the rule into `statement_hash` + bump
-   `STATEMENT_HASH_VERSION` to 3** as its own lane: it unifies the SPLIT
-   inheritance and the statement twins (fixture statement recall 2/3 →
-   expected 3/3), at the cost of re-keying every split ledger (refused
-   loudly and re-derived from prior text, the mechanism `place/ledger.rs`
-   already has). Recommended — same rule, same census backs it.
+   `STATEMENT_HASH_VERSION` to 3** (cut 2 — DONE on
+   `exp094b-statement-spelling`, 2026-10-02): it unifies the SPLIT
+   inheritance and the statement twins — fixture statement recall 2/3 →
+   3/3, MEASURED, red-first — at the cost of re-keying every split ledger
+   (refused loudly and re-derived from prior text, the mechanism
+   `place/ledger.rs` already had, widened to every stale era). Same rule,
+   same shared module (`hash::wrapper_spelling`), same census backs it; the
+   statement arm also carries the function-head fields (`async`,
+   `generator`) in its node content, which v2 could not see at all.
 3. **The measurement tier-3 head-tolerant repair (backlog item 12)** stays
    Andrew's call, now with exact numbers: it would read the 207→208 hop as
    real 43,650 instead of 51,880 and would have closed ~8,230 of the
@@ -296,11 +331,17 @@ npx tsx experiments/094-wrapper-spelling/diff-must-set.ts \
 npx tsx experiments/094-wrapper-spelling/rescore-dumps.ts \
   <092 .runs dir> experiments/092-match-ground-truth/baseline-f8b87490.json
 
-# the fixture regeneration + pins (exp092 README's recipe, with this branch's binary)
+# the fixture regeneration + pins (exp092 README's recipe, with the exp094b branch's binary)
 cargo build --release --locked -p humanify-cli
 ./target/release/humanify match experiments/lib/match-truth/fixtures/new.js \
   --prior-version experiments/lib/match-truth/fixtures/prior.formatted.js \
   -o experiments/lib/match-truth/fixtures/dump.json --work-dir /tmp/match-fixture-work
+
+# the two-arms-agree check (exp094b): the statement arm's join delta,
+# old binary vs new, flip hop + sampled quiet hops over the frozen walk
+npx tsx experiments/094-wrapper-spelling/statement-arm-check.ts \
+  /work/walk-rust-0926/trees experiments/094-wrapper-spelling/out-stmt \
+  --old <main-binary> --new ./target/release/humanify --quiet 2.1.199,2.1.215
 
 # the full corpus with the branch's binary (~35 min on the post-#68 binary; run alone)
 npx tsx experiments/lib/match-truth/run.ts --corpus <092 .corpus dir> \
@@ -309,4 +350,6 @@ npx tsx experiments/lib/match-truth/run.ts --corpus <092 .corpus dir> \
 
 Raw census data: `out-census/` (per-hop composeDiff tallies + spell
 samples), `out-fn/` (per-hop function-level cousin pairing + population
-refusal counts), `out-corpus/` (the launched corpus run).
+refusal counts), `out-corpus/` (the launched corpus run), `out-stmt/`
+(the exp094b two-arms-agree check: the statement arm's gained/lost unique
+joins under both binaries).

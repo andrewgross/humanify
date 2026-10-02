@@ -293,7 +293,9 @@ npm run eval -- score <label> --bin <workspace>/target/release/humanify
 - **The binary's hash bytes are its own** (WP5.6e, 2026-09-25: `--inject-ts-hashes`
   is deleted). A TS-era prior — the archive priors the rebase reads — is
   brought across: its split ledger is re-derived from its `humanified.js`
-  (log line `Split ledger hashes: TS-era (hashVersion 1) re-derived ...`) and
+  (log line `Split ledger hashes: stale era (hashVersion 1) re-derived ...`;
+  since exp094b every STALE era re-keys this way — a `hashVersion`-2 ledger
+  from the pre-exp094b Rust era included) and
   its vendor names carry by CONTENT (`Vendor names re-keyed by content: ...`);
   anything that cannot be proven exact is refused with a `WARNING` line. Every
   prompt whose code shows a `lib_<hash8>` identifier has new text, so a warm

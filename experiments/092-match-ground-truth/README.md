@@ -20,9 +20,12 @@
   matchedOfMust at `structuralHashUnique` (the committed dump.json on that
   branch is the regenerated one; the pins in score.test.ts carry the
   `fixed:{was: 2}` notes). The statement half of the finding (statement
-  recall 2/3) is deliberately UNCHANGED there: the statement twins hash
-  through `statement_hash` (STATEMENT_HASH_VERSION), a family that branch
-  does not touch — exp094's follow-up recommendation. ALSO on that branch:
+  recall 2/3) is resolved on branch `exp094b-statement-spelling`
+  (2026-10-02): the statement twins hash through `statement_hash`
+  (STATEMENT_HASH_VERSION, bumped 2 → 3 there), which now mirrors the SAME
+  shared wrapper-spelling rule — the regenerated fixture scores 3/3
+  statements.proposedOfMust (the pin in score.test.ts carries the
+  `fixed:{was: 2}` note). ALSO on the exp094 branch:
   the canonicalizer's head erasure now REFUSES a `this`/`arguments`-loaded
   flip (it used to run unconditionally and could MANUFACTURE ground truth,
   against this instrument's own contract — measured: the corpus must-set is

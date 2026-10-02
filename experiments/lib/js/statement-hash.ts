@@ -24,6 +24,16 @@
  * renaming. Consequence: short generic statements (`foo();`) collide across
  * unrelated code; the inheritance tier compensates with an equal-count
  * unanimity rule (stable-split.ts).
+ *
+ * NOT the pipeline's statement hash anymore as of exp094b (2026-10-02):
+ * the Rust binary's own statement hash (STATEMENT_HASH_VERSION 3) adopted
+ * the arrow<->function wrapper-spelling unification for its matching/twin
+ * identity, but THIS copy deliberately did NOT — every recorded card's
+ * novel/realLn/noise keys on these bytes, and the scorer recomputes them
+ * here from the emitted trees, so changing them would re-derive every
+ * label on record. The wrapper-spelling mass a hop carries is reported
+ * ADVISORY, as `spellingIdenticalLines` (037's diff composition, via
+ * lib/js/wrapper-spelling.ts).
  */
 
 import { createHash } from "node:crypto";
