@@ -91,13 +91,97 @@ const KEYWORDS = new Set([
 const FUNCTION_HEAD =
   /^(\s*(?:(?:var|let|const)\s+[A-Za-z_$][A-Za-z0-9_$]*\s*=\s*)?)(async\s+)?function\s*(\([^)]*\))\s*\{/;
 
-/** Erase the wrapper spelling of the slice's leading function head. */
+/**
+ * Erase the wrapper spelling of the slice's leading function head — REFUSED
+ * when the flip would rebind something (exp094).
+ *
+ * exp092's original erasure was unconditional, so a `this`/`arguments`-
+ * loaded pair canonicalized EQUAL — manufactured ground truth, against this
+ * instrument's own "never manufactures" contract (an arrow binds neither, a
+ * function expression binds both, so that pair is a real difference and
+ * must stay out of the must-set). The refusal consults the shared rule
+ * (lib/js/wrapper-spelling.ts — the same answer the pipeline's hash
+ * serializer gives), so the ground-truth predicate agrees with the matcher
+ * it audits. A refusal may only MISS ground truth (the pair stays
+ * unmatched), which is this tier's designed error direction.
+ */
 function normalizeWrapper(slice: string): string {
   const head = slice.match(FUNCTION_HEAD);
   if (!head) {
     return slice;
   }
-  return slice.replace(FUNCTION_HEAD, "$1$2$3 => {");
+  return headErasureRefused(slice)
+    ? slice
+    : slice.replace(FUNCTION_HEAD, "$1$2$3 => {");
+}
+
+// --- the head-erasure soundness check (refusal side) --------------------------
+
+// --- the head-erasure soundness check (refusal side) --------------------------
+
+import { parseSync } from "@babel/core";
+import * as t from "@babel/types";
+import { wrapperFlipIsSemanticsPreserving } from "../js/wrapper-spelling.js";
+
+/**
+ * Parse the slice, or null. The body-bearing shapes the head regex matches:
+ * a declaration-headed program (`var w = function …;`) parses directly; a
+ * bare anonymous expression needs parentheses. A trailing `;` prevents the
+ * parenthesized form, so a third attempt strips it.
+ */
+function parseSlice(slice: string): t.File | null {
+  for (const candidate of [
+    slice,
+    `(${slice})`,
+    `(${slice.replace(/;\s*$/, "")})`
+  ]) {
+    try {
+      const ast = parseSync(candidate, { sourceType: "unambiguous" });
+      if (ast?.program.body.length === 1) return ast;
+    } catch {
+      // try the next spelling
+    }
+  }
+  return null;
+}
+
+/** The leading function the head regex matched — the first function node in
+ * visitor order at the program's head. */
+function headFunction(ast: t.File): t.Function | null {
+  const stack: t.Node[] = [ast.program];
+  while (stack.length > 0) {
+    const node = stack.pop() as t.Node;
+    if (t.isFunction(node)) {
+      return node;
+    }
+    for (const k of t.VISITOR_KEYS[node.type] ?? []) {
+      const child = (node as unknown as Record<string, unknown>)[k];
+      const push = (c: unknown): void => {
+        if (Array.isArray(c)) {
+          for (const cc of c) push(cc);
+        } else if (
+          typeof c === "object" &&
+          c !== null &&
+          typeof (c as { type?: unknown }).type === "string"
+        ) {
+          stack.push(c as t.Node);
+        }
+      };
+      push(child);
+    }
+  }
+  return null;
+}
+
+/** True => keep the `function` head UN-erased (the pair then compares
+ * unequal, which may only miss ground truth, never invent it). Unparseable
+ * slices are refused for the same reason. */
+function headErasureRefused(slice: string): boolean {
+  const ast = parseSlice(slice);
+  if (!ast) return true;
+  const fn = headFunction(ast);
+  if (!fn || !t.isFunctionExpression(fn)) return true;
+  return !wrapperFlipIsSemanticsPreserving(fn);
 }
 
 const IDENTIFIER = /[A-Za-z_$][A-Za-z0-9_$]*/y;

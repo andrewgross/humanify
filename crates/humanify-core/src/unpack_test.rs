@@ -924,9 +924,12 @@ fn a_ts_era_prior_carries_its_names_by_content() {
     );
     let rekey = outcome.rekey.expect("re-keyed");
     assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
-    // fixed:{was: 2, why: exp093 bumped FACTORY_HASH_VERSION — MatchKey
-    // numbers are exact now, so the manifest's hash bytes are a new era's}.
-    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 3);
+    // fixed:{was: 3, why: exp094 bumped FACTORY_HASH_VERSION — a safe arrow
+    // serializes under the FunctionExpression token now, so the manifest's
+    // ARROW-factory hashes are a new era's bytes (function-expression
+    // factories keep theirs across the era; the gate, not the bytes,
+    // carries the refusal)}.
+    assert_eq!(read_manifest(&fresh.0)["hashVersion"], 4);
 }
 
 #[test]

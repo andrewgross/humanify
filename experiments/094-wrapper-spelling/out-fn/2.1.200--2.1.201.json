@@ -1,0 +1,30 @@
+{
+  "hop": "2.1.200->2.1.201",
+  "src": {
+    "parseErrors": 0,
+    "population": {
+      "priorFunctions": 53107,
+      "freshFunctions": 53107,
+      "priorRefusals": {
+        "conciseBody": 38404,
+        "lexicalBindingUse": 584,
+        "generator": 17,
+        "namedId": 5,
+        "newTarget": 1
+      },
+      "freshRefusals": {
+        "conciseBody": 38404,
+        "lexicalBindingUse": 584,
+        "generator": 17,
+        "namedId": 5,
+        "newTarget": 1
+      }
+    },
+    "cousinPairs": 0,
+    "bothSafePairs": 0,
+    "bothSafeLines": 0,
+    "refusedPairs": 0,
+    "refusedByReason": {},
+    "pairs": []
+  }
+}

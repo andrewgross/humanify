@@ -1,0 +1,181 @@
+{
+  "hop": "2.1.207->2.1.208",
+  "surfaces": {
+    "src": {
+      "real": 51880,
+      "naming": 9446,
+      "alias": 208,
+      "reorder": 2,
+      "fileAddRemove": 6015,
+      "spellingIdenticalLines": 8230,
+      "postRepairReal": 43650,
+      "flips": 17,
+      "samples": [
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 552,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 276,
+          "freshLines": 276
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 364,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 182,
+          "freshLines": 182
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 202,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 101,
+          "freshLines": 101
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 3180,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 1590,
+          "freshLines": 1590
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 334,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 167,
+          "freshLines": 167
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 348,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 174,
+          "freshLines": 174
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "lines": 64,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 32,
+          "freshLines": 32
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "lines": 124,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 62,
+          "freshLines": 62
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "lines": 88,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 44,
+          "freshLines": 44
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "lines": 140,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 70,
+          "freshLines": 70
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "lines": 124,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 62,
+          "freshLines": 62
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "lines": 802,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 401,
+          "freshLines": 401
+        },
+        {
+          "file": "noop-data/auth-token-manager.js",
+          "lines": 120,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 60,
+          "freshLines": 60
+        },
+        {
+          "file": "noop-data/auth-token-manager.js",
+          "lines": 612,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 306,
+          "freshLines": 306
+        },
+        {
+          "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+          "lines": 144,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 72,
+          "freshLines": 72
+        },
+        {
+          "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+          "lines": 120,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 60,
+          "freshLines": 60
+        },
+        {
+          "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+          "lines": 912,
+          "priorForm": "arrow",
+          "freshForm": "function",
+          "receiver": "getProperty.createModule",
+          "priorLines": 456,
+          "freshLines": 456
+        }
+      ]
+    },
+    "vendor": {
+      "real": 1601,
+      "naming": 0,
+      "alias": 4,
+      "reorder": 0,
+      "fileAddRemove": 30879,
+      "spellingIdenticalLines": 0,
+      "postRepairReal": 1601,
+      "flips": 0,
+      "samples": []
+    }
+  }
+}
