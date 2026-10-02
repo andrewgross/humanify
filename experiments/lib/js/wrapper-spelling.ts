@@ -15,12 +15,13 @@
  * - the match ground-truth canonicalizer (match-truth/canonical.ts —
  *   whether erasing the `function` head can manufacture a must-match);
  * - reference documentation for the PIPELINE's implementation of the same
- *   rule (Rust `hash::serialize`'s `arrow_serializes_as_function`, the
- *   MatchKey families' wrapper-spelling unification), which works over
- *   oxc's ESTree JSON rather than a babel AST — the node names differ
+ *   rule (Rust `hash::wrapper_spelling`'s `arrow_serializes_as_function`,
+ *   read by BOTH Rust hash arms — the MatchKey families' and the statement
+ *   hash's wrapper-spelling unification, exp094 + exp094b), which works
+ *   over oxc's ESTree JSON rather than a babel AST — the node names differ
  *   (oxc merges object methods into `Property` and names class fields
  *   `PropertyDefinition`), the semantics are the same by design, and any
- *   change to one is a change to all three (docs/responsibility.md row).
+ *   change to one is a change to all of them (docs/responsibility.md row).
  *
  * THE RULE. The flip `(a, b) => { … }` ↔ `function (a, b) { … }` is
  * semantics-preserving for a function iff:

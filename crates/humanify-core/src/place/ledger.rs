@@ -60,30 +60,33 @@ impl StableSplitLedger {
     /// `fossilModules[].hashes`) written by THIS hash function? The ONE
     /// owner of the version question: the hash tier, the emission
     /// alignment and the fossil matcher all refuse a ledger for which this
-    /// is false — a TS-era ledger (`hashVersion: 1`, the TS bytes) is
-    /// never joined against the Rust's own hashes (WP5.6e).
+    /// is false — a stale-era ledger (the TS's `hashVersion: 1`, or an
+    /// older Rust hash era) is never joined against this run's own hashes
+    /// (WP5.6e; every era since, re-keyed via
+    /// [`rederive_stale_era_hashes`] or refused loudly).
     pub fn hashes_current(&self) -> bool {
         self.hash_version == Some(STATEMENT_HASH_VERSION)
     }
 }
 
-/// What [`rederive_ts_era_hashes`] proved.
+/// What [`rederive_stale_era_hashes`] proved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rederived {
+    /// The era the ledger carried before the re-derivation (`1` = the TS
+    /// bytes; `2` = the pre-exp094b Rust era).
+    pub recorded_version: u64,
     pub statements: usize,
     /// Distinct hash classes — the same count on both sides (a bijection).
     pub classes: usize,
 }
-
-/// The TS-era hash version (`src/split/statement-hash.ts`).
-const TS_ERA_HASH_VERSION: u64 = 1;
 
 /// A prior ledger's statement hashes, as this run will read them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PriorHashes {
     /// Written by this hash function: read as-is.
     Current,
-    /// TS-era, re-keyed onto this hash function ([`rederive_ts_era_hashes`]).
+    /// Stale era, re-keyed onto this hash function
+    /// ([`rederive_stale_era_hashes`]).
     Rederived(Rederived),
     /// Not usable: every hash reader refuses the ledger (the hash tier
     /// reads `no-prior-hashes`, emission alignment and fossil matching run
@@ -100,9 +103,9 @@ impl PriorHashes {
                 format!("Split ledger hashes: hashVersion {STATEMENT_HASH_VERSION} (current)")
             }
             PriorHashes::Rederived(r) => format!(
-                "Split ledger hashes: TS-era (hashVersion {TS_ERA_HASH_VERSION}) re-derived from \
+                "Split ledger hashes: stale era (hashVersion {}) re-derived from \
 the prior text — {} statements, {} classes (bijection proven)",
-                r.statements, r.classes
+                r.recorded_version, r.statements, r.classes
             ),
             PriorHashes::Refused(why) => format!(
                 "WARNING: split ledger hashes REFUSED ({why}) — the hash tier, emission-order \
@@ -113,7 +116,9 @@ alignment and fossil matching run WITHOUT prior hashes this hop"
 }
 
 /// Settle which hashes a freshly-read prior ledger offers this run: its own
-/// when current, re-derived from `prior_text` when TS-era, else refused.
+/// when current, re-derived from `prior_text` when a STALE era's (the TS's
+/// `hashVersion: 1`, or an older Rust hash era — exp094b bumped the Rust
+/// to 3), else refused.
 pub fn settle_prior_hashes(
     ledger: &mut StableSplitLedger,
     prior_text: Option<&str>,
@@ -129,68 +134,76 @@ pub fn settle_prior_hashes(
                 .map_or("(absent)".to_string(), |v| v.to_string())
         ));
     };
-    match rederive_ts_era_hashes(ledger, text) {
+    match rederive_stale_era_hashes(ledger, text) {
         Ok(r) => PriorHashes::Rederived(r),
         Err(e) => PriorHashes::Refused(e),
     }
 }
 
-/// Bring a TS-era ledger (`hashVersion: 1`) onto THIS hash function by
-/// re-deriving its statement hashes from the prior release's own text —
-/// R6's promise, WP5.6e.
+/// Bring a STALE-era ledger onto THIS hash function (WP5.6e brought the
+/// TS's `hashVersion: 1` across; exp094b widened the same machinery to
+/// every older era, because a version bump makes the previous Rust era a
+/// stale one too) by re-deriving its statement hashes from the prior
+/// release's own text — R6's promise.
 ///
 /// `prior_text` is the prior's `humanified.js` (the shipped text the ledger
 /// was written from: one wrapper statement per `order` entry). Its
-/// statements are hashed by the Rust, and the ledger's TS bytes are
+/// statements are hashed by the Rust, and the ledger's recorded bytes are
 /// re-keyed through the per-statement correspondence ONLY when that
 /// correspondence is a BIJECTION between the two partitions — the same
-/// proof the migration's hash injection required, run the other way. Then
-/// `hashes` is the Rust's, and `emitHashes` / `fossilModules[].hashes` are
-/// translated class for class (each module's list re-sorted, as the
-/// extraction sorts it), so every reader decides exactly as it would have
-/// on the TS bytes.
+/// proof the migration's hash injection required, run the other way. A
+/// class MERGE across the era (the wrapper-spelling unification merges an
+/// arrow-spelled statement into its function twin's class) fails this
+/// proof and refuses the ledger, never half-carries it. Then `hashes` is
+/// the Rust's, and `emitHashes` / `fossilModules[].hashes` are translated
+/// class for class (each module's list re-sorted, as the extraction sorts
+/// it), so every reader decides exactly as it would have on the recorded
+/// bytes.
 ///
-/// Any failure leaves the ledger UNTOUCHED — still `hashVersion: 1`, which
-/// every reader refuses ([`StableSplitLedger::hashes_current`]) — and says
-/// why, for the caller to log. Never a partial re-key.
-pub fn rederive_ts_era_hashes(
+/// Any failure leaves the ledger UNTOUCHED — still its stale era's version,
+/// which every reader refuses ([`StableSplitLedger::hashes_current`]) —
+/// and says why, for the caller to log. Never a partial re-key.
+pub fn rederive_stale_era_hashes(
     ledger: &mut StableSplitLedger,
     prior_text: &str,
 ) -> Result<Rederived, String> {
-    if ledger.hash_version != Some(TS_ERA_HASH_VERSION) {
+    let Some(recorded_version) = ledger.hash_version else {
+        return Err("the ledger records no hashVersion (pre-WP5.6e): no era to re-derive".into());
+    };
+    if recorded_version == STATEMENT_HASH_VERSION {
         return Err(format!(
-            "hashVersion {} is not the TS era ({TS_ERA_HASH_VERSION})",
-            ledger
-                .hash_version
-                .map_or("(absent)".to_string(), |v| v.to_string())
+            "hashVersion {recorded_version} is current — nothing to re-derive"
         ));
     }
-    let ts = ledger
+    let recorded = ledger
         .hashes
         .as_ref()
         .filter(|h| h.len() == ledger.order.len())
         .ok_or("the ledger records no per-statement hashes")?;
-    let rust = super::input::split_input(prior_text)?.hashes;
-    if rust.len() != ts.len() {
+    let current = super::input::split_input(prior_text)?.hashes;
+    if current.len() != recorded.len() {
         return Err(format!(
             "the prior text has {} wrapper statements, the ledger {}",
-            rust.len(),
-            ts.len()
+            current.len(),
+            recorded.len()
         ));
     }
-    let mut ts_to_rust: HashMap<&str, &str> = HashMap::new();
-    let mut rust_to_ts: HashMap<&str, &str> = HashMap::new();
-    for (i, (t, r)) in ts.iter().zip(&rust).enumerate() {
-        if *ts_to_rust.entry(t).or_insert(r) != r || *rust_to_ts.entry(r).or_insert(t) != t {
+    let mut recorded_to_current: HashMap<&str, &str> = HashMap::new();
+    let mut current_to_recorded: HashMap<&str, &str> = HashMap::new();
+    for (i, (t, r)) in recorded.iter().zip(&current).enumerate() {
+        if *recorded_to_current.entry(t).or_insert(r) != r
+            || *current_to_recorded.entry(r).or_insert(t) != t
+        {
             return Err(format!(
-                "statement {i}: the TS and Rust hash partitions differ (not a bijection)"
+                "statement {i}: the recorded (hashVersion {recorded_version}) and current \
+(hashVersion {STATEMENT_HASH_VERSION}) hash partitions differ (not a bijection)"
             ));
         }
     }
     let translate = |list: &[String]| -> Result<Vec<String>, String> {
         list.iter()
             .map(|h| {
-                ts_to_rust
+                recorded_to_current
                     .get(h.as_str())
                     .map(|r| r.to_string())
                     .ok_or_else(|| format!("hash {h} is not among the ledger's statements"))
@@ -214,12 +227,13 @@ pub fn rederive_ts_era_hashes(
         ),
         None => None,
     };
-    let classes = ts_to_rust.len();
-    ledger.hashes = Some(rust);
+    let classes = recorded_to_current.len();
+    ledger.hashes = Some(current);
     ledger.emit_hashes = emit_hashes;
     ledger.fossil_modules = fossil_modules;
     ledger.hash_version = Some(STATEMENT_HASH_VERSION);
     Ok(Rederived {
+        recorded_version,
         statements: ledger.order.len(),
         classes,
     })

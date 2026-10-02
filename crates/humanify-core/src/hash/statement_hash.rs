@@ -14,13 +14,32 @@
 //! marker so they cannot alias the hole-free spelling. Field order is the
 //! child order of the ESTree JSON (oxc's own, alphabetical in the map) —
 //! the partition comparison makes the order's exact choice immaterial.
+//!
+//! exp094b: the wrapper-spelling rule lives HERE too. A bundler
+//! re-serializing a module wrapper arrow -> function expression used to
+//! flip the wrapper's whole STATEMENT into another class (exp092's
+//! `keepWrapper`, statement recall 2/3; the real 2.1.207->208 hop's 17
+//! wrappers). A SAFE arrow's node line now walks under the
+//! FunctionExpression token — the SAME shared predicate the MatchKey
+//! serializer reads (`hash::wrapper_spelling`, one rule, both Rust arms)
+//! — and the function-head fields (`async`, `generator`) ride in the
+//! function nodes' content so the flip's function-side conditions hold in
+//! this scalar-free stream (v2 could not see them at all: a
+//! `function () {}`, an `async function () {}` and a `function* () {}`
+//! hashed as ONE class). The refusal direction is unchanged and shared: a
+//! `this`/`arguments`/`new.target`-loaded, concise-bodied, named or
+//! generator flip keeps its sides in different classes.
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::wrapper_spelling::{arrow_serializes_as_function, function_head_fields};
+
 /// The ledger's `hashVersion` — bump when the serialization changes shape.
 /// A prior ledger hashed under a different version is REFUSED by every
-/// reader (`StableSplitLedger::hashes_current`), never misread.
+/// reader (`StableSplitLedger::hashes_current`), never misread — and, when
+/// the prior text is at hand, RE-DERIVED onto this era's classes through
+/// the proven bijection (`place::ledger::rederive_stale_era_hashes`).
 ///
 /// 1 = the TS statement-hash bytes (`src/split/statement-hash.ts`), which
 /// every TS-era ledger carries. 2 = THIS function's bytes (WP5.6e,
@@ -28,7 +47,15 @@ use sha2::{Digest, Sha256};
 /// are the only hashes). The two define the same partition on every
 /// measured input (the M3 injection's bijection proof), but never the same
 /// bytes, so a v1 ledger read as v2 would silently join nothing.
-pub const STATEMENT_HASH_VERSION: u64 = 2;
+/// 3 = exp094b (2026-10-02): the wrapper-spelling unification reached the
+/// statement arm — a SAFE arrow's node line walks under the
+/// FunctionExpression token (the SAME shared rule as the MatchKey
+/// serializer, `hash::wrapper_spelling`), and the function-head fields
+/// (`async`, `generator`) ride in the node content. A wrapper a bundler
+/// re-serialized arrow -> function keeps its class across the era when
+/// spelled as a function; the ARROW side's bytes are new-era (the version
+/// gate, not the bytes, carries the refusal — exp093's lesson, mirrored).
+pub const STATEMENT_HASH_VERSION: u64 = 3;
 
 /// The value-bearing part of a node (statement-hash.ts's nodeContent): what
 /// distinguishes two structurally-identical trees; identifier names
@@ -107,6 +134,18 @@ fn node_content(node: &serde_json::Map<String, Value>) -> String {
             .unwrap_or("")
             .to_string(),
         "VariableDeclaration" => get("kind").as_str().unwrap_or("").to_string(),
+        // exp094b: the function-head fields the wrapper-spelling rule's
+        // function-side conditions need. The MatchKey arm serializes every
+        // scalar, so `async`/`generator` ride in ITS bytes for free; this
+        // stream hashes node types + content only, so the fields are the
+        // function node's CONTENT — flipped safe arrows carry theirs under
+        // the unified FunctionExpression token (`function_head_fields`,
+        // the shared rule's field set) and a `function*` / async mismatch
+        // can never join an arrow's class. (A binding `id` needs no field:
+        // it is a child NODE and already in the stream.)
+        "FunctionDeclaration" | "FunctionExpression" | "ArrowFunctionExpression" => {
+            function_head_fields(node).to_string()
+        }
         "BinaryExpression" | "LogicalExpression" | "AssignmentExpression" | "UnaryExpression" => {
             get("operator").as_str().unwrap_or("").to_string()
         }
@@ -209,8 +248,19 @@ pub fn statement_hash(stmt: &Value) -> String {
                 // match the TS side's for the partition gate. Identifiers
                 // contribute their type alone (names masked); scalars not
                 // in nodeContent are dropped, exactly as the TS walk drops
-                // everything outside VISITOR_KEYS + nodeContent.
-                hasher.update(format!("({t}\x00{}\x00", node_content(map)));
+                // everything outside VISITOR_KEYS + nodeContent. The ONE
+                // exception since exp094b is the wrapper-spelling rule's
+                // own surface: a SAFE arrow's node line walks under the
+                // FunctionExpression token (shared predicate,
+                // `hash::wrapper_spelling`) so a bundler's arrow ->
+                // function re-serialization keeps the statement's class,
+                // and the function-head fields ride in nodeContent above.
+                let token = if t == "ArrowFunctionExpression" && arrow_serializes_as_function(map) {
+                    "FunctionExpression"
+                } else {
+                    t
+                };
+                hasher.update(format!("({token}\x00{}\x00", node_content(map)));
                 stack.push(Item::Close);
                 // Descend only into child NODES / arrays of them — the
                 // VISITOR_KEYS walk's semantics; scalars never descend.

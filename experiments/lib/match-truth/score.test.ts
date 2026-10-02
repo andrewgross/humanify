@@ -443,13 +443,20 @@ test("the committed fixture's dump scores its constructed ground truth", () => {
     f.priorNames.includes("removedOld"),
     "the prior inventory carries the removed function"
   );
-  // Statements: keepExact and keepRenamed were proposed as twins (both
-  // abstained — nothing to bridge, by design); keepWrapper's statement
-  // twin still does not propose — the STATEMENT hash family
-  // (STATEMENT_HASH_VERSION, the split-inheritance key) does not unify the
-  // spelling yet (exp094's recommended follow-up; only the MatchKey
-  // families do).
+  // Statements: keepExact, keepRenamed and keepWrapper are ALL proposed as
+  // twins now. keepWrapper's statement twin used not to propose — the
+  // STATEMENT hash family (STATEMENT_HASH_VERSION, the split-inheritance
+  // key) split classes on the wrapper's arrow/function spelling, the one
+  // surface exp094 deliberately left open. exp094b mirrors the
+  // wrapper-spelling rule into the statement hash (the SAME shared
+  // predicate as the MatchKey arm; a SAFE arrow's node line walks under
+  // the FunctionExpression token), so all three must-statements propose.
   assert.equal(card.statements.mustMatch, 3);
-  assert.equal(card.statements.proposedOfMust, 2);
-  assert.equal(card.statements.recall, 2 / 3);
+  // fixed:{was: proposedOfMust 2 with keepWrapper unproposed, why: exp094b
+  // mirrored the exp094 wrapper-spelling rule into the statement hash
+  // (STATEMENT_HASH_VERSION 2 -> 3) — the statement twin of a SAFE
+  // arrow<->function wrapper flip now proposes. Regenerated with the
+  // exp094b branch's binary.}
+  assert.equal(card.statements.proposedOfMust, 3);
+  assert.equal(card.statements.recall, 1);
 });

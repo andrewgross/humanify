@@ -1,0 +1,168 @@
+{
+  "oldBin": "/tmp/humanify-main-d97d63e0",
+  "newBin": "/Users/andrewgross/Development/humanify/.claude/worktrees/agent-a7ec8e5b7f5ea1703/target/release/humanify",
+  "hops": {
+    "2.1.207--2.1.208": {
+      "kind": "flip",
+      "files": 4,
+      "skipped": 0,
+      "gained": [
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 2291,
+          "freshStart": 2287,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",3],[\"fn\",2],[\"fn|UNSAFE\",14],[\"arrow|UNSAFE\",3],[\"fn|async|UNSAFE\",2]]",
+          "freshSignatures": "[[\"fn\",3],[\"arrow\",2],[\"fn|UNSAFE\",14],[\"arrow|UNSAFE\",3],[\"fn|async|UNSAFE\",2]]"
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 11190,
+          "freshStart": 10642,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",1],[\"arrow|UNSAFE\",3],[\"fn|async|UNSAFE\",3],[\"fn|UNSAFE\",2]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow|UNSAFE\",3],[\"fn|async|UNSAFE\",3],[\"fn|UNSAFE\",2]]"
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 18412,
+          "freshStart": 17508,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",2],[\"fn|async|UNSAFE\",2],[\"arrow|async|UNSAFE\",1],[\"arrow|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow\",1],[\"fn|async|UNSAFE\",2],[\"arrow|async|UNSAFE\",1],[\"arrow|UNSAFE\",1]]"
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 21753,
+          "freshStart": 20655,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",9],[\"arrow|UNSAFE\",9],[\"fn\",15],[\"fn|UNSAFE\",15],[\"fn|async|UNSAFE\",22],[\"fn|async\",1]]",
+          "freshSignatures": "[[\"fn\",16],[\"arrow|UNSAFE\",9],[\"fn|UNSAFE\",15],[\"arrow\",8],[\"fn|async|UNSAFE\",22],[\"fn|async\",1]]"
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 86044,
+          "freshStart": 81794,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",2],[\"fn|UNSAFE\",4],[\"arrow|UNSAFE\",3],[\"fn|async|UNSAFE\",3],[\"fn\",1]]",
+          "freshSignatures": "[[\"fn\",2],[\"fn|UNSAFE\",4],[\"arrow\",1],[\"arrow|UNSAFE\",3],[\"fn|async|UNSAFE\",3]]"
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 92839,
+          "freshStart": 88255,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",1],[\"fn|UNSAFE\",3],[\"arrow|async|UNSAFE\",1],[\"arrow|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",1],[\"fn|UNSAFE\",3],[\"arrow|async|UNSAFE\",1],[\"arrow|UNSAFE\",1]]"
+        },
+        {
+          "file": "create-error-response-val/plugin-policy-detector.js",
+          "priorStart": 99920,
+          "freshStart": 94991,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",1]]",
+          "freshSignatures": "[[\"fn\",1]]"
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "priorStart": 3314,
+          "freshStart": 3533,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",4],[\"arrow|async|UNSAFE\",1],[\"fn\",2],[\"arrow|UNSAFE\",2]]",
+          "freshSignatures": "[[\"fn\",3],[\"arrow|async|UNSAFE\",1],[\"arrow\",3],[\"arrow|UNSAFE\",2]]"
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "priorStart": 5988,
+          "freshStart": 6093,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",1],[\"arrow|UNSAFE\",3],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow|UNSAFE\",3],[\"arrow|async|UNSAFE\",1]]"
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "priorStart": 8380,
+          "freshStart": 8407,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",2],[\"arrow|UNSAFE\",3],[\"arrow|async|UNSAFE\",3]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow\",1],[\"arrow|UNSAFE\",3],[\"arrow|async|UNSAFE\",3]]"
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "priorStart": 12780,
+          "freshStart": 12677,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",1],[\"fn\",2],[\"fn|UNSAFE\",1],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",3],[\"fn|UNSAFE\",1],[\"arrow|async|UNSAFE\",1]]"
+        },
+        {
+          "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+          "priorStart": 16319,
+          "freshStart": 16102,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",5],[\"fn|UNSAFE\",9],[\"arrow|UNSAFE\",23],[\"fn\",5],[\"arrow|async\",3],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",6],[\"fn|UNSAFE\",9],[\"arrow|UNSAFE\",23],[\"arrow\",4],[\"arrow|async\",3],[\"arrow|async|UNSAFE\",1]]"
+        },
+        {
+          "file": "noop-data/auth-token-manager.js",
+          "priorStart": 2554,
+          "freshStart": 2715,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",2],[\"arrow|UNSAFE\",1],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow\",1],[\"arrow|UNSAFE\",1],[\"arrow|async|UNSAFE\",1]]"
+        },
+        {
+          "file": "noop-data/auth-token-manager.js",
+          "priorStart": 6476,
+          "freshStart": 6518,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",3],[\"arrow|UNSAFE\",11],[\"fn\",10],[\"fn|UNSAFE\",6],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",11],[\"arrow|UNSAFE\",11],[\"arrow\",2],[\"fn|UNSAFE\",6],[\"arrow|async|UNSAFE\",1]]"
+        },
+        {
+          "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+          "priorStart": 3144,
+          "freshStart": 3288,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",1],[\"arrow|UNSAFE\",4],[\"arrow|async\",3]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow|UNSAFE\",4],[\"arrow|async\",3]]"
+        },
+        {
+          "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+          "priorStart": 6329,
+          "freshStart": 6339,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",2],[\"arrow|UNSAFE\",1],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",1],[\"arrow\",1],[\"arrow|UNSAFE\",1],[\"arrow|async|UNSAFE\",1]]"
+        },
+        {
+          "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+          "priorStart": 10235,
+          "freshStart": 10129,
+          "flipVerified": true,
+          "priorSignatures": "[[\"arrow\",3],[\"arrow|UNSAFE\",12],[\"fn\",10],[\"fn|UNSAFE\",13],[\"arrow|async|UNSAFE\",1]]",
+          "freshSignatures": "[[\"fn\",11],[\"arrow|UNSAFE\",12],[\"arrow\",2],[\"fn|UNSAFE\",13],[\"arrow|async|UNSAFE\",1]]"
+        }
+      ],
+      "lost": [],
+      "divergences": []
+    },
+    "2.1.199--2.1.200": {
+      "kind": "quiet",
+      "sampled": 150,
+      "files": 150,
+      "skipped": 0,
+      "gained": [],
+      "lost": []
+    },
+    "2.1.215--2.1.216": {
+      "kind": "quiet",
+      "sampled": 150,
+      "files": 150,
+      "skipped": 0,
+      "gained": [],
+      "lost": []
+    }
+  },
+  "verdict": "AGREE — every statement-arm merge is a rule-accepted flip; quiet hops gained zero"
+}

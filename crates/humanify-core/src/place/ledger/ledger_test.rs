@@ -1,9 +1,10 @@
-//! `rederive_ts_era_hashes`: a TS-era ledger re-keyed onto the Rust's own
-//! statement hashes through a PROVEN bijection, or left untouched.
+//! `rederive_stale_era_hashes`: a stale-era ledger (the TS's, or an older
+//! Rust hash era's) re-keyed onto this run's own statement hashes through a
+//! PROVEN bijection, or left untouched.
 
 use std::collections::HashMap;
 
-use super::{FossilLedgerModule, Rederived, StableSplitLedger, rederive_ts_era_hashes};
+use super::{FossilLedgerModule, Rederived, StableSplitLedger, rederive_stale_era_hashes};
 use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::place::input::split_input;
 
@@ -65,10 +66,11 @@ fn ts_ledger() -> (StableSplitLedger, Vec<String>) {
 #[test]
 fn a_ts_era_ledger_is_rekeyed_class_for_class() {
     let (mut ledger, rust) = ts_ledger();
-    let report = rederive_ts_era_hashes(&mut ledger, &prior()).expect("bijection");
+    let report = rederive_stale_era_hashes(&mut ledger, &prior()).expect("bijection");
     assert_eq!(
         report,
         Rederived {
+            recorded_version: 1,
             statements: 5,
             classes: 4
         }
@@ -97,7 +99,7 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
     let (mut ledger, _) = ts_ledger();
     let before = format!("{ledger:?}");
     let short = prior().replace("  c(b);\n", "");
-    assert!(rederive_ts_era_hashes(&mut ledger, &short).is_err());
+    assert!(rederive_stale_era_hashes(&mut ledger, &short).is_err());
     assert_eq!(format!("{ledger:?}"), before);
     assert!(!ledger.hashes_current());
 
@@ -105,18 +107,44 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
     let (mut ledger, _) = ts_ledger();
     ledger.hashes.as_mut().unwrap()[2] = "ts-split".into();
     let before = format!("{ledger:?}");
-    let err = rederive_ts_era_hashes(&mut ledger, &prior()).unwrap_err();
+    let err = rederive_stale_era_hashes(&mut ledger, &prior()).unwrap_err();
     assert!(err.contains("not a bijection"), "{err}");
     assert_eq!(format!("{ledger:?}"), before);
 
     // An emitted hash that no statement carries.
     let (mut ledger, _) = ts_ledger();
     ledger.emit_hashes.as_mut().unwrap()[0] = "ts-ghost".into();
-    assert!(rederive_ts_era_hashes(&mut ledger, &prior()).is_err());
+    assert!(rederive_stale_era_hashes(&mut ledger, &prior()).is_err());
     assert!(!ledger.hashes_current());
 
-    // Not the TS era: nothing to re-derive.
+    // No recorded era (pre-WP5.6e): nothing to re-derive from.
     let (mut ledger, _) = ts_ledger();
     ledger.hash_version = None;
-    assert!(rederive_ts_era_hashes(&mut ledger, &prior()).is_err());
+    assert!(rederive_stale_era_hashes(&mut ledger, &prior()).is_err());
+}
+
+#[test]
+fn an_older_rust_era_ledger_is_rekeyed_from_the_prior_text() {
+    // exp094b bumped STATEMENT_HASH_VERSION: a ledger the PREVIOUS Rust
+    // era stamped (`hashVersion: 2`) is a stale era's, exactly like a
+    // TS-era one, and the same prior-text bijection re-keys it — the
+    // refusal must come from the version GATE, never from a silent
+    // mis-join (a function-spelled wrapper keeps its bytes across this
+    // era, so the gate alone stands between a stale ledger and a
+    // half-inherited split, the mirror of exp093's factory-manifest
+    // lesson).
+    let (mut ledger, rust) = ts_ledger();
+    ledger.hash_version = Some(2);
+    let report = rederive_stale_era_hashes(&mut ledger, &prior()).expect("bijection");
+    assert_eq!(
+        report,
+        Rederived {
+            recorded_version: 2,
+            statements: 5,
+            classes: 4
+        }
+    );
+    assert!(ledger.hashes_current());
+    assert_eq!(ledger.hash_version, Some(STATEMENT_HASH_VERSION));
+    assert_eq!(ledger.hashes.as_ref(), Some(&rust));
 }
