@@ -773,8 +773,14 @@ fn pipeline_body(
                 renderer,
             )?;
         }
-        // The naming waves' memory gauge (finding #65): the peak count of
+        // The naming waves' memory gauges. Finding #65's: the peak count of
         // rendered prompts alive at once over the run, against its bound.
+        // Finding #66's (docs/perf-inventory.md item 1), in the same print
+        // path: what the wave era RETAINED until it ended, per owner, in
+        // estimated deep heap bytes — the split of the fresh run's ~58 GB.
+        // The two spans that are bounded or transient (the window above, a
+        // round's lanes, the barrier's per-round entries) are not owners;
+        // everything here lives until the era drops.
         let peak = &outcome.waves;
         if peak.peak_live_dispatches > 0 {
             renderer.message(&format!(
@@ -782,6 +788,20 @@ fn pipeline_body(
                 peak.peak_live_dispatches,
                 peak.peak_live_prompt_bytes as f64 / (1024.0 * 1024.0),
                 prompt_window
+            ));
+            renderer.message(&format!(
+                "Context name-sets: {} name(s) held at era end (finding #56)",
+                peak.context_set_names
+            ));
+            let m = |b: u64| b as f64 / (1024.0 * 1024.0);
+            renderer.message(&format!(
+                "Wave-era retained: strategies {:.0} MB, node contexts {:.0} MB, used-identifier \
+                 layers {:.0} MB, name records {:.0} MB, bookkeeping {:.0} MB (finding #66 gauges)",
+                m(peak.gauges.strategy_bytes),
+                m(peak.gauges.ctx_bytes),
+                m(peak.gauges.used_set_bytes),
+                m(peak.gauges.name_record_bytes),
+                m(peak.gauges.bookkeeping_bytes),
             ));
         }
         if let Some(dest) = &opts.dump_asks {
@@ -1163,6 +1183,13 @@ impl NamingRun<'_> {
         }
         if let Some(text) = &outcome.coverage_text {
             renderer.message(text);
+        }
+        // The useless-prior WARNING (docs/perf-inventory.md item 4): a
+        // prior that bound nothing silently degrades the run to a full
+        // fresh pass; this is the loud line the incident had no version
+        // of. Print-only — no decision reads it.
+        if let Some(warning) = outcome.broken_prior_warning() {
+            renderer.message(&warning);
         }
         if outcome.misses > 0 || outcome.errors > 0 {
             verbose().log(&format!(

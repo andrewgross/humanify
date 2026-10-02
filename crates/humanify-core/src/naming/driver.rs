@@ -34,6 +34,7 @@ use humanify_model::llm::{CacheKeyParams, NameProvider};
 use humanify_model::stats::{
     CloseMatchStats, CoverageSummary, EvalStats, NamingFloorStats, RejectionCounts,
     RenameClaimGuards, RenameClaimStats, TransferStats as StatsTransferStats, TransferStatsByTier,
+    WaveGaugesStats,
 };
 
 use crate::naming::passes::census::MintedCensus;
@@ -735,7 +736,49 @@ impl NamingOutcome {
                 self.pre_sweep.as_ref(),
                 self.deferred_sweep.as_ref().map(|(_, run)| &run.result),
             )),
+            wave_gauges: Some(WaveGaugesStats {
+                context_set_names: self.waves.context_set_names as f64,
+                peak_live_dispatches: self.waves.peak_live_dispatches as f64,
+                peak_live_prompt_bytes: self.waves.peak_live_prompt_bytes as f64,
+                strategy_bytes: self.waves.gauges.strategy_bytes as f64,
+                ctx_bytes: self.waves.gauges.ctx_bytes as f64,
+                used_set_bytes: self.waves.gauges.used_set_bytes as f64,
+                name_record_bytes: self.waves.gauges.name_record_bytes as f64,
+                bookkeeping_bytes: self.waves.gauges.bookkeeping_bytes as f64,
+            }),
         }
+    }
+
+    /// The broken-prior WARNING (the useless-prior incident,
+    /// docs/perf-inventory.md item 4): a loaded prior that bound NOTHING
+    /// — no functions matched, none already named, no close matches, no
+    /// binding renames, nothing from the twin or retry tiers — means the
+    /// run silently degraded to a full fresh pass (the incident's
+    /// multipliers: 3.7x wall, 4.8x memory, exit 0). The evidence is
+    /// exactly what [`PriorStats`] already carries at that point; None
+    /// when no prior ran or the prior bound anything at all. Observation
+    /// only — nothing decides on this.
+    pub fn broken_prior_warning(&self) -> Option<String> {
+        let p = self.prior.as_ref()?;
+        let c = p.counts;
+        let bound_something = c.functions_matched > 0
+            || c.functions_already_named > 0
+            || c.close_match_count > 0
+            || c.bindings_applied > 0
+            || p.exact_match.applied > 0
+            || p.close_match.applied > 0
+            || p.statement_twin.applied > 0
+            || p.retry.applied > 0;
+        if bound_something {
+            return None;
+        }
+        Some(format!(
+            "WARNING: the prior version bound nothing — 0 of {} function(s) matched, 0 binding \
+             renames applied — so this run silently degraded to a full fresh pass (~3.7x the \
+             wall, ~4.8x the memory of a bound prior; docs/perf-inventory.md, item 4). Check \
+             the --prior-version file.",
+            self.fn_hashes.len()
+        ))
     }
 }
 

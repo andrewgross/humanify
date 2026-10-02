@@ -176,6 +176,10 @@ pub struct WaveOutcome {
     /// [`Self::peak_live_dispatches`]' byte total: every alive prompt's
     /// system + user + request-code lengths.
     pub peak_live_prompt_bytes: u64,
+    /// Finding #66's owner gauges: what the wave `Run` retained at era
+    /// end, per owner, in estimated deep heap bytes (observation only —
+    /// see [`gauges`]).
+    pub gauges: WaveGauges,
 }
 
 impl WaveOutcome {
@@ -198,6 +202,7 @@ impl WaveOutcome {
             context_set_names: 0,
             peak_live_dispatches: 0,
             peak_live_prompt_bytes: 0,
+            gauges: WaveGauges::default(),
         }
     }
 }
@@ -278,6 +283,18 @@ impl InFlight {
 /// second-biggest term (finding #65).
 fn prompt_bytes(call: &LlmCall) -> u64 {
     (call.system_prompt.len() + call.user_prompt.len() + call.request.code.len()) as u64
+}
+
+/// A stored fn context's deep bytes (finding #66's `strategy_bytes`
+/// owner): its callee signatures, callsites, context vars and taken-name
+/// set — the material every function pass retains for the whole era.
+fn fn_context_bytes(c: &FnContext) -> u64 {
+    gauges::callee_signatures_bytes(&c.callee_signatures)
+        + gauges::string_list_bytes(&c.callsites)
+        + c.context_vars
+            .as_ref()
+            .map_or(0, |v| gauges::string_list_bytes(v))
+        + gauges::hash_set_of_strings(&c.taken)
 }
 
 /// The per-node wave bookkeeping (`WaveNodeCtx`).
@@ -622,11 +639,13 @@ pub fn run_waves<P: NameProvider>(
         }
     }
     let context_set_names = run.context_set_names();
+    let gauges = run.gauges();
     let peak_live = run.peak_live;
     WaveOutcome {
         context_set_names,
         peak_live_dispatches: peak_live.0,
         peak_live_prompt_bytes: peak_live.1,
+        gauges,
         state: run.state,
         fn_state: run.fn_state,
         binding_state: run.binding_state,
@@ -650,6 +669,95 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             .map(|l| l.len())
             .sum();
         shared + self.sets.iter().map(UsedSet::owned_names).sum::<usize>()
+    }
+
+    /// Finding #66's gauges (docs/perf-inventory.md item 1): what this
+    /// `Run` retains at era end, per owner, in estimated deep heap bytes.
+    /// Pure observation — this walks borrowed data and retains nothing
+    /// (#65's lesson: an instrument that holds a copy is a bug); the
+    /// arithmetic lives in [`gauges`], pinned case-for-case in
+    /// `gauges_test`. Shared `Arc` layers are counted ONCE, by pointer,
+    /// exactly as [`Self::context_set_names`] counts their names.
+    fn gauges(&self) -> WaveGauges {
+        use gauges as g;
+        let strategy_bytes = self
+            .strategies
+            .iter()
+            .map(|s| match s {
+                Strategy::Fn {
+                    bindings, context, ..
+                } => g::binding_infos_bytes(bindings) + fn_context_bytes(context),
+                Strategy::Module {
+                    batch,
+                    windowed,
+                    taken,
+                    ..
+                } => {
+                    (batch.len() + windowed.len()) as u64 * std::mem::size_of::<usize>() as u64
+                        + g::string_list_bytes(windowed)
+                        + g::hash_set_of_strings(taken)
+                }
+            })
+            .sum();
+        let ctx_bytes = self
+            .ctxs
+            .iter()
+            .map(|c| {
+                g::map_bytes(&c.binding_map)
+                    + c.binding_map
+                        .iter()
+                        .map(|(k, b)| k.len() as u64 + g::binding_info_bytes(b))
+                        .sum::<u64>()
+                    + g::map_bytes(&c.order)
+                    + c.order.keys().map(|(_, n)| n.len() as u64).sum::<u64>()
+                    + c.names.deep_bytes()
+                    + c.report.as_ref().map_or(0, RenameReport::deep_bytes)
+            })
+            .sum();
+        // The used-identifier material: every layer the contexts share,
+        // counted once by pointer, plus each context's own edits — and the
+        // renamed-name layers the avoid-lists read (one live snapshot per
+        // scope, in `renamed_layers`).
+        let mut seen_layers: HashSet<*const NameLayer> = HashSet::new();
+        let mut used_set_bytes = 0;
+        for set in &self.sets {
+            for layer in set.layers() {
+                if seen_layers.insert(Arc::as_ptr(layer)) {
+                    used_set_bytes += layer.deep_bytes();
+                }
+            }
+            used_set_bytes += set.own_bytes();
+        }
+        used_set_bytes += self
+            .renamed_layers
+            .values()
+            .map(|(_, names)| g::hash_set_of_strings(names))
+            .sum::<u64>();
+        used_set_bytes += g::map_bytes(&self.layers) + g::map_bytes(&self.renamed_layers);
+        // (The barrier's collected ENTRIES are deliberately not a gauge:
+        // the barrier takes them every round — measured zero at era end.)
+        let name_record_bytes = self.names.len() as u64 * std::mem::size_of::<NameRecord>() as u64
+            + self
+                .names
+                .iter()
+                .map(|n| {
+                    n.old_name.len() as u64 + n.new_name.len() as u64 + n.function_id.len() as u64
+                })
+                .sum::<u64>();
+        let bookkeeping_bytes = g::hash_map_strings_to_string(&self.winners)
+            + g::hash_map_strings_to_u64(&self.rounds)
+            + self.used.deep_bytes()
+            + g::map_bytes(&self.graph_era)
+            + self.graph_era.values().map(JsSet::deep_bytes).sum::<u64>()
+            + g::map_bytes(&self.fn_ctx)
+            + self.fresh_scopes.len() as u64 * std::mem::size_of::<(u32, u32, BScopeId)>() as u64;
+        WaveGauges {
+            strategy_bytes,
+            ctx_bytes,
+            used_set_bytes,
+            name_record_bytes,
+            bookkeeping_bytes,
+        }
     }
 
     fn printer(&self) -> FnPrinter<'_, 's> {
@@ -820,7 +928,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             let ph = crate::profiling::phase("setup:owned-bindings");
             let all = collect_owned_binding_infos(&self.state, row);
             drop(ph);
-            match self.select_llm_bindings(f, &all) {
+            // The setup's dark constituents (the perf inventory's 60%):
+            // the eligible-binding filter + CLONE, and `start_fn_phase`'s
+            // registration and lane split, now have spans of their own.
+            let ph = crate::profiling::phase("setup:select-bindings");
+            let selected = self.select_llm_bindings(f, &all);
+            drop(ph);
+            match selected {
                 Err(reason) => {
                     self.settle
                         .insert(ng.node_of_fn[f], Settle::FnSkipped(f, reason));
@@ -832,14 +946,21 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             }
         }
         for group in groups {
+            let ph = crate::profiling::phase("setup:module-lanes");
             let ctx = self.new_ctx(ng.node_of_mb[group[0]], CtxKind::Module(group.clone()));
             self.start_module(ctx, group.clone(), &mut lanes);
             self.settle
                 .insert(ng.node_of_mb[group[0]], Settle::Module(group, ctx));
+            drop(ph);
         }
         let retries: Vec<RetryRun> = seeds
             .into_iter()
-            .map(|seed| self.start_retry(seed))
+            .map(|seed| {
+                let ph = crate::profiling::phase("setup:retry-lanes");
+                let run = self.start_retry(seed);
+                drop(ph);
+                run
+            })
             .collect();
         drop(setup_phase);
         self.drive_round(lanes, retries);
@@ -964,17 +1085,24 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         lanes: &mut Vec<LaneRun>,
     ) {
         let (context, set) = self.build_context(f);
-        for (i, b) in bindings.iter().enumerate() {
-            self.ctxs[ctx].order.insert((phase, b.name.clone()), i);
-            self.ctxs[ctx].binding_map.insert(b.name.clone(), b.clone());
-        }
         let names: Vec<String> = bindings.iter().map(|b| b.name.clone()).collect();
-        self.strategies.push(Strategy::Fn {
-            f,
-            bindings,
-            context,
-            set,
-        });
+        {
+            // The registration the setup's dark 60% paid for: the per-node
+            // map inserts (a binding-info CLONE each) and the strategy the
+            // run retains for the whole era (a second clone — finding
+            // #66's `strategy_bytes` owner).
+            let _ph = crate::profiling::phase("setup:register-bindings");
+            for (i, b) in bindings.iter().enumerate() {
+                self.ctxs[ctx].order.insert((phase, b.name.clone()), i);
+                self.ctxs[ctx].binding_map.insert(b.name.clone(), b.clone());
+            }
+            self.strategies.push(Strategy::Fn {
+                f,
+                bindings,
+                context,
+                set,
+            });
+        }
         let strategy = self.strategies.len() - 1;
         let session = self.inp.graph.functions[f].session_id.clone();
         let batch = self.inp.tunables.batch_size.max(1);
@@ -983,24 +1111,28 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         } else {
             compute_lane_count(names.len(), self.inp.tunables.lane_threshold)
         };
-        if n_lanes > 0 {
-            for (i, lane) in split_by_position(&names, n_lanes).into_iter().enumerate() {
+        {
+            // The lane split — the last of the setup's dark constituents.
+            let _ph = crate::profiling::phase("setup:lane-assembly");
+            if n_lanes > 0 {
+                for (i, lane) in split_by_position(&names, n_lanes).into_iter().enumerate() {
+                    lanes.push(LaneRun {
+                        lane: Lane::new(lane, true).tuned(&self.inp.tunables),
+                        function_id: format!("{session}:lane{i}"),
+                        ctx,
+                        phase,
+                        strategy,
+                    });
+                }
+            } else {
                 lanes.push(LaneRun {
-                    lane: Lane::new(lane, true).tuned(&self.inp.tunables),
-                    function_id: format!("{session}:lane{i}"),
+                    lane: Lane::new(names, true).tuned(&self.inp.tunables),
+                    function_id: session,
                     ctx,
                     phase,
                     strategy,
                 });
             }
-        } else {
-            lanes.push(LaneRun {
-                lane: Lane::new(names, true).tuned(&self.inp.tunables),
-                function_id: session,
-                ctx,
-                phase,
-                strategy,
-            });
         }
     }
 
@@ -2388,8 +2520,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     .is_some_and(|s| !s.is_empty())
             }),
         };
+        // The per-ask floor's render half (the perf inventory's item 5:
+        // 6.9 ms/ask of client CPU, render + HTTP + parse un-split): the
+        // render is now its own span; the dispatch spans carry the rest.
+        let ph = crate::profiling::phase("waves:prompt-render");
         let system_prompt = render_system_prompt(&request);
         let user_prompt = render_user_prompt(&request);
+        drop(ph);
         let prepared = match self.log.mode() {
             RecordMode::Off => Prepared::None,
             RecordMode::Asks => {
@@ -2542,8 +2679,10 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         source: ReplaySource,
     ) -> (Prepared, LlmCall) {
         if self.log.mode() == RecordMode::Full && !self.log.retains() {
+            let ph = crate::profiling::phase("waves:prompt-render");
             let system_prompt = render_system_prompt(&request);
             let user_prompt = render_user_prompt(&request);
+            drop(ph);
             let prepared = Prepared::Replay(Replay {
                 ctx,
                 function_id: function_id.to_string(),
@@ -2917,5 +3056,12 @@ pub fn build_retry_used_names(windowed: &[String], prev: &JsRecord) -> Vec<Strin
     out
 }
 
+mod gauges;
+
+#[cfg(test)]
+mod gauges_test;
+
 #[cfg(test)]
 mod processor_test;
+
+pub use gauges::WaveGauges;

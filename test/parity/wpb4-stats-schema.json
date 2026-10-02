@@ -2095,6 +2095,80 @@
           }
         ]
       }
+    },
+    {
+      "name": "waveGauges",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "contextSetNames",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "peakLiveDispatches",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "peakLivePromptBytes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "strategyBytes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "ctxBytes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "usedSetBytes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "nameRecordBytes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "bookkeepingBytes",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
     }
   ]
 }

@@ -36,7 +36,7 @@ use crate::naming::waves::generate::TextView;
 use crate::naming::waves::graph_ext::{NamingGraph, build_naming_graph};
 use crate::naming::waves::nodes::FnNode;
 use crate::naming::waves::processor::{
-    CloseContext, DispatchRecord, NameRecord, WaveInputs, WaveOutcome, run_waves,
+    CloseContext, DispatchRecord, NameRecord, WaveGauges, WaveInputs, WaveOutcome, run_waves,
 };
 use crate::naming::waves::render::{
     FnPrinter, Occurrences, private_rename_edits, program_edits, render_program_with,
@@ -158,6 +158,8 @@ pub struct WaveRecords {
     pub peak_live_dispatches: usize,
     /// [`WaveOutcome::peak_live_prompt_bytes`].
     pub peak_live_prompt_bytes: u64,
+    /// [`WaveOutcome::gauges`] (finding #66's owner gauges).
+    pub gauges: WaveGauges,
 }
 
 /// `applyPriorVersionIfPresent`'s stats (stats.json / the coverage).
@@ -503,6 +505,7 @@ fn run_era<P: NameProvider>(
         context_set_names,
         peak_live_dispatches,
         peak_live_prompt_bytes,
+        gauges,
         ..
     } = if has_nodes {
         run_waves(
@@ -525,6 +528,7 @@ fn run_era<P: NameProvider>(
         context_set_names,
         peak_live_dispatches,
         peak_live_prompt_bytes,
+        gauges,
     };
     drop(ph);
     let ph = crate::profiling::phase("era:library-prefix");

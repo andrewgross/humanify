@@ -479,6 +479,196 @@ fn a_cold_run_holds_the_module_names_once_not_once_per_function() {
     );
 }
 
+/// Finding #66's instrumentation (docs/perf-inventory.md item 1): every
+/// wave run reports what its `Run` retained at era end, per owner, in
+/// estimated deep heap bytes — the gauges that split the fresh run's
+/// ~58 GB between the candidate owners. The values are load-bearing in
+/// three ways: every owner is LIVE on a cold run (a gauge that reads
+/// zero would hide its owner from the hunt), the estimates are
+/// DETERMINISTIC (two identical runs report identical gauges — a gauge
+/// that read allocator slack or iteration order would not), and the
+/// computation observes only (two identical runs ship identical output
+/// bytes; the cross-binary half of that proof — that a run WITH gauges
+/// ships the bytes a run WITHOUT them shipped — is the e2e gate's
+/// committed fixtures and twice-run byte-determinism).
+#[test]
+fn the_wave_gauges_read_every_retained_owner_on_a_cold_run() {
+    use std::fmt::Write;
+    let mut fresh = String::new();
+    for i in 0..12 {
+        writeln!(fresh, "var t{i} = {i};").unwrap();
+    }
+    for i in 0..5 {
+        writeln!(fresh, "function f{i}(p) {{\n  return p + t{};\n}}", i).unwrap();
+    }
+    writeln!(fresh, "console.log(f0, f1, t0, t11);").unwrap();
+    let mut config = ledger_config();
+    config.emit_rename_ledger = false;
+    let run = |log: &mut crate::artifact_dump::DispatchLog| {
+        super::run_naming(
+            &super::NamingInput {
+                fresh: &fresh,
+                prior: None,
+                library: None,
+            },
+            &config,
+            &SuffixProvider,
+            log,
+        )
+        .expect("the stage runs")
+    };
+    let out = run(&mut retain_log());
+    assert!(
+        out.processor.completed_calls >= 5,
+        "the functions were asked ({})",
+        out.processor.completed_calls
+    );
+    let g = out.waves.gauges;
+    for (owner, bytes) in [
+        ("strategy_bytes", g.strategy_bytes),
+        ("ctx_bytes", g.ctx_bytes),
+        ("used_set_bytes", g.used_set_bytes),
+        ("name_record_bytes", g.name_record_bytes),
+        ("bookkeeping_bytes", g.bookkeeping_bytes),
+    ] {
+        assert!(bytes > 0, "{owner} read {bytes} on a run that renamed");
+    }
+    assert!(
+        out.waves.context_set_names > 0,
+        "the #56 observable is live ({})",
+        out.waves.context_set_names
+    );
+    // Observation only: an identical second run reports the same gauges
+    // and ships identical bytes — the computation retains nothing the
+    // decisions read.
+    let out2 = run(&mut retain_log());
+    assert_eq!(out2.waves.gauges, g, "the gauges are deterministic");
+    assert_eq!(out2.code, out.code, "the gauges do not touch the output");
+    assert_eq!(
+        out2.generated, out.generated,
+        "the gauges do not touch the generated text"
+    );
+}
+
+/// The sub-spans of the three un-attributed serial stretches
+/// (docs/perf-inventory.md item 2): the wave round setup's constituents
+/// were dark (60% of 118 s fresh had no span), and the per-ask prompt
+/// render sat un-split inside the dispatch spans. A run under an
+/// installed profiler must record a span per constituent, named for what
+/// the time actually went to.
+#[test]
+fn the_profile_names_the_wave_setup_and_render_constituents() {
+    let _guard = crate::profiling::SPAN_TEST_LOCK.lock().unwrap();
+    let fresh = "var q1 = 1;\n\
+                 var q2 = 2;\n\
+                 function e0(p) {\n  return p + q1;\n}\n\
+                 console.log(e0(q2), q1, q2);\n";
+    let profiler = crate::profiling::Profiler::new(true);
+    profiler.install_global();
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &ledger_config(),
+        &SuffixProvider,
+        &mut retain_log(),
+    );
+    let report = profiler.finalize(None);
+    crate::profiling::Profiler::uninstall_global();
+    out.expect("the stage runs");
+    let names: std::collections::HashSet<&str> =
+        report.spans.iter().map(|s| s.name.as_str()).collect();
+    for expected in [
+        // the round-setup constituents that had no span (the dark 60%):
+        // the eligible-binding clone, the per-node registration into the
+        // run's retained maps, the lane split, the module groups' lanes.
+        "setup:select-bindings",
+        "setup:register-bindings",
+        "setup:lane-assembly",
+        "setup:module-lanes",
+        // the per-ask floor's render half (the 6.9 ms/ask split).
+        "waves:prompt-render",
+    ] {
+        assert!(
+            names.contains(expected),
+            "span {expected} missing: {names:?}"
+        );
+    }
+}
+
+/// The useless-prior incident (docs/perf-inventory.md item 4): passing a
+/// wrong `--prior-version` file (the survey's case: a 285 KB entry stub)
+/// silently degraded a walk-shaped run to a FULL-ASK fresh pass — 3.7x
+/// wall, 4.8x memory, zero carried functions, exit 0. The run's own
+/// evidence at that point (the transfer counts: no functions matched,
+/// none already named, no close matches, no binding renames) must surface
+/// as a loud WARNING.
+#[test]
+fn a_prior_that_binds_nothing_warns() {
+    let fresh =
+        "function a(b) {\n  var c = b + 1;\n  return c;\n}\nvar d = a(2);\nconsole.log(d);\n";
+    // A stub that shares NOTHING with the program: no functions, no
+    // structurally-matching statements (the `console.log` argument is a
+    // computed member here, an identifier there — not a twin either).
+    let useless = "var stub = { a: 1, b: 2 };\nfor (var k in stub) {\n  console.log(stub[k]);\n}\n";
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: Some(useless),
+            library: None,
+        },
+        &ledger_config(),
+        &SuffixProvider,
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let warning = out.broken_prior_warning().expect("the useless prior warns");
+    assert!(
+        warning.contains("bound nothing"),
+        "the warning names the evidence: {warning}"
+    );
+    assert!(
+        warning.contains("--prior-version"),
+        "the warning points at the flag: {warning}"
+    );
+    assert!(
+        warning.contains("WARNING"),
+        "the warning is loud: {warning}"
+    );
+}
+
+/// The warning's boundary must not cry wolf (docs/perf-inventory.md item
+/// 4): a genuinely small prior — a single-module tree that matches — and
+/// a prior whose names are all already applied are both healthy. Without
+/// a prior there is nothing to warn about.
+#[test]
+fn a_bound_prior_does_not_warn() {
+    let fresh =
+        "function a(b) {\n  var c = b + 1;\n  return c;\n}\nvar d = a(2);\nconsole.log(d);\n";
+    let named = "function addOne(value) {\n  var result = value + 1;\n  return result;\n}\nvar total = addOne(2);\nconsole.log(total);\n";
+    let cases: [(&str, Option<&str>); 3] = [
+        ("a prior with translated names", Some(named)),
+        ("a prior whose names are all applied", Some(fresh)),
+        ("no prior at all", None),
+    ];
+    for (what, prior) in cases {
+        let out = super::run_naming(
+            &super::NamingInput {
+                fresh,
+                prior,
+                library: None,
+            },
+            &ledger_config(),
+            &SuffixProvider,
+            &mut retain_log(),
+        )
+        .expect("the stage runs");
+        assert!(out.broken_prior_warning().is_none(), "{what}: no warning");
+    }
+}
+
 /// The survivor split of
 /// `the_census_splits_single_letter_survivors_by_provenance`'s fixture:
 /// three survivors, one per class — `i` (model-chosen), `j` (asked, kept),

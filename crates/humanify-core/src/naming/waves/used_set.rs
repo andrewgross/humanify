@@ -50,6 +50,26 @@ impl NameLayer {
     fn contains(&self, name: &str) -> bool {
         self.index.contains_key(name)
     }
+
+    /// The layer's estimated deep heap bytes for finding #66's gauges
+    /// (naming::waves::processor::gauges): the order Vec plus the index
+    /// HashMap, whose keys CLONE every name's bytes — deterministic
+    /// lower-bound arithmetic, documented and pinned in gauges_test.
+    pub fn deep_bytes(&self) -> u64 {
+        fn buffers(names: impl Iterator<Item = String>) -> u64 {
+            names.map(|n| n.len() as u64).sum()
+        }
+        // order: the Vec<String>'s element slots (each holds a String
+        // header) plus every name's buffer.
+        let order = self.order.len() as u64 * std::mem::size_of::<String>() as u64
+            + buffers(self.order.iter().cloned());
+        // index: the HashMap<String, u32> table (entry + control byte
+        // each) plus the CLONED key buffers.
+        let index = self.index.len() as u64
+            * (std::mem::size_of::<String>() as u64 + std::mem::size_of::<u32>() as u64 + 1)
+            + buffers(self.index.keys().cloned());
+        order + index
+    }
 }
 
 /// The Set over its layers (innermost first), plus the context's own
@@ -121,6 +141,27 @@ impl UsedSet {
     /// shared. The memory bound's observable.
     pub fn owned_names(&self) -> usize {
         self.added.len() + self.removed.len()
+    }
+
+    /// The Set's OWN estimated heap bytes for finding #66's gauges: the
+    /// Arc list, the per-layer shadowed Vecs and the barrier-edit sets —
+    /// deliberately NOT the shared layers' contents (the gauge counts
+    /// each layer once, by pointer, across every context sharing it).
+    pub fn own_bytes(&self) -> u64 {
+        let layers = self.layers.len() as u64 * std::mem::size_of::<Arc<NameLayer>>() as u64;
+        let shadowed = self.shadowed.len() as u64 * std::mem::size_of::<Vec<u32>>() as u64
+            + self
+                .shadowed
+                .iter()
+                .map(|v| v.len() as u64 * std::mem::size_of::<u32>() as u64)
+                .sum::<u64>();
+        // Each barrier-edit set: the table's per-entry String header + a
+        // control byte, plus the name buffers.
+        let edits = |s: &HashSet<String>| {
+            s.len() as u64 * (std::mem::size_of::<String>() as u64 + 1)
+                + s.iter().map(|n| n.len() as u64).sum::<u64>()
+        };
+        layers + shadowed + edits(&self.added) + edits(&self.removed)
     }
 }
 
