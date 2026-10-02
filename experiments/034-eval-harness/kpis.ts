@@ -91,6 +91,22 @@ export interface Scorecard {
        * presenting their missing measurement as 0.
        */
       spellingIdenticalLines?: number;
+      /**
+       * THE CLEAN DIFF (2026-10-02): the raw charge minus BOTH soft
+       * categories the breakdown can name — Andrew: "we can always report
+       * both numbers (or a breakdown with values assigned to each thing in
+       * the soft flow)". `churnLinesClean` = `churnLines` −
+       * `buildConstantLines` − `spellingIdenticalLines` (the categories:
+       * build-metadata inlining, wrapper-spelling re-serializations);
+       * `realClean` = `realExBuild` − `spellingIdenticalLines`. A DERIVATION
+       * of the raw charge, never a second charge, so the raw fields stay
+       * byte-equal to every recorded label and the two trend lines read side
+       * by side. Optional so cards scored before 2026-10-02 still parse; the
+       * summary prints a NOTE rather than presenting their missing
+       * measurement as 0.
+       */
+      churnLinesClean?: number;
+      realClean?: number;
     };
     /**
      * The `vendor/` tree — a SEPARATE surface from `layout`, never folded into
@@ -166,6 +182,10 @@ export interface SummaryTotals {
   layoutNameOnlyLines: number;
   /** Advisory soft-noise total (see Scorecard.layout.spellingIdenticalLines). */
   layoutSpellingIdenticalLines: number;
+  /** Clean-diff totals (see Scorecard.layout.churnLinesClean / realClean):
+   * raw minus the soft categories — additive, never read by a raw KPI. */
+  layoutChurnLinesClean: number;
+  layoutRealClean: number;
   layoutReal: number;
   layoutNoise: number;
   layoutNaming: number;
@@ -264,6 +284,38 @@ export const KPIS: Kpi[] = [
       "also when upstream simply changed less, so read it beside novel/realLn " +
       "rather than as a noise column on its own",
     fromCard: (c) => c.churn.layout?.churnLines
+  },
+  {
+    // The CLEAN diff (Andrew, 2026-10-02): treeLn minus the soft categories
+    // the breakdown can name (inlined build-metadata constants, wrapper
+    // spelling re-serializations). Reported BESIDE treeLn, never instead of
+    // it — raw keeps the historical trend line, clean shows what the noise
+    // really was (the 2.1.207→208 hop reads 67,551 raw / 58,097 clean: 8,230
+    // of its "real change" was one packaging tool re-spelling its wrappers).
+    key: "cleanLn",
+    total: "layoutChurnLinesClean",
+    direction: "lower",
+    caveat:
+      "the CLEAN diff: treeLn minus build-metadata inlining and " +
+      "spelling-only wrapper re-serializations; the raw columns are unchanged " +
+      "and stay the historical trend line. Read it beside treeLn and " +
+      "novel/realLn, exactly like treeLn — it too falls when upstream " +
+      "changed less. A '-' means the label predates 2026-10-02 (or was " +
+      "scored without layout), not a clean diff of zero",
+    fromCard: (c) => c.churn.layout?.churnLinesClean
+  },
+  {
+    // The clean diff's real-change hold column, the clean analogue of
+    // vendorReal: a "clean win" that moved it dropped real code.
+    key: "cleanReal",
+    total: "layoutRealClean",
+    direction: "hold",
+    caveat:
+      "real change minus the soft categories (realExBuild − " +
+      "spellingIdenticalLines) — must not move in either direction, exactly " +
+      "like realLn/vendorReal; a lever that moves it has dropped real change " +
+      "or started swallowing it",
+    fromCard: (c) => c.churn.layout?.realClean
   },
   {
     key: "reorderLn",

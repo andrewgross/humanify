@@ -13,12 +13,17 @@
  * charge — the columns are frozen — but IDENTIFY the mass in a breakdown, as
  * soft noise.
  *
- * This file pins three things:
+ * This file pins four things:
  *   1. what the detector flags (the flip, either direction, names masked);
  *   2. what it refuses (real edits, insertions, this/arguments bodies);
  *   3. that every pre-existing tally column is BYTE-IDENTICAL — the category
  *      is additive, so the same input must produce the same old numbers
- *      (the pinned values below were produced by the pre-change code).
+ *      (the pinned values below were produced by the pre-change code);
+ *   4. the CLEAN-DIFF SPELLING TOLERANCE flag (Andrew, 2026-10-02): "raw"
+ *      keeps the frozen charge, "tolerant" moves the flagged mass out of
+ *      `real` into the labeled category — and raw real must always equal
+ *      tolerant real + the category, so the two modes are one number stated
+ *      two ways, never two answers.
  *
  *   npx tsx --test experiments/037-noise-source-decomposition/wrapper-spelling.test.ts
  */
@@ -200,32 +205,36 @@ test("a true insertion is never flagged", () => {
   assert.ok(t.real > 0, "the inserted statement is still charged");
 });
 
+/** A mixed file: the flip above, an alias churn, a reorder, a naming churn, a
+ * tier-3 edited pair, an insertion and a removal. Module-scope because the
+ * tolerance tests below score the SAME input both ways. The five pre-change
+ * columns were produced by the PRE-CHANGE code on this exact input. */
+const PINNED_PRIOR = [
+  FLIP_ARROW,
+  'const legacyAlias = require("./shared/util.js");',
+  "var keptCounter = makeCounter(1);",
+  'var firstBlock = buildBlock("alpha");',
+  'var secondBlock = buildBlock("beta");',
+  "var drawnTotal = tallyDraws(4);",
+  "var editedSource = renderPanel({ width: 10, height: 20 });",
+  "var doomedStatement = retireLater(7);"
+].join("\n");
+
+const PINNED_FRESH = [
+  FLIP_FUNCTION,
+  'const renamedAlias = require("./shared/util.js");',
+  "var keptCounter = makeCounter(1);",
+  'var secondBlock = buildBlock("beta");',
+  'var firstBlock = buildBlock("alpha");',
+  "var countedSum = tallyDraws(4);",
+  "var editedSource = renderPanel({ width: 12, height: 20 });",
+  "var insertedStatement = arriveNewly(5);"
+].join("\n");
+
 test("pinned totals: every pre-existing column is byte-identical, plus the soft count", () => {
-  // A mixed file: the flip above, an alias churn, a reorder, a naming churn,
-  // a tier-3 edited pair, an insertion and a removal. The five pre-change
-  // columns were produced by the PRE-CHANGE code on this exact input — this
-  // test fails if the breakdown changes any of them by a single line.
-  const PRIOR = [
-    FLIP_ARROW,
-    'const legacyAlias = require("./shared/util.js");',
-    "var keptCounter = makeCounter(1);",
-    'var firstBlock = buildBlock("alpha");',
-    'var secondBlock = buildBlock("beta");',
-    "var drawnTotal = tallyDraws(4);",
-    "var editedSource = renderPanel({ width: 10, height: 20 });",
-    "var doomedStatement = retireLater(7);"
-  ].join("\n");
-  const FRESH = [
-    FLIP_FUNCTION,
-    'const renamedAlias = require("./shared/util.js");',
-    "var keptCounter = makeCounter(1);",
-    'var secondBlock = buildBlock("beta");',
-    'var firstBlock = buildBlock("alpha");',
-    "var countedSum = tallyDraws(4);",
-    "var editedSource = renderPanel({ width: 12, height: 20 });",
-    "var insertedStatement = arriveNewly(5);"
-  ].join("\n");
-  const t = composeFile(PRIOR, FRESH);
+  // This test fails if the breakdown changes any of the frozen columns by a
+  // single line.
+  const t = composeFile(PINNED_PRIOR, PINNED_FRESH);
   // The frozen, pre-change values:
   assert.deepStrictEqual(
     {
@@ -242,6 +251,96 @@ test("pinned totals: every pre-existing column is byte-identical, plus the soft 
     t.spellingIdenticalLines,
     8,
     "only the flip is soft noise here (4 ln + 4 ln)"
+  );
+});
+
+// ── the CLEAN-DIFF spelling tolerance flag (2026-10-02) ──────────────────────
+//
+// Andrew: "we should probably just have a flag in our scoring... we can always
+// report both numbers (or a breakdown with values assigned to each thing in
+// the soft flow)." The flag is the composition's `spellingTolerance`: "raw"
+// (default) is the frozen charge every recorded label computes from, and
+// "tolerant" is the clean diff — the flagged pairs are charged to their own
+// labeled category instead of `real`.
+
+test("tolerant mode moves the flip out of `real` into the labeled category", () => {
+  const raw = composeFile(FLIP_ARROW, FLIP_FUNCTION);
+  const tolerant = composeFile(FLIP_ARROW, FLIP_FUNCTION, {
+    spellingTolerance: "tolerant"
+  });
+  assert.strictEqual(
+    raw.real,
+    8,
+    "the raw charge is the default and unchanged"
+  );
+  assert.strictEqual(
+    tolerant.real,
+    0,
+    "in the clean diff the flip is not real change"
+  );
+  assert.strictEqual(
+    tolerant.spellingIdenticalLines,
+    8,
+    "the category holds the pair's full mass (both sides)"
+  );
+  assert.strictEqual(
+    raw.real,
+    tolerant.real + tolerant.spellingIdenticalLines,
+    "raw real = tolerant real + the category, in either mode"
+  );
+});
+
+test("tolerant mode moves ONLY the flip: every other column is byte-identical", () => {
+  const raw = composeFile(PINNED_PRIOR, PINNED_FRESH);
+  const tolerant = composeFile(PINNED_PRIOR, PINNED_FRESH, {
+    spellingTolerance: "tolerant"
+  });
+  assert.deepStrictEqual(
+    {
+      naming: tolerant.naming,
+      alias: tolerant.alias,
+      reorder: tolerant.reorder,
+      fileAddRemove: tolerant.fileAddRemove
+    },
+    {
+      naming: raw.naming,
+      alias: raw.alias,
+      reorder: raw.reorder,
+      fileAddRemove: raw.fileAddRemove
+    },
+    "the tolerance may not touch any charge but the flagged pairs'"
+  );
+  assert.strictEqual(
+    tolerant.real,
+    4,
+    "the pinned file: 12 raw real - the 8-ln flip"
+  );
+  assert.strictEqual(
+    tolerant.spellingIdenticalLines,
+    raw.spellingIdenticalLines,
+    "both modes report the same spelling mass"
+  );
+});
+
+test("a semantically-loaded flip stays REAL in tolerant mode (refusals hold)", () => {
+  // An arrow binds `this` lexically, so flipping it rebinds — the detector
+  // refuses the pair and the clean diff keeps charging it as real change.
+  const thisArrow = FLIP_ARROW.replace(
+    "  return totalSeen;",
+    "  return this.count;"
+  );
+  const thisFunction = FLIP_FUNCTION.replace(
+    "  return runningTotal;",
+    "  return this.count;"
+  );
+  const t = composeFile(thisArrow, thisFunction, {
+    spellingTolerance: "tolerant"
+  });
+  assert.strictEqual(t.spellingIdenticalLines, 0);
+  assert.strictEqual(
+    t.real,
+    8,
+    "a `this`-rebinding flip is genuine change, clean or raw"
   );
 });
 
@@ -307,6 +406,34 @@ knownCase(
       soft,
       8230,
       "the four files' wrapper-flip mass (17 flips x both sides)"
+    );
+  }
+);
+
+/** The same four files under the tolerant flag: the exp094 census cross-check,
+ * exact. The hop's 8,428 raw lines decompose into 8,230 spelling and 198
+ * genuine (the repackaged require-paths the detector's structural-difference
+ * refusal correctly keeps charged) — the numbers the clean-diff breakdown must
+ * reproduce on real data (experiments/094-wrapper-spelling, measurement-side
+ * table). */
+knownCase(
+  "tolerant mode on the four known files: 198 real + 8,230 spelling (the census)",
+  () => {
+    let real = 0;
+    let spelling = 0;
+    for (const [file] of KNOWN_CASE) {
+      const t = composeFile(
+        fs.readFileSync(`${WALK}/2.1.207/src/${file}`, "utf8"),
+        fs.readFileSync(`${WALK}/2.1.208/src/${file}`, "utf8"),
+        { spellingTolerance: "tolerant" }
+      );
+      real += t.real;
+      spelling += t.spellingIdenticalLines;
+    }
+    assert.deepStrictEqual(
+      { real, spelling },
+      { real: 198, spelling: 8230 },
+      "the clean diff must read the hop as 198 genuine lines, 8,230 spelling"
     );
   }
 );

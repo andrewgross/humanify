@@ -19,11 +19,14 @@
  * SOFT NOISE (advisory, additive): statement pairs that fail every tier but
  * are the same code modulo WRAPPER SPELLING (arrow vs function expression —
  * a packaging-tool re-serialization) are reported in
- * `spellingIdenticalLines` while keeping their `real` charge, so the frozen
- * columns stay byte-identical and the breakdown can say how much of "real"
- * is only spelling. See `wrapperSpellingKey` for the tight rule.
+ * `spellingIdenticalLines`. The DEFAULT keeps their `real` charge (raw), so
+ * the frozen columns stay byte-identical to every recorded label; the
+ * `spellingTolerance: "tolerant"` option moves the pair's mass out of `real`
+ * into that labeled category instead (the clean diff). See
+ * `wrapperSpellingKey` for the tight rule.
  *
  * Usage: npx tsx diff-composition.ts <priorSrcDir> <freshSrcDir> [label]
+ *   [--spelling-tolerance raw|tolerant]   (default raw; see ComposeOptions)
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -169,16 +172,20 @@ export interface Tally {
   reorder: number;
   fileAddRemove: number;
   /**
-   * SOFT NOISE (advisory, 2026-09-29): lines charged to `real` above whose
-   * statement pair is identical code modulo WRAPPER SPELLING — the packaging
-   * tool re-serialized a wrapper from `createModule((a,b) => {...})` to
-   * `createModule(function(a,b) {...})`, so the wrapper's AST TYPE flips the
-   * statementHash (tier 2 cannot pair) and the keyword breaks the masked head
-   * (tier 3 cannot repair), and both sides are charged full mass as real
-   * change. This field reports that mass WITHOUT moving a single existing
-   * charge — Andrew's call (2026-09-29): upstream changed the source, so we
-   * keep replicating it, but the noise calc should be able to say how much of
-   * "real" is only spelling. See `wrapperSpellingKey` for the exact rule.
+   * SOFT NOISE (2026-09-29; the clean-diff category since 2026-10-02): lines
+   * whose statement pair is identical code modulo WRAPPER SPELLING — the
+   * packaging tool re-serialized a wrapper from `createModule((a,b) => {...})`
+   * to `createModule(function(a,b) {...})`, so the wrapper's AST TYPE flips
+   * the statementHash (tier 2 cannot pair) and the keyword breaks the masked
+   * head (tier 3 cannot repair), and both sides are charged full mass as real
+   * change. Andrew's calls, in order: 2026-09-29 — upstream changed the
+   * source, so keep replicating it; 2026-10-02 — but the scoring should carry
+   * a clean-diff SPELLING TOLERANCE flag and always report both numbers. So
+   * under `spellingTolerance: "raw"` (the default) this field REPORTS the
+   * mass while it stays charged inside `real`; under `"tolerant"` the mass
+   * moves HERE and out of `real`. The two modes are one number stated two
+   * ways: rawReal = tolerantReal + spellingIdenticalLines, identical in both.
+   * See `wrapperSpellingKey` for the exact rule.
    */
   spellingIdenticalLines: number;
 }
@@ -248,16 +255,34 @@ function keep(sink: NoiseSink | undefined, s: NoiseSample): void {
  */
 export type Pairing = "fifo" | "corroborated";
 
+/** The clean-diff spelling tolerance (Andrew, 2026-10-02): "we should
+ * probably just have a flag in our scoring... we can always report both
+ * numbers (or a breakdown with values assigned to each thing in the soft
+ * flow)." */
+export type SpellingTolerance = "raw" | "tolerant";
+
 export interface ComposeOptions {
   pairing?: Pairing;
   /** Jaccard-ish token overlap a corroborated pair must clear. Matches the
    * diff-ledger's own edited-vs-unrelated threshold used in step 3 below. */
   minOverlap?: number;
+  /**
+   * What the changed-lines charge does with wrapper-spelling-identical pairs.
+   * `"raw"` (the default) is the frozen charge every recorded label computes
+   * from: the pairs stay inside `real`, `spellingIdenticalLines` reports
+   * their mass alongside. `"tolerant"` is the CLEAN DIFF: the pairs' mass is
+   * charged to `spellingIdenticalLines` as its own labeled category and NOT
+   * to `real`. Both modes report the same `spellingIdenticalLines`, so
+   * `raw.real === tolerant.real + spellingIdenticalLines` — the raw and the
+   * clean number are two views of one charge, never two answers.
+   */
+  spellingTolerance?: SpellingTolerance;
 }
 
 const DEFAULTS: Required<ComposeOptions> = {
   pairing: "fifo",
-  minOverlap: 0.5
+  minOverlap: 0.5,
+  spellingTolerance: "raw"
 };
 
 /** Tokenising a 5k-line statement once per candidate comparison is the whole
@@ -434,20 +459,28 @@ function findNodeAt(root: t.Node, offset: number): t.Node | null {
 }
 
 /**
- * The soft-noise pass: pair leftover fresh statements with leftover removed
- * statements that are the same code modulo WRAPPER SPELLING (one side an
- * arrow, the other a function expression — `wrapperSpellingKey` for the
- * rule). Charges NOTHING to the existing columns; counts the mass the current
- * rules already charged to `real` for those pairs into
- * `tally.spellingIdenticalLines`, so the scoreboard stays byte-identical and
- * the breakdown can say "of which N are spelling-only".
+ * One spelling-identical pair: a leftover fresh statement and the leftover
+ * removed statement it re-serializes (one side an arrow, the other a function
+ * expression — `wrapperSpellingKey` for the rule), with the git lines the
+ * pair charges (both sides' full mass).
  */
-function chargeSpellingTwins(
+interface SpellingPair {
+  fresh: Stmt;
+  prior: Stmt;
+  lines: number;
+}
+
+/**
+ * The soft-noise pairing: match leftover fresh statements with leftover
+ * removed statements that are the same code modulo WRAPPER SPELLING. PURE —
+ * it touches no tally, because what happens to a pair's mass is the spelling
+ * tolerance's decision, not the pairing's: raw keeps it inside `real`
+ * (reported alongside), tolerant charges it to the labeled category.
+ */
+function pairSpellingTwins(
   leftoverFresh: Stmt[],
-  leftoverRemoved: Stmt[],
-  tally: Tally,
-  sink?: NoiseSink
-): void {
+  leftoverRemoved: Stmt[]
+): SpellingPair[] {
   const removedByKey = new Map<
     string,
     Array<{ key: WrapperSpellingKey; stmt: Stmt }>
@@ -459,6 +492,7 @@ function chargeSpellingTwins(
     list.push({ key, stmt: r });
     removedByKey.set(key.hash, list);
   }
+  const pairs: SpellingPair[] = [];
   for (const s of leftoverFresh) {
     const key = wrapperSpellingKey(s);
     if (!key) continue;
@@ -467,14 +501,34 @@ function chargeSpellingTwins(
     const i = bucket.findIndex((e) => e.key.form !== key.form);
     if (i < 0) continue; // same spelling on both sides is not a flip
     const twin = bucket.splice(i, 1)[0].stmt;
-    const lines = s.lines.length + twin.lines.length;
-    tally.spellingIdenticalLines += lines;
+    pairs.push({
+      fresh: s,
+      prior: twin,
+      lines: s.lines.length + twin.lines.length
+    });
+  }
+  return pairs;
+}
+
+/**
+ * Charge the spelling pairs to their labeled category. In the raw mode this
+ * is advisory bookkeeping (the mass is already inside `real` above); in the
+ * tolerant mode the caller skipped those statements' `real` charges and this
+ * IS the category's charge.
+ */
+function chargeSpellingPairs(
+  pairs: SpellingPair[],
+  tally: Tally,
+  sink?: NoiseSink
+): void {
+  for (const p of pairs) {
+    tally.spellingIdenticalLines += p.lines;
     keep(sink, {
       kind: "spelling",
       file: sink?.file ?? "",
-      lines,
-      priorText: twin.text,
-      freshText: s.text
+      lines: p.lines,
+      priorText: p.prior.text,
+      freshText: p.fresh.text
     });
   }
 }
@@ -584,7 +638,7 @@ function classifyFile(
     removedByHead.set(k, l);
   }
   const usedRemoved = new Set<Stmt>();
-  const tier3PairedFresh = new Set<Stmt>();
+  const unpairedFresh: Stmt[] = [];
   for (const s of novelFresh) {
     const sw = tokenSet(s.text);
     let best: Stmt | null = null;
@@ -602,7 +656,6 @@ function classifyFile(
     }
     if (best && bestScore >= 0.5) {
       usedRemoved.add(best);
-      tier3PairedFresh.add(s);
       const e = editedLineCounts(s.text, best.text);
       tally.real += e.fresh + e.prior;
       // An EDITED pair: both sides exist, so its charged lines can be walked
@@ -615,37 +668,48 @@ function classifyFile(
         freshText: s.text
       });
     } else {
-      tally.real += s.lines.length; // genuinely new code
-      keep(sink, {
-        kind: "real",
-        file: sink?.file ?? "",
-        lines: s.lines.length,
-        freshText: s.text
-      });
-    }
-  }
-  for (const s of removed) {
-    if (!usedRemoved.has(s)) {
-      tally.real += s.lines.length; // genuinely removed
-      keep(sink, {
-        kind: "real",
-        file: sink?.file ?? "",
-        lines: s.lines.length,
-        priorText: s.text
-      });
+      // Not repairable as an edit: charged below, because the spelling
+      // tolerance decides first whether a same-code-modulo-spelling twin of
+      // it is real change (raw) or the labeled soft category (tolerant).
+      unpairedFresh.push(s);
     }
   }
 
-  // 4. SOFT-NOISE pass (advisory, additive): among the statements just charged
-  // as one-sided real change, pair the ones that are the same code modulo
-  // WRAPPER SPELLING. Nothing already charged changes; the pair's mass is
-  // REPORTED so "of which N are spelling-only" can be said of `real`.
-  chargeSpellingTwins(
-    novelFresh.filter((s) => !tier3PairedFresh.has(s)),
-    removed.filter((s) => !usedRemoved.has(s)),
-    tally,
-    sink
-  );
+  // 4. SOFT-NOISE pairing: among the one-sided statements about to be charged
+  // as real change, pair the ones that are the same code modulo WRAPPER
+  // SPELLING. PURE — see `pairSpellingTwins`. It runs before the one-sided
+  // charging so the tolerant mode can move exactly the paired mass, and after
+  // tier 3 so the pairing sees the same leftovers it always did.
+  const leftoverRemoved = removed.filter((s) => !usedRemoved.has(s));
+  const spellingPairs = pairSpellingTwins(unpairedFresh, leftoverRemoved);
+  const tolerant = opts.spellingTolerance === "tolerant";
+  const spellingFresh = new Set(spellingPairs.map((p) => p.fresh));
+  const spellingPrior = new Set(spellingPairs.map((p) => p.prior));
+  for (const s of unpairedFresh) {
+    if (tolerant && spellingFresh.has(s)) continue; // charged to the category
+    tally.real += s.lines.length; // genuinely new code
+    keep(sink, {
+      kind: "real",
+      file: sink?.file ?? "",
+      lines: s.lines.length,
+      freshText: s.text
+    });
+  }
+  for (const s of leftoverRemoved) {
+    if (tolerant && spellingPrior.has(s)) continue; // charged to the category
+    tally.real += s.lines.length; // genuinely removed
+    keep(sink, {
+      kind: "real",
+      file: sink?.file ?? "",
+      lines: s.lines.length,
+      priorText: s.text
+    });
+  }
+  // In the raw mode the pairs were just charged inside `real` and this is the
+  // advisory report of that mass; in the tolerant mode those charges were
+  // skipped and this is the category's own charge. Either way the same mass,
+  // the same sample, one labeled number.
+  chargeSpellingPairs(spellingPairs, tally, sink);
 }
 
 /**
@@ -733,15 +797,53 @@ export function composeDiff(
 }
 
 function main() {
-  const [priorDir, freshDir, label] = process.argv.slice(2);
-  const tally = composeDiff(priorDir, freshDir);
+  // Flags parsed upfront; an unknown one fails loud — the harness convention.
+  const positional: string[] = [];
+  let spellingTolerance: SpellingTolerance = DEFAULTS.spellingTolerance;
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === "--spelling-tolerance") {
+      const v = argv[++i];
+      if (v !== "raw" && v !== "tolerant") {
+        throw new Error(`--spelling-tolerance must be raw|tolerant, got ${v}`);
+      }
+      spellingTolerance = v;
+    } else if (a.startsWith("--")) {
+      throw new Error(`unknown flag ${a}`);
+    } else {
+      positional.push(a);
+    }
+  }
+  const [priorDir, freshDir, label] = positional;
+  if (!priorDir || !freshDir) {
+    throw new Error(
+      "usage: diff-composition.ts <priorSrcDir> <freshSrcDir> [label] " +
+        "[--spelling-tolerance raw|tolerant]"
+    );
+  }
+  const tally = composeDiff(priorDir, freshDir, undefined, {
+    spellingTolerance
+  });
+  // RAW is the frozen charge every recorded label prints, whichever mode ran:
+  // under the tolerant flag the spelling category sits outside `real`, so it
+  // is added back — the two modes report ONE charge two ways, and the raw and
+  // clean lines below read the same for both.
+  const spelling = tally.spellingIdenticalLines;
+  const rawReal =
+    tally.real + (spellingTolerance === "tolerant" ? spelling : 0);
   const noise = tally.naming + tally.alias + tally.reorder;
-  const total = noise + tally.real + tally.fileAddRemove;
-  const pct = (n: number) => ((100 * n) / total).toFixed(1).padStart(5);
-  console.log(`=== DIFF COMPOSITION${label ? ` — ${label}` : ""} ===`);
-  console.log(`  accounted churn lines: ${total}`);
+  const rawTotal = noise + rawReal + tally.fileAddRemove;
+  const cleanReal = rawReal - spelling;
+  const cleanTotal = rawTotal - spelling;
+  const pct = (n: number) => ((100 * n) / rawTotal).toFixed(1).padStart(5);
   console.log(
-    `  REAL change            ${String(tally.real).padStart(7)}  ${pct(tally.real)}%`
+    `=== DIFF COMPOSITION${label ? ` — ${label}` : ""} ` +
+      `(spelling tolerance: ${spellingTolerance}) ===`
+  );
+  console.log(`  accounted churn lines: ${rawTotal}`);
+  console.log(
+    `  REAL change            ${String(rawReal).padStart(7)}  ${pct(rawReal)}%`
   );
   console.log(
     `  new/removed files      ${String(tally.fileAddRemove).padStart(7)}  ${pct(tally.fileAddRemove)}%`
@@ -759,12 +861,20 @@ function main() {
     `    reorder churn        ${String(tally.reorder).padStart(7)}  ${pct(tally.reorder)}%`
   );
   console.log(
-    `    spelling-identical   ${String(tally.spellingIdenticalLines).padStart(7)}  ` +
-      `${pct(tally.spellingIdenticalLines)}%  (soft noise: charged inside REAL, ` +
-      "wrapper arrow<->function flips)"
+    `    spelling-identical   ${String(spelling).padStart(7)}  ${pct(spelling)}%  ` +
+      (spellingTolerance === "tolerant"
+        ? "(the clean diff's own labeled category, wrapper arrow<->function flips)"
+        : "(soft noise: charged inside REAL, wrapper arrow<->function flips)")
+  );
+  console.log("  --- clean diff (raw minus the spelling category) ---");
+  console.log(
+    `    real (clean)         ${String(cleanReal).padStart(7)}  (= REAL - spelling-identical)`
   );
   console.log(
-    `ROW|${label ?? ""}|${total}|${tally.real}|${tally.fileAddRemove}|${tally.naming}|${tally.alias}|${tally.reorder}|${tally.spellingIdenticalLines}`
+    `    churn (clean)        ${String(cleanTotal).padStart(7)}  (= accounted churn - spelling-identical)`
+  );
+  console.log(
+    `ROW|${label ?? ""}|${rawTotal}|${rawReal}|${tally.fileAddRemove}|${tally.naming}|${tally.alias}|${tally.reorder}|${spelling}|${cleanReal}|${cleanTotal}`
   );
 }
 

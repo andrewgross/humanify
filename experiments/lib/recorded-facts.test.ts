@@ -131,7 +131,15 @@ function fullScorecard(): Scorecard {
         noise: 1,
         naming: 1,
         alias: 1,
-        reorder: 1
+        reorder: 1,
+        // The soft-flow fields (build-constant 2026-08-19, spelling 2026-09-29,
+        // the clean diff 2026-10-02) and the line-level naming view: every one
+        // reaches a summary total, so each is measured AND totalled.
+        buildConstantLines: 1,
+        spellingIdenticalLines: 1,
+        nameOnlyLines: 1,
+        churnLinesClean: 1,
+        realClean: 1
       },
       vendor: {
         churnLines: 1,

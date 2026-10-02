@@ -89,6 +89,54 @@ diff in **git lines** (`composeDiff`, shared with exp037's `diff-composition`):
   busy 215→216 controls). Cards scored before 2026-09-29 carry no field; the
   summary prints a NOTE for them instead of presenting a zero.
 
+### RAW vs CLEAN — the contract (2026-10-02)
+
+Andrew: "I lean towards not changing the actual code itself when possible, so
+we should probably just have a flag in our scoring... we can always report
+both numbers (or a breakdown with values assigned to each thing in the soft
+flow)." The raw/clean concept already existed — `churnLinesExBuild` /
+`realExBuild` subtract the one soft category known then (build-metadata
+inlining, 2026-08-19) — and spelling tolerance joined it:
+
+- **RAW** = what the frozen rules charge. `churnLines`, `real` and every
+  pre-existing column keep their exact meaning, so every recorded label and
+  the whole historical trend line stay byte-comparable. Raw is what
+  `composeDiff` charges by default (its `spellingTolerance: "raw"`).
+- **CLEAN** = raw minus the SOFT categories the breakdown can NAME, each
+  valued:
+  - **buildMetadata** (`buildConstantLines`, `build-constant-churn.ts`) —
+    VERSION/BUILD_TIME/GIT_SHA constants the bundler inlined at many sites
+    (at 207→208: 1,224 lines, 408 per field, 79 files);
+  - **spelling** (`spellingIdenticalLines`) — wrapper arrow<->function
+    re-serializations (8,230 lines at 207→208).
+  - `churnLinesClean` = `churnLines − buildConstantLines −
+spellingIdenticalLines`; `realClean` = `realExBuild −
+spellingIdenticalLines`.
+- **Both are always reported.** The card carries raw and clean side by side
+  (clean fields optional so pre-2026-10-02 cards parse; the summary prints a
+  NOTE for them, never a zero), `summarize` prints a breakdown table (TOTAL
+  first: rawChurn, −buildMeta, −spelling, cleanChurn, rawReal, cleanReal),
+  and the leaderboard carries `cleanLn` beside `treeLn` and a `cleanReal`
+  hold column.
+- **One charge, one owner.** Every clean number is a DERIVATION of the raw
+  charge — never a second counter (the changed-lines owners stay
+  `composeDiff` and `lib/diff.ts`; `test/measurement-owners.test.ts` guards
+  that). The composition's `spellingTolerance: "tolerant"` flag charges the
+  same clean real directly (the flagged pairs move out of `real` into the
+  labeled category), and `raw real = tolerant real + spellingIdenticalLines`
+  holds in both modes — pinned in `wrapper-spelling.test.ts` and
+  `clean-diff.test.ts`.
+- **Validated on the recording hop (2.1.207→208, src), exact against the
+  exp094 census:** raw churn 67,551 / real 51,880; buildMetadata 1,224;
+  spelling 8,230; clean churn 58,097; clean real 42,426; the tolerant
+  composition reads real 43,650 (= the census's post-repair number); the four
+  flip files read 198 genuine + 8,230 spelling = their recorded 8,428; vendor
+  0 flips; and the overnight report's rust-vs-ts `realExBuild` gap of +9,162
+  decomposes as 8,230 spelling + 932 genuine repackaging.
+- Neither number subtracts tree NOISE (`naming`/`alias`/`reorder`) — those
+  are the lever-driven columns above; the clean diff only subtracts mass no
+  lever can move (metadata) or that is upstream spelling, not change.
+
 Costs a few minutes per pair; `--no-layout` skips it.
 
 **Which numbers are stable?** Everything except `noiseLn`/`noise` is deterministic
