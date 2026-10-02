@@ -35,6 +35,7 @@ import {
   tokenSet
 } from "../034-eval-harness/diff-ledger.js";
 import { statementHash } from "../lib/js/statement-hash.js";
+import { wrapperFlipIsSemanticsPreserving } from "../lib/js/wrapper-spelling.js";
 
 export interface Stmt {
   hash: string;
@@ -369,80 +370,6 @@ const WRAPPER_HEADS: Array<{
   { re: /^([A-Za-z_$][\w$]*)\s*=>\s*\{/, form: "arrow" }
 ];
 
-/**
- * Node types that BIND their own `this`/`arguments` (or, for classes, run
- * their bodies under their own `this`). An occurrence behind one of these
- * cannot observe the wrapper's binding, so the wrapper's spelling flip is
- * semantics-preserving for it. Arrow functions are deliberately absent:
- * they pass both through, so an arrow nested in the wrapper still observes
- * the WRAPPER's binding.
- */
-const LEXICAL_BINDERS = new Set([
-  "FunctionDeclaration",
-  "FunctionExpression",
-  "ObjectMethod",
-  "ClassMethod",
-  "ClassPrivateMethod",
-  "ClassDeclaration",
-  "ClassExpression",
-  "StaticBlock"
-]);
-
-/**
- * Does a `this` or `arguments` occurrence in the WRAPPER's own lexical scope
- * exist — one the arrow↔function flip would change the meaning of?
- *
- * The wrapper is the function expression at `offset` of the already-parsed
- * normalized statement. Iterative (explicit stack) like `statementHash`, for
- * the same reason: multi-thousand-line wrapper bodies. `x.arguments` (a
- * property, not the binding) is skipped so a member access cannot force a
- * refusal. Returns true => REFUSE the pair.
- */
-function wrapperOwnsLexicalBindingUse(wrapper: t.FunctionExpression): boolean {
-  const stack: Array<{ node: t.Node; barrier: boolean }> = [
-    { node: wrapper, barrier: false }
-  ];
-  while (stack.length > 0) {
-    const { node, barrier } = stack.pop() as {
-      node: t.Node;
-      barrier: boolean;
-    };
-    if (!barrier) {
-      if (node.type === "ThisExpression") return true;
-      if (node.type === "Identifier" && node.name === "arguments") return true;
-    }
-    const nextBarrier = (child: t.Node) =>
-      LEXICAL_BINDERS.has(child.type) ? true : barrier;
-    const keys = t.VISITOR_KEYS[node.type] ?? [];
-    for (const k of keys) {
-      // Non-computed member property: an Identifier node that is NOT a
-      // reference to the `arguments` binding.
-      if (
-        k === "property" &&
-        (node.type === "MemberExpression" ||
-          node.type === "OptionalMemberExpression") &&
-        !(node as t.MemberExpression).computed
-      ) {
-        continue;
-      }
-      const child = (node as unknown as Record<string, unknown>)[k];
-      const push = (c: unknown) => {
-        if (Array.isArray(c)) {
-          for (const cc of c) push(cc);
-        } else if (
-          typeof c === "object" &&
-          c !== null &&
-          typeof (c as { type?: unknown }).type === "string"
-        ) {
-          stack.push({ node: c as t.Node, barrier: nextBarrier(c as t.Node) });
-        }
-      };
-      push(child);
-    }
-  }
-  return false;
-}
-
 function wrapperSpellingKey(s: Stmt): WrapperSpellingKey | null {
   const firstLine = s.text.split("\n", 1)[0];
   const call = SEQUENCE_CALL_HEAD.exec(firstLine);
@@ -474,7 +401,9 @@ function wrapperSpellingKey(s: Stmt): WrapperSpellingKey | null {
   // semantic change — refuse (see the detector docstring).
   const wrapper = findNodeAt(ast.program.body[0], call[0].length);
   if (!wrapper || wrapper.type !== "FunctionExpression") return null;
-  if (wrapperOwnsLexicalBindingUse(wrapper as t.FunctionExpression))
+  // The shared exp094 rule (lib/js/wrapper-spelling.ts) — the SAME answer
+  // the match ground truth and the pipeline's hash serializer give.
+  if (!wrapperFlipIsSemanticsPreserving(wrapper as t.FunctionExpression))
     return null;
   return { form: head.form, hash: statementHash(ast.program.body[0]) };
 }

@@ -44,6 +44,44 @@ test("wrapper spelling is normalized: function expression ≡ arrow", () => {
   );
 });
 
+test("the erasure REFUSES a flip the flip would rebind (exp094)", () => {
+  // exp092's canonicalizer erased the function head UNCONDITIONALLY, so a
+  // `this`/`arguments`-loaded pair canonicalized equal — MANUFACTURED
+  // ground truth, against the instrument's own "never manufactures"
+  // contract (an arrow binds neither, a function expression binds both, so
+  // the pair is a real difference). Same rule as the pipeline's hash
+  // serializer and the 037 detector: lib/js/wrapper-spelling.ts.
+  assert.notEqual(
+    canonical("function () {\n  return this.token;\n}"),
+    canonical("() => {\n  return this.token;\n}")
+  );
+  assert.notEqual(
+    canonical("function () {\n  return arguments.length;\n}"),
+    canonical("() => {\n  return arguments.length;\n}")
+  );
+  // Occurrences the flip does NOT rebind keep the erasure: `x.arguments`
+  // is a property, `this` behind a nested classic function or class
+  // (methods, field initializers) is bound there.
+  assert.equal(
+    canonical("function () {\n  return x.arguments;\n}"),
+    canonical("() => {\n  return x.arguments;\n}")
+  );
+  assert.equal(
+    canonical(
+      "function () {\n  return function () {\n    return this;\n  };\n}"
+    ),
+    canonical("() => {\n  return function () {\n    return this;\n  };\n}")
+  );
+  assert.equal(
+    canonical(
+      "function (a) {\n  class C {\n    m() {\n      return this.x;\n    }\n    f = this.y;\n  }\n  return new C(a);\n}"
+    ),
+    canonical(
+      "(a) => {\n  class C {\n    m() {\n      return this.x;\n    }\n    f = this.y;\n  }\n  return new C(a);\n}"
+    )
+  );
+});
+
 test("consistent identifier renaming is erased", () => {
   assert.equal(
     canonical("function (px, qy) {\n  return px * qy + 7;\n}"),
@@ -380,24 +418,23 @@ test("the committed fixture's dump scores its constructed ground truth", () => {
   // keepExact (byte-identical), keepRenamed (identifier renaming) and
   // keepWrapper (arrow vs function-expression spelling). Matcher
   // behavior ON THIS DUMP, recorded exactly because the dump is
-  // deterministic — the two findings below are the README's first two:
+  // deterministic — the two findings the README's first section records:
   assert.equal(f.mustMatch, 3);
-  // FINDING 1: keepWrapper (the arrow↔function-expression spelling
-  // change) is NOT matched — recall is 2/3 despite the byte-equal body.
-  assert.equal(f.matchedOfMust, 2);
-  assert.equal(f.missedMust.length, 1);
-  assert.ok(
-    f.missedMust[0].priorSlice.includes("keepExact(one, two) + 1"),
-    `the missed must-pair is the wrapper-spelling one, got ${JSON.stringify(
-      f.missedMust[0]
-    )}`
-  );
+  // fixed:{was: f.matchedOfMust 2 with keepWrapper in missedMust, why:
+  // exp094's wrapper-spelling unification in the MatchKey serializer — a
+  // safe arrow hashes as its function-expression spelling, so the pair now
+  // matches at structuralHashUnique and FINDING 1 is resolved. Regenerated
+  // with the exp094 branch's binary; the exp037-era baseline
+  // (baseline-f8b87490.json) records the pre-fix corpus.}
+  assert.equal(f.matchedOfMust, 3);
+  assert.equal(f.missedMust.length, 0);
   assert.ok(
     f.missedMust.every((m) => !m.priorSlice.includes("alpha + beta")),
     "the byte-identical function is matched (a finding if this ever fails)"
   );
-  // FINDING 2: changedSmall differs only in literals (n * 2 + 50 vs
-  // n * 3 + 100) — a loose/should-match pair the matcher also missed.
+  // OPEN FINDING 2: changedSmall differs only in literals (n * 2 + 50 vs
+  // n * 3 + 100 — different exact numbers) — a loose/should-match pair the
+  // matcher still misses.
   assert.equal(f.shouldMatch, 1);
   assert.equal(f.matchedOfShould, 0);
   assert.equal(f.missedShould[0].priorName, "changedSmall");
@@ -408,7 +445,10 @@ test("the committed fixture's dump scores its constructed ground truth", () => {
   );
   // Statements: keepExact and keepRenamed were proposed as twins (both
   // abstained — nothing to bridge, by design); keepWrapper's statement
-  // (spelling change) was not proposed at all.
+  // twin still does not propose — the STATEMENT hash family
+  // (STATEMENT_HASH_VERSION, the split-inheritance key) does not unify the
+  // spelling yet (exp094's recommended follow-up; only the MatchKey
+  // families do).
   assert.equal(card.statements.mustMatch, 3);
   assert.equal(card.statements.proposedOfMust, 2);
   assert.equal(card.statements.recall, 2 / 3);
