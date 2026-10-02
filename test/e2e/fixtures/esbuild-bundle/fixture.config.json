@@ -1,0 +1,14 @@
+{
+  "package": "esbuild-bundle",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A real esbuild 0.27.2 iife bundle (unminified): a CJS dep via __commonJS (vendor extraction + source-path handover), lazy and eager ESM modules via __esm and scope hoisting (the fossil split), enough wrapper-scope bindings to clear the frozen wrapper threshold after extraction, and a deterministic stdout report the boot step compares against the split tree. v1.1.0 perturbs the CJS dep (adds tripled), the pad width, and the report."
+    }
+  ]
+}
