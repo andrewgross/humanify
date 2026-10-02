@@ -33,6 +33,10 @@
   The recorded baseline above stays the PRE-change reference; re-record it
   when the branch lands on main (a fresh binary-inclusive scorecard was
   produced for it, see `experiments/094-wrapper-spelling/out-corpus/`).
+  The MEASUREMENT side of the same spelling mass (its share of the diff
+  charge) is now a clean-diff category with a per-value breakdown — see
+  `experiments/034-eval-harness/README.md` ("RAW vs CLEAN — the contract",
+  2026-10-02), validated against the exp094 census.
 - **Findings on day one** (from the fixed fixture alone, before any real
   package ran): the two misses below are REAL matcher behavior, recorded
   in `score.test.ts` as exact values — treat them as the first leads:

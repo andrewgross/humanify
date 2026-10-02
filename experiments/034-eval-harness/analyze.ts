@@ -242,8 +242,11 @@ export function determinism(stats: any) {
  * regression stayed hidden while the eval looked green. This scores the tree a
  * human actually reads, splitting its churn into real change vs each noise
  * mechanism — REORDER being the one nothing else can see.
+ *
+ * Exported (the summarizeCards precedent) so clean-diff.test.ts can pin the
+ * raw/clean contract against the real instruments rather than fixtures only.
  */
-function layoutChurn(priorSrc: string, freshSrc: string) {
+export function layoutChurn(priorSrc: string, freshSrc: string) {
   const t = composeDiff(priorSrc, freshSrc);
   const noise = t.naming + t.alias + t.reorder;
   const churnLines = noise + t.real + t.fileAddRemove;
@@ -278,6 +281,15 @@ function layoutChurn(priorSrc: string, freshSrc: string) {
      * (Scorecard.layout.spellingIdenticalLines): wrapper arrow<->function
      * re-serializations — same code, different spelling. */
     spellingIdenticalLines: t.spellingIdenticalLines,
+    /**
+     * THE CLEAN DIFF (Andrew, 2026-10-02): the raw charge minus BOTH soft
+     * categories, valued per category in the summary's breakdown. Derived,
+     * never a second charge — raw fields above stay byte-equal to every
+     * recorded label, and the same clean real reads directly off the
+     * composition's `spellingTolerance: "tolerant"` flag.
+     */
+    churnLinesClean: churnLines - bc.lines - t.spellingIdenticalLines,
+    realClean: t.real - bc.lines - t.spellingIdenticalLines,
     alias: t.alias,
     reorder: t.reorder
   };

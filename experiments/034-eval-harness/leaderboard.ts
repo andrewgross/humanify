@@ -44,10 +44,17 @@ const COLUMNS = [
   // treeLn leads: it is the number a reviewer of the split tree actually sees.
   // exp054 removed 5,026 of these while `noise`/`noiseLn` barely moved.
   "treeLn",
+  // The clean diff (2026-10-02) beside the raw one: treeLn minus the soft
+  // categories (build metadata, wrapper spelling). Both are always reported —
+  // raw keeps the trend line, clean shows what the noise really was.
+  "cleanLn",
   "noise",
   "noiseLn",
   "novel",
   "realLn",
+  // The clean diff's real-change hold: a clean win that moved it dropped
+  // real code or started swallowing it.
+  "cleanReal",
   "reloc",
   "relocSt",
   "newName",

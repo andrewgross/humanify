@@ -136,6 +136,7 @@ export function summarizeCards(cards: Scorecard[]): {
   totals: SummaryTotals;
   treeChurnCards: number;
   spellingCards: number;
+  cleanDiffCards: number;
 } {
   const totals: SummaryTotals = {
     stmts: 0,
@@ -153,6 +154,8 @@ export function summarizeCards(cards: Scorecard[]): {
     layoutBuildConstantLines: 0,
     layoutNameOnlyLines: 0,
     layoutSpellingIdenticalLines: 0,
+    layoutChurnLinesClean: 0,
+    layoutRealClean: 0,
     layoutReal: 0,
     layoutNoise: 0,
     layoutNaming: 0,
@@ -164,6 +167,7 @@ export function summarizeCards(cards: Scorecard[]): {
   };
   let treeChurnCards = 0;
   let spellingCards = 0;
+  let cleanDiffCards = 0;
   for (const c of cards) {
     totals.stmts += c.churn.statements.total;
     totals.unchangedClean += c.churn.statements.unchangedClean;
@@ -186,9 +190,18 @@ export function summarizeCards(cards: Scorecard[]): {
     if (c.churn.layout) {
       totals.layoutChurnLines += c.churn.layout.churnLines;
       totals.layoutBuildConstantLines += c.churn.layout.buildConstantLines ?? 0;
+      // nameOnlyLines was measured every run since 2026-08-19 and totalled
+      // NOWHERE — the TOTAL row printed 0 under a per-pair column of real
+      // numbers (found while adding the clean breakdown beside it).
+      totals.layoutNameOnlyLines += c.churn.layout.nameOnlyLines ?? 0;
       totals.layoutSpellingIdenticalLines +=
         c.churn.layout.spellingIdenticalLines ?? 0;
       if (c.churn.layout.spellingIdenticalLines !== undefined) spellingCards++;
+      if (c.churn.layout.churnLinesClean !== undefined) {
+        cleanDiffCards++;
+        totals.layoutChurnLinesClean += c.churn.layout.churnLinesClean;
+        totals.layoutRealClean += c.churn.layout.realClean ?? 0;
+      }
       totals.layoutReal += c.churn.layout.real;
       totals.layoutNoise += c.churn.layout.noise;
       totals.layoutNaming += c.churn.layout.naming;
@@ -201,7 +214,7 @@ export function summarizeCards(cards: Scorecard[]): {
       totals.vendorReal += c.churn.vendor.real;
     }
   }
-  return { totals, treeChurnCards, spellingCards };
+  return { totals, treeChurnCards, spellingCards, cleanDiffCards };
 }
 
 function main() {
@@ -210,7 +223,8 @@ function main() {
   const dir = path.join(import.meta.dirname, "results", model);
   const cards = loadScorecards(dir);
   if (cards.length === 0) throw new Error(`no scorecards in ${dir}`);
-  const { totals, treeChurnCards, spellingCards } = summarizeCards(cards);
+  const { totals, treeChurnCards, spellingCards, cleanDiffCards } =
+    summarizeCards(cards);
 
   // Whether the pipeline declared each run VALID, recorded by run.sh. Absent
   // for every result set produced before this existed — absent, not clean.
@@ -233,6 +247,13 @@ function main() {
       `NOTE: spellingIdentical totals ${spellingCards} of the ${layoutCards} ` +
         "scored pairs — the rest predate the field (2026-09-29), and their " +
         "soft-noise mass is missing from the total rather than counted as zero."
+    );
+  }
+  if (cleanDiffCards !== layoutCards) {
+    banner.push(
+      `NOTE: the clean-diff totals cover ${cleanDiffCards} of the ${layoutCards} ` +
+        "scored pairs — the rest predate the breakdown (2026-10-02), and their " +
+        "clean numbers are missing from the total rather than counted as zero."
     );
   }
 
@@ -300,7 +321,7 @@ function main() {
     })
   );
   for (const line of caveatLines(shown)) console.log(line);
-  printLayout(cards, totals);
+  printLayout(cards, totals, cleanDiffCards);
   console.log(`\nwrote ${path.join(dir, "summary.json")}`);
   // And again last, so it is the final thing on screen as well as the first.
   // A run whose pipeline rejected its own output must not be summarised by a
@@ -332,7 +353,11 @@ function main() {
  * correctly charged to `real` (the values did change), which is exactly why it
  * hides — no noise KPI can see it, and no lever will ever move it.
  */
-function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
+function printLayout(
+  cards: Scorecard[],
+  totals: SummaryTotals,
+  cleanDiffCards: number
+): void {
   const scored = cards.filter((c) => c.churn.layout);
   if (scored.length === 0) return;
   console.log("\n=== on-disk diff composition (git lines; EVAL_LAYOUT) ===");
@@ -412,6 +437,87 @@ function printLayout(cards: Scorecard[], totals: SummaryTotals): void {
     `spell = SOFT noise inside real — of the ${totals.layoutReal} real lines ` +
       `above, ${totals.layoutSpellingIdenticalLines} are spelling-only ` +
       "(statement pairs identical modulo wrapper arrow<->function spelling)"
+  );
+  printCleanDiff(cards, totals, cleanDiffCards);
+}
+
+/**
+ * THE CLEAN-DIFF BREAKDOWN (Andrew, 2026-10-02: "we can always report both
+ * numbers (or a breakdown with values assigned to each thing in the soft
+ * flow)"): the raw charge with each soft category valued, then the clean
+ * number it leaves. Raw keeps the historical trend line byte-equal; clean
+ * subtracts what the soft flow can name — inlined build-metadata constants
+ * (VERSION/BUILD_TIME/GIT_SHA, the ex-build convention since 2026-08-19) and
+ * wrapper-spelling re-serializations (2026-10-02). TOTAL first. Neither
+ * number subtracts tree noise (naming/alias/reorder) — those are the noise
+ * columns above, and the levers that move them are judged there.
+ */
+function printCleanDiff(
+  cards: Scorecard[],
+  totals: SummaryTotals,
+  cleanDiffCards: number
+): void {
+  const scored = cards.filter((c) => c.churn.layout);
+  if (scored.length === 0) return;
+  console.log("\n=== clean diff (raw vs clean; soft-flow breakdown) ===");
+  const head = [
+    "pair".padEnd(16),
+    pad("rawChurn", 10),
+    pad("-buildMeta", 11),
+    pad("-spelling", 11),
+    pad("cleanChurn", 12),
+    pad("rawReal", 9),
+    pad("cleanReal", 10)
+  ].join(" ");
+  console.log(head);
+  console.log("-".repeat(head.length));
+  /** `-` for a clean number the card never measured, never 0-by-omission. */
+  const dash = (n: number | undefined) => (n === undefined ? "-" : n);
+  const row = (
+    label: string,
+    v: [number, number, number, number | string, number, number | string]
+  ) =>
+    [
+      label.padEnd(16),
+      pad(v[0], 10),
+      pad(v[1], 11),
+      pad(v[2], 11),
+      pad(v[3], 12),
+      pad(v[4], 9),
+      pad(v[5], 10)
+    ].join(" ");
+  console.log(
+    row("TOTAL", [
+      totals.layoutChurnLines,
+      totals.layoutBuildConstantLines,
+      totals.layoutSpellingIdenticalLines,
+      cleanDiffCards > 0 ? totals.layoutChurnLinesClean : "-",
+      totals.layoutReal,
+      cleanDiffCards > 0 ? totals.layoutRealClean : "-"
+    ])
+  );
+  console.log("-".repeat(head.length));
+  for (const c of scored) {
+    const l = c.churn.layout;
+    if (!l) continue;
+    console.log(
+      row(c.pair, [
+        l.churnLines,
+        l.buildConstantLines ?? 0,
+        l.spellingIdenticalLines ?? 0,
+        dash(l.churnLinesClean),
+        l.real,
+        dash(l.realClean)
+      ])
+    );
+  }
+  console.log(
+    "raw = the frozen charge every recorded label prints (the trend line; " +
+      "byte-equal). clean = raw minus the valued categories: buildMeta " +
+      "(VERSION/BUILD_TIME/GIT_SHA constants inlined at many sites) and " +
+      "spelling (wrapper arrow<->function re-serializations). cleanChurn " +
+      "still INCLUDES the noise columns above. A `-` clean number means the " +
+      "card predates 2026-10-02, not a clean diff of zero."
   );
 }
 
