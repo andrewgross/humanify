@@ -22,4 +22,5 @@ pub mod jsset;
 pub mod nodes;
 pub mod processor;
 pub mod render;
+pub mod taken;
 pub mod used_set;

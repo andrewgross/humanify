@@ -345,6 +345,46 @@ fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
     assert_eq!(first_round.ask.phase, 0);
 }
 
+/// Finding #66's taken-set fix, red test: the two late functions are
+/// asked in the SAME round, so their contexts are built while the
+/// program scope's table is unchanged — they must retain ONE shared
+/// taken snapshot (the #56 pattern on the renamed-name field), not two
+/// private clones of the same names. Before the sharing fix this reads
+/// 4 (each context's own copy); after it, 2 (one snapshot, two names).
+#[test]
+fn the_late_contexts_share_one_taken_snapshot() {
+    let fresh = "var q = 4;\n\
+                 function e0(p) {\n  return p + q;\n}\n\
+                 function late1(z) {\n  return e0(z) + q;\n}\n\
+                 function late2(y) {\n  return e0(y) * q;\n}\n\
+                 console.log(late1(e0(q)) + late2(q));\n";
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &plain_config(),
+        &MapProvider::new(),
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let g = &out.waves.gauges;
+    assert_eq!(
+        g.taken_set_names, 2,
+        "one shared {{eventHooks, qBase}} snapshot, not a clone per context"
+    );
+    // No private clone remains: the shared snapshot's bytes are the
+    // renamed-layers map's copy (charged to usedSetBytes), so the
+    // strategy split's taken term holds only the per-context layer
+    // lists (2 Arc pointers per fn context — under one set's 65 bytes).
+    assert!(
+        g.strategy_taken_bytes < 65,
+        "no private taken clone: {}",
+        g.strategy_taken_bytes
+    );
+}
+
 /// Finding #66's taken-set sub-gauge, pinned on the collision fixture's
 /// shape: two functions asked in the SAME later wave each cover the
 /// program scope's already-applied names in their taken sets (the probe
