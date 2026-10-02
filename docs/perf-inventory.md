@@ -230,6 +230,54 @@ assembly, ctx maps) so the extractable share is measurable. **BP; size
 −40…−100 s fresh (−8…−20%), −15 s with-prior; client-side only — worth
 it only where the client, not the server, is the wall.**
 
+**RESOLVED 2026-10-02 (branch `perf/module-lanes`).** The sub-spans
+isolated the whole story to ONE seam: the module-lane groups'
+`module_strategy`, which for EVERY group of a wave step re-cloned the
+~25k-name used list (`JsSet::to_vec`), re-counted the target scope's
+bindings (`bindings_in(..).len()` — a full clone + sort), re-read the
+taken-name set, and re-windowed via `get_proximate_used_names`
+(per-name binding lookup + per-ref line mapping) — over inputs that are
+IDENTICAL for every group of a step, because no ask is driven, so no
+rename applies, until `drive_round` runs after every group's strategy is
+built. The function-side constituents everyone suspected were already
+sub-2 s (select-bindings 0.75, register 0.56, lane assembly 0.55).
+
+The fix is the extract-then-parallel pattern verbatim: `ProximityWindow`
+(`rename::votes::proximity`) extracts the used list, binding count,
+droppability and per-name proximity lines ONCE per wave step on the
+calling thread (the oxc-side state behind the extraction is not
+`Sync`); each group's batch windows on the rayon pool
+(`par::map_ordered`) and rejoins in group order. Module retry seeds
+re-ask through the same step snapshot (see
+`docs/responsibility.md`'s proximity-window row; byte identity to the
+serial `get_proximate_used_names` — still the function lanes' per-request
+path — is pinned in `proximity_test` against the live serial function, a
+hardcoded serial-plan fixture, and the parallel rejoin order).
+
+Numbers (clean main `a977f4e7` vs the branch, stub LLM, back-to-back
+legs, box otherwise idle; artifacts `/work/module-lanes/`):
+
+|                                          | before |  after |
+| ---------------------------------------- | -----: | -----: |
+| fresh 182: `setup:module-lanes`          | 78.7 s |  1.8 s |
+| fresh 182: `waves:setup` (whole)         | 92.3 s | 15.0 s |
+| fresh 182: total wall                    |  449 s |  368 s |
+| with-prior 213←212: `setup:module-lanes` | 10.6 s | 0.29 s |
+| with-prior 213←212: total wall           |  173 s |  165 s |
+
+(The 73.9 s figure quoted around this item was measured on the PRE-#66
+binary; on current main the span was 78.7 s — after #66 shrank
+`setup:build-context` 40.7→1.5 s, module-lanes dominated round setup
+even more.) The remaining 1.8 s is the once-per-step extraction span
+(`setup:module-window`, 1.68 s serial) plus ~0.14 s of pool wall
+(~40 cores). Peak RSS unchanged: fresh legs byte-equal (8.35 GB plain /
+9.36 GB dump), prior legs within 2 s-sample noise (±0.1 GB).
+Byte-identity proof: all four before/after trees `diff -r`-identical
+(5,762 fresh / 6,455 prior files), `asks.jsonl` identical (44,351 /
+1,494 rows), `prompts.jsonl` identical (154.8 MB / 13.1 MB),
+`cache-keys.jsonl` identical (11.5 GB / 1.08 GB) — asks, prompts, apply
+order and output all preserved.
+
 ### 3. With-prior `split:finish`: 40 s serial per hop — sub-spans first
 
 New measurement (not in any prior study). Post-split reconcile + relink

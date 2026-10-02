@@ -69,7 +69,9 @@ use crate::rename::transfer::rows::Rows;
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::target::is_valid_rename_target;
 use crate::rename::validated::{RejectionReason, RenameRequest, RenameState, TrailSpec};
-use crate::rename::votes::proximity::{ProximityBinding, get_proximate_used_names};
+use crate::rename::votes::proximity::{
+    ProximityBinding, ProximityWindow, get_proximate_used_names,
+};
 use crate::trail::{Attempt, Outcome, Tier};
 
 /// A close-matched function's prior-version context (`fn.priorVersion*`).
@@ -993,19 +995,50 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 }
             }
         }
-        for group in groups {
-            let ph = crate::profiling::phase("setup:module-lanes");
+        // ---- module lanes -----------------------------------------------
+        // (`setup:module-lanes`, perf-inventory item 2): the per-group
+        // strategy work is a pure function of ONE per-step snapshot — the
+        // used list, the target scope's binding count and taken names,
+        // and each name's proximity lines do not change between the
+        // groups of a step (no ask is driven, so no rename applies, until
+        // `drive_round` runs after every group's strategy is built). The
+        // extraction (oxc-side state is not `Sync`) runs ONCE on this
+        // thread; the per-group windowing — plain data only — fans out to
+        // the rayon pool and rejoins in group order.
+        let module_lanes = crate::profiling::phase("setup:module-lanes");
+        let module_window = if !groups.is_empty()
+            || seeds
+                .iter()
+                .any(|s| matches!(self.ctxs[s.ctx].kind, CtxKind::Module(_)))
+        {
+            Some(self.module_window())
+        } else {
+            None
+        };
+        let group_lines: Vec<Vec<u32>> = groups
+            .iter()
+            .map(|g| {
+                g.iter()
+                    .map(|&j| self.inp.ng.mb_text[j].declaration_line)
+                    .collect()
+            })
+            .collect();
+        let group_windowed: Vec<Vec<String>> = match &module_window {
+            Some(w) => crate::par::map_ordered(&group_lines, |lines| w.windowed(lines)),
+            None => Vec::new(),
+        };
+        for (group, windowed) in groups.into_iter().zip(group_windowed) {
             let ctx = self.new_ctx(ng.node_of_mb[group[0]], CtxKind::Module(group.clone()));
-            self.start_module(ctx, group.clone(), &mut lanes);
+            self.start_module(ctx, group.clone(), &mut lanes, windowed);
             self.settle
                 .insert(ng.node_of_mb[group[0]], Settle::Module(group, ctx));
-            drop(ph);
         }
+        drop(module_lanes);
         let retries: Vec<RetryRun> = seeds
             .into_iter()
             .map(|seed| {
                 let ph = crate::profiling::phase("setup:retry-lanes");
-                let run = self.start_retry(seed);
+                let run = self.start_retry(seed, module_window.as_ref());
                 drop(ph);
                 run
             })
@@ -1603,30 +1636,15 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         format!("module-binding-batch:{}", names.join(","))
     }
 
-    /// `buildModuleBindingBatchCallbacks`: the windowed names are computed
-    /// ONCE, at construction, from the live usedNames. A name this run
-    /// already applied in the target scope is never droppable — the same
-    /// taken-name rule as the function path.
-    fn module_strategy(&mut self, batch: &[usize]) -> usize {
-        let lines: Vec<u32> = batch
-            .iter()
-            .map(|&j| self.inp.ng.mb_text[j].declaration_line)
-            .collect();
-        let total = self.state.bindings_in(self.target_scope).len();
-        let used = self.used.to_vec();
+    /// `buildModuleBindingBatchCallbacks`: the windowed names arrive from
+    /// the per-step [`ProximityWindow`] (extracted once per step, windowed
+    /// per batch — the snapshot reads the same state this group's own
+    /// per-group computation read, so the lane plan is byte-identical). A
+    /// name this run already applied in the target scope is never
+    /// droppable — the same taken-name rule as the function path.
+    fn module_strategy(&mut self, batch: &[usize], windowed: Vec<String>) -> usize {
         let target = self.target_scope;
         let taken = TakenNames::new(vec![self.renamed_in(target)]);
-        let windowed = get_proximate_used_names(
-            &used,
-            &lines,
-            |name| {
-                self.state
-                    .binding_in(target, name)
-                    .map(|b| self.proximity_binding(b))
-            },
-            total,
-            |n| self.is_eligible(n) && !taken.contains(n),
-        );
         self.strategies.push(Strategy::Module {
             batch: batch.to_vec(),
             windowed,
@@ -1635,12 +1653,44 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         self.strategies.len() - 1
     }
 
-    fn start_module(&mut self, ctx: usize, batch: Vec<usize>, lanes: &mut Vec<LaneRun>) {
+    /// The module lanes' windowing inputs as PLAIN data, extracted ONCE
+    /// per wave step on the calling thread (the state behind the closures
+    /// is not `Sync`): the used list, the target scope's binding count and
+    /// taken names, and each preserved name's proximity lines. Nothing
+    /// changes them between a step's module lanes — renames apply only in
+    /// `drive_round`, which runs after every group's strategy is built —
+    /// so each group's windowing reads exactly what its own per-group
+    /// computation would have read.
+    fn module_window(&mut self) -> ProximityWindow {
+        let _ph = crate::profiling::phase("setup:module-window");
+        let target = self.target_scope;
+        let total = self.state.bindings_in(target).len();
+        let used = self.used.to_vec();
+        let taken = self.renamed_in(target);
+        ProximityWindow::new(
+            used,
+            total,
+            |name| self.is_eligible(name) && !taken.contains(name),
+            |name| {
+                self.state
+                    .binding_in(target, name)
+                    .map(|b| self.proximity_binding(b))
+            },
+        )
+    }
+
+    fn start_module(
+        &mut self,
+        ctx: usize,
+        batch: Vec<usize>,
+        lanes: &mut Vec<LaneRun>,
+        windowed: Vec<String>,
+    ) {
         for (i, &j) in batch.iter().enumerate() {
             let name = self.inp.graph.module_bindings[j].name.clone();
             self.ctxs[ctx].order.insert((0, name), i);
         }
-        let strategy = self.module_strategy(&batch);
+        let strategy = self.module_strategy(&batch, windowed);
         let names: Vec<String> = batch
             .iter()
             .map(|&j| self.inp.graph.module_bindings[j].name.clone())
@@ -1768,11 +1818,21 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
     // ------------------------------------------------------------------
 
     /// `buildWaveRetryCallbacks` (at round-A time of the next step).
-    fn start_retry(&mut self, seed: RetrySeed) -> RetryRun {
+    fn start_retry(&mut self, seed: RetrySeed, window: Option<&ProximityWindow>) -> RetryRun {
         let ctx = seed.ctx;
         match self.ctxs[ctx].kind.clone() {
             CtxKind::Module(batch) => {
-                let strategy = self.module_strategy(&batch);
+                // The step's already-extracted window: retry seeds are
+                // re-asked in the step whose setup built it, over the
+                // same unchanged state the fresh lanes read.
+                let window =
+                    window.expect("a module retry seed implies the step built a module window");
+                let lines: Vec<u32> = batch
+                    .iter()
+                    .map(|&j| self.inp.ng.mb_text[j].declaration_line)
+                    .collect();
+                let windowed = window.windowed(&lines);
+                let strategy = self.module_strategy(&batch, windowed);
                 RetryRun {
                     function_id: self.module_function_id(&batch),
                     seed,
