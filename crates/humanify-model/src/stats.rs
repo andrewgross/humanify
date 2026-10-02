@@ -13,7 +13,8 @@
 //! always present, `null` when no binding matching ran. The `reask` block
 //! (2026-09-29) is always written by the current writer and ABSENT on every
 //! recorded pre-2026-09-29 scorecard — strictly additive, so those files
-//! still strict-parse and re-emit byte-identically.
+//! still strict-parse and re-emit byte-identically. The `waveGauges` block
+//! (2026-10-02, finding #66's instrumentation) follows the same rule.
 //!
 //! Every record's key order was read from its TS construction site (cited)
 //! and is proven by the byte round trip over the oracle runs' stats files.
@@ -353,9 +354,47 @@ js_record! {
 }
 
 js_record! {
+    /// The wave-era retention gauges (finding #66's instrumentation,
+    /// 2026-10-02 — docs/perf-inventory.md item 1): what the naming waves'
+    /// `Run` held at era end, per owner, in estimated deep heap bytes —
+    /// the numbers that split a fresh run's ~58 GB between the candidate
+    /// owners. Deterministic estimates (a String is its buffer plus its
+    /// header; container slack is not counted), so run-to-run deltas are
+    /// real.
+    pub struct WaveGaugesStats {
+        /// The #56 observable: name strings the function contexts'
+        /// used-identifier Sets hold at run end (shared layers counted
+        /// once).
+        context_set_names: f64 = "contextSetNames",
+        /// Finding #65's window gauge: the most rendered prompts alive at
+        /// once.
+        peak_live_dispatches: f64 = "peakLiveDispatches",
+        /// [`Self::peak_live_dispatches`]' byte total.
+        peak_live_prompt_bytes: f64 = "peakLivePromptBytes",
+        /// The stored strategy material: every function pass's retained
+        /// context (binding infos, callee signatures, callsites, context
+        /// vars, taken-name sets).
+        strategy_bytes: f64 = "strategyBytes",
+        /// The per-node contexts: binding maps, phase orders, applied-name
+        /// records, the nodes' reports.
+        ctx_bytes: f64 = "ctxBytes",
+        /// The used-identifier layers (shared `Arc`s, counted once) plus
+        /// every context's own barrier-edit sets and the renamed-name
+        /// layers.
+        used_set_bytes: f64 = "usedSetBytes",
+        /// The recorded names.
+        name_record_bytes: f64 = "nameRecordBytes",
+        /// The run's small maps: the winners, the per-functionId round
+        /// counter, the module used-names Set, the graph-era tables.
+        bookkeeping_bytes: f64 = "bookkeepingBytes",
+    }
+}
+
+js_record! {
     /// The whole `--stats-json` object (writeEvalStats' literal, plus the
-    /// 2026-09-29 `reask` addition — the one deliberate post-cutover bump,
-    /// nested so the top level stays byte-stable).
+    /// 2026-09-29 `reask` and 2026-10-02 `waveGauges` additions — the
+    /// deliberate post-cutover bumps, nested so the top level stays
+    /// byte-stable).
     pub struct EvalStats {
         coverage: Option<CoverageSummary> = "coverage",
         transfer_stats: Option<TransferStatsByTier> = "transferStats",
@@ -374,6 +413,10 @@ js_record! {
         /// scorecard, which must stay loadable — Option expresses exactly
         /// that absent-is-not-zero state (contract 14 §5.2).
         reask: Option<ReaskStats> = "reask",
+        /// The `waveGauges` block (2026-10-02). ALWAYS written on runs
+        /// from this writer (all-zero included); ABSENT on every earlier
+        /// recorded scorecard — the `reask` precedent, verbatim.
+        wave_gauges: Option<WaveGaugesStats> = "waveGauges",
     }
 }
 

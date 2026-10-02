@@ -226,6 +226,12 @@ pub const PHASE_TID: u32 = 4;
 /// back into a decision.
 static GLOBAL: RwLock<Option<(Instant, Arc<Mutex<Recorded>>)>> = RwLock::new(None);
 
+#[cfg(test)]
+/// Serializes the tests that route [`phase`] spans into their own
+/// profiler: installs replace each other's global recorder, and cargo
+/// runs a crate's tests on parallel threads.
+pub static SPAN_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 impl Profiler {
     /// Route [`phase`] spans into this profiler (enabled profilers only).
     pub fn install_global(&self) {

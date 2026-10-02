@@ -58,6 +58,25 @@ impl JsSet {
     pub fn to_vec(&self) -> Vec<String> {
         self.iter().cloned().collect()
     }
+
+    /// The Set's estimated deep heap bytes for finding #66's gauges
+    /// (naming::waves::processor::gauges): every member is stored TWICE —
+    /// once as the `pos` HashMap's key, once as the `order` BTreeMap's
+    /// value — so both sides are counted. Deterministic lower-bound
+    /// arithmetic, pinned in gauges_test.
+    pub fn deep_bytes(&self) -> u64 {
+        // pos: the HashMap<String, u64>'s table (each entry's String
+        // header + the u64 + a control byte) plus the name buffers.
+        let pos = self.pos.len() as u64
+            * (std::mem::size_of::<String>() as u64 + std::mem::size_of::<u64>() as u64 + 1)
+            + self.pos.keys().map(|n| n.len() as u64).sum::<u64>();
+        // order: (entry inline size + ~two words of B-tree node overhead)
+        // per member, plus the stored String buffers.
+        let order = self.order.len() as u64
+            * (std::mem::size_of::<u64>() as u64 + std::mem::size_of::<String>() as u64 + 16)
+            + self.order.values().map(|n| n.len() as u64).sum::<u64>();
+        pos + order
+    }
 }
 
 /// A `Record<string, string>` built by assignment: a new key appends, an
@@ -90,5 +109,17 @@ impl JsRecord {
         for (k, v) in &other.0 {
             self.set(k, v);
         }
+    }
+
+    /// The record's estimated deep heap bytes for finding #66's gauges:
+    /// the pair Vec's element slots plus every key and value buffer.
+    /// Deterministic lower-bound arithmetic, pinned in gauges_test.
+    pub fn deep_bytes(&self) -> u64 {
+        self.0.len() as u64 * std::mem::size_of::<(String, String)>() as u64
+            + self
+                .0
+                .iter()
+                .map(|(k, v)| k.len() as u64 + v.len() as u64)
+                .sum::<u64>()
     }
 }

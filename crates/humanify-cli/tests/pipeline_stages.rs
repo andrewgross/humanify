@@ -279,3 +279,156 @@ fn skip_libraries_off_processes_every_unpacked_file() {
         assert!(err.contains(&format!("Processing file {i}/3")), "{err}");
     }
 }
+
+/// The useless-prior incident (docs/perf-inventory.md item 4): a wrong
+/// `--prior-version` file silently degraded a run to a FULL-ASK fresh
+/// pass — 3.7x wall, 4.8x memory, exit 0, nothing louder than an empty
+/// coverage table. The run must now WARN on stderr when the prior bound
+/// nothing — and must stay quiet for a prior that genuinely bound this
+/// program (here: its own tree).
+#[test]
+fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
+    let s = Scratch::new("bad-prior");
+    let input = s.write("plain.js", PLAIN);
+    let out = s.out().display().to_string();
+    // Baseline: the same run without a prior, whose shipped text is a
+    // genuinely bound prior for the second pass.
+    let base = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    assert_eq!(base.status.code(), Some(0), "{}", stderr(&base));
+    let prior = s.out().join("index.js").display().to_string();
+    // The incident's shape: a small non-empty file that is NOT this
+    // program's tree, passed as --prior-version.
+    let stub = s.write("stub.js", "var entryStub = 1;\nconsole.log(entryStub);\n");
+    let o = run(
+        &s.0,
+        &[
+            &input,
+            "--api-key",
+            "k",
+            "--prior-version",
+            &stub,
+            "-o",
+            &(s.0.join("out-stub").display().to_string()),
+        ],
+    );
+    let err = stderr(&o);
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "the hazard: it still exits 0\n{err}"
+    );
+    assert!(
+        err.contains("WARNING") && err.contains("bound nothing"),
+        "the useless prior warns loudly:\n{err}"
+    );
+    // The boundary: a prior that binds this program does not warn.
+    let quiet = run(
+        &s.0,
+        &[
+            &input,
+            "--api-key",
+            "k",
+            "--prior-version",
+            &prior,
+            "-o",
+            &(s.0.join("out-bound").display().to_string()),
+        ],
+    );
+    let err = stderr(&quiet);
+    assert_eq!(quiet.status.code(), Some(0), "{err}");
+    assert!(
+        !err.contains("bound nothing"),
+        "a bound prior does not cry wolf:\n{err}"
+    );
+}
+
+/// The second un-attributed serial stretch (docs/perf-inventory.md item
+/// 3): `split:finish` was 40 s of serial work per with-prior hop with NO
+/// internal spans. A with-prior run under `--profile` must record a span
+/// per constituent that fires in this shape (the ledger read, the
+/// per-file reconcile, the desugar, the scaffold — this dead-port fixture
+/// carries a perfect prior, so the reconcile changes nothing; the apply
+/// and carry SPANS are pinned where a changing reconcile exists, in
+/// humanify-core's finish/driver_test over the wp54 fixture). The run
+/// also pins the printed gauges' console lines (finding #66).
+#[test]
+fn the_profile_names_the_split_finish_constituents() {
+    // Two same-shaped versions of the wrapper (names same-length, so the
+    // statements are structural twins): the first run's tree is a genuine
+    // prior for the second.
+    let variant = |vars: &str, func: &str| {
+        let mut s = String::from("(function () {\n");
+        for i in 0..60 {
+            s.push_str(&format!("  var {vars}{i} = {i};\n"));
+        }
+        s.push_str(&format!(
+            "  function {func}(n) {{\n    console.log(\"Hello, \" + n + {vars}0);\n  }}\n"
+        ));
+        s.push_str(&format!("  {func}(\"world\");\n}})();\n"));
+        s
+    };
+    let s = Scratch::new("finish-spans");
+    let v1 = s.write("v1.js", &variant("aaaa", "greet"));
+    let v2 = s.write("v2.js", &variant("bbbb", "hail"));
+    let out1 = s.0.join("tree-v1").display().to_string();
+    let o = run(&s.0, &[&v1, "--api-key", "k", "--split", "-o", &out1]);
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    // The printed gauges (finding #66), pinned on the FRESH run (the
+    // with-prior run below carries everything and asks nothing, so no
+    // waves ran there): the #56 name-set count line and the owner-bytes
+    // line, per run, beside #65's window gauge.
+    assert!(
+        err.contains("LLM prompt window: peak ")
+            && err.contains("Context name-sets: ")
+            && err.contains("Wave-era retained: strategies ")
+            && err.contains(" MB (finding #66 gauges)"),
+        "the gauge lines:\n{err}"
+    );
+    let prior = s.0.join("tree-v1/.humanify/humanified.js");
+    assert!(prior.is_file(), "the first run wrote its bundle");
+    let out2 = s.0.join("tree-v2").display().to_string();
+    let prof = s.0.join("profile.json").display().to_string();
+    let o = run(
+        &s.0,
+        &[
+            &v2,
+            "--api-key",
+            "k",
+            "--split",
+            "--prior-version",
+            &prior.display().to_string(),
+            "--profile",
+            &prof,
+            "-o",
+            &out2,
+        ],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(
+        err.contains("Post-split reconcile: no changes"),
+        "the reconcile ran against the prior:\n{err}"
+    );
+    let profile: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&prof).unwrap()).unwrap();
+    let spans: std::collections::HashSet<&str> = profile["traceEvents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e.get("ph") == Some(&serde_json::json!("X")))
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    for expected in [
+        "split:finish",
+        "split:finish:reconcile-ledger",
+        "split:finish:reconcile",
+        "split:finish:desugar-using",
+        "split:finish:scaffold",
+    ] {
+        assert!(
+            spans.contains(expected),
+            "span {expected} missing: {spans:?}"
+        );
+    }
+}

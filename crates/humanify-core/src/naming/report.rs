@@ -192,6 +192,50 @@ impl RenameReport {
         self.total_llm_calls = Some(self.total_llm_calls.unwrap_or(0) + 1);
         self.finish_reasons.push(finish_reason);
     }
+
+    /// The report's estimated deep heap bytes for finding #66's gauges
+    /// (naming::waves::processor::gauges): its string buffers, the
+    /// outcomes' pair slots and attempt trails, the finish reasons —
+    /// every heap allocation counted once (a string's header rides the
+    /// slot of whatever holds it). Pinned in gauges_test.
+    pub fn deep_bytes(&self) -> u64 {
+        let buffer = |n: &str| n.len() as u64;
+        let optional = |s: &Option<String>| s.as_ref().map_or(0, |n| buffer(n));
+        let status_bytes = |o: &IdentifierOutcome| -> u64 {
+            let trail = o.trail.as_ref().map_or(0, |t| {
+                t.len() as u64 * std::mem::size_of::<RoundAttempt>() as u64
+                    + t.iter().map(|a| optional(&a.proposed)).sum::<u64>()
+            });
+            let status = match &o.status {
+                Status::Renamed { new_name, .. } => buffer(new_name),
+                Status::Unchanged { suggestion, .. } | Status::Invalid { suggestion, .. } => {
+                    optional(suggestion)
+                }
+                Status::Duplicate {
+                    conflicted_with,
+                    suggestion,
+                    ..
+                } => buffer(conflicted_with) + optional(suggestion),
+                Status::Missing {
+                    last_finish_reason, ..
+                } => optional(last_finish_reason),
+            };
+            trail + status
+        };
+        let outcomes = self.outcomes.0.len() as u64
+            * std::mem::size_of::<(String, IdentifierOutcome)>() as u64
+            + self
+                .outcomes
+                .0
+                .iter()
+                .map(|(k, o)| buffer(k) + status_bytes(o))
+                .sum::<u64>();
+        buffer(&self.target_id)
+            + outcomes
+            + self.finish_reasons.len() as u64 * std::mem::size_of::<Option<String>>() as u64
+            + self.finish_reasons.iter().map(optional).sum::<u64>()
+            + optional(&self.structural_hash)
+    }
 }
 
 /// One contention event (`NameContentionEvent`): a requested name was

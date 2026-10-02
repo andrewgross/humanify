@@ -6718,6 +6718,10 @@
       {
         "text": "{\n  \"bindingResolutionStats\": null,\n  \"renameClaims\": {\n    \"ledgerOnlyRejections\": 0,\n    \"byGuard\": {\n      \"targetInScope\": 0,\n      \"targetVisible\": 0,\n      \"shadowsChild\": 0\n    },\n    \"claimsRecorded\": 3\n  },\n  \"reask\": {\n    \"unrecoverableRejections\": 1,\n    \"lateRejections\": 2,\n    \"invalidSuggestionFinishes\": 1,\n    \"allFailedWindows\": 4,\n    \"sweepReasked\": 6,\n    \"sweepReaskApplied\": 4,\n    \"sweepReaskDropped\": 2\n  }\n}",
         "note": "Rust-added vector (2026-09-29): the reask block's round trip. The four cases above are the TS's recorded bytes and stay byte-for-byte — an old-format scorecard still parses and re-emits unchanged."
+      },
+      {
+        "text": "{\n  \"bindingResolutionStats\": null,\n  \"renameClaims\": {\n    \"ledgerOnlyRejections\": 0,\n    \"byGuard\": {\n      \"targetInScope\": 0,\n      \"targetVisible\": 0,\n      \"shadowsChild\": 0\n    },\n    \"claimsRecorded\": 3\n  },\n  \"reask\": {\n    \"unrecoverableRejections\": 1,\n    \"lateRejections\": 2,\n    \"invalidSuggestionFinishes\": 1,\n    \"allFailedWindows\": 4,\n    \"sweepReasked\": 6,\n    \"sweepReaskApplied\": 4,\n    \"sweepReaskDropped\": 2\n  },\n  \"waveGauges\": {\n    \"contextSetNames\": 120,\n    \"peakLiveDispatches\": 4,\n    \"peakLivePromptBytes\": 2048,\n    \"strategyBytes\": 512,\n    \"ctxBytes\": 256,\n    \"usedSetBytes\": 1024,\n    \"nameRecordBytes\": 64,\n    \"bookkeepingBytes\": 32\n  }\n}",
+        "note": "Rust-added vector (2026-10-02): the waveGauges block's round trip (finding #66's additive schema bump — the reask precedent)."
       }
     ],
     "stageHashes": {

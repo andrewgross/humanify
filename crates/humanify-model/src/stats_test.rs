@@ -68,6 +68,19 @@ fn an_old_format_stats_text_stays_reask_absent() {
     assert!(!stats.to_file_text().contains("\"reask\""));
 }
 
+/// The 2026-10-02 `waveGauges` bump is additive the same way `reask` was:
+/// a pre-bump text strict-parses under the new record and re-emits
+/// WITHOUT the block — absent stays absent (finding #66's gauges; every
+/// recorded scorecard predates the block).
+#[test]
+fn an_old_format_stats_text_stays_wave_gauges_absent() {
+    let v = vectors();
+    let text = v["writers"]["evalStats"][0]["text"].as_str().unwrap();
+    let stats = EvalStats::parse(text).unwrap();
+    assert!(stats.wave_gauges.is_none(), "the text predates the bump");
+    assert!(!stats.to_file_text().contains("\"waveGauges\""));
+}
+
 fn vectors() -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(repo("test/parity/wpb4-vectors.json")).unwrap())
         .unwrap()
@@ -84,8 +97,10 @@ fn ts_writer_outputs_round_trip() {
     }
     // 4 = the TS's recorded bytes (must stay byte-for-byte: old-format
     // scorecards still strict-parse and re-emit unchanged); +1 = the
-    // Rust-added `reask` vector (2026-09-29, the deliberate schema bump).
-    assert_eq!(cases.len(), 5);
+    // Rust-added `reask` vector (2026-09-29, the deliberate schema bump);
+    // +1 = the Rust-added `waveGauges` vector (2026-10-02, finding #66's
+    // additive bump — the same precedent).
+    assert_eq!(cases.len(), 6);
 }
 
 #[test]

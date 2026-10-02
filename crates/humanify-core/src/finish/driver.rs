@@ -26,6 +26,9 @@ use super::relink::{
 use super::scaffold::{detect_external_packages, read_utf8, write_runnable_scaffold};
 use super::vendor_inherit::VendorBodyInheritor;
 
+#[cfg(test)]
+mod driver_test;
+
 /// The finishing kill switches (`--disable` names).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FinishSwitches {
@@ -195,14 +198,22 @@ pub fn finish_split_output(
         } else {
             input.prior_version.and_then(find_prior_tree_root)
         };
-        relink_bun_modules(
-            output_dir,
-            manifest,
-            runnable,
-            prior_root.as_deref(),
-            &input.bridges,
-            report,
-        )?;
+        {
+            // The finish's constituents were dark (docs/perf-inventory.md
+            // item 3: 40 s serial per with-prior hop, no internal spans) —
+            // a span each for relink, the using desugar, the scaffold,
+            // then (in reconcile_post_split) the ledger read, the
+            // per-file reconcile, the apply and the carry.
+            let _ph = crate::profiling::phase("split:finish:relink");
+            relink_bun_modules(
+                output_dir,
+                manifest,
+                runnable,
+                prior_root.as_deref(),
+                &input.bridges,
+                report,
+            )?;
+        }
         report.messages.push(format!(
             "Re-linked {} Bun factory module(s) into the runnable graph",
             manifest.factories.len()
@@ -214,13 +225,20 @@ pub fn finish_split_output(
         let _ = fs::remove_file(output_dir.join(runtime));
     }
     if let Some(runnable) = input.runnable {
-        let desugared = super::using::desugar_using_in_tree(output_dir)?;
+        let desugared = {
+            let _ph = crate::profiling::phase("split:finish:desugar-using");
+            super::using::desugar_using_in_tree(output_dir)?
+        };
         report
             .messages
             .push(super::using::desugar_summary(output_dir, desugared));
         let entry = runnable_entry_file(runnable);
-        let externals = detect_external_packages(output_dir)?;
-        write_runnable_scaffold(output_dir, &entry, &externals, input.input_file.parent())?;
+        let externals = {
+            let _ph = crate::profiling::phase("split:finish:scaffold");
+            let externals = detect_external_packages(output_dir)?;
+            write_runnable_scaffold(output_dir, &entry, &externals, input.input_file.parent())?;
+            externals
+        };
         let deps = if externals.is_empty() {
             "no external deps".to_string()
         } else {
@@ -301,17 +319,27 @@ pub fn reconcile_post_split(
     };
     let prior_root = split_tree_root_of(prior_version);
     let ledger_path = output_dir.join(METADATA_DIR).join("split-ledger.json");
-    let mut ledger = JsValue::parse(&read_utf8(&ledger_path)?)?;
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let (mut ledger, eligible) = {
+        let _ph = crate::profiling::phase("split:finish:reconcile-ledger");
+        (
+            JsValue::parse(&read_utf8(&ledger_path)?)?,
+            Eligibility::new(Some("bun"), Some("bun")),
+        )
+    };
     let read_fresh = |f: &str| read_opt(output_dir, f);
     let read_prior = |f: &str| read_opt(&prior_root, f);
-    let result = post_split_reconcile(PostSplitInput {
-        ledger: &mut ledger,
-        read_fresh: &read_fresh,
-        read_prior: &read_prior,
-        eligible: &eligible,
-        disabled: switches.post_split_reconcile_disabled,
-    });
+    let result = {
+        // The per-file read + compute bulk (the reads interleave with the
+        // diffing inside post_split_reconcile — one span spans it all).
+        let _ph = crate::profiling::phase("split:finish:reconcile");
+        post_split_reconcile(PostSplitInput {
+            ledger: &mut ledger,
+            read_fresh: &read_fresh,
+            read_prior: &read_prior,
+            eligible: &eligible,
+            disabled: switches.post_split_reconcile_disabled,
+        })
+    };
     if result.changed.is_empty() {
         report.messages.push(format!(
             "Post-split reconcile: no changes (considered {} file(s))",
@@ -322,11 +350,17 @@ pub fn reconcile_post_split(
             carry: None,
         }));
     }
-    for (file, text) in &result.changed {
-        write_file(&output_dir.join(file), text)?;
+    {
+        let _ph = crate::profiling::phase("split:finish:reconcile-apply");
+        for (file, text) in &result.changed {
+            write_file(&output_dir.join(file), text)?;
+        }
+        write_file(&ledger_path, &stringify(&ledger))?;
     }
-    write_file(&ledger_path, &stringify(&ledger))?;
-    let carry = carry_into_bundle(output_dir, &ledger, &result.renames, report);
+    let carry = {
+        let _ph = crate::profiling::phase("split:finish:carry");
+        carry_into_bundle(output_dir, &ledger, &result.renames, report)
+    };
     report.messages.push(format!(
         "Post-split reconcile: restored {} prior name(s) across {} of {} file(s){}",
         result.renames.len(),
