@@ -49,8 +49,12 @@ binary ever ran it — there is no golden to prove anything against), with a
 printed note.
 
 The fixture's heads-up for future edits: the wrapper-detection threshold
-(frozen at 50 wrapper-scope bindings) is measured on the text WITH the
-vendor already extracted — this bundle sits at ~60 after extraction. If a
-source edit removes wrapper-scope declarations, the split starts failing
-loud (`no recognizable bundle wrapper`); grow the local ESM modules (whose
-bodies esbuild scope-hoists) rather than the CJS dep.
+(frozen at 50 wrapper-scope bindings) is measured on the run's ORIGINAL
+input bundle (2026-10-02; it used to be measured on the text WITH the
+vendor already extracted, which failed legitimate mid-size apps whose
+vendor half dominates — see the `esbuild-bundle-small` fixture for that
+boundary). This bundle's input clears it at ~60 wrapper-scope bindings
+either way, so if a source edit removes wrapper-scope declarations, the
+split starts failing loud (`no recognizable bundle wrapper`); grow the
+local ESM modules (whose bodies esbuild scope-hoists) rather than the
+CJS dep.

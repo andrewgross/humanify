@@ -6,12 +6,19 @@
 //! ([`crate::twins::statement_inventory_from_json`]) with the wrapper gate
 //! REQUIRED: the TS returns null (and the pipeline fails loud) when the
 //! code is not one wrapper IIFE, so there is no program-body fallback here.
+//!
+//! The ≥50-binding half of the gate reads the text at hand by default
+//! ([`split_input`]); a split that knows the run's ORIGINAL input bundle
+//! reads it there instead ([`split_input_with_original_bundle`]) — being a
+//! bundled app is a property of the INPUT, and the vendor extraction
+//! shrinking the runtime it hands downstream is expected. The GRAMMAR half
+//! always reads the text at hand.
 
 use oxc_allocator::Allocator;
 use serde_json::Value;
 
 use crate::ingest::{Ingest, program_estree_json};
-use crate::modules::wrapper::find_wrapper_function;
+use crate::modules::wrapper::{find_wrapper_function, recognize_wrapper_function};
 use crate::twins::statement_inventory_from_json;
 
 /// The wrapper body, ready for placement.
@@ -56,8 +63,32 @@ pub fn top_level_statement_texts(text: &str) -> Result<Vec<String>, String> {
 }
 
 /// Parse `text` and take its wrapper body. `Err` wherever the TS returns
-/// null: a parse failure, no wrapper, or fewer than two statements.
+/// null: a parse failure, no wrapper, or fewer than two statements. The
+/// ≥50 wrapper-binding threshold is measured on `text` itself — the right
+/// default for every text that has no recorded ORIGINAL (prior releases,
+/// the standalone owners, the tests).
 pub fn split_input(text: &str) -> Result<SplitInput, String> {
+    split_input_with_original_bundle(text, None)
+}
+
+/// [`split_input`] with the ≥50 threshold read from the run's ORIGINAL
+/// input bundle instead of the text at hand. `original_binding_count` is
+/// [`crate::modules::wrapper::original_bundle_binding_count`]'s verdict on
+/// the ORIGINAL text (what the unpack stage saw): `Some(_)` means the
+/// input already cleared the frozen gate, and the text at hand only has
+/// to be one wrapper IIFE by GRAMMAR — the vendor extraction removed one
+/// wrapper-scope binding per vendored module from it, which is expected,
+/// not evidence against being a bundle. `None` falls back to measuring
+/// the text at hand (the historical gate).
+///
+/// The bound check is on the ORIGINAL's count, never the local one: a
+/// mid-size app whose vendor half dominates lands under the threshold on
+/// its runtime (32 bindings on the esbuild lane's real test app) while
+/// its input clears it comfortably.
+pub fn split_input_with_original_bundle(
+    text: &str,
+    original_binding_count: Option<usize>,
+) -> Result<SplitInput, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, text, "shipped.js");
     if !ingest.errors.is_empty() {
@@ -66,8 +97,14 @@ pub fn split_input(text: &str) -> Result<SplitInput, String> {
             ingest.errors.len()
         ));
     }
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic())
-        .ok_or("not stable-splittable: no recognizable bundle wrapper")?;
+    let wrapper = match original_binding_count {
+        // The input settled "is this really a bundled app?"; the text at
+        // hand only owes the GRAMMAR (the tight WP1.5 recognition — a
+        // non-bundle stays unsplittable however bundled its input was).
+        Some(_) => recognize_wrapper_function(ingest.program, ingest.semantic()),
+        None => find_wrapper_function(ingest.program, ingest.semantic()),
+    }
+    .ok_or("not stable-splittable: no recognizable bundle wrapper")?;
     let program_json = program_estree_json(ingest.program);
     let (inventory, body) = statement_inventory_from_json(
         &program_json,

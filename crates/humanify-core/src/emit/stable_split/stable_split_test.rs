@@ -67,6 +67,7 @@ fn a_declined_emit_persists_the_ts_aliases() {
             trail: None,
             vendor_captures: &[],
             vendor_fresh: None,
+            original_bundle: None,
         },
     )
     .expect("the split runs");
@@ -142,6 +143,10 @@ fn bridge_options<'a>(
         trail: None,
         vendor_captures: captures,
         vendor_fresh: fresh,
+        // The bridge bundle's own text clears the ≥50 gate — the threshold
+        // reads the text at hand here (see the gated tests below for the
+        // original-bundle path).
+        original_bundle: None,
     }
 }
 
@@ -205,6 +210,167 @@ fn vendor_captures_resolve_to_owner_files_with_forced_accessors() {
             .count(),
         1
     );
+}
+
+// ── the ≥50 wrapper gate reads the run's ORIGINAL input bundle ────────
+//
+// Being a bundled app is a property of the INPUT. The split is handed the
+// POST-EXTRACTION runtime, where the vendor extraction has already
+// spliced out one wrapper-scope declaration per vendored module, so a
+// mid-size app whose vendor half dominates (the esbuild lane's real test
+// app: semver+ms+mitt, 32 bindings left after extraction) falls under the
+// frozen WP1.5 threshold although its input clears it comfortably. The
+// threshold reads the ORIGINAL text the unpack stage saw; the WRAPPER
+// GRAMMAR still reads the text at hand (a non-bundle cannot mint phantom
+// modules — pinned below).
+
+/// One esbuild-shaped CJS dep (the `__commonJS` object form): one
+/// wrapper-scope binding pre-extraction, spliced out WHOLE by the vendor
+/// extraction.
+fn cjs_dep_decl(i: usize) -> String {
+    format!(
+        "  var require_mod{i:02} = __commonJS({{ \"src/vendor/mod{i:02}.cjs\"(\
+exports, module) {{ var base = {i}; module.exports = {{ base }}; }} }});\n"
+    )
+}
+
+/// A mid-size bundle whose vendor half dominates: `deps` CJS modules plus
+/// a small ESM app half, esbuild's iife shape behind the `"use strict"`
+/// directive prologue. Wrapper-scope bindings: 3 helpers + `deps`
+/// requires + `deps` interop imports + the app half.
+fn dominant_vendor_bundle(deps: usize) -> String {
+    let mut s = String::from("\"use strict\";\n(() => {\n");
+    s.push_str("  var __defProp = Object.defineProperty;\n");
+    s.push_str(
+        "  var __commonJS = (cb, mod) => function __require() {\n\
+             return (mod || (0, cb[Object.getOwnPropertyNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports);\n\
+           };\n",
+    );
+    s.push_str("  var __toESM = (mod) => mod;\n");
+    for i in 0..deps {
+        s.push_str(&cjs_dep_decl(i));
+    }
+    for i in 0..deps {
+        s.push_str(&format!(
+            "  var import_mod{i:02} = __toESM(require_mod{i:02}());\n"
+        ));
+    }
+    s.push_str("  var REPORT = [];\n  for (const line of REPORT) { console.log(line); }\n})();\n");
+    s
+}
+
+/// The same bundle's POST-EXTRACTION runtime: every `require_modNN`
+/// declaration is gone (vendored) and its references were rewritten to
+/// the vendored bodies' file identifiers, exactly as the unpack stage
+/// leaves the runtime it hands the naming stage and the split.
+fn dominant_vendor_runtime(deps: usize) -> String {
+    let mut s = String::from("\"use strict\";\n(() => {\n");
+    s.push_str("  var __defProp = Object.defineProperty;\n");
+    s.push_str("  var __commonJS = (cb, mod) => function __require() { return mod; };\n");
+    s.push_str("  var __toESM = (mod) => mod;\n");
+    for i in 0..deps {
+        s.push_str(&format!(
+            "  var import_mod{i:02} = __toESM(vendored_mod{i:02}());\n"
+        ));
+    }
+    s.push_str("  var REPORT = [];\n  for (const line of REPORT) { console.log(line); }\n})();\n");
+    s
+}
+
+fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
+    SplitOptions {
+        regime: Regime::Cluster,
+        prior: None,
+        carry: None,
+        namer: None,
+        reviser: None,
+        placement: Default::default(),
+        align: Default::default(),
+        registrar_exemption_disabled: false,
+        split_pure: false,
+        trail: None,
+        vendor_captures: &[],
+        vendor_fresh: None,
+        original_bundle,
+    }
+}
+
+/// The wrapper binding counts that make the shape: the INPUT clears the
+/// frozen ≥50 threshold, the post-extraction runtime the split is HANDED
+/// sits under it.
+fn wrapper_binding_count(text: &str) -> Option<usize> {
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, text, "gate.js");
+    assert!(
+        ingest.errors.is_empty(),
+        "fixture must parse: {:?}",
+        ingest.errors
+    );
+    crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic())
+        .map(|w| w.binding_count)
+}
+
+#[test]
+fn a_mid_size_bundle_whose_vendor_half_dominates_splits() {
+    let original = dominant_vendor_bundle(24);
+    let runtime = dominant_vendor_runtime(24);
+    assert!(
+        wrapper_binding_count(&original).is_some_and(|n| n >= 50),
+        "the input bundle clears the frozen threshold"
+    );
+    assert!(
+        wrapper_binding_count(&runtime).is_none(),
+        "the post-extraction runtime sits UNDER the threshold (the old gate fails it)"
+    );
+    // The historical gate, on the runtime alone, still fails loud — this
+    // is the failure the original-bundle gate exists to lift.
+    let err = match stable_split(&runtime, gated_options(None)) {
+        Err(e) => e,
+        Ok(_) => panic!("the runtime alone does not clear the ≥50 gate"),
+    };
+    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    // The same runtime splits when the run hands the ORIGINAL input the
+    // unpack stage saw: being a bundled app is a property of the INPUT.
+    let outcome = stable_split(&runtime, gated_options(Some(&original)))
+        .expect("the mid-size app splits on the strength of its input");
+    assert!(outcome.stats.statements > 1);
+}
+
+#[test]
+fn a_non_bundled_input_still_fails_the_split_loudly() {
+    // A plain script: no wrapper anywhere — the tight WP1.5 grammar, with
+    // or without an input gate. The gate must not become pass-always.
+    let plain = "var a = 1;\nvar b = 2;\nconsole.log(a + b);\n";
+    for original in [None, Some(plain)] {
+        let err = match stable_split(plain, gated_options(original)) {
+            Err(e) => e,
+            Ok(_) => panic!("a plain script never splits"),
+        };
+        assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    }
+    // A small IIFE input: the grammar passes, but the INPUT's binding
+    // count is under the threshold — the same ≥50 logic, now measured on
+    // the input the unpack stage saw.
+    let small_iife = "(function(){var b=1;return b;})();\n";
+    let err = match stable_split(small_iife, gated_options(Some(small_iife))) {
+        Err(e) => e,
+        Ok(_) => panic!("a small-IIFE input never splits"),
+    };
+    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+}
+
+#[test]
+fn the_wrapper_grammar_still_reads_the_runtime_even_with_an_input_gate() {
+    // The original clears the gate, but the text handed to the split is
+    // not one wrapper IIFE: the grammar is measured on the text at hand —
+    // a non-bundle cannot be lifted into a split tree by its input.
+    let original = dominant_vendor_bundle(24);
+    let stray = "var a = 1;\nvar b = 2;\nconsole.log(a + b);\n";
+    let err = match stable_split(stray, gated_options(Some(&original))) {
+        Err(e) => e,
+        Ok(_) => panic!("the grammar gates the text at hand"),
+    };
+    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
 }
 
 /// A capture the split cannot resolve would leave a free name in a vendor
