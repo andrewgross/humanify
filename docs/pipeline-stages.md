@@ -17,9 +17,9 @@ editing the caller.
 | #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)       | pluggable?                                                                                          |
 | --- | ------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | 1   | Detect bundler/minifier  | `detect` → `humanify_cli::pipeline_config`                                | **yes** — `--bundler` / `--minifier` override detection                                             |
-| 2   | Select unpack adapter    | `unpack` (adapter selection)                                              | **yes** — registry of 3, chosen by name, passthrough last                                           |
-| 3   | Unpack the bundle        | `unpack` (the selected adapter; webpack/browserify via the webcrack shim) | via stage 2                                                                                         |
-| 4   | Detect libraries         | `libdetect`                                                               | **yes** — registry of 2, `supports()`, default last                                                 |
+| 2   | Select unpack adapter    | `unpack` (adapter selection)                                              | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), chosen by name, passthrough last     |
+| 3   | Unpack the bundle        | `unpack` (the selected adapter; webpack/browserify via the webcrack shim) | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_esbuild`)  |
+| 4   | Detect libraries         | `libdetect`                                                               | **yes** — registry of 3, `supports()`, default last                                                 |
 | 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over)                     | injected namer, one implementation — a seam, not a registry                                         |
 | 6   | Format                   | `format` (`core::format`, the native formatter)                           | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json) |
 | 7   | Build the function graph | `graph`                                                                   | **no**                                                                                              |
@@ -44,7 +44,7 @@ output, because they run once the tree looks finished:
 - **carry into bundle** (`finish::carry`) — writes names back into
   `.humanify/humanified.js`, which becomes the NEXT release's prior. Top-level
   renames must never carry: the export key is a string, and 238/238 drifted.
-- **finish on disk** — scaffold, bun factory relink, ledgers, eval stats. The relink has two answers for a vendor body's out-of-body references (finding #51/#60): recognized Bun interop helpers are bound from `.humanify/__bun-runtime.js`, and app-scope READS recorded by the unpack's scope plan are bridged — a lazy `require(<owner file>).<accessor>` splice through the live getter the emit was forced to export. Writes and non-statement-level bindings keep the factory in the app; nothing else may leave a free name in a vendor file.
+- **finish on disk** — scaffold, the vendor factory relink (bun and esbuild trees alike: the relink reads the one manifest format both adapters write), ledgers, eval stats. The relink has two answers for a vendor body's out-of-body references (finding #51/#60): recognized Bun interop helpers are bound from `.humanify/__bun-runtime.js`, and app-scope READS recorded by the unpack's scope plan are bridged — a lazy `require(<owner file>).<accessor>` splice through the live getter the emit was forced to export. Writes and non-statement-level bindings keep the factory in the app; nothing else may leave a free name in a vendor file.
 
 After those, the run's REPORTS are written, in this order: `--diagnostics`
 (the naming report with the split's placement trail after the strategy
@@ -75,7 +75,15 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
 both the same shape: an array, selection by name or `supports()`, a fallback
 last. Stage 10 (`PLACEMENT_TIERS`) is a registry internally but is not
 selectable from outside. (Stage 11's split-adapter registry was deleted with
-the legacy splitter, 2026-08-12.)
+the legacy splitter, 2026-08-12.) The unpack registry gained **esbuild** as
+its second bundler (exp075's module form, ported 2026-10-02): the same
+vendor-extraction implementation as bun — the two differ only in the factory
+wrapper shapes (`modules::factory_arg_function`, the one unwrapping owner)
+and in what esbuild's unminified builds hand over for free: each module's
+original source path, recovered from the factory object's key and recorded
+(`FactoryRecord::source_path`, the vendor manifest's `sourcePath`, the
+ledger's `fossilModules[].sourcePath`) — recorded metadata ONLY; no name
+source, no join key, no behavioral switch reads it.
 
 **The second splitter is GONE (2026-08-12).** Until then a legacy
 clustering splitter (`splitFromAst` + a 4-adapter registry + the
