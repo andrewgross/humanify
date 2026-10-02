@@ -39,6 +39,7 @@ use super::graph_ext::{NamingGraph, NodeRef};
 use super::jsset::{JsRecord, JsSet};
 use super::nodes::FnNode;
 use super::render::{FnPrinter, Occurrences};
+use super::taken::TakenNames;
 use super::used_set::{NameLayer, UsedSet};
 use crate::artifact_dump::{AskRowParts, Dispatch, DispatchLog, RecordMode};
 use crate::fast::Lever;
@@ -285,18 +286,6 @@ fn prompt_bytes(call: &LlmCall) -> u64 {
     (call.system_prompt.len() + call.user_prompt.len() + call.request.code.len()) as u64
 }
 
-/// A stored fn context's deep bytes (finding #66's `strategy_bytes`
-/// owner): its callee signatures, callsites, context vars and taken-name
-/// set — the material every function pass retains for the whole era.
-fn fn_context_bytes(c: &FnContext) -> u64 {
-    gauges::callee_signatures_bytes(&c.callee_signatures)
-        + gauges::string_list_bytes(&c.callsites)
-        + c.context_vars
-            .as_ref()
-            .map_or(0, |v| gauges::string_list_bytes(v))
-        + gauges::hash_set_of_strings(&c.taken)
-}
-
 /// The per-node wave bookkeeping (`WaveNodeCtx`).
 struct NodeCtx {
     node_index: usize,
@@ -421,7 +410,7 @@ enum Strategy {
         windowed: Vec<String>,
         /// The target scope's renamed names — the builder-side filter of
         /// [`module_request`] reads the same droppable rule.
-        taken: Arc<HashSet<String>>,
+        taken: TakenNames,
     },
 }
 
@@ -434,8 +423,10 @@ struct FnContext {
     /// The names the covered scopes' bindings were RENAMED to earlier in
     /// this run (`renamed_in` over the scope chain): a TAKEN name is never
     /// droppable from an ask's avoid-list, however eligible it looks
-    /// (the collision fix, 2026-09-28).
-    taken: Arc<HashSet<String>>,
+    /// (the collision fix, 2026-09-28). Shared per-scope snapshots —
+    /// one `renamed_layers` `Arc` per chain scope, frozen at build time
+    /// by the `Arc`'s immutability (the #56 pattern; finding #66's fix).
+    taken: TakenNames,
 }
 
 /// One lane in a round.
@@ -680,25 +671,75 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
     /// exactly as [`Self::context_set_names`] counts their names.
     fn gauges(&self) -> WaveGauges {
         use gauges as g;
-        let strategy_bytes = self
-            .strategies
-            .iter()
-            .map(|s| match s {
+        // The strategy split (finding #66's taken-set sub-gauge): the
+        // six constituents sum to `strategy_bytes`. The taken term
+        // counts each DISTINCT retained snapshot once, by pointer, and
+        // never the copy the `renamed_layers` map already charges to
+        // `used_set_bytes` below — the exclusion is what makes the
+        // split sum-once once the snapshots are shared.
+        let map_taken: HashSet<*const HashSet<String>> = self
+            .renamed_layers
+            .values()
+            .map(|(_, names)| Arc::as_ptr(names))
+            .collect();
+        let mut seen_taken: HashSet<*const HashSet<String>> = HashSet::new();
+        let mut seen_taken_names: HashSet<*const HashSet<String>> = HashSet::new();
+        let mut strategy_bindings_bytes = 0u64;
+        let mut strategy_taken_bytes = 0u64;
+        let mut strategy_callee_bytes = 0u64;
+        let mut strategy_callsite_bytes = 0u64;
+        let mut strategy_context_var_bytes = 0u64;
+        let mut strategy_module_bytes = 0u64;
+        let mut taken_set_names = 0usize;
+        for s in &self.strategies {
+            // Every strategy's taken view is a chain of shared snapshots
+            // (`TakenNames`): charge each DISTINCT snapshot once across
+            // the whole run, plus the view's own per-context layer list.
+            let mut taken_view =
+                |taken: &super::taken::TakenNames, bytes: &mut u64, names: &mut usize| {
+                    *bytes += taken.own_bytes();
+                    for layer in taken.layers() {
+                        let ptr = Arc::as_ptr(layer);
+                        *bytes += g::taken_snapshot_bytes(layer, ptr, &map_taken, &mut seen_taken);
+                        *names += g::count_taken_names(layer, ptr, &mut seen_taken_names);
+                    }
+                };
+            match s {
                 Strategy::Fn {
                     bindings, context, ..
-                } => g::binding_infos_bytes(bindings) + fn_context_bytes(context),
+                } => {
+                    strategy_bindings_bytes += g::binding_infos_bytes(bindings);
+                    strategy_callee_bytes += g::callee_signatures_bytes(&context.callee_signatures);
+                    strategy_callsite_bytes += g::string_list_bytes(&context.callsites);
+                    strategy_context_var_bytes += context
+                        .context_vars
+                        .as_ref()
+                        .map_or(0, |v| g::string_list_bytes(v));
+                    taken_view(
+                        &context.taken,
+                        &mut strategy_taken_bytes,
+                        &mut taken_set_names,
+                    );
+                }
                 Strategy::Module {
                     batch,
                     windowed,
                     taken,
                     ..
                 } => {
-                    (batch.len() + windowed.len()) as u64 * std::mem::size_of::<usize>() as u64
-                        + g::string_list_bytes(windowed)
-                        + g::hash_set_of_strings(taken)
+                    strategy_module_bytes += (batch.len() + windowed.len()) as u64
+                        * std::mem::size_of::<usize>() as u64
+                        + g::string_list_bytes(windowed);
+                    taken_view(taken, &mut strategy_taken_bytes, &mut taken_set_names);
                 }
-            })
-            .sum();
+            }
+        }
+        let strategy_bytes = strategy_bindings_bytes
+            + strategy_taken_bytes
+            + strategy_callee_bytes
+            + strategy_callsite_bytes
+            + strategy_context_var_bytes
+            + strategy_module_bytes;
         let ctx_bytes = self
             .ctxs
             .iter()
@@ -753,10 +794,17 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             + self.fresh_scopes.len() as u64 * std::mem::size_of::<(u32, u32, BScopeId)>() as u64;
         WaveGauges {
             strategy_bytes,
+            strategy_bindings_bytes,
+            strategy_taken_bytes,
+            strategy_callee_bytes,
+            strategy_callsite_bytes,
+            strategy_context_var_bytes,
+            strategy_module_bytes,
             ctx_bytes,
             used_set_bytes,
             name_record_bytes,
             bookkeeping_bytes,
+            taken_set_names,
         }
     }
 
@@ -1149,17 +1197,20 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         });
         let chain = self.scope_chain(f);
         let layers = self.used_layers(&chain);
-        let mut taken: HashSet<String> = HashSet::new();
-        for scope in chain {
-            taken.extend(self.renamed_in(scope).iter().cloned());
-        }
+        // The taken view over the SAME chain's renamed-name snapshots —
+        // shared `Arc`s, not a union clone per context (finding #66: the
+        // private clones were ~31 GB of a fresh 2.1.182 run's ~58 GB
+        // peak; membership over the layers is membership over the
+        // union, and the `Arc`s freeze the build-time state exactly as
+        // the clone did).
+        let taken: Vec<_> = chain.iter().map(|&scope| self.renamed_in(scope)).collect();
         self.sets.push(UsedSet::new(layers));
         (
             FnContext {
                 callee_signatures: ctx.callee_signatures,
                 callsites: ctx.callsites,
                 context_vars: ctx.context_vars,
-                taken: Arc::new(taken),
+                taken: TakenNames::new(taken),
             },
             self.sets.len() - 1,
         )
@@ -1473,7 +1524,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         remaining: &[String],
         binding_map: &HashMap<&str, &BindingInfo>,
         set: &UsedSet,
-        taken: &HashSet<String>,
+        taken: &TakenNames,
     ) -> Vec<String> {
         let batch_lines: Vec<u32> = remaining
             .iter()
@@ -1564,7 +1615,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         let total = self.state.bindings_in(self.target_scope).len();
         let used = self.used.to_vec();
         let target = self.target_scope;
-        let taken = self.renamed_in(target);
+        let taken = TakenNames::new(vec![self.renamed_in(target)]);
         let windowed = get_proximate_used_names(
             &used,
             &lines,
