@@ -1,0 +1,167 @@
+{
+  "hop": "2.1.207->2.1.208",
+  "src": {
+    "parseErrors": 0,
+    "population": {
+      "priorFunctions": 54321,
+      "freshFunctions": 54540,
+      "priorRefusals": {
+        "conciseBody": 39369,
+        "lexicalBindingUse": 588,
+        "generator": 17,
+        "namedId": 166,
+        "newTarget": 1
+      },
+      "freshRefusals": {
+        "conciseBody": 39535,
+        "lexicalBindingUse": 593,
+        "generator": 17,
+        "namedId": 167,
+        "newTarget": 1
+      }
+    },
+    "cousinPairs": 17,
+    "bothSafePairs": 17,
+    "bothSafeLines": 4115,
+    "refusedPairs": 0,
+    "refusedByReason": {},
+    "pairs": [
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 32,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 174,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 167,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 1590,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 101,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 182,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "create-error-response-val/plugin-policy-detector.js",
+        "lines": 276,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+        "lines": 401,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+        "lines": 62,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+        "lines": 70,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+        "lines": 44,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "credential-provider-registry/credentials-provider-error/create-stshttp-auth-provider.js",
+        "lines": 62,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "noop-data/auth-token-manager.js",
+        "lines": 306,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "noop-data/auth-token-manager.js",
+        "lines": 60,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+        "lines": 456,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+        "lines": 60,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      },
+      {
+        "file": "shared-credentials-error/sso-token-refresh-threshold-ms.js",
+        "lines": 72,
+        "forms": "arrow->function",
+        "safe": true,
+        "reason": null,
+        "position": "argument:getProperty.createModule"
+      }
+    ]
+  }
+}

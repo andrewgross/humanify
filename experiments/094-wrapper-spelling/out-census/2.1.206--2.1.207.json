@@ -1,0 +1,27 @@
+{
+  "hop": "2.1.206->2.1.207",
+  "surfaces": {
+    "src": {
+      "real": 15236,
+      "naming": 1232,
+      "alias": 0,
+      "reorder": 2,
+      "fileAddRemove": 927,
+      "spellingIdenticalLines": 0,
+      "postRepairReal": 15236,
+      "flips": 0,
+      "samples": []
+    },
+    "vendor": {
+      "real": 24,
+      "naming": 26,
+      "alias": 0,
+      "reorder": 0,
+      "fileAddRemove": 0,
+      "spellingIdenticalLines": 0,
+      "postRepairReal": 24,
+      "flips": 0,
+      "samples": []
+    }
+  }
+}

@@ -1,0 +1,33 @@
+== underscore 1.12.1 -> 1.13.4
+   functions: must 174/174 (recall 1.000), should 0/0, reported 182 (identical 181, near 1, far 0)
+== lodash 4.17.20 -> 4.17.21
+   functions: must 588/588 (recall 1.000), should 0/0, reported 678 (identical 678, near 0, far 0)
+== moment 2.29.1 -> 2.29.4
+   functions: must 306/306 (recall 1.000), should 0/0, reported 349 (identical 349, near 0, far 0)
+== dayjs 1.10.7 -> 1.11.10
+   functions: must 38/39 (recall 0.974), should 0/0, reported 44 (identical 41, near 1, far 2)
+== axios 1.6.0 -> 1.7.9
+   functions: must 205/205 (recall 1.000), should 0/0, reported 215 (identical 212, near 0, far 3)
+== bluebird 3.7.0 -> 3.7.2
+   functions: must 1/1 (recall 1.000), should 0/0, reported 1 (identical 1, near 0, far 0)
+== q 1.5.0 -> 1.5.1
+   functions: must 184/184 (recall 1.000), should 0/0, reported 219 (identical 219, near 0, far 0)
+== ramda 0.27.2 -> 0.29.1
+   functions: must 354/354 (recall 1.000), should 0/0, reported 395 (identical 392, near 0, far 3)
+== immutable 4.0.0 -> 4.3.7
+   functions: must 485/485 (recall 1.000), should 0/0, reported 662 (identical 661, near 0, far 1)
+== async 3.2.0 -> 3.2.6
+   functions: must 248/248 (recall 1.000), should 0/0, reported 311 (identical 310, near 0, far 1)
+== minimist 1.2.5 -> 1.2.8
+   functions: must 16/16 (recall 1.000), should 0/0, reported 16 (identical 16, near 0, far 0)
+== ms 2.1.2 -> 2.1.3
+   functions: must 5/5 (recall 1.000), should 0/0, reported 5 (identical 5, near 0, far 0)
+== jquery 3.6.0 -> 3.7.1
+   functions: must 480/483 (recall 0.994), should 0/0, reported 518 (identical 516, near 1, far 1)
+scorecard written to experiments/094-wrapper-spelling/out-corpus/exp094-binary-scorecard.json
+TOTAL 3084/3088 must-match (recall 0.9987), 0/0 should-match, statements 20/20
+  lead: dayjs recall 0.974 (1 missed must-pairs)
+  lead: jquery recall 0.994 (3 missed must-pairs)
+  lead: underscore recall 1.000 (0 missed must-pairs)
+  lead: lodash recall 1.000 (0 missed must-pairs)
+  lead: moment recall 1.000 (0 missed must-pairs)
