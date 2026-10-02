@@ -703,6 +703,11 @@ fn pipeline_body(
             // Finding #60: the vendor bridge resolves the manifest's raw
             // capture names against this PRE-RENAME text.
             fresh: Some(fresh),
+            // The ≥50 wrapper-binding gate reads the run's ORIGINAL input
+            // (what the unpack stage saw), never the post-extraction
+            // runtime the split is handed — being a bundled app is a
+            // property of the input.
+            input_bundle: Some(bundled_code.as_str()),
         };
         let _ph = phase("split");
         let span = profiler.pipeline_span("split");

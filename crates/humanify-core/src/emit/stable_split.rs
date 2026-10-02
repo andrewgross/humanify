@@ -13,10 +13,10 @@ use oxc_allocator::Allocator;
 
 use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::ingest::Ingest;
-use crate::modules::wrapper::find_wrapper_function;
+use crate::modules::wrapper::recognize_wrapper_function;
 use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
-use crate::place::input::{SplitInput, split_input};
+use crate::place::input::{SplitInput, split_input_with_original_bundle};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
 use crate::place::placement_dump::{Placed, PlacementGate, Regime, assign_regime};
 use crate::place::tiers::{PlacementSwitches, PriorCarry, TierStats};
@@ -59,6 +59,16 @@ pub struct SplitOptions<'a, 'n> {
     /// the shipped list renames only substitute names in. Required when
     /// `vendor_captures` is non-empty.
     pub vendor_fresh: Option<&'a str>,
+    /// The run's ORIGINAL input bundle — the text the unpack stage saw,
+    /// BEFORE its vendor extraction spliced the CJS factories out.
+    /// Being a bundled app is a property of the INPUT (2026-10-02): the
+    /// frozen ≥50 wrapper-binding threshold reads the ORIGINAL, so a
+    /// mid-size app whose vendor half dominates — which lands UNDER the
+    /// threshold on the post-extraction runtime this split is handed —
+    /// still splits. The wrapper GRAMMAR always reads the shipped text.
+    /// None: the historical gate on the shipped text itself (the
+    /// standalone owners and the tests).
+    pub original_bundle: Option<&'a str>,
 }
 
 /// `StableSplitStats`.
@@ -184,7 +194,20 @@ fn build_ledger(
 pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<SplitOutcome, String> {
     use crate::profiling::phase;
     let ph = phase("split:input");
-    let input = split_input(shipped)?;
+    // The input-bundle gate, measured ONCE: being a bundled app is a
+    // property of the run's INPUT (the text the unpack stage saw), so the
+    // frozen ≥50 threshold reads the ORIGINAL — the post-extraction
+    // runtime below has lost one wrapper-scope binding per vendored
+    // module, and a mid-size app whose vendor half dominates is expected
+    // to land under the threshold on it. Both the shipped and the fresh
+    // (pre-rename) texts consume the same verdict.
+    let original_binding_count = match options.original_bundle {
+        Some(original) => Some(crate::modules::wrapper::original_bundle_binding_count(
+            original,
+        )?),
+        None => None,
+    };
+    let input = split_input_with_original_bundle(shipped, original_binding_count)?;
     drop(ph);
     let ph = phase("split:assign");
     let mut own_trail = PlacementTrail::default();
@@ -217,7 +240,10 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // The typed parse the emit walks (same text, same spans).
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, shipped, "shipped.js");
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic())
+    // Grammar only: the ≥50 gate was already settled — on this text (the
+    // historical split_input path) or on the run's ORIGINAL input — by
+    // split_input_with_original_bundle above, over the same bytes.
+    let wrapper = recognize_wrapper_function(ingest.program, ingest.semantic())
         .ok_or("no recognizable bundle wrapper")?;
     let view = wrapper_view(ingest.semantic(), wrapper.span).ok_or("wrapper node not found")?;
     let statements = &view.body.statements;
@@ -288,6 +314,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         options.vendor_fresh,
         &input.body,
         &assignment,
+        original_binding_count,
     )?;
     let mut forced_exports: Vec<(String, String)> = vendor_bridges
         .iter()
@@ -441,13 +468,17 @@ fn resolve_vendor_bridges(
     fresh: Option<&str>,
     body: &[Value],
     assignment: &[String],
+    // The run's input-bundle gate verdict — the FRESH text is the same
+    // post-extraction runtime (pre-rename), so it owes the same GRAMMAR
+    // and reads the same ORIGINAL threshold.
+    original_binding_count: Option<usize>,
 ) -> Result<Vec<VendorBridge>, String> {
     if captures.is_empty() {
         return Ok(Vec::new());
     }
     let fresh = fresh
         .ok_or("vendor bridge: the manifest carries captures but the run has no fresh text")?;
-    let fresh_input = split_input(fresh)?;
+    let fresh_input = split_input_with_original_bundle(fresh, original_binding_count)?;
     let fresh_body = &fresh_input.body;
     if fresh_body.len() != body.len() {
         return Err(format!(

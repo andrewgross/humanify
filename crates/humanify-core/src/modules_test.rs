@@ -409,6 +409,58 @@ fn wrapper_negated_and_call_forms() {
 }
 
 #[test]
+fn the_input_bundle_gate_reads_the_original_text() {
+    use crate::modules::wrapper::original_bundle_binding_count;
+    // Being a bundled app is a property of the INPUT: the split's ≥50
+    // threshold reads the run's ORIGINAL bundle (what the unpack stage
+    // saw), never the post-extraction runtime it is handed.
+    let decls: Vec<String> = (0..55).map(|i| format!("var v{i}={i};")).collect();
+    let bundled = "(function(){".to_string() + &decls.concat() + "return v0;})();";
+    assert_eq!(
+        original_bundle_binding_count(&bundled).expect("bundled input"),
+        55
+    );
+    // A plain script fails the gate loud, as does a small per-module IIFE
+    // (the WP1.5 negative) — the same ≥50 threshold, measured on the
+    // input.
+    let err = original_bundle_binding_count("var a=1;console.log(a);").unwrap_err();
+    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+    let err = original_bundle_binding_count("(function(){var b=1;return b;})();").unwrap_err();
+    assert!(err.contains("no recognizable bundle wrapper"), "{err}");
+}
+
+#[test]
+fn the_small_esbuild_fixture_pins_the_original_bundle_boundary() {
+    // The committed small fixture is the boundary shape: its ORIGINAL
+    // clears the frozen ≥50 wrapper threshold while its POST-EXTRACTION
+    // runtime (one wrapper-scope binding spliced out per vendored CJS
+    // module) sits under it — the failure the input-bundle gate lifts. A
+    // regen that shrinks the vendor half below the threshold makes e2e
+    // fail loud; a regen that fattens the app half past it silently stops
+    // exercising the boundary, so this pin reads the counts off the
+    // committed build.
+    let text =
+        include_str!("../../../test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js");
+    let deps = text.matches("= __commonJS({").count();
+    assert!(deps >= 1, "the fixture's vendor half is CJS modules");
+    let w = with_parsed(text, |p, s| {
+        crate::modules::wrapper::find_wrapper_function(p, s)
+            .expect("the fixture's original is a bundled app")
+            .binding_count
+    });
+    assert!(
+        w >= 50,
+        "the fixture's ORIGINAL must clear the frozen threshold (has {w})"
+    );
+    assert!(
+        w - deps < 50,
+        "the fixture's post-extraction runtime ({} = {w} − {deps} vendored) \
+must sit UNDER the threshold — otherwise the fixture exercises nothing",
+        w - deps
+    );
+}
+
+#[test]
 fn wrapper_directive_prologue_does_not_hide_the_bundle_iife() {
     // esbuild's --format=iife output (the default bundle form) opens with
     // a `"use strict";` directive prologue BEFORE the IIFE — the wrapper

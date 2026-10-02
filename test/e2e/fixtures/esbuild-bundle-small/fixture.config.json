@@ -1,0 +1,14 @@
+{
+  "package": "esbuild-bundle-small",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A real esbuild 0.27.2 iife bundle (unminified) whose vendor half dominates: 24 tiny CJS deps via __commonJS (all extracted to vendor/, one wrapper-scope `var require_*` each) against a small ESM app half plus one lazy __esm module (the fossil split's grammar). The ORIGINAL bundle clears the frozen ≥50 wrapper-binding threshold (64 bindings); the POST-EXTRACTION runtime the split is handed sits under it (40) — the mid-size-app shape that failed the split loud until the threshold moved to the run's input (2026-10-02). v1.1.0 perturbs the last dep (adds tripled) and the lazy report line."
+    }
+  ]
+}

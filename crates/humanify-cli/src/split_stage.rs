@@ -65,6 +65,13 @@ pub struct SplitStageInput<'a> {
     /// the vendor bridge's (finding #60) raw-name anchor. None when no
     /// naming outcome exists.
     pub fresh: Option<&'a str>,
+    /// The run's ORIGINAL input bundle — the text the unpack stage saw,
+    /// before its vendor extraction spliced the CJS factories out. The
+    /// split's ≥50 wrapper-binding gate reads the INPUT (being a bundled
+    /// app is a property of the input, not of the post-extraction runtime
+    /// the split is handed); the wrapper GRAMMAR still reads the shipped
+    /// text.
+    pub input_bundle: Option<&'a str>,
 }
 
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
@@ -302,6 +309,7 @@ fn split_before_commit(
             trail: Some(trail),
             vendor_captures: &vendor_captures,
             vendor_fresh: input.fresh,
+            original_bundle: input.input_bundle,
         },
     )?;
     report_namer(&namer, renderer);

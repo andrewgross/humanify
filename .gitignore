@@ -9,6 +9,12 @@ test/e2e/fixtures/*/build/
 !test/e2e/fixtures/r1b-synthetic/build/
 !test/e2e/fixtures/disambiguation/build/
 !test/e2e/fixtures/esbuild-bundle/build/
+!test/e2e/fixtures/esbuild-bundle-small/build/
+# The small fixture's boundary is MEASURED off its committed source and
+# build (wrapper-binding counts, see its README) — the source is part of
+# the fixture's proof, so it is tracked where the other fixtures' local
+# source trees are not.
+!test/e2e/fixtures/esbuild-bundle-small/source/
 test/e2e/fixtures/*/minified/
 .env
 dist.tar.gz
