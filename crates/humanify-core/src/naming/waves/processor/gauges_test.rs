@@ -12,6 +12,7 @@ use std::collections::{HashMap, HashSet};
 use super::gauges::{
     WaveGauges, binding_infos_bytes, callee_signatures_bytes, hash_map_strings_to_string,
     hash_map_strings_to_u64, hash_set_of_strings, string_bytes, string_list_bytes,
+    taken_snapshot_bytes,
 };
 use crate::naming::report::{IdentifierOutcome, Outcomes, RenameReport};
 use crate::naming::waves::jsset::{JsRecord, JsSet};
@@ -205,10 +206,54 @@ fn the_gauges_default_to_zero() {
         WaveGauges::default(),
         WaveGauges {
             strategy_bytes: 0,
+            strategy_bindings_bytes: 0,
+            strategy_taken_bytes: 0,
+            strategy_callee_bytes: 0,
+            strategy_callsite_bytes: 0,
+            strategy_context_var_bytes: 0,
+            strategy_module_bytes: 0,
             ctx_bytes: 0,
+            taken_set_names: 0,
             used_set_bytes: 0,
             name_record_bytes: 0,
             bookkeeping_bytes: 0,
         }
     );
+}
+
+/// The strategy split's taken term (finding #66's taken-set follow-up):
+/// a snapshot is charged ONCE, by pointer, however many strategies hold
+/// it — and NEVER for the copy the `renamed_layers` map already charges
+/// to `used_set_bytes` (its current per-scope snapshots).
+#[test]
+fn a_taken_snapshot_is_charged_once_and_never_for_the_maps_copy() {
+    use std::sync::Arc;
+    let names = |n: &str| {
+        let mut s = HashSet::new();
+        s.insert(n.to_string());
+        s
+    };
+    let map_resident = Arc::new(names("a"));
+    let private = Arc::new(names("b"));
+    let mut map_ptrs: HashSet<*const HashSet<String>> = HashSet::new();
+    map_ptrs.insert(Arc::as_ptr(&map_resident));
+    let mut seen: HashSet<*const HashSet<String>> = HashSet::new();
+    // The map holds it: `used_set_bytes` already counts these bytes.
+    assert_eq!(
+        taken_snapshot_bytes(
+            &map_resident,
+            Arc::as_ptr(&map_resident),
+            &map_ptrs,
+            &mut seen
+        ),
+        0
+    );
+    // A strategy's own snapshot: full bytes, the first time only.
+    let ptr = Arc::as_ptr(&private);
+    assert_eq!(
+        taken_snapshot_bytes(&private, ptr, &map_ptrs, &mut seen),
+        hash_set_of_strings(&private)
+    );
+    // A second strategy sharing that snapshot: nothing more.
+    assert_eq!(taken_snapshot_bytes(&private, ptr, &map_ptrs, &mut seen), 0);
 }

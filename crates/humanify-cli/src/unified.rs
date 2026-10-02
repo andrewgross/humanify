@@ -803,6 +803,18 @@ fn pipeline_body(
                 m(peak.gauges.name_record_bytes),
                 m(peak.gauges.bookkeeping_bytes),
             ));
+            renderer.message(&format!(
+                "Strategy split: bindings {:.0} MB, taken sets {:.0} MB ({} names), callees {:.0} \
+                 MB, callsites {:.0} MB, context vars {:.0} MB, module {:.0} MB (finding #66 \
+                 sub-gauges)",
+                m(peak.gauges.strategy_bindings_bytes),
+                m(peak.gauges.strategy_taken_bytes),
+                peak.gauges.taken_set_names,
+                m(peak.gauges.strategy_callee_bytes),
+                m(peak.gauges.strategy_callsite_bytes),
+                m(peak.gauges.strategy_context_var_bytes),
+                m(peak.gauges.strategy_module_bytes),
+            ));
         }
         if let Some(dest) = &opts.dump_asks {
             let n = humanify_core::artifact_dump::write_ask_rows(

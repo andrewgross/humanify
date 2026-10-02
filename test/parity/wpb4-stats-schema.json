@@ -2136,6 +2136,62 @@
             }
           },
           {
+            "name": "strategyBindingsBytes",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "strategyTakenBytes",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "strategyCalleeBytes",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "strategyCallsiteBytes",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "strategyContextVarBytes",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "strategyModuleBytes",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "takenSetNames",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
             "name": "ctxBytes",
             "optional": false,
             "nullable": false,

@@ -37,8 +37,29 @@ use humanify_model::llm::CalleeSignature;
 pub struct WaveGauges {
     /// The stored strategy material (the `strategies` Vec): every
     /// function pass's retained context — its binding infos, callee
-    /// signatures, callsites, context vars, taken-name set.
+    /// signatures, callsites, context vars, taken-name set. The SUM of
+    /// the six `strategy_*` constituents below.
     pub strategy_bytes: u64,
+    /// The split of [`Self::strategy_bytes`]: the phase's binding infos
+    /// (`Strategy::Fn::bindings`).
+    pub strategy_bindings_bytes: u64,
+    /// The split of [`Self::strategy_bytes`]: the taken-name sets the
+    /// strategies hold — the per-scope renamed-name snapshots shared by
+    /// every context built over an unchanged table, each DISTINCT
+    /// snapshot counted once by pointer, and never the copy the
+    /// `renamed_layers` map already charges to
+    /// [`Self::used_set_bytes`].
+    pub strategy_taken_bytes: u64,
+    /// The split of [`Self::strategy_bytes`]: the callee signature
+    /// snippets.
+    pub strategy_callee_bytes: u64,
+    /// The split of [`Self::strategy_bytes`]: the callsites.
+    pub strategy_callsite_bytes: u64,
+    /// The split of [`Self::strategy_bytes`]: the capped context vars.
+    pub strategy_context_var_bytes: u64,
+    /// The split of [`Self::strategy_bytes`]: the module strategies'
+    /// batch and windowed-name lists.
+    pub strategy_module_bytes: u64,
     /// The per-node contexts (the `ctxs` Vec): binding maps, phase
     /// orders, applied-name records, the nodes' reports.
     pub ctx_bytes: u64,
@@ -52,6 +73,12 @@ pub struct WaveGauges {
     /// round counter, the module used-names Set, the graph-era tables,
     /// the fresh-scope index.
     pub bookkeeping_bytes: u64,
+    /// The #56-style observable for the taken sets (finding #66's
+    /// taken-set follow-up): the name strings the strategies' retained
+    /// taken snapshots hold, each DISTINCT snapshot counted once by
+    /// pointer — the number that collapses when private per-context
+    /// clones become shared snapshots.
+    pub taken_set_names: usize,
 }
 
 /// One String's full footprint: its 24-byte header slot plus its buffer —
@@ -111,6 +138,36 @@ pub(crate) fn binding_info_bytes(b: &BindingInfo) -> u64 {
 pub(crate) fn binding_infos_bytes(v: &[BindingInfo]) -> u64 {
     v.len() as u64 * std::mem::size_of::<BindingInfo>() as u64
         + v.iter().map(binding_info_bytes).sum::<u64>()
+}
+
+/// One retained taken-name snapshot's byte contribution to the strategy
+/// split (finding #66's taken-set sub-gauge): ZERO when the
+/// `renamed_layers` map holds this snapshot (`used_set_bytes` already
+/// charges it — the map keeps one live copy per scope), full bytes the
+/// first time a strategy-held snapshot is seen, zero ever after — so
+/// however many strategies share a snapshot, it is counted once.
+pub(crate) fn taken_snapshot_bytes(
+    set: &HashSet<String>,
+    ptr: *const HashSet<String>,
+    map_layer_ptrs: &HashSet<*const HashSet<String>>,
+    seen: &mut HashSet<*const HashSet<String>>,
+) -> u64 {
+    if map_layer_ptrs.contains(&ptr) || !seen.insert(ptr) {
+        return 0;
+    }
+    hash_set_of_strings(set)
+}
+
+/// Count one retained taken snapshot's names once, by pointer — the
+/// `taken_set_names` observable. Unlike the byte split, the map's
+/// current copies COUNT: the observable answers "how many name strings
+/// do the strategies' taken views hold", shared or not.
+pub(crate) fn count_taken_names(
+    set: &HashSet<String>,
+    ptr: *const HashSet<String>,
+    seen: &mut HashSet<*const HashSet<String>>,
+) -> usize {
+    if seen.insert(ptr) { set.len() } else { 0 }
 }
 
 /// One `CalleeSignature`'s deep bytes: the name and snippet buffers plus

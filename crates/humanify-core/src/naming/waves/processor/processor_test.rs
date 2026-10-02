@@ -345,6 +345,50 @@ fn the_collision_reask_records_its_cause_and_is_bounded_in_the_ask_log() {
     assert_eq!(first_round.ask.phase, 0);
 }
 
+/// Finding #66's taken-set sub-gauge, pinned on the collision fixture's
+/// shape: two functions asked in the SAME later wave each cover the
+/// program scope's already-applied names in their taken sets (the probe
+/// that will flip when the private clones become shared snapshots —
+/// see `the_late_contexts_share_one_taken_snapshot`).
+#[test]
+fn the_strategy_split_pins_the_taken_sets_on_a_same_wave_pair() {
+    let fresh = "var q = 4;\n\
+                 function e0(p) {\n  return p + q;\n}\n\
+                 function late1(z) {\n  return e0(z) + q;\n}\n\
+                 function late2(y) {\n  return e0(y) * q;\n}\n\
+                 console.log(late1(e0(q)) + late2(q));\n";
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &plain_config(),
+        &MapProvider::new(),
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let g = &out.waves.gauges;
+    // The six constituents sum to the total.
+    assert_eq!(
+        g.strategy_bindings_bytes
+            + g.strategy_taken_bytes
+            + g.strategy_callee_bytes
+            + g.strategy_callsite_bytes
+            + g.strategy_context_var_bytes
+            + g.strategy_module_bytes,
+        g.strategy_bytes,
+        "the split partitions the strategy bytes"
+    );
+    // The run applied q->qBase and e0->eventHooks before the late pair
+    // was asked: each late context's taken set holds them.
+    assert!(
+        g.taken_set_names >= 2,
+        "names are held: {}",
+        g.taken_set_names
+    );
+}
+
 #[test]
 fn short_code_is_sent_whole_on_retries() {
     let code = "function f(a) {\n  return a;\n}";

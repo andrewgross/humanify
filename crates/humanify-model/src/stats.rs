@@ -373,8 +373,29 @@ js_record! {
         peak_live_prompt_bytes: f64 = "peakLivePromptBytes",
         /// The stored strategy material: every function pass's retained
         /// context (binding infos, callee signatures, callsites, context
-        /// vars, taken-name sets).
+        /// vars, taken-name sets). The SUM of the six `strategy*Bytes`
+        /// constituents below (2026-10-02 taken-set sub-gauge, additive
+        /// the same `reask` way — absent on every pre-bump scorecard).
         strategy_bytes: f64 = "strategyBytes",
+        /// The split of `strategyBytes`: the phase's binding infos.
+        strategy_bindings_bytes: Option<f64> = "strategyBindingsBytes",
+        /// The split of `strategyBytes`: the taken-name snapshots the
+        /// strategies hold, each distinct snapshot counted once by
+        /// pointer (the sub-gauge that split finding #66's ~31 GB).
+        strategy_taken_bytes: Option<f64> = "strategyTakenBytes",
+        /// The split of `strategyBytes`: the callee signature snippets.
+        strategy_callee_bytes: Option<f64> = "strategyCalleeBytes",
+        /// The split of `strategyBytes`: the callsites.
+        strategy_callsite_bytes: Option<f64> = "strategyCallsiteBytes",
+        /// The split of `strategyBytes`: the capped context vars.
+        strategy_context_var_bytes: Option<f64> = "strategyContextVarBytes",
+        /// The split of `strategyBytes`: the module strategies' batch and
+        /// windowed-name lists.
+        strategy_module_bytes: Option<f64> = "strategyModuleBytes",
+        /// The taken sets' `contextSetNames`-style count (the #56
+        /// observable): name strings the strategies' retained taken
+        /// snapshots hold, distinct snapshots counted once.
+        taken_set_names: Option<f64> = "takenSetNames",
         /// The per-node contexts: binding maps, phase orders, applied-name
         /// records, the nodes' reports.
         ctx_bytes: f64 = "ctxBytes",

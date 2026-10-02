@@ -81,6 +81,26 @@ fn an_old_format_stats_text_stays_wave_gauges_absent() {
     assert!(!stats.to_file_text().contains("\"waveGauges\""));
 }
 
+/// The 2026-10-02 strategy-split bump INSIDE `waveGauges` is additive the
+/// same way again: a pre-split `waveGauges` block (the sixth vector)
+/// strict-parses with every sub-key absent and re-emits byte-identically
+/// — absent stays absent (finding #66's taken-set sub-gauge).
+#[test]
+fn a_pre_split_wave_gauges_block_stays_split_absent() {
+    let v = vectors();
+    let text = v["writers"]["evalStats"][5]["text"].as_str().unwrap();
+    let stats = EvalStats::parse(text).unwrap();
+    let g = stats.wave_gauges.as_ref().expect("the block is present");
+    assert!(g.strategy_bindings_bytes.is_none());
+    assert!(g.strategy_taken_bytes.is_none());
+    assert!(g.strategy_callee_bytes.is_none());
+    assert!(g.strategy_callsite_bytes.is_none());
+    assert!(g.strategy_context_var_bytes.is_none());
+    assert!(g.strategy_module_bytes.is_none());
+    assert!(g.taken_set_names.is_none());
+    assert_eq!(stats.to_file_text(), text);
+}
+
 fn vectors() -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(repo("test/parity/wpb4-vectors.json")).unwrap())
         .unwrap()
@@ -99,8 +119,9 @@ fn ts_writer_outputs_round_trip() {
     // scorecards still strict-parse and re-emit unchanged); +1 = the
     // Rust-added `reask` vector (2026-09-29, the deliberate schema bump);
     // +1 = the Rust-added `waveGauges` vector (2026-10-02, finding #66's
-    // additive bump — the same precedent).
-    assert_eq!(cases.len(), 6);
+    // additive bump — the same precedent); +1 = the Rust-added strategy-
+    // SPLIT vector (2026-10-02, finding #66's taken-set sub-gauge).
+    assert_eq!(cases.len(), 7);
 }
 
 #[test]

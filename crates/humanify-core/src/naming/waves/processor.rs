@@ -285,18 +285,6 @@ fn prompt_bytes(call: &LlmCall) -> u64 {
     (call.system_prompt.len() + call.user_prompt.len() + call.request.code.len()) as u64
 }
 
-/// A stored fn context's deep bytes (finding #66's `strategy_bytes`
-/// owner): its callee signatures, callsites, context vars and taken-name
-/// set — the material every function pass retains for the whole era.
-fn fn_context_bytes(c: &FnContext) -> u64 {
-    gauges::callee_signatures_bytes(&c.callee_signatures)
-        + gauges::string_list_bytes(&c.callsites)
-        + c.context_vars
-            .as_ref()
-            .map_or(0, |v| gauges::string_list_bytes(v))
-        + gauges::hash_set_of_strings(&c.taken)
-}
-
 /// The per-node wave bookkeeping (`WaveNodeCtx`).
 struct NodeCtx {
     node_index: usize,
@@ -680,25 +668,66 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
     /// exactly as [`Self::context_set_names`] counts their names.
     fn gauges(&self) -> WaveGauges {
         use gauges as g;
-        let strategy_bytes = self
-            .strategies
-            .iter()
-            .map(|s| match s {
+        // The strategy split (finding #66's taken-set sub-gauge): the
+        // six constituents sum to `strategy_bytes`. The taken term
+        // counts each DISTINCT retained snapshot once, by pointer, and
+        // never the copy the `renamed_layers` map already charges to
+        // `used_set_bytes` below — the exclusion is what makes the
+        // split sum-once once the snapshots are shared.
+        let map_taken: HashSet<*const HashSet<String>> = self
+            .renamed_layers
+            .values()
+            .map(|(_, names)| Arc::as_ptr(names))
+            .collect();
+        let mut seen_taken: HashSet<*const HashSet<String>> = HashSet::new();
+        let mut seen_taken_names: HashSet<*const HashSet<String>> = HashSet::new();
+        let mut strategy_bindings_bytes = 0u64;
+        let mut strategy_taken_bytes = 0u64;
+        let mut strategy_callee_bytes = 0u64;
+        let mut strategy_callsite_bytes = 0u64;
+        let mut strategy_context_var_bytes = 0u64;
+        let mut strategy_module_bytes = 0u64;
+        let mut taken_set_names = 0usize;
+        for s in &self.strategies {
+            match s {
                 Strategy::Fn {
                     bindings, context, ..
-                } => g::binding_infos_bytes(bindings) + fn_context_bytes(context),
+                } => {
+                    strategy_bindings_bytes += g::binding_infos_bytes(bindings);
+                    strategy_callee_bytes += g::callee_signatures_bytes(&context.callee_signatures);
+                    strategy_callsite_bytes += g::string_list_bytes(&context.callsites);
+                    strategy_context_var_bytes += context
+                        .context_vars
+                        .as_ref()
+                        .map_or(0, |v| g::string_list_bytes(v));
+                    let ptr = Arc::as_ptr(&context.taken);
+                    strategy_taken_bytes +=
+                        g::taken_snapshot_bytes(&context.taken, ptr, &map_taken, &mut seen_taken);
+                    taken_set_names +=
+                        g::count_taken_names(&context.taken, ptr, &mut seen_taken_names);
+                }
                 Strategy::Module {
                     batch,
                     windowed,
                     taken,
                     ..
                 } => {
-                    (batch.len() + windowed.len()) as u64 * std::mem::size_of::<usize>() as u64
-                        + g::string_list_bytes(windowed)
-                        + g::hash_set_of_strings(taken)
+                    strategy_module_bytes += (batch.len() + windowed.len()) as u64
+                        * std::mem::size_of::<usize>() as u64
+                        + g::string_list_bytes(windowed);
+                    let ptr = Arc::as_ptr(taken);
+                    strategy_taken_bytes +=
+                        g::taken_snapshot_bytes(taken, ptr, &map_taken, &mut seen_taken);
+                    taken_set_names += g::count_taken_names(taken, ptr, &mut seen_taken_names);
                 }
-            })
-            .sum();
+            }
+        }
+        let strategy_bytes = strategy_bindings_bytes
+            + strategy_taken_bytes
+            + strategy_callee_bytes
+            + strategy_callsite_bytes
+            + strategy_context_var_bytes
+            + strategy_module_bytes;
         let ctx_bytes = self
             .ctxs
             .iter()
@@ -753,10 +782,17 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             + self.fresh_scopes.len() as u64 * std::mem::size_of::<(u32, u32, BScopeId)>() as u64;
         WaveGauges {
             strategy_bytes,
+            strategy_bindings_bytes,
+            strategy_taken_bytes,
+            strategy_callee_bytes,
+            strategy_callsite_bytes,
+            strategy_context_var_bytes,
+            strategy_module_bytes,
             ctx_bytes,
             used_set_bytes,
             name_record_bytes,
             bookkeeping_bytes,
+            taken_set_names,
         }
     }
 
