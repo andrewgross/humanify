@@ -14,6 +14,22 @@
   machinery of main @ `f8b87490` (the verb is purely additive; it drives
   the same `match_prior_version` stage a pipeline run drives). Numbers
   below.
+- **FINDING 1 RESOLVED on branch `exp094-wrapper-spelling` (2026-10-02):**
+  the wrapper-spelling miss is FIXED by the MatchKey serializer's
+  wrapper-spelling unification — the regenerated fixture scores 3/3
+  matchedOfMust at `structuralHashUnique` (the committed dump.json on that
+  branch is the regenerated one; the pins in score.test.ts carry the
+  `fixed:{was: 2}` notes). The statement half of the finding (statement
+  recall 2/3) is deliberately UNCHANGED there: the statement twins hash
+  through `statement_hash` (STATEMENT_HASH_VERSION), a family that branch
+  does not touch — exp094's follow-up recommendation. ALSO on that branch:
+  the canonicalizer's head erasure now REFUSES a `this`/`arguments`-loaded
+  flip (it used to run unconditionally and could MANUFACTURE ground truth,
+  against this instrument's own contract — measured: the corpus must-set is
+  unchanged, zero pairs enter or leave, see exp094's `diff-must-set.ts`).
+  The recorded baseline above stays the PRE-change reference; re-record it
+  when the branch lands on main (a fresh binary-inclusive scorecard was
+  produced for it, see `experiments/094-wrapper-spelling/out-corpus/`).
 - **Findings on day one** (from the fixed fixture alone, before any real
   package ran): the two misses below are REAL matcher behavior, recorded
   in `score.test.ts` as exact values — treat them as the first leads:
