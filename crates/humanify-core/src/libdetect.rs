@@ -94,11 +94,14 @@ fn map_set<V>(map: &mut Vec<(PathBuf, V)>, key: &Path, value: V) {
 // The registry (index.ts)
 // ---------------------------------------------------------------------------
 
-/// The registered detectors, in registry order: bun first, default last
-/// (the fallback — it supports every config).
+/// The registered detectors, in registry order: the two vendor-manifest
+/// bundlers (bun, esbuild) first, default last (the fallback — it supports
+/// every config). The manifest-driven layer reads the same
+/// `vendor/_bun-modules.json` either adapter writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LibraryDetector {
     Bun,
+    Esbuild,
     Default,
 }
 
@@ -106,15 +109,17 @@ impl LibraryDetector {
     pub fn name(self) -> &'static str {
         match self {
             LibraryDetector::Bun => "bun",
+            LibraryDetector::Esbuild => "esbuild",
             LibraryDetector::Default => "default",
         }
     }
 
-    /// `supports(config)`: the bun detector only behind the bun unpack
-    /// adapter.
+    /// `supports(config)`: the manifest-driven detectors only behind their
+    /// own unpack adapters.
     pub fn supports(self, unpack_adapter_name: &str) -> bool {
         match self {
             LibraryDetector::Bun => unpack_adapter_name == "bun",
+            LibraryDetector::Esbuild => unpack_adapter_name == "esbuild",
             LibraryDetector::Default => true,
         }
     }
@@ -122,10 +127,14 @@ impl LibraryDetector {
 
 /// `selectLibraryDetector(config)`.
 pub fn select_library_detector(unpack_adapter_name: &str) -> LibraryDetector {
-    [LibraryDetector::Bun, LibraryDetector::Default]
-        .into_iter()
-        .find(|d| d.supports(unpack_adapter_name))
-        .unwrap_or(LibraryDetector::Default)
+    [
+        LibraryDetector::Bun,
+        LibraryDetector::Esbuild,
+        LibraryDetector::Default,
+    ]
+    .into_iter()
+    .find(|d| d.supports(unpack_adapter_name))
+    .unwrap_or(LibraryDetector::Default)
 }
 
 /// `detector.detectLibraries(files)`.
@@ -134,7 +143,7 @@ pub fn detect_libraries(
     files: &[UnpackedFile],
 ) -> Result<LibraryDetectionResult, String> {
     match detector {
-        LibraryDetector::Bun => detect_bun(files),
+        LibraryDetector::Bun | LibraryDetector::Esbuild => detect_bun(files),
         LibraryDetector::Default => detect_default(files),
     }
 }
@@ -442,7 +451,8 @@ fn detect_default(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, Stri
 }
 
 // ---------------------------------------------------------------------------
-// The Bun detector (adapters/bun.ts)
+// The vendor-manifest detector (adapters/bun.ts; the same manifest format
+// serves the esbuild adapter — exp075's second bundler)
 // ---------------------------------------------------------------------------
 
 /// Deepest a factory file sits below the output root:

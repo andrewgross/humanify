@@ -6063,15 +6063,15 @@
         "bundlerType": "esbuild",
         "bundlerTier": "likely",
         "minifierType": "esbuild",
-        "unpackAdapterName": "passthrough"
+        "unpackAdapterName": "esbuild"
       },
       "record": {
         "bundler": "esbuild",
         "bundlerTier": "likely",
         "minifier": "esbuild",
-        "unpackAdapter": "passthrough"
+        "unpackAdapter": "esbuild"
       },
-      "recordJson": "{\"bundler\":\"esbuild\",\"bundlerTier\":\"likely\",\"minifier\":\"esbuild\",\"unpackAdapter\":\"passthrough\"}"
+      "recordJson": "{\"bundler\":\"esbuild\",\"bundlerTier\":\"likely\",\"minifier\":\"esbuild\",\"unpackAdapter\":\"esbuild\"}"
     },
     {
       "detection": {
@@ -6152,15 +6152,15 @@
         "bundlerType": "esbuild",
         "bundlerTier": "likely",
         "minifierType": "esbuild",
-        "unpackAdapterName": "passthrough"
+        "unpackAdapterName": "esbuild"
       },
       "record": {
         "bundler": "esbuild",
         "bundlerTier": "likely",
         "minifier": "esbuild",
-        "unpackAdapter": "passthrough"
+        "unpackAdapter": "esbuild"
       },
-      "recordJson": "{\"bundler\":\"esbuild\",\"bundlerTier\":\"likely\",\"minifier\":\"esbuild\",\"unpackAdapter\":\"passthrough\"}"
+      "recordJson": "{\"bundler\":\"esbuild\",\"bundlerTier\":\"likely\",\"minifier\":\"esbuild\",\"unpackAdapter\":\"esbuild\"}"
     },
     {
       "detection": {
@@ -6210,15 +6210,15 @@
         "bundlerType": "esbuild",
         "bundlerTier": "likely",
         "minifierType": "none",
-        "unpackAdapterName": "passthrough"
+        "unpackAdapterName": "esbuild"
       },
       "record": {
         "bundler": "esbuild",
         "bundlerTier": "likely",
         "minifier": "none",
-        "unpackAdapter": "passthrough"
+        "unpackAdapter": "esbuild"
       },
-      "recordJson": "{\"bundler\":\"esbuild\",\"bundlerTier\":\"likely\",\"minifier\":\"none\",\"unpackAdapter\":\"passthrough\"}"
+      "recordJson": "{\"bundler\":\"esbuild\",\"bundlerTier\":\"likely\",\"minifier\":\"none\",\"unpackAdapter\":\"esbuild\"}"
     }
   ],
   "invariants": [

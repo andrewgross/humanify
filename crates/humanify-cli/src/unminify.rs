@@ -83,7 +83,9 @@ pub fn unpack_bundle(
     }
     let mut namer = ProviderVendorNamer::new(provider, log);
     let span = profiler.pipeline_span("unpack");
-    let files = if adapter == UnpackAdapter::Bun {
+    // The bun and esbuild adapters share the one vendor-extraction flow —
+    // the adapter name only stamps the manifest.
+    let files = if matches!(adapter, UnpackAdapter::Bun | UnpackAdapter::Esbuild) {
         let outcome = bun::unpack_bun(
             code,
             out_dir,
@@ -91,6 +93,7 @@ pub fn unpack_bundle(
                 namer: Some(&mut namer as &mut dyn VendorNamer),
                 prior: prior_vendor,
                 manifest_prior_order_disabled,
+                adapter: adapter.name(),
             },
         )?;
         if let Some(r) = outcome.rekey {

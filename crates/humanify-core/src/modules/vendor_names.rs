@@ -300,6 +300,13 @@ pub struct ManifestEntry {
     /// Banner version, if present.
     #[serde(rename = "bannerVersion", skip_serializing_if = "Option::is_none")]
     pub banner_version: Option<String>,
+    /// The module's original source path, when the bundler kept it —
+    /// esbuild's unminified form uses it as the factory object's key
+    /// (exp075). Absent for bun and for any minified build, so NOTHING may
+    /// depend on it: it is recorded metadata, never a name source and
+    /// never a join key.
+    #[serde(rename = "sourcePath", skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
     /// This entry's position within its structuralHash group, in BUNDLE
     /// order — the tie-break `priorNameFor` indexes with. Absent for a
     /// singleton group (the ordinal is always 0 there) and from every
