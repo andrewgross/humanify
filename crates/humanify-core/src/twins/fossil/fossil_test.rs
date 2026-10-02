@@ -102,6 +102,27 @@ var objInit = __esm({{ \"src/a.ts\": () => {{ objVal = 3; }} }});
     assert_eq!(ex.modules.len(), 1, "the object form is still an init def");
     assert_eq!(ex.modules[0].statements, vec![0, 1, 2]);
     assert_eq!(ex.modules[0].init_index, 2);
+    // The object's key IS the original source path — recovered, never
+    // load-bearing (absent for bun and for any minified build).
+    assert_eq!(ex.modules[0].source_path.as_deref(), Some("src/a.ts"));
+}
+
+#[test]
+fn the_direct_function_forms_carry_no_source_path() {
+    // Both bun-direct inits and esbuild's FUNCTION-EXPRESSION helper thunk
+    // leave source_path None — nothing downstream may require it.
+    let code = format!(
+        "\
+{helper}
+var arrowInit = __esm(() => {{ arrowVal = 1; }});
+var fnExpInit = __esm(function() {{ return (arrowVal = 2, arrowVal), arrowVal; }});
+",
+        helper = ESM_HELPER
+    );
+    let (hashes, values) = inventory_of(&code);
+    let ex = extract_fossil_modules(&values, &hashes).expect("extract");
+    assert_eq!(ex.modules.len(), 2);
+    assert!(ex.modules.iter().all(|m| m.source_path.is_none()));
 }
 
 #[test]
@@ -126,6 +147,87 @@ var v1 = zz(() => { v0 = 1; });
     // The helper declaration itself is segment A's first statement (it was
     // swallowed by the v1 segment).
     assert_eq!(ex.eager_zone, Vec::<usize>::new());
+}
+
+#[test]
+fn the_beautified_esbuild_helper_shape_extract() {
+    // The stage-6 beautifier restructures esbuild's
+    // `function __init() { return fn && (res = …), res; }` thunk into an
+    // if-guard plus a BARE identifier return — the helper shape must hold
+    // for the beautified wrapper body the split reads (verified against a
+    // real esbuild 0.27.2 bundle's shipped text; params renamed, as the
+    // shipped text always is post-naming).
+    let code = "\
+var __esmRenamed = (fnRenamed, resRenamed) => function __init() {
+  if (fnRenamed) {
+    resRenamed = (0, fnRenamed[ObjectRenamed(fnRenamed)[0]])(fnRenamed = 0);
+  }
+  return resRenamed;
+};
+var objVal;
+var objInit = __esmRenamed({
+  \"src/a.ts\"() {
+    \"use strict\";
+    objVal = 3;
+  }
+});
+";
+    let (hashes, values) = inventory_of(code);
+    let ex = extract_fossil_modules(&values, &hashes).expect("extract");
+    assert_eq!(
+        ex.modules.len(),
+        1,
+        "the beautified helper is still a helper"
+    );
+    assert_eq!(ex.modules[0].source_path.as_deref(), Some("src/a.ts"));
+}
+
+#[test]
+fn the_import_edges_survive_a_directive_prologue() {
+    // esbuild heads every wrapped module body with `"use strict";` — the
+    // leading-init-call scan (the import edges) must read through the
+    // directive, in the object form and the direct one alike.
+    let code = format!(
+        "\
+{helper}
+var aVal;
+var aInit = __esm(() => {{ aVal = 1; }});
+var bVal;
+var bInit = __esm({{
+  \"src/b.ts\"() {{
+    \"use strict\";
+    aInit();
+    bVal = 2;
+  }}
+}});
+",
+        helper = ESM_HELPER
+    );
+    let (hashes, values) = inventory_of(&code);
+    let ex = extract_fossil_modules(&values, &hashes).expect("extract");
+    assert_eq!(ex.modules.len(), 2);
+    assert_eq!(
+        ex.modules[1].imports,
+        vec![0],
+        "the edge reads past the directive"
+    );
+}
+
+#[test]
+fn a_param_named_return_alone_is_not_a_helper() {
+    // The beautified-form guard is TIGHT: a two-param arrow returning a
+    // zero-arg function that merely `return res;` (no if-guard on the
+    // first param) is NOT an `__esm` helper — ordinary memoizer-shaped
+    // code must not mint phantom modules on BUN trees.
+    let code = "\
+var memo = (fn, res) => function () { return res; };
+var seed;
+var init_thing = memo(() => { seed = 1; });
+";
+    let (hashes, values) = inventory_of(code);
+    let ex = extract_fossil_modules(&values, &hashes).expect("extract");
+    assert!(ex.modules.is_empty(), "no phantom modules");
+    assert_eq!(ex.eager_zone, vec![0, 1, 2]);
 }
 
 #[test]
