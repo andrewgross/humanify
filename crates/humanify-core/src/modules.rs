@@ -1,11 +1,16 @@
-//! Bun CJS module classification (WP1.5) — TS originals:
+//! CJS module classification — the Bun original (WP1.5, TS:
 //! `src/analysis/bun-module-classification.ts`, plus the one function WP1.5
-//! needs from `src/shared/bun-helpers.ts` (identifyBunCjsFactory — that
-//! file's ledger row is WP5.3 → core::emit; the rest of it stays there).
-//! Submodules: `wrapper` (wrapper-detection.ts), `soundness` (soundness.ts),
+//! needs from `src/shared/bun-helpers.ts` — identifyBunCjsFactory; that
+//! file's ledger row is WP5.3 → core::emit; the rest of it stays there),
+//! extended to esbuild's module form (exp075): the SECOND bundler, whose
+//! factories differ in exactly two wrapper shapes — the factory argument
+//! arrives as an OBJECT with one keyed method (whose key is the module's
+//! original source path) and the unminified helper writes its
+//! `{ exports: {} }` marker spaced. Submodules: `wrapper`
+//! (wrapper-detection.ts), `soundness` (soundness.ts),
 //! `known_globals` (known-globals.ts).
 //!
-//! Bun wraps every CJS module in a `var X = HELPER((q,m) => {...})` factory
+//! A bundler wraps every CJS module in a `var X = HELPER(fn)` factory
 //! that survives minification; factories are essentially guaranteed
 //! third-party, so the rename pipeline skips their bindings/functions and
 //! the split extracts them to vendor/. Classifying them is what makes the
@@ -45,6 +50,12 @@ pub struct IdentifiedHelper {
     pub name: String,
     pub start_offset: u32,
 }
+
+/// esbuild's CJS runtime helper name — preserved verbatim in every
+/// unminified esbuild build (minified builds minify the name away and
+/// revert to bun's tight `{exports:{}}` marker, which
+/// [`identify_bun_cjs_factory`] reads).
+pub const ESBUILD_CJS_HELPER: &str = "__commonJS";
 
 /// JS `\s` — the ASCII subset a minified bundle's markers use. (The TS
 /// regex `\s` also takes Unicode spaces; a non-ASCII whitespace byte inside
@@ -97,6 +108,78 @@ pub fn identify_bun_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
         }
         search_from = p + MARKER_TAIL.len();
     }
+}
+
+/// The declared binding site of `__commonJS` — the ESBUILD CJS helper
+/// (exp075, verified against real esbuild 0.27.2 output). An unminified
+/// esbuild build writes `{ exports: {} }` (SPACED — bun's tight
+/// `{exports:{}}` marker does not match) but keeps the helper's NAME, the
+/// same name the detection stage keys its definitive esbuild verdict on —
+/// so the helper is identified by its `var|let|const NAME =` (or
+/// `, NAME =`) DECLARATION, leftmost. Returns None when the name only
+/// appears as a reference (word-bounded check on both sides).
+pub fn identify_esbuild_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
+    let bytes = source.as_bytes();
+    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'$';
+    for (rel, _) in source.match_indices(ESBUILD_CJS_HELPER) {
+        let at = rel;
+        let after = at + ESBUILD_CJS_HELPER.len();
+        // Word-bounded on both sides, and followed by `=` — a declaration,
+        // not a use.
+        let mut p = after;
+        while p < bytes.len() && is_js_ws(bytes[p]) {
+            p += 1;
+        }
+        let bounded = at > 0
+            && !(is_ident(bytes[at - 1]) || bytes[at - 1] == b'"' || bytes[at - 1] == b'\'')
+            && bytes.get(p) == Some(&b'=');
+        if !bounded {
+            continue;
+        }
+        // Preceded by `var|let|const` + whitespace, or by a `,` (a joined
+        // declaration). The match starts at the keyword / comma.
+        let mut q = at;
+        while q > 0 && is_js_ws(bytes[q - 1]) {
+            q -= 1;
+        }
+        if q > 0 && bytes[q - 1] == b',' {
+            return Some(IdentifiedHelper {
+                name: ESBUILD_CJS_HELPER.to_string(),
+                start_offset: (q - 1) as u32,
+            });
+        }
+        for kw in ["var", "let", "const"] {
+            let Some(kw_at) = q.checked_sub(kw.len()) else {
+                continue;
+            };
+            // keyword, then the whitespace run [kw_at+len, at), at least
+            // one byte (q sits at the run's start — q == at means there
+            // was NO whitespace, a miss), then the name at `at`.
+            let ws_gap = &bytes[kw_at + kw.len()..at];
+            if starts_with_at(bytes, kw_at, kw.as_bytes())
+                && (kw_at == 0 || !is_ident(bytes[kw_at - 1]))
+                && !ws_gap.is_empty()
+                && ws_gap.iter().all(|&b| is_js_ws(b))
+            {
+                return Some(IdentifiedHelper {
+                    name: ESBUILD_CJS_HELPER.to_string(),
+                    start_offset: kw_at as u32,
+                });
+            }
+        }
+    }
+    None
+}
+
+/// The CJS factory helper of EITHER bundler — the one owner of that
+/// question for every classification site: bun's tight `{exports:{}}`
+/// marker first (its behavior is the frozen WP1.5 surface), then
+/// esbuild's named `__commonJS` declaration (only reachable when bun's
+/// marker missed, which no real bun bundle does — bun emits the tight
+/// marker; an esbuild bundle reverts to it only once minified, and only
+/// after the esbuild name is gone too).
+pub fn identify_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
+    identify_bun_cjs_factory(source).or_else(|| identify_esbuild_cjs_factory(source))
 }
 
 /// The byte offset of JS `Math.max(0, at - units)` for byte offset `at`:
@@ -249,6 +332,12 @@ pub struct FactoryRecord {
     /// this is how the runtime-statement ordinals of finding #60's bridge
     /// records are computed (container ordinal minus removed statements).
     pub decl_stmt_span: Span,
+    /// The module's ORIGINAL source path, when the bundler kept it —
+    /// esbuild's unminified form uses it as the factory object's key
+    /// (exp075). Absent for bun and for ANY minified build, so nothing may
+    /// depend on it (it is never a name source, never a join key); it is
+    /// recorded metadata, a gift when present.
+    pub source_path: Option<String>,
 }
 
 /// The classification: the helper var + every factory, in source order.
@@ -322,6 +411,71 @@ pub fn factory_structural_hash(
     de.disable_recursion_limit();
     let body_json: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
     Some(canonical_serialize(&body_json, tables, LiteralPolicy::MatchKey).hash)
+}
+
+/// A factory call argument, unwrapped: the factory FUNCTION, the module's
+/// original source path when the bundler kept it, and whether the function
+/// is an object METHOD — esbuild's `{"src/x.js"(a, b) { … }}` spelling,
+/// whose function span carries NO `function` keyword, so a span slice of
+/// it is not a complete expression (the extraction must supply one).
+#[derive(Clone)]
+pub struct FactoryArg<'a> {
+    pub function: &'a oxc_ast::ast::Expression<'a>,
+    /// esbuild's object-key source path; None in every other form.
+    pub source_path: Option<String>,
+    /// The function came from an object METHOD declaration.
+    pub object_method: bool,
+}
+
+/// The factory function inside a `HELPER(…)` call's first argument, in
+/// either bundler's observed form (exp075, verified against real esbuild
+/// 0.27.2 output): bun passes the function DIRECTLY (arrow or function
+/// expression); esbuild's unminified form passes an OBJECT with a single
+/// keyed method (or property) whose KEY IS the module's original source
+/// path. Returns the unwrapping — the ONE owner for the classification
+/// here and the extraction in `unpack::bun`.
+pub fn factory_arg_function<'a>(arg: &'a oxc_ast::ast::Expression<'a>) -> Option<FactoryArg<'a>> {
+    let arg = unparen(arg);
+    match arg {
+        e @ (oxc_ast::ast::Expression::ArrowFunctionExpression(_)
+        | oxc_ast::ast::Expression::FunctionExpression(_)) => Some(FactoryArg {
+            function: e,
+            source_path: None,
+            object_method: false,
+        }),
+        oxc_ast::ast::Expression::ObjectExpression(obj) => {
+            let [oxc_ast::ast::ObjectPropertyKind::ObjectProperty(prop)] =
+                obj.properties.as_slice()
+            else {
+                return None;
+            };
+            if prop.kind != oxc_ast::ast::PropertyKind::Init || prop.computed {
+                return None;
+            }
+            let function = unparen(&prop.value);
+            if !matches!(
+                function,
+                oxc_ast::ast::Expression::ArrowFunctionExpression(_)
+                    | oxc_ast::ast::Expression::FunctionExpression(_)
+            ) {
+                return None;
+            }
+            // The key: a string literal is esbuild's own spelling; a bare
+            // identifier (an esbuild source path that happens to be a valid
+            // unquoted key, or a generated name) is read by its text.
+            let source_path = match &prop.key {
+                oxc_ast::ast::PropertyKey::StaticIdentifier(id) => Some(id.name.to_string()),
+                oxc_ast::ast::PropertyKey::StringLiteral(lit) => Some(lit.value.to_string()),
+                _ => None,
+            };
+            Some(FactoryArg {
+                function,
+                source_path,
+                object_method: prop.method,
+            })
+        }
+        _ => None,
+    }
 }
 
 /// `lib_<first 8 chars of structuralHash>` (hashFallbackName).
@@ -563,10 +717,12 @@ fn capture_run(bytes: &[u8], at: usize) -> Option<(String, usize)> {
     Some((String::from_utf8_lossy(&bytes[at..j]).into_owned(), j))
 }
 
-/// Classify the factories of a parsed bundle. `wrapper_body` = the wrapper
-/// function's BODY block span when a wrapper exists (the container of the
-/// top-level statements), else None (the program's own body is the
-/// container).
+/// Classify the factories of a parsed bundle — either bundler's form
+/// (bun's direct function, esbuild's single-key object; the helper
+/// identification is [`identify_cjs_factory`], bun's marker first).
+/// `wrapper_body` = the wrapper function's BODY block span when a wrapper
+/// exists (the container of the top-level statements), else None (the
+/// program's own body is the container).
 pub fn classify_bun_modules<'a>(
     source: &'a str,
     program: &'a oxc_ast::ast::Program<'a>,
@@ -574,7 +730,7 @@ pub fn classify_bun_modules<'a>(
     wrapper_body: Option<Span>,
     tables: &SymbolTables,
 ) -> Option<BunModuleClassification> {
-    let helper = identify_bun_cjs_factory(source)?;
+    let helper = identify_cjs_factory(source)?;
 
     // The container's statements: the wrapper body's (when the body is a
     // block — the TS bodyPath.isBlockStatement() gate) or the program's.
@@ -659,15 +815,16 @@ pub fn classify_bun_modules<'a>(
             let Some(arg_expr) = arg0.as_expression() else {
                 continue;
             };
-            let arg_expr = unparen(arg_expr);
-            if !matches!(
-                arg_expr,
-                oxc_ast::ast::Expression::ArrowFunctionExpression(_)
-                    | oxc_ast::ast::Expression::FunctionExpression(_)
-            ) {
+            // Either bundler's form: the function directly (bun, and any
+            // minified build) or esbuild's single-key object — the
+            // unwrapping owner, which also hands over the object key as
+            // the module's original source path.
+            let Some(factory_arg) = factory_arg_function(arg_expr) else {
                 continue;
-            }
-            let body_span = arg_expr.span();
+            };
+            let factory_fn = factory_arg.function;
+            let source_path = factory_arg.source_path;
+            let body_span = factory_fn.span();
             // The banner: statement-level first (even WITHOUT a package —
             // bannerText is recorded either way), the in-body fallback only
             // when statement level found nothing (the TS
@@ -679,7 +836,7 @@ pub fn classify_bun_modules<'a>(
             // cross-version join key, via the same canonical serializer the
             // function graph uses.
             let structural_hash =
-                factory_structural_hash(arg_expr, tables).expect("shape-checked above");
+                factory_structural_hash(factory_fn, tables).expect("shape-checked above");
             // The content hash covers the DECLARATOR's slice (the TS
             // contentHash), not the body's.
             let content_hash: String = {
@@ -708,6 +865,7 @@ pub fn classify_bun_modules<'a>(
                 name: None,
                 name_source: None,
                 decl_stmt_span: stmt_span,
+                source_path,
             });
         }
     }
@@ -963,6 +1121,11 @@ pub mod modules_dump {
                 if let Some(v) = &f.banner_version {
                     obj.insert("bannerVersion".into(), json!(v));
                 }
+                // esbuild's unminified builds carry the module's original
+                // source path (exp075) — recorded, never load-bearing.
+                if let Some(p) = &f.source_path {
+                    obj.insert("sourcePath".into(), json!(p));
+                }
                 row
             })
             .collect();
@@ -1001,8 +1164,9 @@ pub mod modules_dump {
         String,
     > {
         // No factory helper, no classification — and no parse (an ESM text
-        // is not a Bun bundle; the scan is the classifier's own first step).
-        if super::identify_bun_cjs_factory(text).is_none() {
+        // is not a bundle; the scan is the classifier's own first step —
+        // either bundler's helper, [`super::identify_cjs_factory`]).
+        if super::identify_cjs_factory(text).is_none() {
             return Ok(None);
         }
         let allocator = Allocator::default();

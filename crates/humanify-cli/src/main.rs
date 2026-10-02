@@ -49,9 +49,10 @@ enum Command {
         profile: Option<String>,
     },
     /// WPB.2's unpack stage: detect the bundler, select the unpack adapter
-    /// and write its tree (bun: vendor/*.js + runtime.js +
-    /// vendor/_bun-modules.json; webcrack: the subprocess shim;
-    /// passthrough: index.js). Prints one summary line.
+    /// and write its tree (bun and esbuild: vendor/*.js + runtime.js +
+    /// vendor/_bun-modules.json — one shared vendor-extraction flow;
+    /// webcrack: the subprocess shim; passthrough: index.js). Prints one
+    /// summary line.
     Unpack {
         /// The bundle (read as UTF-8, invalid bytes replaced).
         input: String,
@@ -425,7 +426,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         .map_err(|e| format!("cannot read {input}: {e}"))?;
     let out = Path::new(out_dir);
     let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
-    if adapter != UnpackAdapter::Bun {
+    if !matches!(adapter, UnpackAdapter::Bun | UnpackAdapter::Esbuild) {
         let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
         let result = run_adapter(
             adapter,
@@ -464,6 +465,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
             prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,
+            adapter: adapter.name(),
         },
     )?;
     let mut sources: Vec<(String, usize)> = Vec::new();
@@ -481,7 +483,8 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         .map(|f| f.captures.len())
         .sum();
     println!(
-        "unpack: adapter=bun files={} sources={} llm-renamed={}{} kept-in-app={} captures={}",
+        "unpack: adapter={} files={} sources={} llm-renamed={}{} kept-in-app={} captures={}",
+        adapter.name(),
         outcome.result.files.len(),
         sources
             .iter()

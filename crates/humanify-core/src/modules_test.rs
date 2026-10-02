@@ -408,6 +408,32 @@ fn wrapper_negated_and_call_forms() {
     }));
 }
 
+#[test]
+fn wrapper_directive_prologue_does_not_hide_the_bundle_iife() {
+    // esbuild's --format=iife output (the default bundle form) opens with
+    // a `"use strict";` directive prologue BEFORE the IIFE — the wrapper
+    // must be found through it (the classification container and the
+    // split both read this).
+    let decls: Vec<String> = (0..55).map(|i| format!("var u{i}={i};")).collect();
+    let strict = format!(
+        "\"use strict\";\n(() => {{{}return u0;}})();",
+        decls.concat()
+    );
+    let w = with_parsed(&strict, |p, s| {
+        crate::modules::wrapper::find_wrapper_function(p, s).expect("wrapper behind a directive")
+    });
+    assert_eq!(w.binding_count, 55);
+    // A directive does not license extra statements: the wrapper must
+    // still be the ONLY real statement.
+    let extra = format!(
+        "\"use strict\";var a=1;(()=>{{{}return u0;}})();",
+        decls.concat()
+    );
+    assert!(with_parsed(&extra, |p, s| {
+        crate::modules::wrapper::find_wrapper_function(p, s).is_none()
+    }));
+}
+
 // ── soundness (eval/with taint) ──────────────────────────────────────
 
 #[test]
@@ -493,4 +519,68 @@ fn known_globals_cover_the_historical_misses() {
         );
     }
     assert!(crate::modules::known_globals::known_globals(&[]).len() >= 100);
+}
+
+// ── esbuild's module form (exp075) ───────────────────────────────────
+
+/// Real esbuild 0.27.2 output shapes (verified against a fresh build):
+/// the CJS helper is a two-param arrow whose thunk REQUIRES `mod`, and an
+/// unminified build wraps every lazy module — CJS and ESM alike — in an
+/// OBJECT with one keyed method whose KEY IS the original source path.
+/// The helper's `{ exports: {} }` marker is SPACED, which bun's tight
+/// `{exports:` marker does not match: the esbuild helper is identified by
+/// its preserved declaration NAME (`__commonJS`).
+const ESBUILD_CJS_HELPER: &str = concat!(
+    "var __commonJS = ((cb, mod) => function __require() {\n",
+    "  return mod || (0, cb[Object.getOwnPropertyNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n",
+    "});\n",
+);
+
+/// The unminified factory: `var require_x = __commonJS({ "src/x.js"(exports, module) {...} });`
+const ESBUILD_OBJECT_FACTORY: &str = concat!(
+    "var require_cjs_dep = __commonJS({\n",
+    "  \"src/libs/cjs-dep.js\"(exports, module2) {\n",
+    "    module2.exports = { value: 1 };\n",
+    "  }\n",
+    "});\n",
+);
+
+#[test]
+fn classifies_esbuilds_object_form_factory_with_its_source_path() {
+    let src = format!("{ESBUILD_CJS_HELPER}{ESBUILD_OBJECT_FACTORY}");
+    let factories = classify_of(&src);
+    assert_eq!(factories.len(), 1, "the object form is a factory");
+    let f = &factories[0];
+    assert_eq!(f.factory_var, "require_cjs_dep");
+    assert_eq!(f.source_path.as_deref(), Some("src/libs/cjs-dep.js"));
+    assert_eq!(f.structural_hash.len(), 16, "the inner function is hashed");
+}
+
+#[test]
+fn esbuilds_minified_form_is_the_bare_function_factory() {
+    // Minified esbuild reverts to bun's shape — bare function first arg —
+    // and the helper name is minified away; the tight `{exports:{}}`
+    // marker identifies it exactly as bun's does.
+    let src = concat!(
+        "var l=(r,e)=>()=>(e||r((e={exports:{}}).exports,e),e.exports);\n",
+        "var c=l((k,u)=>{u.exports={value:1}});\n",
+    );
+    let factories = classify_of(src);
+    assert_eq!(factories.len(), 1);
+    assert_eq!(factories[0].factory_var, "c");
+    assert!(
+        factories[0].source_path.is_none(),
+        "no source path survives minification"
+    );
+}
+
+#[test]
+fn bun_bundles_never_pick_up_the_esbuild_helper_name() {
+    // The bun-first helper identification is unchanged: a bundle whose
+    // factories call bun's helper keeps classifying by the tight marker
+    // even when the text mentions an esbuild helper name.
+    let src = format!("{HELPER} var tO8=x((q,m)=>{{module.exports=1;}}); var __commonJS = 1;");
+    let factories = classify_of(&src);
+    assert_eq!(factories.len(), 1);
+    assert_eq!(factories[0].factory_var, "tO8");
 }

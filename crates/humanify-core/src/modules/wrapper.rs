@@ -41,11 +41,22 @@ pub fn find_wrapper_function(
     program: &oxc_ast::ast::Program<'_>,
     semantic: &Semantic<'_>,
 ) -> Option<WrapperFunction> {
-    // Must be a single expression statement.
-    if program.body.len() != 1 {
-        return None;
+    // Skip a Directive Prologue — esbuild's `--format=iife` output (the
+    // default bundle form) opens with `"use strict";` before the IIFE.
+    // The wrapper must still be the only REAL statement after it.
+    let mut body = program.body.as_slice();
+    loop {
+        match body.split_first() {
+            Some((Statement::ExpressionStatement(stmt), rest))
+                if is_directive(&stmt.expression) =>
+            {
+                body = rest
+            }
+            _ => break,
+        }
     }
-    let Statement::ExpressionStatement(stmt) = &program.body[0] else {
+    // Must be a single expression statement.
+    let [Statement::ExpressionStatement(stmt)] = body else {
         return None;
     };
     // Babel drops paren wrappers; oxc keeps them — see through them first.
@@ -68,6 +79,14 @@ pub fn find_wrapper_function(
         _ => None,
     };
     checked(fn_expr?, semantic)
+}
+
+/// A Directive Prologue member (spec): a leading ExpressionStatement whose
+/// expression is a bare string literal (`"use strict"`). Parenthesized
+/// strings are NOT directives (the ESTree `directive` field's rule), and a
+/// template literal never is.
+fn is_directive(expr: &Expression<'_>) -> bool {
+    matches!(expr, Expression::StringLiteral(_))
 }
 
 /// The callee's function expression, or None: a direct function, or a

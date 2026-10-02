@@ -47,6 +47,17 @@
  * the eval (`npm run eval -- score`), which boots each split tree on four
  * real release pairs.
  *
+ * BUNDLE fixtures (`"bundle": true` in fixture.config.json — e.g.
+ * `esbuild-bundle`, a real esbuild 0.27.2 iife build) ARE split trees:
+ * every leg runs with `--split`, and the boot step compares the input
+ * bundle's observable behavior (stdout + exit of `node <input>`) with
+ * `node run.cjs` in the emitted runnable graph. The legacy-golden step
+ * only runs for pairs with committed goldens — a post-flip fixture has
+ * no pre-flip golden to prove anything against, so the comparison is
+ * skipped with a printed note instead of silently committed against
+ * itself.
+
+ *
  * Pass/fail, never advisory. Exit 1 on the first failure, naming it.
  */
 import { spawn, spawnSync } from "node:child_process";
@@ -65,6 +76,28 @@ const FIXTURES = path.join(REPO, "test/e2e/fixtures");
 interface VersionPair {
   v1: string;
   v2: string;
+}
+
+/**
+ * A fixture whose committed build is a real BUNDLE (not a single-module
+ * library). Such fixtures run the pipeline WITH `--split`, so the output
+ * is the runnable CJS module graph (`src/` + `vendor/` + `run.cjs`), not
+ * one rewritten file:
+ *
+ *   - the "rename landed" check scans the whole output tree;
+ *   - `--prior-version` points at the fresh run's
+ *     `.humanify/humanified.js`, the tree the next release diffs against;
+ *   - the boot step compares BEHAVIOR (stdout + exit of `node run.cjs`
+ *     vs `node <input>`, both run in place) — an iife bundle exports
+ *     nothing, so there is no import surface to compare (the export-name
+ *     invariant keeps its own fixture: `esm-exports`);
+ *   - step 5's legacy-golden comparison only runs when a golden for the
+ *     pair is committed (the goldens predate bundle fixtures; a new
+ *     fixture has none and can never prove the pre-flip default).
+ */
+interface FixtureConfig {
+  versionPairs: VersionPair[];
+  bundle?: boolean;
 }
 
 function fail(msg: string): never {
@@ -167,15 +200,43 @@ function asModule(file: string, dir: string): string {
   return dest;
 }
 
-function fixturePairs(): Array<{ name: string; pair: VersionPair }> {
-  const out: Array<{ name: string; pair: VersionPair }> = [];
+/**
+ * A BUNDLE fixture's observable behavior: what the file prints and how it
+ * exits when Node runs it AS-IS, in its own directory (a split tree's
+ * run.cjs requires its sibling files — no copying it away).
+ */
+function behaviorOf(
+  file: string,
+  label: string
+): { stdout: string; status: number } {
+  const r = spawnSync(process.execPath, [path.basename(file)], {
+    encoding: "utf8",
+    cwd: path.dirname(file)
+  });
+  if (r.status === null) {
+    fail(`${label}: ${file} could not be run by Node:\n${r.stderr}`);
+  }
+  return { stdout: r.stdout, status: r.status ?? -1 };
+}
+
+/** True when the committed legacy goldens cover this pair. */
+function hasGolden(dir: string): boolean {
+  return fs.existsSync(dir);
+}
+
+function fixturePairs(): Array<{
+  name: string;
+  pair: VersionPair;
+  bundle: boolean;
+}> {
+  const out: Array<{ name: string; pair: VersionPair; bundle: boolean }> = [];
   for (const name of fs.readdirSync(FIXTURES).sort()) {
     const cfgPath = path.join(FIXTURES, name, "fixture.config.json");
     if (!fs.existsSync(cfgPath)) continue;
-    const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8")) as {
-      versionPairs: VersionPair[];
-    };
-    for (const pair of cfg.versionPairs) out.push({ name, pair });
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8")) as FixtureConfig;
+    for (const pair of cfg.versionPairs) {
+      out.push({ name, pair, bundle: cfg.bundle === true });
+    }
   }
   return out;
 }
@@ -186,109 +247,237 @@ function inputOf(name: string, version: string): string {
   return p;
 }
 
+/**
+ * Steps 1: the fresh run — the binary humanifies v1 against the stub, and
+ * a stub rename MUST land (it proves the whole LLM path ran). A bundle
+ * fixture's output is a tree, so the rename check scans every file.
+ * Returns the output path the report and the prior legs read.
+ */
+async function freshLeg(
+  name: string,
+  pair: VersionPair,
+  endpoint: string,
+  bundle: boolean,
+  fresh: string,
+  splitArgs: string[]
+): Promise<string> {
+  const label = `${name} ${pair.v1}->${pair.v2}`;
+  await runBinary(
+    [inputOf(name, pair.v1), ...splitArgs, "-o", fresh],
+    endpoint,
+    `${label} fresh`
+  );
+  const freshOut = path.join(fresh, "index.js");
+  if (!fs.existsSync(freshOut)) fail(`${label}: fresh run wrote no index.js`);
+  const renamedLanded = bundle
+    ? treeFiles(fresh).some((f) =>
+        fs.readFileSync(path.join(fresh, f), "utf8").includes("Renamed")
+      )
+    : fs.readFileSync(freshOut, "utf8").includes("Renamed");
+  if (!renamedLanded) {
+    fail(
+      `${label}: no stub rename landed — the LLM path did not run end to end`
+    );
+  }
+  return freshOut;
+}
+
+/**
+ * Steps 2-3: v2 with `--prior-version` (the cross-version path), twice —
+ * the two trees must be byte-identical.
+ */
+async function priorLeg(
+  name: string,
+  pair: VersionPair,
+  endpoint: string,
+  priorReference: string,
+  prior: string,
+  again: string,
+  splitArgs: string[]
+): Promise<void> {
+  const label = `${name} ${pair.v1}->${pair.v2}`;
+  const priorArgs = [inputOf(name, pair.v2), "--prior-version", priorReference];
+  await runBinary(
+    [...priorArgs, ...splitArgs, "-o", prior],
+    endpoint,
+    `${label} prior`
+  );
+  await runBinary(
+    [...priorArgs, ...splitArgs, "-o", again],
+    endpoint,
+    `${label} prior (again)`
+  );
+  assertIdenticalTrees(prior, again, label);
+}
+
 async function checkPair(
   name: string,
   pair: VersionPair,
   endpoint: string,
-  scratch: string
+  scratch: string,
+  bundle: boolean
 ): Promise<void> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
   const root = path.join(scratch, `${name}-${pair.v1}-${pair.v2}`);
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
+  // A bundle fixture's output is the runnable split tree.
+  const splitArgs = bundle ? ["--split"] : [];
 
-  await runBinary(
-    [inputOf(name, pair.v1), "-o", fresh],
+  const freshOut = await freshLeg(
+    name,
+    pair,
     endpoint,
-    `${label} fresh`
+    bundle,
+    fresh,
+    splitArgs
   );
-  const freshOut = path.join(fresh, "index.js");
-  if (!fs.existsSync(freshOut)) fail(`${label}: fresh run wrote no index.js`);
-  if (!fs.readFileSync(freshOut, "utf8").includes("Renamed")) {
-    fail(
-      `${label}: no stub rename landed — the LLM path did not run end to end`
+  // The prior the next release diffs against: the split tree's
+  // humanified source, or the single humanified file.
+  const priorReference = bundle
+    ? path.join(fresh, ".humanify", "humanified.js")
+    : freshOut;
+  await priorLeg(name, pair, endpoint, priorReference, prior, again, splitArgs);
+  const seqPriorA = await sequencedLeg(
+    root,
+    label,
+    name,
+    pair,
+    endpoint,
+    bundle,
+    splitArgs
+  );
+
+  if (bundle) {
+    // A bundle's observable identity is its BEHAVIOR — same stdout, same
+    // exit code — input bundle vs split tree, both run in place.
+    for (const [version, out, tag] of [
+      [pair.v1, fresh, "fresh"],
+      [pair.v2, prior, "prior"],
+      [pair.v2, seqPriorA, "sequential"]
+    ] as const) {
+      const want = behaviorOf(
+        inputOf(name, version),
+        `${label} input v${version}`
+      );
+      const got = behaviorOf(
+        path.join(out, "run.cjs"),
+        `${label} ${tag} output v${version}`
+      );
+      if (got.stdout !== want.stdout || got.status !== want.status) {
+        fail(
+          `${label}: v${version}'s split tree behaves differently\n  input:  ${JSON.stringify(want)}\n  output: ${JSON.stringify(got)}`
+        );
+      }
+    }
+    console.log(
+      `  ${label}: fresh + prior (+ --sequential, twice) split trees ran, deterministic, boots with the input's behavior`
+    );
+  } else {
+    for (const [version, out, tag] of [
+      [pair.v1, freshOut, "fresh"],
+      [pair.v2, path.join(prior, "index.js"), "prior"],
+      [pair.v2, path.join(seqPriorA, "index.js"), "sequential"]
+    ] as const) {
+      const want = surfaceOf(
+        asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
+        `${label} input v${version}`
+      );
+      const got = surfaceOf(
+        asModule(out, path.join(root, `boot-out-${tag}`)),
+        `${label} ${tag} output v${version}`
+      );
+      if (got !== want) {
+        fail(
+          `${label}: v${version}'s output boots with a different surface\n  input:  ${want}\n  output: ${got}`
+        );
+      }
+    }
+    console.log(
+      `  ${label}: fresh + prior (+ --sequential, twice, vs the legacy goldens) ran, deterministic, boots with the input's surface`
     );
   }
+}
 
-  const priorArgs = [inputOf(name, pair.v2), "--prior-version", freshOut];
-  await runBinary([...priorArgs, "-o", prior], endpoint, `${label} prior`);
-  await runBinary(
-    [...priorArgs, "-o", again],
-    endpoint,
-    `${label} prior (again)`
-  );
-  assertIdenticalTrees(prior, again, label);
-  // The conservative schedule at the OLD batch size: byte-identical to the
-  // pre-flip default's committed goldens (see step 5 in the header).
+/**
+ * Step 5: the conservative schedule at the OLD batch size, fresh + prior
+ * each run twice for byte-determinism, compared against the pre-flip
+ * default's committed goldens when the pair has any (a post-flip fixture
+ * has none — see the header). Returns the sequential-prior output dir (the
+ * boot step's third leg).
+ */
+async function sequencedLeg(
+  root: string,
+  label: string,
+  name: string,
+  pair: VersionPair,
+  endpoint: string,
+  bundle: boolean,
+  splitArgs: string[]
+): Promise<string> {
   const seqArgs = ["--sequential", "--batch-size", "10"];
   const seqFreshA = path.join(root, "seq-fresh-a");
   const seqFreshB = path.join(root, "seq-fresh-b");
   const seqPriorA = path.join(root, "seq-prior-a");
   const seqPriorB = path.join(root, "seq-prior-b");
   const goldenDir = path.join(REPO, "test/golden/legacy-default");
+  const freshGolden = path.join(goldenDir, `${name}-${pair.v1}-fresh`);
+  const priorGolden = path.join(goldenDir, `${name}-${pair.v1}-${pair.v2}`);
   await runBinary(
-    [inputOf(name, pair.v1), ...seqArgs, "-o", seqFreshA],
+    [inputOf(name, pair.v1), ...splitArgs, ...seqArgs, "-o", seqFreshA],
     endpoint,
     `${label} sequential fresh`
   );
   await runBinary(
-    [inputOf(name, pair.v1), ...seqArgs, "-o", seqFreshB],
+    [inputOf(name, pair.v1), ...splitArgs, ...seqArgs, "-o", seqFreshB],
     endpoint,
     `${label} sequential fresh (again)`
   );
   assertIdenticalTrees(seqFreshA, seqFreshB, `${label} --sequential fresh`);
-  assertIdenticalTrees(
-    seqFreshA,
-    path.join(goldenDir, `${name}-${pair.v1}-fresh`),
-    `${label} --sequential fresh vs the pre-flip default's golden`
-  );
-  const seqFreshOut = path.join(seqFreshA, "index.js");
+  compareGolden(seqFreshA, freshGolden, label, "--sequential fresh");
+  const seqPriorReference = bundle
+    ? path.join(seqFreshA, ".humanify", "humanified.js")
+    : path.join(seqFreshA, "index.js");
   const seqPriorArgs = [
     inputOf(name, pair.v2),
     "--prior-version",
-    seqFreshOut,
+    seqPriorReference,
     ...seqArgs
   ];
   await runBinary(
-    [...seqPriorArgs, "-o", seqPriorA],
+    [...seqPriorArgs, ...splitArgs, "-o", seqPriorA],
     endpoint,
     `${label} sequential prior`
   );
   await runBinary(
-    [...seqPriorArgs, "-o", seqPriorB],
+    [...seqPriorArgs, ...splitArgs, "-o", seqPriorB],
     endpoint,
     `${label} sequential prior (again)`
   );
   assertIdenticalTrees(seqPriorA, seqPriorB, `${label} --sequential prior`);
-  assertIdenticalTrees(
-    seqPriorA,
-    path.join(goldenDir, `${name}-${pair.v1}-${pair.v2}`),
-    `${label} --sequential prior vs the pre-flip default's golden`
-  );
+  compareGolden(seqPriorA, priorGolden, label, "--sequential prior");
+  return seqPriorA;
+}
 
-  for (const [version, out, tag] of [
-    [pair.v1, freshOut, "fresh"],
-    [pair.v2, path.join(prior, "index.js"), "prior"],
-    [pair.v2, path.join(seqPriorA, "index.js"), "sequential"]
-  ] as const) {
-    const want = surfaceOf(
-      asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
-      `${label} input v${version}`
+/** The byte-comparison against a committed legacy golden, when one exists. */
+function compareGolden(
+  actual: string,
+  goldenDir: string,
+  label: string,
+  step: string
+): void {
+  if (hasGolden(goldenDir)) {
+    assertIdenticalTrees(
+      actual,
+      goldenDir,
+      `${label} ${step} vs the pre-flip default's golden`
     );
-    const got = surfaceOf(
-      asModule(out, path.join(root, `boot-out-${tag}`)),
-      `${label} ${tag} output v${version}`
+  } else {
+    console.log(
+      `  ${label}: no committed golden for this pair — golden comparison skipped (${step})`
     );
-    if (got !== want) {
-      fail(
-        `${label}: v${version}'s output boots with a different surface\n  input:  ${want}\n  output: ${got}`
-      );
-    }
   }
-  console.log(
-    `  ${label}: fresh + prior (+ --sequential, twice, vs the legacy goldens) ran, deterministic, boots with the input's surface`
-  );
 }
 
 async function main(): Promise<void> {
@@ -303,8 +492,14 @@ async function main(): Promise<void> {
   const { port } = server.address() as AddressInfo;
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-e2e-"));
   try {
-    for (const { name, pair } of pairs) {
-      await checkPair(name, pair, `http://127.0.0.1:${port}/v1`, scratch);
+    for (const { name, pair, bundle } of pairs) {
+      await checkPair(
+        name,
+        pair,
+        `http://127.0.0.1:${port}/v1`,
+        scratch,
+        bundle
+      );
     }
   } finally {
     server.close();

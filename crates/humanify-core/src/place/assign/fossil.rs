@@ -847,6 +847,7 @@ definitions) — fix detection or run with --disable fossil-split"
                 imports: m.imports.clone(),
                 declared: Some(m.declared.clone()),
                 tokens: Some(tokens),
+                source_path: m.source_path.clone(),
             })
             .collect(),
         stats: FossilStats {

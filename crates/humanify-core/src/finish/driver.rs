@@ -63,8 +63,9 @@ struct Manifest {
     factories: Vec<(String, Option<String>)>,
 }
 
-/// `loadBunManifest(outputDir)`: None when absent, not the Bun adapter's,
-/// or factory-less.
+/// `loadBunManifest(outputDir)`: None when absent, not a vendor-extraction
+/// adapter's (bun's or esbuild's — the two that write this manifest
+/// format), or factory-less.
 fn load_bun_manifest(output_dir: &Path) -> Result<Option<Manifest>, String> {
     let path = bun_manifest_path(output_dir);
     if !path.exists() {
@@ -78,7 +79,10 @@ fn load_bun_manifest(output_dir: &Path) -> Result<Option<Manifest>, String> {
         Some(JsValue::String(s)) => Some(s.clone()),
         _ => None,
     };
-    if str_field(&obj, "adapter").as_deref() != Some("bun") {
+    if !matches!(
+        str_field(&obj, "adapter").as_deref(),
+        Some("bun" | "esbuild")
+    ) {
         return Ok(None);
     }
     let factories: Vec<(String, Option<String>)> = match obj.get("factories") {

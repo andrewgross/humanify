@@ -1,3 +1,6 @@
+//! The finish driver's tests: the SPAN coverage (perf-instrumentation)
+//! and the manifest gate (feat/esbuild-unpack).
+
 //! The finish driver's SPAN coverage (docs/perf-inventory.md item 3):
 //! `split:finish` was 40 s of serial work per with-prior hop with NO
 //! internal spans — relink vs the reconcile's ledger read vs the
@@ -8,16 +11,22 @@
 //! needs a Bun manifest and is covered by the pipeline-level test
 //! (crates/humanify-cli/tests/pipeline_stages.rs).
 
-use std::path::PathBuf;
+//! The manifest gate's doc:
+//! The finish driver's manifest gate: `loadBunManifest` reads the vendor
+//! manifest BOTH bundler adapters write (the format is shared; the esbuild
+//! adapter advertises the runnable split the same way bun's does).
+
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use humanify_model::js::{JsValue, stringify};
 
-use super::{FinishReport, FinishSwitches, reconcile_post_split};
+use super::{FinishReport, FinishSwitches, load_bun_manifest, reconcile_post_split};
+use crate::unpack::bun::bun_manifest_path;
 
 /// One scratch tree: (fresh output tree, prior tree) with the fixture's
 /// files materialized where the drivers read them.
 struct Scratch(PathBuf, PathBuf);
-
 impl Scratch {
     fn new(tag: &str) -> Scratch {
         let root = std::env::temp_dir().join(format!(
@@ -31,20 +40,17 @@ impl Scratch {
         std::fs::create_dir_all(prior.join(".humanify")).unwrap();
         Scratch(out, prior)
     }
-
     fn write(&self, root: &std::path::Path, rel: &str, text: &str) {
         let p = root.join(rel);
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, text).unwrap();
     }
 }
-
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(self.0.parent().unwrap());
     }
 }
-
 #[test]
 fn the_finish_reconcile_records_its_constituent_spans() {
     let _guard = crate::profiling::SPAN_TEST_LOCK.lock().unwrap();
@@ -73,7 +79,6 @@ fn the_finish_reconcile_records_its_constituent_spans() {
     }
     let prior_bundle = s.1.join(".humanify/humanified.js");
     std::fs::write(&prior_bundle, fx["bundle"].as_str().unwrap()).unwrap();
-
     let profiler = crate::profiling::Profiler::new(true);
     profiler.install_global();
     let mut report = FinishReport::default();
@@ -86,7 +91,6 @@ fn the_finish_reconcile_records_its_constituent_spans() {
     .expect("the reconcile runs");
     let profile = profiler.finalize(None);
     crate::profiling::Profiler::uninstall_global();
-
     // The fixture's regime: one file considered, one changed, renames to
     // carry — so the apply and the carry really ran.
     let result = result.expect("a with-prior reconcile");
@@ -99,7 +103,6 @@ fn the_finish_reconcile_records_its_constituent_spans() {
         "the fixture restores names"
     );
     assert!(result.carry.is_some(), "the carry ran");
-
     let names: Vec<&str> = profile
         .spans
         .iter()
@@ -128,4 +131,64 @@ fn the_finish_reconcile_records_its_constituent_spans() {
         "the messages survive: {:?}",
         report.messages
     );
+}
+
+// ---- the manifest gate's tests (feat/esbuild-unpack) ----
+
+struct TempDir(PathBuf);
+impl TempDir {
+    fn new(tag: &str) -> TempDir {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "humanify-finish-{tag}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        fs::remove_dir_all(&dir).ok();
+        fs::create_dir_all(dir.join("vendor")).unwrap();
+        TempDir(dir)
+    }
+}
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        fs::remove_dir_all(&self.0).ok();
+    }
+}
+/// Write a manifest with the given adapter stamp and one factory.
+fn manifest(dir: &Path, adapter: &str) {
+    fs::write(
+        bun_manifest_path(dir),
+        format!(
+            "{{\"adapter\":\"{adapter}\",\"hashVersion\":3,\"runtimeFile\":\"runtime.js\",\
+             \"factories\":[{{\"fileName\":\"vendor/lib_aaaaaaaa.js\",\"name\":\"lib_aaaaaaaa\",\
+             \"nameSource\":\"fallback\",\"structuralHash\":\"aaaaaaaaaaaaaaaa\",\
+             \"runtimeIdentifier\":\"lib_aaaaaaaa\"}}]}}\n"
+        ),
+    )
+    .unwrap();
+}
+#[test]
+fn the_manifest_gate_accepts_both_bundler_adapters() {
+    let bun_dir = TempDir::new("bun");
+    manifest(&bun_dir.0, "bun");
+    let bun = load_bun_manifest(&bun_dir.0)
+        .expect("reads")
+        .expect("bun manifest loads");
+    assert_eq!(bun.factories.len(), 1);
+    // The esbuild adapter writes the same format under its own stamp —
+    // the relink machinery is shared (exp075's port).
+    let esbuild_dir = TempDir::new("esbuild");
+    manifest(&esbuild_dir.0, "esbuild");
+    let esbuild = load_bun_manifest(&esbuild_dir.0)
+        .expect("reads")
+        .expect("the esbuild manifest loads the same way");
+    assert_eq!(esbuild.factories.len(), 1);
+    assert_eq!(esbuild.runtime_file.as_deref(), Some("runtime.js"));
+}
+#[test]
+fn unknown_adapter_stamps_still_decline() {
+    let dir = TempDir::new("other");
+    manifest(&dir.0, "webcrack");
+    assert!(load_bun_manifest(&dir.0).expect("reads").is_none());
 }

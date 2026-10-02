@@ -35,6 +35,7 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
         name: Some(name.to_string()),
         name_source: Some(source),
         decl_stmt_span: Span::new(0, 10),
+        source_path: None,
     }
 }
 
@@ -214,6 +215,7 @@ fn entry(name: &str, hash: &str, ordinal: Option<usize>) -> ManifestEntry {
         hash_ordinal: ordinal,
         banner_package: None,
         banner_version: None,
+        source_path: None,
         captures: Vec::new(),
     }
 }

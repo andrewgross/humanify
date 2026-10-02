@@ -23,7 +23,6 @@ use oxc_ast::AstKind;
 use oxc_span::GetSpan;
 use oxc_syntax::reference::ReferenceFlags;
 
-use crate::babel_view::unparen;
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
@@ -39,7 +38,7 @@ use crate::modules::vendor_names::{
 use crate::modules::wrapper::find_wrapper_function;
 use crate::modules::{
     BunModuleClassification, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
-    classify_bun_modules, identify_bun_cjs_factory, name_cjs_factories,
+    classify_bun_modules, factory_arg_function, identify_cjs_factory, name_cjs_factories,
 };
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
@@ -204,8 +203,9 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
     })
 }
 
-/// The unpack options (`UnpackOptions`).
-#[derive(Default)]
+/// The unpack options (`UnpackOptions`) — shared by the Bun and esbuild
+/// adapters (the vendor-extraction flow is one implementation; only the
+/// manifest's `adapter` stamp differs).
 pub struct BunUnpackOptions<'n> {
     /// The LLM namer for hash-named factories — None skips the pass, as the
     /// TS does when no `vendorNamer` is wired.
@@ -216,6 +216,19 @@ pub struct BunUnpackOptions<'n> {
     /// `hashOrdinal` stamps and no prior-order reorder — the manifest in
     /// bundle order, as before exp047.
     pub manifest_prior_order_disabled: bool,
+    /// The manifest's `adapter` stamp: "bun" or "esbuild".
+    pub adapter: &'static str,
+}
+
+impl Default for BunUnpackOptions<'_> {
+    fn default() -> Self {
+        BunUnpackOptions {
+            namer: None,
+            prior: None,
+            manifest_prior_order_disabled: false,
+            adapter: "bun",
+        }
+    }
 }
 
 /// What the Bun adapter did, beyond the files.
@@ -257,13 +270,18 @@ pub struct BundleOrderRow {
 pub struct ExtractedModule {
     /// The factory var.
     pub name: String,
-    /// The factory BODY range (the helper call's first argument).
+    /// The factory BODY range (the helper call's first argument's
+    /// function).
     pub body_start: usize,
     pub body_end: usize,
     /// The whole declaration's range (spliced out of the runtime), past
     /// one trailing `;`.
     pub decl_start: usize,
     pub decl_end: usize,
+    /// esbuild's object-METHOD form: the function's span carries no
+    /// `function` keyword, so the vendored body needs one supplied to be a
+    /// complete expression.
+    pub object_method: bool,
 }
 
 /// A byte-precise source substitution ("" = splice the range out).
@@ -288,7 +306,11 @@ pub struct UnpackPlan {
     pub ref_edits: Vec<TextEdit>,
 }
 
-/// The Bun adapter (`BunUnpackAdapter.unpack`).
+/// The Bun adapter (`BunUnpackAdapter.unpack`) — also the esbuild
+/// adapter's flow: the two readers share the whole vendor-extraction
+/// pipeline, differing only in the wrapper shapes the classification
+/// accepts ([`crate::modules::factory_arg_function`]) and the manifest's
+/// `adapter` stamp.
 pub fn unpack_bun(
     code: &str,
     out_dir: &Path,
@@ -308,7 +330,7 @@ pub fn unpack_bun(
         })
     };
 
-    let Some(factory) = identify_bun_cjs_factory(code) else {
+    let Some(factory) = identify_cjs_factory(code) else {
         return floor(code);
     };
     let require_var = identify_bun_require(code);
@@ -411,6 +433,12 @@ pub fn unpack_bun(
     body_edits.extend(helper_edits.iter().cloned());
     for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
         let mut body = slice_with_edits(code, &body_edits, module.body_start, module.body_end);
+        // An object-METHOD factory's span carries no `function` keyword —
+        // supply one so the vendored body is a complete expression (the
+        // relink stage re-parses every vendored body).
+        if module.object_method {
+            body = format!("function {body}");
+        }
         if let Some(req) = &require_var {
             body = rewrite_require_calls(&body, req);
         }
@@ -435,6 +463,9 @@ pub fn unpack_bun(
             runtime_identifier: module_plan.identifier.clone(),
             banner_package: record.and_then(|r| r.banner_package.clone()),
             banner_version: record.and_then(|r| r.banner_version.clone()),
+            // The module's original source path, when the bundler kept it
+            // (esbuild's unminified form) — recorded, never load-bearing.
+            source_path: record.and_then(|r| r.source_path.clone()),
             hash_ordinal: None,
             captures: captures_by_module
                 .get(module_index)
@@ -460,7 +491,7 @@ pub fn unpack_bun(
     // Entries are in BUNDLE order here, the order the naming tie-break is
     // defined against — ordinals are stamped BEFORE the reorder.
     let manifest = BunModulesManifest {
-        adapter: "bun",
+        adapter: options.adapter,
         hash_version: FACTORY_HASH_VERSION,
         runtime_file,
         factories: if options.manifest_prior_order_disabled {
@@ -482,6 +513,22 @@ pub fn unpack_bun(
         kept_in_app,
         helper_refs: helper_edits.len(),
     })
+}
+
+/// The esbuild adapter: the same reader with the `esbuild` manifest stamp
+/// (`unpack_esbuild` — the sibling entry point the unpack registry routes
+/// `BundlerType::Esbuild` inputs to). Everything downstream — extraction,
+/// naming, prior carry, scope planning — is shared with bun; esbuild's
+/// module form differs only in the wrapper shapes
+/// ([`crate::modules::factory_arg_function`]) and hands over each
+/// unminified module's original source path ([`FactoryRecord::source_path`]).
+pub fn unpack_esbuild(
+    code: &str,
+    out_dir: &Path,
+    mut options: BunUnpackOptions<'_>,
+) -> Result<BunUnpackOutcome, String> {
+    options.adapter = "esbuild";
+    unpack_bun(code, out_dir, options)
 }
 
 /// The AST classification on the parsed input (`classifyWithAst` minus the
@@ -635,18 +682,25 @@ pub fn slice_with_edits(
 }
 
 /// `extractFactoryBodiesFromAst`: one module per classified factory whose
-/// declarator is `HELPER(arrowOrFunction, …)` (`factoryToModule` — the call
-/// needs at least one argument and the first must be a function; the
-/// callee is not re-checked). The declaration range covers the `var`
+/// declarator is `HELPER(factory, …)` (`factoryToModule` — the call needs
+/// at least one argument and the first must be a function, DIRECTLY (bun,
+/// any minified build) or as esbuild's single-key object whose method IS
+/// the factory — [`crate::modules::factory_arg_function`], the one
+/// unwrapping owner; the callee is not re-checked). The body range is the
+/// FUNCTION's span, either form. The declaration range covers the `var`
 /// keyword — the parent VariableDeclaration — plus one trailing `;`.
+/// One declarator's extraction shape: (body range, parent declaration
+/// range, object-method form).
+type FactoryShape = ((usize, usize), (usize, usize), bool);
+
 fn extract_factory_bodies_from_ast(
     classification: &BunModuleClassification,
     code: &str,
     ingest: &Ingest<'_>,
 ) -> Vec<ExtractedModule> {
     let nodes = ingest.semantic().nodes();
-    // Declarator span → (body range, parent declaration span).
-    let mut shapes: HashMap<(u32, u32), [(usize, usize); 2]> = HashMap::new();
+    // Declarator span → its extraction shape.
+    let mut shapes: HashMap<(u32, u32), FactoryShape> = HashMap::new();
     for node in nodes.iter() {
         let AstKind::VariableDeclarator(decl) = node.kind() else {
             continue;
@@ -657,33 +711,29 @@ fn extract_factory_bodies_from_ast(
         let Some(arg0) = call.arguments.first().and_then(|a| a.as_expression()) else {
             continue;
         };
-        let arg0 = unparen(arg0);
-        if !matches!(
-            arg0,
-            oxc_ast::ast::Expression::ArrowFunctionExpression(_)
-                | oxc_ast::ast::Expression::FunctionExpression(_)
-        ) {
+        let Some(factory_arg) = factory_arg_function(arg0) else {
             continue;
-        }
+        };
         let parent = nodes.parent_node(node.id());
         let AstKind::VariableDeclaration(declaration) = parent.kind() else {
             continue;
         };
-        let body = arg0.span();
+        let body = factory_arg.function.span();
         let d = declaration.span();
         shapes.insert(
             (decl.span.start, decl.span.end),
-            [
+            (
                 (body.start as usize, body.end as usize),
                 (d.start as usize, d.end as usize),
-            ],
+                factory_arg.object_method,
+            ),
         );
     }
     classification
         .factories
         .iter()
         .filter_map(|f| {
-            let &[(body_start, body_end), (decl_start, mut decl_end)] =
+            let &((body_start, body_end), (decl_start, mut decl_end), object_method) =
                 shapes.get(&(f.span.start, f.span.end))?;
             if code.as_bytes().get(decl_end) == Some(&b';') {
                 decl_end += 1;
@@ -694,6 +744,7 @@ fn extract_factory_bodies_from_ast(
                 body_end,
                 decl_start,
                 decl_end,
+                object_method,
             })
         })
         .collect()
@@ -758,6 +809,7 @@ pub fn extract_factory_bodies(code: &str, helper: &str) -> Vec<ExtractedModule> 
             body_end: paren_end,
             decl_start: start,
             decl_end,
+            object_method: false,
         });
     }
     modules

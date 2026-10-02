@@ -126,10 +126,12 @@ fn selects_bun_for_bun_cjs() {
 }
 
 #[test]
-fn selects_passthrough_for_esbuild() {
+fn selects_esbuild_for_esbuild() {
+    // The pre-exp075-port behavior was passthrough (no esbuild reader);
+    // the TS-era reference (ac56eac0) established the module form.
     assert_eq!(
         select_adapter(&detect_bundle(ESBUILD), None).name(),
-        "passthrough"
+        "esbuild"
     );
 }
 
@@ -160,11 +162,13 @@ fn override_to_unknown_is_ignored() {
 #[test]
 fn select_by_name_and_unknown_name_errors() {
     assert_eq!(select_unpack_adapter("bun"), Ok(UnpackAdapter::Bun));
+    assert_eq!(select_unpack_adapter("esbuild"), Ok(UnpackAdapter::Esbuild));
     assert_eq!(
         select_unpack_adapter("nope"),
         Err("No unpack adapter named \"nope\"".to_string())
     );
     assert!(UnpackAdapter::Bun.provides_module_fossils());
+    assert!(UnpackAdapter::Esbuild.provides_module_fossils());
     assert!(!UnpackAdapter::Webcrack.provides_module_fossils());
     assert!(!UnpackAdapter::Passthrough.provides_module_fossils());
 }
@@ -570,6 +574,117 @@ fn disambiguates_names_differing_only_in_case() {
     assert_eq!(names, vec!["vendor/Ab@1.0.0.js", "vendor/aB@1.0.0-2.js"]);
 }
 
+// ---- the esbuild adapter (exp075 — real esbuild 0.27.2 wrapper shapes) ------
+
+/// An unminified esbuild 0.27.2 bundle, byte-shaped as a fresh build emits
+/// it: the `__commonJS` helper's `{ exports: {} }` marker is SPACED (bun's
+/// tight marker does not match), and every CJS factory arrives as an
+/// OBJECT with one keyed method whose KEY IS the module's original source
+/// path.
+const ESBUILD_OBJECT_BUNDLE: &str = concat!(
+    "var __defProp = Object.defineProperty;\n",
+    "var __getOwnPropNames = Object.getOwnPropertyNames;\n",
+    "var __commonJS = ((cb, mod) => function __require() {\n",
+    "  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;\n",
+    "});\n",
+    "// src/libs/cjs-dep.js\n",
+    "var require_cjs_dep = __commonJS({\n",
+    "  \"src/libs/cjs-dep.js\"(exports, module2) {\n",
+    "    var version = \"1.2.3\";\n",
+    "    function helper(x) {\n",
+    "      return x * 2;\n",
+    "    }\n",
+    "    module2.exports = { version, helper };\n",
+    "  }\n",
+    "});\n",
+    "// src/main.js\n",
+    "function main(n) {\n",
+    "  var dep = require_cjs_dep();\n",
+    "  return dep.helper(n);\n",
+    "}\n",
+    "console.log(main(5));\n",
+);
+
+#[test]
+fn esbuild_object_factories_extract_with_their_source_paths() {
+    let t = TempDir::new("esbuild");
+    let outcome = crate::unpack::bun::unpack_esbuild(
+        ESBUILD_OBJECT_BUNDLE,
+        &t.0,
+        BunUnpackOptions::default(),
+    )
+    .expect("unpack runs");
+    let manifest = read_manifest(&t.0);
+    assert_eq!(manifest["adapter"], "esbuild");
+    assert_eq!(manifest["runtimeFile"], "runtime.js");
+    let entries = factories(&manifest);
+    assert_eq!(entries.len(), 1, "one CJS factory");
+    assert_eq!(s(&entries[0], "sourcePath"), "src/libs/cjs-dep.js");
+    assert!(is_lib_hash_js(s(&entries[0], "fileName")));
+    // The vendor body is the METHOD's function — the object wrapper and
+    // its path key are stripped, the body's own code kept. A method's
+    // span carries no `function` keyword, so the vendored body gains one
+    // (it must be a complete expression: the relink stage re-parses it).
+    let body = fs::read_to_string(t.0.join(s(&entries[0], "fileName"))).unwrap();
+    assert!(body.starts_with("function "), "{body}");
+    assert!(body.contains("x * 2"), "{body}");
+    assert!(!body.contains("src/libs/cjs-dep.js"), "{body}");
+    assert!(!body.contains("__commonJS"), "{body}");
+    // The factory's bundle reference in the runtime is the stable
+    // identifier, never the factory var.
+    let id = s(&entries[0], "runtimeIdentifier");
+    assert!(!id.is_empty(), "esbuild factories get an identifier");
+    let runtime = fs::read_to_string(t.0.join("runtime.js")).unwrap();
+    assert!(runtime.contains(&format!("{id}()")), "{runtime}");
+    assert!(!runtime.contains("require_cjs_dep()"), "{runtime}");
+    // The outcome's bundle order keeps the factory var — bundle order is
+    // same-version bookkeeping, not a carried field.
+    assert_eq!(
+        outcome
+            .bundle_order
+            .iter()
+            .map(|r| r.factory_var.as_str())
+            .collect::<Vec<_>>(),
+        vec!["require_cjs_dep"]
+    );
+}
+
+#[test]
+fn esbuilds_minified_form_extracts_through_the_bun_marker() {
+    // Minified esbuild reverts to the bare-function factory and minifies
+    // the helper name away — the tight `{exports:{}}` marker identifies it
+    // (bun-first identification), and NO source path is claimed.
+    let minified = concat!(
+        "var l=(r,e)=>()=>(e||r((e={exports:{}}).exports,e),e.exports);\n",
+        "var c=l((k,u)=>{u.exports={value:1}});\n",
+        "var done=c();\n",
+    );
+    let t = TempDir::new("esbuild-min");
+    crate::unpack::bun::unpack_esbuild(minified, &t.0, BunUnpackOptions::default())
+        .expect("unpack runs");
+    let entries = factories(&read_manifest(&t.0));
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0].get("sourcePath").is_none(),
+        "no source path survives minification"
+    );
+}
+
+#[test]
+fn bun_bundles_still_unpack_under_the_bun_adapter_stamp() {
+    // The combined helper identification changed nothing for bun: the same
+    // bundle, the same manifest bytes, adapter "bun".
+    let t = TempDir::new("bun-still");
+    unpack(BUN_BUNDLE, &t.0);
+    let manifest = read_manifest(&t.0);
+    assert_eq!(manifest["adapter"], "bun");
+    assert!(
+        factories(&manifest)
+            .iter()
+            .all(|f| f.get("sourcePath").is_none())
+    );
+}
+
 // ---- cross-version vendor name carry-over ----------------------------------
 
 const UNKNOWN_BUNDLE: &str = concat!(
@@ -747,6 +862,7 @@ fn regex_floor_extracts_between_the_outermost_parens() {
                 body_end: 30,
                 decl_start: 8,
                 decl_end: 32,
+                object_method: false,
             },
             ExtractedModule {
                 name: "b".into(),
@@ -754,6 +870,7 @@ fn regex_floor_extracts_between_the_outermost_parens() {
                 body_end: 59,
                 decl_start: 32,
                 decl_end: 60,
+                object_method: false,
             },
         ]
     );

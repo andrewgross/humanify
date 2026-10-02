@@ -23,6 +23,12 @@ pub struct FossilLedgerModule {
     pub declared: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens: Option<Vec<String>>,
+    /// The module's original source path, when the bundler kept it
+    /// (esbuild's unminified form — exp075). Recorded metadata ONLY:
+    /// no placement or matching tier reads it, and a ledger written
+    /// before it existed simply reads as None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_path: Option<String>,
 }
 
 /// `StableSplitLedger`.

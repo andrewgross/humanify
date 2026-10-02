@@ -2,7 +2,13 @@
 //! pipeline processes. TS originals: `src/unpack/index.ts` (the adapter
 //! registry), `src/unpack/types.ts`, `src/unpack/adapters/{bun,passthrough,
 //! webcrack}.ts`; `src/plugins/webcrack.ts` is NOT ported — webcrack runs as
-//! a subprocess shim (`webcrack`).
+//! a subprocess shim (`webcrack`). The registry's post-cutover fourth
+//! adapter is esbuild (exp075's module form, ported to Rust 2026-10-02):
+//! the same vendor-extraction flow as bun, entered through
+//! `bun::unpack_esbuild` — the two bundlers differ only in two wrapper
+//! shapes ([`crate::modules::factory_arg_function`]) and esbuild's
+//! unminified builds hand each module's original source path through the
+//! object key ([`crate::modules::FactoryRecord::source_path`]).
 //!
 //! The Bun adapter's classification and naming halves live in
 //! `crate::modules` (classification, WP1.5) and `crate::modules::
@@ -48,20 +54,27 @@ pub struct UnpackResult {
     pub files: Vec<UnpackedFile>,
 }
 
-/// The registered adapters (`adapters` in src/unpack/index.ts), in
-/// registry order — the first whose `supports` holds wins, and passthrough
-/// is last because it supports everything.
+/// The registered adapters — the TS registry (`adapters` in
+/// src/unpack/index.ts`) plus esbuild (exp075's second bundler, ported to
+/// the Rust pipeline), in registry order — the first whose `supports`
+/// holds wins, and passthrough is last because it supports everything.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnpackAdapter {
     Webcrack,
     Bun,
+    /// esbuild's bundle reader (`unpack::bun::unpack_esbuild`): the same
+    /// vendor-extraction flow as bun, whose module form differs in two
+    /// wrapper shapes and hands over each unminified module's original
+    /// source path.
+    Esbuild,
     Passthrough,
 }
 
 /// Registry order (`adapters`).
-pub const ADAPTERS: [UnpackAdapter; 3] = [
+pub const ADAPTERS: [UnpackAdapter; 4] = [
     UnpackAdapter::Webcrack,
     UnpackAdapter::Bun,
+    UnpackAdapter::Esbuild,
     UnpackAdapter::Passthrough,
 ];
 
@@ -72,6 +85,7 @@ impl UnpackAdapter {
         match self {
             UnpackAdapter::Webcrack => "webcrack",
             UnpackAdapter::Bun => "bun",
+            UnpackAdapter::Esbuild => "esbuild",
             UnpackAdapter::Passthrough => "passthrough",
         }
     }
@@ -84,14 +98,18 @@ impl UnpackAdapter {
                 BundlerType::Webpack | BundlerType::Browserify
             ),
             UnpackAdapter::Bun => detection.bundler.kind == BundlerType::Bun,
+            UnpackAdapter::Esbuild => detection.bundler.kind == BundlerType::Esbuild,
             UnpackAdapter::Passthrough => true,
         }
     }
 
     /// `providesModuleFossils`: the bundle records its original module
-    /// layout as `__esm` fossils (exp070). Only the Bun adapter declares it.
+    /// layout as `__esm` fossils (exp070; the grammar covers both bundlers
+    /// — esbuild's init thunks and object-wrapped modules too, exp075).
+    /// The bun and esbuild adapters declare it; webcrack and passthrough
+    /// do not.
     pub fn provides_module_fossils(self) -> bool {
-        self == UnpackAdapter::Bun
+        matches!(self, UnpackAdapter::Bun | UnpackAdapter::Esbuild)
     }
 }
 
@@ -140,6 +158,7 @@ pub fn run_adapter(
 ) -> Result<UnpackResult, String> {
     match adapter {
         UnpackAdapter::Bun => Ok(bun::unpack_bun(code, out_dir, bun_options)?.result),
+        UnpackAdapter::Esbuild => Ok(bun::unpack_esbuild(code, out_dir, bun_options)?.result),
         UnpackAdapter::Webcrack => webcrack::unpack_webcrack(
             code,
             out_dir,

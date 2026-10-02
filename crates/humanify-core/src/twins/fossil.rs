@@ -43,6 +43,11 @@ pub struct FossilModule {
     pub imports: Vec<usize>,
     /// Names the segment declares (post-rename; same-version use only).
     pub declared: Vec<String>,
+    /// The module's ORIGINAL source path, when the bundler kept it —
+    /// esbuild's unminified form uses it as the init object's key (exp075).
+    /// Absent for bun and for any minified build, so nothing may depend on
+    /// it; recorded metadata, a gift when present.
+    pub source_path: Option<String>,
 }
 
 /// TS `FossilExtract` (:47).
@@ -75,7 +80,11 @@ fn thunk_of(init: &Value) -> Option<&Value> {
     Some(body)
 }
 
-/// The `(…, ident)` a helper thunk yields, whichever form it takes (:93).
+/// The `(…, ident)` a helper thunk yields, whichever form it takes (:93):
+/// a SEQUENCE — the raw text's form, expression-bodied (bun) or returned
+/// (esbuild) — or esbuild's BEAUTIFIED restructing of the returned one
+/// (the stage-6 formatter unrolls `return fn && (…), res;` into
+/// `if (fn) { … } return res;`).
 fn thunk_result_sequence(thunk: &Value) -> Option<&Value> {
     let body = unwrap_paren(thunk.get("body")?);
     if body.get("type").and_then(Value::as_str) == Some("SequenceExpression") {
@@ -93,9 +102,22 @@ fn thunk_result_sequence(thunk: &Value) -> Option<&Value> {
     (arg.get("type").and_then(Value::as_str) == Some("SequenceExpression")).then_some(arg)
 }
 
+/// An ESTree Identifier's name (None for anything else).
+fn ident_name(v: Option<&Value>) -> Option<&str> {
+    let v = v?;
+    (v.get("type").and_then(Value::as_str) == Some("Identifier"))
+        .then(|| v.get("name")?.as_str())
+        .flatten()
+}
+
 /// The `__esm` helper SHAPE (:82): a two-parameter arrow whose body is a
-/// zero-arg thunk ending in an identifier — bun's and esbuild's forms
-/// agree on this shape (exp075, verified against esbuild 0.27.2 output).
+/// zero-arg thunk ending in an identifier — the RAW form's sequence
+/// (bun's and esbuild's, exp075-verified against real 0.27.2 output), or
+/// esbuild's beautified form on the SHIPPED text the split reads: an
+/// if-guard on the FIRST parameter and a bare `return <second parameter>`.
+/// The beautified recognition is deliberately TIGHT (both parameter names
+/// must appear in exactly those roles) so ordinary memoizer-shaped code
+/// on a BUN tree cannot mint phantom modules.
 fn is_esm_helper(d: &Value) -> bool {
     if d.get("id")
         .and_then(|i| i.get("type"))
@@ -110,16 +132,45 @@ fn is_esm_helper(d: &Value) -> bool {
     let Some(thunk) = thunk_of(init) else {
         return false;
     };
-    let Some(seq) = thunk_result_sequence(thunk) else {
+    if let Some(seq) = thunk_result_sequence(thunk) {
+        let Some(exprs) = seq.get("expressions").and_then(Value::as_array) else {
+            return false;
+        };
+        let Some(last) = exprs.last() else {
+            return false;
+        };
+        return last.get("type").and_then(Value::as_str) == Some("Identifier");
+    }
+    // The beautified esbuild form: every statement is examined only for
+    // its role, so the `(0, fn[…](fn = 0))` call inside the if survives
+    // any formatting.
+    let Some(params) = init.get("params").and_then(Value::as_array) else {
         return false;
     };
-    let Some(exprs) = seq.get("expressions").and_then(Value::as_array) else {
+    let (Some(fn_name), Some(res_name)) = (ident_name(params.first()), ident_name(params.get(1)))
+    else {
         return false;
     };
-    let Some(last) = exprs.last() else {
+    let Some(body) = thunk.get("body").map(unwrap_paren) else {
         return false;
     };
-    last.get("type").and_then(Value::as_str) == Some("Identifier")
+    let Some(stmts) = body.get("body").and_then(Value::as_array) else {
+        return false;
+    };
+    let Some((last, head)) = stmts.split_last() else {
+        return false;
+    };
+    if last.get("type").and_then(Value::as_str) != Some("ReturnStatement")
+        || ident_name(last.get("argument")) != Some(res_name)
+    {
+        return false;
+    }
+    // The final return must name the second parameter, and SOME preceding
+    // statement must be an if-guard naming the first.
+    head.iter().any(|s| {
+        s.get("type").and_then(Value::as_str) == Some("IfStatement")
+            && ident_name(s.get("test")) == Some(fn_name)
+    })
 }
 
 /// What a top-level statement DECLARES — the names the placement trail is
@@ -217,7 +268,9 @@ fn init_function_of(arg: Option<&Value>) -> (Option<&Value>, Option<String>) {
 }
 
 /// Leading zero-arg identifier calls of an init body — the import edges
-/// (:177).
+/// (:177). esbuild heads every wrapped module body with `"use strict";`
+/// (the Directive Prologue), which the scan reads through — the init
+/// calls start after it.
 fn leading_init_calls(init_fn: Option<&Value>) -> Vec<String> {
     let mut leading: Vec<String> = Vec::new();
     let Some(fn_body) = init_fn.and_then(|f| f.get("body")) else {
@@ -229,7 +282,17 @@ fn leading_init_calls(init_fn: Option<&Value>) -> Vec<String> {
     let Some(body) = fn_body.get("body").and_then(Value::as_array) else {
         return leading;
     };
-    for s in body {
+    let mut stmts = body.as_slice();
+    // The Directive Prologue: leading string-literal expression statements.
+    while matches!(
+        stmts.first().map(|s| (s.get("type").and_then(Value::as_str), s.get("expression"))),
+        Some((Some("ExpressionStatement"), Some(expr)))
+            if expr.get("type").and_then(Value::as_str) == Some("Literal")
+                && expr.get("value").is_some_and(Value::is_string)
+    ) {
+        stmts = &stmts[1..];
+    }
+    for s in stmts {
         let is_call = s.get("type").and_then(Value::as_str) == Some("ExpressionStatement")
             && s.get("expression")
                 .and_then(|e| e.get("type"))
@@ -264,6 +327,8 @@ struct RawInit {
     index: usize,
     name: String,
     leading: Vec<String>,
+    /// esbuild only: the original source path, from the object key.
+    source_path: Option<String>,
 }
 
 fn find_init_defs(body: &[Value], esm_helpers: &HashSet<String>) -> Vec<RawInit> {
@@ -301,7 +366,7 @@ fn find_init_defs(body: &[Value], esm_helpers: &HashSet<String>) -> Vec<RawInit>
             {
                 continue;
             }
-            let (init_fn, _source_path) = init_function_of(arguments.and_then(|a| a.first()));
+            let (init_fn, source_path) = init_function_of(arguments.and_then(|a| a.first()));
             if init_fn.is_none() {
                 continue;
             }
@@ -309,6 +374,7 @@ fn find_init_defs(body: &[Value], esm_helpers: &HashSet<String>) -> Vec<RawInit>
                 index: i,
                 name: name.unwrap_or_default().to_string(),
                 leading: leading_init_calls(init_fn),
+                source_path,
             });
         }
     }
@@ -376,6 +442,7 @@ pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<Fossi
                 .filter_map(|n| name_to_module.get(n).copied())
                 .collect(),
             declared,
+            source_path: r.source_path.clone(),
         });
         prev = r.index as isize;
     }
