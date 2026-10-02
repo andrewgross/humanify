@@ -136,5 +136,119 @@ pub fn get_proximate_used_names<'a, S: AsRef<str>>(
     result
 }
 
+/// One scope's windowing inputs as PLAIN data — the extract-then-parallel
+/// snapshot the wave processor's module lanes window from
+/// (perf-inventory item 2: per-group windowing re-read the same used
+/// list, droppability and per-name proximity lines once per group, 73.9 s
+/// of a 122.6 s fresh-run round setup).
+///
+/// [`ProximityWindow::new`] runs on the CALLING thread, where its
+/// closures may borrow state that is not `Sync` (the oxc `Semantic` behind
+/// the binding tables); [`ProximityWindow::windowed`] is a pure function
+/// of the extracted data, so many batches may window in parallel and
+/// rejoin in their own order (the `par::map_ordered` rule). The output is
+/// byte-identical to [`get_proximate_used_names`] over the same inputs —
+/// the serial path's, exactly — pinned in `proximity_test`.
+pub struct ProximityWindow {
+    /// The used names, in insertion order (the serial `all_used_names`).
+    used: Vec<String>,
+    /// Whether `used[i]` is a [`WELL_KNOWN_NAMES`] member.
+    well_known: Vec<bool>,
+    /// The serial `is_droppable` per name: eligibility AND not-taken.
+    droppable: Vec<bool>,
+    /// The serial `scope_binding(name)` per name, extracted where the
+    /// serial loop would consult it: preserved names of a windowed scope
+    /// (`total >= WINDOWING_THRESHOLD`); `None` elsewhere — including for
+    /// an absent binding, which the serial loop includes "to be safe".
+    bindings: Vec<Option<ProximityBinding>>,
+    /// The serial `total_bindings`.
+    total: usize,
+}
+
+impl ProximityWindow {
+    /// Extract the snapshot: mirrors [`get_proximate_used_names`]'s read
+    /// pattern over the caller's closures — `is_droppable` for every name,
+    /// `scope_binding` only for the preserved names a windowed scope
+    /// consults.
+    pub fn new(
+        used: Vec<String>,
+        total: usize,
+        is_droppable: impl Fn(&str) -> bool,
+        scope_binding: impl Fn(&str) -> Option<ProximityBinding>,
+    ) -> ProximityWindow {
+        let n = used.len();
+        let mut well_known = Vec::with_capacity(n);
+        let mut droppable = Vec::with_capacity(n);
+        for name in &used {
+            well_known.push(WELL_KNOWN_NAMES.contains(&name.as_str()));
+            droppable.push(is_droppable(name));
+        }
+        let mut bindings = vec![None; n];
+        if total >= WINDOWING_THRESHOLD {
+            for (i, name) in used.iter().enumerate() {
+                if !droppable[i] {
+                    bindings[i] = scope_binding(name);
+                }
+            }
+        }
+        ProximityWindow {
+            used,
+            well_known,
+            droppable,
+            bindings,
+            total,
+        }
+    }
+
+    /// The windowed used names for one batch — the serial
+    /// [`get_proximate_used_names`]'s result over the extracted inputs, in
+    /// the serial order (well-known first, then preserved names),
+    /// deduplicated by insertion. Pure data in, pure data out.
+    pub fn windowed(&self, batch_lines: &[u32]) -> Vec<String> {
+        fn push_unique<'a>(
+            result: &mut Vec<String>,
+            members: &mut std::collections::HashSet<&'a str>,
+            name: &'a str,
+        ) {
+            if members.insert(name) {
+                result.push(name.to_string());
+            }
+        }
+        let mut result: Vec<String> = Vec::new();
+        let mut members: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for i in 0..self.used.len() {
+            if self.well_known[i] {
+                push_unique(&mut result, &mut members, &self.used[i]);
+            }
+        }
+        if self.total < WINDOWING_THRESHOLD {
+            for i in 0..self.used.len() {
+                if !self.droppable[i] {
+                    push_unique(&mut result, &mut members, &self.used[i]);
+                }
+            }
+            return result;
+        }
+        // Math.min(...[]) is Infinity and Math.max(...[]) -Infinity: an
+        // empty batch windows nothing in (absent bindings still included).
+        let min_line = batch_lines
+            .iter()
+            .map(|&l| f64::from(l))
+            .fold(f64::INFINITY, f64::min)
+            - PROXIMITY_RADIUS;
+        let max_line = batch_lines
+            .iter()
+            .map(|&l| f64::from(l))
+            .fold(f64::NEG_INFINITY, f64::max)
+            + PROXIMITY_RADIUS;
+        for i in 0..self.used.len() {
+            if !self.droppable[i] && in_window(self.bindings[i].as_ref(), min_line, max_line) {
+                push_unique(&mut result, &mut members, &self.used[i]);
+            }
+        }
+        result
+    }
+}
+
 #[cfg(test)]
 mod proximity_test;
