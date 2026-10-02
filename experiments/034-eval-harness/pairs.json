@@ -8,7 +8,7 @@
     "model": "openai/gpt-oss-20b",
     "apiKey": "local",
     "reasoningEffort": "low",
-    "concurrency": "32"
+    "concurrency": "472"
   },
   "pairs": [
     {

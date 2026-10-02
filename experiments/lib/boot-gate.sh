@@ -44,6 +44,16 @@ export PATH="$HOME/.bun/bin:$PATH"
 # re-recorded with it).
 export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-opus-4-1}"
 
+# The walked CLI must see only BOOT_GATE_MODEL. A launching agent session
+# exports its own model overrides (ANTHROPIC_MODEL + the per-tier defaults);
+# inherited, the walked CLI remaps the pinned model onto the session's model
+# and the live prompt fails with "issue with the selected model" — a false
+# boot FAIL (2026-10-02: ANTHROPIC_MODEL=GLM-… from the session). Strip them
+# for the probe only.
+BOOT_GATE_ENV_STRIP=(env -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL
+  -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL
+  -u ANTHROPIC_DEFAULT_FABLE_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL)
+
 # Fail NOW, at source time, rather than at the point a caller expected a check.
 if ! command -v bun >/dev/null 2>&1; then
   echo "FATAL: \`bun\` is not on PATH (looked in \$PATH and \$HOME/.bun/bin)." >&2
@@ -67,7 +77,7 @@ boot_gate() {
   local version prompt
   version=$( (cd "$dir" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
   version=${version//\"/}
-  prompt=$( (cd "$dir" && timeout 120 bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
+  prompt=$( (cd "$dir" && timeout 120 "${BOOT_GATE_ENV_STRIP[@]}" bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
   prompt=${prompt//\"/}
 
   if [[ "$version" == *"$want"* && "$prompt" == *"boot-ok"* ]]; then
