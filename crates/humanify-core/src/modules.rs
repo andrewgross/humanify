@@ -292,7 +292,14 @@ pub fn is_inside_factory_body(span: Span, factories: &[FactoryRecord]) -> bool {
 ///     silently matched (a number-free factory's bytes coincide across the
 ///     era, so the version gate alone stands between a stale manifest and
 ///     a half-carried prior).
-pub const FACTORY_HASH_VERSION: u64 = 3;
+/// 4 = exp094 (2026-10-02): a SAFE arrow serializes under the
+///     FunctionExpression token (`hash::serialize`'s wrapper-spelling
+///     unification), so arrow-factory hashes are a new era's bytes. A
+///     factory spelled as a function expression keeps its bytes ACROSS the
+///     era — the same half-carried-prior shape exp093's gate exists for —
+///     so the version gate alone again stands between a stale manifest and
+///     a silent join.
+pub const FACTORY_HASH_VERSION: u64 = 4;
 
 /// The MatchKey structural hash of a factory body FUNCTION (arrow or
 /// function expression; None for anything else) under `tables` — the
