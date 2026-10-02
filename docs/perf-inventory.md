@@ -165,6 +165,46 @@ decision-changing, needs the cold eval.
 
 ### 1. #66: the fresh run's ~58 GB live working set — instrument, then fix
 
+**RESOLVED 2026-10-02 (branch `fix/taken-set-retention`).** The
+instrumentation lane's gauges split the fresh-182 peak's stored-strategy
+owner at 31.1 GB (measured 2026-10-02); the sub-gauge added on the fix
+branch re-pinned that owner at **28.15 GB** (the lane's 31.1 GB
+double-counted the module strategies' shared taken `Arc`s, once per
+strategy) and split it: **taken-name sets 28.11 GB (99.9%)** — 843.9M
+name strings, one private clone of the scope chain's already-renamed
+names per function pass — against bindings 5 MB, callee snippets 14 MB,
+callsites 3 MB, context vars 5 MB, module lists 11 MB. The #56
+phenotype on the renamed-name field, as the lane suspected.
+
+The fix is #56's pattern on that field: `naming::waves::taken::TakenNames`
+holds the `renamed_layers` map's immutable per-scope snapshots (one
+`Arc` per chain scope) instead of cloning the union — membership over
+the layers is membership over the union, and the `Arc`s freeze the
+build-time state exactly as the private clone did (the map replaces its
+`Arc` on a table-version bump, never mutates it). Before/after, same
+input, same flags, stub LLM (the instrumentation lane's runner; artifacts
+in `/work/taken-set-retention/`):
+
+- fresh 2.1.182: peak RSS **57.81 GB → 8.35 GB** (−49.5 GB, −86%; the
+  clone traffic was mimalloc-amplified far beyond its own 28 GB — with
+  843.9M small string allocations gone, the wave era now peaks below the
+  tail's old 58→6 GB collapse line); the taken sub-gauge 28,112 MB →
+  78 MB (843.9M names → 2.37M — the residue is stale-generation
+  snapshots a context froze before its scope's table bumped); wall
+  527 s → 446 s (−15%).
+- with-prior 213←212: peak 16.99 GB → 16.88 GB (the hop's peak is the
+  prior side's parse/graph/matching, not the wave-era retention — the
+  strategies gauge still fell 1,935 MB → 38 MB, taken 1,932 MB → 35 MB);
+  wall 199 s → 191 s.
+- byte-identity: trees, asks.jsonl (44,351 rows fresh / 1,446 prior),
+  prompts.jsonl and cache-keys.jsonl (11.5 GB fresh) all IDENTICAL
+  before vs after on both shapes (`compare.sh` in the records dir,
+  output in `compare.txt`); exit codes 0 everywhere; the gate 12/12
+  (`npm run check` on the branch).
+
+(Everything below is the item's pre-fix state, kept as the record of
+how the number was chased.)
+
 Memory is perf (see above). The fix class is #65's: a retention fix with
 byte-identity proof; #65 incidentally made runs ~25% faster, so a wall
 dividend is plausible but unmeasured. First step is instrumentation a
