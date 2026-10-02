@@ -80,22 +80,22 @@ The walk-hop shape: 91.3% of functions carry from the prior (58,154
 cached, 945 LLM-asked); only 1,369 stub calls. Uses the box a little
 (2.3 cores inside naming; 50 cores only inside twin-inventories).
 
-| phase                                                         |   wall s | cores | notes                                                                                                                                    |
-| ------------------------------------------------------------- | -------: | ----: | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| unpack+vendor                                                 |      2.7 |   3.1 |                                                                                                                                          |
-| prior:sides-parallel                                          |      8.3 |   4.5 | both parses + both graph builds; the 33 MB prior is parsed TWICE in the fast path (its own thread + again for the AST later stages walk) |
-| prior:index                                                   |      1.2 |   2.0 |                                                                                                                                          |
-| prior:match-cascade                                           |     21.7 |  1.08 | 3 function cascades (16.5) + 2 binding rounds (4.7) — the serial decision code, verified                                                 |
-| prior:close-dump                                              |      9.1 |   6.5 |                                                                                                                                          |
-| prior:twin-inventories                                        |     0.35 |  49.7 | already parallel                                                                                                                         |
-| era:transfer                                                  |     13.4 |  1.00 | settle 9.8 — serial decision code, verified                                                                                              |
-| era:close-contexts                                            |      1.7 |  39.9 | already parallel (`par::map_ordered`; prior-path only, by design)                                                                        |
-| era:waves                                                     |     36.5 |  1.00 | setup 12.2 (build-context 3.3), dispatch 18.3 (13.5 ms/call), gate-release 0.7                                                           |
-| validate+reconcile / deferred-sweep / family-permute / census |     20.6 |  ~1.2 | sweep 4.3, permute 9.8, reconcile 5.5                                                                                                    |
-| **split (whole stage)**                                       | **66.7** |  1.13 | **35% of the whole run**                                                                                                                 |
-| — split:compute                                               |     25.9 |  1.56 | assign 13.7 (the prior-inherit layout path), input 3.9, runnable-cjs 6.4, review 0.9                                                     |
-| — split:finish                                                | **40.2** |  0.86 | **relink + post-split reconcile + carry: restored 2,489 prior names across 1,264 of 4,772 files — serial**                               |
-| — split:write-tree                                            |      0.6 |       |                                                                                                                                          |
+| phase                                                         |   wall s | cores | notes                                                                                                                                                                                                                 |
+| ------------------------------------------------------------- | -------: | ----: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unpack+vendor                                                 |      2.7 |   3.1 |                                                                                                                                                                                                                       |
+| prior:sides-parallel                                          |      8.3 |   4.5 | both parses + both graph builds; the 33 MB prior is parsed TWICE in the fast path (its own thread + again for the AST later stages walk)                                                                              |
+| prior:index                                                   |      1.2 |   2.0 |                                                                                                                                                                                                                       |
+| prior:match-cascade                                           |     21.7 |  1.08 | 3 function cascades (16.5) + 2 binding rounds (4.7) — the serial decision code, verified                                                                                                                              |
+| prior:close-dump                                              |      9.1 |   6.5 |                                                                                                                                                                                                                       |
+| prior:twin-inventories                                        |     0.35 |  49.7 | already parallel                                                                                                                                                                                                      |
+| era:transfer                                                  |     13.4 |  1.00 | settle 9.8 — serial decision code, verified                                                                                                                                                                           |
+| era:close-contexts                                            |      1.7 |  39.9 | already parallel (`par::map_ordered`; prior-path only, by design)                                                                                                                                                     |
+| era:waves                                                     |     36.5 |  1.00 | setup 12.2 (build-context 3.3), dispatch 18.3 (13.5 ms/call), gate-release 0.7                                                                                                                                        |
+| validate+reconcile / deferred-sweep / family-permute / census |     20.6 |  ~1.2 | sweep 4.3, permute 9.8, reconcile 5.5                                                                                                                                                                                 |
+| **split (whole stage)**                                       | **66.7** |  1.13 | **35% of the whole run**                                                                                                                                                                                              |
+| — split:compute                                               |     25.9 |  1.56 | assign 13.7 (the prior-inherit layout path), input 3.9, runnable-cjs 6.4, review 0.9                                                                                                                                  |
+| — split:finish                                                | **40.2** |  0.86 | **relink + post-split reconcile + carry: restored 2,489 prior names across 1,264 of 4,772 files — serial; RESOLVED 2026-10-02 (item 3 below): reconcile parallelized, ~27 s → 17.6 s at this commit, byte-identical** |
+| — split:write-tree                                            |      0.6 |       |                                                                                                                                                                                                                       |
 
 Highest-signal surprises vs the fast-mode study's 215→216 table:
 
@@ -105,7 +105,9 @@ Highest-signal surprises vs the fast-mode study's 215→216 table:
    pays it 33 times. NOT in the fast-mode study's table (its 20 s "split"
    line was pre-cutover TS-era-prior shape). No sub-spans exist inside
    it — relink vs reconcile-read vs reconcile-apply vs carry is not yet
-   measurable.
+   measurable. **→ RESOLVED 2026-10-02: sub-spans added, the per-file
+   reconcile parallelized byte-identically (item 3 below); the carry
+   (~12 s) is what remains serial.**
 2. The fast-mode study's serial-decision numbers **verify on current
    main**: match cascade 22 s → 21.7 s; transfer 16 s → 13.4 s (settle,
    1.0 core).
@@ -230,7 +232,7 @@ assembly, ctx maps) so the extractable share is measurable. **BP; size
 −40…−100 s fresh (−8…−20%), −15 s with-prior; client-side only — worth
 it only where the client, not the server, is the wall.**
 
-### 3. With-prior `split:finish`: 40 s serial per hop — sub-spans first
+### 3. With-prior `split:finish`: 40 s serial per hop — RESOLVED 2026-10-02
 
 New measurement (not in any prior study). Post-split reconcile + relink
 
@@ -241,6 +243,53 @@ New measurement (not in any prior study). Post-split reconcile + relink
   read, reconcile apply, carry). **Likely BP (deterministic stage; the
   repo's own doc notes reconcile is why draw-pinned A/B is licensed to
   measure it); size −30 s on a 192 s hop (−16%); client-side only.**
+
+**RESOLVED (branch `perf/split-finish`, from main `a977f4e7`).** The
+sub-spans (added 2026-10-02 on the instrumentation lane) named the
+seams; the per-file read+compute half was parallelized in the
+extract-plain-data pattern (`par::map_ordered` over the ledger's files —
+a worker sees only its file's two texts, the eligibility set and its
+statement count, never the ledger), and everything cross-file — the
+ledger patches (`nameToFiles` is shared: one file's patch appends to a
+list the next file's patch and stale count read), the stale counts, the
+trail, the claim totals, the changed list, the renames — is re-joined
+serially in ledger file order, the order the TS iterated: byte-identical
+by construction. The **carry stays serial** (a single-bundle
+validate-and-rewrite loop, stateful by design); relink, desugar and
+scaffold untouched.
+
+Proof (one with-prior stub hop, 213←212, three solo legs —
+`/work/split-finish-lane/`):
+
+- **Byte identity**: the finished trees (all ~4.7k files incl.
+  `.humanify/humanified.js` and `split-ledger.json`) are byte-identical
+  before vs after (0 `diff -r` lines), the before leg run twice agreeing
+  (0 lines — the stub hop is deterministic), the asks and the full
+  1.5 GB `--dump-artifacts` identical except `meta.json`'s `generatedAt`
+  (all text hashes — `shipped`, `reconciled` included — equal).
+  Unit-level determinism pin:
+  `results_are_byte_identical_under_scrambled_completion_order`
+  (scrambled worker completion order must not move one byte; verified it
+  can fire by seeding a completion-order rejoin and watching it fail).
+- **Sub-spans** (`--profile`, ms): reconcile **10,802/12,418 serial →
+  1,837 at 7.4 cores**; carry 12,183/11,974 → 12,076 (unchanged); relink
+  ~1,900; ledger ~1,310; apply ~125. `split:finish` 26.7/28.1 s →
+  **17.6 s**. Note the original instrumentation run measured the
+  reconcile span at 23.9 s; main since got ~2× faster in that span
+  (independent of this change) — these before/after numbers are
+  same-commit, one change.
+- **Hop wall** 216/215 s → 206 s; **peak RSS 16.75/16.78 GB → 16.80 GB**
+  (unchanged; the collected per-file results hold the same data the
+  serial pass accumulated incrementally).
+- The span's CPU rose 8.2–9.5 s → 13.6 s (allocator/cache contention
+  across workers) — wall is the metric the walk pays.
+
+**What remains in `split:finish`** is now the serial carry (~12.1 s, a
+single-bundle parse + 2,489 stateful validated renames + two
+full-bundle signature parses) and relink (~1.9 s) — the carry is the
+next candidate, but it is one big file, not per-file work; the same
+pattern does not apply without splitting its parse from its rename
+loop. Gate: `npm run check` 12/12.
 
 ### 4. Incident: a useless prior silently degrades to a full-ask fresh run
 
