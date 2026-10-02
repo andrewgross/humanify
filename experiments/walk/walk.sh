@@ -247,18 +247,16 @@ fi
 # (an agent running this walk) it inherits CLAUDECODE and refuses to start
 # ("cannot be launched inside another Claude Code session") — which reads as a
 # boot FAILURE of a tree that is fine. Strip the session's variables.
-BOOT_ENV=(env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION
-  -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET
-  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID)
+# BOOT_ENV / boot_version / boot_prompt: lib/boot-gate.sh (the one probe).
 
 # Boot both halves and RECORD them; never exits.
 boot_record() {
   local dir="$1" v="$2" dest="$3"
   local version="" prompt="skipped"
   if [[ -f "$dir/run.cjs" ]]; then
-    version=$( (cd "$dir" && timeout 60 "${BOOT_ENV[@]}" bun run.cjs --version 2>&1 | tail -1) || true )
+    version=$(boot_version "$dir")
     if [[ "$BOOT_PROMPT_ON" == "1" ]]; then
-      prompt=$( (cd "$dir" && timeout 120 "${BOOT_ENV[@]}" bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
+      prompt=$(boot_prompt "$dir")
     fi
   else
     version="(no run.cjs)"

@@ -368,14 +368,12 @@ for i in $(seq 0 $((npairs - 1))); do
   # warns about it — so a whole sweep could report green having never booted
   # a tree.
   if [[ -f "$OUT/run.cjs" ]]; then
-    BOOT_VERSION=$( (cd "$OUT" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
-    BOOT_VERSION=${BOOT_VERSION//\"/}
+    BOOT_VERSION=$(boot_version "$OUT")
     BOOT_PROMPT="skipped"
     if [[ "$RUN_BOOT_PROMPT" == "1" ]]; then
       # --model: see BOOT_GATE_MODEL in lib/boot-gate.sh (the API rejects the
       # default model on every version this project walks since 2026-09-18).
-      BOOT_PROMPT=$( (cd "$OUT" && timeout 120 bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
-      BOOT_PROMPT=${BOOT_PROMPT//\"/}
+      BOOT_PROMPT=$(boot_prompt "$OUT")
     fi
     BOOT_OK=false
     if [[ "$BOOT_VERSION" == *"$TO"* ]]; then

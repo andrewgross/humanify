@@ -44,15 +44,38 @@ export PATH="$HOME/.bun/bin:$PATH"
 # re-recorded with it).
 export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-opus-4-1}"
 
-# The walked CLI must see only BOOT_GATE_MODEL. A launching agent session
-# exports its own model overrides (ANTHROPIC_MODEL + the per-tier defaults);
-# inherited, the walked CLI remaps the pinned model onto the session's model
-# and the live prompt fails with "issue with the selected model" — a false
-# boot FAIL (2026-10-02: ANTHROPIC_MODEL=GLM-… from the session). Strip them
-# for the probe only.
-BOOT_GATE_ENV_STRIP=(env -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL
-  -u ANTHROPIC_DEFAULT_SONNET_MODEL -u ANTHROPIC_DEFAULT_HAIKU_MODEL
-  -u ANTHROPIC_DEFAULT_FABLE_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL)
+# The ONE environment a walked CLI boots under (run.sh, walk.sh and boot_gate
+# all go through boot_version / boot_prompt below — there used to be three
+# copies of the probe and two half-lists of what to strip). A launching agent
+# session exports two kinds of state the walked CLI must not inherit:
+# - its MODEL overrides (ANTHROPIC_MODEL + the per-tier defaults): inherited,
+#   the walked CLI remaps the pinned model onto the session's model and the
+#   live prompt fails "issue with the selected model" — a false boot FAIL on
+#   every tree (2026-10-02, ANTHROPIC_MODEL=GLM-… from the session; it failed
+#   all four boots of the control-843826be-8gpu eval);
+# - its SESSION identity (CLAUDECODE, CLAUDE_CODE_*): the walked CLI would act
+#   as a child of the launching session (walk.sh's list, now shared).
+BOOT_ENV=(env
+  -u ANTHROPIC_MODEL -u ANTHROPIC_DEFAULT_OPUS_MODEL -u ANTHROPIC_DEFAULT_SONNET_MODEL
+  -u ANTHROPIC_DEFAULT_HAIKU_MODEL -u ANTHROPIC_DEFAULT_FABLE_MODEL -u CLAUDE_CODE_SUBAGENT_MODEL
+  -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_CHILD_SESSION
+  -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET
+  -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_CODE_BRIDGE_SESSION_ID)
+
+# boot_version <treeDir> — the tree's `--version` line (quotes stripped).
+boot_version() {
+  local v
+  v=$( (cd "$1" && timeout 60 "${BOOT_ENV[@]}" bun run.cjs --version 2>&1 | tail -1) || true )
+  echo "${v//\"/}"
+}
+
+# boot_prompt <treeDir> — the tree's answer to the live prompt, pinned to
+# BOOT_GATE_MODEL (quotes stripped). Contains "boot-ok" when the tree runs.
+boot_prompt() {
+  local p
+  p=$( (cd "$1" && timeout 120 "${BOOT_ENV[@]}" bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
+  echo "${p//\"/}"
+}
 
 # Fail NOW, at source time, rather than at the point a caller expected a check.
 if ! command -v bun >/dev/null 2>&1; then
@@ -75,10 +98,8 @@ boot_gate() {
   fi
 
   local version prompt
-  version=$( (cd "$dir" && timeout 60 bun run.cjs --version 2>&1 | tail -1) || true )
-  version=${version//\"/}
-  prompt=$( (cd "$dir" && timeout 120 "${BOOT_GATE_ENV_STRIP[@]}" bun run.cjs -p "say exactly: boot-ok" --model "$BOOT_GATE_MODEL" 2>&1 | tail -1) || true )
-  prompt=${prompt//\"/}
+  version=$(boot_version "$dir")
+  prompt=$(boot_prompt "$dir")
 
   if [[ "$version" == *"$want"* && "$prompt" == *"boot-ok"* ]]; then
     echo "BOOT GATE OK   $dir ($version)"
