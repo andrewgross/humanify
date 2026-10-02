@@ -14,6 +14,20 @@
 //!
 //! Best-effort throughout, as the TS: any failure is a DISCARD of that
 //! file, never a failed run.
+//!
+//! The pass halves (perf-inventory item 3): the per-file READ+COMPUTE —
+//! read both texts, diff, parse, run the reconcile tiers, rewrite — is
+//! pure per-file work (a worker sees only its file's texts, the
+//! eligibility set and the file's ledger statement count; it never reads
+//! the ledger, which one file's renames patch), so it runs on the rayon
+//! pool as plain data out; everything that touches CROSS-FILE state —
+//! the ledger patches (`nameToFiles` is shared: one file's patch
+//! APPENDS to a list the next file's patch and stale count read), the
+//! stale counts, the trail, the claim totals, the changed list and the
+//! renames — is re-joined serially in LEDGER FILE order, the exact
+//! order the TS iterated, so the outputs are byte-identical by
+//! construction. The determinism pin over that boundary is
+//! `results_are_byte_identical_under_scrambled_completion_order`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -565,22 +579,55 @@ fn discarded() -> FileOutcome {
     }
 }
 
-/// `reconcileOneFile`.
+/// One file's reconcile as PURE per-file work (the rayon item): the
+/// outcome plus the trail rows and claim counters the pass recorded
+/// while it ran. Plain data only — the oxc nodes it parsed stay on the
+/// worker (they are not `Sync`); [`post_split_reconcile`] re-joins these
+/// in ledger file order.
+#[derive(Default)]
+struct FileWork {
+    outcome: FileOutcome,
+    trail: Option<crate::naming::report::diagnostics::ExtraText>,
+    claims: crate::rename::validated::RenameClaimStats,
+}
+
+impl FileWork {
+    /// A pre-compute failure (`FileOutcome::discarded`, nothing
+    /// recorded) — the Err the TS's caller swallowed into a discard.
+    fn failed() -> FileWork {
+        FileWork {
+            outcome: discarded(),
+            trail: None,
+            claims: crate::rename::validated::RenameClaimStats::default(),
+        }
+    }
+}
+
+/// `reconcileOneFile`. Infallible: any failure is a discard of this
+/// file, never a failed run — and what the pass already recorded (the
+/// trail rows, the claim counters) stays recorded wherever the file
+/// lands, exactly as when these were pushed into the shared result
+/// before the failure.
 fn reconcile_one_file(
     file: &str,
     fresh: &str,
     prior: &str,
     eligible: &Eligibility,
     ledger_statements: usize,
-    sink: &mut PostSplitResult,
-) -> Result<FileOutcome, String> {
-    let diff_text = compute_normal_diff(prior, fresh)?;
+) -> FileWork {
+    let Ok(diff_text) = compute_normal_diff(prior, fresh) else {
+        return FileWork::failed();
+    };
     if diff_text.is_empty() {
-        return Ok(FileOutcome::default());
+        return FileWork::default();
     }
     let allocator = Allocator::default();
-    let ingest = parse_or_err(&allocator, fresh)?;
-    let baseline = file_signature(fresh).ok_or("the fresh text does not parse")?;
+    let Ok(ingest) = parse_or_err(&allocator, fresh) else {
+        return FileWork::failed();
+    };
+    let Some(baseline) = file_signature(fresh) else {
+        return FileWork::failed();
+    };
     let lines = DiffLines::new(fresh);
     let mut state = RenameState::with_trail(
         ingest.semantic(),
@@ -603,23 +650,25 @@ fn reconcile_one_file(
     let result = reconcile_diff_noise(ingest.semantic(), &mut state, &diff_text, eligible, &opts);
     // Recorded as the pass ran — whatever the file's fate below.
     let rows = state.trail().entries().to_vec();
-    if !rows.is_empty() {
-        sink.trail
-            .push(crate::naming::report::diagnostics::ExtraText {
-                file: file.to_string(),
-                text: fresh.to_string(),
-                rows,
-            });
-    }
-    crate::naming::driver::add_claims(&mut sink.claims, &state.claim_stats());
+    let trail = (!rows.is_empty()).then(|| crate::naming::report::diagnostics::ExtraText {
+        file: file.to_string(),
+        text: fresh.to_string(),
+        rows,
+    });
+    let claims = state.claim_stats();
+    let finish = |outcome| FileWork {
+        outcome,
+        trail,
+        claims,
+    };
     if result.prior_too_dissimilar {
-        return Ok(FileOutcome {
+        return finish(FileOutcome {
             corpus_gated: true,
             ..FileOutcome::default()
         });
     }
     if result.renames.is_empty() {
-        return Ok(FileOutcome::default());
+        return finish(FileOutcome::default());
     }
     let renamed = renamed_occurrences(&state, fresh);
     let text_lines: Vec<&str> = fresh.split('\n').collect();
@@ -629,10 +678,12 @@ fn reconcile_one_file(
     let rewritten = apply_substitutions(&owned, &subs);
     // The saving is only real if the rewritten TEXT is the same program.
     if file_signature(&rewritten).as_deref() != Some(baseline.as_str()) {
-        return Ok(discarded());
+        return finish(discarded());
     }
     let re_alloc = Allocator::default();
-    let reparsed = parse_or_err(&re_alloc, &rewritten)?;
+    let Ok(reparsed) = parse_or_err(&re_alloc, &rewritten) else {
+        return finish(discarded());
+    };
     let declared = top_level_names(reparsed.program);
     let mut renames: Vec<PostSplitRename> = result
         .renames
@@ -666,7 +717,7 @@ fn reconcile_one_file(
         &decl_lines,
         ledger_statements,
     );
-    Ok(FileOutcome {
+    finish(FileOutcome {
         text: Some(rewritten),
         renames,
         corpus_gated: false,
@@ -674,60 +725,79 @@ fn reconcile_one_file(
     })
 }
 
-/// What the pass is given (`PostSplitReconcileInput`).
+/// What the pass is given (`PostSplitReconcileInput`). The read closures
+/// run on the rayon pool's workers (the per-file reads), so they must be
+/// `Sync` — they are shared, immutable-side reads of the two trees.
 pub struct PostSplitInput<'i> {
     /// The split ledger (patched in place).
     pub ledger: &'i mut JsValue,
-    pub read_fresh: &'i dyn Fn(&str) -> Option<String>,
-    pub read_prior: &'i dyn Fn(&str) -> Option<String>,
+    pub read_fresh: &'i (dyn Fn(&str) -> Option<String> + Sync),
+    pub read_prior: &'i (dyn Fn(&str) -> Option<String> + Sync),
     pub eligible: &'i Eligibility,
     /// `--disable post-split-reconcile`.
     pub disabled: bool,
 }
 
-/// `postSplitReconcile(input)`.
+/// `postSplitReconcile(input)`: the per-file read+compute is a PURE
+/// per-file map (see the module docs) so it runs on the rayon pool in
+/// [`crate::par::map_ordered`]'s input-order pattern — plain data out,
+/// results back in ledger order — and the cross-file half (the ledger
+/// patches, the stale counts, the trail, the claim totals, the changed
+/// list, the renames) is re-joined serially below in that same order,
+/// the exact order the TS iterated.
 pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
     let mut result = PostSplitResult::default();
     if input.disabled {
         return result;
     }
-    let ledger = ledger_obj(input.ledger);
+    let PostSplitInput {
+        ledger,
+        read_fresh,
+        read_prior,
+        eligible,
+        disabled: _,
+    } = input;
+    let ledger = ledger_obj(ledger);
     let mut ledger_statements: HashMap<String, usize> = HashMap::new();
     for f in strings(ledger.get("order")) {
         *ledger_statements.entry(f).or_insert(0) += 1;
     }
-    for file in strings(ledger.get("files")) {
-        let (Some(fresh), Some(prior)) = ((input.read_fresh)(&file), (input.read_prior)(&file))
-        else {
+    let files = strings(ledger.get("files"));
+    let works: Vec<Option<FileWork>> = crate::par::map_ordered(&files, |file| {
+        // The reads run on the worker: both trees are immutable here and
+        // a file's texts are its per-item input.
+        let (Some(fresh), Some(prior)) = ((read_fresh)(file), (read_prior)(file)) else {
+            return None;
+        };
+        let statements = ledger_statements.get(file).copied().unwrap_or(0);
+        Some(reconcile_one_file(
+            file, &fresh, &prior, eligible, statements,
+        ))
+    });
+    for (file, work) in files.iter().zip(works) {
+        let Some(work) = work else {
             continue;
         };
         result.stats.considered += 1;
-        let statements = ledger_statements.get(&file).copied().unwrap_or(0);
-        // "An optional pass must never lose a completed run": any error is
-        // a discard.
-        let outcome = reconcile_one_file(
-            &file,
-            &fresh,
-            &prior,
-            input.eligible,
-            statements,
-            &mut result,
-        )
-        .unwrap_or_else(|_| discarded());
-        if outcome.corpus_gated {
+        if work.outcome.corpus_gated {
             result.stats.corpus_gated += 1;
         }
-        if outcome.discarded {
+        if work.outcome.discarded {
             result.stats.discarded += 1;
         }
-        let Some(text) = outcome.text else {
+        if let Some(trail) = work.trail {
+            result.trail.push(trail);
+        }
+        crate::naming::driver::add_claims(&mut result.claims, &work.claims);
+        let Some(text) = work.outcome.text else {
             continue;
         };
+        let renames = work.outcome.renames;
         result.changed.push((file.clone(), text));
         result.stats.changed += 1;
-        patch_ledger(ledger, &file, &outcome.renames);
-        result.stats.incoherent += count_stale(ledger, &file, &outcome.renames);
-        result.renames.extend(outcome.renames);
+        patch_ledger(ledger, file, &renames);
+        result.stats.incoherent += count_stale(ledger, file, &renames);
+        result.renames.extend(renames);
     }
     result
 }

@@ -143,6 +143,224 @@ fn a_non_ascii_identifier_is_left_intact() {
     );
 }
 
+/// docs/perf-inventory.md item 3's determinism pin: the per-file
+/// read+compute runs on the rayon pool (`crate::par::map_ordered`) and
+/// the rejoin — the ledger patches, the stale counts, the trail, the
+/// claim totals, the changed list, the renames — is serial in LEDGER
+/// FILE order. The cross-file state the rejoin touches is the ledger's
+/// `nameToFiles`: several files here rename the same `Rb`→`value`, so
+/// each file's patch APPENDS the file to the shared `value` list — a
+/// completion-order rejoin would permute that list (and every other
+/// order-sensitive accumulator) while a ledger-order rejoin reproduces
+/// the serial bytes exactly.
+///
+/// The pin runs the same scenario repeatedly with per-file read DELAYS
+/// that scramble the workers' completion order differently each run, and
+/// requires every run — including an undelayed one — to agree on every
+/// byte: the changed files, the renames WITH locators, the trail, the
+/// claim counters, the stats, and the patched ledger's exact `stringify`
+/// bytes. The final `nameToFiles["value"]` list is additionally asserted
+/// to be the LEDGER order of the renaming files — the canonical rejoin
+/// order, so the pin cannot pass vacuously.
+/// The scenario for the determinism pin below: six files rename
+/// `Rb`→`value` (top-level: patches emitNames AND nameToFiles), three
+/// rename `Xq`→`total` inside a function (locator paths, no patch), one
+/// is a finding-#31 chain, one is identical to its prior (empty diff),
+/// one is missing its prior (skipped) and one is missing its fresh text
+/// (skipped). Returns (fresh, prior, the ledger's JSON text).
+fn scramble_scenario() -> (HashMap<String, String>, HashMap<String, String>, String) {
+    let mut fresh = HashMap::new();
+    let mut prior = HashMap::new();
+    for i in 0..6 {
+        let name = format!("src/a{i}.js");
+        fresh.insert(name.clone(), format!("var Rb = {i};\nuse(Rb);\n"));
+        prior.insert(name.clone(), format!("var value = {i};\nuse(value);\n"));
+    }
+    for i in 0..3 {
+        let name = format!("src/b{i}.js");
+        fresh.insert(
+            name.clone(),
+            format!("function f(a) {{\n  const Xq = a + {i};\n  return Xq;\n}}\n"),
+        );
+        prior.insert(
+            name.clone(),
+            format!("function f(a) {{\n  const total = a + {i};\n  return total;\n}}\n"),
+        );
+    }
+    let chain = |first: &str, second: &str| {
+        format!(
+            "function f(p) {{\n  {{\n    let {first} = p + 1;\n    g({first});\n  }}\n  {{\n    let {second} = p + 2;\n    h({second});\n  }}\n  {{\n    let value = p + 3;\n    k(value);\n  }}\n}}\n"
+        )
+    };
+    fresh.insert("src/e.js".to_string(), chain("Rb", "value"));
+    prior.insert("src/e.js".to_string(), chain("value", "total"));
+    for (map, text) in [
+        (&mut fresh, "var same = 1;\nuse(same);\n"),
+        (&mut prior, "var same = 1;\nuse(same);\n"),
+    ] {
+        map.insert("src/c.js".to_string(), text.to_string());
+    }
+    fresh.insert("src/d.js".to_string(), "var only = 1;\n".to_string()); // no prior
+    prior.insert(
+        "src/g.js".to_string(),
+        "var ghost = 1;\nuse(ghost);\n".to_string(),
+    ); // no fresh
+
+    // The ledger's file order is SORTED — a stable order that is not the
+    // scenario-construction order, so the rejoin is pinned to the
+    // LEDGER's order, not something incidental.
+    let mut sorted: Vec<&str> = [
+        "src/a0.js",
+        "src/a1.js",
+        "src/a2.js",
+        "src/a3.js",
+        "src/a4.js",
+        "src/a5.js",
+        "src/b0.js",
+        "src/b1.js",
+        "src/b2.js",
+        "src/c.js",
+        "src/d.js",
+        "src/e.js",
+        "src/g.js",
+    ]
+    .to_vec();
+    sorted.sort_unstable();
+    let quoted: Vec<String> = sorted.iter().map(|f| format!("\"{f}\"")).collect();
+    let emit_names: Vec<String> = sorted
+        .iter()
+        .map(|f| match *f {
+            f if f.starts_with("src/a") => "\"Rb\"".to_string(),
+            f if f.starts_with("src/b") => "\"f,Xq\"".to_string(),
+            "src/c.js" | "src/d.js" | "src/g.js" => "null".to_string(),
+            _ => "\"f\"".to_string(),
+        })
+        .collect();
+    let emit_indexes: Vec<String> = (0..sorted.len()).map(|i| i.to_string()).collect();
+    let ledger_text = format!(
+        "{{\"version\":1,\"files\":[{}],\"nameToFiles\":{{\"Rb\":[\"src/a0.js\",\"src/a1.js\",\"src/a2.js\",\"src/a3.js\",\"src/a4.js\",\"src/a5.js\"],\"Xq\":[\"src/b0.js\",\"src/b1.js\",\"src/b2.js\"]}},\"order\":[{}],\"hashes\":[],\"emitHashes\":[],\"emitNames\":[{}],\"emitIndexes\":[{}]}}",
+        quoted.join(","),
+        quoted.join(","),
+        emit_names.join(","),
+        emit_indexes.join(",")
+    );
+    (fresh, prior, ledger_text)
+}
+
+/// One full scenario run, with per-file read delays derived from `run` —
+/// each run scrambles the workers' completion order differently. `run <
+/// 0` is the undelayed baseline. Returns the result and the patched
+/// ledger's exact bytes.
+fn scramble_run(
+    fresh: &HashMap<String, String>,
+    prior: &HashMap<String, String>,
+    ledger_text: &str,
+    run: i64,
+) -> (super::PostSplitResult, String) {
+    let sleep_for = move |f: &str| -> u64 {
+        if run < 0 {
+            return 0;
+        }
+        let h = f
+            .bytes()
+            .fold(7u64, |a, b| a.wrapping_mul(31).wrapping_add(u64::from(b)));
+        (h.wrapping_add((run as u64).wrapping_mul(0x9E3779B9))) % 17
+    };
+    let read_fresh = |f: &str| {
+        std::thread::sleep(std::time::Duration::from_millis(sleep_for(f)));
+        fresh.get(f).cloned()
+    };
+    let read_prior = |f: &str| {
+        std::thread::sleep(std::time::Duration::from_millis(sleep_for(f)));
+        prior.get(f).cloned()
+    };
+    let mut ledger = JsValue::parse(ledger_text).unwrap();
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let result = post_split_reconcile(PostSplitInput {
+        ledger: &mut ledger,
+        read_fresh: &read_fresh,
+        read_prior: &read_prior,
+        eligible: &eligible,
+        disabled: false,
+    });
+    (result, stringify(&ledger))
+}
+
+#[test]
+fn results_are_byte_identical_under_scrambled_completion_order() {
+    let (fresh, prior, ledger_text) = scramble_scenario();
+    let one_run = |run: i64| -> (super::PostSplitResult, String) {
+        scramble_run(&fresh, &prior, &ledger_text, run)
+    };
+
+    let canonical = one_run(-1);
+    for run in 0..5 {
+        let scrambled = one_run(run);
+        assert_eq!(
+            scrambled.0.changed, canonical.0.changed,
+            "run {run}: the changed files moved"
+        );
+        assert_eq!(
+            scrambled.0.renames, canonical.0.renames,
+            "run {run}: the rename list (with locators) moved"
+        );
+        assert_eq!(
+            scrambled.0.stats, canonical.0.stats,
+            "run {run}: the stats moved"
+        );
+        assert_eq!(
+            scrambled.0.claims, canonical.0.claims,
+            "run {run}: the claim totals moved"
+        );
+        assert_eq!(
+            format!("{:?}", scrambled.0.trail),
+            format!("{:?}", canonical.0.trail),
+            "run {run}: the trail moved"
+        );
+        assert_eq!(
+            scrambled.1, canonical.1,
+            "run {run}: the patched ledger's bytes moved"
+        );
+    }
+
+    // The pin must not pass vacuously: the scenario really reconciled.
+    let (result, ledger_bytes) = canonical;
+    assert_eq!(result.stats.considered, 11, "one per file with both texts");
+    assert!(
+        result.changed.len() >= 9,
+        "the six a-files and three b-files changed: {:?}",
+        result.changed.iter().map(|(f, _)| f).collect::<Vec<_>>()
+    );
+    assert!(result.renames.iter().any(|r| r.top_level));
+    assert!(!result.trail.is_empty(), "the trail recorded rows");
+    // THE cross-file state check: `value`'s home list is the renaming
+    // files in LEDGER order (the rejoin order), not completion order.
+    let ledger: serde_json::Value = serde_json::from_str(&ledger_bytes).unwrap();
+    let value_homes: Vec<&str> = ledger["nameToFiles"]["value"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        value_homes,
+        vec![
+            "src/a0.js",
+            "src/a1.js",
+            "src/a2.js",
+            "src/a3.js",
+            "src/a4.js",
+            "src/a5.js"
+        ],
+        "nameToFiles[\"value\"] is the ledger order"
+    );
+    let rb_homes: Vec<&str> = ledger["nameToFiles"]["Rb"]
+        .as_array()
+        .map(|a| a.iter().map(|v| v.as_str().unwrap()).collect())
+        .unwrap_or_default();
+    assert!(rb_homes.is_empty(), "every Rb home moved: {rb_homes:?}");
+}
+
 /// Finding #31: a rename CHAIN inside one statement — X `a`→`b`, then
 /// Y `b`→`c`, with a third binding W still named `b` after Y. The locator's
 /// nameOrdinal was counted in the REWRITTEN file, where X already holds
