@@ -7,6 +7,7 @@
 
 pub mod serialize;
 pub mod statement_hash;
+pub mod wrapper_spelling;
 
 #[cfg(test)]
 mod serialize_test;

@@ -339,6 +339,22 @@
             },
             {
               "fresh": {
+                "end": 135,
+                "start": 59,
+                "text": "fresh"
+              },
+              "outcome": "bridged",
+              "pairs": [],
+              "prior": {
+                "end": 129,
+                "start": 59,
+                "text": "prior"
+              },
+              "slots": 0,
+              "tier": "unique"
+            },
+            {
+              "fresh": {
                 "end": 190,
                 "start": 136,
                 "text": "fresh"
@@ -354,7 +370,7 @@
           ],
           "stats": {
             "bucketTwins": 0,
-            "candidates": 0,
+            "candidates": 1,
             "cascadeConflicts": 0,
             "freshStatements": 5,
             "moduleScopedAmbiguous": 0,
@@ -364,7 +380,7 @@
             "priorStatements": 5,
             "privateRenames": 0,
             "transferredTwins": 0,
-            "uniqueTwins": 2,
+            "uniqueTwins": 3,
             "vetoedCallee": 0,
             "vetoedRole": 0,
             "vetoedStructural": 0
@@ -379,7 +395,7 @@
           },
           {
             "end": 129,
-            "hash": "4beea2d290ae0942",
+            "hash": "c5cadc2812a17cb3",
             "slice": "var keepWrapper = (one, two) => {\n  return keepExact(one, two) + 1;\n};",
             "start": 59
           },

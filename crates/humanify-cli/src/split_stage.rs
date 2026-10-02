@@ -86,9 +86,10 @@ fn load_prior_split_ledger(
         "Split ledger: inheriting assignments from {}",
         path.display()
     ));
-    // A TS-era ledger's statement hashes are not this binary's: re-key them
-    // from the prior text they were written from, or refuse them LOUDLY
-    // (WP5.6e) — never a silent mis-join.
+    // A stale-era ledger's statement hashes are not this binary's (the TS's
+    // `hashVersion: 1`, or an older Rust hash era): re-key them from the
+    // prior text they were written from, or refuse them LOUDLY (WP5.6e) —
+    // never a silent mis-join.
     let prior_text = input
         .prior_version
         .and_then(|p| std::fs::read_to_string(p).ok());
