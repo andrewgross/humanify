@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use humanify_model::llm::{PriorRejects, RenameFailures, Renames};
 
 use super::jsset::JsRecord;
+use crate::naming::reask::{ReaskClass, class_of};
 use crate::naming::report::{
     AttemptResult, ContentionEvent, IdentifierOutcome, Outcomes, RoundAttempt, Status,
 };
@@ -755,7 +756,8 @@ impl Lane {
                 left.push(name.clone());
                 continue;
             }
-            let scope_rejected = (env.would_reject)(name, &suggested).is_some();
+            let rejection = (env.would_reject)(name, &suggested);
+            let scope_rejected = rejection.is_some();
             if !snap_used(&suggested) && !scope_rejected {
                 self.claim(name, &suggested);
                 self.report
@@ -763,7 +765,31 @@ impl Lane {
                     .set(name, IdentifierOutcome::renamed(&suggested, round, None));
                 continue;
             }
-            let resolved = resolve_conflict(&suggested, snap_used);
+            // A rejection no name can escape (`exported-name`, a missing
+            // binding) settles the id as identity: there is nothing to try.
+            if rejection.is_some_and(|r| class_of(r) != ReaskClass::NameTaken) {
+                left.push(name.clone());
+                continue;
+            }
+            // The ladder steps past a decoration the scope check rejects
+            // exactly as it steps past a taken one (finding #74): the
+            // first scope-safe decoration lands. It used to test only the
+            // used set, then give up on a scope-unsafe pick and record
+            // IDENTITY — a valid answer silently dropped, never re-asked
+            // (2.1.215's axios adapter `t`: `requestOptionsVal` was held
+            // by a nested callback that reads `t`). A name-taken rejection
+            // reads finite name sets, so the ladder terminates. The id's
+            // OWN name stops the ladder: a binding already wearing the
+            // decoration (`isReplBridgeActiveVal` answered
+            // `isReplBridgeActive`) keeps it — never re-decorated past
+            // itself into churn.
+            let blocked = |n: &str| {
+                n != name.as_str()
+                    && (snap_used(n)
+                        || (env.would_reject)(name, n)
+                            .is_some_and(|r| class_of(r) == ReaskClass::NameTaken))
+            };
+            let resolved = resolve_conflict(&suggested, blocked);
             if (env.would_reject)(name, &resolved).is_some() {
                 left.push(name.clone());
                 continue;

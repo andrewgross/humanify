@@ -157,6 +157,69 @@ fn a_used_suggestion_resolves_through_the_conflict_ladder() {
     );
 }
 
+/// Finding #74: the ladder's first decoration is SCOPE-unsafe (a child
+/// scope that reads `a` already binds `takenVal`). The tail used to give
+/// up and record identity — the answer dropped, never re-asked. It steps
+/// past the unsafe decoration like a taken one and lands the next.
+#[test]
+fn the_ladder_steps_past_a_scope_unsafe_decoration() {
+    let used = |n: &str| n == "taken";
+    let reject = |_: &str, n: &str| (n == "takenVal").then_some(RejectionReason::ShadowsChild);
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Rename {
+            old: "a".into(),
+            new: "takenVar".into()
+        }]
+    );
+}
+
+/// The ladder stops at the id's OWN name: a binding already wearing the
+/// decoration (`isReplBridgeActiveVal`, answered `isReplBridgeActive`,
+/// r3 2.1.198 of the census) keeps it rather than being re-decorated
+/// past itself to `...Var`.
+#[test]
+fn the_ladder_stops_at_the_ids_own_name() {
+    let used = |n: &str| n == "taken";
+    let reject = |old: &str, n: &str| (old == n).then_some(RejectionReason::TargetInScope);
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["takenVal"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("takenVal", "taken")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Identity {
+            name: "takenVal".into()
+        }]
+    );
+}
+
+/// A rejection NO name escapes (`exported-name`) still settles identity —
+/// and the ladder never spins looking for a name that cannot exist.
+#[test]
+fn an_unescapable_rejection_stays_identity_without_laddering() {
+    let used = |n: &str| n == "taken";
+    let reject = |_: &str, _: &str| Some(RejectionReason::ExportedName);
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Identity { name: "a".into() }]
+    );
+}
+
 /// `--batch-size` / `--max-retries` (processor.ts runBatchRenameLoop's
 /// `options.batchSize ?? DEFAULT_BATCH_SIZE` and
 /// `options.maxRetriesPerIdentifier ?? DEFAULT_MAX_RETRIES_PER_ID`): the
