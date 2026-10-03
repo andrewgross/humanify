@@ -312,7 +312,10 @@ fn naming_cascade_carry_over_requires_intact_group() {
     let mut prior = HashMap::new();
     prior.insert(
         hash.clone(),
-        vec!["lib_prior0".to_string(), "lib_prior1".to_string()],
+        vec![
+            crate::modules::CarriedName::new("lib_prior0", Some("fallback")),
+            crate::modules::CarriedName::new("lib_prior1", Some("fallback")),
+        ],
     );
     let counts = name_cjs_factories(&mut classification, leaked, Some(&prior));
     assert_eq!(counts.carry_over, 2);
@@ -334,7 +337,13 @@ fn naming_cascade_carry_over_requires_intact_group() {
     )
     .expect("helper present");
     let mut prior = HashMap::new();
-    prior.insert(hash, vec!["lib_prior0".to_string()]);
+    prior.insert(
+        hash,
+        vec![crate::modules::CarriedName::new(
+            "lib_prior0",
+            Some("fallback"),
+        )],
+    );
     let counts = name_cjs_factories(&mut classification, leaked, Some(&prior));
     assert_eq!(counts.carry_over, 0);
     assert_eq!(counts.fallback, 2);

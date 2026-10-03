@@ -32,7 +32,7 @@ use humanify_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
 
 use crate::artifact_dump::{Dispatch, DispatchLog};
 
-use super::{FactoryRecord, NameSource, hash_fallback_name, is_hash_fallback_name};
+use super::{CarriedName, FactoryRecord, NameSource, hash_fallback_name, is_hash_fallback_name};
 
 // ---------------------------------------------------------------------------
 // The filename floor (shared/cjs-factory.ts)
@@ -143,7 +143,10 @@ pub struct NameLookup {
     /// and the `vendor/` prefix).
     pub file_name: String,
     pub name: String,
+    /// How THIS run got the name (run state).
     pub name_source: NameSource,
+    /// Where the name originally came from — the manifest label.
+    pub name_origin: NameSource,
     pub structural_hash: String,
 }
 
@@ -248,6 +251,7 @@ impl FileNameChooser {
                 },
                 name: name.clone(),
                 name_source: source,
+                name_origin: record.name_origin.unwrap_or(source),
                 structural_hash: record.structural_hash.clone(),
             };
         }
@@ -260,6 +264,7 @@ impl FileNameChooser {
             ),
             name: factory_var.to_string(),
             name_source: NameSource::Fallback,
+            name_origin: NameSource::Fallback,
             structural_hash: String::new(),
         }
     }
@@ -280,9 +285,15 @@ pub struct ManifestEntry {
     pub file_name: String,
     /// Human-friendly name used to derive fileName.
     pub name: String,
-    /// How `name` was chosen by the cascade.
+    /// Where `name` ORIGINALLY came from: a carried name keeps the prior
+    /// manifest's label, so an unchanged library's entry is byte-identical
+    /// across hops (finding #71). How THIS run got it is `run_source`.
     #[serde(rename = "nameSource")]
     pub name_source: &'static str,
+    /// How THIS run got the name (a carry reads "carry-over") — run state,
+    /// never written.
+    #[serde(skip)]
+    pub run_source: NameSource,
     /// Structural hash — stable across builds. The cross-version join key.
     /// (The bundle's obfuscated factory variable is DELIBERATELY absent:
     /// Bun rerolls the token every build — exp046 measured the persisted
@@ -529,10 +540,10 @@ fn claim_from(
 /// before exp047 has no such field, and there array order IS bundle order,
 /// so the fallback reproduces the old behaviour exactly: entries without
 /// the field keep their array order and sort after those with one.
-pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Vec<String>>> {
+pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Vec<CarriedName>>> {
     let manifest: serde_json::Value = serde_json::from_str(manifest_text).ok()?;
     let factories = manifest.get("factories")?.as_array()?;
-    let mut groups: BTreeMap<String, Vec<(String, usize, usize)>> = BTreeMap::new();
+    let mut groups: BTreeMap<String, Vec<(CarriedName, usize, usize)>> = BTreeMap::new();
     for (idx, entry) in factories.iter().enumerate() {
         // `if (!entry.structuralHash || !entry.name) continue;` — a missing,
         // non-string or empty field skips the ENTRY, not the manifest.
@@ -550,15 +561,16 @@ pub fn load_prior_vendor_names(manifest_text: &str) -> Option<HashMap<String, Ve
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or(usize::MAX);
-        groups
-            .entry(hash.to_string())
-            .or_default()
-            .push((name.to_string(), ordinal, idx));
+        groups.entry(hash.to_string()).or_default().push((
+            CarriedName::new(name, entry.get("nameSource").and_then(|v| v.as_str())),
+            ordinal,
+            idx,
+        ));
     }
     if groups.is_empty() {
         return None;
     }
-    let mut names: HashMap<String, Vec<String>> = HashMap::new();
+    let mut names: HashMap<String, Vec<CarriedName>> = HashMap::new();
     for (hash, group) in groups {
         let mut sorted = group;
         sorted.sort_by_key(|(_, ordinal, idx)| (*ordinal, *idx));
@@ -990,6 +1002,7 @@ pub fn name_fallback_factories_with_llm_sized(
         let record = &mut factories[idx];
         record.name = Some(name);
         record.name_source = Some(NameSource::Llm);
+        record.name_origin = Some(NameSource::Llm);
         renamed += 1;
     }
     renamed

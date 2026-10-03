@@ -3,7 +3,8 @@
 //! specific spellings; the re-key carries only exact group matches.
 
 use super::{
-    StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content, vendor_content_key,
+    NameSource, StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content,
+    vendor_content_key,
 };
 
 /// A fresh factory body: `REQ` is the bundle's require var, `qA`/`kC` are
@@ -59,6 +60,7 @@ fn content_and_known_globals_are_in_the_key() {
 fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> StaleEraEntry {
     StaleEraEntry {
         name: name.into(),
+        origin: NameSource::Llm,
         era_hash: ts.into(),
         ordinal,
         key: key.map(String::from),
@@ -83,10 +85,19 @@ fn the_rekey_carries_exact_groups_in_prior_bundle_order() {
         ("h3".to_string(), Some("K3".to_string())),
     ];
     let r = rekey_prior_by_content(&fresh, &prior);
-    assert_eq!(r.names.get("h1"), Some(&vec!["dep".to_string()]));
-    assert_eq!(
-        r.names.get("h2"),
-        Some(&vec!["shim-a".to_string(), "shim-b".to_string()])
+    let names_of = |h: &str| {
+        r.names
+            .get(h)
+            .map(|v| v.iter().map(|c| c.name.as_str()).collect::<Vec<_>>())
+    };
+    assert_eq!(names_of("h1"), Some(vec!["dep"]));
+    assert_eq!(names_of("h2"), Some(vec!["shim-a", "shim-b"]));
+    // A carry keeps each name's prior label (finding #71).
+    assert!(
+        r.names
+            .values()
+            .flatten()
+            .all(|c| c.origin == NameSource::Llm)
     );
     assert_eq!(r.names.get("h3"), None);
     let hashes: Vec<&str> = r

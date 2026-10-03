@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::detect::detect_bundle;
+use crate::modules::CarriedName;
 use crate::modules::vendor_names::{VendorNameRequest, VendorNamer};
 use crate::unpack::bun::{
     BunUnpackOptions, ExtractedModule, PriorVendor, extract_factory_bodies, find_prior_tree_root,
@@ -708,7 +709,19 @@ fn run_with(
         dir,
         BunUnpackOptions {
             namer: Some(&mut namer),
-            prior: prior.map(PriorVendor::from_names),
+            prior: prior.map(|names| {
+                PriorVendor::from_names(
+                    names
+                        .into_iter()
+                        .map(|(h, v)| {
+                            (
+                                h,
+                                v.into_iter().map(|n| CarriedName::new(n, None)).collect(),
+                            )
+                        })
+                        .collect(),
+                )
+            }),
             ..Default::default()
         },
     )
@@ -734,6 +747,50 @@ fn reuses_the_prior_name_ahead_of_the_llm() {
     assert_eq!(s(&m2[0], "nameSource"), "carry-over");
     assert_eq!(s(&m2[0], "fileName"), "vendor/js-yaml.js");
     assert!(asked.is_empty(), "a carried factory never reaches the LLM");
+}
+
+/// The manifest records where the NAME came from, not how THIS run got it:
+/// a library named "llm" on a fresh run and carried on the next hop keeps a
+/// byte-identical manifest entry (finding #71 — the per-hop "llm" ->
+/// "carry-over" flip was ~3,000 manifest lines per version with no change
+/// behind them). How this run got the name stays in run state: the
+/// cascade's carry-over count still reports the carry.
+#[test]
+fn a_carried_library_keeps_a_byte_identical_manifest_entry() {
+    let hop = |dir: &Path, prior: Option<PriorVendor>| {
+        let mut namer = FnNamer {
+            answer: |_| Some("js-yaml".into()),
+            asked: Vec::new(),
+        };
+        let outcome = unpack_bun(
+            UNKNOWN_BUNDLE,
+            dir,
+            BunUnpackOptions {
+                namer: Some(&mut namer),
+                prior,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        (outcome, namer.asked.len())
+    };
+    let first = TempDir::new("stable1");
+    let (out1, asked1) = hop(&first.0, None);
+    assert_eq!(asked1, 1);
+    assert_eq!(out1.name_counts.as_ref().unwrap().carry_over, 0);
+    let m1 = factories(&read_manifest(&first.0));
+    assert_eq!(s(&m1[0], "nameSource"), "llm");
+
+    let second = TempDir::new("stable2");
+    let prior = load_prior_vendor(&first.0.join("humanified.js")).expect("prior tree");
+    let (out2, asked2) = hop(&second.0, Some(prior));
+    assert_eq!(asked2, 0, "a carried factory never reaches the LLM");
+    assert_eq!(out2.name_counts.as_ref().unwrap().carry_over, 1);
+    let m2 = factories(&read_manifest(&second.0));
+    assert_eq!(
+        serde_json::to_string(&m2[0]).unwrap(),
+        serde_json::to_string(&m1[0]).unwrap()
+    );
 }
 
 #[test]
@@ -836,7 +893,10 @@ fn loads_prior_vendor_names_from_a_prior_tree() {
     let names = load_prior_vendor(&prior_file)
         .and_then(|p| p.names)
         .expect("discovered");
-    assert_eq!(names.get(&hash), Some(&vec!["js-yaml".to_string()]));
+    assert_eq!(
+        names.get(&hash),
+        Some(&vec![CarriedName::new("js-yaml", Some("llm"))])
+    );
     assert_eq!(find_prior_tree_root(&prior_file), Some(t.0.clone()));
 }
 
