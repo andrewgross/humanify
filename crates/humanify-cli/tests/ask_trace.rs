@@ -361,10 +361,14 @@ fn the_second_reask_prompt_carries_the_accumulated_blocklist() {
     let second = &retry_prompts[1];
     let user = second["userPrompt"].as_str().unwrap();
     let id = second["identifiers"][0].as_str().unwrap();
-    for failed in ["eventHooks", "q2Named"] {
+    // Each with WHO holds it (2026-10-04).
+    for (failed, holder) in [
+        ("eventHooks", "another function in the same scope"),
+        ("q2Named", "another variable in the same scope"),
+    ] {
         assert!(
             user.contains(&format!(
-                "- \"{id}\" was suggested as \"{failed}\" but that conflicts with an existing name"
+                "- \"{id}\" was suggested as \"{failed}\" but that name is already used by {holder}"
             )),
             "the {failed} failure disclosed: {user}"
         );

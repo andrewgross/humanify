@@ -20,11 +20,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use humanify_model::llm::{PriorRejects, RenameFailures, Renames};
 
 use super::jsset::JsRecord;
-use crate::naming::reask::{ReaskClass, class_of};
+use crate::naming::reask::{ReaskClass, class_of, ladder};
 use crate::naming::report::{
     AttemptResult, ContentionEvent, IdentifierOutcome, Outcomes, RoundAttempt, Status,
 };
-use crate::naming::validation::{resolve_conflict, sanitize_identifier};
+use crate::naming::validation::sanitize_identifier;
 use crate::rename::floor::is_minified_echo;
 use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RejectionReason;
@@ -128,6 +128,9 @@ struct IdState {
     /// transform (the prior-name snap) — what a later disclosure must
     /// name when the applied name differs (Fix B, 2026-10-03).
     last_raw: Option<String>,
+    /// The all-failed rule exhausted this id's window before its round-2
+    /// (2026-10-04): a colliding answer here was never told it collided.
+    cut_off: bool,
     trail: Option<Vec<RoundAttempt>>,
 }
 
@@ -162,6 +165,9 @@ pub struct LaneReport {
     /// all-failed rule; an INVALID failure there now gets the one
     /// feedback straggler).
     pub all_failed_windows: usize,
+    /// Colliding answers of all-failed windows handed to the barrier
+    /// undecorated, for its disclosed re-ask (2026-10-04).
+    pub collision_handoffs: usize,
 }
 
 /// What a lane collects for the barrier.
@@ -271,6 +277,10 @@ pub struct Lane {
     /// word, not ours — disclosing `requestTimeoutMsVal` when the model
     /// said `requestTimeoutMs` invited it to re-offer the same word.
     pub proposed: HashMap<String, String>,
+    /// Whether a re-ask budget exists (`--rename-retries` > 0): a colliding
+    /// answer the all-failed rule cut off goes to the barrier's disclosed
+    /// re-ask instead of the tail's ladder (2026-10-04).
+    handoff: bool,
 }
 
 impl Lane {
@@ -279,6 +289,7 @@ impl Lane {
         self.adaptive = t.batch_size;
         self.max_retries = t.max_retries;
         self.max_free = compute_max_free_retries(self.names.len(), t.max_free_retries);
+        self.handoff = t.reask_limit > 0;
         self
     }
 
@@ -307,6 +318,7 @@ impl Lane {
             attempted_calls: 0,
             report: LaneReport::default(),
             proposed: HashMap::new(),
+            handoff: crate::naming::reask::REASK_LIMIT > 0,
         }
     }
 
@@ -472,6 +484,11 @@ impl Lane {
         // second all-failed round exhausts them through attempts).
         if applied == 0 && next.len() == batch.len() && !late_rejected {
             self.report.all_failed_windows += 1;
+            for name in &next {
+                if let Some(s) = self.states.get_mut(name) {
+                    s.cut_off = true;
+                }
+            }
             self.exhausted.extend(next);
             self.stage = Stage::NextWindow;
         } else if next.is_empty() {
@@ -710,6 +727,23 @@ impl Lane {
         (next, exhausted)
     }
 
+    /// The lone-collision gap (finding #74's open item, 2026-10-04): an
+    /// answer the all-failed rule cut off before its round-2 collided and
+    /// was never TOLD so. With a re-ask budget, the tail hands the model's
+    /// answer to the barrier UNDECORATED: the barrier sees the collision
+    /// and gives it the disclosed re-ask every other conflict gets
+    /// (`--rename-retries`, accumulating do-not list, the holder named);
+    /// the barrier's ladder is the last resort once that budget is spent.
+    /// Never for a rejection no name escapes (`rejection` of another
+    /// class): nothing to re-ask.
+    fn hands_off(&self, name: &str, rejection: Option<RejectionReason>) -> bool {
+        let s = &self.states[name];
+        self.handoff
+            && s.cut_off
+            && s.last_failure == Some(FailureReason::Duplicate)
+            && rejection.is_none_or(|r| class_of(r) == ReaskClass::NameTaken)
+    }
+
     /// The loop's tail after the last call: resolve the remaining
     /// identifiers from their last suggestions (`resolveRemaining`, over a
     /// used-name SNAPSHOT), then record identity outcomes for the rest.
@@ -761,11 +795,14 @@ impl Lane {
             }
             let rejection = (env.would_reject)(name, &suggested);
             let scope_rejected = rejection.is_some();
-            if !snap_used(&suggested) && !scope_rejected {
+            let direct = !snap_used(&suggested) && !scope_rejected;
+            let handed = !direct && self.hands_off(name, rejection);
+            if direct || handed {
                 self.claim(name, &suggested);
                 self.report
                     .outcomes
                     .set(name, IdentifierOutcome::renamed(&suggested, round, None));
+                self.report.collision_handoffs += usize::from(handed);
                 continue;
             }
             // A rejection no name can escape (`exported-name`, a missing
@@ -775,24 +812,13 @@ impl Lane {
                 continue;
             }
             // The ladder steps past a decoration the scope check rejects
-            // exactly as it steps past a taken one (finding #74): the
-            // first scope-safe decoration lands. It used to test only the
-            // used set, then give up on a scope-unsafe pick and record
-            // IDENTITY — a valid answer silently dropped, never re-asked
-            // (2.1.215's axios adapter `t`: `requestOptionsVal` was held
-            // by a nested callback that reads `t`). A name-taken rejection
-            // reads finite name sets, so the ladder terminates. The id's
-            // OWN name stops the ladder: a binding already wearing the
-            // decoration (`isReplBridgeActiveVal` answered
-            // `isReplBridgeActive`) keeps it — never re-decorated past
-            // itself into churn.
-            let blocked = |n: &str| {
-                n != name.as_str()
-                    && (snap_used(n)
-                        || (env.would_reject)(name, n)
-                            .is_some_and(|r| class_of(r) == ReaskClass::NameTaken))
-            };
-            let resolved = resolve_conflict(&suggested, blocked);
+            // exactly as it steps past a taken one (finding #74,
+            // `reask::ladder`): the first scope-safe decoration lands. It
+            // used to give up on a scope-unsafe pick and record IDENTITY —
+            // a valid answer silently dropped (2.1.215's axios adapter
+            // `t`: `requestOptionsVal` was held by a nested callback that
+            // reads `t`). The id's OWN name stops the ladder (it keeps it).
+            let resolved = ladder(name, &suggested, snap_used, |n| (env.would_reject)(name, n));
             if (env.would_reject)(name, &resolved).is_some() {
                 left.push(name.clone());
                 continue;

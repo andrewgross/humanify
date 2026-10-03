@@ -233,7 +233,9 @@ fn a_module_collision_retry_discloses_and_lists_the_names_the_run_applied() {
     assert_eq!(
         second
             .user_prompt
-            .matches("but that conflicts with an existing name")
+            .matches(
+                "- \"q1\" was suggested as \"eventHooks\" but that name is already used by another function in the same scope"
+            )
             .count(),
         2,
         "every prior suggestion gets its own disclosure line: {}",
@@ -694,11 +696,15 @@ fn the_second_reask_discloses_every_prior_suggestion_and_is_bounded() {
     assert_eq!(*provider.retries.borrow(), 2, "bounded: no third re-ask");
     let second = retry[1];
     let id = &second.request.identifiers[0];
-    // Every prior suggestion, oldest first, each with its reason.
-    for failed in ["eventHooks", "q2Named"] {
+    // Every prior suggestion, oldest first, each with its reason — and,
+    // since 2026-10-04, WHO holds it.
+    for (failed, holder) in [
+        ("eventHooks", "another function in the same scope"),
+        ("q2Named", "another variable in the same scope"),
+    ] {
         assert!(
             second.user_prompt.contains(&format!(
-                "- \"{id}\" was suggested as \"{failed}\" but that conflicts with an existing name"
+                "- \"{id}\" was suggested as \"{failed}\" but that name is already used by {holder}"
             )),
             "the {failed} failure disclosed: {}",
             second.user_prompt
@@ -1214,4 +1220,137 @@ console.log(h);
         code.contains("function (requestOptionsVar)"),
         "the answer lands on the next scope-safe decoration:\n{code}"
     );
+    // Since 2026-10-04 the decoration is the LAST resort: the lone
+    // collision first spends the whole disclosed re-ask budget.
+    let t_reasks = barrier_reasks(&out)
+        .into_iter()
+        .filter(|d| d.request.identifiers == ["t"])
+        .count();
+    assert_eq!(t_reasks, 2, "both disclosed re-asks before the ladder");
+}
+
+/// The adapter's shape (the lone-collision fix, 2026-10-04 — finding #74's
+/// open item).
+const ADAPTER_PROGRAM: &str = r#"var Sx = new WeakMap();
+function g() {
+  return Sx;
+}
+var h = function (t) {
+  g();
+  return run(async function (n) {
+    n.pipe({
+      transform(c, requestOptionsVal, b) {
+        b(t.limit, c, requestOptionsVal);
+      }
+    });
+    return t.url;
+  });
+};
+console.log(h);
+"#;
+
+/// A lone identifier whose answer an enclosing-scope binding holds gets
+/// the disclosed re-ask every other conflict gets — and the re-ask says
+/// WHO holds each rejected name. Re-ask 1's answer is the nested
+/// callback's parameter (`shadows-child`); re-ask 2 is told so, and its
+/// clean answer lands. On main: no re-ask at all, `requestOptionsVar`.
+#[test]
+fn a_lone_colliding_answer_is_reasked_with_its_holder_disclosed() {
+    let out = run_scripted(ADAPTER_PROGRAM, |id, r| {
+        let round = r
+            .prior_rejects
+            .as_ref()
+            .and_then(|p| p.get(id))
+            .map_or(0, <[humanify_model::llm::PriorReject]>::len);
+        match (id, round) {
+            ("Sx", _) | ("t", 0) => "requestOptions".to_string(),
+            ("t", 1) | ("requestOptionsVal", _) => "requestOptionsVal".to_string(),
+            ("t", _) => "adapterConfig".to_string(),
+            (other, _) => plain_name(other),
+        }
+    });
+    let code = out.code.as_deref().expect("shipped");
+    assert!(
+        code.contains("function (adapterConfig)"),
+        "the re-asked clean name lands:\n{code}"
+    );
+    let reasks: Vec<_> = barrier_reasks(&out)
+        .into_iter()
+        .filter(|d| d.request.identifiers == ["t"])
+        .collect();
+    assert_eq!(reasks.len(), 2, "two disclosed re-asks of the lone `t`");
+    assert!(
+        reasks[0].user_prompt.contains(
+            "- \"t\" was suggested as \"requestOptions\" but that name is already used by a variable in an enclosing scope"
+        ),
+        "re-ask 1 names the holder: {}",
+        reasks[0].user_prompt
+    );
+    let second = &reasks[1].user_prompt;
+    assert!(
+        second.contains(
+            "- \"t\" was suggested as \"requestOptionsVal\" but that name is already used by an inner function's parameter"
+        ),
+        "re-ask 2 says the nested parameter holds it: {second}"
+    );
+    assert!(
+        second.contains("DO NOT suggest these names: requestOptions, requestOptionsVal"),
+        "the accumulated do-not list: {second}"
+    );
+}
+
+/// The sibling shape (r1 2.1.118 `w` → `error`): a lone identifier whose
+/// answer a binding of the SAME scope holds: the inner function `error`
+/// is named (kept) in an earlier wave, so `w` is asked alone.
+const SIBLING_PROGRAM: &str = "var runTask = function (w) {\n  function error() {\n    return w.err;\n  }\n  return error() ? null : w();\n};\nconsole.log(runTask);\n";
+
+/// Re-asked with the holder named; the second answer lands instead of
+/// `errorVal`.
+#[test]
+fn a_lone_answer_held_by_a_sibling_is_reasked_not_decorated() {
+    let out = run_scripted(SIBLING_PROGRAM, |id, r| match id {
+        "w" if r.prior_rejects.is_some() => "taskFn".to_string(),
+        "w" | "error" => "error".to_string(),
+        other => plain_name(other),
+    });
+    let code = out.code.as_deref().expect("shipped");
+    assert!(code.contains("function (taskFn)"), "{code}");
+    assert!(!code.contains("errorVal"), "never decorated: {code}");
+    let reasks = barrier_reasks(&out);
+    assert_eq!(reasks.len(), 1, "one disclosed re-ask, then the clean name");
+    assert!(
+        reasks[0].user_prompt.contains(
+            "- \"w\" was suggested as \"error\" but that name is already used by another function in the same scope"
+        ),
+        "{}",
+        reasks[0].user_prompt
+    );
+    assert_eq!(out.processor.collision_handoffs, 1);
+}
+
+/// `--rename-retries 0`: no re-ask exists, so the lone collision settles
+/// on the ladder exactly as before the fix.
+#[test]
+fn a_zero_reask_budget_ladders_a_lone_collision_as_before() {
+    let mut config = plain_config();
+    config.tunables.reask_limit = 0;
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh: SIBLING_PROGRAM,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &ScriptProvider {
+            answer: |id: &str, _: &humanify_model::llm::BatchRenameRequest| match id {
+                "w" | "error" => "error".to_string(),
+                other => plain_name(other),
+            },
+        },
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let code = out.code.as_deref().expect("shipped");
+    assert!(code.contains("function (errorVal)"), "{code}");
+    assert!(barrier_reasks(&out).is_empty());
 }

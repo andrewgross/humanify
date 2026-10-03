@@ -59,7 +59,6 @@ use crate::naming::report::{
     ReportType, Status,
 };
 use crate::naming::snap::{build_prior_stem_index, snap_suggestion_to_prior, snap_to_known_prior};
-use crate::naming::validation::resolve_conflict;
 use crate::rename::eligibility::Eligibility;
 use crate::rename::floor::{MinifiedStems, borrowed_minified_stem, is_minified_echo};
 use crate::rename::transfer::lifecycle::Lifecycle;
@@ -352,12 +351,24 @@ struct Entry {
     live: Live,
     /// Every prior rejected suggestion of this identifier (the ACCUMULATED
     /// disclosure each further re-ask carries), oldest first:
-    /// (suggestion, rejection code — None for a used-set collision).
     /// Empty for a lane's first-round entry; nonempty marks a re-ask entry.
-    rejects: Vec<(String, Option<&'static str>)>,
+    rejects: Vec<Reject>,
     /// The model's OWN word behind `new` (a prior-name snap or the lane's
     /// decoration can make them differ) — what a rejection discloses.
     proposed: String,
+}
+
+/// One rejected suggestion of a re-asked identifier, as its re-ask
+/// discloses it.
+#[derive(Clone)]
+struct Reject {
+    /// The model's word.
+    word: String,
+    /// The rejection code — None for a used-set collision.
+    code: Option<&'static str>,
+    /// WHO holds the name (`prompts::holder_phrase`), when the scopes know
+    /// (2026-10-04).
+    held_by: Option<String>,
 }
 
 /// The rejection code of an answer refused for borrowing a minified name
@@ -396,9 +407,11 @@ pub(crate) fn answer_refusal(
 /// borrowed (the re-ask names it). Shared by the barrier and the sweep.
 /// An echo refusal discloses the identifier's own name as the word; the
 /// prompt renders that as "is the minified name" (`prompts::failure_line`).
+/// `held_by` names who holds a taken name, when the site knows.
 pub(crate) fn disclose_reject(
     name: &str,
     code: Option<&str>,
+    held_by: Option<String>,
     stems: &MinifiedStems,
 ) -> PriorReject {
     let borrowed = (code == Some(BORROWED_STEM))
@@ -410,6 +423,7 @@ pub(crate) fn disclose_reject(
             || code == Some(BORROWED_STEM)
             || code == Some(MINIFIED_ECHO),
         borrowed,
+        held_by,
     }
 }
 
@@ -423,6 +437,8 @@ struct Rejection {
     cause: reask::ReaskClass,
     /// The validated applier's rejection code, when it rejected.
     cause_code: Option<&'static str>,
+    /// WHO holds the rejected name, when the scopes know.
+    held_by: Option<String>,
 }
 
 struct RetryItem {
@@ -432,7 +448,7 @@ struct RetryItem {
     /// The item's FULL reject history — the MODEL's words, each with its
     /// rejection code (its last entry is the word behind `prev_name`): the
     /// retry's prompt discloses all of it.
-    rejects: Vec<(String, Option<&'static str>)>,
+    rejects: Vec<Reject>,
     target: ApplyTarget,
     binding: Option<BindingInfo>,
 }
@@ -1964,13 +1980,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         let mut prior = PriorRejects::default();
         for item in &r.seed.items {
             // The model's own last word (Fix B): never our decoration.
-            let last = item.rejects.last().map_or(&item.prev_name, |(n, _)| n);
+            let last = item.rejects.last().map_or(&item.prev_name, |r| &r.word);
             prev.set(&item.id, last);
             prior.0.push((
                 item.id.clone(),
                 item.rejects
                     .iter()
-                    .map(|(name, code)| disclose_reject(name, *code, self.inp.stems))
+                    .map(|r| disclose_reject(&r.word, r.code, r.held_by.clone(), self.inp.stems))
                     .collect(),
             ));
         }
@@ -2025,7 +2041,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     (t, raw.to_string())
                 }
                 _ => {
-                    let word = item.rejects.last().map_or(&item.prev_name, |(n, _)| n);
+                    let word = item.rejects.last().map_or(&item.prev_name, |r| &r.word);
                     (item.prev_name.clone(), word.clone())
                 }
             };
@@ -2066,6 +2082,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             winner_old,
             cause,
             cause_code,
+            held_by,
         } in rejections
         {
             let key = (entry.ctx, entry.phase);
@@ -2090,7 +2107,11 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             // do-not list let the model re-offer `ONE_HOUR_MS` and collide
             // again (233 of 869 first re-asks in the seeded candidate run).
             let mut rejects = entry.rejects.clone();
-            rejects.push((entry.proposed.clone(), cause_code));
+            rejects.push(Reject {
+                word: entry.proposed.clone(),
+                code: cause_code,
+                held_by,
+            });
             seeds[i].items.push(RetryItem {
                 id: entry.old,
                 index: entry.binding_index,
@@ -2494,6 +2515,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             self.processor.late_rejections += lane.late_rejections;
             self.processor.invalid_suggestion_finishes += lane.invalid_suggestion_finishes;
             self.processor.all_failed_windows += lane.all_failed_windows;
+            self.processor.collision_handoffs += lane.collision_handoffs;
         }
         let report = RenameReport {
             ty,
@@ -3024,11 +3046,17 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             }
             if reask::reask_again(self.inp.tunables.reask_limit, entry.rejects.len(), class) {
                 let winner_old = self.winners.get(&entry.new).cloned();
+                let held_by = if refusal.is_none() && class == reask::ReaskClass::NameTaken {
+                    self.holder_of(&entry, reason)
+                } else {
+                    None
+                };
                 rejections.push(Rejection {
                     entry,
                     winner_old,
                     cause: class,
                     cause_code,
+                    held_by,
                 });
             } else if first_pass && !reask::should_reask(class) {
                 // Unrecoverable (`no-binding`, `stale-binding`,
@@ -3050,7 +3078,21 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 // was promised this ladder; a first-pass entry reaches it
                 // only when `--rename-retries 0` disabled the re-ask.
                 let suggestion = entry.new.clone();
-                let variant = resolve_conflict(&suggestion, |n| self.live_has(entry.live, n));
+                // The shared ladder (`reask::ladder`, finding #74): it
+                // steps past a decoration a nested binding holds exactly as
+                // past a taken one, and stops at the id's own name.
+                let scope = self.entry_scope(&entry);
+                let variant = reask::ladder(
+                    &entry.old,
+                    &suggestion,
+                    |n| self.live_has(entry.live, n),
+                    |n| scope.and_then(|s| self.state.get_rename_rejection(s, &entry.old, n)),
+                );
+                if variant == entry.old {
+                    // Already wearing the decoration: a keep, not a drop.
+                    self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
+                    continue;
+                }
                 let (ok, _) = if variant != suggestion {
                     self.apply(&entry, &variant)
                 } else {
@@ -3071,6 +3113,28 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             }
         }
         rejections
+    }
+
+    /// The scope the entry's binding lives in (what its renames validate
+    /// against), when the entry still has a binding.
+    fn entry_scope(&self, entry: &Entry) -> Option<BScopeId> {
+        match &entry.target {
+            ApplyTarget::Fn { binding, .. } => binding.as_ref().map(|b| b.scope),
+            ApplyTarget::Module { mb } => mb.map(|j| self.inp.rows.modules[j].scope),
+        }
+    }
+
+    /// WHO holds the name a rejected entry wanted, as its re-ask words it
+    /// (2026-10-04) — only when the disclosed word IS the rejected name (a
+    /// prior-name snap can make them differ; then nothing is claimed).
+    fn holder_of(&self, entry: &Entry, reason: Option<RejectionReason>) -> Option<String> {
+        if entry.proposed != entry.new {
+            return None;
+        }
+        let scope = self.entry_scope(entry)?;
+        self.state
+            .name_holder(scope, &entry.old, &entry.new, reason)
+            .map(crate::naming::prompts::holder_phrase)
     }
 
     /// The terminal give-up of a reaskable rejection whose budget died:

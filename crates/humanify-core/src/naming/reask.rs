@@ -94,6 +94,27 @@ pub fn reask_again(limit: usize, spent: usize, class: ReaskClass) -> bool {
     should_reask(class) && spent < limit
 }
 
+/// The deterministic repair once no re-ask is left — the suffix ladder,
+/// shared by the lane's resolution tail and the wave barrier (one rule,
+/// finding #74): it steps past a decoration that is TAKEN (`taken`) or
+/// that the scope check rejects with a name-taken class (`reject`, e.g. a
+/// nested binding already holds `requestOptionsVal`), and lands the first
+/// one neither blocks. A name-taken rejection reads finite name sets, so
+/// the ladder terminates. The identifier's OWN name stops it: a binding
+/// already wearing the decoration (`isReplBridgeActiveVal` answered
+/// `isReplBridgeActive`) gets its own name back — never re-decorated past
+/// itself into churn; the caller treats that as a keep.
+pub fn ladder(
+    own: &str,
+    suggestion: &str,
+    taken: impl Fn(&str) -> bool,
+    reject: impl Fn(&str) -> Option<RejectionReason>,
+) -> String {
+    crate::naming::validation::resolve_conflict(suggestion, |n| {
+        n != own && (taken(n) || reject(n).is_some_and(|r| class_of(r) == ReaskClass::NameTaken))
+    })
+}
+
 /// The class a wave-barrier rejection reads as: the validated applier's
 /// rejection's own class; `None` is the used-set collision — the name is
 /// in the live used set, no applier code — which reads `NameTaken`. (The

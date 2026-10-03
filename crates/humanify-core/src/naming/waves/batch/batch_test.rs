@@ -139,12 +139,102 @@ fn a_missing_answer_goes_to_the_straggler_pass_then_identity() {
     );
 }
 
+/// `--rename-retries 0`: no disclosed re-ask exists, so a lone window's
+/// colliding answer is settled by the tail's ladder on the spot (the
+/// pre-2026-10-04 behavior, kept as the disabled-budget path).
+fn no_reasks() -> super::WaveTunables {
+    super::WaveTunables {
+        reask_limit: 0,
+        ..super::WaveTunables::default()
+    }
+}
+
+/// Finding #74's open item (2026-10-04): a ONE-id window whose answer
+/// collides with a name already in use dies under the all-failed rule
+/// before any disclosed round-2 — and the tail used to decorate it on the
+/// spot (`w` → `error`, held by a sibling → `errorVal`). With a re-ask
+/// budget the lane hands the model's OWN answer to the barrier instead,
+/// undecorated: the barrier sees the collision and gives it the same
+/// disclosed re-ask every other conflict gets; the ladder is the last
+/// resort once that budget is spent.
+#[test]
+fn a_lone_colliding_answer_goes_to_the_barrier_undecorated() {
+    let used = |n: &str| n == "error";
+    let reject = |_: &str, _: &str| None;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["w"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("w", "error")]), None)), &e);
+    assert!(
+        lane.next_call().is_none(),
+        "the all-failed rule still burns the window"
+    );
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Rename {
+            old: "w".into(),
+            new: "error".into()
+        }],
+        "the colliding answer itself, for the barrier to re-ask"
+    );
+    assert_eq!(lane.report.collision_handoffs, 1);
+    assert!(
+        lane.report.contention.is_empty(),
+        "no decoration happened in the lane"
+    );
+}
+
+/// The hand-off is for answers the all-failed rule cut off BEFORE their
+/// round-2: an id that already had its lane round-2 and collided again is
+/// settled by the tail's ladder as before.
+#[test]
+fn a_collision_exhausted_through_round_two_still_ladders_in_the_tail() {
+    let used = |n: &str| n == "taken";
+    let reject = |_: &str, _: &str| None;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a", "b"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "alpha"), ("b", "taken")]), None)), &e);
+    let retry = lane.next_call().expect("b's round-2");
+    assert_eq!(retry.batch, names(&["b"]));
+    lane.feed(Ok((renames(&[("b", "taken")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects[1],
+        LaneEffect::Rename {
+            old: "b".into(),
+            new: "takenVal".into()
+        }
+    );
+    assert_eq!(lane.report.collision_handoffs, 0);
+}
+
+/// An unescapable rejection is never handed off: no re-ask can fix it.
+#[test]
+fn an_unescapable_lone_rejection_is_not_handed_off() {
+    let used = |n: &str| n == "taken";
+    let reject = |_: &str, _: &str| Some(RejectionReason::ExportedName);
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a"]), true);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![LaneEffect::Identity { name: "a".into() }]
+    );
+    assert_eq!(lane.report.collision_handoffs, 0);
+}
+
 #[test]
 fn a_used_suggestion_resolves_through_the_conflict_ladder() {
     let used = |n: &str| n == "taken";
     let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
-    let mut lane = Lane::new(names(&["a"]), false);
+    let mut lane = Lane::new(names(&["a"]), false).tuned(&no_reasks());
     lane.next_call().unwrap();
     lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
     assert!(lane.next_call().is_none());
@@ -167,7 +257,7 @@ fn the_ladder_steps_past_a_scope_unsafe_decoration() {
     let used = |n: &str| n == "taken";
     let reject = |_: &str, n: &str| (n == "takenVal").then_some(RejectionReason::ShadowsChild);
     let e = env(&used, &reject);
-    let mut lane = Lane::new(names(&["a"]), true);
+    let mut lane = Lane::new(names(&["a"]), true).tuned(&no_reasks());
     lane.next_call().unwrap();
     lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
     assert!(lane.next_call().is_none());
@@ -190,7 +280,7 @@ fn the_ladder_stops_at_the_ids_own_name() {
     let used = |n: &str| n == "taken";
     let reject = |old: &str, n: &str| (old == n).then_some(RejectionReason::TargetInScope);
     let e = env(&used, &reject);
-    let mut lane = Lane::new(names(&["takenVal"]), true);
+    let mut lane = Lane::new(names(&["takenVal"]), true).tuned(&no_reasks());
     lane.next_call().unwrap();
     lane.feed(Ok((renames(&[("takenVal", "taken")]), None)), &e);
     assert!(lane.next_call().is_none());
@@ -210,7 +300,7 @@ fn an_unescapable_rejection_stays_identity_without_laddering() {
     let used = |n: &str| n == "taken";
     let reject = |_: &str, _: &str| Some(RejectionReason::ExportedName);
     let e = env(&used, &reject);
-    let mut lane = Lane::new(names(&["a"]), true);
+    let mut lane = Lane::new(names(&["a"]), true).tuned(&no_reasks());
     lane.next_call().unwrap();
     lane.feed(Ok((renames(&[("a", "taken")]), None)), &e);
     assert!(lane.next_call().is_none());
@@ -247,7 +337,8 @@ fn the_configured_batch_size_and_retry_limit_shape_the_loop() {
     // The default batch size is its own test (the_default_batch_size_is_25).
     assert_eq!(WaveTunables::default().lane_threshold, 25);
     // The name-conflict re-ask budget defaults to reask.rs's TWO
-    // (`--rename-retries` sizes it; the lane loop itself never reads it).
+    // (`--rename-retries` sizes it; the lane reads only whether it is
+    // nonzero — whether a lone collision may be handed to the barrier).
     assert_eq!(
         WaveTunables::default().reask_limit,
         crate::naming::reask::REASK_LIMIT

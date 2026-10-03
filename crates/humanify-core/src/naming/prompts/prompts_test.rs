@@ -278,6 +278,7 @@ fn rejects(id: &str, failed: &[&str], invalid: &[bool]) -> PriorRejects {
                 name: n.to_string(),
                 invalid: *inv,
                 borrowed: None,
+                held_by: None,
             })
             .collect(),
     )])

@@ -284,4 +284,8 @@ pub struct ProcessorReport {
     /// Batch windows whose every identifier failed (the all-failed
     /// exhaustion rule) — the feedback-straggler fix's input class.
     pub all_failed_windows: usize,
+    /// Answers an all-failed window cut off before their round-2 because
+    /// they collided with a name in use, handed to the barrier undecorated
+    /// for the disclosed re-ask (finding #74's open item, 2026-10-04).
+    pub collision_handoffs: usize,
 }

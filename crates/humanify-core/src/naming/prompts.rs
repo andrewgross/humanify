@@ -27,6 +27,8 @@ use humanify_model::llm::{BatchRenameRequest, PriorRejects, RenameFailures, StrM
 use super::js_record;
 use crate::rename::floor::is_minified_echo;
 use crate::rename::name_profile::NameProfile;
+use crate::rename::validated::NameHolder;
+use crate::rename::validated::scopes::BindingKind;
 
 /// System prompt for batch renaming all identifiers in a function at once.
 pub const BATCH_RENAME_SYSTEM_PROMPT: &str = "You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -364,6 +366,7 @@ fn failure_line(
     sug: &str,
     invalid: bool,
     borrowed: Option<&str>,
+    held_by: Option<&str>,
     profile: NameProfile,
 ) -> String {
     if sug == name {
@@ -378,10 +381,37 @@ fn failure_line(
         format!(
             "- \"{name}\" was suggested as \"{sug}\" which is not allowed (reserved word, global built-in, or invalid syntax)\n"
         )
+    } else if let Some(holder) = held_by {
+        // WHO holds the name, when the barrier knew (2026-10-04): a nested
+        // parameter tells the model the name would shadow it.
+        format!(
+            "- \"{name}\" was suggested as \"{sug}\" but that name is already used by {holder}\n"
+        )
     } else {
         format!(
             "- \"{name}\" was suggested as \"{sug}\" but that conflicts with an existing name\n"
         )
+    }
+}
+
+/// How a collision re-ask names WHO holds the rejected name (the
+/// `held_by` of a disclosed [`humanify_model::llm::PriorReject`],
+/// 2026-10-04): "another variable in the same scope", "a variable in an
+/// enclosing scope", "an inner function's parameter", "a global name".
+pub fn holder_phrase(holder: NameHolder) -> String {
+    let word = |k: BindingKind| match k {
+        BindingKind::Param => "parameter",
+        BindingKind::Var | BindingKind::Let | BindingKind::Const => "variable",
+        BindingKind::Hoisted => "function",
+        BindingKind::Module => "import",
+        BindingKind::Local => "local name",
+    };
+    match holder {
+        NameHolder::SameScope(k) => format!("another {} in the same scope", word(k)),
+        NameHolder::Enclosing(k) => format!("a {} in an enclosing scope", word(k)),
+        NameHolder::Inner(BindingKind::Param) => "an inner function's parameter".to_string(),
+        NameHolder::Inner(k) => format!("a {} in an inner scope", word(k)),
+        NameHolder::Global => "a global name".to_string(),
     }
 }
 
@@ -413,12 +443,19 @@ fn render_retry_diagnostics(
         match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
             Some(list) => {
                 for r in list {
-                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref(), profile);
+                    s += &failure_line(
+                        name,
+                        &r.name,
+                        r.invalid,
+                        r.borrowed.as_deref(),
+                        r.held_by.as_deref(),
+                        profile,
+                    );
                 }
             }
             None => {
                 s += &match js_record::get_truthy(prev, name) {
-                    Some(sug) => failure_line(name, &sug, false, None, profile),
+                    Some(sug) => failure_line(name, &sug, false, None, None, profile),
                     None => format!("- \"{name}\" had a duplicate/conflicting name\n"),
                 };
             }
@@ -429,7 +466,7 @@ fn render_retry_diagnostics(
     }
     for name in &f.invalid {
         s += &match js_record::get_truthy(prev, name) {
-            Some(sug) => failure_line(name, &sug, true, None, profile),
+            Some(sug) => failure_line(name, &sug, true, None, None, profile),
             None => format!("- \"{name}\" had an invalid suggested name\n"),
         };
     }
@@ -594,12 +631,19 @@ pub fn build_module_level_retry_prefix(
         match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
             Some(list) => {
                 for r in list {
-                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref(), profile);
+                    s += &failure_line(
+                        name,
+                        &r.name,
+                        r.invalid,
+                        r.borrowed.as_deref(),
+                        r.held_by.as_deref(),
+                        profile,
+                    );
                 }
             }
             None => {
                 if let Some(sug) = js_record::get_truthy(prev, name) {
-                    s += &failure_line(name, &sug, false, None, profile);
+                    s += &failure_line(name, &sug, false, None, None, profile);
                 }
             }
         }
@@ -609,7 +653,7 @@ pub fn build_module_level_retry_prefix(
     }
     for name in &f.invalid {
         if let Some(sug) = js_record::get_truthy(prev, name) {
-            s += &failure_line(name, &sug, true, None, profile);
+            s += &failure_line(name, &sug, true, None, None, profile);
         }
     }
     s += &missing_line(f);
