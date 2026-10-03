@@ -26,8 +26,7 @@ fn with_side<T>(code: &str, run: impl FnOnce(&Ingest<'_>, &UnifiedGraph, &Symbol
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     run(&ingest, &graph, &tables)
 }

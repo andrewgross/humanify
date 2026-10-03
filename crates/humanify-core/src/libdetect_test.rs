@@ -12,9 +12,8 @@ use crate::libdetect::function_carry::library_at_offset;
 use crate::libdetect::{
     CommentRegion, DetectedBy, LibraryDetector, detect_libraries, extract_library_name_from_path,
     find_comment_regions, is_library_path, normalize_library_name, relative_posix,
-    select_library_detector,
 };
-use crate::unpack::UnpackedFile;
+use crate::unpack::{UnpackAdapter, UnpackedFile};
 
 struct TempDir(PathBuf);
 
@@ -272,17 +271,20 @@ fn library_names_from_paths() {
 
 #[test]
 fn registry_selects_bun_only_behind_the_bun_adapter() {
-    assert_eq!(select_library_detector("bun"), LibraryDetector::Bun);
     assert_eq!(
-        select_library_detector("webcrack"),
+        LibraryDetector::for_adapter(UnpackAdapter::Bun),
+        LibraryDetector::Bun
+    );
+    assert_eq!(
+        LibraryDetector::for_adapter(UnpackAdapter::Webcrack),
         LibraryDetector::Default
     );
     assert_eq!(
-        select_library_detector("passthrough"),
+        LibraryDetector::for_adapter(UnpackAdapter::Passthrough),
         LibraryDetector::Default
     );
-    assert!(LibraryDetector::Default.supports("bun"));
-    assert!(!LibraryDetector::Bun.supports("passthrough"));
+    assert!(LibraryDetector::Default.supports(UnpackAdapter::Bun));
+    assert!(!LibraryDetector::Bun.supports(UnpackAdapter::Passthrough));
 }
 
 #[test]

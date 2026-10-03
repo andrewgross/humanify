@@ -2225,6 +2225,43 @@
           }
         ]
       }
+    },
+    {
+      "name": "toolchain",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "array",
+        "items": {
+          "kind": "object",
+          "props": [
+            {
+              "name": "piece",
+              "optional": false,
+              "nullable": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "choice",
+              "optional": false,
+              "nullable": false,
+              "type": {
+                "kind": "string"
+              }
+            },
+            {
+              "name": "reason",
+              "optional": false,
+              "nullable": false,
+              "type": {
+                "kind": "string"
+              }
+            }
+          ]
+        }
+      }
     }
   ]
 }

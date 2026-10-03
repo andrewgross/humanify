@@ -81,6 +81,28 @@ fn an_old_format_stats_text_stays_wave_gauges_absent() {
     assert!(!stats.to_file_text().contains("\"waveGauges\""));
 }
 
+/// The 2026-10-04 `toolchain` bump is additive the same way: a pre-bump
+/// text strict-parses and re-emits WITHOUT the block, and a written block
+/// round-trips through the strict parser.
+#[test]
+fn the_toolchain_block_is_additive() {
+    let v = vectors();
+    let text = v["writers"]["evalStats"][0]["text"].as_str().unwrap();
+    let mut stats = EvalStats::parse(text).unwrap();
+    assert!(stats.toolchain.is_none(), "the text predates the bump");
+    assert!(!stats.to_file_text().contains("\"toolchain\""));
+    stats.toolchain = Some(vec![crate::pipeline::ToolchainPieceRecord {
+        piece: "unpackAdapter".into(),
+        choice: "bun".into(),
+        reason: "detected".into(),
+    }]);
+    let written = stats.to_file_text();
+    assert!(written.ends_with(
+        "\"toolchain\": [\n    {\n      \"piece\": \"unpackAdapter\",\n      \"choice\": \"bun\",\n      \"reason\": \"detected\"\n    }\n  ]\n}"
+    ));
+    assert_eq!(EvalStats::parse(&written).unwrap(), stats);
+}
+
 /// The 2026-10-02 strategy-split bump INSIDE `waveGauges` is additive the
 /// same way again: a pre-split `waveGauges` block (the sixth vector)
 /// strict-parses with every sub-key absent and re-emits byte-identically

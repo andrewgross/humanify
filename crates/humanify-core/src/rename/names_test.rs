@@ -54,8 +54,20 @@ fn name_predicates_match_the_ts_truth_table() {
                 is_decorated_descriptive(BUN, name),
             ),
             ("isBelowFloorName", is_below_floor_name(BUN, name)),
-            ("eligible", is_eligible(name, None, None)),
-            ("eligibleBun", is_eligible(name, Some("bun"), Some("bun"))),
+            (
+                "eligible",
+                is_eligible(name, crate::rename::eligibility::NeverRename::UNIVERSAL),
+            ),
+            (
+                "eligibleBun",
+                is_eligible(
+                    name,
+                    crate::rename::eligibility::NeverRename::for_verdicts(
+                        humanify_model::detection::BundlerType::Bun,
+                        humanify_model::detection::MinifierType::Bun,
+                    ),
+                ),
+            ),
         ];
         for (field, mine) in checks {
             let theirs = row[field].as_bool().expect("bool");

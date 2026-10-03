@@ -19,8 +19,7 @@ fn contexts_of(code: &str) -> (String, &'static UnifiedGraph, StatementContexts)
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     )));
     let ctx = StatementContexts::build(graph, ingest.semantic(), &tables, ingest.program, text);
     (text.to_string(), graph, ctx)

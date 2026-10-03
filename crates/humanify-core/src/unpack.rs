@@ -4,8 +4,8 @@
 //! webcrack}.ts`; `src/plugins/webcrack.ts` is NOT ported — webcrack runs as
 //! a subprocess shim (`webcrack`). The registry's post-cutover fourth
 //! adapter is esbuild (exp075's module form, ported to Rust 2026-10-02):
-//! the same vendor-extraction flow as bun, entered through
-//! `bun::unpack_esbuild` — the two bundlers differ only in two wrapper
+//! the same vendor-extraction flow as bun (`bun::unpack_bun`, stamped
+//! with the adapter's name) — the two bundlers differ only in two wrapper
 //! shapes ([`crate::modules::factory_arg_function`]) and esbuild's
 //! unminified builds hand each module's original source path through the
 //! object key ([`crate::modules::FactoryRecord::source_path`]).
@@ -24,6 +24,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use humanify_model::detection::{BundlerDetectionResult, BundlerType};
+
+use crate::toolchain::{Chosen, Reason};
 
 /// Module metadata webcrack reports for one extracted file
 /// (`plugins/webcrack.ts ModuleMetadata`): the default library detector's
@@ -62,7 +64,8 @@ pub struct UnpackResult {
 pub enum UnpackAdapter {
     Webcrack,
     Bun,
-    /// esbuild's bundle reader (`unpack::bun::unpack_esbuild`): the same
+    /// esbuild's bundle reader (`unpack::bun::unpack_bun` with the esbuild
+    /// stamp): the same
     /// vendor-extraction flow as bun, whose module form differs in two
     /// wrapper shapes and hands over each unminified module's original
     /// source path.
@@ -111,25 +114,40 @@ impl UnpackAdapter {
     pub fn provides_module_fossils(self) -> bool {
         matches!(self, UnpackAdapter::Bun | UnpackAdapter::Esbuild)
     }
+
+    /// The stamp this adapter writes into the vendor record
+    /// (`vendor/_bun-modules.json`'s `adapter`), or None when it writes no
+    /// vendor record (docs/plugin-spec.md P5). Bun and esbuild share the
+    /// one record format; the stamp is their registered name.
+    pub fn vendor_record_stamp(self) -> Option<&'static str> {
+        match self {
+            UnpackAdapter::Bun | UnpackAdapter::Esbuild => Some(self.name()),
+            UnpackAdapter::Webcrack | UnpackAdapter::Passthrough => None,
+        }
+    }
+
+    /// The registered adapter whose vendor record carries `stamp` — the
+    /// finish's "is this a record we can re-link?" (spec I14), answered by
+    /// the registry instead of a list of names.
+    pub fn of_vendor_record_stamp(stamp: &str) -> Option<UnpackAdapter> {
+        ADAPTERS
+            .into_iter()
+            .find(|a| a.vendor_record_stamp() == Some(stamp))
+    }
 }
 
-/// `selectUnpackAdapter(config)`: the adapter registered under `name`; an
-/// unknown name is an error (the TS throws).
-pub fn select_unpack_adapter(name: &str) -> Result<UnpackAdapter, String> {
-    ADAPTERS
-        .into_iter()
-        .find(|a| a.name() == name)
-        .ok_or_else(|| format!("No unpack adapter named \"{name}\""))
-}
-
-/// `selectAdapter(detection, { bundlerOverride })`: a forced bundler type
-/// (other than "unknown") is tried first as a synthetic definitive verdict;
-/// otherwise — or when nothing supports the override — the first adapter
-/// supporting the real detection wins.
-pub fn select_adapter(
+/// `selectAdapter(detection, { bundlerOverride })`, with WHY: a forced
+/// bundler type (other than "unknown") is tried first as a synthetic
+/// definitive verdict ([`Reason::Flag`]); otherwise the first adapter
+/// supporting the real detection wins ([`Reason::Detected`]). The
+/// do-nothing passthrough (last, supports everything) is always the
+/// [`Reason::Fallback`] — also for a forced bundler that has no adapter. Called by the toolchain
+/// (`crate::toolchain::resolve_toolchain`), the one place a run's pieces
+/// are chosen.
+pub fn choose_adapter(
     detection: &BundlerDetectionResult,
     bundler_override: Option<BundlerType>,
-) -> UnpackAdapter {
+) -> Chosen<UnpackAdapter> {
     if let Some(kind) = bundler_override
         && kind != BundlerType::Unknown
     {
@@ -137,34 +155,100 @@ pub fn select_adapter(
         overridden.bundler.kind = kind;
         overridden.bundler.tier = humanify_model::detection::DetectionTier::Definitive;
         overridden.bundler.version = None;
-        if let Some(a) = ADAPTERS.into_iter().find(|a| a.supports(&overridden)) {
-            return a;
+        if let Some(piece) = ADAPTERS.into_iter().find(|a| a.supports(&overridden)) {
+            return Chosen {
+                piece,
+                // A forced bundler with no adapter of its own (rollup,
+                // parcel) lands on the do-nothing adapter: a fallback.
+                reason: if piece == UnpackAdapter::Passthrough {
+                    Reason::Fallback
+                } else {
+                    Reason::Flag
+                },
+            };
         }
     }
-    ADAPTERS
+    let piece = ADAPTERS
         .into_iter()
         .find(|a| a.supports(detection))
-        .unwrap_or(UnpackAdapter::Passthrough)
+        .unwrap_or(UnpackAdapter::Passthrough);
+    Chosen {
+        piece,
+        reason: if piece == UnpackAdapter::Passthrough {
+            Reason::Fallback
+        } else {
+            Reason::Detected
+        },
+    }
 }
 
-/// Run the selected adapter (`adapter.unpack(code, outputDir, options)`).
-/// The webcrack adapter needs its shim; running it without one is an error.
+/// What a caller hands the selected adapter. Every field is optional: an
+/// adapter takes what it uses and ignores the rest, so no caller has to
+/// know which adapter needs what (docs/plugin-spec.md I9 — the adapter
+/// used to be run from three places, two of which special-cased bun and
+/// esbuild to pass the namer and the prior).
+#[derive(Default)]
+pub struct AdapterRun<'n> {
+    /// The LLM vendor namer (vendor-record adapters; None skips the pass).
+    pub namer: Option<&'n mut dyn crate::modules::vendor_names::VendorNamer>,
+    /// The prior release's vendor record (`bun::load_prior_vendor`).
+    pub prior: Option<bun::PriorVendor>,
+    /// `--disable manifest-prior-order`.
+    pub manifest_prior_order_disabled: bool,
+    /// The webcrack subprocess shim (the webcrack adapter errors without it).
+    pub webcrack_shim: Option<&'n webcrack::WebcrackShim>,
+}
+
+/// What the adapter produced: a vendor-record adapter's full outcome, or
+/// the plain file list.
+pub enum AdapterOutcome {
+    VendorRecord(Box<bun::BunUnpackOutcome>),
+    Files(UnpackResult),
+}
+
+impl AdapterOutcome {
+    /// The files handed downstream, in the adapter's order.
+    pub fn into_result(self) -> UnpackResult {
+        match self {
+            AdapterOutcome::VendorRecord(o) => o.result,
+            AdapterOutcome::Files(r) => r,
+        }
+    }
+}
+
+/// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —
+/// THE one dispatch site: the pipeline, the `unpack`, `libdetect` and
+/// `match` verbs all come through here, so a registered adapter is run
+/// the same way everywhere.
 pub fn run_adapter(
     adapter: UnpackAdapter,
     code: &str,
     out_dir: &Path,
-    bun_options: bun::BunUnpackOptions<'_>,
-    webcrack_shim: Option<&webcrack::WebcrackShim>,
-) -> Result<UnpackResult, String> {
+    run: AdapterRun<'_>,
+) -> Result<AdapterOutcome, String> {
     match adapter {
-        UnpackAdapter::Bun => Ok(bun::unpack_bun(code, out_dir, bun_options)?.result),
-        UnpackAdapter::Esbuild => Ok(bun::unpack_esbuild(code, out_dir, bun_options)?.result),
+        // The vendor-record adapters share the one extraction flow; the
+        // adapter only stamps the record.
+        UnpackAdapter::Bun | UnpackAdapter::Esbuild => {
+            Ok(AdapterOutcome::VendorRecord(Box::new(bun::unpack_bun(
+                code,
+                out_dir,
+                bun::BunUnpackOptions {
+                    namer: run.namer,
+                    prior: run.prior,
+                    manifest_prior_order_disabled: run.manifest_prior_order_disabled,
+                    adapter,
+                },
+            )?)))
+        }
         UnpackAdapter::Webcrack => webcrack::unpack_webcrack(
             code,
             out_dir,
-            webcrack_shim.ok_or("the webcrack adapter needs its subprocess shim")?,
-        ),
-        UnpackAdapter::Passthrough => write_passthrough(code, out_dir),
+            run.webcrack_shim
+                .ok_or("the webcrack adapter needs its subprocess shim")?,
+        )
+        .map(AdapterOutcome::Files),
+        UnpackAdapter::Passthrough => write_passthrough(code, out_dir).map(AdapterOutcome::Files),
     }
 }
 

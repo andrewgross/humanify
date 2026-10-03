@@ -113,25 +113,9 @@ pub const DEFAULT_CONCURRENCY: u32 = 50;
 /// the provider fallback, and a hard-coded experiment copy).
 pub const DEFAULT_LLM_TIMEOUT_MS: u64 = 300_000;
 
-/// Module-lane concurrency, per bundler. esbuild bundles hold many more
-/// independent module bindings, so their lane is wider.
-pub fn default_module_concurrency(bundler_type: Option<&str>) -> u32 {
-    if bundler_type == Some("esbuild") {
-        MODULE_LANES_ESBUILD
-    } else {
-        MODULE_LANES_OTHER
-    }
-}
-
-const MODULE_LANES_ESBUILD: u32 = 40;
-const MODULE_LANES_OTHER: u32 = 20;
-
-/// The widest lane `default_module_concurrency` can return — the LLM rate
-/// limiter's outer bound, sized before the bundler is known. DERIVED from
-/// the lane table rather than restated, so raising a lane cannot leave the
-/// ceiling behind.
-pub const MAX_DEFAULT_MODULE_CONCURRENCY: u32 = if MODULE_LANES_ESBUILD > MODULE_LANES_OTHER {
-    MODULE_LANES_ESBUILD
-} else {
-    MODULE_LANES_OTHER
-};
+/// The module-lane width the LLM rate limiter's outer bound is sized by
+/// (when `--module-concurrency` is unset). It was the wider entry of a
+/// per-bundler lane table (esbuild 40, others 20) whose per-bundler lookup
+/// nothing called (docs/plugin-spec.md I24): the table was deleted
+/// 2026-10-04, keeping the one value anything read.
+pub const MAX_DEFAULT_MODULE_CONCURRENCY: u32 = 40;

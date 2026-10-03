@@ -19,6 +19,28 @@ Bun code path. This file answers two questions:
 Read with [`pipeline-stages.md`](./pipeline-stages.md) (the twelve stages)
 and [`responsibility.md`](./responsibility.md) (who owns which question).
 
+**Update 2026-10-04 (finding #76, branch `feat/detected-toolchain`) — the
+TOOLCHAIN.** Part 4's steps 1 and 3 are done. A run's plugin pieces are now
+chosen in ONE place, `humanify_core::toolchain::resolve_toolchain`, at the
+start of the run, from the detection verdict and the `--bundler` /
+`--minifier` flags, and handed to every stage as values — no stage below it
+compares a bundler or minifier NAME any more. Each choice is recorded with
+its reason (`flag`, `detected`, `fallback`, `only-implementation`) in the
+`--stats-json` file's `toolchain` block and in a `-vv` log line. Pieces it
+holds: the unpack adapter (P2), the vendor record and its stamp (P5), the
+library detector (P6), the never-rename lists (P7), the name profile (P10),
+the module-layout record (P11) and the per-bundler tuning (P14); plus four
+slots whose only implementation is today's Bun/esbuild behaviour — the
+module wrapper grammar (P3), the interop helpers (P8), the bundle layout
+(P9) and "which file is the app" (P13). Fixed by it: I9 (one dispatch
+site), I14 (the finish accepts any registered vendor-record adapter's
+stamp), I21 (the post-split reconcile uses the run's never-rename lists),
+I23 (the group size is a tuning piece), I24 (the dead lane table is gone).
+The statuses below are updated where they changed; the original audit text
+is kept for the record. Neutral: byte-identical output against main's
+binary on the five e2e fixture pairs and a stub-LLM Claude Code pair
+(2.1.118 → 2.1.119, trees and asks).
+
 ## Words used here
 
 - **Bundler** — the tool that glued many source files into one file (Bun,
@@ -115,16 +137,16 @@ given).
 
 #### Stages 2-3 — choosing and running the unpacker (`crates/humanify-core/src/unpack/`, `modules/`)
 
-| #   | where                                                                                              | what it assumes                                                                                                                                                                                                      | belongs to   | status                    | sev    |
-| --- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------- | ------ |
-| I8  | `unpack.rs:61-148` (`UnpackAdapter`, `ADAPTERS`, `select_adapter`)                                 | the adapter list; each adapter says which detected bundler it takes                                                                                                                                                  | all          | selected                  | Low    |
-| I9  | `unpack.rs:152` (`run_adapter`), `humanify-cli/src/unminify.rs:88`, `humanify-cli/src/main.rs:429` | the adapter is RUN from three places; two of them special-case `Bun \| Esbuild` with `matches!` to pass the vendor namer and the prior                                                                               | Bun, esbuild | **wrong** for a new one   | Medium |
-| I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them | Bun, esbuild | **wrong** by construction | Medium |
-| I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                       | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                   | Bun          | harmless                  | Low    |
-| I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                  | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                         | Bun          | harmless (naming only)    | Low    |
-| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                          | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                       | all          | harmless                  | Low    |
-| I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                     | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"`                                                                                                                              | Bun, esbuild | **wrong** for a new one   | Medium |
-| I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                         | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                      | Bun, esbuild | harmless (by shape)       | Low    |
+| #   | where                                                                                              | what it assumes                                                                                                                                                                                                                                                                                            | belongs to   | status                    | sev    |
+| --- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------- | ------ |
+| I8  | `unpack.rs:61-148` (`UnpackAdapter`, `ADAPTERS`, `select_adapter`)                                 | the adapter list; each adapter says which detected bundler it takes                                                                                                                                                                                                                                        | all          | selected                  | Low    |
+| I9  | `unpack.rs:152` (`run_adapter`), `humanify-cli/src/unminify.rs:88`, `humanify-cli/src/main.rs:429` | the adapter is RUN from three places; two of them special-case `Bun \| Esbuild` with `matches!` to pass the vendor namer and the prior — **FIXED 2026-10-04**: `unpack::run_adapter` is the one dispatch site; every caller hands it `AdapterRun` (namer, prior, shim) and each adapter takes what it uses | Bun, esbuild | fixed                     | Medium |
+| I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them                                                                                       | Bun, esbuild | **wrong** by construction | Medium |
+| I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                       | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                                                                                                         | Bun          | harmless                  | Low    |
+| I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                  | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                                                                                                               | Bun          | harmless (naming only)    | Low    |
+| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                          | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                  | Low    |
+| I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                     | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"` — **FIXED 2026-10-04**: it accepts the stamp of any registered adapter that writes the record (`UnpackAdapter::of_vendor_record_stamp`)                                                                            | Bun, esbuild | fixed                     | Medium |
+| I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                         | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                                                                                                            | Bun, esbuild | harmless (by shape)       | Low    |
 
 - **I9 example:** add a third vendor-extracting adapter to `run_adapter`
   only, and `humanify unminify` routes it through the generic branch with
@@ -163,14 +185,14 @@ given).
 
 #### Stages 6-9 — formatting and naming
 
-| #   | where                                                         | what it assumes                                                                                                                                                                                                                          | belongs to            | status                      | sev    |
-| --- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------- | ------ |
-| I19 | `format/beautify.rs`                                          | undoes general minifier idioms (`void 0`, `!0`, comma chains, flipped comparisons)                                                                                                                                                       | all minifiers         | harmless (generic)          | Low    |
-| I20 | `rename/eligibility.rs:59-159` (`create_skip_set`)            | never-rename lists per bundler (webpack, esbuild) and minifier (swc), chosen from detection — but the always-on rules (any `__word…` name, any `_word_word` name) already cover every listed entry except swc's `_extends` / `_inherits` | webpack, esbuild, swc | selected (mostly redundant) | Low    |
-| I21 | `finish/driver.rs:330`                                        | the post-split rename pass builds its never-rename list as `Eligibility::new(Some("bun"), Some("bun"))` — whatever was detected                                                                                                          | Bun                   | **wrong** (two answers)     | Medium |
-| I22 | `rename/floor.rs:123` (`is_bun_token`) and its 9 callers      | "does this name look minifier-made?" is answered with Bun's shape on every input: the minted-name meter, the below-floor rule, vote candidacy, the family permute, the answer checks (echo, borrowed stem)                               | Bun's minifier        | **wrong** (in flight)       | Medium |
-| I23 | `naming/waves/processor.rs:1195`, `naming/driver/era.rs:487`  | module-level names are sent to the LLM in groups of 15 for esbuild, 10 for everything else                                                                                                                                               | esbuild               | selected                    | Low    |
-| I24 | `humanify-cli/src/util.rs:118` (`default_module_concurrency`) | a per-bundler lane width (esbuild 40, others 20) — but nothing calls it; only the maximum is used                                                                                                                                        | esbuild               | harmless (dead code)        | Low    |
+| #   | where                                                         | what it assumes                                                                                                                                                                                                                                   | belongs to            | status                      | sev    |
+| --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------- | ------ |
+| I19 | `format/beautify.rs`                                          | undoes general minifier idioms (`void 0`, `!0`, comma chains, flipped comparisons)                                                                                                                                                                | all minifiers         | harmless (generic)          | Low    |
+| I20 | `rename/eligibility.rs:59-159` (`create_skip_set`)            | never-rename lists per bundler (webpack, esbuild) and minifier (swc), chosen from detection — but the always-on rules (any `__word…` name, any `_word_word` name) already cover every listed entry except swc's `_extends` / `_inherits`          | webpack, esbuild, swc | selected (mostly redundant) | Low    |
+| I21 | `finish/driver.rs:330`                                        | the post-split rename pass builds its never-rename list as `Eligibility::new(Some("bun"), Some("bun"))` — whatever was detected — **FIXED 2026-10-04**: it reads the run's `NeverRename` from the toolchain, the same value the naming stage uses | Bun                   | fixed                       | Medium |
+| I22 | `rename/floor.rs:123` (`is_bun_token`) and its 9 callers      | "does this name look minifier-made?" is answered with Bun's shape on every input: the minted-name meter, the below-floor rule, vote candidacy, the family permute, the answer checks (echo, borrowed stem)                                        | Bun's minifier        | **wrong** (in flight)       | Medium |
+| I23 | `naming/waves/processor.rs:1195`, `naming/driver/era.rs:487`  | module-level names are sent to the LLM in groups of 15 for esbuild, 10 for everything else (2026-10-04: the toolchain's `BundlerTuning` piece, no string check)                                                                                   | esbuild               | selected                    | Low    |
+| I24 | `humanify-cli/src/util.rs:118` (`default_module_concurrency`) | a per-bundler lane width (esbuild 40, others 20) — but nothing calls it; only the maximum is used — **DELETED 2026-10-04** (the one value read, 40, kept as a constant)                                                                           | esbuild               | fixed                       | Low    |
 
 - **I21 example:** for an swc build, the naming stage never renames
   `_extends`, but the post-split pass may. Today this cannot fire for Bun or
@@ -233,19 +255,19 @@ are both.
 | piece                                       | stage  | status                  | a new plugin today must…                                                                                            |
 | ------------------------------------------- | ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | P1 Detection signals                        | 1      | **PARTIAL**             | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything |
-| P2 Unpack adapter (choose + run)            | 2-3    | **PARTIAL**             | add an enum value, a `supports` rule, and edit three dispatch sites (I9)                                            |
-| P3 Module wrapper grammar (factories)       | 3, 8-9 | **PARTIAL**             | extend the shared factory owners; they run on every input, not just theirs (I10)                                    |
+| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04) | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                    |
+| P3 Module wrapper grammar (factories)       | 3, 8-9 | **PARTIAL** (slot)      | extend the shared factory owners; they run on every input, not just theirs (I10); the toolchain names the slot      |
 | P4 Original source-path handover            | 3      | **EXISTS**              | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                          |
-| P5 Vendor record, vendor names, prior carry | 3, 5   | **PARTIAL**             | reuse the record format; add its stamp to the finish's allow-list (I14)                                             |
+| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04) | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the finish reads the registry   |
 | P6 Library detection                        | 4      | **EXISTS**              | add a detector or reuse the vendor-record one                                                                       |
-| P7 Never-rename helper names                | 7-9    | **PARTIAL**             | add a list in `create_skip_set`; fix the one hard-coded consumer (I21)                                              |
-| P8 Interop helpers for vendored code        | 3, 12  | **PARTIAL**             | Bun's shapes and Bun's helper file only (I16-I18)                                                                   |
-| P9 Bundle layout ("container") grammar      | 7-12   | **MISSING**             | one hard-coded grammar with ~10 callers (I25)                                                                       |
-| P10 Name profile (minifier naming shape)    | 9      | **MISSING** (in flight) | `is_bun_token` everywhere today (I22); `feat/minifier-name-profiles` is adding the seam                             |
+| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04) | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain       |
+| P8 Interop helpers for vendored code        | 3, 12  | **PARTIAL** (slot)      | Bun's shapes and Bun's helper file only (I16-I18); the helper file now comes from the toolchain's `InteropHelpers`  |
+| P9 Bundle layout ("container") grammar      | 7-12   | **MISSING** (slot)      | one hard-coded grammar with ~10 callers (I25); the toolchain names it, the callers do not read it yet               |
+| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)        | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                             |
 | P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**             | per-adapter flag exists; the grammar itself is one shared shape list                                                |
 | P12 Load-order helper shapes                | 11     | **PARTIAL**             | registrar by shape works for both; lazy-init is Bun's text only (I27)                                               |
-| P13 Which unpacked file is the app          | 10-12  | **MISSING**             | "the last file processed" (I26)                                                                                     |
-| P14 Per-bundler tuning                      | 9      | **PARTIAL**             | group size is selected; lane width is dead code (I23, I24)                                                          |
+| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)      | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                       |
+| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04) | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                              |
 | P15 Formatting                              | 6      | not a plugin piece      | nothing — the formatter undoes generic idioms and is a frozen spec                                                  |
 | P16 Fixtures and tests                      | gate   | **PARTIAL**             | see the test list in each piece and the checklist                                                                   |
 
@@ -268,7 +290,9 @@ taste):
   `FACTORY_HASH_VERSION` does), never silently re-interpret them.
 - **Selected once, from detection.** A piece should be chosen at the start
   of the run and passed down, never re-guessed deep inside a stage (I10 and
-  I21 are what happens otherwise).
+  I21 are what happens otherwise). Since 2026-10-04 the place is
+  `toolchain::resolve_toolchain`: a new piece is a field there, chosen
+  there, recorded by `Toolchain::record`, and handed down as a value.
 
 ### P1 — Detection signals (stage 1) — PARTIAL
 
@@ -281,7 +305,8 @@ over the first 16K characters, listed in `BUNDLER_DETECTORS`
 signal names a bundler OR a minifier, with a tier (`definitive`, `likely`,
 `unknown`). The bundler verdict is the first `definitive` bundler signal; the
 minifier verdict is the highest-tier minifier signal. `--bundler` /
-`--minifier` override both (`humanify-cli/src/pipeline_config.rs`).
+`--minifier` override both (`humanify_core::toolchain::resolve_toolchain`,
+where every piece is chosen from the verdicts).
 
 **A plugin must provide:**
 
@@ -335,7 +360,13 @@ verb in `humanify-cli/src/main.rs:429` — and the last two special-case
 esbuild differs only by the stamp string it passes.
 
 **Refactor needed:** one dispatch site that always passes the namer and the
-prior, so an adapter cannot be half-registered.
+prior, so an adapter cannot be half-registered. **DONE 2026-10-04:**
+`unpack::run_adapter(adapter, code, out_dir, AdapterRun)` is the only
+place an adapter runs (the pipeline and the `unpack`, `libdetect` and
+`match` verbs); `AdapterRun` carries the namer, the prior's vendor record
+and the webcrack shim, and an adapter ignores what it does not use. The
+adapter is chosen by `unpack::choose_adapter`, called only by the
+toolchain, which also records why (flag / detected / fallback).
 
 **Fallback:** `passthrough` (last in the list, supports everything).
 
@@ -375,6 +406,11 @@ unpacker's factory list rather than re-detect it.
 
 **Fallback:** no helper found → no factories → nothing skipped, nothing
 extracted.
+
+**Slot (2026-10-04):** `toolchain::ModuleWrapperGrammar` (one value,
+`BunAndEsbuild`, whose `identify_factory_helper` is
+`modules::identify_cjs_factory`). Its consumers still call the shared
+owners directly — routing them through the run's value is Part 4 step 4.
 
 **Tests:** `modules_test.rs` cases for the helper and argument shapes from a
 real build (minified AND unminified), and a negative case (the helper's
@@ -417,6 +453,10 @@ renaming it is a migration because prior trees hold it).
 
 **Refactor needed:** the allow-lists should come from the adapter list
 ("does this adapter write a vendor record?"), not from string matches.
+**DONE 2026-10-04:** `UnpackAdapter::vendor_record_stamp` declares it; the
+finish asks `UnpackAdapter::of_vendor_record_stamp`, the library detector
+is chosen from the adapter value (`LibraryDetector::for_adapter`), and the
+unpack writes `adapter.vendor_record_stamp()` into the record.
 
 **Tests:** a prior → next-release pair in the e2e fixture (the existing
 bundle fixtures run fresh, then with `--prior-version`).
@@ -447,6 +487,13 @@ correctly renamed and recognised by shape elsewhere.)
 
 **Where Bun is wired in:** the post-split rename pass hard-codes
 `Some("bun"), Some("bun")` (I21). It should receive the run's selection.
+**DONE 2026-10-04:** the lists are a typed value, `NeverRename`, chosen
+once by the toolchain (from the same bundler + minifier verdicts the naming
+stage always read) and passed to the naming stage, the match stage's
+graphs, the `match` verb and the post-split reconcile alike. On Bun and
+esbuild input the change is invisible: their lists add nothing the two
+always-on rules miss. It differs only for an swc-detected input, where the
+reconcile now also refuses `_extends` / `_inherits`, as naming always did.
 
 **Tests:** the existing `skip-list.json` parity table, extended per plugin.
 
@@ -474,6 +521,10 @@ unminified esbuild factories in the app (I17).
 the input bundle), with a fixture that has a CommonJS module requiring an ES
 module.
 
+**Slot (2026-10-04):** `toolchain::InteropHelpers` (one value, `Bun`); the
+finish's relink writes `interop.relink_runtime()`. The helper SHAPES in
+`unpack/bun/scope.rs` are not behind it yet.
+
 ### P9 — Bundle layout ("container") grammar (stages 7-12) — MISSING
 
 **Question:** where are the bundle's top-level statements — the list the
@@ -499,7 +550,11 @@ one that opens ESM-format bundles from every bundler.
 
 **Fallback:** today's grammar; no wrapper → no split (fail loud).
 
-### P10 — Name profile: what a minifier-made name looks like (stage 9) — MISSING, in flight
+**Slot (2026-10-04):** `toolchain::BundleLayout` (one value,
+`SingleWrapperFunction`). It is recorded, but the ten callers still read
+`modules/wrapper.rs` directly — that routing is the refactor above.
+
+### P10 — Name profile: what a minifier-made name looks like (stage 9) — EXISTS (landed #75; chosen by the toolchain since 2026-10-04)
 
 **Question:** does this name look like something a minifier invented? (Who
 gets counted as minted, which answers are junk, which LLM answers borrow a
@@ -601,12 +656,18 @@ code — the file the split cuts up and the next release's prior is made from?
 file (or says "several modules, no single app file", in which case the split
 declines with a clear message instead of running on one module).
 
+**Slot (2026-10-04):** `toolchain::AppFile` — today's only rule,
+`LastProcessed`, is what the naming loop asks before replacing the file it
+hands the split. A second rule lands there.
+
 ### P14 — Per-bundler tuning (stage 9) — PARTIAL
 
 Two knobs keyed on the bundler: the module-level naming group size (esbuild
 15, else 10 — selected, I23) and the module lane width (a table that nothing
 reads, I24). A plugin may set its own values; the defaults apply otherwise.
-The dead lane table should be deleted or wired in.
+The dead lane table should be deleted or wired in. **DONE 2026-10-04:** the
+group size is `toolchain::BundlerTuning::module_group_size`, carried on
+`NamingConfig`; the lane table is deleted.
 
 ### P15 — Formatting (stage 6) — not a plugin piece
 
@@ -648,15 +709,14 @@ For a new **bundler** (say, rollup or webpack 5) today:
    `SELECTABLE_BUNDLERS` entry. Write positive tests with minified and
    unminified real builds, and negative tests on Bun/esbuild output.
 2. Unpacker (P2): add the `UnpackAdapter` value, its `supports` rule and
-   `name`, and edit **all three** dispatch sites (`unpack::run_adapter`,
-   `humanify-cli/src/unminify.rs`, the `unpack` verb in
-   `humanify-cli/src/main.rs`). Write the app's own code last.
+   `name`, and its arm in the one dispatch site, `unpack::run_adapter`.
+   Write the app's own code last.
 3. If the bundle wraps modules in factories (P3): extend
    `identify_cjs_factory` / `factory_arg_function`, and check what the
    change does to every OTHER bundler's input (they run everywhere).
-4. If it reuses the vendor record (P5): add the stamp to the finish's
-   allow-list (`finish/driver.rs:84`) and the library detector registry
-   (`libdetect.rs:119`).
+4. If it reuses the vendor record (P5): return its stamp from
+   `UnpackAdapter::vendor_record_stamp` (the finish then re-links it), and
+   add a `LibraryDetector` that `supports` the adapter if it needs its own.
 5. Interop helpers (P8): add their shapes to `scope.rs` and their
    implementation to the relink helper file, or accept that factories using
    them stay in the app.
@@ -666,8 +726,15 @@ For a new **bundler** (say, rollup or webpack 5) today:
    has them; set `provides_module_fossils`.
 8. If its output has no single wrapper function: the split is not available
    until P9 and P13 exist.
-9. Fixtures (P16), then `npm run check`, then add a row to
-   `responsibility.md` for any new owner.
+9. **Register in the toolchain** (`humanify_core::toolchain`): if a piece
+   has a new implementation (a `BundlerTuning`, an `InteropHelpers`, a
+   `ModuleWrapperGrammar`…), add the value and choose it in
+   `resolve_toolchain` — from the flags or a DEFINITIVE detection, never
+   from the minifier detection verdict (P1) — and give it a `name()` so
+   `Toolchain::record` writes it into the run's stats. Nothing below the
+   toolchain may compare bundler or minifier names.
+10. Fixtures (P16), then `npm run check`, then add a row to
+    `responsibility.md` for any new owner.
 
 For a new **minifier** (say, terser): P1 (with a "not minified" answer and
 honest tiers), P10 (a name profile — after the in-flight branch lands), P7
@@ -684,11 +751,13 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
    `"esbuild"`) in the finish (I14, I21), library detection, the naming
    group size (I23) and the dead lane table (I24). Neutral by construction
    on Bun input. This is also the hook the name-profile branch needs.
+   **DONE 2026-10-04** — `toolchain::resolve_toolchain` (finding #76).
 2. **Make the minifier verdict trustworthy before anything reads it** (I3-I5):
    add "not minified", stop treating the terser fallback as a verdict, and
    make the name profile fall back to Bun's when unsure. Then land the name
    profile (P10) on top. Neutral on Bun input by the fallback rule.
-3. **One adapter dispatch site** (I9). Pure refactor, neutral.
+3. **One adapter dispatch site** (I9). Pure refactor, neutral. **DONE
+   2026-10-04** — `unpack::run_adapter` (finding #76).
 4. **Pass the unpacker's factory grammar to the naming stage** instead of
    re-detecting on every file (I10). Neutral on Bun input (same grammar,
    same answer); changes behaviour only on other bundlers, which is the

@@ -1,26 +1,12 @@
-//! Pipeline configuration types (TS: `src/pipeline/types.ts` and the
-//! record of `src/pipeline/selection-record.ts`).
+//! The pipeline's selection records (TS: the record of
+//! `src/pipeline/selection-record.ts`) — the selection itself is
+//! `humanify_core::toolchain`.
 //!
 //! `FileContext` (the per-file plugin context) is not here yet: its only
 //! consumers are the per-file stages (format, rename) that are NOT-YET in
 //! the Rust driver; it lands with them.
 
-use crate::detection::{BundlerType, DetectionTier, MinifierType};
 use crate::js_record;
-
-/// TS `PipelineConfig`: every selection the pipeline made before any code
-/// was transformed. Frozen in TS; a plain value here.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PipelineConfig {
-    pub bundler_type: BundlerType,
-    pub bundler_tier: DetectionTier,
-    pub minifier_type: MinifierType,
-    /// The selected unpack adapter's name ("webcrack", "bun", "passthrough").
-    pub unpack_adapter_name: &'static str,
-    /// The selected minifier name profile's name ("bun", "esbuild", …;
-    /// `humanify_core::rename::name_profile`).
-    pub name_profile_name: &'static str,
-}
 
 js_record! {
     /// TS `PipelineSelectionRecord` — the stats file's `selection` block, in
@@ -30,5 +16,17 @@ js_record! {
         bundler_tier: String = "bundlerTier",
         minifier: String = "minifier",
         unpack_adapter: String = "unpackAdapter",
+    }
+}
+
+js_record! {
+    /// One row of the run's TOOLCHAIN (`humanify_core::toolchain`): which
+    /// plugin piece the run used, what was chosen, and why ("flag",
+    /// "detected", "fallback", "only-implementation"). The stats file's
+    /// `toolchain` block is the list of them, in pipeline order.
+    pub struct ToolchainPieceRecord {
+        piece: String = "piece",
+        choice: String = "choice",
+        reason: String = "reason",
     }
 }

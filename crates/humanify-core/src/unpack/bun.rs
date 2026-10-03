@@ -220,8 +220,9 @@ pub struct BunUnpackOptions<'n> {
     /// `hashOrdinal` stamps and no prior-order reorder — the manifest in
     /// bundle order, as before exp047.
     pub manifest_prior_order_disabled: bool,
-    /// The manifest's `adapter` stamp: "bun" or "esbuild".
-    pub adapter: &'static str,
+    /// The adapter running this flow — its vendor-record stamp is the
+    /// manifest's `adapter` field (`UnpackAdapter::vendor_record_stamp`).
+    pub adapter: crate::unpack::UnpackAdapter,
 }
 
 impl Default for BunUnpackOptions<'_> {
@@ -230,7 +231,7 @@ impl Default for BunUnpackOptions<'_> {
             namer: None,
             prior: None,
             manifest_prior_order_disabled: false,
-            adapter: "bun",
+            adapter: crate::unpack::UnpackAdapter::Bun,
         }
     }
 }
@@ -496,7 +497,10 @@ pub fn unpack_bun(
     // Entries are in BUNDLE order here, the order the naming tie-break is
     // defined against — ordinals are stamped BEFORE the reorder.
     let manifest = BunModulesManifest {
-        adapter: options.adapter,
+        adapter: options
+            .adapter
+            .vendor_record_stamp()
+            .ok_or("this adapter writes no vendor record")?,
         hash_version: FACTORY_HASH_VERSION,
         runtime_file,
         factories: if options.manifest_prior_order_disabled {
@@ -518,22 +522,6 @@ pub fn unpack_bun(
         kept_in_app,
         helper_refs: helper_edits.len(),
     })
-}
-
-/// The esbuild adapter: the same reader with the `esbuild` manifest stamp
-/// (`unpack_esbuild` — the sibling entry point the unpack registry routes
-/// `BundlerType::Esbuild` inputs to). Everything downstream — extraction,
-/// naming, prior carry, scope planning — is shared with bun; esbuild's
-/// module form differs only in the wrapper shapes
-/// ([`crate::modules::factory_arg_function`]) and hands over each
-/// unminified module's original source path ([`FactoryRecord::source_path`]).
-pub fn unpack_esbuild(
-    code: &str,
-    out_dir: &Path,
-    mut options: BunUnpackOptions<'_>,
-) -> Result<BunUnpackOutcome, String> {
-    options.adapter = "esbuild";
-    unpack_bun(code, out_dir, options)
 }
 
 /// The AST classification on the parsed input (`classifyWithAst` minus the

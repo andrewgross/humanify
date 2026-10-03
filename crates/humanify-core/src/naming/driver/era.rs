@@ -52,8 +52,10 @@ use crate::twins::gates::PrivateRenameSet;
 
 /// What the era is asked to do (the plugin options it reads).
 pub struct EraOptions<'o> {
-    pub bundler: Option<&'o str>,
-    pub minifier: Option<&'o str>,
+    /// `NamingConfig::never_rename`.
+    pub never_rename: crate::rename::eligibility::NeverRename,
+    /// `NamingConfig::tuning`.
+    pub tuning: crate::toolchain::BundlerTuning,
     /// `NamingConfig::name_profile`.
     pub name_profile: crate::rename::name_profile::NameProfile,
     pub params: &'o CacheKeyParams,
@@ -413,10 +415,7 @@ pub fn fresh_era<P: NameProvider>(
         &ingest,
         &json,
         "input.js",
-        crate::graph::Eligibility::SkipSet {
-            bundler: opts.bundler,
-            minifier: opts.minifier,
-        },
+        crate::graph::Eligibility::SkipSet(opts.never_rename),
     );
     let semantic = ingest.semantic();
     let graph = &parts.graph;
@@ -468,7 +467,7 @@ fn run_era<P: NameProvider>(
     };
     let semantic = naming.semantic;
     let graph = naming.graph;
-    let eligible = Eligibility::new(opts.bundler, opts.minifier);
+    let eligible = Eligibility::new(opts.never_rename);
     let ph = crate::profiling::phase("era:occurrences+rows");
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
@@ -487,7 +486,7 @@ fn run_era<P: NameProvider>(
         transferred_pairs: &start.transferred_pairs,
         close: &start.close,
         suggested: &start.suggested,
-        esbuild: opts.bundler == Some("esbuild"),
+        module_group_size: opts.tuning.module_group_size(),
         params: opts.params.clone(),
         single_epoch: start.single_epoch,
         tunables: opts.tunables,

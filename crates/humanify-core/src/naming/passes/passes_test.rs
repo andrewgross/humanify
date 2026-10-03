@@ -36,7 +36,7 @@ fn scope_holding(state: &RenameState, name: &str) -> BScopeId {
 #[test]
 fn a_sweep_collision_gets_one_disclosed_reask() {
     let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -148,7 +148,7 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
 #[test]
 fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
     let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -219,7 +219,7 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
 #[test]
 fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
     let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -325,7 +325,7 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
 #[test]
 fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
     let text = "function f() {\n  var i = 0;\n  return i + 1;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -412,7 +412,7 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
 #[test]
 fn a_single_letter_answer_lands_and_is_marked_carried() {
     let text = "function f() {\n  var Kq_ = two();\n  return Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -523,7 +523,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
 #[test]
 fn sweep_junk_answers_are_still_refused() {
     let text = "function f() {\n  var Kq_ = two();\n  return Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -606,7 +606,7 @@ fn sweep_junk_answers_are_still_refused() {
 #[test]
 fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
     let text = "var H6t = {};\nfunction f() {\n  var Kq_ = two(H6t);\n  return Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -700,7 +700,7 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
 #[test]
 fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
     let text = "function f() {\n  var yl = two();\n  var i = one();\n  return yl + i;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -799,7 +799,7 @@ fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
 #[test]
 fn a_never_asked_destructure_value_slot_is_a_sweep_target_even_when_descriptive() {
     let text = "function f() {\n  const [valueSlot, setValueSlot] = use();\n  return valueSlot + setValueSlot;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -851,7 +851,7 @@ fn a_never_asked_destructure_value_slot_is_a_sweep_target_even_when_descriptive(
 #[test]
 fn decided_bindings_are_not_retargeted_but_exhausted_ones_are() {
     let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  var Och_ = three();\n  return used + Kq_ + Och_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -925,7 +925,7 @@ fn decided_bindings_are_not_retargeted_but_exhausted_ones_are() {
 #[test]
 fn convention_carveouts_are_never_sweep_targets() {
     let text = "function f() {\n  var _ = one();\n  var __ = two();\n  var $ = three();\n  return _ + __ + $;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
@@ -953,7 +953,7 @@ fn convention_carveouts_are_never_sweep_targets() {
 #[test]
 fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
     let text = "var Kq_ = one();\nvar kept_ = two();\nvar Och_ = three();\nvar renamed = four();\nfunction f() { return Kq_ + kept_ + Och_ + renamed; }";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let params = humanify_model::llm::CacheKeyParams::default();
     struct Declining {
         asked: std::cell::RefCell<Vec<String>>,
@@ -1040,7 +1040,7 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
 #[test]
 fn the_sweep_reask_budget_is_configurable() {
     let text = "function f() {\n  var used = one();\n  var Kq_ = two();\n  return used + Kq_;\n}";
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();

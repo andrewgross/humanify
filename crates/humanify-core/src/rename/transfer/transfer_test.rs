@@ -82,8 +82,7 @@ fn synthetic_pairs_match_the_ts_probe() {
         let input = PriorMatchInput {
             fresh: case["fresh"].as_str().unwrap(),
             prior: case["prior"].as_str().unwrap(),
-            bundler: None,
-            minifier: None,
+            never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
             fast: false,
             same_program_check: true,
         };

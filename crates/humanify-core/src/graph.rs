@@ -645,22 +645,21 @@ fn build_function_graph_with_json(
 /// module half — getModuleLevelBindings' node set, edge builders 4a/4b,
 /// wireModuleBindingCallees).
 ///
-/// `bundler`/`minifier` feed the eligibility skip-set (the pipeline
-/// resolves them from RunConfig; the dump's meta.json flags carry them).
+/// `never_rename` is the run's never-rename lists (the toolchain's P7
+/// piece, `crate::toolchain`).
 pub fn build_unified_graph(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
-    bundler: Option<&str>,
-    minifier: Option<&str>,
+    never_rename: crate::rename::eligibility::NeverRename,
 ) -> UnifiedGraph {
     build_unified_graph_with_eligibility(
         semantic,
         program,
         file_name,
         factories,
-        Eligibility::SkipSet { bundler, minifier },
+        Eligibility::SkipSet(never_rename),
     )
 }
 
@@ -669,11 +668,8 @@ pub fn build_unified_graph(
 /// prior binding names are all humanified, so every binding is a valid
 /// name source).
 #[derive(Clone, Copy, Debug)]
-pub enum Eligibility<'x> {
-    SkipSet {
-        bundler: Option<&'x str>,
-        minifier: Option<&'x str>,
-    },
+pub enum Eligibility {
+    SkipSet(crate::rename::eligibility::NeverRename),
     All,
 }
 
@@ -682,7 +678,7 @@ pub fn build_unified_graph_with_eligibility(
     program: &oxc_ast::ast::Program<'_>,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
-    eligibility: Eligibility<'_>,
+    eligibility: Eligibility,
 ) -> UnifiedGraph {
     let program_json = crate::ingest::program_estree_json(program);
     build_unified_graph_with_json(
@@ -704,7 +700,7 @@ pub fn build_unified_graph_with_json(
     program_json: &Value,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
-    eligibility: Eligibility<'_>,
+    eligibility: Eligibility,
 ) -> UnifiedGraph {
     let (graph, function_by_symbol) =
         build_function_graph_with_json(semantic, program_json, file_name, factories);
@@ -1043,11 +1039,9 @@ fn binding_fingerprint_hash(
 const BINDING_HASH_CHUNK: usize = 4096;
 
 /// One binding's eligibility under the run's setting.
-fn is_eligible_under(eligibility: Eligibility<'_>, name: &str) -> bool {
+fn is_eligible_under(eligibility: Eligibility, name: &str) -> bool {
     match eligibility {
-        Eligibility::SkipSet { bundler, minifier } => {
-            crate::rename::eligibility::is_eligible(name, bundler, minifier)
-        }
+        Eligibility::SkipSet(lists) => crate::rename::eligibility::is_eligible(name, lists),
         Eligibility::All => true,
     }
 }
@@ -1089,7 +1083,7 @@ fn build_module_bindings(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
     factories: &[crate::modules::FactoryRecord],
-    eligibility: Eligibility<'_>,
+    eligibility: Eligibility,
     function_by_symbol: &HashMap<SymbolId, usize>,
     functions: &[GraphFunction],
 ) -> Vec<ModuleBindingNode> {

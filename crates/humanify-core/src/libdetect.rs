@@ -116,25 +116,27 @@ impl LibraryDetector {
 
     /// `supports(config)`: the manifest-driven detectors only behind their
     /// own unpack adapters.
-    pub fn supports(self, unpack_adapter_name: &str) -> bool {
+    pub fn supports(self, adapter: crate::unpack::UnpackAdapter) -> bool {
+        use crate::unpack::UnpackAdapter;
         match self {
-            LibraryDetector::Bun => unpack_adapter_name == "bun",
-            LibraryDetector::Esbuild => unpack_adapter_name == "esbuild",
+            LibraryDetector::Bun => adapter == UnpackAdapter::Bun,
+            LibraryDetector::Esbuild => adapter == UnpackAdapter::Esbuild,
             LibraryDetector::Default => true,
         }
     }
-}
 
-/// `selectLibraryDetector(config)`.
-pub fn select_library_detector(unpack_adapter_name: &str) -> LibraryDetector {
-    [
-        LibraryDetector::Bun,
-        LibraryDetector::Esbuild,
-        LibraryDetector::Default,
-    ]
-    .into_iter()
-    .find(|d| d.supports(unpack_adapter_name))
-    .unwrap_or(LibraryDetector::Default)
+    /// `selectLibraryDetector(config)`: the first registered detector that
+    /// supports the run's adapter (the toolchain's P6 piece).
+    pub fn for_adapter(adapter: crate::unpack::UnpackAdapter) -> LibraryDetector {
+        [
+            LibraryDetector::Bun,
+            LibraryDetector::Esbuild,
+            LibraryDetector::Default,
+        ]
+        .into_iter()
+        .find(|d| d.supports(adapter))
+        .unwrap_or(LibraryDetector::Default)
+    }
 }
 
 /// `detector.detectLibraries(files)`.

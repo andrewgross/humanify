@@ -50,7 +50,7 @@ fn run_case(preset: &str, prior: &str, next: &str) -> Value {
         crate::rename::name_profile::NameProfile::Bun,
     );
     let diff = compute_normal_diff(prior, next).unwrap();
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let opts = options(preset, prior);
     let result = reconcile_diff_noise(ingest.semantic(), &mut state, &diff, &eligible, &opts);
     let renames: Vec<Value> = result

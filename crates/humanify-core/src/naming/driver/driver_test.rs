@@ -258,8 +258,8 @@ impl humanify_model::llm::NameProvider for SuffixProvider {
 fn ledger_config() -> super::NamingConfig {
     super::NamingConfig {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
-        bundler: None,
-        minifier: None,
+        never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
+        tuning: crate::toolchain::BundlerTuning::Default,
         skip_libraries: true,
         reconcile_prior_diff: true,
         naming_floor: true,

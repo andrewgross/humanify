@@ -7,11 +7,13 @@
 
 use std::path::{Path, PathBuf};
 
-use humanify_core::libdetect::{MixedFileDetection, detect_libraries, select_library_detector};
+use humanify_core::libdetect::{LibraryDetector, MixedFileDetection, detect_libraries};
 use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer, VendorNamingStats};
 use humanify_core::profiling::Profiler;
 use humanify_core::unpack::webcrack::WebcrackShim;
-use humanify_core::unpack::{UnpackAdapter, UnpackedFile, bun, run_adapter};
+use humanify_core::unpack::{
+    AdapterOutcome, AdapterRun, UnpackAdapter, UnpackedFile, bun, run_adapter,
+};
 use humanify_model::llm::NameProvider;
 use humanify_model::profiling::JsObject;
 
@@ -46,10 +48,11 @@ pub struct Unpacked {
     pub vendor_naming: VendorNamingStats,
 }
 
-/// `unpackBundle`: run the selected adapter into `out_dir`. The Bun adapter
-/// gets the vendor namer over `provider` and the prior release's vendor
-/// names + manifest order (discovered from `--prior-version`, as the TS
-/// does); the others take the bundle as-is.
+/// `unpackBundle`: run the run's adapter into `out_dir` through the one
+/// dispatch site (`unpack::run_adapter`), handing it the vendor namer over
+/// `provider` and the prior release's vendor names + manifest order
+/// (discovered from `--prior-version`, as the TS does); an adapter that
+/// writes no vendor record ignores both.
 #[allow(clippy::too_many_arguments)]
 pub fn unpack_bundle(
     code: &str,
@@ -83,42 +86,27 @@ pub fn unpack_bundle(
     }
     let mut namer = ProviderVendorNamer::new(provider, log);
     let span = profiler.pipeline_span("unpack");
-    // The bun and esbuild adapters share the one vendor-extraction flow —
-    // the adapter name only stamps the manifest.
-    let files = if matches!(adapter, UnpackAdapter::Bun | UnpackAdapter::Esbuild) {
-        let outcome = bun::unpack_bun(
-            code,
-            out_dir,
-            bun::BunUnpackOptions {
-                namer: Some(&mut namer as &mut dyn VendorNamer),
-                prior: prior_vendor,
-                manifest_prior_order_disabled,
-                adapter: adapter.name(),
-            },
-        )?;
-        if let Some(r) = outcome.rekey {
-            renderer.message(&format!(
-                "Vendor names re-keyed by content: {} of {} prior entries readable; {} factories \
-                 in {} structural groups joined a prior group ({} prior groups ambiguous, refused)",
-                r.prior_keyed,
-                r.prior_entries,
-                r.factories_joined,
-                r.groups_joined,
-                r.prior_groups_ambiguous
-            ));
+    // The one dispatch site: every adapter is handed everything it may
+    // use (the vendor namer, the prior's vendor record, the webcrack
+    // shim) and takes what it needs.
+    let shim = repo_webcrack_shim();
+    let outcome = run_adapter(
+        adapter,
+        code,
+        out_dir,
+        AdapterRun {
+            namer: Some(&mut namer as &mut dyn VendorNamer),
+            prior: prior_vendor,
+            manifest_prior_order_disabled,
+            webcrack_shim: Some(&shim),
+        },
+    )?;
+    let files = match outcome {
+        AdapterOutcome::VendorRecord(outcome) => {
+            report_vendor_unpack(&outcome, renderer);
+            outcome.result.files
         }
-        log_name_sources(&outcome);
-        outcome.result.files
-    } else {
-        let shim = repo_webcrack_shim();
-        run_adapter(
-            adapter,
-            code,
-            out_dir,
-            bun::BunUnpackOptions::default(),
-            Some(&shim),
-        )?
-        .files
+        AdapterOutcome::Files(result) => result.files,
     };
     span.end(Some(
         JsObject::new()
@@ -134,6 +122,23 @@ pub fn unpack_bundle(
         files,
         vendor_naming: namer.stats,
     })
+}
+
+/// A vendor-record adapter's progress lines: the content re-key, then the
+/// name sources.
+fn report_vendor_unpack(outcome: &bun::BunUnpackOutcome, renderer: &mut dyn ProgressRenderer) {
+    if let Some(r) = outcome.rekey {
+        renderer.message(&format!(
+            "Vendor names re-keyed by content: {} of {} prior entries readable; {} factories \
+             in {} structural groups joined a prior group ({} prior groups ambiguous, refused)",
+            r.prior_keyed,
+            r.prior_entries,
+            r.factories_joined,
+            r.groups_joined,
+            r.prior_groups_ambiguous
+        ));
+    }
+    log_name_sources(outcome);
 }
 
 /// The Bun adapter's two verbose lines (verboseLogNameSources, then
@@ -164,15 +169,15 @@ pub struct Filtered {
     pub mixed_files: Vec<(PathBuf, MixedFileDetection)>,
 }
 
-/// `filterLibraries`: detect with the selected detector, report what is
-/// skipped, keep every file that is not a whole library.
+/// `filterLibraries`: detect with the run's detector (the toolchain's P6
+/// piece), report what is skipped, keep every file that is not a whole
+/// library.
 pub fn filter_libraries(
     files: Vec<UnpackedFile>,
-    adapter: UnpackAdapter,
+    detector: LibraryDetector,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Filtered, String> {
-    let detector = select_library_detector(adapter.name());
     let span = profiler.pipeline_span("library-detection");
     let detection = detect_libraries(detector, &files)?;
     span.end(Some(
