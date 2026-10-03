@@ -981,3 +981,94 @@ fn the_reask_discloses_the_models_own_word_not_our_decoration() {
     let code = out.code.expect("shipped");
     assert!(code.contains("var eventNameKey = "), "{code}");
 }
+
+/// Finding #70's residual (2.1.86 `renderPluginItem`, 2026-10-03): a
+/// minifier reuses the same short name for locals of SIBLING blocks — here
+/// three `Z`s. The close match carries the unchanged `indented` block's
+/// `Z` to its prior name (`indentColor`, applied by binding), but the
+/// prompt's "already renamed" section is keyed by the MINIFIED NAME, so
+/// the prompt asking for the changed `plugin` block's `Z` — a different
+/// binding — also told the model "`Z` → `indentColor`, already renamed, do
+/// NOT rename it again, keep consistent". The model copied it: every
+/// plugin-branch local took the indented block's names. An identifier the
+/// call is ASKING for is by definition not already renamed; an entry under
+/// its name belongs to another binding and must not be shown.
+#[test]
+fn an_already_renamed_entry_never_names_an_identifier_the_call_is_asking_for() {
+    let prior = r#"function renderItem(item, isSelected) {
+  if (item.type === "plugin") {
+    let statusIcon;
+    statusIcon = mk.icon(item, 1);
+    return mk.row(statusIcon);
+  }
+  if (item.type === "failed") {
+    let failedIcon = mk.fail(item);
+    return mk.row(failedIcon);
+  }
+  if (item.indented) {
+    let indentColor = isSelected ? "suggestion" : undefined;
+    let indentPrefix = isSelected ? "> " : "  ";
+    return mk.indent(indentColor, indentPrefix);
+  }
+  return null;
+}
+console.log(renderItem({ type: "plugin" }, true));
+"#;
+    let fresh = r#"function r(q, $) {
+  if (q.type === "plugin") {
+    let Z;
+    Z = mk.icon(q, 1);
+    let e = mk.plural(q.count, "error");
+    return mk.row(Z, e);
+  }
+  if (q.type === "failed") {
+    let Z = mk.fail(q, 2);
+    return mk.row(Z);
+  }
+  if (q.indented) {
+    let Z = $ ? "suggestion" : undefined;
+    let k = $ ? "> " : "  ";
+    return mk.indent(Z, k);
+  }
+  return null;
+}
+console.log(r({ type: "plugin" }, true));
+"#;
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: Some(prior),
+            library: None,
+        },
+        &plain_config(),
+        &MapProvider::new(),
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let code = out.code.expect("shipped");
+    assert!(
+        code.contains("let indentColor = "),
+        "precondition: the unchanged indented block's `Z` carried its prior name:\n{code}"
+    );
+    let asks: Vec<_> = out
+        .waves
+        .dispatches
+        .iter()
+        .filter(|d| d.request.identifiers.iter().any(|i| i == "Z"))
+        .collect();
+    assert!(
+        !asks.is_empty(),
+        "precondition: the changed blocks' `Z`s go to the model:\n{code}"
+    );
+    for d in asks {
+        let asked = &d.request.identifiers;
+        for (old, new) in d.request.already_renamed.iter().flat_map(|m| m.0.iter()) {
+            assert!(
+                !asked.contains(old),
+                "the prompt asks for `{old}` AND lists `{old} → {new}` as already renamed \
+                 (another binding's carry, by name):\n{}",
+                d.user_prompt
+            );
+        }
+    }
+}

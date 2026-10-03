@@ -1498,7 +1498,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         } else {
             windowed
         };
-        let already = self.already_renamed(f, ctx, is_retry);
+        let already = self.already_renamed(f, ctx, is_retry, remaining);
         let prev = StrMap(call.prev.0.clone());
         let prompt_body = is_retry.then(|| {
             build_batch_rename_retry_body(&RetryInput {
@@ -1618,8 +1618,34 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         )
     }
 
-    /// `computeAlreadyRenamed`.
-    fn already_renamed(&self, f: usize, ctx: usize, is_retry: bool) -> Option<StrMap> {
+    /// `computeAlreadyRenamed`, minus every entry keyed by a name this call
+    /// is ASKING for (finding #70's residual). The section is keyed by the
+    /// minified NAME, and a minifier reuses short names across sibling
+    /// blocks: an asked `Z` is by definition not renamed yet, so a `Z → x`
+    /// entry here is ANOTHER binding's carry — shown to the model as "the
+    /// same identifier, already renamed, keep consistent", it was copied
+    /// onto the asked one (2.1.86 `renderPluginItem`: every changed-branch
+    /// local took the aligned sibling block's names).
+    fn already_renamed(
+        &self,
+        f: usize,
+        ctx: usize,
+        is_retry: bool,
+        asking: &[String],
+    ) -> Option<StrMap> {
+        self.already_renamed_by_name(f, ctx, is_retry)
+            .map(|m| {
+                StrMap(
+                    m.0.into_iter()
+                        .filter(|(k, _)| !asking.contains(k))
+                        .collect(),
+                )
+            })
+            .filter(|m| !m.0.is_empty())
+    }
+
+    /// The name-keyed already-renamed record (TS `computeAlreadyRenamed`).
+    fn already_renamed_by_name(&self, f: usize, ctx: usize, is_retry: bool) -> Option<StrMap> {
         let mut out: Option<JsRecord> = None;
         if let Some(pairs) = &self.inp.transferred_pairs[f]
             && !pairs.is_empty()
