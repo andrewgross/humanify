@@ -94,6 +94,20 @@ impl RejectionReason {
     }
 }
 
+/// Who holds a name a rename wanted ([`RenameState::name_holder`]), with
+/// the holding binding's kind.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NameHolder {
+    /// A binding of the renamed binding's own scope (a sibling).
+    SameScope(scopes::BindingKind),
+    /// A binding of an enclosing scope.
+    Enclosing(scopes::BindingKind),
+    /// A binding of an inner scope the renamed binding is read from.
+    Inner(scopes::BindingKind),
+    /// A free (global) name.
+    Global,
+}
+
 /// `RenameAttempt`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[must_use]
@@ -647,14 +661,61 @@ impl RenameState {
 
     /// Some scope from `from` up to (excluding) `stop` binds `name`.
     fn binds_between(&self, from: BScopeId, stop: BScopeId, name: &str) -> bool {
+        self.binding_between(from, stop, name).is_some()
+    }
+
+    /// The first binding of `name` in a scope from `from` up to
+    /// (excluding) `stop`.
+    fn binding_between(&self, from: BScopeId, stop: BScopeId, name: &str) -> Option<BindingId> {
         let mut cur = Some(from);
         while let Some(s) = cur.filter(|s| *s != stop) {
-            if self.binding_in(s, name).is_some() {
-                return true;
+            if let Some(b) = self.binding_in(s, name) {
+                return Some(b);
             }
             cur = self.view.scope(s).parent;
         }
-        false
+        None
+    }
+
+    /// WHO holds `new_name`, seen from the binding `old_name` of `scope` —
+    /// what a collision re-ask discloses (2026-10-04): a binding of the
+    /// same scope, of an enclosing scope, of an inner scope the binding is
+    /// read from (`shadows-child`), or a global. `reason` is the
+    /// rejection being explained, when there is one: a `shadows-child`
+    /// rejection names the inner binding even where an enclosing scope
+    /// also has the name. None when nothing the scopes know holds it (a
+    /// name taken only by the run's bookkeeping).
+    pub fn name_holder(
+        &self,
+        scope: BScopeId,
+        old_name: &str,
+        new_name: &str,
+        reason: Option<RejectionReason>,
+    ) -> Option<NameHolder> {
+        let inner = || {
+            let own = self.binding_in(scope, old_name)?;
+            let b = self.view.binding(own);
+            b.refs
+                .iter()
+                .chain(&b.violations)
+                .find_map(|site| self.binding_between(site.scope, scope, new_name))
+                .map(|h| NameHolder::Inner(self.view.binding(h).kind))
+        };
+        if reason == Some(RejectionReason::ShadowsChild) {
+            return inner();
+        }
+        if let Some(b) = self.binding_in(scope, new_name) {
+            return Some(NameHolder::SameScope(self.view.binding(b).kind));
+        }
+        if let Some(b) = self.resolve_outer_binding(scope, new_name) {
+            return Some(NameHolder::Enclosing(self.view.binding(b).kind));
+        }
+        inner().or_else(|| {
+            self.view
+                .globals
+                .contains(new_name)
+                .then_some(NameHolder::Global)
+        })
     }
 
     /// `wouldCaptureOuterReference`: the binding `new_name` resolves to

@@ -87,6 +87,11 @@ pub struct PriorReject {
     /// other re-ask keys exactly as before.
     #[serde(default)]
     pub borrowed: Option<String>,
+    /// WHO holds the rejected name, as the re-ask words it ("an inner
+    /// function's parameter") — set by the wave barrier when the scopes
+    /// know (2026-10-04). Absent from the key material when None.
+    #[serde(default)]
+    pub held_by: Option<String>,
 }
 
 /// An insertion-ordered `Record<string, PriorReject[]>` (`StrMap`'s
@@ -121,6 +126,9 @@ impl PriorRejects {
                                     o.insert("invalid", JsValue::Bool(r.invalid));
                                     if let Some(stem) = &r.borrowed {
                                         o.insert("borrowed", JsValue::str(stem));
+                                    }
+                                    if let Some(holder) = &r.held_by {
+                                        o.insert("heldBy", JsValue::str(holder));
                                     }
                                     JsValue::Object(o)
                                 })
@@ -169,10 +177,16 @@ impl<'de> serde::Deserialize<'de> for PriorRejects {
                             .iter()
                             .find(|(k, _)| k == "borrowed")
                             .and_then(|(_, v)| v.as_str().map(str::to_string));
+                        let held_by = fields
+                            .entries()
+                            .iter()
+                            .find(|(k, _)| k == "heldBy")
+                            .and_then(|(_, v)| v.as_str().map(str::to_string));
                         Ok(PriorReject {
                             name,
                             invalid,
                             borrowed,
+                            held_by,
                         })
                     }
                     _ => Err(serde::de::Error::custom("a reject must be an object")),

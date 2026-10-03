@@ -819,7 +819,7 @@ fn sweep_reask<P: NameProvider>(
                     t.name.clone(),
                     rejects
                         .iter()
-                        .map(|(name, code)| disclose_reject(name, Some(code), stems))
+                        .map(|(name, code)| disclose_reject(name, Some(code), None, stems))
                         .collect(),
                 ));
             }
