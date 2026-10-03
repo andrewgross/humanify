@@ -262,6 +262,37 @@ fn a_failed_vendor_batch_is_counted_not_fatal() {
     assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 0);
 }
 
+/// The `unpack` verb's `sources=` line counts how THIS run named each
+/// module, so a carry still reads `carry-over` there even though the
+/// manifest keeps the name's original label (finding #71).
+#[test]
+fn unpack_verb_counts_carries_from_run_state_not_the_manifest() {
+    let s = Scratch::new("unpack-carry");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let unpack = |out: &str, prior: Option<&str>| {
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_humanify"));
+        cmd.current_dir(&s.0)
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .args(["unpack", &input, out]);
+        if let Some(p) = prior {
+            cmd.args(["--prior-version", p]);
+        }
+        let o = cmd.output().unwrap();
+        assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+        String::from_utf8_lossy(&o.stdout).into_owned()
+    };
+    let first = unpack("one", None);
+    assert!(first.contains("sources=fallback=2 "), "{first}");
+    let prior = s.0.join("one/humanified.js").display().to_string();
+    let second = unpack("two", Some(&prior));
+    assert!(second.contains("sources=carry-over=2 "), "{second}");
+    let manifest = |dir: &str| {
+        std::fs::read_to_string(s.0.join(dir).join("vendor/_bun-modules.json")).unwrap()
+    };
+    assert_eq!(manifest("two"), manifest("one"));
+}
+
 #[test]
 fn skip_libraries_off_processes_every_unpacked_file() {
     let s = Scratch::new("no-skip");

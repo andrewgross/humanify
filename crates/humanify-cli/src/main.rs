@@ -469,10 +469,13 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         },
     )?;
     let mut sources: Vec<(String, usize)> = Vec::new();
+    // How THIS run named each module (a carry counts as carry-over) — the
+    // run-state source, not the manifest's origin label (finding #71).
     for f in outcome.manifest.iter().flat_map(|m| &m.factories) {
-        match sources.iter_mut().find(|(k, _)| k == f.name_source) {
+        let source = f.run_source.as_str();
+        match sources.iter_mut().find(|(k, _)| k == source) {
             Some((_, n)) => *n += 1,
-            None => sources.push((f.name_source.to_string(), 1)),
+            None => sources.push((source.to_string(), 1)),
         }
     }
     sources.sort();

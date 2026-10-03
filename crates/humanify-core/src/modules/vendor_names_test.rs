@@ -17,7 +17,11 @@ use crate::modules::vendor_names::{
     sanitize_fs_path, strip_js_extension, unique_case_insensitive_name, vendor_batch_request,
     vendor_stem_for,
 };
-use crate::modules::{FactoryRecord, NameSource};
+use crate::modules::{CarriedName, FactoryRecord, NameSource};
+
+fn names_of(carried: &[CarriedName]) -> Vec<&str> {
+    carried.iter().map(|c| c.name.as_str()).collect()
+}
 
 /// A synthetic classified factory (the TS vendor-namer.test.ts `record`
 /// helper's shape).
@@ -34,6 +38,7 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
         banner_version: None,
         name: Some(name.to_string()),
         name_source: Some(source),
+        name_origin: Some(source),
         decl_stmt_span: Span::new(0, 10),
         source_path: None,
     }
@@ -210,6 +215,7 @@ fn entry(name: &str, hash: &str, ordinal: Option<usize>) -> ManifestEntry {
         file_name: format!("vendor/{name}.js"),
         name: name.to_string(),
         name_source: "carry-over",
+        run_source: NameSource::CarryOver,
         structural_hash: hash.to_string(),
         runtime_identifier: None,
         hash_ordinal: ordinal,
@@ -320,8 +326,8 @@ fn prior_names_recover_bundle_order_from_hash_ordinal() {
         {"fileName":"vendor/retry.js","name":"retry","nameSource":"carry-over","structuralHash":"dup","hashOrdinal":0}
     ]}"#;
     let names = load_prior_vendor_names(manifest).expect("names");
-    assert_eq!(names["dup"], vec!["retry", "lodash"]);
-    assert_eq!(names["solo"], vec!["unrelated"]);
+    assert_eq!(names_of(&names["dup"]), vec!["retry", "lodash"]);
+    assert_eq!(names_of(&names["solo"]), vec!["unrelated"]);
 }
 
 /// A legacy manifest (pre-exp047) has no hashOrdinal and array order IS
@@ -333,7 +339,7 @@ fn legacy_prior_manifest_keeps_array_order() {
         {"fileName":"vendor/lodash.js","name":"lodash","nameSource":"carry-over","structuralHash":"dup"}
     ]}"#;
     let names = load_prior_vendor_names(manifest).expect("names");
-    assert_eq!(names["dup"], vec!["retry", "lodash"]);
+    assert_eq!(names_of(&names["dup"]), vec!["retry", "lodash"]);
 }
 
 /// A partially-annotated group sorts the un-annotated member last, and it
@@ -346,7 +352,16 @@ fn partially_annotated_group_keeps_every_member() {
         {"fileName":"vendor/a.js","name":"a","nameSource":"carry-over","structuralHash":"dup","hashOrdinal":0}
     ]}"#;
     let names = load_prior_vendor_names(manifest).expect("names");
-    assert_eq!(names["dup"], vec!["a", "b", "fresh"]);
+    assert_eq!(names_of(&names["dup"]), vec!["a", "b", "fresh"]);
+    // Each carried name keeps the label its prior entry wrote (finding #71).
+    assert_eq!(
+        names["dup"].iter().map(|c| c.origin).collect::<Vec<_>>(),
+        vec![
+            NameSource::CarryOver,
+            NameSource::CarryOver,
+            NameSource::Fallback
+        ]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -829,10 +844,13 @@ var main=shimOne();"#;
             .expect("the two shims share a structural hash")
     };
 
-    let mut prior: HashMap<String, Vec<String>> = HashMap::new();
+    let mut prior: HashMap<String, Vec<CarriedName>> = HashMap::new();
     prior.insert(
         shared_hash.clone(),
-        vec!["retry".to_string(), "lodash".to_string()],
+        vec![
+            CarriedName::new("retry", None),
+            CarriedName::new("lodash", None),
+        ],
     );
     let mut classification = classify();
     crate::modules::name_cjs_factories(&mut classification, source, Some(&prior));
@@ -946,6 +964,6 @@ fn prior_names_skip_an_entry_missing_its_fields() {
       {"fileName":"vendor/c.js","name":"c","nameSource":"carry-over","structuralHash":"h3"}
     ]}"#;
     let names = load_prior_vendor_names(manifest).expect("the valid entry loads");
-    assert_eq!(names.get("h3"), Some(&vec!["c".to_string()]));
+    assert_eq!(names.get("h3").map(|v| names_of(v)), Some(vec!["c"]));
     assert_eq!(names.len(), 1);
 }

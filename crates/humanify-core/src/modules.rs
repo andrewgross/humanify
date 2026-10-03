@@ -299,6 +299,41 @@ impl NameSource {
             NameSource::Fallback => "fallback",
         }
     }
+
+    /// Read a prior manifest's `nameSource` label back, for a carry. A
+    /// missing or unknown label reads as "carry-over": the name was
+    /// carried, from where is not recorded.
+    pub fn of_prior_label(label: Option<&str>) -> NameSource {
+        [
+            NameSource::Banner,
+            NameSource::Url,
+            NameSource::Llm,
+            NameSource::Fallback,
+        ]
+        .into_iter()
+        .find(|s| Some(s.as_str()) == label)
+        .unwrap_or(NameSource::CarryOver)
+    }
+}
+
+/// A name the prior release's manifest offers for carrying, with the label
+/// that manifest wrote for it — where the name ORIGINALLY came from, which
+/// a carry keeps (finding #71: relabelling every carried library
+/// "carry-over" churned ~3,000 manifest lines per hop for nothing).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CarriedName {
+    pub name: String,
+    pub origin: NameSource,
+}
+
+impl CarriedName {
+    /// A prior entry's name and its raw `nameSource` field.
+    pub fn new(name: impl Into<String>, label: Option<&str>) -> CarriedName {
+        CarriedName {
+            name: name.into(),
+            origin: NameSource::of_prior_label(label),
+        }
+    }
 }
 
 /// One detected CJS factory (CjsFactoryRecord's dumped fields).
@@ -325,8 +360,14 @@ pub struct FactoryRecord {
     pub banner_version: Option<String>,
     /// Final assigned name — set by the naming cascade (`nameCjsFactories`).
     pub name: Option<String>,
-    /// Where the name came from — set by the naming cascade.
+    /// How THIS run got the name — set by the naming cascade (run state:
+    /// the LLM pass reads it, the per-source counts report it).
     pub name_source: Option<NameSource>,
+    /// Where the NAME originally came from — the manifest's `nameSource`
+    /// label. Equal to `name_source`, except a carry, which keeps the
+    /// prior manifest's label so an unchanged library's entry is
+    /// byte-identical across hops (finding #71).
+    pub name_origin: Option<NameSource>,
     /// The CONTAINER statement's span (the whole `var …;` this declarator
     /// lives in) — extraction splices that statement out of the runtime, so
     /// this is how the runtime-statement ordinals of finding #60's bridge
@@ -532,9 +573,9 @@ fn index_by_hash(factories: &[FactoryRecord]) -> HashIndex {
 fn prior_name_for(
     idx: usize,
     hash: &str,
-    prior_names: Option<&HashMap<String, Vec<String>>>,
+    prior_names: Option<&HashMap<String, Vec<CarriedName>>>,
     index: &HashIndex,
-) -> Option<String> {
+) -> Option<CarriedName> {
     let group = prior_names?.get(hash)?;
     if group.len() != *index.group_size.get(hash)? {
         return None;
@@ -557,7 +598,7 @@ fn prior_name_for(
 pub fn name_cjs_factories(
     classification: &mut BunModuleClassification,
     source: &str,
-    prior_names: Option<&HashMap<String, Vec<String>>>,
+    prior_names: Option<&HashMap<String, Vec<CarriedName>>>,
 ) -> FactoryNameCounts {
     let mut counts = FactoryNameCounts::default();
     let index = index_by_hash(&classification.factories);
@@ -569,6 +610,7 @@ pub fn name_cjs_factories(
                 None => pkg.clone(),
             });
             factory.name_source = Some(NameSource::Banner);
+            factory.name_origin = Some(NameSource::Banner);
             counts.banner += 1;
             continue;
         }
@@ -576,17 +618,20 @@ pub fn name_cjs_factories(
         if let Some(url_name) = extract_distinctive_repo_name(body_source) {
             factory.name = Some(url_name);
             factory.name_source = Some(NameSource::Url);
+            factory.name_origin = Some(NameSource::Url);
             counts.url += 1;
             continue;
         }
         if let Some(carried) = prior_name_for(idx, &factory.structural_hash, prior_names, &index) {
-            factory.name = Some(carried);
+            factory.name = Some(carried.name);
             factory.name_source = Some(NameSource::CarryOver);
+            factory.name_origin = Some(carried.origin);
             counts.carry_over += 1;
             continue;
         }
         factory.name = Some(hash_fallback_name(&factory.structural_hash));
         factory.name_source = Some(NameSource::Fallback);
+        factory.name_origin = Some(NameSource::Fallback);
         counts.fallback += 1;
     }
     counts
@@ -864,6 +909,7 @@ pub fn classify_bun_modules<'a>(
                 banner_version: banner.as_ref().and_then(|b| b.version.clone()),
                 name: None,
                 name_source: None,
+                name_origin: None,
                 decl_stmt_span: stmt_span,
                 source_path,
             });

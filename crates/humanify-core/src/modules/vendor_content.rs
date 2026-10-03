@@ -45,7 +45,7 @@ use oxc_span::GetSpan;
 
 use super::known_globals::is_known_global;
 use super::vendor_names::PriorManifestEntry;
-use super::{FactoryRecord, factory_structural_hash};
+use super::{CarriedName, FactoryRecord, NameSource, factory_structural_hash};
 use crate::babel_view::unparen;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
@@ -238,6 +238,8 @@ pub fn prior_file_content_key(file_text: &str) -> Option<String> {
 #[derive(Clone, Debug)]
 pub struct StaleEraEntry {
     pub name: String,
+    /// The prior manifest's `nameSource` label for `name` (kept by a carry).
+    pub origin: NameSource,
     /// The prior era's `structuralHash` (groups the prior's bundle-order
     /// ordinals).
     pub era_hash: String,
@@ -266,7 +268,7 @@ pub struct RekeyStats {
 /// prior entries, both on the FRESH structural hashes.
 #[derive(Clone, Debug, Default)]
 pub struct Rekeyed {
-    pub names: HashMap<String, Vec<String>>,
+    pub names: HashMap<String, Vec<CarriedName>>,
     pub factories: Vec<PriorManifestEntry>,
     pub stats: RekeyStats,
 }
@@ -296,7 +298,7 @@ pub fn rekey_prior_by_content(
             groups.entry(k.as_str()).or_default().push((idx, e));
         }
     }
-    let mut prior_names: HashMap<&str, Vec<String>> = HashMap::new();
+    let mut prior_names: HashMap<&str, Vec<CarriedName>> = HashMap::new();
     for (key, mut members) in groups {
         let one_ts_group = members
             .iter()
@@ -307,7 +309,16 @@ pub fn rekey_prior_by_content(
             continue;
         }
         members.sort_by_key(|(idx, e)| (e.ordinal, *idx));
-        prior_names.insert(key, members.iter().map(|(_, e)| e.name.clone()).collect());
+        prior_names.insert(
+            key,
+            members
+                .iter()
+                .map(|(_, e)| CarriedName {
+                    name: e.name.clone(),
+                    origin: e.origin,
+                })
+                .collect(),
+        );
     }
     // Fresh: per structural-hash group, its members' keys; per key, its size.
     let mut hash_groups: Vec<(&str, Vec<Option<&str>>)> = Vec::new();

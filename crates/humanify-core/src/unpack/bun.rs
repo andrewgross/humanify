@@ -37,8 +37,9 @@ use crate::modules::vendor_names::{
 };
 use crate::modules::wrapper::find_wrapper_function;
 use crate::modules::{
-    BunModuleClassification, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
-    classify_bun_modules, factory_arg_function, identify_cjs_factory, name_cjs_factories,
+    BunModuleClassification, CarriedName, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
+    NameSource, classify_bun_modules, factory_arg_function, identify_cjs_factory,
+    name_cjs_factories,
 };
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
@@ -111,7 +112,7 @@ pub struct PriorVendor {
     /// carried, in bundle order (the carry-over, ahead of the LLM). Keyed by
     /// THIS run's hash bytes: set for a current manifest, or after the
     /// content re-key of a stale-era one.
-    pub names: Option<HashMap<String, Vec<String>>>,
+    pub names: Option<HashMap<String, Vec<CarriedName>>>,
     /// `loadPriorManifestFactories`: the entries in the order that release
     /// emitted them (the ordering pass).
     pub factories: Option<Vec<PriorManifestEntry>>,
@@ -125,7 +126,7 @@ pub struct PriorVendor {
 
 impl PriorVendor {
     /// A current-era prior from its names alone (tests, the gate verbs).
-    pub fn from_names(names: HashMap<String, Vec<String>>) -> PriorVendor {
+    pub fn from_names(names: HashMap<String, Vec<CarriedName>>) -> PriorVendor {
         PriorVendor {
             names: Some(names),
             ..PriorVendor::default()
@@ -172,6 +173,9 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
             Some((
                 StaleEraEntry {
                     name: str_of(r, "name")?,
+                    origin: NameSource::of_prior_label(
+                        r.get("nameSource").and_then(|x| x.as_str()),
+                    ),
                     era_hash: str_of(r, "structuralHash")?,
                     ordinal: r
                         .get("hashOrdinal")
@@ -458,7 +462,8 @@ pub fn unpack_bun(
         entries.push(ManifestEntry {
             file_name: rel_path,
             name: module_plan.naming.name.clone(),
-            name_source: module_plan.naming.name_source.as_str(),
+            name_source: module_plan.naming.name_origin.as_str(),
+            run_source: module_plan.naming.name_source,
             structural_hash: module_plan.naming.structural_hash.clone(),
             runtime_identifier: module_plan.identifier.clone(),
             banner_package: record.and_then(|r| r.banner_package.clone()),
