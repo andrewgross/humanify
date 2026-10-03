@@ -594,7 +594,10 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
                             let answer = match id.as_str() {
                                 "Kq_" if retry => "methodSetter",
                                 "Kq_" => "setMethodH6t",
-                                _ => id.as_str(),
+                                // Everything else DECLINES (an empty
+                                // answer): echoing `H6t` would now be a
+                                // refused echo (round 2), not a decline.
+                                _ => "",
                             };
                             (id.clone(), Some(answer.to_string()))
                         })
@@ -635,6 +638,95 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
     assert!(code.contains("var methodSetter = two(H6t);"), "{code}");
     assert_eq!(provider.reasks.get(), 1, "one disclosed re-ask");
     assert_eq!(r.reasked, 1);
+}
+
+/// Round 2's IDENTITY ECHO in the sweep — the same answer-quality rule as
+/// the wave barrier: a multi-letter minified target answered with itself
+/// (`yl` → `yl`) is refused (a disclosed re-ask saying it IS the minified
+/// name), and a model that keeps echoing leaves it EXHAUSTED — still a
+/// target — never a decided keep. A single letter's echo stays a keep.
+#[test]
+fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
+    let text = "function f() {\n  var yl = two();\n  var i = one();\n  return yl + i;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
+    struct Echoing {
+        reasks: std::cell::Cell<usize>,
+        relent: bool,
+    }
+    impl NameProvider for Echoing {
+        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+            calls
+                .into_iter()
+                .map(|c| {
+                    let retry = c.request.prior_rejects.is_some();
+                    if retry {
+                        self.reasks.set(self.reasks.get() + 1);
+                        assert!(
+                            c.user_prompt.contains(
+                                "- \"yl\" is the minified name; suggest a descriptive name"
+                            ),
+                            "the re-ask says the echo IS the minified name: {}",
+                            c.user_prompt
+                        );
+                    }
+                    let renames: Vec<(String, Option<String>)> = c
+                        .request
+                        .identifiers
+                        .iter()
+                        .map(|id| {
+                            let answer = match id.as_str() {
+                                "yl" if retry && self.relent => "itemTotal",
+                                other => other,
+                            };
+                            (id.clone(), Some(answer.to_string()))
+                        })
+                        .collect();
+                    Ok(BatchRenameResponse {
+                        renames: Renames::from_entries(renames),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    for relent in [true, false] {
+        let provider = Echoing {
+            reasks: std::cell::Cell::new(0),
+            relent,
+        };
+        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+        let r = sweep_minted_names(
+            semantic,
+            &mut state,
+            &eligible,
+            &taint,
+            &provider,
+            &mut log,
+            Anchor::Fresh,
+            &params,
+            usize::MAX,
+            2,
+            None,
+            &crate::rename::floor::MinifiedStems::of_program(semantic),
+        );
+        let code = render_program(semantic, &state);
+        if relent {
+            assert!(code.contains("var itemTotal = two();"), "{code}");
+            assert_eq!(provider.reasks.get(), 1, "one disclosed re-ask");
+        } else {
+            assert!(code.contains("var yl = two();"), "{code}");
+            assert_eq!(provider.reasks.get(), 2, "the budget");
+            assert_eq!(r.exhausted_names, ["yl"], "still a target; `i` is a keep");
+        }
+        assert!(code.contains("var i = one();"), "{code}");
+    }
 }
 
 /// Finding #64's never-asked class, generalized by Andrew's 2026-09-30

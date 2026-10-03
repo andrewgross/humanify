@@ -61,7 +61,7 @@ use crate::naming::report::{
 use crate::naming::snap::{build_prior_stem_index, snap_suggestion_to_prior, snap_to_known_prior};
 use crate::naming::validation::resolve_conflict;
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{MinifiedStems, borrowed_minified_stem};
+use crate::rename::floor::{MinifiedStems, borrowed_minified_stem, is_minified_echo};
 use crate::rename::transfer::lifecycle::Lifecycle;
 use crate::rename::transfer::owned::{
     BindingInfo, collect_owned_binding_infos, collect_shadowed_block_bindings,
@@ -365,9 +365,37 @@ struct Entry {
 /// the answer never reached the applier.
 pub(crate) const BORROWED_STEM: &str = "borrowed-minified-stem";
 
+/// The rejection code of an answer refused for handing a multi-letter
+/// minified name back as itself (`rename::floor::is_minified_echo`,
+/// round 2, 2026-10-03) — no applier code either.
+pub(crate) const MINIFIED_ECHO: &str = "minified-echo";
+
+/// The ONE answer-quality question every LLM naming site asks before an
+/// answer may reach the applier (the wave barrier and the sweep): is
+/// `answer` for the identifier `old` an echo of its own minified name, or
+/// does it borrow one of the program's minified names as a word? The
+/// refusal's code, or None. A refused answer is an invalid answer: a
+/// disclosed re-ask within `--rename-retries`, then unrenamed and
+/// EXHAUSTED — never applied, never suffix-laddered.
+pub(crate) fn answer_refusal(
+    old: &str,
+    answer: &str,
+    stems: &MinifiedStems,
+) -> Option<&'static str> {
+    if is_minified_echo(old, answer) {
+        Some(MINIFIED_ECHO)
+    } else if answer != old && borrowed_minified_stem(answer, stems).is_some() {
+        Some(BORROWED_STEM)
+    } else {
+        None
+    }
+}
+
 /// One disclosed prior rejection: the model's word, whether it was an
 /// invalid target, and — for a borrowed-stem refusal — the stem it
 /// borrowed (the re-ask names it). Shared by the barrier and the sweep.
+/// An echo refusal discloses the identifier's own name as the word; the
+/// prompt renders that as "is the minified name" (`prompts::failure_line`).
 pub(crate) fn disclose_reject(
     name: &str,
     code: Option<&str>,
@@ -379,7 +407,8 @@ pub(crate) fn disclose_reject(
     PriorReject {
         name: name.to_string(),
         invalid: code == Some(RejectionReason::InvalidTarget.as_str())
-            || code == Some(BORROWED_STEM),
+            || code == Some(BORROWED_STEM)
+            || code == Some(MINIFIED_ECHO),
         borrowed,
     }
 }
@@ -2606,6 +2635,9 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             let (old, new, identity) = match effect {
                 LaneEffect::Rename { old, new } => (old, new, false),
                 LaneEffect::Identity { name } => (name.clone(), name, true),
+                // A refused echo rides the barrier like any answer: the
+                // barrier's answer check refuses it (`answer_refusal`).
+                LaneEffect::Echo { name } => (name.clone(), name, false),
             };
             let proposed = proposed.remove(&old).unwrap_or_else(|| new.clone());
             let ctx = &self.ctxs[lr.ctx];
@@ -2951,10 +2983,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 continue;
             }
             // Fix A (2026-10-03): an answer wearing one of the program's
-            // minified names as a word is refused BEFORE it can apply —
-            // the invalid-answer path (a disclosed re-ask, then give-up).
-            let borrowed = borrowed_minified_stem(&entry.new, self.inp.stems).is_some();
-            let taken = borrowed || self.live_has(entry.live, &entry.new);
+            // minified names as a word — or (round 2) handing a
+            // multi-letter minified name back as itself — is refused
+            // BEFORE it can apply: the invalid-answer path (a disclosed
+            // re-ask, then give-up).
+            let refusal = answer_refusal(&entry.old, &entry.new, self.inp.stems);
+            let taken = refusal.is_some() || self.live_has(entry.live, &entry.new);
             let (applied, reason) = if taken {
                 (false, None)
             } else {
@@ -2967,8 +3001,8 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 }
                 continue;
             }
-            let (class, cause_code) = if borrowed {
-                (reask::ReaskClass::InvalidSuggestion, Some(BORROWED_STEM))
+            let (class, cause_code) = if let Some(code) = refusal {
+                (reask::ReaskClass::InvalidSuggestion, Some(code))
             } else {
                 (
                     reask::barrier_class(reason),
@@ -2995,10 +3029,11 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 // trail row keeps them loud, and the counter keeps them
                 // visible in the processor report.
                 self.processor.unrecoverable_rejections += 1;
-            } else if borrowed {
-                // Still borrowing when the budget died: never the junk,
-                // never a decoration built on it — the binding stays
-                // unrenamed and EXHAUSTED (the sweep keeps it a target).
+            } else if refusal.is_some() {
+                // Still borrowing (or echoing) when the budget died: never
+                // the junk, never a decoration built on it — the binding
+                // stays unrenamed and EXHAUSTED (the sweep keeps it a
+                // target).
                 let suggestion = entry.new.clone();
                 self.give_up(&entry, &suggestion);
             } else {

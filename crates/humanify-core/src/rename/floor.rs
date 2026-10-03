@@ -34,6 +34,9 @@
 //!   half stays the sweep's alone, a declared difference: replayed over
 //!   the main pass's recorded answers it would refuse `iv`, `fd`, `x1`,
 //!   `is2017OrLater`, `LZ77Compressor` (461 answers, mostly real names).
+//!   Round 2 (2026-10-03) added the IDENTITY-ECHO half
+//!   ([`is_minified_echo`]: `{"yl":"yl"}`), asked by the same sites
+//!   through `naming::waves::processor::answer_refusal`.
 
 /// Short words that are real names, not mints (`SHORT_WORDS`). The ten
 /// single letters a/b/e/i/j/k/n/t/x/y left this list 2026-09-30 (Andrew:
@@ -178,6 +181,8 @@ const TECH_TERMS: &[&str] = &[
     "p2c", "p2s", "b2c", "x5c", "x5t", "lz4", "lz77", "x10", "x11", "ie9", "ie10", "ie11", "md4",
     "cidrv4", "cidrv6", "sigv4", "es256", "es384", "es512", "rs256", "hs256", "ps256", "vp8",
     "vp8l", "vp9", "mp3", "mp4", "h264", "h265", "x86", "x64", "arm64",
+    // Round 2 (2026-10-03): `isE2E` (end-to-end) beside a program `e2e`.
+    "e2e",
 ];
 
 /// The shape of a minified name another answer can BORROW as a word: a
@@ -195,20 +200,27 @@ pub fn is_borrowable_stem(name: &str) -> bool {
 /// borrowable shape ([`is_borrowable_stem`]) — read once from the fresh
 /// (pre-rename) text, so a neighbour renamed earlier in the run still
 /// counts: the model saw its minified name in the code it was shown.
+/// Membership is CASE-INSENSITIVE (round 2, 2026-10-03 — the model
+/// re-cases what it borrows: `k2hResult` for the program's `K2H`), with
+/// the exact spellings kept for the one place that needs them (a trailing
+/// numbered word, see [`borrowed_minified_stem`]).
 #[derive(Clone, Debug, Default)]
-pub struct MinifiedStems(std::collections::HashSet<String>);
+pub struct MinifiedStems {
+    exact: std::collections::HashSet<String>,
+    folded: std::collections::HashSet<String>,
+}
 
 impl MinifiedStems {
     /// The borrowable names among `names` (every binding name of the
     /// input program).
     pub fn from_names<'n>(names: impl IntoIterator<Item = &'n str>) -> Self {
-        MinifiedStems(
-            names
-                .into_iter()
-                .filter(|n| is_borrowable_stem(n))
-                .map(str::to_string)
-                .collect(),
-        )
+        let exact: std::collections::HashSet<String> = names
+            .into_iter()
+            .filter(|n| is_borrowable_stem(n))
+            .map(str::to_string)
+            .collect();
+        let folded = exact.iter().map(|n| n.to_ascii_lowercase()).collect();
+        MinifiedStems { exact, folded }
     }
 
     /// Every symbol name of a parsed program (the fresh text's semantic).
@@ -217,9 +229,58 @@ impl MinifiedStems {
         Self::from_names(scoping.symbol_ids().map(|s| scoping.symbol_name(s)))
     }
 
+    /// Whether the program binds `name` in any ASCII casing.
     pub fn contains(&self, name: &str) -> bool {
-        self.0.contains(name)
+        self.folded.contains(&name.to_ascii_lowercase())
     }
+
+    /// Whether the program binds `name` spelled exactly so.
+    pub fn contains_exact(&self, name: &str) -> bool {
+        self.exact.contains(name)
+    }
+}
+
+/// A capitalised word followed only by digits (`Fn3`, `Go4`) — at the END
+/// of an answer this reads as a numbered variant (`emptyFn3` beside
+/// `emptyFn2`), so it counts as borrowed only on an EXACT-case match.
+fn is_numbered_word(segment: &str) -> bool {
+    let b = segment.as_bytes();
+    let letters = b.iter().take_while(|c| c.is_ascii_alphabetic()).count();
+    letters >= 2
+        && letters < b.len()
+        && b[0].is_ascii_uppercase()
+        && b[1..letters].iter().all(u8::is_ascii_lowercase)
+        && b[letters..].iter().all(u8::is_ascii_digit)
+}
+
+/// The stem CANDIDATES of a name, as byte ranges: every word segment
+/// ([`word_segments`]), plus — when a segment ends in a digit and the
+/// next starts a run of capitals — the segment continued through that
+/// run up to the capital that starts the next word (round 2, 2026-10-03:
+/// `S2KFunction` segments as `S2` + `KFunction`, and the program's `S2K`
+/// is the candidate `S2` + `K`; `Q2KXHandler` → `Q2KX`; `valueS2K` →
+/// `S2K`). The continued candidate comes first: it is the longer stem.
+fn stem_candidates(name: &str) -> Vec<(usize, usize)> {
+    let b = name.as_bytes();
+    let mut out = Vec::new();
+    for (a, e) in word_segments(name) {
+        if e > a && b[e - 1].is_ascii_digit() && b.get(e).is_some_and(u8::is_ascii_uppercase) {
+            let mut j = e;
+            while b.get(j).is_some_and(u8::is_ascii_uppercase) {
+                j += 1;
+            }
+            // The last capital of a run that a lowercase letter follows
+            // starts the next word (`KFunction`: `F` begins `Function`).
+            if b.get(j).is_some_and(u8::is_ascii_lowercase) {
+                j -= 1;
+            }
+            if j > e {
+                out.push((a, j));
+            }
+        }
+        out.push((a, e));
+    }
+    out
 }
 
 /// The word segments of a name, as byte ranges: split at `_` / `$`, and
@@ -281,18 +342,57 @@ fn tech_term_covers(name: &str, a: usize, b: usize) -> bool {
 /// technical term covers (`p2sBytes`, `b2cLoginHosts`, `x5cArray`) are
 /// exempt. `is2017OrLater` / `sha256Hash` pass because `is2017` and
 /// `sha256` are not minified bindings.
+///
+/// Round 2 (2026-10-03): the comparison is CASE-INSENSITIVE
+/// ([`MinifiedStems`]; `go4Function` borrows `Go4`), and the candidates
+/// include a digit-ended segment continued through the capitals after it
+/// ([`stem_candidates`]; `S2KFunction` borrows `S2K`). The returned stem
+/// is the ANSWER's spelling — the word the re-ask tells the model to drop.
+/// One case exception, from the round-2 replay: a capitalised word plus
+/// digits at the very END (`emptyFn3`, `noopFn3` — numbered variants; the
+/// program binds `fn3`) needs an EXACT-case match, as before round 2. And
+/// a stem whose digits run on as `_<digit>` is a version number
+/// (`migrateSonnet1mTo4_5` — the one legitimate name main's predicate
+/// refused in the round-2 replay).
 pub fn borrowed_minified_stem<'a>(answer: &'a str, stems: &MinifiedStems) -> Option<&'a str> {
     if is_constant_case(answer) {
         return None;
     }
-    word_segments(answer).into_iter().find_map(|(a, b)| {
+    stem_candidates(answer).into_iter().find_map(|(a, b)| {
         let segment = &answer[a..b];
+        let bound = if b == answer.len() && is_numbered_word(segment) {
+            stems.contains_exact(segment)
+        } else {
+            stems.contains(segment)
+        };
+        // Digits continued by `_<digit>` spell a version (`To4_5` = "to
+        // 4.5" in `migrateSonnet1mTo4_5`), not a minified name.
+        let version = answer.as_bytes()[b..].starts_with(b"_")
+            && answer.as_bytes().get(b + 1).is_some_and(u8::is_ascii_digit);
         let borrowed = (a, b) != (0, answer.len())
-            && stems.contains(segment)
+            && bound
+            && !version
             && is_borrowable_stem(segment)
             && !tech_term_covers(answer, a, b);
         borrowed.then_some(segment)
     })
+}
+
+/// WHAT ANSWER MAY LAND, the identity-echo half (round 2, 2026-10-03):
+/// is `answer` the asked identifier's own MINIFIED name handed back
+/// (`{"yl":"yl","zf":"zf"}`)? True when the answer equals the name and
+/// the name is a minifier token ([`is_bun_token`]) of two or more UTF-16
+/// units that is not a convention placeholder. Single letters are left
+/// out on purpose (Andrew, 2026-09-30: a loop counter `i` may stay), and
+/// so are real short words (`fs`, `id` are not tokens) and every
+/// descriptive name. Every LLM naming site refuses such an echo like a
+/// borrowed answer: a disclosed re-ask ("`yl` is the minified name"),
+/// within `--rename-retries`, then unrenamed and EXHAUSTED — a sweep
+/// target, never a decided keep. Three-letter digitless mints (`RHe`,
+/// `Etl`) are not [`is_bun_token`]s and keep their echo (precision
+/// first: the shape cannot tell them from words).
+pub fn is_minified_echo(old: &str, answer: &str) -> bool {
+    answer == old && js_len(old) >= 2 && is_bun_token(old) && !is_convention_carveout(old)
 }
 
 /// A deliberate convention placeholder: all-underscore (`_`, `__`) or

@@ -32,9 +32,11 @@
 //! conflict. The ANSWER filter is `rename::floor::is_sweep_answer_acceptable`
 //! — junk shapes stay refused, but a single-letter answer may land — and,
 //! FIRST, the answer-quality question the wave barrier asks too
-//! (`rename::floor::borrowed_minified_stem`, 2026-10-03): an answer that
-//! borrows a minified name as a word gets a disclosed re-ask naming the
-//! stem, and is EXHAUSTED when the budget dies — never applied.
+//! (`naming::waves::processor::answer_refusal`): an answer that borrows a
+//! minified name as a word (`rename::floor::borrowed_minified_stem`,
+//! 2026-10-03), or hands a multi-letter minified target back as itself
+//! (`rename::floor::is_minified_echo`, round 2), gets a disclosed re-ask
+//! and is EXHAUSTED when the budget dies — never applied, never a keep.
 
 use std::collections::{HashMap, HashSet};
 
@@ -53,12 +55,10 @@ use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
 use crate::naming::code_window::MAX_CODE_LINES;
 use crate::naming::prompts::{render_system_prompt, render_user_prompt};
 use crate::naming::waves::generate::TextView;
-use crate::naming::waves::processor::{BORROWED_STEM, disclose_reject};
+use crate::naming::waves::processor::{answer_refusal, disclose_reject};
 use crate::naming::waves::render::{Occurrences, program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{
-    MinifiedStems, borrowed_minified_stem, is_convention_carveout, is_sweep_answer_acceptable,
-};
+use crate::rename::floor::{MinifiedStems, is_convention_carveout, is_sweep_answer_acceptable};
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier};
@@ -478,23 +478,24 @@ fn apply_group_response(
     for target in &group.targets {
         let suggestion = renames.get(&target.name).filter(|s| !s.is_empty());
         // The ONE answer-quality question the wave barrier asks too
-        // (Fix A, 2026-10-03): an answer borrowing a minified name as a
-        // word is refused like an invalid answer — a disclosed re-ask
-        // naming the stem, then EXHAUSTED; never applied.
-        if let Some(junk) = suggestion
-            .filter(|s| *s != target.name && borrowed_minified_stem(s, reask.stems).is_some())
+        // (`answer_refusal`): an answer borrowing a minified name as a
+        // word (Fix A, 2026-10-03) or handing a multi-letter minified
+        // name back as itself (round 2) is refused like an invalid
+        // answer — a disclosed re-ask, then EXHAUSTED; never applied.
+        if let Some((junk, code)) = suggestion
+            .and_then(|s| answer_refusal(&target.name, s, reask.stems).map(|code| (s, code)))
         {
             skipped += 1;
             let row = Attempt::new(Tier::CoverageSweep, Outcome::Rejected)
                 .proposed(junk.to_string())
-                .reason(BORROWED_STEM);
+                .reason(code);
             state.record(target.binding, &target.name, row, true);
             reask.reask_or_exhaust(
                 state,
                 target,
                 junk.to_string(),
                 crate::naming::reask::ReaskClass::InvalidSuggestion,
-                BORROWED_STEM,
+                code,
                 &mut reasks,
             );
             continue;

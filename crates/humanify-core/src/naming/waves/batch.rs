@@ -24,6 +24,7 @@ use crate::naming::report::{
     AttemptResult, ContentionEvent, IdentifierOutcome, Outcomes, RoundAttempt, Status,
 };
 use crate::naming::validation::{resolve_conflict, sanitize_identifier};
+use crate::rename::floor::is_minified_echo;
 use crate::rename::validated::RejectionReason;
 use crate::rename::validated::target::is_valid_rename_target;
 
@@ -168,6 +169,10 @@ pub enum LaneEffect {
     Rename { old: String, new: String },
     /// `onUnrenamed(name)` — a deferred identity record.
     Identity { name: String },
+    /// The lane's last answer for `name` was the name itself and the name
+    /// is a multi-letter minifier token (`rename::floor::is_minified_echo`):
+    /// a refused answer the barrier re-asks — never an identity keep.
+    Echo { name: String },
 }
 
 /// A strategy's `transformSuggestion(oldName, suggestion)`.
@@ -315,7 +320,12 @@ impl Lane {
         let mut rejections = Vec::new();
         for name in batch {
             let s = &self.states[name];
-            if let Some(sug) = &s.last_suggestion {
+            // The disclosure is the MODEL's own word (finding #73's module
+            // leftover, 2026-10-03): the prior-name snap turned
+            // `setupApplication` into the taken prior `setupApplication12`,
+            // and the round-2 showed the snap. `last_suggestion` keeps the
+            // transformed word — the resolution tail applies THAT.
+            if let Some(sug) = s.last_suggestion.as_ref().and(s.last_raw.as_ref()) {
                 prev.set(name, sug);
             }
             match s.last_failure {
@@ -722,6 +732,7 @@ impl Lane {
         // `resolveOneRemaining`'s round: the answered calls + 1.
         let round = self.report.finish_reasons.len() as u64 + 1;
         let mut left: Vec<String> = Vec::new();
+        let mut echoed: HashSet<String> = HashSet::new();
         for name in &remaining {
             let Some(raw) = prev.get(name) else {
                 left.push(name.clone());
@@ -738,6 +749,9 @@ impl Lane {
                 sanitize_identifier(raw)
             };
             if suggested == name.as_str() {
+                if is_minified_echo(name, &suggested) {
+                    echoed.insert(name.clone());
+                }
                 left.push(name.clone());
                 continue;
             }
@@ -771,7 +785,12 @@ impl Lane {
         }
         let last_finish = self.report.finish_reasons.last().cloned().flatten();
         for name in &left {
-            if self.identity {
+            if echoed.contains(name) {
+                // The model handed a multi-letter minified name back as
+                // its answer: a REFUSED answer, not a keep — the barrier
+                // re-asks it (round 2, 2026-10-03), module lanes too.
+                self.effects.push(LaneEffect::Echo { name: name.clone() });
+            } else if self.identity {
                 self.effects
                     .push(LaneEffect::Identity { name: name.clone() });
             }
