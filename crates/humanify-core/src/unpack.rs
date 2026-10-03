@@ -191,6 +191,9 @@ pub struct AdapterRun<'n> {
     /// The run's interop helpers (the toolchain's P8 piece; vendor-record
     /// adapters recognise and rename the bundle's helpers with it).
     pub interop: crate::toolchain::InteropHelpers,
+    /// The run's module wrapper grammar (the toolchain's P3 piece;
+    /// vendor-record adapters find and extract the bundled modules with it).
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
     /// The LLM vendor namer (vendor-record adapters; None skips the pass).
     pub namer: Option<&'n mut dyn crate::modules::vendor_names::VendorNamer>,
     /// The prior release's vendor record (`bun::load_prior_vendor`).
@@ -202,13 +205,17 @@ pub struct AdapterRun<'n> {
 }
 
 impl<'n> AdapterRun<'n> {
-    /// A run with the toolchain's interop piece and nothing optional (no
-    /// namer, no prior, no shim). The interop piece has no default: it is
-    /// the run's choice (`toolchain::resolve_toolchain`), never a fallback
-    /// picked here.
-    pub fn new(interop: crate::toolchain::InteropHelpers) -> AdapterRun<'n> {
+    /// A run with the toolchain's interop and module-wrapper pieces and
+    /// nothing optional (no namer, no prior, no shim). The pieces have no
+    /// default: they are the run's choice (`toolchain::resolve_toolchain`),
+    /// never a fallback picked here.
+    pub fn new(
+        interop: crate::toolchain::InteropHelpers,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+    ) -> AdapterRun<'n> {
         AdapterRun {
             interop,
+            module_wrappers,
             namer: None,
             prior: None,
             manifest_prior_order_disabled: false,
@@ -258,6 +265,7 @@ pub fn run_adapter(
                     manifest_prior_order_disabled: run.manifest_prior_order_disabled,
                     adapter,
                     layout,
+                    module_wrappers: run.module_wrappers,
                     interop: run.interop,
                 },
             )?)))

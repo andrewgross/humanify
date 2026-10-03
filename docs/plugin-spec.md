@@ -57,6 +57,17 @@ record?". Byte-identical output vs main on the five e2e fixture pairs and
 the stub-LLM 2.1.118 → 2.1.119 pair; the stats `libraryDetector` row now
 reads `vendor-record`.
 
+**Update 2026-10-04 (finding #79, branch `feat/module-grammar-seam`;
+toolchain review R11, R2, R7, R12).** P3: `ModuleWrapperGrammar` has real
+methods (the module helper, the factory classification, the factory
+argument's forms, the lazy-init helpers) and every caller asks the run's
+piece — the unpack, the naming stage's per-file skip (I10, behaviour
+unchanged and measured), the artifact dump, and the fresh-grouping split,
+whose own "most-used wrapper" guess is gone. P12: one lazy-init recogniser
+(Bun's and esbuild's shapes) for the load order and the fossil layout;
+I27 closed. Byte-identical vs main on the five e2e fixture pairs and the
+stub-LLM 2.1.118 → 2.1.119 pair.
+
 ## Words used here
 
 - **Bundler** — the tool that glued many source files into one file (Bun,
@@ -272,7 +283,7 @@ are both.
 | ------------------------------------------- | ------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | P1 Detection signals                        | 1      | **PARTIAL**                   | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything                           |
 | P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                              |
-| P3 Module wrapper grammar (factories)       | 3, 8-9 | **PARTIAL** (slot)            | extend the shared factory owners; they run on every input, not just theirs (I10); the toolchain names the slot                                |
+| P3 Module wrapper grammar (factories)       | 3, 8-9 | **EXISTS** (seam, 2026-10-04) | add a `ModuleWrapperGrammar` value (helper, classification, factory argument, lazy-init helpers); every caller asks the run's (#79); I10 open |
 | P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                    |
 | P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78) |
 | P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                               |
@@ -281,7 +292,7 @@ are both.
 | P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                |
 | P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                       |
 | P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                          |
-| P12 Load-order helper shapes                | 11     | **PARTIAL**                   | registrar by shape works for both; lazy-init is Bun's text only (I27)                                                                         |
+| P12 Load-order helper shapes                | 11     | **EXISTS** (2026-10-04)       | registrar by shape works for both; lazy-init comes from the module grammar, Bun's and esbuild's shapes (#79)                                  |
 | P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                 |
 | P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                        |
 | P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                            |
@@ -388,7 +399,7 @@ toolchain, which also records why (flag / detected / fallback).
 
 **Tests:** `unpack_test.rs` cases for selection; the e2e fixture below.
 
-### P3 — Module wrapper grammar: finding the bundled modules (stages 3, 8-9) — PARTIAL
+### P3 — Module wrapper grammar: finding the bundled modules (stages 3, 8-9) — EXISTS (seam real, one implementation; I10 open)
 
 **Question:** where are the bundled third-party modules, and what is each
 module's body?
@@ -427,6 +438,41 @@ extracted.
 `BunAndEsbuild`, whose `identify_factory_helper` is
 `modules::identify_cjs_factory`). Its consumers still call the shared
 owners directly — routing them through the run's value is Part 4 step 4.
+
+**Seam (2026-10-04, branch `feat/module-grammar-seam`, finding #79,
+toolchain review R11/R2/R7/R12):** `ModuleWrapperGrammar` answers the
+questions its callers ask, delegating to the shared owners:
+`identify_factory_helper` (the module helper), `classify_factories` (every
+`var X = HELPER(factory)` in the layout's container), `factory_function`
+(the argument's accepted forms) and `lazy_init_helpers` (P12). Bun's and
+esbuild's adapters share the one value (`run_adapter` hands both to
+`unpack::bun::unpack_bun`). Every pipeline caller takes the run's piece:
+the unpack (`AdapterRun::module_wrappers`: the helper scan, the
+classification, the extraction), the naming stage's per-file skip
+(`prior::build_side_parts` via `NamingConfig`/`PriorMatchInput` and the
+`match` verb), the `--dump-artifacts` classification sites, the split's
+load order (`SplitOptions::module_wrappers`), and the fresh-grouping
+split's vendor bucket — which used to tally "the most-used higher-order
+callee, ≥2" (`detect_cjs_helper`, deleted) and so sent an app's own
+`forwardRef`/`memo`-style wrapper to `vendor/` (review R7); it now takes
+the helper the grammar recognises in the shipped text. That last one is a
+behaviour change in the clustered regime only (passthrough/webcrack input
+or `--disable fossil-split`); default Bun and esbuild runs place by fossils.
+Byte-identical on the five e2e fixture pairs and the stub-LLM real Bun pair.
+
+**I10 / R2 is unchanged and measured (#79):** the naming stage still
+re-runs the grammar on every processed file. On the esbuild fixtures it
+FINDS `__commonJS` on every naming input (both sides) but no factory is
+left in the app (the unpack extracted them all), so it skips nothing —
+switching it off changes neither tree nor asks. When a factory does stay
+in the app on esbuild (a factory that WRITES an app binding, shown on a
+one-line variant of `esbuild-bundle`), the skip removes its inner
+functions from the main naming waves and the coverage sweep names them
+instead, one function per ask without call-graph context (5 sweep asks
+instead of 5 wave asks); on Bun's formatted text the grammar never fires
+(the formatter splits `{exports:{}}`), so the same factory would be named
+in the waves. Whether to pass the unpacker's factory list down or retire
+the naming-time detection is a separate decision.
 
 **Tests:** `modules_test.rs` cases for the helper and argument shapes from a
 real build (minified AND unminified), and a negative case (the helper's
@@ -705,7 +751,7 @@ per-plugin; matching reads it on every input (I30, harmless by shape).
 **Tests:** `place/assign/fossil` and `twins` cases; the `esbuild-bundle`
 fixture's ledger.
 
-### P12 — Load-order helper shapes (stage 11) — PARTIAL
+### P12 — Load-order helper shapes (stage 11) — EXISTS (2026-10-04)
 
 **Question:** which helper calls are safe to move past (they do nothing
 until called later) when the split reorders statements?
@@ -719,6 +765,21 @@ Bun and esbuild, I28).
 recognised → calls are treated as having effects (safe, fewer moves).
 
 **Tests:** `load_order` unit cases with the plugin's helper texts.
+
+**One lazy-init owner (2026-10-04, finding #79, toolchain review R12):**
+the load order no longer reads Bun's TEXT (`identify_bun_lazy_init`,
+deleted). It asks `ModuleWrapperGrammar::lazy_init_helpers`, the same
+shape recogniser the fossil layout (P11) uses —
+`twins::fossil::lazy_init_helper_names`: Bun's and esbuild's forms, raw and
+formatted. Before switching, both recognisers were run side by side on
+every split of the stub-LLM real Bun pair (2.1.118 fresh, 2.1.119 with that
+prior): each named the same single binding. On the esbuild fixtures the
+text found nothing and the shape finds `__esm`, so I27 is closed: the load
+order now knows esbuild's init calls do nothing at load time (both
+fixtures' trees still byte-identical to main). The text recogniser's two
+quirks went with it: in a comma declaration it named the FIRST declarator,
+not the helper, and it accepted a 3-parameter non-thunk form the shape
+does not.
 
 ### P13 — Which unpacked file is the app (stages 10-12) — MISSING
 
@@ -838,11 +899,17 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
 4. **Pass the unpacker's factory grammar to the naming stage** instead of
    re-detecting on every file (I10). Neutral on Bun input (same grammar,
    same answer); changes behaviour only on other bundlers, which is the
-   point.
+   point. **First half DONE 2026-10-04** (finding #79): every caller asks
+   the toolchain's `ModuleWrapperGrammar`; the naming stage still
+   re-detects (unchanged behaviour, measured in #79) — whether to pass the
+   unpacker's list down or retire the naming-time detection is Andrew's
+   call.
 5. **Recognise minified esbuild** (I2), with a committed minified esbuild
    fixture first. The extraction code already handles the shape.
 6. **Per-plugin interop helpers and lazy-init shapes** (I16-I18, I27), with
-   a fixture that has CommonJS requiring an ES module.
+   a fixture that has CommonJS requiring an ES module. (Lazy-init: one
+   recogniser, Bun's and esbuild's shapes, behind `ModuleWrapperGrammar` —
+   finding #79.)
 7. **The container seam and "which file is the app"** (P9, P13): the large
    refactor that opens ESM-format bundles and a webpack split. Plan it as
    its own piece of work; it touches the split, the emit and the matching

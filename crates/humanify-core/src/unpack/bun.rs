@@ -37,8 +37,7 @@ use crate::modules::vendor_names::{
 };
 use crate::modules::{
     BunModuleClassification, CarriedName, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
-    NameSource, classify_bun_modules, factory_arg_function, identify_cjs_factory,
-    name_cjs_factories,
+    NameSource, name_cjs_factories,
 };
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
@@ -205,6 +204,10 @@ pub struct BunUnpackOptions<'n> {
     /// The run's bundle layout (the toolchain's P9 piece): the container
     /// the factory classification scans.
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's module wrapper grammar (the toolchain's P3 piece): the
+    /// module helper, the factory classification and the factory
+    /// argument's forms.
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
     /// The run's interop helpers (the toolchain's P8 piece): which bundle
     /// bindings are interop helpers, and the names a vendored body's
     /// references to them are rewritten to.
@@ -221,6 +224,7 @@ impl Default for BunUnpackOptions<'_> {
             manifest_prior_order_disabled: false,
             adapter: crate::unpack::UnpackAdapter::Bun,
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+            module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             interop: crate::toolchain::InteropHelpers::Bun,
         }
     }
@@ -325,7 +329,8 @@ pub fn unpack_bun(
         })
     };
 
-    let Some(factory) = identify_cjs_factory(code) else {
+    let grammar = options.module_wrappers;
+    let Some(factory) = grammar.identify_factory_helper(code) else {
         return floor(code);
     };
     let require_var = identify_bun_require(code);
@@ -337,7 +342,7 @@ pub fn unpack_bun(
     // the regex floor: on broken input the two parsers recover differently,
     // and the regex path is the one both sides define the same way.
     let mut classification = if ingest.errors.is_empty() {
-        classify(code, &ingest, options.layout)
+        classify(code, &ingest, options.layout, grammar)
     } else {
         None
     };
@@ -401,7 +406,7 @@ pub fn unpack_bun(
     // AST extraction is the source of truth; the regex floor only when the
     // classifier did not run.
     let modules = match &classification {
-        Some(c) => extract_factory_bodies_from_ast(c, code, &ingest),
+        Some(c) => extract_factory_bodies_from_ast(c, code, &ingest, grammar),
         None => extract_factory_bodies(code, helper_name),
     };
     if modules.is_empty() {
@@ -517,15 +522,17 @@ pub fn unpack_bun(
 
 /// The AST classification on the parsed input (`classifyWithAst` minus the
 /// naming, which the caller sequences around the hook), inside the
-/// container the run's bundle `layout` finds.
+/// container the run's bundle `layout` finds, under the run's module
+/// wrapper `grammar`.
 fn classify(
     code: &str,
     ingest: &Ingest<'_>,
     layout: crate::toolchain::BundleLayout,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
 ) -> Option<BunModuleClassification> {
     let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let tables = SymbolTables::build(ingest.semantic());
-    classify_bun_modules(
+    grammar.classify_factories(
         code,
         ingest.program,
         ingest.semantic(),
@@ -686,6 +693,7 @@ fn extract_factory_bodies_from_ast(
     classification: &BunModuleClassification,
     code: &str,
     ingest: &Ingest<'_>,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
 ) -> Vec<ExtractedModule> {
     let nodes = ingest.semantic().nodes();
     // Declarator span → its extraction shape.
@@ -700,7 +708,7 @@ fn extract_factory_bodies_from_ast(
         let Some(arg0) = call.arguments.first().and_then(|a| a.as_expression()) else {
             continue;
         };
-        let Some(factory_arg) = factory_arg_function(arg0) else {
+        let Some(factory_arg) = grammar.factory_function(arg0) else {
             continue;
         };
         let parent = nodes.parent_node(node.id());

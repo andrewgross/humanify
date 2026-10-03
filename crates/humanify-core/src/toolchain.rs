@@ -46,6 +46,8 @@
 //! stage always has. Every choice is recorded with its [`Reason`]
 //! ([`Toolchain::record`], the `--stats-json` `toolchain` block).
 
+use std::collections::HashSet;
+
 use humanify_model::detection::{BundlerDetectionResult, BundlerType, DetectionTier, MinifierType};
 
 use crate::libdetect::LibraryDetector;
@@ -90,12 +92,20 @@ pub struct Chosen<T> {
 }
 
 /// P3 — where the bundled third-party modules are and what each module's
-/// body is. ONE grammar today: Bun's `{exports:{}}` factory marker, then
-/// esbuild's declared `__commonJS` (`modules::identify_cjs_factory`,
-/// `modules::factory_arg_function`). Its consumers (the unpack's
-/// classification and the naming stage's third-party skip, spec I10) still
-/// call those owners directly; routing them through this value is spec
-/// Part 4 step 4.
+/// body is. ONE grammar today, shared by the Bun and esbuild adapters
+/// (esbuild's flow IS Bun's — `unpack::run_adapter` hands both to
+/// `unpack::bun::unpack_bun`): Bun's `{exports:{}}` factory marker, then
+/// esbuild's declared `__commonJS` (`modules::identify_cjs_factory`); the
+/// factory argument in either form (`modules::factory_arg_function`); the
+/// classification of every `var X = HELPER(factory)` in the container
+/// (`modules::classify_bun_modules`). Every pipeline caller asks the run's
+/// value (toolchain review R11/R2/R7, 2026-10-04): the unpack's
+/// classification and extraction, the naming stage's third-party skip
+/// (`prior::build_side_parts`, spec I10 — behaviour unchanged), the
+/// artifact dump's classification sites, and the fresh-grouping split's
+/// vendor bucket (`place::assign::cluster`, which used to tally its own
+/// "most-used higher-order callee"). A second grammar (webpack's module
+/// table, rollup's) is a second variant here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModuleWrapperGrammar {
     BunAndEsbuild,
@@ -108,10 +118,62 @@ impl ModuleWrapperGrammar {
         }
     }
 
-    /// The module helper this grammar recognises in `source`.
+    /// The module helper this grammar recognises in `source` (its binding
+    /// name and where its declaration starts), or None: the text holds no
+    /// bundled modules under this grammar.
     pub fn identify_factory_helper(self, source: &str) -> Option<crate::modules::IdentifiedHelper> {
         match self {
             ModuleWrapperGrammar::BunAndEsbuild => crate::modules::identify_cjs_factory(source),
+        }
+    }
+
+    /// Every bundled module (`var X = HELPER(factory)`) among the
+    /// container's statements — `wrapper_body` is the layout's container
+    /// (None: the program's own body). None when the text has no helper.
+    pub fn classify_factories<'a>(
+        self,
+        source: &'a str,
+        program: &'a oxc_ast::ast::Program<'a>,
+        semantic: &'a oxc_semantic::Semantic<'a>,
+        wrapper_body: Option<oxc_span::Span>,
+        tables: &crate::hash::serialize::SymbolTables,
+    ) -> Option<crate::modules::BunModuleClassification> {
+        match self {
+            ModuleWrapperGrammar::BunAndEsbuild => crate::modules::classify_bun_modules(
+                source,
+                program,
+                semantic,
+                wrapper_body,
+                tables,
+            ),
+        }
+    }
+
+    /// The module's factory function inside a helper call's first
+    /// argument, in the forms this grammar accepts (Bun's function,
+    /// esbuild's single-key object whose key is the source path).
+    pub fn factory_function<'a>(
+        self,
+        arg: &'a oxc_ast::ast::Expression<'a>,
+    ) -> Option<crate::modules::FactoryArg<'a>> {
+        match self {
+            ModuleWrapperGrammar::BunAndEsbuild => crate::modules::factory_arg_function(arg),
+        }
+    }
+
+    /// The lazy-init (ES-module init) helpers declared among the
+    /// container's top-level statements (their ESTree JSON): a call to one
+    /// does nothing until the module is first used. ONE recogniser for the
+    /// split's load order (spec P12, I27) and the fossil layout (P11) —
+    /// toolchain review R12: Bun's and esbuild's forms, raw and formatted
+    /// (`twins::fossil::lazy_init_helper_names`). The load order used to
+    /// read Bun's TEXT `x && (y = x(x = 0))` on its own; on the real Bun
+    /// pair both recognisers named the same binding.
+    pub fn lazy_init_helpers(self, body: &[serde_json::Value]) -> HashSet<String> {
+        match self {
+            ModuleWrapperGrammar::BunAndEsbuild => {
+                crate::twins::fossil::lazy_init_helper_names(body)
+            }
         }
     }
 }

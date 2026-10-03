@@ -56,6 +56,7 @@ fn a_declined_emit_persists_the_ts_aliases() {
         code,
         SplitOptions {
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+            module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             regime: Regime::Tiers,
             prior: Some(&prior),
             carry: None,
@@ -133,6 +134,7 @@ fn bridge_options<'a>(
 ) -> SplitOptions<'a, 'a> {
     SplitOptions {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         regime: Regime::Cluster,
         prior: None,
         carry: None,
@@ -282,6 +284,7 @@ fn dominant_vendor_runtime(deps: usize) -> String {
 fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
     SplitOptions {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         regime: Regime::Cluster,
         prior: None,
         carry: None,
@@ -415,4 +418,60 @@ fn an_unresolvable_vendor_capture_fails_the_split() {
         Ok(_) => panic!("a name declared twice is refused"),
     };
     assert!(err.contains("exactly one"), "{err}");
+}
+
+/// A wrapper bundle for the fresh grouping (the clustered regime): enough
+/// pad bindings to clear the ≥50 gate, plus `decls` — the statements under
+/// test.
+fn clustered_bundle(decls: &str) -> String {
+    let mut s = String::from("(function () {\n");
+    s.push_str(decls);
+    for i in 0..55 {
+        s.push_str(&format!("  var pad{i:02} = {i};\n"));
+    }
+    s.push_str("  console.log(pad00);\n})();\n");
+    s
+}
+
+fn vendor_files(outcome: &super::SplitOutcome) -> Vec<String> {
+    outcome
+        .files
+        .iter()
+        .map(|(f, _)| f.clone())
+        .filter(|f| f.starts_with("vendor/"))
+        .collect()
+}
+
+/// Toolchain review R7: the fresh grouping's vendor bucket takes the
+/// module helper from the run's module wrapper grammar (P3), never from
+/// its own "most-used higher-order callee" tally. An app's own wrapper
+/// used twice (a minified `forwardRef`/`memo`, `K7(function …)`) is not a
+/// bundled module: its statements stay in the app.
+#[test]
+fn the_fresh_grouping_does_not_vendor_an_app_wrapper_the_grammar_rejects() {
+    let code = clustered_bundle(
+        "  var K7 = (render) => render;\n\
+         \x20 var Card = K7(function (props) { return props.a; });\n\
+         \x20 var Row = K7(function (props) { return props.b; });\n",
+    );
+    let outcome = stable_split(&code, gated_options(None)).expect("splits");
+    assert_eq!(vendor_files(&outcome), Vec::<String>::new());
+}
+
+/// The same bucket still takes what the grammar recognises: Bun's module
+/// helper (the tight `{exports:{}}` marker) wrapping two factories.
+#[test]
+fn the_fresh_grouping_vendors_the_modules_the_grammar_recognises() {
+    let code = clustered_bundle(
+        "  var U = (A, q) => () => (q || A((q = {exports:{}}).exports, q), q.exports);\n\
+         \x20 var reqA = U((e, m) => { m.exports = 1; });\n\
+         \x20 var reqB = U((e, m) => { m.exports = 2; });\n",
+    );
+    let outcome = stable_split(&code, gated_options(None)).expect("splits");
+    assert_eq!(
+        vendor_files(&outcome).len(),
+        2,
+        "{:?}",
+        vendor_files(&outcome)
+    );
 }

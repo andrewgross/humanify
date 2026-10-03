@@ -60,7 +60,7 @@ use crate::matching::cascade::{
 };
 use crate::matching::statement_context::StatementContexts;
 use crate::rename::eligibility::NeverRename;
-use crate::toolchain::BundleLayout;
+use crate::toolchain::{BundleLayout, ModuleWrapperGrammar};
 
 /// The texts and flags the match stage runs on: the FORMATTED fresh text,
 /// the prior version's code, the run's never-rename lists (the fresh
@@ -72,6 +72,9 @@ pub struct PriorMatchInput<'t> {
     pub prior: &'t str,
     pub never_rename: NeverRename,
     pub layout: BundleLayout,
+    /// The run's module wrapper grammar (P3): each side's bundled modules,
+    /// whose functions the graph skips (spec I10).
+    pub module_wrappers: ModuleWrapperGrammar,
     /// The fast schedule (the relaxed default and `--sequential` alike):
     /// build the prior side's graph on a thread of its own
     /// (from its own parse of the same text — the AST is not `Send`),
@@ -150,6 +153,7 @@ pub fn match_prior_version<T>(
         prior,
         never_rename,
         layout,
+        module_wrappers,
         same_program_check,
         fast,
     } = input;
@@ -170,7 +174,7 @@ pub fn match_prior_version<T>(
         // this thread builds the fresh side, then parses the prior again
         // for the AST the later stages walk.
         let (prior_side, fresh_side) = crate::par::beside(
-            || prior_side_owned(prior, layout),
+            || prior_side_owned(prior, layout, module_wrappers),
             || -> Result<_, String> {
                 let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
                 let fresh_json = crate::ingest::program_estree_json(fresh_ingest.program);
@@ -180,6 +184,7 @@ pub fn match_prior_version<T>(
                     "input.js",
                     fresh_eligibility,
                     layout,
+                    module_wrappers,
                 );
                 let prior_ingest = parse_prior(&prior_allocator, prior)?;
                 Ok((fresh_ingest, fresh_json, fresh_parts, prior_ingest))
@@ -208,6 +213,7 @@ pub fn match_prior_version<T>(
             "input.js",
             fresh_eligibility,
             layout,
+            module_wrappers,
         );
         drop(ph);
         // ── the prior side (ALL bindings eligible — prior-version.ts:284-288)
@@ -218,6 +224,7 @@ pub fn match_prior_version<T>(
             "prior.js",
             Eligibility::All,
             layout,
+            module_wrappers,
         );
         (
             fresh_ingest,
@@ -280,6 +287,7 @@ pub fn match_prior_version<T>(
 pub fn with_prior_match_side<T>(
     prior: &str,
     layout: BundleLayout,
+    module_wrappers: ModuleWrapperGrammar,
     run: impl FnOnce(&StageSide<'_, '_>) -> Result<T, String>,
 ) -> Result<T, String> {
     use crate::profiling::phase;
@@ -288,7 +296,14 @@ pub fn with_prior_match_side<T>(
     let ingest = parse_prior(&allocator, prior)?;
     let json = crate::ingest::program_estree_json(ingest.program);
     // The prior side's eligibility is ALL bindings (prior-version.ts:284-288).
-    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All, layout);
+    let parts = build_side_parts(
+        &ingest,
+        &json,
+        "prior.js",
+        Eligibility::All,
+        layout,
+        module_wrappers,
+    );
     let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "prior", layout)?;
     drop(ph);
     run(&stage_side(&ingest, &json, &parts, &deps))
@@ -305,6 +320,7 @@ pub fn match_stage_with_prior<T>(
     fresh: &str,
     never_rename: NeverRename,
     layout: BundleLayout,
+    module_wrappers: ModuleWrapperGrammar,
     prior: StageSide<'_, '_>,
     same_program_check: bool,
     consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
@@ -320,6 +336,7 @@ pub fn match_stage_with_prior<T>(
         "input.js",
         Eligibility::SkipSet(never_rename),
         layout,
+        module_wrappers,
     );
     let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "fresh", layout)?;
     drop(ph);
@@ -518,11 +535,22 @@ pub(crate) fn program_jsons(fresh: &Ingest<'_>, prior: &Ingest<'_>) -> (Value, V
 
 /// The prior side's program JSON and built parts from a parse of its own
 /// (everything returned is plain data: the parse dies here).
-fn prior_side_owned(prior: &str, layout: BundleLayout) -> Result<(Value, SideParts), String> {
+fn prior_side_owned(
+    prior: &str,
+    layout: BundleLayout,
+    module_wrappers: ModuleWrapperGrammar,
+) -> Result<(Value, SideParts), String> {
     let allocator = Allocator::default();
     let ingest = parse_prior(&allocator, prior)?;
     let json = crate::ingest::program_estree_json(ingest.program);
-    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All, layout);
+    let parts = build_side_parts(
+        &ingest,
+        &json,
+        "prior.js",
+        Eligibility::All,
+        layout,
+        module_wrappers,
+    );
     Ok((json, parts))
 }
 
@@ -610,25 +638,30 @@ fn stage_side<'a, 's>(
 /// Build one side: the Bun classification, the unified graph, the
 /// statement contexts and the session-id spans — all over the side's one
 /// program JSON. `layout` is the run's bundle layout (the toolchain's P9
-/// piece): the classification's container and the graph's module scope.
+/// piece): the classification's container and the graph's module scope;
+/// `module_wrappers` is the run's module grammar (P3): the classification.
 pub(crate) fn build_side_parts(
     ingest: &Ingest<'_>,
     program_json: &Value,
     file_name: &str,
     eligibility: Eligibility,
     layout: BundleLayout,
+    module_wrappers: ModuleWrapperGrammar,
 ) -> SideParts {
     let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let tables = SymbolTables::build(ingest.semantic());
-    let factories = crate::modules::classify_bun_modules(
-        ingest.text,
-        ingest.program,
-        ingest.semantic(),
-        wrapper.as_ref().map(|w| w.body_span),
-        &tables,
-    )
-    .map(|c| c.factories)
-    .unwrap_or_default();
+    // The naming stage's third-party skip (spec I10, review R2): the run's
+    // module grammar re-run on this side's text, unchanged in behaviour.
+    let factories = module_wrappers
+        .classify_factories(
+            ingest.text,
+            ingest.program,
+            ingest.semantic(),
+            wrapper.as_ref().map(|w| w.body_span),
+            &tables,
+        )
+        .map(|c| c.factories)
+        .unwrap_or_default();
     let graph = crate::graph::build_unified_graph_with_json(
         ingest.semantic(),
         ingest.program,

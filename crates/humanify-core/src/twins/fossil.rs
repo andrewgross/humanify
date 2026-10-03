@@ -381,18 +381,10 @@ fn find_init_defs(body: &[Value], esm_helpers: &HashSet<String>) -> Vec<RawInit>
     raw
 }
 
-/// Extract the fossil modules of a wrapper body (:298). `hashes` is the
-/// rename-blind statement hash per statement, SAME ORDER AS `body` — the
-/// caller computes them once for everything (the inventory's own).
-pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<FossilExtract, String> {
-    if hashes.len() != body.len() {
-        return Err(format!(
-            "fossil map: {} hashes for {} statements",
-            hashes.len(),
-            body.len()
-        ));
-    }
-    // The helper NAMES: every declarator matching the helper SHAPE.
+/// The lazy-init (`__esm`) helper NAMES among a wrapper body's top-level
+/// statements: every declarator matching the helper SHAPE
+/// ([`is_esm_helper`] — Bun's and esbuild's forms, raw and formatted).
+pub fn lazy_init_helper_names(body: &[Value]) -> HashSet<String> {
     let mut helpers: HashSet<String> = HashSet::new();
     for stmt in body {
         if stmt.get("type").and_then(Value::as_str) != Some("VariableDeclaration") {
@@ -413,7 +405,21 @@ pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<Fossi
             }
         }
     }
+    helpers
+}
 
+/// Extract the fossil modules of a wrapper body (:298). `hashes` is the
+/// rename-blind statement hash per statement, SAME ORDER AS `body` — the
+/// caller computes them once for everything (the inventory's own).
+pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<FossilExtract, String> {
+    if hashes.len() != body.len() {
+        return Err(format!(
+            "fossil map: {} hashes for {} statements",
+            hashes.len(),
+            body.len()
+        ));
+    }
+    let helpers = lazy_init_helper_names(body);
     let mut raw = find_init_defs(body, &helpers);
     raw.sort_by_key(|r| r.index);
     let name_to_module: HashMap<String, usize> = raw

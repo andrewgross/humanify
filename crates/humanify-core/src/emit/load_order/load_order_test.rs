@@ -31,7 +31,10 @@ fn bundle_facts(src: &str) -> Vec<LoadOrderFacts> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, src, "t.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
-    bundle_load_order_facts(&ingest.program.body, src, false)
+    let json = crate::ingest::program_estree_json(ingest.program);
+    let body = json["body"].as_array().expect("body");
+    let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(body);
+    bundle_load_order_facts(&ingest.program.body, &lazy, false)
 }
 
 fn v(xs: &[&str]) -> Vec<String> {
@@ -163,6 +166,21 @@ fn the_lazy_init_helper_is_verified_by_shape_not_by_name() {
     assert_eq!(f[1].writes, v(&["mod"]));
     let src2 = "var qz = makeThing;\nvar mod = qz(() => loadHeavyThing());";
     assert!(bundle_facts(src2)[1].effects);
+}
+
+/// Unminified esbuild's lazy-init helper (`__esm`, real 0.27.2 output,
+/// formatted): the same helper the fossil layout reads, so the load order
+/// admits its calls too (toolchain review R12, spec I27 — one owner).
+const ESBUILD_HELPER: &str = "var __esm = (fn, res) => function __init() {\n  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;\n};";
+
+#[test]
+fn esbuilds_lazy_init_helper_is_admitted_by_the_same_shape() {
+    let src = format!(
+        "{ESBUILD_HELPER}\nvar init_mod = __esm({{ \"src/mod.js\"() {{ loadHeavyThing(); }} }});"
+    );
+    let f = bundle_facts(&src);
+    assert!(!f[1].effects);
+    assert_eq!(f[1].writes, v(&["init_mod"]));
 }
 
 const REGISTRAR: &str = "var defineModuleExports = (targetObject, sourceObject) => {

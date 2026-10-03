@@ -19,6 +19,7 @@ fn call_sites(text: &str) -> Vec<(String, Vec<String>)> {
         "input.js",
         crate::graph::Eligibility::All,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
+        crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
     );
     let view = TextView::build(ingest.semantic());
     let ng = build_naming_graph(ingest.semantic(), &parts.graph, &view);
@@ -263,6 +264,7 @@ impl humanify_model::llm::NameProvider for SuffixProvider {
 fn ledger_config() -> super::NamingConfig {
     super::NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
         tuning: crate::toolchain::BundlerTuning::Default,

@@ -142,6 +142,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     let name_profile = toolchain.name_profile.piece;
     let never_rename = toolchain.never_rename.piece;
     let layout = toolchain.layout.piece;
+    let module_wrappers = toolchain.module_wrappers.piece;
 
     // Stage 3: unpack into the work dir (a default temp dir is removed
     // afterwards; the dump embeds everything the harness needs).
@@ -168,7 +169,10 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         Path::new(&work_dir),
         humanify_core::unpack::AdapterRun {
             webcrack_shim: shim.as_ref(),
-            ..humanify_core::unpack::AdapterRun::new(toolchain.interop.piece)
+            ..humanify_core::unpack::AdapterRun::new(
+                toolchain.interop.piece,
+                toolchain.module_wrappers.piece,
+            )
         },
     )?
     .into_result();
@@ -189,31 +193,33 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     // same index — and the parse-count pin (tests/match_prior_side_cache)
     // holds the amortization in place.
     let mut run = MatchRun::default();
-    let built = humanify_core::prior::with_prior_match_side(&prior, layout, |side| {
-        let ctx = MatchContext {
-            prior: &prior,
-            never_rename,
-            layout,
-            name_profile,
-            interop: toolchain.interop.piece,
-            multi,
-            side,
-        };
-        if multi {
-            // The hoisted prior block — the ONE copy of the prior
-            // inventories the multi-file dump carries, built from the
-            // run's shared prior side (identical rows to every call's
-            // prior side; one build instead of a first-call capture).
-            run.shared_prior = Some(json!({
-                "functions": function_rows(side.graph, &prior),
-                "statements": statement_rows(side.inventory, &prior),
-            }));
-        }
-        for (path, text) in &candidates {
-            run.add_file(&ctx, path, text)?;
-        }
-        Ok(())
-    });
+    let built =
+        humanify_core::prior::with_prior_match_side(&prior, layout, module_wrappers, |side| {
+            let ctx = MatchContext {
+                prior: &prior,
+                never_rename,
+                layout,
+                module_wrappers,
+                name_profile,
+                interop: toolchain.interop.piece,
+                multi,
+                side,
+            };
+            if multi {
+                // The hoisted prior block — the ONE copy of the prior
+                // inventories the multi-file dump carries, built from the
+                // run's shared prior side (identical rows to every call's
+                // prior side; one build instead of a first-call capture).
+                run.shared_prior = Some(json!({
+                    "functions": function_rows(side.graph, &prior),
+                    "statements": statement_rows(side.inventory, &prior),
+                }));
+            }
+            for (path, text) in &candidates {
+                run.add_file(&ctx, path, text)?;
+            }
+            Ok(())
+        });
     built?;
     if owned && !args.keep_work_dir {
         let _ = std::fs::remove_dir_all(&work_dir);
@@ -286,6 +292,7 @@ struct MatchContext<'a, 's> {
     prior: &'a str,
     never_rename: humanify_core::rename::eligibility::NeverRename,
     layout: humanify_core::toolchain::BundleLayout,
+    module_wrappers: humanify_core::toolchain::ModuleWrapperGrammar,
     name_profile: humanify_core::rename::name_profile::NameProfile,
     /// The run's interop helpers (the vendor files' wrapping).
     interop: humanify_core::toolchain::InteropHelpers,
@@ -313,6 +320,7 @@ impl MatchRun {
             prior,
             never_rename,
             layout,
+            module_wrappers,
             name_profile,
             interop,
             multi,
@@ -343,6 +351,7 @@ impl MatchRun {
             &fresh,
             never_rename,
             layout,
+            module_wrappers,
             *side,
             !multi,
             |stage| {

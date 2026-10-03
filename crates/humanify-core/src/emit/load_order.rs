@@ -38,8 +38,6 @@ use oxc_ast::ast::{
 
 use crate::babel_view::unparen;
 
-use super::bun_helpers::identify_bun_lazy_init;
-
 /// What one top-level statement does while the module is loading.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LoadOrderFacts {
@@ -820,18 +818,19 @@ pub fn identify_export_registrar(stmts: &[Statement<'_>]) -> Option<String> {
 }
 
 /// `bundleLoadOrderFacts`: facts for the bundle's statements, admitting the
-/// structurally-verified lazy-init wrapper as pure and the export registrar
-/// as target-writing. `registrar_exemption_disabled` is the
+/// structurally-verified lazy-init helpers as pure (`lazy_init_helpers`:
+/// the run's module grammar's answer,
+/// `toolchain::ModuleWrapperGrammar::lazy_init_helpers`) and the export
+/// registrar as target-writing. `registrar_exemption_disabled` is the
 /// `--disable registrar-exemption` kill switch (the pre-049 behaviour).
 pub fn bundle_load_order_facts(
     stmts: &[Statement<'_>],
-    code: &str,
+    lazy_init_helpers: &std::collections::HashSet<String>,
     registrar_exemption_disabled: bool,
 ) -> Vec<LoadOrderFacts> {
     let mut opts = LoadOrderOptions::default();
-    if let Some(lazy) = identify_bun_lazy_init(code) {
-        opts.pure_call_names.insert(lazy);
-    }
+    opts.pure_call_names
+        .extend(lazy_init_helpers.iter().cloned());
     if !registrar_exemption_disabled && let Some(reg) = identify_export_registrar(stmts) {
         opts.target_writing_call_names.insert(reg);
     }

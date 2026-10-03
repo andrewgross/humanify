@@ -316,3 +316,38 @@ fn the_single_wrapper_layout_names_the_commonjs_parameter_roles_by_position() {
         &["exports", "require", "module", "filename", "dirname"]
     );
 }
+
+/// P3 (toolchain review R11/R2/R7/R12): the module grammar answers which
+/// helper wraps the bundled modules — Bun's tight marker, esbuild's
+/// declared `__commonJS` — and which bindings are lazy-init helpers, in
+/// Bun's formatted form and esbuild's; a look-alike is neither.
+#[test]
+fn the_module_grammar_names_the_module_helper_and_the_lazy_init_helpers() {
+    let grammar = ModuleWrapperGrammar::BunAndEsbuild;
+    let helper = |src: &str| grammar.identify_factory_helper(src).map(|h| h.name);
+    assert_eq!(helper(BUN_HEAD).as_deref(), Some("x"));
+    assert_eq!(helper(ESBUILD).as_deref(), Some("__commonJS"));
+    assert_eq!(helper(PLAIN), None);
+    let lazy = |src: &str| {
+        let allocator = oxc_allocator::Allocator::default();
+        let ingest = crate::ingest::Ingest::parse(&allocator, src, "t.js");
+        let json = crate::ingest::program_estree_json(ingest.program);
+        let mut names: Vec<String> = grammar
+            .lazy_init_helpers(json["body"].as_array().expect("body"))
+            .into_iter()
+            .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        lazy("var Z = (H, q) => () => (H && (q = H(H = 0)), q);"),
+        vec!["Z".to_string()]
+    );
+    assert_eq!(
+        lazy(
+            "var __esm = (fn, res) => function __init() {\n  return fn && (res = (0, fn[Object.keys(fn)[0]])(fn = 0)), res;\n};"
+        ),
+        vec!["__esm".to_string()]
+    );
+    assert!(lazy("var memo = (f, r) => () => r;").is_empty());
+}

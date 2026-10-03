@@ -81,6 +81,7 @@ fn synthetic_pairs_match_the_ts_probe() {
             serde_json::from_value(case["transfers"].clone()).expect("rows");
         let input = PriorMatchInput {
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+            module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             fresh: case["fresh"].as_str().unwrap(),
             prior: case["prior"].as_str().unwrap(),
             never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,

@@ -71,6 +71,9 @@ pub struct NamingConfig {
     /// side's top-level statements are — the match sides, the freezes, the
     /// family permute's module scope.
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's module wrapper grammar (the toolchain's P3 piece): the
+    /// bundled modules each side's graph skips (spec I10).
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
     /// The minifier name profile selected once from detection
     /// (`rename::name_profile::select_name_profile`) — every name-shape
     /// question of the stage is asked under it.
@@ -193,6 +196,7 @@ pub fn run_naming<P: NameProvider>(
         never_rename: config.never_rename,
         tuning: config.tuning,
         layout: config.layout,
+        module_wrappers: config.module_wrappers,
         name_profile: config.name_profile,
         params: &config.params,
         naming_floor: config.naming_floor,
@@ -213,6 +217,7 @@ pub fn run_naming<P: NameProvider>(
                 prior,
                 never_rename: opts.never_rename,
                 layout: config.layout,
+                module_wrappers: config.module_wrappers,
                 fast: config.fast.on(),
                 same_program_check: true,
             },
