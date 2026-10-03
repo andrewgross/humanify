@@ -1,23 +1,29 @@
 {
   "provenance": {
     "provisional": false,
-    "sources": ["measured from 2 same-commit repeats"],
-    "commit": "db1bbb6",
-    "labels": ["exp076-head-a", "exp076-head-b"]
+    "sources": ["measured from 3 same-commit repeats"],
+    "commit": "0f338ffa",
+    "labels": [
+      "ref-scratch-0f338ffa-r1",
+      "ref-scratch-0f338ffa-r2",
+      "ref-scratch-0f338ffa-r3"
+    ]
   },
   "bands": {
-    "clean": 2,
-    "noise": 2,
+    "clean": 17,
+    "noise": 17,
     "novel": 0,
-    "noiseLn": 514,
+    "noiseLn": 1376,
     "realLn": 0,
-    "reloc": 1,
+    "reloc": 35,
     "relocSt": 0,
-    "newName": 15,
-    "mints": 11,
-    "treeLn": 14,
-    "reorderLn": 2,
-    "vendorLn": 51,
-    "vendorReal": 852
+    "newName": 13,
+    "mints": 33,
+    "treeLn": 16,
+    "cleanLn": 16,
+    "cleanReal": 74,
+    "reorderLn": 0,
+    "vendorLn": 67,
+    "vendorReal": 20
   }
 }
