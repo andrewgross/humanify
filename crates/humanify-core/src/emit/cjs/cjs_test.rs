@@ -43,7 +43,12 @@ fn replay(v: &Value) -> Result<(), String> {
     let wrapper = find_wrapper_function(ingest.program, ingest.semantic()).expect("wrapper");
     let view = wrapper_view(ingest.semantic(), wrapper.span).expect("view");
     let scopes = BabelScopes::build(ingest.semantic());
-    let facts = bundle_load_order_facts(&view.body.statements, code, false);
+    let input = crate::place::input::split_input(
+        code,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )?;
+    let lazy = crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.lazy_init_helpers(&input.body);
+    let facts = bundle_load_order_facts(&view.body.statements, &lazy, false);
     let names = vec![None; order.len()];
     let got = emit_runnable_cjs(&RunnableInput {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,

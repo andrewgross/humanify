@@ -20,13 +20,11 @@
 //!   (exp037 Lever B, the exp050 (hash, name) key);
 //! - [`review`] — the byte-exact review tree + the fresh ledger's layout;
 //! - [`cjs`] — the runnable live-binding CommonJS module graph;
-//! - [`bun_helpers`] — the Bun lazy-init helper's structural detection;
 //! - [`paths`] / [`substitutions`] — the relative-import and positional
 //!   text-splice owners the post-split passes share;
 //! - [`emit_dump`] — the emit section of the `--dump-artifacts` catalog.
 
 pub mod align;
-pub mod bun_helpers;
 pub mod cjs;
 pub mod emit_dump;
 pub mod load_order;

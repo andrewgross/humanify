@@ -46,6 +46,8 @@
 //! stage always has. Every choice is recorded with its [`Reason`]
 //! ([`Toolchain::record`], the `--stats-json` `toolchain` block).
 
+use std::collections::HashSet;
+
 use humanify_model::detection::{BundlerDetectionResult, BundlerType, DetectionTier, MinifierType};
 
 use crate::libdetect::LibraryDetector;
@@ -156,6 +158,22 @@ impl ModuleWrapperGrammar {
     ) -> Option<crate::modules::FactoryArg<'a>> {
         match self {
             ModuleWrapperGrammar::BunAndEsbuild => crate::modules::factory_arg_function(arg),
+        }
+    }
+
+    /// The lazy-init (ES-module init) helpers declared among the
+    /// container's top-level statements (their ESTree JSON): a call to one
+    /// does nothing until the module is first used. ONE recogniser for the
+    /// split's load order (spec P12, I27) and the fossil layout (P11) —
+    /// toolchain review R12: Bun's and esbuild's forms, raw and formatted
+    /// (`twins::fossil::lazy_init_helper_names`). The load order used to
+    /// read Bun's TEXT `x && (y = x(x = 0))` on its own; on the real Bun
+    /// pair both recognisers named the same binding.
+    pub fn lazy_init_helpers(self, body: &[serde_json::Value]) -> HashSet<String> {
+        match self {
+            ModuleWrapperGrammar::BunAndEsbuild => {
+                crate::twins::fossil::lazy_init_helper_names(body)
+            }
         }
     }
 }

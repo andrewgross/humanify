@@ -270,7 +270,9 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         .iter()
         .map(|s| statement_align_name(declared_names(s)))
         .collect();
-    let facts = bundle_load_order_facts(statements, shipped, options.registrar_exemption_disabled);
+    let lazy_init = options.module_wrappers.lazy_init_helpers(&input.body);
+    let facts =
+        bundle_load_order_facts(statements, &lazy_init, options.registrar_exemption_disabled);
     let review = review_split(
         shipped,
         &input.spans,
