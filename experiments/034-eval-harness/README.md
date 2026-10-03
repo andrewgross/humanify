@@ -12,7 +12,9 @@ The goal it serves: drive cross-version diff **noise** toward zero while leaving
 ## What it measures (per version pair `v-1 → v`)
 
 Runs the current pipeline on `input(v)` with `--prior-version humanified(v-1)`,
-then scores two deterministic signals plus the churn:
+where `humanified(v-1)` is by default rebuilt from SCRATCH by the current
+pipeline (see "The base" below), then scores two deterministic signals plus
+the churn:
 
 > **Every KPI is defined once, in `kpis.ts`** — where it comes from, which way
 > is good, and what misleads about it. `analyze.ts` produces a `Scorecard` typed
@@ -234,23 +236,44 @@ committed reference, or the next diff will carry churn nobody intended.
 A reference is only a like-for-like control when it was produced by a pipeline
 whose formatting matches — see the next section.
 
-### If a change alters formatting (not just names)
+### The base: scratch (default), seeded, or archive
 
-The eval diffs a freshly-humanified `v` against the archive `v-1`. That archive
-prior was produced by an earlier pipeline, so it is a valid base **as long as
-formatting is unchanged** — the rename-invariant `statementHash` cancels naming
-differences, and real formatting is identical, so only names/real-change show up.
-If a change alters **formatting** (whitespace, statement shape, generator output),
-the archive `v-1` is no longer like-for-like and formatting diffs swamp the
-signal. Regenerate the prior first:
+The eval diffs a freshly-humanified `v` against a base `v-1`. **How that base
+is produced is the run's BASE MODE** — one per run, recorded in the label's
+`pipeline.json` (`baseMode`) and in every pair's run manifest
+(`inputs.baseMode`, the mode the pair ACTUALLY got: a rebuild that fails falls
+back to the archive and is recorded as `archive`):
 
-```bash
-REBASE_PRIOR=1 experiments/034-eval-harness/run.sh <label>
-```
+| mode        | flag                  | what v-1 is                                                                                                                                                                                                               |
+| ----------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **scratch** | (default, 2026-10-03) | v-1 rebuilt by the current pipeline with **no prior**. Both sides of the pair are pure current-pipeline output. A full cold run per base — heavier than the seeded rebuild, which inherited most names by exact match.    |
+| **seeded**  | `--seeded-base`       | v-1 rebuilt with the ARCHIVE tree as `--prior-version`, so it inherits the archive's (July-era TS) names by exact match — junk half-renames like `do7Function`, raw minifier letters. The only rebuild before 2026-10-03. |
+| **archive** | `--archive-prior`     | no rebuild; the archive tree itself is the base. Formatting differences swamp the signal and KPIs read ~3.7x worse; each pair's manifest warns.                                                                           |
 
-This re-humanifies each base version with the current pipeline (inheriting its own
-archive names) before scoring, so the pair's diff again reflects only naming/real
-change. It doubles the runs per pair; it is expected and fine when formatting moved.
+Why scratch is the default (Andrew, 2026-10-03): the seeded rebuild was
+described as a "fresh base" and was not one. It passed the archive output as
+`--prior-version`, so the base carried the archive's names wherever a function
+exact-matched, and every comparison measured the current pipeline against a
+base partly named by a pipeline deleted at the cutover.
+
+**Every reference recorded before 2026-10-03 was scored on a SEEDED base** —
+`main-2026-09-18`, `rust-relaxed-default-843826be`, `control-843826be-8gpu`,
+`candidate-8af0574f-8gpu` and everything older that rebuilt its base. They are
+comparable only to seeded runs. To compare against one of them, score the
+candidate with `--seeded-base` (its launch lines are pinned byte-for-byte to
+the old protocol by `run-launch.seeded-base.golden.txt`), or score a scratch
+control at the base commit. A manifest from before the field has no
+`baseMode`; `baseModeOf` (run-manifest.ts) reads a rebased prior there as
+seeded — which it was, because run.sh had no other rebuild.
+
+**Mixed modes are refused, like mixed commits.** The leaderboard prints each
+label's base (`base: a=scratch · b=seeded`) and REFUSES (exit 2) named labels
+whose known modes differ, or a label whose own pairs are mixed, unless
+`--force-mixed` — then it prints `!! MIXED BASE MODES` under the table. A label
+with no manifest prints `UNKNOWN` and is not refused (absent is unverified,
+not agreement). The no-argument listing (every label) only warns. `eval score`
+refuses to add cards on one base mode to a label holding another
+(`--force-mixed` overrides), and `summarize` leads its banner with `BASE:`.
 
 ## As a pre-merge gate
 
@@ -309,9 +332,12 @@ npm run eval -- score <label> --bin <workspace>/target/release/humanify
 - **All three launch sites run the binary:** the rebase of each prior, the
   scored leg (run-pipeline.ts, via the run config's `command`), and the self-hop
   (cold and warm). `run-launch.test.ts` runs run.sh end to end with a recording
-  `npx`, checks the launches against a golden captured from the pre-cutover
-  run.sh under `--bin` (the command lines `rust-5b-c3b272f-a/-b` were scored
-  by), and checks every guard below.
+  `npx`, checks the launches against two goldens — `run-launch.golden.txt`
+  (the default, scratch bases: the rebase lines carry no `--prior-version`)
+  and `run-launch.seeded-base.golden.txt` (`--seeded-base`: byte-identical to
+  the pre-2026-10-03 golden, the command lines `rust-5b-c3b272f-a/-b` and every
+  later reference were scored by, plus the recorded `baseMode`) — and checks
+  every guard below.
 - **Provenance.** run.sh BUILDS the binary itself. It runs
   `cargo build --release --locked -p humanify-cli` in the cargo workspace
   that owns the path (`experiments/lib/pipeline-bin.ts`), so the label's commit

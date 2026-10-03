@@ -30,6 +30,23 @@ import { sameCommit } from "./pipeline-bin.js";
 /** Which base the run was scored against. */
 export type PriorKind = "rebased" | "archive" | "unknown";
 
+/**
+ * HOW the base (v-1) was produced — `run.sh`'s base-mode switch, 2026-10-03.
+ *
+ * - `scratch` (the default): v-1 rebuilt by the current pipeline with NO
+ *   prior, so both sides of the pair are pure current-pipeline output.
+ * - `seeded` (`--seeded-base`): v-1 rebuilt with the ARCHIVE tree as
+ *   `--prior-version`, so the base inherits the archive's (July-era TS)
+ *   names by exact match — half-renames and raw minifier letters included.
+ *   This was the only rebuild before 2026-10-03: every reference scored
+ *   before then is seeded.
+ * - `archive` (`--archive-prior`): no rebuild; the archive tree IS the base.
+ *
+ * Two labels on different modes measure different bases; the leaderboard
+ * refuses to compare them without `--force-mixed`.
+ */
+export type BaseMode = "scratch" | "seeded" | "archive";
+
 export interface RunManifest {
   /** "2.1.85->2.1.86" */
   pair: string;
@@ -49,6 +66,10 @@ export interface RunManifest {
     input: string;
     prior: string;
     priorKind: PriorKind;
+    /** The base mode this pair was ACTUALLY scored on (a rebuild that fell
+     *  back to the archive records `archive`). Absent on every run before
+     *  2026-10-03 — read it through `baseModeOf`, which infers those. */
+    baseMode?: BaseMode;
   };
   config: {
     endpoint: string;
@@ -123,6 +144,82 @@ export function priorKindOf(priorPath: string): PriorKind {
   if (!priorPath) return "unknown";
   if (/-rebased(\/|$)/.test(priorPath)) return "rebased";
   return "archive";
+}
+
+/**
+ * The base mode one recorded run was scored on.
+ *
+ * A manifest from before 2026-10-03 has no `baseMode`, and that is not a
+ * gap to guess across: run.sh then had exactly one rebuild, seeded by the
+ * archive (`--prior-version <archive>`), so a rebased prior WAS seeded and
+ * an archive prior was the archive mode. Only a run with no prior at all is
+ * `unknown`.
+ */
+export function baseModeOf(m: RunManifest): BaseMode | "unknown" {
+  if (m.inputs.baseMode) return m.inputs.baseMode;
+  const kind = m.inputs.priorKind ?? priorKindOf(m.inputs.prior);
+  if (kind === "rebased") return "seeded";
+  if (kind === "archive") return "archive";
+  return "unknown";
+}
+
+/** Every base mode a label's pairs were scored on, sorted and de-duplicated.
+ *  Empty for a label with no run manifests — UNKNOWN, never "the same". */
+export function labelBaseModes(resultsDir: string): string[] {
+  return [...new Set(loadManifests(resultsDir).map(baseModeOf))].sort();
+}
+
+/**
+ * May these labels be compared? Refused when their KNOWN base modes differ
+ * (or one label is itself mixed) — a delta between a scratch and a seeded
+ * label reports the base change as the candidate's effect. `force` turns the
+ * refusal into a loud line, the `--force-mixed` precedent of `eval score`.
+ * A label with no recorded mode is said out loud and never refused: refusing
+ * it would refuse every pre-manifest label, and the leaderboard's job there
+ * is to say "unverified", not to guess.
+ *
+ * `lines` always carries one `base:` line naming each label's mode, so the
+ * mode is on screen whether or not anything is wrong.
+ */
+export function baseModeComparison(
+  labels: ReadonlyArray<{ label: string; modes: readonly string[] }>,
+  force: boolean
+): { refusal: string | null; lines: string[] } {
+  const shown = (modes: readonly string[]) =>
+    modes.length === 0 ? "UNKNOWN" : modes.join("+");
+  const lines = [
+    `  base: ${labels.map((l) => `${l.label}=${shown(l.modes)}`).join(" · ")}`
+  ];
+  const unknown = labels.filter(
+    (l) => l.modes.length === 0 || l.modes.includes("unknown")
+  );
+  if (unknown.length > 0) {
+    lines.push(
+      `  base: mode UNKNOWN for ${unknown.map((l) => l.label).join(", ")} ` +
+        "(no run manifest records it) — comparability unverified, not confirmed."
+    );
+  }
+  const known = new Set(
+    labels.flatMap((l) => l.modes.filter((m) => m !== "unknown"))
+  );
+  if (known.size <= 1) return { refusal: null, lines };
+  const what =
+    `these labels were scored on ${known.size} base modes ` +
+    `(${labels.map((l) => `${l.label}=${shown(l.modes)}`).join(", ")}). ` +
+    "A scratch base, a seeded base and the archive are DIFFERENT bases: every " +
+    "delta between them includes the base change, not just the candidate's.";
+  if (!force) {
+    return {
+      refusal:
+        `refusing to compare: ${what}\n` +
+        "Score the labels on one base mode (`eval score --seeded-base` " +
+        "reproduces the recorded references' protocol), or pass " +
+        "--force-mixed if mixing is deliberate.",
+      lines
+    };
+  }
+  lines.push(`  !! MIXED BASE MODES — shown anyway: ${what}`);
+  return { refusal: null, lines };
 }
 
 /**
@@ -289,6 +386,18 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
     say: () =>
       "scored against the ARCHIVE prior, not a rebased one. Expect KPIs to " +
       "read far worse than a like-for-like base would give."
+  },
+  {
+    // 2026-10-03: the seeded rebuild was the eval's default for its whole
+    // life, and its base inherited the July-era archive's names by exact
+    // match (do7Function-style half-renames, raw minifier letters) — the
+    // "fresh" base was not fresh. Still available for comparability.
+    name: "seeded-base",
+    fires: (m) => baseModeOf(m) === "seeded",
+    say: () =>
+      "base SEEDED by the archive (--seeded-base): v-1 inherits the archive's " +
+      "names, so this pair is comparable only to other seeded runs — every " +
+      "reference scored before 2026-10-03 — not to the scratch default."
   },
   {
     name: "kill-switch-active",

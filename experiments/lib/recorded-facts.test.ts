@@ -159,7 +159,14 @@ function fullManifest(): RunManifest {
     startedAt: "2026-08-15T00:00:00Z",
     wallSeconds: 1,
     provenance: { commit: "abc1234", dirty: true, node: "v24", bun: "1.3" },
-    inputs: { input: "/in.js", prior: "/prior.js", priorKind: "archive" },
+    // baseMode "seeded" so the seeded-base check fires and its reads count
+    // (an archive priorKind beside it is inconsistent, and harmless here).
+    inputs: {
+      input: "/in.js",
+      prior: "/prior.js",
+      priorKind: "archive",
+      baseMode: "seeded"
+    },
     config: {
       endpoint: "http://x",
       model: "m",

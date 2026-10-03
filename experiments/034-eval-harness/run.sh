@@ -7,9 +7,21 @@
 #
 # Flags (parsed upfront; unknown flags are fatal — no ambient env reads):
 #   --workdir <dir>        work root (default /tmp/eval-work)
-#   --archive-prior        score against the ARCHIVE v-1 tree instead of
-#                          re-humanifying it first (default: fresh base;
-#                          archive mode reads ~3.7x worse and says so)
+#   BASE MODE — how each pair's base (v-1) is produced; one per run, recorded
+#   in pipeline.json and every run manifest (inputs.baseMode):
+#     (default)            SCRATCH base: rebuild v-1 with the current pipeline
+#                          and NO prior, so both sides of the pair are pure
+#                          current-pipeline output. A full cold run per base.
+#   --seeded-base          SEEDED base: rebuild v-1 with the ARCHIVE tree as
+#                          --prior-version, so the base inherits the archive's
+#                          (July-era TS) names by exact match. The protocol
+#                          of every reference scored before 2026-10-03
+#                          (main-2026-09-18, rust-relaxed-default-843826be,
+#                          control-843826be-8gpu, candidate-8af0574f-8gpu) —
+#                          comparable only to other seeded runs.
+#   --archive-prior        no rebuild: score against the ARCHIVE v-1 tree
+#                          itself (reads ~3.7x worse and says so per pair).
+#                          Exclusive with --seeded-base.
 #   --pairs <a,b>          restrict to named pairs ("215->216" or full form)
 #   --heap-mb <n>          recorded heap (default 65536) — INERT for the
 #                          binary (not a Node process); kept because every
@@ -60,6 +72,7 @@ CFG="$HERE/pairs.json"
 MODEL=""
 WORK="/tmp/eval-work"
 ARCHIVE_PRIOR=0
+SEEDED_BASE=0
 PAIRS_FILTER=""
 HEAP_MB=65536
 ENDPOINT_OVERRIDE=""
@@ -77,6 +90,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --workdir)        WORK="$2"; shift ;;
     --archive-prior)  ARCHIVE_PRIOR=1 ;;
+    --seeded-base)    SEEDED_BASE=1 ;;
     --pairs)          PAIRS_FILTER="$2"; shift ;;
     --heap-mb)        HEAP_MB="$2"; shift ;;
     --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
@@ -98,6 +112,14 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 [[ -n "$MODEL" ]] || { echo "usage: run.sh <model-label> [flags]" >&2; exit 2; }
+# The base mode (header): scratch | seeded | archive. One per run.
+if [[ "$SEEDED_BASE" == "1" && "$ARCHIVE_PRIOR" == "1" ]]; then
+  echo "run.sh: --seeded-base and --archive-prior are exclusive (one base mode per run)" >&2
+  exit 2
+fi
+BASE_MODE="scratch"
+[[ "$SEEDED_BASE" == "1" ]] && BASE_MODE="seeded"
+[[ "$ARCHIVE_PRIOR" == "1" ]] && BASE_MODE="archive"
 # 14336 was sized when this harness ran through an LLM cache. Cold-by-default
 # (rule 10) keeps far more naming state live at once, and 2.1.215->216 — the
 # largest base — OOM'd at 14GB with 219GB free on the box. Sized for the
@@ -141,11 +163,19 @@ if [[ ${#PIPELINE_ARGS[@]} -gt 0 ]]; then
   echo "PIPELINE ARGS (every launch): ${PIPELINE_ARGS[*]}"
 fi
 
+case "$BASE_MODE" in
+  scratch) echo "BASE: scratch — each v-1 rebuilt by this pipeline with NO prior (a full cold run per base)" ;;
+  seeded)  echo "BASE: seeded (--seeded-base) — each v-1 rebuilt with the ARCHIVE as --prior-version; it inherits the archive's names. Comparable only to seeded labels." ;;
+  archive) echo "BASE: archive (--archive-prior) — no rebuild; scored against the archive tree (~3.7x worse)" ;;
+esac
+
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
 jq -cn --argjson bin "$BIN_JSON" --argjson extra "$PIPELINE_ARGS_JSON" \
+  --arg baseMode "$BASE_MODE" \
   '{pipeline:({kind:"rust-bin", bin:$bin}
-    + (if $extra == null then {} else {pipelineArgs:$extra} end))}' > "$RESULTS/pipeline.json"
+    + (if $extra == null then {} else {pipelineArgs:$extra} end)),
+    baseMode:$baseMode}' > "$RESULTS/pipeline.json"
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
@@ -215,31 +245,46 @@ for i in $(seq 0 $((npairs - 1))); do
   LAST_TO="$TO"
   LAST_INPUT="$INPUT"
 
-  # Fresh base (the DEFAULT): re-humanify v-1 with the CURRENT pipeline
-  # (inheriting its own archive names) so the pair's diff reflects naming/real
-  # change only. Costs one extra run per pair. --archive-prior skips this and
-  # scores against the archive tree — expect KPIs to read ~3.7x worse, and the
-  # per-pair warning says so.
-  if [[ "$ARCHIVE_PRIOR" != "1" ]]; then
+  # The base (header, BASE MODE). scratch (the DEFAULT) rebuilds v-1 with the
+  # CURRENT pipeline and NO prior, so both sides of the pair are pure
+  # current-pipeline output — a full cold run per base. seeded rebuilds it
+  # with the ARCHIVE as --prior-version (it inherits the archive's names by
+  # exact match: the protocol of every reference before 2026-10-03). archive
+  # skips the rebuild and scores against the archive tree — expect KPIs to
+  # read ~3.7x worse, and the per-pair warning says so. PAIR_BASE_MODE is what
+  # this pair ACTUALLY got: a rebuild that fails falls back to the archive
+  # and is recorded as such.
+  PAIR_BASE_MODE="archive"
+  if [[ "$BASE_MODE" != "archive" ]]; then
     INPUT_FROM="$INPUTS/claude-code-$FROM/binary-decompiled/src/entrypoints/index.js"
     if [[ -f "$INPUT_FROM" ]]; then
       REBASE="$WORK/$MODEL/${FROM}-rebased"
-      echo "=== $PAIR: rebasing prior (re-humanify $FROM, current pipeline) ==="
+      REBASE_SEED_ARGS=()
+      if [[ "$BASE_MODE" == "seeded" ]]; then
+        REBASE_SEED_ARGS=(--prior-version "$PRIOR")
+        echo "=== $PAIR: rebasing prior (re-humanify $FROM, current pipeline, SEEDED by the archive) ==="
+      else
+        echo "=== $PAIR: rebasing prior (re-humanify $FROM from SCRATCH, current pipeline, no prior) ==="
+      fi
       rm -rf "$REBASE"
       NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" "${PIPE_CMD[@]}" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
-        --prior-version "$PRIOR" -vv --log-file "$RESULTS/${FROM}-rebase.log" \
+        ${REBASE_SEED_ARGS[@]+"${REBASE_SEED_ARGS[@]}"} \
+        -vv --log-file "$RESULTS/${FROM}-rebase.log" \
         ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
         PRIOR="$REBASE/.humanify/humanified.js"
         PRIOR_LEDGER="$REBASE/.humanify/split-ledger.json"
-        echo "  prior rebased -> $PRIOR"
+        PAIR_BASE_MODE="$BASE_MODE"
+        echo "  prior rebased ($BASE_MODE) -> $PRIOR"
       else
-        echo "  rebase FAILED; falling back to archive prior"
+        echo "  rebase FAILED; falling back to archive prior (recorded as baseMode archive)"
       fi
+    else
+      echo "  no input for $FROM; scoring against the archive prior (recorded as baseMode archive)"
     fi
   fi
 
@@ -267,6 +312,7 @@ for i in $(seq 0 $((npairs - 1))); do
   jq -n \
     --arg pair "$PAIR" --arg version "$TO" --arg runLabel "$MODEL" \
     --arg resultsDir "$RESULTS" --arg input "$INPUT" --arg prior "$PRIOR" \
+    --arg baseMode "$PAIR_BASE_MODE" \
     --arg outputDir "$OUT" --arg repo "$REPO" \
     --arg stdoutPath "$RESULTS/$TO.stdout" --arg endpoint "$ENDPOINT" \
     --arg model "$MODELNAME" --arg effort "$EFFORT" \
@@ -276,7 +322,8 @@ for i in $(seq 0 $((npairs - 1))); do
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
       "$OUT/.humanify/split-ledger.json" "$STATS" | jq -R . | jq -s .)" \
     '{"pair":$pair,"version":$version,"label":$runLabel,"resultsDir":$resultsDir,
-      "input":$input,"prior":$prior,"outputDir":$outputDir,"repo":$repo,
+      "input":$input,"prior":$prior,"baseMode":$baseMode,
+      "outputDir":$outputDir,"repo":$repo,
       "args":$args,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
       "model":$model,"reasoningEffort":$effort,"concurrency":$concurrency,
       "heapMb":$heapMb,"artifacts":$artifacts}

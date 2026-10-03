@@ -34,6 +34,7 @@ import {
   sha256File
 } from "./pipeline-bin.js";
 import {
+  type BaseMode,
   type RunManifest,
   manifestWarnings,
   type ProcSample,
@@ -62,6 +63,9 @@ interface RunConfig {
   resultsDir: string;
   input: string;
   prior: string;
+  /** How the prior was produced (run.sh's base-mode switch), recorded into
+   *  the manifest's `inputs.baseMode`. */
+  baseMode?: BaseMode;
   outputDir: string;
   repo: string;
   /** The pipeline's flags, after the command head (the binary). */
@@ -283,7 +287,8 @@ async function main(): Promise<void> {
     inputs: {
       input: cfg.input,
       prior: cfg.prior,
-      priorKind: priorKindOf(cfg.prior)
+      priorKind: priorKindOf(cfg.prior),
+      ...(cfg.baseMode ? { baseMode: cfg.baseMode } : {})
     },
     config: {
       endpoint: cfg.endpoint,

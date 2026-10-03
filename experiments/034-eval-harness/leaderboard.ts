@@ -21,6 +21,7 @@ import {
   type SummaryTotals
 } from "./kpis.js";
 import { bandFor, loadNoiseBands } from "./noise-bands.js";
+import { baseModeComparison, labelBaseModes } from "../lib/run-manifest.js";
 
 interface Summary {
   model: string;
@@ -31,7 +32,20 @@ interface Summary {
     models: string[];
     endpoints: string[];
     reasoningEfforts: string[];
+    /** Absent on summaries written before 2026-10-03: re-derived from the
+     *  label's run manifests (`labelBaseModes`). */
+    baseModes?: string[];
   };
+}
+
+/**
+ * Each label's base modes — the summary's record, else the manifests'
+ * (where a pre-field rebased prior reads as seeded, which it was).
+ */
+function baseModesOf(resultsDir: string, s: Summary, label: string): string[] {
+  return (
+    s.provenance?.baseModes ?? labelBaseModes(path.join(resultsDir, label))
+  );
 }
 
 /**
@@ -167,7 +181,22 @@ function modelMismatchWarning(summaries: Summary[]): string[] {
 
 function main() {
   const resultsDir = path.join(import.meta.dirname, "results");
-  let models = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const forceMixed = argv.includes("--force-mixed");
+  const unknownFlag = argv.find(
+    (a) => a.startsWith("--") && a !== "--force-mixed"
+  );
+  if (unknownFlag) {
+    console.error(
+      `leaderboard: unknown flag ${unknownFlag} — valid: --force-mixed`
+    );
+    process.exit(2);
+  }
+  let models = argv.filter((a) => !a.startsWith("--"));
+  // Labels NAMED on the command line are a comparison, and a comparison
+  // across base modes is refused (baseModeComparison). The no-argument
+  // listing is a browse of every label ever scored, so there it only warns.
+  const browsing = models.length === 0;
   if (models.length === 0) {
     models = fs.existsSync(resultsDir)
       ? fs
@@ -187,6 +216,18 @@ function main() {
       fs.readFileSync(path.join(resultsDir, m, "summary.json"), "utf8")
     )
   );
+  // BEFORE the table: a refused comparison prints no numbers to misread.
+  const bases = baseModeComparison(
+    summaries.map((s, i) => ({
+      label: models[i],
+      modes: baseModesOf(resultsDir, s, models[i])
+    })),
+    forceMixed || browsing
+  );
+  if (bases.refusal) {
+    console.error(`leaderboard: ${bases.refusal}`);
+    process.exit(2);
+  }
   const base = summaries[0].totals;
   const cols = kpisNamed(COLUMNS);
 
@@ -241,6 +282,7 @@ function main() {
     console.log(line);
   }
   for (const line of modelMismatchWarning(summaries)) console.log(line);
+  for (const line of bases.lines) console.log(line);
   if (bands?.provenance.provisional) {
     console.log(
       "  bands: PROVISIONAL (seeded from recorded measurements) — produce a " +

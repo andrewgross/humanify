@@ -217,6 +217,8 @@ cache or on another version.
 ```bash
 experiments/034-eval-harness/run.sh <label>   # score current tree on 4 pairs (~1hr)
 npx tsx experiments/034-eval-harness/leaderboard.ts archive-shipped session-2026-08-05 <label>
+#   ^ both references are SEEDED-base: <label> must be scored with --seeded-base,
+#     or the leaderboard refuses the mix (--force-mixed to show it anyway)
 ```
 
 Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
@@ -235,8 +237,9 @@ UNKNOWN, not passing.
 
 - **`main-2026-09-18` — the current valid cold reference**, scored at
   `1813577` (main; exp088 skeleton-vote merged, model back on gpt-oss-20b
-  :8000). Four pairs, all exit 0, `cache +0` on every pair, fresh-generated
-  bases. Hold columns byte-equal to ALL THREE prior references (novel 4,188
+  :8000). Four pairs, all exit 0, `cache +0` on every pair, SEEDED bases
+  (rebuilt with the archive as prior — compare only against `--seeded-base`
+  runs; there is no scratch-base reference yet). Hold columns byte-equal to ALL THREE prior references (novel 4,188
   / realLn 416,377). 215→216 tree churn ex-build 24,768 (was 24,947),
   nameOnlyLines 4,544 (was 4,734 — the exp088 merge). **Boot verdicts were
   RE-RECORDED after the run:** the harness's own boot check failed on all
@@ -247,7 +250,7 @@ UNKNOWN, not passing.
   both halves with it; each `*-boot.json` carries a `rerecorded` note.
 - `main-2026-08-20` — the previous reference, superseded by the above,
   scored at the merge commit `77c4a59` (main; exp082-087 arc). Four pairs,
-  all exit 0, boot gates OK (both halves), fresh-generated bases. Hold
+  all exit 0, boot gates OK (both halves), seeded bases. Hold
   columns byte-equal to BOTH prior references. 215→216 tree churn ex-build
   24,947 (walk-measured 24,629 on the same commit; the eval's regenerated
   base differs slightly), down ~1,100 on the week from the exp082/085/086
@@ -269,12 +272,29 @@ UNKNOWN, not passing.
 A label that says "current main" ages silently. Re-score and re-point it rather
 than trusting the name.
 
-The eval diffs a freshly-humanified `v` against the prior `v-1`. If a change
-alters **formatting** (not just names) so the archive `v-1` is no longer a
-like-for-like base — formatting diffs would swamp the signal — regenerate the
-prior first — which is now the DEFAULT: `npm run eval -- score <label>`
-re-humanifies each base version with the current pipeline before scoring.
-`--archive-prior` is the explicit opt-out and warns per pair. All harness
+The eval diffs a freshly-humanified `v` against a base `v-1`, and **how that
+base is built is the run's BASE MODE** (recorded in `pipeline.json` and every
+run manifest; `summarize` prints it first):
+
+- **scratch — the DEFAULT since 2026-10-03.** `npm run eval -- score <label>`
+  rebuilds each `v-1` with the current pipeline and **no prior**, so both
+  sides of every comparison are pure current-pipeline output. A full cold run
+  per base, heavier than the old rebuild.
+- **seeded — `--seeded-base`.** Rebuilds `v-1` with the ARCHIVE (July-era TS
+  output) as `--prior-version`, so the base INHERITS the archive's names by
+  exact match — junk half-renames, raw minifier letters. This was the old
+  default, and it was called a "fresh base" when it was not one. Kept,
+  byte-for-byte (`run-launch.seeded-base.golden.txt`), for comparability.
+- **archive — `--archive-prior`.** No rebuild; reads ~3.7x worse, warns per pair.
+
+**Every recorded reference was scored on a SEEDED base** — `main-2026-09-18`,
+`rust-relaxed-default-843826be`, `control-843826be-8gpu`,
+`candidate-8af0574f-8gpu` and every label before them that rebuilt its base —
+so each is comparable ONLY to seeded runs. The leaderboard prints each label's
+base and REFUSES labels on different modes unless `--force-mixed` (then a loud
+`MIXED BASE MODES` line); `eval score` refuses to add one mode's cards to a
+label holding another. To compare against those references, score with
+`--seeded-base`, or score a scratch control at the base commit. All harness
 configuration is flags parsed upfront (see `npm run eval` with no args);
 ambient env vars are gone and a guard test keeps them gone.
 
