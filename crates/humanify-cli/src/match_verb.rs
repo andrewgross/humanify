@@ -168,7 +168,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         Path::new(&work_dir),
         humanify_core::unpack::AdapterRun {
             webcrack_shim: shim.as_ref(),
-            ..Default::default()
+            ..humanify_core::unpack::AdapterRun::new(toolchain.interop.piece)
         },
     )?
     .into_result();
@@ -195,6 +195,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
             never_rename,
             layout,
             name_profile,
+            interop: toolchain.interop.piece,
             multi,
             side,
         };
@@ -286,6 +287,8 @@ struct MatchContext<'a, 's> {
     never_rename: humanify_core::rename::eligibility::NeverRename,
     layout: humanify_core::toolchain::BundleLayout,
     name_profile: humanify_core::rename::name_profile::NameProfile,
+    /// The run's interop helpers (the vendor files' wrapping).
+    interop: humanify_core::toolchain::InteropHelpers,
     multi: bool,
     side: &'a humanify_core::prior::StageSide<'a, 's>,
 }
@@ -311,11 +314,12 @@ impl MatchRun {
             never_rename,
             layout,
             name_profile,
+            interop,
             multi,
             side,
         } = *ctx;
         let fresh = if path.starts_with("vendor/") {
-            match wrapped_factory_text(text, path) {
+            match wrapped_factory_text(text, path, interop) {
                 Ok(wrapped) => {
                     self.wrapped.push(path.to_string());
                     wrapped
@@ -460,12 +464,17 @@ fn dump_meta(
 /// helpers bound from the shim), then formatted. The dump then describes
 /// the same matching surface a humanified prior tree carries for its
 /// vendor modules.
-fn wrapped_factory_text(raw: &str, from_file: &str) -> Result<String, String> {
+fn wrapped_factory_text(
+    raw: &str,
+    from_file: &str,
+    interop: humanify_core::toolchain::InteropHelpers,
+) -> Result<String, String> {
     let (wrapped, _) = humanify_core::finish::relink::wrap_extracted_factory(
         humanify_model::js::trim(raw),
         from_file,
         &std::collections::BTreeMap::new(),
         &[],
+        interop,
     )?;
     Ok(humanify_core::format::format_file(
         &wrapped,

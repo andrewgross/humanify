@@ -16,7 +16,9 @@
 //! - Bun's `__toESM` / `__toCommonJS` are pure runtime helpers, recognised
 //!   by SHAPE. A vendor body's reference is rewritten to the canonical name
 //!   and the finish binds it from `.humanify/__bun-runtime.js`, which carries
-//!   Bun's implementation (`finish::relink`).
+//!   Bun's implementation (`finish::relink`). The shapes, the names and the
+//!   file are the run's `toolchain::InteropHelpers` piece (P8); this module
+//!   asks it, and holds Bun's implementation of the shape question.
 //! - A pure READ of a binding the wrapper's body declares at statement
 //!   level (`ns`, `initM`, any module-level var) is BRIDGED (finding #60):
 //!   the factory is still extracted, the manifest records the read as a
@@ -49,12 +51,16 @@ use oxc_syntax::reference::ReferenceFlags;
 
 use crate::ingest::Ingest;
 use crate::modules::FactoryRecord;
+use crate::toolchain::InteropHelpers;
 
 use super::TextEdit;
 
-/// The canonical names the relink shim exports.
-pub const TO_ESM: &str = "__toESM";
-pub const TO_COMMON_JS: &str = "__toCommonJS";
+/// Bun's interop helpers' standard names — the ones the relink shim
+/// exports. Read through the run's `toolchain::InteropHelpers`
+/// (`canonical_names`), never directly.
+const TO_ESM: &str = "__toESM";
+const TO_COMMON_JS: &str = "__toCommonJS";
+pub(crate) const BUN_INTEROP_NAMES: [&str; 2] = [TO_ESM, TO_COMMON_JS];
 
 /// The names Node's CommonJS wrapper binds in every vendor file — a bundle
 /// wrapper's parameters of these names resolve there too.
@@ -113,6 +119,7 @@ pub fn plan_bundle_scope_refs(
     factories: &[FactoryRecord],
     container: &[Span],
     require_var: Option<&str>,
+    interop: InteropHelpers,
 ) -> ScopePlan {
     let scoping = ingest.semantic().scoping();
     let nodes = ingest.semantic().nodes();
@@ -127,7 +134,7 @@ pub fn plan_bundle_scope_refs(
         .enumerate()
         .map(|(i, f)| ((f.span.start, f.span.end), i))
         .collect();
-    let canonical_taken = canonical_names_taken(ingest);
+    let canonical_taken = canonical_names_taken(ingest, interop);
 
     let mut edges: Vec<HashSet<usize>> = vec![HashSet::new(); factories.len()];
     let mut kept = HashSet::new();
@@ -147,7 +154,15 @@ pub fn plan_bundle_scope_refs(
                 continue; // the body's own binding
             }
             let capture = captures.entry(symbol).or_insert_with(|| {
-                classify_capture(code, ingest, symbol, &by_declarator, container, require_var)
+                classify_capture(
+                    code,
+                    ingest,
+                    symbol,
+                    &by_declarator,
+                    container,
+                    require_var,
+                    interop,
+                )
             });
             let write = reference.flags().contains(ReferenceFlags::Write);
             match capture {
@@ -233,9 +248,10 @@ fn close_over_dependents(kept: &mut HashSet<usize>, edges: &[HashSet<usize>]) {
 /// Does the bundle already use a canonical helper name anywhere (a binding,
 /// or a free reference)? Then a rewrite to it could be captured — keep the
 /// helper's users in the app instead.
-fn canonical_names_taken(ingest: &Ingest<'_>) -> bool {
+fn canonical_names_taken(ingest: &Ingest<'_>, interop: InteropHelpers) -> bool {
     let scoping = ingest.semantic().scoping();
-    let taken = |name: &str| name == TO_ESM || name == TO_COMMON_JS;
+    let names = interop.canonical_names();
+    let taken = |name: &str| names.contains(&name);
     scoping.symbol_ids().any(|s| taken(scoping.symbol_name(s)))
         || scoping
             .root_unresolved_references()
@@ -250,6 +266,7 @@ fn classify_capture(
     by_declarator: &HashMap<(u32, u32), usize>,
     container: &[Span],
     require_var: Option<&str>,
+    interop: InteropHelpers,
 ) -> Capture {
     let scoping = ingest.semantic().scoping();
     let nodes = ingest.semantic().nodes();
@@ -275,7 +292,10 @@ fn classify_capture(
     if never_written
         && let AstKind::VariableDeclarator(d) = nodes.kind(decl)
         && let BindingPattern::BindingIdentifier(_) = d.id
-        && let Some(helper) = d.init.as_ref().and_then(|init| helper_shape(code, init))
+        && let Some(helper) = d
+            .init
+            .as_ref()
+            .and_then(|init| interop.recognise(code, init))
     {
         return Capture::Helper(helper);
     }
@@ -325,11 +345,12 @@ fn container_statement_span(
 }
 
 /// Bun's `__toESM` / `__toCommonJS`, by shape: an arrow of three / one
-/// parameters whose body builds the ES-module interop object.
+/// parameters whose body builds the ES-module interop object. Bun's
+/// implementation of `toolchain::InteropHelpers::recognise`.
 ///
 /// `__toESM = (mod, isNodeMode, target) => {…"default"…__esModule…}`;
 /// `__toCommonJS = (from) => {…WeakMap…"__esModule"…}`.
-fn helper_shape(code: &str, init: &Expression<'_>) -> Option<&'static str> {
+pub(crate) fn bun_helper_shape(code: &str, init: &Expression<'_>) -> Option<&'static str> {
     let Expression::ArrowFunctionExpression(arrow) = init else {
         return None;
     };

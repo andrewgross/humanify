@@ -29,7 +29,7 @@ fn a_bun_bundle_gets_the_bun_pieces_by_detection() {
             reason: Reason::Detected
         }
     );
-    assert_eq!(t.library_detector.piece, LibraryDetector::Bun);
+    assert_eq!(t.library_detector.piece, LibraryDetector::VendorRecord);
     assert_eq!(t.name_profile.piece, NameProfile::Bun);
     assert_eq!(t.name_profile.reason, Reason::Detected);
     assert_eq!(t.tuning.piece, BundlerTuning::Default);
@@ -41,7 +41,7 @@ fn a_bun_bundle_gets_the_bun_pieces_by_detection() {
 fn an_esbuild_bundle_gets_the_esbuild_pieces_by_detection() {
     let t = resolve_toolchain(&detect_bundle(ESBUILD), None, None);
     assert_eq!(t.unpack.piece, UnpackAdapter::Esbuild);
-    assert_eq!(t.library_detector.piece, LibraryDetector::Esbuild);
+    assert_eq!(t.library_detector.piece, LibraryDetector::VendorRecord);
     assert_eq!(t.name_profile.piece, NameProfile::Esbuild);
     assert_eq!(
         t.tuning,
@@ -172,6 +172,39 @@ fn the_slots_hold_their_only_implementation() {
     );
 }
 
+/// P8 end to end (toolchain review R4): the helper SHAPES the unpack
+/// recognises, the standard names, the helper file's path and the module
+/// helper are all answered by the run's interop piece — Bun's values,
+/// byte-for-byte the constants they replaced.
+#[test]
+fn the_interop_piece_owns_shapes_names_and_the_helper_file() {
+    let bun = InteropHelpers::Bun;
+    assert_eq!(bun.runtime_file(), ".humanify/__bun-runtime.js");
+    assert_eq!(bun.module_helper(), "__commonJS");
+    assert_eq!(bun.canonical_names(), &["__toESM", "__toCommonJS"]);
+    let shape_of = |src: &str| {
+        let allocator = oxc_allocator::Allocator::default();
+        let ingest = crate::ingest::Ingest::parse_unambiguous(&allocator, src);
+        let oxc_ast::ast::Statement::VariableDeclaration(decl) = &ingest.program.body[0] else {
+            panic!("a var statement");
+        };
+        bun.recognise(src, decl.declarations[0].init.as_ref().unwrap())
+    };
+    assert_eq!(
+        shape_of(
+            "var L=(I,A,q)=>(q=I!=null?Object.create(null):A,Object.defineProperty(q,\"default\",{value:I}),I.__esModule);"
+        ),
+        Some("__toESM")
+    );
+    assert_eq!(
+        shape_of(
+            "var T=(I)=>{var A=new WeakMap;return Object.defineProperty({},\"__esModule\",{value:!0})};"
+        ),
+        Some("__toCommonJS")
+    );
+    assert_eq!(shape_of("var f=(a)=>a+1;"), None);
+}
+
 /// The record names every piece, in pipeline order, with its reason.
 #[test]
 fn the_record_lists_every_piece() {
@@ -185,7 +218,7 @@ fn the_record_lists_every_piece() {
         ("unpackAdapter", "bun", "detected"),
         ("moduleWrappers", "bun+esbuild", "only-implementation"),
         ("vendorRecord", "bun", "detected"),
-        ("libraryDetector", "bun", "detected"),
+        ("libraryDetector", "vendor-record", "detected"),
         ("neverRename", "universal", "detected"),
         ("interopHelpers", "bun", "only-implementation"),
         (

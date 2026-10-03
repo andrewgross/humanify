@@ -187,8 +187,10 @@ pub fn choose_adapter(
 /// know which adapter needs what (docs/plugin-spec.md I9 — the adapter
 /// used to be run from three places, two of which special-cased bun and
 /// esbuild to pass the namer and the prior).
-#[derive(Default)]
 pub struct AdapterRun<'n> {
+    /// The run's interop helpers (the toolchain's P8 piece; vendor-record
+    /// adapters recognise and rename the bundle's helpers with it).
+    pub interop: crate::toolchain::InteropHelpers,
     /// The LLM vendor namer (vendor-record adapters; None skips the pass).
     pub namer: Option<&'n mut dyn crate::modules::vendor_names::VendorNamer>,
     /// The prior release's vendor record (`bun::load_prior_vendor`).
@@ -197,6 +199,22 @@ pub struct AdapterRun<'n> {
     pub manifest_prior_order_disabled: bool,
     /// The webcrack subprocess shim (the webcrack adapter errors without it).
     pub webcrack_shim: Option<&'n webcrack::WebcrackShim>,
+}
+
+impl<'n> AdapterRun<'n> {
+    /// A run with the toolchain's interop piece and nothing optional (no
+    /// namer, no prior, no shim). The interop piece has no default: it is
+    /// the run's choice (`toolchain::resolve_toolchain`), never a fallback
+    /// picked here.
+    pub fn new(interop: crate::toolchain::InteropHelpers) -> AdapterRun<'n> {
+        AdapterRun {
+            interop,
+            namer: None,
+            prior: None,
+            manifest_prior_order_disabled: false,
+            webcrack_shim: None,
+        }
+    }
 }
 
 /// What the adapter produced: a vendor-record adapter's full outcome, or
@@ -240,6 +258,7 @@ pub fn run_adapter(
                     manifest_prior_order_disabled: run.manifest_prior_order_disabled,
                     adapter,
                     layout,
+                    interop: run.interop,
                 },
             )?)))
         }

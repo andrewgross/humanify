@@ -1362,9 +1362,10 @@ const BUN_BUNDLE_SCOPE_REFS: &str = concat!(
 /// for the owner file in the pipeline.
 fn run_relinked(dir: &Path) -> Result<String, String> {
     use crate::finish::relink::{
-        BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, bun_relink_runtime_filename,
-        relink_factory_references, wrap_extracted_factory,
+        BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, relink_factory_references,
+        wrap_extracted_factory,
     };
+    let interop = crate::toolchain::InteropHelpers::Bun;
     let entries = factories(&read_manifest(dir));
     let lookup: FactoryLookup = entries
         .iter()
@@ -1395,7 +1396,7 @@ fn run_relinked(dir: &Path) -> Result<String, String> {
     for e in &entries {
         let file = s(e, "fileName");
         let body = fs::read_to_string(dir.join(file)).unwrap();
-        let (wrapped, _) = wrap_extracted_factory(&body, file, &lookup, &bridges).unwrap();
+        let (wrapped, _) = wrap_extracted_factory(&body, file, &lookup, &bridges, interop).unwrap();
         fs::write(dir.join(file), wrapped).unwrap();
     }
     let runtime = fs::read_to_string(dir.join("runtime.js")).unwrap();
@@ -1404,7 +1405,7 @@ fn run_relinked(dir: &Path) -> Result<String, String> {
         relinked = format!("{}\n{relinked}", accessor_lines.join("\n"));
     }
     fs::write(dir.join("runtime.js"), &relinked).unwrap();
-    let shim = dir.join(bun_relink_runtime_filename());
+    let shim = dir.join(interop.runtime_file());
     fs::create_dir_all(shim.parent().unwrap()).unwrap();
     fs::write(shim, BUN_RELINK_RUNTIME).unwrap();
     node(&dir.join("runtime.js"))

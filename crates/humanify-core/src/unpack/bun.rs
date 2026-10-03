@@ -43,9 +43,7 @@ use crate::modules::{
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
 
-mod scope;
-
-pub use scope::{TO_COMMON_JS, TO_ESM};
+pub(crate) mod scope;
 
 /// The vendor folder (`split/layout.ts VENDOR_DIR`).
 pub const VENDOR_DIR: &str = "vendor";
@@ -56,35 +54,17 @@ pub const BUN_MODULES_MANIFEST: &str = "_bun-modules.json";
 /// The runtime file's name (the leftover code outside every factory).
 pub const RUNTIME_FILE: &str = "runtime.js";
 
-/// The run's vendor capture records (finding #60), read back from the
-/// manifest the unpack wrote — the split resolves them against its own
-/// (renamed) statements and placement. Missing file, unreadable JSON or a
-/// pre-#60 manifest all read as "no captures".
-pub fn read_vendor_captures(output_dir: &Path) -> Vec<ManifestCapture> {
-    let Ok(text) = fs::read_to_string(bun_manifest_path(output_dir)) else {
-        return Vec::new();
-    };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
-    let Some(entries) = value.get("factories").and_then(|f| f.as_array()) else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for entry in entries {
-        let Some(captures) = entry.get("captures").and_then(|c| c.as_array()) else {
-            continue;
-        };
-        for capture in captures {
-            let Some(name) = capture.get("name").and_then(|n| n.as_str()) else {
-                continue;
-            };
-            out.push(ManifestCapture {
-                name: name.to_string(),
-            });
-        }
-    }
-    out
+/// The run's vendor capture records (finding #60), from the vendor record
+/// THIS run's adapter wrote (handed down in memory — never read back from
+/// the output folder, which may hold an earlier run's record: toolchain
+/// review R6) — the split resolves them against its own (renamed)
+/// statements and placement. No record reads as "no captures".
+pub fn vendor_captures(record: Option<&BunModulesManifest>) -> Vec<ManifestCapture> {
+    record
+        .into_iter()
+        .flat_map(|m| &m.factories)
+        .flat_map(|e| e.captures.iter().cloned())
+        .collect()
 }
 
 /// The manifest's path within an output tree (`bunManifestPath`).
@@ -225,6 +205,10 @@ pub struct BunUnpackOptions<'n> {
     /// The run's bundle layout (the toolchain's P9 piece): the container
     /// the factory classification scans.
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's interop helpers (the toolchain's P8 piece): which bundle
+    /// bindings are interop helpers, and the names a vendored body's
+    /// references to them are rewritten to.
+    pub interop: crate::toolchain::InteropHelpers,
 }
 
 impl Default for BunUnpackOptions<'_> {
@@ -237,6 +221,7 @@ impl Default for BunUnpackOptions<'_> {
             manifest_prior_order_disabled: false,
             adapter: crate::unpack::UnpackAdapter::Bun,
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+            interop: crate::toolchain::InteropHelpers::Bun,
         }
     }
 }
@@ -374,6 +359,7 @@ pub fn unpack_bun(
             &c.factories,
             &c.container,
             require_var.as_deref(),
+            options.interop,
         );
         kept_in_app = plan.kept.len();
         helper_edits = plan.helper_edits;

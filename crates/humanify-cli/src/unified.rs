@@ -632,11 +632,12 @@ fn pipeline_body(
         }
     };
     let ph = phase("unpack+vendor");
-    let unpacked = unpack_bundle(
+    let mut unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
         toolchain.unpack.piece,
         toolchain.layout.piece,
+        toolchain.interop.piece,
         provider,
         &mut dispatch_log,
         prior_path,
@@ -646,16 +647,17 @@ fn pipeline_body(
     )?;
     drop(ph);
     let ph = phase("library-detection");
+    let unpacked_files = std::mem::take(&mut unpacked.files);
     let (files_to_process, mixed_files) = if settings.skip_libraries {
         let filtered = filter_libraries(
-            unpacked.files,
+            unpacked_files,
             toolchain.library_detector.piece,
             profiler,
             renderer,
         )?;
         (filtered.files_to_process, filtered.mixed_files)
     } else {
-        (unpacked.files, Vec::new())
+        (unpacked_files, Vec::new())
     };
 
     // Stages 6-9 per file.
@@ -703,6 +705,7 @@ fn pipeline_body(
             input_file: Path::new(input),
             processed_source: Some(source),
             toolchain,
+            vendor_record: unpacked.vendor_record.as_ref(),
             prior_version: prior_path,
             split_ledger: opts.split_ledger.as_deref(),
             split_pure: opts.split_pure,

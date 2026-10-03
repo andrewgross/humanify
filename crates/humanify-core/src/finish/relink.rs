@@ -29,16 +29,14 @@ use humanify_model::js::{cmp_utf16, trim};
 use crate::emit::paths::compute_relative_import_path;
 use crate::graph::is_babel_assignment_target;
 use crate::ingest::Ingest;
-use crate::place::layout::METADATA_DIR;
 use crate::rename::validated::RenameState;
+use crate::toolchain::InteropHelpers;
 use crate::trail::Anchor;
-use crate::unpack::bun::{TO_COMMON_JS, TO_ESM};
 
-/// The shared factory-helper runtime's path (a generated shim that lives
-/// with the metadata, like `_bundle.js`).
-pub fn bun_relink_runtime_filename() -> String {
-    format!("{METADATA_DIR}/__bun-runtime.js")
-}
+/// Bun's helper file's name inside the metadata folder (a generated shim
+/// that lives with the metadata, like `_bundle.js`). Read through the run's
+/// `toolchain::InteropHelpers::runtime_file`, never directly.
+pub(crate) const BUN_RELINK_RUNTIME_FILE: &str = "__bun-runtime.js";
 
 /// The shared Bun factory helpers (the bundle's own `Q` / `__esm`), plus
 /// Bun's `__toESM` / `__toCommonJS` interop helpers, which a vendored body
@@ -101,9 +99,6 @@ const __toCommonJS = (from) => {
 };
 module.exports = { __commonJS, __esm, __toESM, __toCommonJS };
 ";
-
-/// The runtime helpers a vendored body may name free, bound from the shim.
-const INTEROP_HELPERS: [&str; 2] = [TO_ESM, TO_COMMON_JS];
 
 /// runtimeIdentifier → the file that defines that factory
 /// (`FactoryLookup`; only `has` / `get` are read, so the map's order is
@@ -260,16 +255,19 @@ pub fn relink_factory_references(
     Ok(insert_header_at(&spliced, at, &lines))
 }
 
-/// The interop helpers `body` references FREE (unbound anywhere in it).
-fn free_interop_helpers(body: &str) -> Result<Vec<&'static str>, String> {
+/// The interop helpers (the run's standard names) `body` references FREE
+/// (unbound anywhere in it) — bound from the helper file.
+fn free_interop_helpers(body: &str, interop: InteropHelpers) -> Result<Vec<&'static str>, String> {
     // The body is an EXPRESSION: parenthesized, so a `function (…) {…}`
     // factory is not read as a nameless declaration.
     let expression = format!("({body}\n)");
     let allocator = Allocator::default();
     let ingest = parse_or_err(&allocator, &expression)?;
     let unresolved = ingest.semantic().scoping().root_unresolved_references();
-    Ok(INTEROP_HELPERS
-        .into_iter()
+    Ok(interop
+        .canonical_names()
+        .iter()
+        .copied()
         .filter(|h| unresolved.keys().any(|k| k == h))
         .collect())
 }
@@ -285,14 +283,16 @@ pub fn wrap_extracted_factory(
     from_file: &str,
     lookup: &FactoryLookup,
     bridges: &[VendorBridge],
+    interop: InteropHelpers,
 ) -> Result<(String, usize), String> {
-    let rt = compute_relative_import_path(from_file, &bun_relink_runtime_filename());
-    let mut bound = vec!["__commonJS"];
-    bound.extend(free_interop_helpers(trim(body))?);
+    let rt = compute_relative_import_path(from_file, &interop.runtime_file());
+    let module_helper = interop.module_helper();
+    let mut bound = vec![module_helper];
+    bound.extend(free_interop_helpers(trim(body), interop)?);
     // `exports.f = …` MUTATES the initial exports object, so a cyclic
     // requirer's captured identity stays valid.
     let wrapped = format!(
-        "const {{ {} }} = require(\"{rt}\");\nexports.{THUNK_PROP} = __commonJS({});\n",
+        "const {{ {} }} = require(\"{rt}\");\nexports.{THUNK_PROP} = {module_helper}({});\n",
         bound.join(", "),
         trim(body)
     );
