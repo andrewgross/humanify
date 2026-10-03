@@ -26,7 +26,11 @@ fn with_fn<R>(code: &str, name: Option<&str>, f: impl FnOnce(&mut RenameState, &
         &[],
         Eligibility::All,
     );
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let rows = Rows::build(&graph, semantic, state.view());
     let row = match name {
         Some(n) => rows

@@ -51,6 +51,7 @@ fn retry(
     let ids = strs(ids);
     let used = strs(used);
     build_batch_rename_retry_prompt(&RetryInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         code,
         identifiers: &ids,
         used_names: &used,
@@ -204,12 +205,14 @@ fn an_unchanged_minified_name_is_told_it_is_the_minified_name() {
         &map(&[("yl", "yl")]),
         &failures(&[], &[], &[], &["yl"]),
         None,
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(m.contains(line), "{m}");
     let z = build_module_level_retry_prefix(
         &map(&[("z", "z")]),
         &failures(&[], &[], &[], &["z"]),
         None,
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(z.contains(r#""z" was returned as itself"#), "{z}");
 }
@@ -222,6 +225,7 @@ fn module_prefix_renders_duplicate() {
         &map(&[("x", "config")]),
         &failures(&["x"], &[], &[], &[]),
         None,
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(p.contains(r#""x" was suggested as "config""#));
     assert!(p.contains("conflicts"));
@@ -233,6 +237,7 @@ fn module_prefix_renders_unchanged() {
         &map(&[("z", "z")]),
         &failures(&[], &[], &[], &["z"]),
         None,
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(p.contains(r#""z" was returned as itself"#));
 }
@@ -243,6 +248,7 @@ fn module_prefix_renders_invalid() {
         &map(&[("y", "delete")]),
         &failures(&[], &["y"], &[], &[]),
         None,
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(p.contains(r#""y" was suggested as "delete""#));
     assert!(p.contains("not allowed"));
@@ -254,6 +260,7 @@ fn module_prefix_includes_do_not_suggest() {
         &map(&[("a", "badName")]),
         &failures(&["a"], &[], &[], &[]),
         None,
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(p.contains("DO NOT suggest these names"));
     assert!(p.contains("badName"));
@@ -284,6 +291,7 @@ fn rejects(id: &str, failed: &[&str], invalid: &[bool]) -> PriorRejects {
 fn an_accumulated_retry_discloses_every_prior_suggestion_in_order() {
     let prior = rejects("q1", &["eventHooks", "q2Named"], &[false, false]);
     let p = build_batch_rename_retry_prompt(&RetryInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         code: "var q1 = 1;",
         identifiers: &["q1".to_string()],
         used_names: &["eventHooks".to_string()],
@@ -315,6 +323,7 @@ fn an_accumulated_invalid_suggestion_discloses_its_own_reason() {
         &map(&[("a", "delete")]),
         &failures(&["a"], &[], &[], &[]),
         Some(&prior),
+        crate::rename::name_profile::NameProfile::Bun,
     );
     assert!(
         p.contains("- \"a\" was suggested as \"taken\" but that conflicts with an existing name\n"),
@@ -338,6 +347,7 @@ fn an_accumulated_invalid_suggestion_discloses_its_own_reason() {
 fn a_single_prior_reject_renders_the_legacy_bytes() {
     let prior = rejects("q1", &["eventHooks"], &[false]);
     let with_prior = build_batch_rename_retry_prompt(&RetryInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         code: "var q1 = 1;",
         identifiers: &["q1".to_string()],
         used_names: &["eventHooks".to_string()],
@@ -487,12 +497,18 @@ fn render_prefers_a_non_empty_user_prompt_and_system_override() {
     let mut r = request("x", &["a"], &[]);
     r.user_prompt = Some("verbatim".into());
     r.system_prompt = Some("sys".into());
-    assert_eq!(render_user_prompt(&r), "verbatim");
+    assert_eq!(
+        render_user_prompt(&r, crate::rename::name_profile::NameProfile::Bun),
+        "verbatim"
+    );
     assert_eq!(render_system_prompt(&r), "sys");
     // `if (request.userPrompt)` / `request.systemPrompt ||` — "" is falsy.
     r.user_prompt = Some(String::new());
     r.system_prompt = Some(String::new());
-    assert_eq!(render_user_prompt(&r), build_batch_rename_prompt(&r));
+    assert_eq!(
+        render_user_prompt(&r, crate::rename::name_profile::NameProfile::Bun),
+        build_batch_rename_prompt(&r)
+    );
     assert_eq!(render_system_prompt(&r), BATCH_RENAME_SYSTEM_PROMPT);
 }
 
@@ -500,11 +516,20 @@ fn render_prefers_a_non_empty_user_prompt_and_system_override() {
 fn render_takes_the_retry_path_only_with_failures() {
     let mut r = request("x", &["a"], &["u"]);
     r.is_retry = Some(true);
-    assert_eq!(render_user_prompt(&r), build_batch_rename_prompt(&r));
+    assert_eq!(
+        render_user_prompt(&r, crate::rename::name_profile::NameProfile::Bun),
+        build_batch_rename_prompt(&r)
+    );
     r.failures = Some(failures(&[], &[], &["a"], &[]));
-    assert!(render_user_prompt(&r).starts_with("Your previous rename suggestions"));
+    assert!(
+        render_user_prompt(&r, crate::rename::name_profile::NameProfile::Bun)
+            .starts_with("Your previous rename suggestions")
+    );
     // previousAttempt `|| {}`
-    assert!(render_user_prompt(&r).contains("MISSING from your response: a"));
+    assert!(
+        render_user_prompt(&r, crate::rename::name_profile::NameProfile::Bun)
+            .contains("MISSING from your response: a")
+    );
 }
 
 // ---- snapshots, one per prompt type (inline; any byte change is loud) ----

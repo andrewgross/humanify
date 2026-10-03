@@ -519,6 +519,19 @@ into per-minifier profiles chosen once from detection. On 2026-10-03 that
 branch had no commits yet, so this section describes the interface this
 spec needs; reconcile it with the branch when it lands.
 
+**Landed on the branch (2026-10-03, finding #75):** `rename::name_profile`
+— `NameProfile` (bun, esbuild, terser, swc, none) chosen once by
+`select_name_profile` and carried to every caller above; every
+`rename::floor` predicate takes it (`is_bun_token` is now the Bun
+profile's private rule behind `is_minifier_token`). It follows the
+guarantees below: Bun is byte-for-byte today's (frozen battery + stub-LLM
+pair), the minifier DETECTION verdict is not read at all (P1), an unsure
+input stays on Bun, and `--minifier none` counts nothing as minted. Only
+the flags and a definitive bun/esbuild bundler verdict select another
+profile. The esbuild/terser/swc profile does NOT yet cover the digit-free
+3-letter names below — none of the three measured minifiers' digit-free
+names can be told from words by shape alone.
+
 **Interface this spec needs:** a `NameProfile` value, chosen once from the
 minifier verdict and passed to every caller above, answering at least:
 

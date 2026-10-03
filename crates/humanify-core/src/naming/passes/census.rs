@@ -9,7 +9,7 @@
 //! order is a decision input (which candidate is attempted first).
 //!
 //! TWO universes read this walk (2026-09-30, Andrew's provenance decision):
-//! the MINTED walk (`collect_minted_bindings`, `is_bun_token`-gated) is the
+//! the MINTED walk (`collect_minted_bindings`, minifier-token-gated) is the
 //! no-minified-leftovers METER's population; the ELIGIBLE walk
 //! (`collect_eligible_bindings` — minted shape NOT asked) is the coverage
 //! sweep's candidate universe, decided by the LEDGER instead of by shape
@@ -32,7 +32,8 @@ use humanify_model::js::cmp_utf16;
 use crate::modules::known_globals::is_known_global;
 use crate::naming::waves::render::Occurrences;
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{is_bun_token, is_decorated_descriptive, is_wordless_mint_shape};
+use crate::rename::floor::{is_decorated_descriptive, is_minifier_token, is_wordless_mint_shape};
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
 use crate::rename::validated::scopes::{BindingId, BindingKind};
 
@@ -152,7 +153,7 @@ pub fn derivation_source(
         }
         _ => None,
     };
-    candidate.filter(|c| !is_bun_token(c))
+    candidate.filter(|c| !is_minifier_token(state.name_profile(), c))
 }
 
 /// `collectMintedBindings`: every eligible minted binding, walking each
@@ -182,7 +183,7 @@ pub fn collect_eligible_bindings(
 /// The one walk behind both: scopes in traversal order, each scope's
 /// bindings in `Object.entries` order under their CURRENT names (a
 /// renamed binding sits at the end of its map), each binding once.
-/// `minted_only` keeps the census's `is_bun_token` gate (the
+/// `minted_only` keeps the census's minifier-token gate (the
 /// no-minified-leftovers meter's population); `false` is the sweep's
 /// ledger universe.
 fn collect_bindings(
@@ -204,7 +205,9 @@ fn collect_bindings(
             if !seen.insert(binding) {
                 continue;
             }
-            if !eligible.is_eligible(&name) || (minted_only && !is_bun_token(&name)) {
+            if !eligible.is_eligible(&name)
+                || (minted_only && !is_minifier_token(state.name_profile(), &name))
+            {
                 continue;
             }
             let family = classify(semantic, state, binding);
@@ -258,8 +261,10 @@ pub struct MintedCensus {
     pub decorated_names: Vec<String>,
 }
 
-/// `summarizeCensus`.
+/// `summarizeCensus` (the decorated split read under the run's name
+/// profile).
 pub fn summarize_census(
+    profile: NameProfile,
     bindings: &[MintedBinding],
     total_bindings: usize,
     free_references: Vec<String>,
@@ -270,7 +275,7 @@ pub fn summarize_census(
         ..MintedCensus::default()
     };
     for entry in bindings {
-        if is_decorated_descriptive(&entry.name) {
+        if is_decorated_descriptive(profile, &entry.name) {
             c.decorated += 1;
             c.decorated_names.push(entry.name.clone());
             continue;

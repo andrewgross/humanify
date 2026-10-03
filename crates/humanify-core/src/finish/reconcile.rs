@@ -44,6 +44,7 @@ use crate::naming::reconcile::hunks::compute_normal_diff;
 use crate::naming::reconcile::resolve::{IdentSite, identifier_sites, shorthand_key};
 use crate::naming::reconcile::{ReconcileOptions, collect_word_tokens, reconcile_diff_noise};
 use crate::rename::eligibility::Eligibility;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
 use crate::rename::validated::scopes::{BabelScopes, SiteType};
 use crate::trail::Anchor;
@@ -613,6 +614,7 @@ fn reconcile_one_file(
     fresh: &str,
     prior: &str,
     eligible: &Eligibility,
+    profile: NameProfile,
     ledger_statements: usize,
 ) -> FileWork {
     let Ok(diff_text) = compute_normal_diff(prior, fresh) else {
@@ -633,6 +635,7 @@ fn reconcile_one_file(
         ingest.semantic(),
         Anchor::Generated,
         crate::trail::StrategyTrail::enabled(),
+        profile,
     );
     let prior_names = collect_word_tokens(prior);
     let opts = ReconcileOptions {
@@ -734,6 +737,9 @@ pub struct PostSplitInput<'i> {
     pub read_fresh: &'i (dyn Fn(&str) -> Option<String> + Sync),
     pub read_prior: &'i (dyn Fn(&str) -> Option<String> + Sync),
     pub eligible: &'i Eligibility,
+    /// The run's minifier name profile (the reconcile gate's half-mint
+    /// check, the carried rule).
+    pub name_profile: NameProfile,
     /// `--disable post-split-reconcile`.
     pub disabled: bool,
 }
@@ -755,6 +761,7 @@ pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
         read_fresh,
         read_prior,
         eligible,
+        name_profile,
         disabled: _,
     } = input;
     let ledger = ledger_obj(ledger);
@@ -771,7 +778,12 @@ pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
         };
         let statements = ledger_statements.get(file).copied().unwrap_or(0);
         Some(reconcile_one_file(
-            file, &fresh, &prior, eligible, statements,
+            file,
+            &fresh,
+            &prior,
+            eligible,
+            name_profile,
+            statements,
         ))
     });
     for (file, work) in files.iter().zip(works) {

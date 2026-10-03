@@ -16,6 +16,7 @@ use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 /// The plain `--sequential`-shaped config the collision pins run under.
 fn plain_config() -> crate::naming::driver::NamingConfig {
     crate::naming::driver::NamingConfig {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         bundler: None,
         minifier: None,
         skip_libraries: true,
@@ -76,7 +77,7 @@ fn name_of(id: &str) -> String {
 /// borrowed stem (Fix A, 2026-10-03; case-insensitively since round 2, so
 /// upper-casing no longer dodges it), which these pins are not about.
 fn plain_name(id: &str) -> String {
-    if crate::rename::floor::is_borrowable_stem(id) {
+    if crate::rename::floor::is_borrowable_stem(crate::rename::name_profile::NameProfile::Bun, id) {
         let spelled: String = id
             .chars()
             .map(|c| match c.to_digit(10) {

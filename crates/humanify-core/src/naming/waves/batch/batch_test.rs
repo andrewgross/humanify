@@ -23,6 +23,7 @@ fn env<'e>(
     reject: &'e dyn Fn(&str, &str) -> Option<RejectionReason>,
 ) -> LaneEnv<'e> {
     LaneEnv {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         used,
         would_reject: reject,
         transform: None,
@@ -443,6 +444,7 @@ fn a_lane_round_two_discloses_the_models_word_not_the_prior_snap() {
         }
     };
     let e = LaneEnv {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         used: &used,
         would_reject: &reject,
         transform: Some(&snap),

@@ -88,7 +88,11 @@ fn synthetic_pairs_match_the_ts_probe() {
             same_program_check: true,
         };
         let rows = match_prior_version(input, |stage| {
-            let (outcome, _) = apply_prior_version(stage, &Default::default())?;
+            let (outcome, _) = apply_prior_version(
+                stage,
+                &Default::default(),
+                crate::rename::name_profile::NameProfile::Bun,
+            )?;
             Ok(outcome.rename.trail().transfer_rows())
         })
         .unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -109,7 +113,11 @@ fn with_run<R>(code: &str, f: impl FnOnce(&mut TransferRun<'_, '_>) -> R) -> R {
         &[],
         Eligibility::All,
     );
-    let rename = RenameState::new(semantic, Anchor::Fresh);
+    let rename = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let rows = Rows::build(&graph, semantic, rename.view());
     let (n_fns, n_bindings) = (graph.functions.len(), graph.module_bindings.len());
     let mut run = TransferRun {

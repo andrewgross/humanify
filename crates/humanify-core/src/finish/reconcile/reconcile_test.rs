@@ -49,6 +49,7 @@ fn reconcile_and_carry_match_the_ts() {
     let read_prior = |f: &str| prior.get(f).cloned();
     let eligible = Eligibility::new(Some("bun"), Some("bun"));
     let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
         read_fresh: &read_fresh,
         read_prior: &read_prior,
@@ -79,7 +80,13 @@ fn reconcile_and_carry_match_the_ts() {
     );
 
     let bundle = fx["bundle"].as_str().unwrap();
-    let carry = carry_renames_into_bundle(bundle, &ledger, &result.renames).unwrap();
+    let carry = carry_renames_into_bundle(
+        bundle,
+        &ledger,
+        &result.renames,
+        crate::rename::name_profile::NameProfile::Bun,
+    )
+    .unwrap();
     assert_eq!(carry.code.as_deref(), fx["carry"]["code"].as_str());
     assert_eq!(
         carry.carried as u64,
@@ -99,6 +106,7 @@ fn the_kill_switch_does_nothing() {
     let read = |_: &str| Some("var a = 1;\n".to_string());
     let eligible = Eligibility::new(None, None);
     let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
         read_fresh: &read,
         read_prior: &read,
@@ -127,6 +135,7 @@ fn a_non_ascii_identifier_is_left_intact() {
     let read_prior = |_: &str| Some(prior.to_string());
     let eligible = Eligibility::new(Some("bun"), Some("bun"));
     let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
         read_fresh: &read_fresh,
         read_prior: &read_prior,
@@ -277,6 +286,7 @@ fn scramble_run(
     let mut ledger = JsValue::parse(ledger_text).unwrap();
     let eligible = Eligibility::new(Some("bun"), Some("bun"));
     let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
         read_fresh: &read_fresh,
         read_prior: &read_prior,
@@ -381,6 +391,7 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
     let read_prior = |_: &str| Some(prior.to_string());
     let eligible = Eligibility::new(Some("bun"), Some("bun"));
     let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
         read_fresh: &read_fresh,
         read_prior: &read_prior,
@@ -402,7 +413,13 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
     let locators: Vec<_> = result.renames.iter().map(|r| r.locator).collect();
     // X is the only `Rb`; Y is the FIRST of the fresh `value`s.
     assert_eq!(locators, vec![Some((0, 0)), Some((0, 0))]);
-    let carry = carry_renames_into_bundle(&bundle, &ledger, &result.renames).unwrap();
+    let carry = carry_renames_into_bundle(
+        &bundle,
+        &ledger,
+        &result.renames,
+        crate::rename::name_profile::NameProfile::Bun,
+    )
+    .unwrap();
     assert_eq!(carry.carried, 2);
     assert_eq!(
         carry.code.as_deref(),

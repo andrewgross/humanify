@@ -19,10 +19,10 @@
 //!   `rename::validated`'s decision ledger, joined by name across the
 //!   text boundary), and the ONLY shape exception left in its target
 //!   path is [`is_convention_carveout`] (`_`, `__`, `$`-only: deliberate
-//!   placeholders, not un-renamed code). [`is_bun_token`] still answers
-//!   the shape question where shape IS the question: the minted-census
-//!   METER's population, the class-id floor's derivation filter, vote
-//!   candidacy, and the below-floor/carried rules.
+//!   placeholders, not un-renamed code). [`is_minifier_token`] still
+//!   answers the shape question where shape IS the question: the
+//!   minted-census METER's population, the class-id floor's derivation
+//!   filter, vote candidacy, and the below-floor/carried rules.
 //! - WHAT ANSWER MAY LAND — may the model's suggestion become the new
 //!   name? ([`is_sweep_answer_acceptable`]: the sweep's answer filter.)
 //!   This stays a STRING question by nature ("is this candidate junk?"),
@@ -37,11 +37,23 @@
 //!   Round 2 (2026-10-03) added the IDENTITY-ECHO half
 //!   ([`is_minified_echo`]: `{"yl":"yl"}`), asked by the same sites
 //!   through `naming::waves::processor::answer_refusal`.
+//!
+//! WHICH MINIFIER's shapes (2026-10-03, Andrew: "loaded dynamically based
+//! on the detected minifier ... the generic ones are fine to run always"):
+//! every shape predicate takes the run's [`NameProfile`], selected once
+//! from detection by `rename::name_profile::select_name_profile`. The Bun
+//! profile is the pre-2026-10-03 `isBunToken` exactly; what the others
+//! read, and which checks stay profile-independent, is that module's doc.
+//! Profile-independent here: [`is_single_letter`],
+//! [`is_convention_carveout`], [`is_wordless_mint_shape`], and the
+//! program lookup half of [`borrowed_minified_stem`].
+
+use crate::rename::name_profile::NameProfile;
 
 /// Short words that are real names, not mints (`SHORT_WORDS`). The ten
 /// single letters a/b/e/i/j/k/n/t/x/y left this list 2026-09-30 (Andrew:
 /// "remove the limit on single character names not being processed" —
-/// `is_bun_token` treats them as minted now); the real two/three-letter
+/// every profile treats them as minted now); the real two/three-letter
 /// words stay.
 const SHORT_WORDS: &[&str] = &[
     "abs", "add", "arg", "cb", "col", "ctx", "cwd", "db", "del", "dir", "end", "env", "err", "ext",
@@ -114,41 +126,86 @@ fn has_mint_head(name: &str) -> bool {
     }
 }
 
-/// `isBunToken`: the shape of a minifier-minted token — the WHO GETS
-/// ASKED question. The census walk and the sweep's target collection read
-/// it to decide what to process (single letters included since 2026-09-30,
-/// Andrew: the old `SHORT_WORDS` exemption made never-asked letters
-/// invisible to the sweep, finding #62); the carried rule and the vote
-/// candidacy read it through [`is_below_floor_name`].
-pub fn is_bun_token(name: &str) -> bool {
+/// The shape of a minifier-minted token under the run's
+/// [`NameProfile`] — the WHO GETS ASKED question. The census walk and the
+/// sweep's target collection read it to decide what to process (single
+/// letters included since 2026-09-30, Andrew: the old `SHORT_WORDS`
+/// exemption made never-asked letters invisible to the sweep, finding
+/// #62); the carried rule and the vote candidacy read it through
+/// [`is_below_floor_name`]. What each profile reads:
+/// `rename::name_profile`'s module doc.
+pub fn is_minifier_token(profile: NameProfile, name: &str) -> bool {
+    match profile {
+        NameProfile::Bun => is_bun_token(name),
+        NameProfile::Esbuild | NameProfile::Terser | NameProfile::Swc => is_renamer_token(name),
+        NameProfile::NotMinified => false,
+    }
+}
+
+/// The Bun profile (`isBunToken`, unchanged from the TS): `$` anywhere or
+/// a trailing `_`, else a mint head at any length, else a 1-2 unit
+/// non-word — behind the CONSTANT_CASE and domain-stem exemptions.
+fn is_bun_token(name: &str) -> bool {
     if name.contains('$') || name.ends_with('_') {
         return true;
     }
-    if is_constant_case(name) || has_domain_stem_head(name) {
+    if is_exempt_shape(name) {
         return false;
     }
     if has_mint_head(name) {
         return true;
     }
+    is_short_non_word(name)
+}
+
+/// The renamer-alphabet profiles (esbuild, terser, swc): a 1-2 unit
+/// non-word, or a WHOLE 3-4 unit name in the renamer alphabet carrying a
+/// mint head or a `$` (`p5e`, `ab_`, `$me`) — behind the exemptions.
+fn is_renamer_token(name: &str) -> bool {
+    if is_exempt_shape(name) {
+        return false;
+    }
+    is_short_non_word(name)
+        || ((3..=4).contains(&js_len(name))
+            && is_renamer_alphabet(name)
+            && (has_mint_head(name) || name.contains('$')))
+}
+
+/// `[A-Za-z_$][A-Za-z0-9_$]*` — every measured renamer's alphabet (a
+/// digit is never first).
+fn is_renamer_alphabet(name: &str) -> bool {
+    let word = |b: &u8| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'$';
+    let b = name.as_bytes();
+    b.first().is_some_and(|c| !c.is_ascii_digit()) && b.iter().all(word)
+}
+
+/// The precision exemptions every profile shares: a CONSTANT_CASE
+/// constant or a domain-stem head (`sha256`, `v8Engine`, `h1Title`).
+fn is_exempt_shape(name: &str) -> bool {
+    is_constant_case(name) || has_domain_stem_head(name)
+}
+
+/// At most two UTF-16 units and not a real short word ([`SHORT_WORDS`]).
+fn is_short_non_word(name: &str) -> bool {
     js_len(name) <= 2 && !SHORT_WORDS.contains(&name.to_lowercase().as_str())
 }
 
 /// `isDecoratedDescriptive`: a descriptive stem wearing the conflict
 /// ladder's trailing `_` (`fsPromises_`).
-pub fn is_decorated_descriptive(name: &str) -> bool {
+pub fn is_decorated_descriptive(profile: NameProfile, name: &str) -> bool {
     if !name.ends_with('_') {
         return false;
     }
     let stem = name.trim_end_matches('_');
-    !stem.is_empty() && !is_bun_token(stem)
+    !stem.is_empty() && !is_minifier_token(profile, stem)
 }
 
 /// `isBelowFloorName`: minted-shaped and not a decorated descriptive name.
 /// Since 2026-09-30 this includes single letters — so a deliberately
 /// APPLIED letter is recorded CARRIED (validated rename's exp066 rule) and
 /// the sweep cannot re-roll it within the run.
-pub fn is_below_floor_name(name: &str) -> bool {
-    is_bun_token(name) && !is_decorated_descriptive(name)
+pub fn is_below_floor_name(profile: NameProfile, name: &str) -> bool {
+    is_minifier_token(profile, name) && !is_decorated_descriptive(profile, name)
 }
 
 /// A single alphabetic character (UTF-16 length 1) — the one mint shape
@@ -164,8 +221,11 @@ pub fn is_single_letter(name: &str) -> bool {
 /// the module doc for the target-vs-answer split.) Refuses re-minted
 /// junk — `$`-bearing tokens, `_`-tails, `a1b`-shaped mint heads,
 /// two-letter non-words — but accepts a single letter.
-pub fn is_sweep_answer_acceptable(name: &str) -> bool {
-    !is_bun_token(name) || is_single_letter(name)
+/// The junk shapes are the run's [`NameProfile`]'s: under Bun a `$`, a
+/// `_`-tail or a mint head refuses at any length; under the other
+/// profiles only a whole minifier-shaped token does.
+pub fn is_sweep_answer_acceptable(profile: NameProfile, name: &str) -> bool {
+    !is_minifier_token(profile, name) || is_single_letter(name)
 }
 
 /// Technical terms that carry a digit and look like a minifier stem but
@@ -174,8 +234,8 @@ pub fn is_sweep_answer_acceptable(name: &str) -> bool {
 /// 1.46M recorded answers found the model using legitimately, plus their
 /// obvious siblings. Matched case-insensitively ANYWHERE in the answer —
 /// a term that overlaps the candidate stem exempts it. The
-/// [`DOMAIN_STEMS`] are NOT here: [`is_bun_token`] already keeps them out
-/// of the stem set, and matching their short entries (`v8`, `es5`)
+/// [`DOMAIN_STEMS`] are NOT here: [`is_minifier_token`] already keeps them
+/// out of the stem set, and matching their short entries (`v8`, `es5`)
 /// anywhere would exempt real borrowings (`initAv8`, `initializeS56`).
 const TECH_TERMS: &[&str] = &[
     "p2c", "p2s", "b2c", "x5c", "x5t", "lz4", "lz77", "x10", "x11", "ie9", "ie10", "ie11", "md4",
@@ -186,14 +246,28 @@ const TECH_TERMS: &[&str] = &[
 ];
 
 /// The shape of a minified name another answer can BORROW as a word: a
-/// minifier token ([`is_bun_token`]) of at least three UTF-16 units that
-/// carries a digit — `H6t`, `uo7`, `D0u`, `A0n`, `da1`. Two-unit tokens
-/// (`V2`, `y1`, `T4`) and digitless ones (`Etl`, `Ctl`) are left out on
-/// purpose: in the replay they were mostly real words (`isV1Enabled`,
-/// `y1Coordinate`), and precision comes first — a wrongly refused good
-/// name forces a worse one.
-pub fn is_borrowable_stem(name: &str) -> bool {
-    js_len(name) >= 3 && name.bytes().any(|b| b.is_ascii_digit()) && is_bun_token(name)
+/// minifier token of at least three UTF-16 units that carries a digit —
+/// `H6t`, `uo7`, `D0u`, `A0n`, `da1`. Two-unit tokens (`V2`, `y1`, `T4`)
+/// and digitless ones (`Etl`, `Ctl`) are left out on purpose: in the
+/// replay they were mostly real words (`isV1Enabled`, `y1Coordinate`),
+/// and precision comes first — a wrongly refused good name forces a
+/// worse one.
+///
+/// This is the PRECISION GUARD of an always-on check, not its evidence
+/// (the evidence is the program lookup, [`MinifiedStems`]). Under Bun the
+/// guard is the Bun token, as before. Under every other profile —
+/// NotMinified included — it is the renamer-alphabet token (a whole 3-4
+/// unit name with a mint head, `p5e`): NotMinified's own token reads
+/// nothing, which would switch an always-on check off, and the renamer
+/// alphabet is the one shape every measured minifier emits for its
+/// 3-character names (`rename::name_profile`). On an unminified program
+/// such names are rare, and the lookup still has to find one bound.
+pub fn is_borrowable_stem(profile: NameProfile, name: &str) -> bool {
+    let shaped = match profile {
+        NameProfile::Bun => is_bun_token(name),
+        _ => is_renamer_token(name),
+    };
+    js_len(name) >= 3 && name.bytes().any(|b| b.is_ascii_digit()) && shaped
 }
 
 /// The program's ORIGINAL minified binding names that have the
@@ -203,30 +277,51 @@ pub fn is_borrowable_stem(name: &str) -> bool {
 /// Membership is CASE-INSENSITIVE (round 2, 2026-10-03 — the model
 /// re-cases what it borrows: `k2hResult` for the program's `K2H`), with
 /// the exact spellings kept for the one place that needs them (a trailing
-/// numbered word, see [`borrowed_minified_stem`]).
-#[derive(Clone, Debug, Default)]
+/// numbered word, see [`borrowed_minified_stem`]). It carries the run's
+/// [`NameProfile`], so every LLM naming site that holds the stems asks
+/// the answer checks under the same profile.
+#[derive(Clone, Debug)]
 pub struct MinifiedStems {
+    profile: NameProfile,
     exact: std::collections::HashSet<String>,
     folded: std::collections::HashSet<String>,
 }
 
 impl MinifiedStems {
     /// The borrowable names among `names` (every binding name of the
-    /// input program).
-    pub fn from_names<'n>(names: impl IntoIterator<Item = &'n str>) -> Self {
+    /// input program), under `profile`.
+    pub fn from_names<'n>(profile: NameProfile, names: impl IntoIterator<Item = &'n str>) -> Self {
         let exact: std::collections::HashSet<String> = names
             .into_iter()
-            .filter(|n| is_borrowable_stem(n))
+            .filter(|n| is_borrowable_stem(profile, n))
             .map(str::to_string)
             .collect();
         let folded = exact.iter().map(|n| n.to_ascii_lowercase()).collect();
-        MinifiedStems { exact, folded }
+        MinifiedStems {
+            profile,
+            exact,
+            folded,
+        }
+    }
+
+    /// No stems at all (a pass that runs without the fresh program).
+    pub fn empty(profile: NameProfile) -> Self {
+        Self::from_names(profile, [])
     }
 
     /// Every symbol name of a parsed program (the fresh text's semantic).
-    pub fn of_program(semantic: &oxc_semantic::Semantic<'_>) -> Self {
+    pub fn of_program(profile: NameProfile, semantic: &oxc_semantic::Semantic<'_>) -> Self {
         let scoping = semantic.scoping();
-        Self::from_names(scoping.symbol_ids().map(|s| scoping.symbol_name(s)))
+        Self::from_names(
+            profile,
+            scoping.symbol_ids().map(|s| scoping.symbol_name(s)),
+        )
+    }
+
+    /// The name profile the stems (and every answer check beside them)
+    /// were selected under.
+    pub fn profile(&self) -> NameProfile {
+        self.profile
     }
 
     /// Whether the program binds `name` in any ASCII casing.
@@ -372,7 +467,7 @@ pub fn borrowed_minified_stem<'a>(answer: &'a str, stems: &MinifiedStems) -> Opt
         let borrowed = (a, b) != (0, answer.len())
             && bound
             && !version
-            && is_borrowable_stem(segment)
+            && is_borrowable_stem(stems.profile, segment)
             && !tech_term_covers(answer, a, b);
         borrowed.then_some(segment)
     })
@@ -381,18 +476,22 @@ pub fn borrowed_minified_stem<'a>(answer: &'a str, stems: &MinifiedStems) -> Opt
 /// WHAT ANSWER MAY LAND, the identity-echo half (round 2, 2026-10-03):
 /// is `answer` the asked identifier's own MINIFIED name handed back
 /// (`{"yl":"yl","zf":"zf"}`)? True when the answer equals the name and
-/// the name is a minifier token ([`is_bun_token`]) of two or more UTF-16
-/// units that is not a convention placeholder. Single letters are left
+/// the name is a minifier token ([`is_minifier_token`], under the run's
+/// profile) of two or more UTF-16 units that is not a convention
+/// placeholder. Single letters are left
 /// out on purpose (Andrew, 2026-09-30: a loop counter `i` may stay), and
 /// so are real short words (`fs`, `id` are not tokens) and every
 /// descriptive name. Every LLM naming site refuses such an echo like a
 /// borrowed answer: a disclosed re-ask ("`yl` is the minified name"),
 /// within `--rename-retries`, then unrenamed and EXHAUSTED — a sweep
 /// target, never a decided keep. Three-letter digitless mints (`RHe`,
-/// `Etl`) are not [`is_bun_token`]s and keep their echo (precision
-/// first: the shape cannot tell them from words).
-pub fn is_minified_echo(old: &str, answer: &str) -> bool {
-    answer == old && js_len(old) >= 2 && is_bun_token(old) && !is_convention_carveout(old)
+/// `Etl`) are minifier tokens under no profile and keep their echo
+/// (precision first: the shape cannot tell them from words).
+pub fn is_minified_echo(profile: NameProfile, old: &str, answer: &str) -> bool {
+    answer == old
+        && js_len(old) >= 2
+        && is_minifier_token(profile, old)
+        && !is_convention_carveout(old)
 }
 
 /// A deliberate convention placeholder: all-underscore (`_`, `__`) or
@@ -408,7 +507,7 @@ pub fn is_convention_carveout(name: &str) -> bool {
 
 /// `isWordlessMintShape`: no 3-letter lowercase word run and not a
 /// CONSTANT_CASE constant — the reconcile's coarse mint metric (flags
-/// `iIn`, which `is_bun_token` cannot see; does NOT flag the half-mint
+/// `iIn`, which no profile's token reads; does NOT flag the half-mint
 /// `do7Function`, which has a word run).
 pub fn is_wordless_mint_shape(name: &str) -> bool {
     if is_constant_case(name) {
@@ -423,11 +522,17 @@ pub fn is_wordless_mint_shape(name: &str) -> bool {
 /// `isHalfMintHead`: a short mint stem wearing a capitalized word tail
 /// (`do7Function`, `T7Class`, `sm6Factory`, `h06Result`, `j3lResult`) —
 /// `/^(?:[A-Za-z][0-9]{1,2}|[A-Za-z]{2}[0-9]|[A-Za-z][0-9][a-z])[A-Z][a-z]/`
-/// behind the `isBunToken` gate.
-pub fn is_half_mint_head(name: &str) -> bool {
-    if !is_bun_token(name) {
-        return false;
-    }
+/// behind the profile's gate. Under Bun the gate is the WHOLE name's Bun
+/// token (`isBunToken`, as before — a mint head at any length is one).
+/// The other profiles' tokens are whole short names, so there the gate is
+/// the HEAD's: the stem before the word tail must itself be a minifier
+/// token (`do7`, `T7` under esbuild; nothing under NotMinified), and the whole
+/// name must not be an exempt shape (`h1Title`, `v8Engine`).
+pub fn is_half_mint_head(profile: NameProfile, name: &str) -> bool {
+    let gate = |head_len: usize| match profile {
+        NameProfile::Bun => is_bun_token(name),
+        _ => !is_exempt_shape(name) && is_minifier_token(profile, &name[..head_len]),
+    };
     let b = name.as_bytes();
     let alpha = |i: usize| b.get(i).is_some_and(u8::is_ascii_alphabetic);
     let digit = |i: usize| b.get(i).is_some_and(u8::is_ascii_digit);
@@ -444,7 +549,10 @@ pub fn is_half_mint_head(name: &str) -> bool {
         digit(1) && lower(2), // [A-Za-z][0-9][a-z]
     ];
     let lens = [2usize, 3, 3, 3];
-    heads.iter().zip(lens).any(|(&ok, len)| ok && tail_at(len))
+    heads
+        .iter()
+        .zip(lens)
+        .any(|(&ok, len)| ok && tail_at(len) && gate(len))
 }
 
 #[cfg(test)]

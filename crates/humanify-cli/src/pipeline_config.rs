@@ -27,7 +27,21 @@ pub fn build_pipeline_config(
         minifier_type: minifier.unwrap_or(detection.minifier.kind),
         unpack_adapter_name: humanify_core::unpack::select_adapter(detection, bundler_override)
             .name(),
+        name_profile_name: humanify_core::rename::name_profile::select_name_profile(
+            detection,
+            bundler_override,
+            minifier_override,
+        )
+        .name(),
     }
+}
+
+/// The run's minifier name profile, as the config recorded it.
+pub fn name_profile_of(
+    config: &PipelineConfig,
+) -> humanify_core::rename::name_profile::NameProfile {
+    humanify_core::rename::name_profile::name_profile_named(config.name_profile_name)
+        .expect("the config records a registered profile")
 }
 
 /// The TS string literal of a serde-lowercase enum.

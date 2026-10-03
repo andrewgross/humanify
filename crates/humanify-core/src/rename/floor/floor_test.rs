@@ -3,15 +3,23 @@
 //! names the replay found stay legal.
 
 use super::{MinifiedStems, borrowed_minified_stem, is_borrowable_stem, is_minified_echo};
+use crate::rename::name_profile::NameProfile;
+
+/// These pin the Bun profile (their replays ran on the Bun-minified
+/// Claude Code corpus); `rename::name_profile`'s tests cover the others.
+const BUN: NameProfile = NameProfile::Bun;
 
 /// A program whose minified names include every stem below — and the
 /// look-alikes (`b2c`, `p2s`, `x5c`, `LZ4`, `Rv4`, `V2`, `is2017`) so the
 /// exemptions are tested against a program that DOES bind them.
 fn stems() -> MinifiedStems {
-    MinifiedStems::from_names([
-        "H6t", "uo7", "go4", "d0u", "D0u", "A0n", "da1", "_", "RHe", "b2c", "p2s", "p2c", "x5c",
-        "LZ4", "X11", "Rv4", "V2", "y1", "Etl", "GT1",
-    ])
+    MinifiedStems::from_names(
+        BUN,
+        [
+            "H6t", "uo7", "go4", "d0u", "D0u", "A0n", "da1", "_", "RHe", "b2c", "p2s", "p2c",
+            "x5c", "LZ4", "X11", "Rv4", "V2", "y1", "Etl", "GT1",
+        ],
+    )
 }
 
 #[test]
@@ -66,10 +74,10 @@ fn legitimate_digit_names_stay_legal() {
 #[test]
 fn only_digit_bearing_minifier_tokens_of_three_or_more_units_are_stems() {
     for name in ["H6t", "uo7", "D0u", "A0n", "da1", "Fn8"] {
-        assert!(is_borrowable_stem(name), "{name}");
+        assert!(is_borrowable_stem(BUN, name), "{name}");
     }
     for name in ["V2", "y1", "Etl", "RHe", "_", "sha256", "ipv4", "value"] {
-        assert!(!is_borrowable_stem(name), "{name}");
+        assert!(!is_borrowable_stem(BUN, name), "{name}");
     }
 }
 
@@ -80,7 +88,7 @@ fn only_digit_bearing_minifier_tokens_of_three_or_more_units_are_stems() {
 /// spelling of it.
 #[test]
 fn a_recased_borrowed_stem_is_refused() {
-    let s = MinifiedStems::from_names(["Go4", "Ro4", "GS7", "SS7", "GR9", "K2H"]);
+    let s = MinifiedStems::from_names(BUN, ["Go4", "Ro4", "GS7", "SS7", "GR9", "K2H"]);
     for (answer, stem) in [
         ("go4Function", "go4"),
         ("ro4Function", "ro4"),
@@ -99,7 +107,7 @@ fn a_recased_borrowed_stem_is_refused() {
 /// of capitals before the next capitalised word continues the stem.
 #[test]
 fn a_stem_continued_by_capitals_after_its_digit_is_refused() {
-    let s = MinifiedStems::from_names(["S2K", "E2K", "Q2K", "Q2KX"]);
+    let s = MinifiedStems::from_names(BUN, ["S2K", "E2K", "Q2K", "Q2KX"]);
     for (answer, stem) in [
         ("S2KFunction", "S2K"),
         ("E2KFunction", "E2K"),
@@ -116,9 +124,12 @@ fn a_stem_continued_by_capitals_after_its_digit_is_refused() {
 /// when the program binds a same-letters-other-case look-alike.
 #[test]
 fn the_widened_predicate_keeps_legitimate_names_legal() {
-    let s = MinifiedStems::from_names([
-        "Is2", "IS2", "B2c", "P2s", "X5c", "Lz7", "Ha1", "Ut6", "s1m", "S1m", "t45",
-    ]);
+    let s = MinifiedStems::from_names(
+        BUN,
+        [
+            "Is2", "IS2", "B2c", "P2s", "X5c", "Lz7", "Ha1", "Ut6", "s1m", "S1m", "t45",
+        ],
+    );
     for answer in [
         "is2017OrLater",
         "b2cLoginHosts",
@@ -143,7 +154,7 @@ fn the_widened_predicate_keeps_legitimate_names_legal() {
     // numbered variant (`emptyFn3` beside `emptyFn2`; the program binds
     // `fn3`) and the end-to-end term (`isE2E`; the program binds `e2e`).
     // A trailing word+digits stem must match EXACTLY to be borrowed.
-    let replayed = MinifiedStems::from_names(["fn3", "e2e"]);
+    let replayed = MinifiedStems::from_names(BUN, ["fn3", "e2e"]);
     for answer in ["emptyFn3", "noopFn3", "isE2E", "runE2ETests"] {
         assert_eq!(borrowed_minified_stem(answer, &replayed), None, "{answer}");
     }
@@ -151,16 +162,19 @@ fn the_widened_predicate_keeps_legitimate_names_legal() {
     // legitimate name main's predicate refused in the round-2 replay
     // (the 2.1.85 program binds `To4`).
     assert_eq!(
-        borrowed_minified_stem("migrateSonnet1mTo4_5", &MinifiedStems::from_names(["To4"])),
+        borrowed_minified_stem(
+            "migrateSonnet1mTo4_5",
+            &MinifiedStems::from_names(BUN, ["To4"])
+        ),
         None
     );
     assert_eq!(
-        borrowed_minified_stem("emptyFn3", &MinifiedStems::from_names(["Fn3"])),
+        borrowed_minified_stem("emptyFn3", &MinifiedStems::from_names(BUN, ["Fn3"])),
         Some("Fn3"),
         "an EXACT trailing match is still borrowed (main's rule)"
     );
     // A stem bound only by a DIFFERENT program is not borrowed here.
-    let other = MinifiedStems::from_names(["Go4"]);
+    let other = MinifiedStems::from_names(BUN, ["Go4"]);
     assert_eq!(borrowed_minified_stem("S2KFunction", &other), None);
     assert_eq!(borrowed_minified_stem("ss7Initializer", &other), None);
 }
@@ -172,12 +186,12 @@ fn the_widened_predicate_keeps_legitimate_names_legal() {
 #[test]
 fn an_echoed_multi_letter_minified_name_is_refused() {
     for name in ["yl", "zf", "Ul", "kd", "lh", "$r", "z88", "Go4", "a1b"] {
-        assert!(is_minified_echo(name, name), "{name}");
+        assert!(is_minified_echo(BUN, name, name), "{name}");
     }
     for name in [
         "i", "e", "x", "_", "__", "$", "fs", "id", "cb", "config", "RHe", "sha256",
     ] {
-        assert!(!is_minified_echo(name, name), "{name}");
+        assert!(!is_minified_echo(BUN, name, name), "{name}");
     }
-    assert!(!is_minified_echo("yl", "jobItem"), "only an echo");
+    assert!(!is_minified_echo(BUN, "yl", "jobItem"), "only an echo");
 }

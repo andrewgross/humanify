@@ -28,6 +28,7 @@ pub mod proximity;
 use std::collections::HashMap;
 
 use crate::rename::floor::is_below_floor_name;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::transfer::evidence::{SideRows, TransferEvidence};
 use crate::rename::transfer::retry::OnApplied;
 use crate::rename::transfer::rows::Rows;
@@ -89,13 +90,14 @@ pub fn get_top_vote<'v>(
 }
 
 /// TS `rankVoteSuggestion`: the unique top by (exact, then total), below-
-/// floor names excluded from candidacy; a tie abstains.
-pub fn rank_vote_suggestion(votes: &Votes) -> Option<String> {
+/// floor names (under the run's name profile) excluded from candidacy; a
+/// tie abstains.
+pub fn rank_vote_suggestion(votes: &Votes, profile: NameProfile) -> Option<String> {
     let mut best: Option<&str> = None;
     let (mut best_exact, mut best_total) = (-1i64, -1i64);
     let mut tied = false;
     for (name, count) in votes {
-        if is_below_floor_name(name) {
+        if is_below_floor_name(profile, name) {
             continue;
         }
         let (exact, total) = (count.exact as i64, count.total as i64);
@@ -504,7 +506,7 @@ fn suggest_from_votes(run: &mut TransferRun<'_, '_>, row: usize, votes: &Votes) 
     if run.binding_suggested[row].is_some() {
         return;
     }
-    let Some(suggestion) = rank_vote_suggestion(votes) else {
+    let Some(suggestion) = rank_vote_suggestion(votes, run.rename.name_profile()) else {
         return;
     };
     run.binding_suggested[row] = Some(suggestion.clone());

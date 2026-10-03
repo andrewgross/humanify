@@ -88,7 +88,11 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
     let provider = CollisionSweep {
         asks: std::cell::Cell::new(0),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
         semantic,
@@ -102,7 +106,10 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(provider.asks.get(), 2, "exactly one re-ask (it applied)");
     assert_eq!(r.reasked, 1, "the retry is recorded");
@@ -171,7 +178,11 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
     let stubborn = Stubborn {
         asks: std::cell::Cell::new(0),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
         semantic,
@@ -185,7 +196,10 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(
         stubborn.asks.get(),
@@ -272,7 +286,11 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
     let provider = TwoCollisions {
         asks: std::cell::Cell::new(0),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
         semantic,
@@ -286,7 +304,10 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(provider.asks.get(), 3, "bounded: no third re-ask");
     assert_eq!(r.reasked, 2, "one re-ask round each");
@@ -344,7 +365,11 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
     let provider = Naming {
         asked: std::cell::RefCell::new(Vec::new()),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
 
     let r = sweep_minted_names(
@@ -359,7 +384,10 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     let asked: Vec<String> = provider.asked.borrow().iter().flatten().cloned().collect();
     assert!(
@@ -418,7 +446,11 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
                 .collect()
         }
     }
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
 
     let r = sweep_minted_names(
@@ -433,7 +465,10 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(r.named, 2, "the letter answer applied");
     let code = render_program(semantic, &state);
@@ -470,7 +505,10 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(
         (r2.named, r2.dispatches.len()),
@@ -519,7 +557,11 @@ fn sweep_junk_answers_are_still_refused() {
                 .collect()
         }
     }
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
 
     let r = sweep_minted_names(
@@ -534,7 +576,10 @@ fn sweep_junk_answers_are_still_refused() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(r.named, 0, "no junk answer applied");
     assert_eq!(r.skipped, 2);
@@ -614,7 +659,11 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
     let provider = Borrowing {
         reasks: std::cell::Cell::new(0),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
         semantic,
@@ -628,7 +677,10 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
         usize::MAX,
         2,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     let code = render_program(semantic, &state);
     assert!(
@@ -700,7 +752,11 @@ fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
             reasks: std::cell::Cell::new(0),
             relent,
         };
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
         let r = sweep_minted_names(
             semantic,
@@ -714,7 +770,10 @@ fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
             usize::MAX,
             2,
             None,
-            &crate::rename::floor::MinifiedStems::of_program(semantic),
+            &crate::rename::floor::MinifiedStems::of_program(
+                crate::rename::name_profile::NameProfile::Bun,
+                semantic,
+            ),
         );
         let code = render_program(semantic, &state);
         if relent {
@@ -745,7 +804,11 @@ fn a_never_asked_destructure_value_slot_is_a_sweep_target_even_when_descriptive(
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     // The setter half was decided by a wave: the model renamed it.
     let scope = scope_holding(&state, "valueSlot");
     let setter = state.get_binding(scope, "setValueSlot").expect("setter");
@@ -793,7 +856,11 @@ fn decided_bindings_are_not_retargeted_but_exhausted_ones_are() {
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let f_scope = scope_holding(&state, "Kq_");
     // `used` was renamed this run.
     let used = state.get_binding(f_scope, "used").expect("used");
@@ -863,7 +930,11 @@ fn convention_carveouts_are_never_sweep_targets() {
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
     let taint = collect_eval_with_taint(semantic);
-    let state = RenameState::new(semantic, Anchor::Fresh);
+    let state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let targets = collect_sweep_targets(semantic, &state, &eligible, &taint, None);
     let names: Vec<&str> = targets.iter().map(|t| t.name.as_str()).collect();
     for out in ["_", "__", "$"] {
@@ -925,7 +996,7 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
         false,
         2,
         &decided,
-        &crate::rename::floor::MinifiedStems::default(),
+        &crate::rename::floor::MinifiedStems::empty(crate::rename::name_profile::NameProfile::Bun),
     )
     .expect("the sweep parses its text");
     let asked = provider.asked.borrow().clone();
@@ -999,7 +1070,11 @@ fn the_sweep_reask_budget_is_configurable() {
     let one = Counting {
         asks: std::cell::Cell::new(0),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
         semantic,
@@ -1013,7 +1088,10 @@ fn the_sweep_reask_budget_is_configurable() {
         usize::MAX,
         1,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(one.asks.get(), 2, "a single-reask budget is the old bound");
     assert_eq!(r.reasked, 1);
@@ -1022,7 +1100,11 @@ fn the_sweep_reask_budget_is_configurable() {
     let zero = Counting {
         asks: std::cell::Cell::new(0),
     };
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
     let r = sweep_minted_names(
         semantic,
@@ -1036,7 +1118,10 @@ fn the_sweep_reask_budget_is_configurable() {
         usize::MAX,
         0,
         None,
-        &crate::rename::floor::MinifiedStems::of_program(semantic),
+        &crate::rename::floor::MinifiedStems::of_program(
+            crate::rename::name_profile::NameProfile::Bun,
+            semantic,
+        ),
     );
     assert_eq!(zero.asks.get(), 1, "a zero budget never re-asks");
     assert_eq!(r.reasked, 0);

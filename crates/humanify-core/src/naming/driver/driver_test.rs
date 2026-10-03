@@ -51,7 +51,11 @@ fn rename_and_render(code: &str, renames: &[(&str, &str)]) -> String {
     use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
     use crate::trail::Anchor;
     with_semantic(code, true, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let program = state.view().program_scope();
         for (old, new) in renames {
             let attempt = state.attempt_validated_rename(
@@ -93,7 +97,11 @@ fn rename_every_binding_and_render(code: &str) -> String {
     use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
     use crate::trail::Anchor;
     with_semantic(code, true, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let program = state.view().program_scope();
         for pass in ["Renamed", "Again"] {
             for (old, _) in state.bindings_in(program) {
@@ -127,7 +135,11 @@ fn export_const_renames_never_leave_a_specifier_on_a_dead_name() {
     use crate::trail::Anchor;
     let code = "export const a = 1, b = 2;\nuse(a, b);\n";
     let out = with_semantic(code, true, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let program = state.view().program_scope();
         for (old, new) in [("a", "first"), ("b", "second"), ("first", "again")] {
             let _ = state.attempt_validated_rename(
@@ -245,6 +257,7 @@ impl humanify_model::llm::NameProvider for SuffixProvider {
 
 fn ledger_config() -> super::NamingConfig {
     super::NamingConfig {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
         bundler: None,
         minifier: None,
         skip_libraries: true,

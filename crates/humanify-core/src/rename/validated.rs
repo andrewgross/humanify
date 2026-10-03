@@ -49,6 +49,7 @@ use oxc_semantic::{Semantic, SymbolId};
 
 use crate::modules::soundness::{EvalWithTaint, is_binding_eval_taint_frozen};
 use crate::rename::floor::is_below_floor_name;
+use crate::rename::name_profile::NameProfile;
 use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier, TrailTarget};
 
 pub mod ledger;
@@ -261,12 +262,24 @@ pub struct RenameState {
     applied: Vec<AppliedRename>,
     trail: StrategyTrail,
     opt_outs: TrailOptOuts,
+    /// The run's minifier name profile — the carried rule's "below the
+    /// floor" is its shape question (`rename::name_profile`). None only
+    /// for a [`RenameState::for_lookups`] state, which never renames.
+    profile: Option<NameProfile>,
 }
 
 impl RenameState {
     /// A fresh state over a parsed text, with an armed trail.
-    pub fn new(semantic: &Semantic<'_>, anchor: Anchor) -> RenameState {
-        RenameState::with_trail(semantic, anchor, StrategyTrail::enabled())
+    pub fn new(semantic: &Semantic<'_>, anchor: Anchor, profile: NameProfile) -> RenameState {
+        RenameState::with_trail(semantic, anchor, StrategyTrail::enabled(), profile)
+    }
+
+    /// A state for SCOPE LOOKUPS only (the finish's relink: "is this free
+    /// reference shadowed here?"). It never applies a rename, so it needs
+    /// no name profile; asking it for one ([`RenameState::name_profile`],
+    /// which every apply does) is a bug and panics.
+    pub fn for_lookups(semantic: &Semantic<'_>, anchor: Anchor) -> RenameState {
+        RenameState::build(semantic, anchor, StrategyTrail::enabled(), None)
     }
 
     /// A state that continues an earlier pass's trail (the TS trail is one
@@ -275,6 +288,16 @@ impl RenameState {
         semantic: &Semantic<'_>,
         anchor: Anchor,
         trail: StrategyTrail,
+        profile: NameProfile,
+    ) -> RenameState {
+        RenameState::build(semantic, anchor, trail, Some(profile))
+    }
+
+    fn build(
+        semantic: &Semantic<'_>,
+        anchor: Anchor,
+        trail: StrategyTrail,
+        profile: Option<NameProfile>,
     ) -> RenameState {
         let view = BabelScopes::build(semantic);
         let maps: Vec<BTreeMap<String, (u64, BindingId)>> = view
@@ -303,7 +326,15 @@ impl RenameState {
             applied: Vec::new(),
             trail,
             opt_outs: TrailOptOuts::default(),
+            profile,
         }
+    }
+
+    /// The run's minifier name profile, for every shape question asked
+    /// against this state's names.
+    pub fn name_profile(&self) -> NameProfile {
+        self.profile
+            .expect("a renaming state carries the run's name profile (for_lookups never renames)")
     }
 
     // -- reads ---------------------------------------------------------------
@@ -721,7 +752,7 @@ impl RenameState {
         self.claims.claims_recorded += 1;
         // exp066 provenance rule: a below-floor name deliberately APPLIED is
         // carried — the sweep must not re-roll it this run.
-        if is_below_floor_name(new_name)
+        if is_below_floor_name(self.name_profile(), new_name)
             && let Some(carried) = self.binding_in(scope, new_name)
         {
             self.carried.insert(carried);

@@ -322,7 +322,9 @@ impl Ctx<'_, '_> {
             };
             return skip_of(g, &to_name, reason);
         }
-        if is_half_mint_head(&to_name) && !is_wordless_mint_shape(&g.from_name) {
+        if is_half_mint_head(state.name_profile(), &to_name)
+            && !is_wordless_mint_shape(&g.from_name)
+        {
             return skip_of(g, &to_name, "half-mint-restore");
         }
         let kind = if is_wordless_mint_shape(&g.from_name) {

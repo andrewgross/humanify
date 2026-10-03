@@ -198,7 +198,11 @@ fn rename_scenarios_match_the_ts_probe() {
         let module = spec["sourceType"].as_str().unwrap_or("module") == "module";
         let code = spec["code"].as_str().expect("code");
         let (results, names) = with_semantic(code, module, |semantic| {
-            let mut state = RenameState::new(semantic, Anchor::Fresh);
+            let mut state = RenameState::new(
+                semantic,
+                Anchor::Fresh,
+                crate::rename::name_profile::NameProfile::Bun,
+            );
             let mut replay = Replay {
                 state: &mut state,
                 captured: Vec::new(),
@@ -227,7 +231,11 @@ fn rename_scenarios_match_the_ts_probe() {
 
 fn program_state<R>(code: &str, f: impl FnOnce(&mut RenameState) -> R) -> R {
     with_semantic(code, true, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         f(&mut state)
     })
 }
@@ -299,7 +307,11 @@ fn claims_count_applied_renames_and_the_ledger_counter_stays_zero() {
 fn the_era_capture_is_rejected_without_any_ledger_attribution() {
     let code = "\nfunction getFileWriter() {\n  let outerDir = null;\n  register({ writeFn: (task) => {\n    let innerDir = dirname(getPath());\n    let changed = outerDir !== innerDir;\n    outerDir = innerDir;\n    return changed;\n  }});\n}";
     with_semantic(code, false, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let owner_of = |state: &RenameState, name: &str| {
             let view = state.view();
             let b = (0..view.bindings.len() as u32)
@@ -431,7 +443,11 @@ fn finish_hands_the_render_every_renamed_symbol() {
         "var a = 1; function f(p) { return p + a; }",
         true,
         |semantic| {
-            let mut state = RenameState::new(semantic, Anchor::Fresh);
+            let mut state = RenameState::new(
+                semantic,
+                Anchor::Fresh,
+                crate::rename::name_profile::NameProfile::Bun,
+            );
             let p = state.view().program_scope();
             assert!(attempt(&mut state, p, "a", "count").applied);
             assert!(attempt(&mut state, p, "a", "x").reason == Some(RejectionReason::NoBinding));
@@ -463,7 +479,11 @@ fn eval_taint_freeze_matches_the_ts_probe() {
         let code = case["code"].as_str().expect("code");
         let mine = with_semantic(code, false, |semantic| {
             let taint = crate::modules::soundness::collect_eval_with_taint(semantic);
-            let state = RenameState::new(semantic, Anchor::Fresh);
+            let state = RenameState::new(
+                semantic,
+                Anchor::Fresh,
+                crate::rename::name_profile::NameProfile::Bun,
+            );
             let view = state.view();
             let mut ids: Vec<BindingId> = (0..view.bindings.len() as u32).map(BindingId).collect();
             ids.sort_by_key(|b| view.binding(*b).id_span.start);
@@ -512,7 +532,11 @@ fn the_catch_var_capture_is_rejected() {
     ];
     for (code, allowed) in cases {
         with_semantic(code, false, |semantic| {
-            let mut state = RenameState::new(semantic, Anchor::Fresh);
+            let mut state = RenameState::new(
+                semantic,
+                Anchor::Fresh,
+                crate::rename::name_profile::NameProfile::Bun,
+            );
             let catch_scope = state
                 .view()
                 .scopes
@@ -564,7 +588,11 @@ fn a_recrawl_restores_registration_order_under_current_names() {
 #[test]
 fn program_globals_keep_babels_insertion_order() {
     with_semantic("use(zeta); later = 1; alpha();", false, |semantic| {
-        let state = RenameState::new(semantic, Anchor::Fresh);
+        let state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         assert_eq!(
             state.view().globals_order,
             ["later", "use", "zeta", "alpha"]
@@ -763,7 +791,11 @@ fn llm_ask_rows_mark_a_binding_decided_floor_rows_do_not() {
 #[test]
 fn finish_hands_on_the_exhausted_names() {
     with_semantic("var Kq_ = one(); var O_ = two();", true, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let p = state.view().program_scope();
         let kq = state.binding_in(p, "Kq_").expect("Kq_");
         let o = state.binding_in(p, "O_").expect("O_");

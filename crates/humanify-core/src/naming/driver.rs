@@ -52,6 +52,7 @@ use crate::naming::report::coverage::{
 use crate::naming::report::{ProcessorReport, RenameReport};
 use crate::prior::{PriorMatchInput, match_prior_version};
 use crate::rename::eligibility::Eligibility;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::transfer::TransferStats;
 use crate::trail::{Anchor, StrategyTrail};
 use era::{EraOptions, FloorCounts, NamingEra, PriorStats, WaveRecords};
@@ -63,6 +64,10 @@ use library::RecordedName;
 pub struct NamingConfig {
     pub bundler: Option<String>,
     pub minifier: Option<String>,
+    /// The minifier name profile selected once from detection
+    /// (`rename::name_profile::select_name_profile`) — every name-shape
+    /// question of the stage is asked under it.
+    pub name_profile: NameProfile,
     /// `skipLibraries` (default true).
     pub skip_libraries: bool,
     pub reconcile_prior_diff: bool,
@@ -180,6 +185,7 @@ pub fn run_naming<P: NameProvider>(
     let opts = EraOptions {
         bundler: config.bundler.as_deref(),
         minifier: config.minifier.as_deref(),
+        name_profile: config.name_profile,
         params: &config.params,
         naming_floor: config.naming_floor,
         pre_generate_sweep: config.naming_floor_sweep && !deferred,
@@ -220,7 +226,7 @@ pub fn run_naming<P: NameProvider>(
                 let prior_members = input
                     .prior
                     .filter(|_| permute_may_run)
-                    .map(PriorMembers::of);
+                    .map(|p| PriorMembers::of(p, config.name_profile));
                 (Some(validate::baseline_of(input.fresh)), prior_members)
             },
             run_era,
@@ -308,7 +314,14 @@ pub fn run_naming<P: NameProvider>(
         crate::naming::reconcile::step::LedgerWalk::Live
     });
     let reconcile = |prior: &str, trail: StrategyTrail| {
-        reconcile_pass(&generated, prior, &eligible, trail, ledger_walk)
+        reconcile_pass(
+            &generated,
+            prior,
+            &eligible,
+            config.name_profile,
+            trail,
+            ledger_walk,
+        )
     };
     let (verdict, reconciled, trail) = match input.prior.filter(|_| reconcile_gates) {
         // The fast schedule: the verdict (a re-parse of the generated text) runs
@@ -441,8 +454,10 @@ pub fn run_naming<P: NameProvider>(
     {
         let text = resolved;
         let permuted = match prior_members.take() {
-            Some(members) => run_family_permute_with(&text, members, &eligible),
-            None => run_family_permute(&text, prior, &eligible),
+            Some(members) => {
+                run_family_permute_with(&text, members, &eligible, config.name_profile)
+            }
+            None => run_family_permute(&text, prior, &eligible, config.name_profile),
         };
         if let Ok(p) = permuted {
             add_claims(&mut out.claims, &p.claims);
@@ -456,7 +471,7 @@ pub fn run_naming<P: NameProvider>(
     drop(ph);
     let _ph = crate::profiling::phase("naming:census");
     // -- the census + coverage ----------------------------------------------
-    let census = census_of_text(&shipped, &eligible)?;
+    let census = census_of_text(&shipped, &eligible, config.name_profile)?;
     let mut coverage = build_coverage_summary(
         &out.reports,
         &coverage_inputs(&out, function_count, &library),
@@ -516,10 +531,11 @@ fn reconcile_pass(
     generated: &str,
     prior: &str,
     eligible: &Eligibility,
+    profile: NameProfile,
     trail: StrategyTrail,
     ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
 ) -> (StrategyTrail, Option<ReconcileRun>) {
-    match run_prior_diff_reconciliation(generated, prior, eligible, trail, ledger_walk) {
+    match run_prior_diff_reconciliation(generated, prior, eligible, profile, trail, ledger_walk) {
         Ok(PriorDiffOutcome {
             result,
             code,

@@ -138,7 +138,7 @@ pub fn retry_decorated_names(
 ) -> DecorationRetryResult {
     let mut result = DecorationRetryResult::default();
     for entry in collect_minted_bindings(semantic, state, eligible).entries {
-        if !is_decorated_descriptive(&entry.name) {
+        if !is_decorated_descriptive(state.name_profile(), &entry.name) {
             continue;
         }
         if state.is_eval_taint_frozen(entry.binding, taint) {

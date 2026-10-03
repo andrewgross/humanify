@@ -23,6 +23,7 @@ use humanify_model::js::JsValue;
 use crate::babel_view::DiffLines;
 use crate::emit::substitutions::{Substitution, apply_substitutions};
 use crate::naming::reconcile::resolve::{identifier_sites, shorthand_key};
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::scopes::BScopeId;
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::Anchor;
@@ -228,6 +229,7 @@ pub fn carry_renames_into_bundle(
     bundle: &str,
     ledger: &JsValue,
     renames: &[PostSplitRename],
+    profile: NameProfile,
 ) -> Result<CarryResult, String> {
     let mut result = CarryResult::default();
     if renames.is_empty() {
@@ -248,7 +250,7 @@ pub fn carry_renames_into_bundle(
         return Ok(result);
     };
     let targets = resolve_targets(renames, ledger, body.len(), &mut result.abstained);
-    let mut state = RenameState::new(ingest.semantic(), Anchor::Shipped);
+    let mut state = RenameState::new(ingest.semantic(), Anchor::Shipped, profile);
     let decls = bundle_declarations(&state, &body);
     let lines = DiffLines::new(bundle);
     let text_lines: Vec<&str> = bundle.split('\n').collect();
