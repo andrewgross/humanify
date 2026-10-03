@@ -72,6 +72,9 @@ pub struct SplitOptions<'a, 'n> {
     /// gate, the wrapper body every text here is sliced from, and the
     /// wrapper parameters' roles in the runnable emit.
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's module wrapper grammar (the toolchain's P3 piece): the
+    /// module helper the fresh grouping's vendor bucket takes (review R7).
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
 }
 
 /// `StableSplitStats`.
@@ -232,6 +235,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             namer: options.namer,
             reviser: options.reviser,
             layout,
+            module_wrappers: options.module_wrappers,
         },
         options.prior,
         trail,

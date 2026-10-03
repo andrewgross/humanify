@@ -635,9 +635,7 @@ fn pipeline_body(
     let mut unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
-        toolchain.unpack.piece,
-        toolchain.layout.piece,
-        toolchain.interop.piece,
+        &toolchain,
         provider,
         &mut dispatch_log,
         prior_path,
@@ -790,6 +788,7 @@ fn pipeline_body(
                     flags: dump_flags(opts, settings, &toolchain),
                     regions: &regions,
                     layout: toolchain.layout.piece,
+                    module_wrappers: toolchain.module_wrappers.piece,
                 },
                 renderer,
             )?;
@@ -878,6 +877,7 @@ struct DumpContext<'a> {
     flags: humanify_model::js::JsValue,
     regions: &'a [humanify_core::libdetect::CommentRegion],
     layout: humanify_core::toolchain::BundleLayout,
+    module_wrappers: humanify_core::toolchain::ModuleWrapperGrammar,
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
@@ -1005,6 +1005,7 @@ impl RunReports<'_> {
                 split: self.split,
                 comment_regions: ctx.regions,
                 layout: ctx.layout,
+                module_wrappers: ctx.module_wrappers,
                 extra_trail: &self.post_split.trail,
             },
         )
@@ -1410,6 +1411,7 @@ fn naming_config(
         never_rename: toolchain.never_rename.piece,
         tuning: toolchain.tuning.piece,
         layout: toolchain.layout.piece,
+        module_wrappers: toolchain.module_wrappers.piece,
         name_profile: toolchain.name_profile.piece,
         skip_libraries: settings.skip_libraries,
         reconcile_prior_diff: settings.levers.reconcile_prior_diff,

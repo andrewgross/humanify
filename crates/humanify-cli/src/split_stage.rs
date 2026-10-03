@@ -327,6 +327,7 @@ fn split_before_commit(
             vendor_fresh: input.fresh,
             original_bundle: input.input_bundle,
             layout: input.toolchain.layout.piece,
+            module_wrappers: input.toolchain.module_wrappers.piece,
         },
     )?;
     report_namer(&namer, renderer);

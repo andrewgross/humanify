@@ -266,9 +266,12 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
         .0
     } else {
         let (mut namer, mut reviser) = (replay, replay);
+        let helper =
+            crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild.identify_factory_helper(code);
         assign_clustered(
             &input.body,
             Some((code, input.spans.as_slice())),
+            helper.as_ref().map(|h| h.name.as_str()),
             &cluster_config(&row["clusterConfig"]),
             ClusterNamers {
                 namer: (row["namer"] == true).then_some(&mut namer as &mut dyn SplitNamer),

@@ -17,6 +17,7 @@ use crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 fn plain_config() -> crate::naming::driver::NamingConfig {
     crate::naming::driver::NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
         tuning: crate::toolchain::BundlerTuning::Default,

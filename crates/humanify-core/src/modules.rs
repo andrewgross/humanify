@@ -1123,12 +1123,10 @@ pub fn parse_banner(raw: &str) -> BannerInfo {
 /// classification per site (helper var, wrapper, factory rows).
 pub mod modules_dump {
 
-    use oxc_allocator::Allocator;
-    use serde_json::{Value, json};
-
-    use super::classify_bun_modules;
     use crate::hash::serialize::SymbolTables;
     use crate::ingest::Ingest;
+    use oxc_allocator::Allocator;
+    use serde_json::{Value, json};
 
     /// One classification site's modules.json object (`recordBunModules`):
     /// helper var, wrapper, factory rows sorted by span — Null without a
@@ -1203,6 +1201,7 @@ pub mod modules_dump {
     pub fn classify_site(
         text: &str,
         layout: crate::toolchain::BundleLayout,
+        grammar: crate::toolchain::ModuleWrapperGrammar,
     ) -> Result<
         Option<(
             super::BunModuleClassification,
@@ -1212,8 +1211,8 @@ pub mod modules_dump {
     > {
         // No factory helper, no classification — and no parse (an ESM text
         // is not a bundle; the scan is the classifier's own first step —
-        // either bundler's helper, [`super::identify_cjs_factory`]).
-        if super::identify_cjs_factory(text).is_none() {
+        // the run's grammar's helper).
+        if grammar.identify_factory_helper(text).is_none() {
             return Ok(None);
         }
         let allocator = Allocator::default();
@@ -1223,7 +1222,7 @@ pub mod modules_dump {
         }
         let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
         let tables = SymbolTables::build(ingest.semantic());
-        let classification = classify_bun_modules(
+        let classification = grammar.classify_factories(
             text,
             ingest.program,
             ingest.semantic(),

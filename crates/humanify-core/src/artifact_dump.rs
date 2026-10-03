@@ -93,6 +93,8 @@ pub struct DumpInputs<'a> {
     pub extra_trail: &'a crate::naming::report::diagnostics::ExtraTrail,
     /// The run's bundle layout (the classification sites' container).
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's module wrapper grammar (the classification sites').
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
 }
 
 fn sha256_hex(text: &str) -> String {
@@ -163,8 +165,9 @@ pub fn write_artifact_dump(inp: &DumpInputs<'_>) -> Result<(), String> {
     }
     // The graph-time classification site (the fresh text's): modules.json's
     // `graph` and regions.json's banner rows.
-    let graph_site = crate::modules::modules_dump::classify_site(inp.fresh, inp.layout)
-        .map_err(|e| format!("fresh: {e}"))?;
+    let graph_site =
+        crate::modules::modules_dump::classify_site(inp.fresh, inp.layout, inp.module_wrappers)
+            .map_err(|e| format!("fresh: {e}"))?;
     write_modules(&w, inp, graph_site.as_ref())?;
     if let Some(m) = capture.and_then(|c| c.matches.as_ref()) {
         write_twin_gates(&w, &m.twin_gates)?;
@@ -322,7 +325,8 @@ fn write_meta(w: &Writer<'_>, inp: &DumpInputs<'_>, texts: &DumpTexts<'_>) -> Re
 /// neither site classified.
 fn write_modules(w: &Writer<'_>, inp: &DumpInputs<'_>, graph: Option<&Site>) -> Result<(), String> {
     use crate::modules::modules_dump::{classify_site, site_json};
-    let unpack = classify_site(inp.minified, inp.layout).map_err(|e| format!("minified: {e}"))?;
+    let unpack = classify_site(inp.minified, inp.layout, inp.module_wrappers)
+        .map_err(|e| format!("minified: {e}"))?;
     if unpack.is_none() && graph.is_none() {
         return Ok(());
     }

@@ -1203,7 +1203,7 @@ fn factory_call_of(decl: &Value) -> Option<(String, String, usize)> {
 
 /// `factoryCallee`: a statement that is PURELY factory declarations with
 /// one shared callee → (first binding, callee, declarator count).
-pub fn factory_callee(stmt: &Value) -> Option<(String, String, usize)> {
+fn factory_callee(stmt: &Value) -> Option<(String, String, usize)> {
     if node_type(stmt) != "VariableDeclaration" {
         return None;
     }
@@ -1226,38 +1226,23 @@ pub fn factory_callee(stmt: &Value) -> Option<(String, String, usize)> {
     Some((calls[0].0.clone(), callee, calls.len()))
 }
 
-/// `detectCjsHelper`: the identifier wrapping the most modules (>= 2).
-pub fn detect_cjs_helper(body: &[Value]) -> Option<String> {
-    let mut tally: Vec<(String, usize)> = Vec::new();
-    for stmt in body {
-        if let Some((_, callee, count)) = factory_callee(stmt) {
-            match tally.iter_mut().find(|(c, _)| *c == callee) {
-                Some((_, n)) => *n += count,
-                None => tally.push((callee, count)),
-            }
-        }
-    }
-    let mut best: Option<String> = None;
-    let mut best_n = 1;
-    for (name, n) in tally {
-        if n > best_n {
-            best_n = n;
-            best = Some(name);
-        }
-    }
-    best
-}
-
 /// `assignClustered`: the per-statement file assignment of the fresh
 /// grouping. `code` + `spans` are the rendered text the statements were
 /// parsed from (vendor stems floor to a content hash; namer evidence).
+/// `module_helper` is the module helper the run's module wrapper grammar
+/// recognised in that text (`ModuleWrapperGrammar::identify_factory_helper`,
+/// toolchain review R7): every pure factory-declaration statement wrapped
+/// in it goes to `vendor/`. None: no bundled modules, nothing vendored —
+/// the grouping no longer guesses a helper by tallying the most-used
+/// higher-order callee (which took an app's own `forwardRef`/`memo`).
 pub fn assign_clustered(
     body: &[Value],
     code: Option<(&str, &[(u32, u32)])>,
+    module_helper: Option<&str>,
     cfg: &ClusterConfig,
     namers: ClusterNamers,
 ) -> Vec<String> {
-    let helper = detect_cjs_helper(body);
+    let helper = module_helper.map(str::to_string);
     let mut used_lib: HashSet<String> = HashSet::new();
     let mut assignment = vec![String::new(); body.len()];
     let mut app_idx: Vec<usize> = Vec::new();

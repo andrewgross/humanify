@@ -330,7 +330,7 @@ fn run_libdetect(
                 dir,
                 AdapterRun {
                     webcrack_shim: shim.as_ref(),
-                    ..AdapterRun::new(toolchain.interop.piece)
+                    ..AdapterRun::new(toolchain.interop.piece, toolchain.module_wrappers.piece)
                 },
             )?
             .into_result()
@@ -466,6 +466,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         out,
         AdapterRun {
             interop: toolchain.interop.piece,
+            module_wrappers: toolchain.module_wrappers.piece,
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
             prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,

@@ -263,6 +263,7 @@ fn with_twin_sides_classified(
 ) {
     let input = PriorMatchInput {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         fresh: fresh_code,
         prior: prior_code,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,

@@ -52,6 +52,9 @@ pub struct PlacementGate<'a> {
     pub reviser: Option<&'a mut dyn TreeReviser>,
     /// The run's bundle layout (`prior_text`'s top-level statements).
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's module wrapper grammar (P3): the module helper the
+    /// cluster regime's vendor bucket takes (review R7).
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
@@ -123,9 +126,11 @@ pub fn assign_regime(
             assigned.assignment
         }
         Regime::Cluster => {
+            let module_helper = gate.module_wrappers.identify_factory_helper(shipped);
             let assignment = assign_clustered(
                 &input.body,
                 Some((shipped, input.spans.as_slice())),
+                module_helper.as_ref().map(|h| h.name.as_str()),
                 &DEFAULT_CLUSTER_CONFIG,
                 ClusterNamers {
                     namer: gate.namer,

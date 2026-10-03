@@ -58,6 +58,8 @@ pub struct EraOptions<'o> {
     pub tuning: crate::toolchain::BundlerTuning,
     /// `NamingConfig::layout`.
     pub layout: crate::toolchain::BundleLayout,
+    /// `NamingConfig::module_wrappers`.
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
     /// `NamingConfig::name_profile`.
     pub name_profile: crate::rename::name_profile::NameProfile,
     pub params: &'o CacheKeyParams,
@@ -419,6 +421,7 @@ pub fn fresh_era<P: NameProvider>(
         "input.js",
         crate::graph::Eligibility::SkipSet(opts.never_rename),
         opts.layout,
+        opts.module_wrappers,
     );
     let semantic = ingest.semantic();
     let graph = &parts.graph;

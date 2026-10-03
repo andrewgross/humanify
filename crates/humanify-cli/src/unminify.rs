@@ -13,9 +13,7 @@ use humanify_core::modules::vendor_names::{
 };
 use humanify_core::profiling::Profiler;
 use humanify_core::unpack::webcrack::WebcrackShim;
-use humanify_core::unpack::{
-    AdapterOutcome, AdapterRun, UnpackAdapter, UnpackedFile, bun, run_adapter,
-};
+use humanify_core::unpack::{AdapterOutcome, AdapterRun, UnpackedFile, bun, run_adapter};
 use humanify_model::llm::NameProvider;
 use humanify_model::profiling::JsObject;
 
@@ -64,9 +62,7 @@ pub struct Unpacked {
 pub fn unpack_bundle(
     code: &str,
     out_dir: &Path,
-    adapter: UnpackAdapter,
-    layout: humanify_core::toolchain::BundleLayout,
-    interop: humanify_core::toolchain::InteropHelpers,
+    toolchain: &humanify_core::toolchain::Toolchain,
     provider: &dyn NameProvider,
     log: &mut humanify_core::artifact_dump::DispatchLog,
     prior_version: Option<&Path>,
@@ -99,13 +95,15 @@ pub fn unpack_bundle(
     // use (the vendor namer, the prior's vendor record, the webcrack
     // shim) and takes what it needs.
     let shim = repo_webcrack_shim();
+    let adapter = toolchain.unpack.piece;
     let outcome = run_adapter(
         adapter,
-        layout,
+        toolchain.layout.piece,
         code,
         out_dir,
         AdapterRun {
-            interop,
+            interop: toolchain.interop.piece,
+            module_wrappers: toolchain.module_wrappers.piece,
             namer: Some(&mut namer as &mut dyn VendorNamer),
             prior: prior_vendor,
             manifest_prior_order_disabled,
