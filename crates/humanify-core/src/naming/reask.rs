@@ -11,8 +11,10 @@
 //!   previous suggestion can fix it.
 //! - [`ReaskClass::InvalidSuggestion`] — the suggestion is not a legal
 //!   rename target (`invalid-target`), or it borrows one of the program's
-//!   minified names as a word (`borrowed-minified-stem`, 2026-10-03 —
-//!   refused at the barrier and in the sweep; a budget that dies on it
+//!   minified names as a word (`borrowed-minified-stem`, 2026-10-03), or
+//!   it hands a multi-letter minified name back as itself
+//!   (`minified-echo`, round 2) — both refused at the barrier and in the
+//!   sweep (`naming::waves::processor::answer_refusal`); a budget that dies on it
 //!   leaves the binding unrenamed and EXHAUSTED, never decorated). The
 //!   lane loop already re-asks invalid targets; a site without that loop
 //!   (the sweep) may re-ask too.

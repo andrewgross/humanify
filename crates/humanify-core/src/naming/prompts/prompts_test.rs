@@ -184,6 +184,36 @@ fn module_body_caps_used_names() {
     assert!(listed <= 200, "got {listed}");
 }
 
+/// Round 2 (2026-10-03): a MULTI-LETTER minified name returned as itself
+/// is told it IS the minified name — in the function and module retries
+/// alike; a single letter keeps the generic wording.
+#[test]
+fn an_unchanged_minified_name_is_told_it_is_the_minified_name() {
+    let line = "- \"yl\" is the minified name; suggest a descriptive name\n";
+    let p = retry(
+        "function f(yl) { return yl; }",
+        &["yl"],
+        &[],
+        &map(&[("yl", "yl")]),
+        &failures(&[], &[], &[], &["yl"]),
+        None,
+        None,
+    );
+    assert!(p.contains(line), "{p}");
+    let m = build_module_level_retry_prefix(
+        &map(&[("yl", "yl")]),
+        &failures(&[], &[], &[], &["yl"]),
+        None,
+    );
+    assert!(m.contains(line), "{m}");
+    let z = build_module_level_retry_prefix(
+        &map(&[("z", "z")]),
+        &failures(&[], &[], &[], &["z"]),
+        None,
+    );
+    assert!(z.contains(r#""z" was returned as itself"#), "{z}");
+}
+
 // ---- buildModuleLevelRetryPrefix ----
 
 #[test]

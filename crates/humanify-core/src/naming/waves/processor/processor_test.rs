@@ -70,13 +70,21 @@ fn name_of(id: &str) -> String {
     }
 }
 
-/// The stub's descriptive answer for an id: `<id>Named` — upper-cased
-/// when the id is itself a borrowable minified name (`p00`, `v05`): its
-/// own name as a word would be refused as a borrowed stem (Fix A,
-/// 2026-10-03), which these pins are not about.
+/// The stub's descriptive answer for an id: `<id>Named` — with its digits
+/// spelled as letters when the id is itself a borrowable minified name
+/// (`p01` → `pABNamed`): its own name as a word would be refused as a
+/// borrowed stem (Fix A, 2026-10-03; case-insensitively since round 2, so
+/// upper-casing no longer dodges it), which these pins are not about.
 fn plain_name(id: &str) -> String {
     if crate::rename::floor::is_borrowable_stem(id) {
-        format!("{}Named", id.to_uppercase())
+        let spelled: String = id
+            .chars()
+            .map(|c| match c.to_digit(10) {
+                Some(d) => char::from(b'A' + d as u8),
+                None => c,
+            })
+            .collect();
+        format!("{spelled}Named")
     } else {
         format!("{id}Named")
     }
@@ -299,7 +307,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
     );
     let code = out.code.expect("shipped");
     assert!(
-        code.contains("var eventNameKey = eventHooks + P01Named;"),
+        code.contains("var eventNameKey = eventHooks + pABNamed;"),
         "{code}"
     );
 }
@@ -917,6 +925,82 @@ fn a_stubborn_borrowed_stem_exhausts_and_stays_unrenamed() {
         barrier_reasks(&out).len(),
         2,
         "the default budget: two re-asks"
+    );
+}
+
+const ECHO_PROGRAM: &str = "function Qz(yl, i) {\n  return yl + i;\n}\n\
+     console.log(Qz(2, 3));\n";
+
+/// Round 2, the IDENTITY ECHO (ref r2 2.1.216: `{"yl":"yl","zf":"zf",...}`):
+/// a multi-letter minified name answered with itself is refused like a
+/// borrowed answer — a disclosed re-ask saying it IS the minified name —
+/// and the descriptive re-ask lands. Before: the echo settled as an
+/// identity KEEP the sweep never revisits. A single letter keeps its echo
+/// (a loop counter may stay `i`) and is never re-asked.
+#[test]
+fn an_echoed_minified_name_is_refused_and_reasked() {
+    let out = run_scripted(ECHO_PROGRAM, |id, r| match id {
+        "yl" if r.prior_rejects.is_some() => "addend".to_string(),
+        "yl" | "i" => id.to_string(),
+        other => format!("{other}Named"),
+    });
+    let code = out.code.as_deref().expect("shipped");
+    assert!(code.contains("function QzNamed(addend, i)"), "{code}");
+    let reasks = barrier_reasks(&out);
+    assert_eq!(reasks.len(), 1, "one disclosed re-ask, for yl only");
+    assert_eq!(reasks[0].request.identifiers, ["yl"]);
+    let prompt = &reasks[0].user_prompt;
+    assert!(
+        prompt.contains("- \"yl\" is the minified name; suggest a descriptive name"),
+        "the re-ask says the echo IS the minified name: {prompt}"
+    );
+}
+
+/// The echo's budget: a model that keeps echoing runs `--rename-retries`
+/// out, and the binding stays unrenamed and EXHAUSTED — a sweep target,
+/// not a decided keep.
+#[test]
+fn a_stubborn_echo_exhausts_and_stays_a_sweep_target() {
+    let mut config = plain_config();
+    config.naming_floor = true;
+    config.naming_floor_sweep = true;
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh: ECHO_PROGRAM,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &ScriptProvider {
+            answer: |id: &str, _: &humanify_model::llm::BatchRenameRequest| match id {
+                "yl" | "i" => id.to_string(),
+                other => format!("{other}Named"),
+            },
+        },
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let code = out.code.as_deref().expect("shipped");
+    assert!(code.contains("function QzNamed(yl, i)"), "{code}");
+    assert_eq!(barrier_reasks(&out).len(), 2, "the default budget");
+    let sweep = out.pre_sweep.as_ref().expect("the in-era sweep ran");
+    let swept: Vec<&String> = sweep
+        .dispatches
+        .iter()
+        .flat_map(|d| &d.request.identifiers)
+        .collect();
+    assert!(
+        swept.iter().any(|n| *n == "yl"),
+        "the exhausted echo is a sweep target: {swept:?}"
+    );
+    assert!(
+        !swept.iter().any(|n| *n == "i"),
+        "a letter's echo is a decided keep: {swept:?}"
+    );
+    assert!(
+        sweep.exhausted_names.iter().any(|n| n == "yl"),
+        "still echoing in the sweep: exhausted again, {:?}",
+        sweep.exhausted_names
     );
 }
 

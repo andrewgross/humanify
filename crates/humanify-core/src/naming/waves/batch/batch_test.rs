@@ -363,6 +363,81 @@ fn an_all_failed_window_with_invalid_answers_gets_one_feedback_straggler() {
     );
 }
 
+/// Finding #73's module-lane leftover (rep73.py, 17/26/24 per run): the
+/// lane's round-2 disclosed the PRIOR-VERSION name the module transform
+/// snapped the model's word to — the model said `setupApplication`, the
+/// snap made it the prior `setupApplication12` (taken), and the re-ask
+/// showed `setupApplication12`. It must disclose the model's own word.
+#[test]
+fn a_lane_round_two_discloses_the_models_word_not_the_prior_snap() {
+    let used = |n: &str| n == "setupApplication12";
+    let reject = |_: &str, _: &str| None;
+    let snap = |old: &str, s: &str| {
+        if old == "z88" && s == "setupApplication" {
+            "setupApplication12".to_string()
+        } else {
+            s.to_string()
+        }
+    };
+    let e = LaneEnv {
+        used: &used,
+        would_reject: &reject,
+        transform: Some(&snap),
+    };
+    let mut lane = Lane::new(names(&["T88", "z88"]), false);
+    lane.next_call().unwrap();
+    lane.feed(
+        Ok((
+            renames(&[("T88", "chalkInstance"), ("z88", "setupApplication")]),
+            None,
+        )),
+        &e,
+    );
+    let retry = lane.next_call().expect("z88's round-2");
+    assert_eq!(retry.batch, names(&["z88"]));
+    assert_eq!(retry.failures.duplicates, names(&["z88"]));
+    assert_eq!(
+        retry.prev.0,
+        vec![("z88".to_string(), "setupApplication".to_string())],
+        "the model's own word is disclosed, not the snapped prior name"
+    );
+}
+
+/// Round 2, the IDENTITY ECHO: a window that answers every multi-letter
+/// minified name with itself (`{"yl":"yl","zf":"zf"}`, ref r2 2.1.216)
+/// used to settle them as identity — a KEEP the sweep never revisits.
+/// The lane hands such an echo to the barrier as a refused answer (the
+/// echo effect); a single letter keeps its identity record.
+#[test]
+fn an_echoed_minified_name_leaves_the_lane_as_an_echo_not_identity() {
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| None;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["yl", "zf", "i"]), true);
+    lane.next_call().unwrap();
+    lane.feed(
+        Ok((renames(&[("yl", "yl"), ("zf", "zf"), ("i", "i")]), None)),
+        &e,
+    );
+    assert!(lane.next_call().is_none(), "an all-failed window");
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![
+            LaneEffect::Echo { name: "yl".into() },
+            LaneEffect::Echo { name: "zf".into() },
+            LaneEffect::Identity { name: "i".into() },
+        ]
+    );
+    // A module lane (no identity records) hands its echo on too.
+    let mut lane = Lane::new(names(&["yl"]), false);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("yl", "yl")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(lane.effects, vec![LaneEffect::Echo { name: "yl".into() }]);
+}
+
 /// The exhausted-through-round-2 id is NOT re-admitted: it had its
 /// disclosed retry already, so only the tail (sanitize + ladder) remains.
 #[test]

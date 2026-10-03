@@ -25,6 +25,7 @@ use humanify_model::js::JsValue;
 use humanify_model::llm::{BatchRenameRequest, PriorRejects, RenameFailures, StrMap};
 
 use super::js_record;
+use crate::rename::floor::is_minified_echo;
 
 /// System prompt for batch renaming all identifiers in a function at once.
 pub const BATCH_RENAME_SYSTEM_PROMPT: &str = "You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -354,7 +355,11 @@ fn missing_line(f: &RenameFailures) -> String {
 /// shared wording — a barrier/sweep re-ask reuses it per ACCUMULATED
 /// entry, a lane round-2 once per id from `previous_attempt`).
 fn failure_line(name: &str, sug: &str, invalid: bool, borrowed: Option<&str>) -> String {
-    if let Some(stem) = borrowed {
+    if sug == name {
+        // An echo refusal (`rename::floor::is_minified_echo`, round 2,
+        // 2026-10-03): the "suggestion" IS the minified name.
+        echo_line(name)
+    } else if let Some(stem) = borrowed {
         format!(
             "- \"{name}\" was suggested as \"{sug}\" which reuses the minified name \"{stem}\" from elsewhere in the code; suggest a descriptive name\n"
         )
@@ -366,6 +371,18 @@ fn failure_line(name: &str, sug: &str, invalid: bool, borrowed: Option<&str>) ->
         format!(
             "- \"{name}\" was suggested as \"{sug}\" but that conflicts with an existing name\n"
         )
+    }
+}
+
+/// The line for an identifier the model returned as ITSELF: a
+/// multi-letter minified name is told it IS the minified name (round 2,
+/// 2026-10-03 — the echo refusal, `rename::floor::is_minified_echo`); any
+/// other name keeps the generic wording.
+fn echo_line(name: &str) -> String {
+    if is_minified_echo(name, name) {
+        format!("- \"{name}\" is the minified name; suggest a descriptive name\n")
+    } else {
+        format!("- \"{name}\" was returned as itself — you MUST suggest a DIFFERENT name\n")
     }
 }
 
@@ -396,7 +413,7 @@ fn render_retry_diagnostics(
         }
     }
     for name in &f.unchanged {
-        s += &format!("- \"{name}\" was returned as itself — you MUST suggest a DIFFERENT name\n");
+        s += &echo_line(name);
     }
     for name in &f.invalid {
         s += &match js_record::get_truthy(prev, name) {
@@ -570,7 +587,7 @@ pub fn build_module_level_retry_prefix(
         }
     }
     for name in &f.unchanged {
-        s += &format!("- \"{name}\" was returned as itself — you MUST suggest a DIFFERENT name\n");
+        s += &echo_line(name);
     }
     for name in &f.invalid {
         if let Some(sug) = js_record::get_truthy(prev, name) {
