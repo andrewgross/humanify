@@ -5,6 +5,9 @@ import * as path from "node:path";
 import { after, describe, it } from "node:test";
 import {
   type RunManifest,
+  baseModeComparison,
+  baseModeOf,
+  labelBaseModes,
   loadManifest,
   manifestWarnings,
   peakRssMbFromStatus,
@@ -43,7 +46,8 @@ function base(over: Partial<RunManifest> = {}): RunManifest {
     inputs: {
       input: "/in/index.js",
       prior: "/work/exp050-cold/2.1.85-rebased/.humanify/humanified.js",
-      priorKind: "rebased"
+      priorKind: "rebased",
+      baseMode: "scratch"
     },
     config: {
       endpoint: "http://x/v1",
@@ -71,6 +75,131 @@ describe("prior provenance", () => {
         "/Users/x/unpacked-claude-code/versions/claude-code-2.1.85/.humanify/humanified.js"
       ),
       "archive"
+    );
+  });
+});
+
+/**
+ * WHICH BASE a pair was scored against (2026-10-03). The default became a
+ * SCRATCH base — v-1 rebuilt by the current pipeline with no prior — after
+ * the seeded rebuild was found to inherit the July-era archive's names by
+ * exact match. Every reference scored before then was SEEDED, and a seeded
+ * label and a scratch label measure different bases: comparing them is the
+ * mixed-commit failure one axis over.
+ */
+describe("base mode", () => {
+  const withInputs = (inputs: Partial<RunManifest["inputs"]>): RunManifest =>
+    base({ inputs: { ...base().inputs, ...inputs } });
+
+  it("reads the recorded mode when the run recorded one", () => {
+    assert.strictEqual(
+      baseModeOf(withInputs({ baseMode: "scratch" })),
+      "scratch"
+    );
+    assert.strictEqual(
+      baseModeOf(withInputs({ baseMode: "seeded" })),
+      "seeded"
+    );
+  });
+
+  it("infers SEEDED for a rebased prior recorded before the field existed", () => {
+    // Before 2026-10-03 run.sh had exactly one rebuild, and it was seeded by
+    // the archive (`--prior-version <archive>`), so this is a fact, not a guess.
+    const old = (inputs: Partial<RunManifest["inputs"]>): RunManifest => {
+      const m = withInputs(inputs);
+      delete m.inputs.baseMode;
+      return m;
+    };
+    assert.strictEqual(baseModeOf(old({ priorKind: "rebased" })), "seeded");
+    assert.strictEqual(baseModeOf(old({ priorKind: "archive" })), "archive");
+    assert.strictEqual(
+      baseModeOf(old({ priorKind: "unknown", prior: "" })),
+      "unknown"
+    );
+  });
+
+  it("collects a label's modes from its manifests — empty when it has none", () => {
+    const d = path.join(tmp, "modes");
+    fs.mkdirSync(d, { recursive: true });
+    assert.deepStrictEqual(labelBaseModes(d), []);
+    writeManifest(d, "2.1.86", withInputs({ baseMode: "scratch" }));
+    writeManifest(d, "2.1.119", withInputs({ baseMode: "archive" }));
+    assert.deepStrictEqual(labelBaseModes(d), ["archive", "scratch"]);
+  });
+
+  it("warns on a SEEDED base — it inherits the archive's names", () => {
+    const w = manifestWarnings(withInputs({ baseMode: "seeded" }));
+    assert.ok(
+      w.some((l) => /SEEDED/.test(l)),
+      `expected a seeded-base warning, got: ${JSON.stringify(w)}`
+    );
+    assert.deepStrictEqual(
+      manifestWarnings(withInputs({ baseMode: "scratch" })),
+      []
+    );
+  });
+
+  it("REFUSES a comparison across base modes, naming each label's mode", () => {
+    const r = baseModeComparison(
+      [
+        { label: "ref", modes: ["seeded"] },
+        { label: "new", modes: ["scratch"] }
+      ],
+      false
+    );
+    assert.ok(r.refusal, "a seeded-vs-scratch comparison must be refused");
+    assert.match(r.refusal, /ref=seeded/);
+    assert.match(r.refusal, /new=scratch/);
+    assert.match(r.refusal, /--force-mixed/);
+  });
+
+  it("--force-mixed prints the mix loudly instead of refusing", () => {
+    const r = baseModeComparison(
+      [
+        { label: "ref", modes: ["seeded"] },
+        { label: "new", modes: ["scratch"] }
+      ],
+      true
+    );
+    assert.strictEqual(r.refusal, null);
+    assert.ok(
+      r.lines.some((l) => /MIXED BASE MODES/.test(l)),
+      r.lines.join("\n")
+    );
+  });
+
+  it("a label that is itself mixed (a rebase fell back to the archive) is mixed", () => {
+    const r = baseModeComparison(
+      [{ label: "half", modes: ["archive", "scratch"] }],
+      false
+    );
+    assert.ok(r.refusal);
+  });
+
+  it("agreeing labels compare silently except for the base line", () => {
+    const r = baseModeComparison(
+      [
+        { label: "a", modes: ["scratch"] },
+        { label: "b", modes: ["scratch"] }
+      ],
+      false
+    );
+    assert.strictEqual(r.refusal, null);
+    assert.deepStrictEqual(r.lines, ["  base: a=scratch · b=scratch"]);
+  });
+
+  it("an UNKNOWN mode is said out loud, never read as agreement — and never refused", () => {
+    const r = baseModeComparison(
+      [
+        { label: "old", modes: [] },
+        { label: "b", modes: ["scratch"] }
+      ],
+      false
+    );
+    assert.strictEqual(r.refusal, null);
+    assert.ok(
+      r.lines.some((l) => /UNKNOWN for old/.test(l)),
+      r.lines.join("\n")
     );
   });
 });

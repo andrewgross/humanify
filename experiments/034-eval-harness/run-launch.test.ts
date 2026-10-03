@@ -19,12 +19,20 @@ import { describe, it } from "node:test";
  * replaced by a recorder that writes the promised artifacts and nothing
  * else; the recorded launches are normalised and compared against a golden
  * captured from the pre-cutover run.sh under `--bin`.
+ *
+ * TWO goldens since the base-mode switch (2026-10-03). The default rebuilds
+ * each base from SCRATCH, so its rebase lines carry no `--prior-version`
+ * (run-launch.golden.txt). `--seeded-base` is the old protocol — every
+ * reference before 2026-10-03 — and its golden is the previous golden byte
+ * for byte, plus the recorded `"baseMode"` in each run config
+ * (run-launch.seeded-base.golden.txt).
  */
 
 const HERE = import.meta.dirname;
 const REPO = path.resolve(HERE, "../..");
 const RUN_SH = path.join(HERE, "run.sh");
 const GOLDEN = path.join(HERE, "run-launch.golden.txt");
+const SEEDED_GOLDEN = path.join(HERE, "run-launch.seeded-base.golden.txt");
 const PAIRS: Array<[string, string]> = JSON.parse(
   fs.readFileSync(path.join(HERE, "pairs.json"), "utf8")
 ).pairs.map((p: { from: string; to: string }) => [p.from, p.to]);
@@ -208,7 +216,7 @@ function runHarness(
 }
 
 describe("run.sh pipeline launches", () => {
-  it("every --bin launch is byte-identical to the binary-scored references'", () => {
+  it("every --bin launch is byte-identical to the golden (default: SCRATCH bases)", () => {
     const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
     assert.strictEqual(h.status, 0, h.stdout);
     if (process.env.UPDATE_RUN_LAUNCH_GOLDEN === "1") {
@@ -217,8 +225,95 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(
       h.launches,
       fs.readFileSync(GOLDEN, "utf8"),
-      "the --bin launches changed — the binary-scored references were scored by the golden's command lines"
+      "the default --bin launches changed — the golden is the protocol a scratch-base label is scored by"
     );
+  });
+
+  it("--seeded-base launches are byte-identical to the pre-2026-10-03 protocol (every recorded reference)", () => {
+    // main-2026-09-18, rust-relaxed-default-843826be, control-843826be-8gpu
+    // and candidate-8af0574f-8gpu were all scored on bases rebuilt WITH the
+    // archive as --prior-version. This golden is that protocol's launch
+    // lines, kept byte-for-byte so a seeded re-score stays comparable to them.
+    const h = runHarness([
+      "--bin",
+      "<TMP>/shims/humanify",
+      "--force-mixed",
+      "--seeded-base"
+    ]);
+    assert.strictEqual(h.status, 0, h.stdout);
+    if (process.env.UPDATE_RUN_LAUNCH_GOLDEN === "1") {
+      fs.writeFileSync(SEEDED_GOLDEN, h.launches);
+    }
+    assert.strictEqual(h.launches, fs.readFileSync(SEEDED_GOLDEN, "utf8"));
+  });
+
+  it("the DEFAULT rebuilds each base from SCRATCH: no rebase launch has a prior", () => {
+    const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
+    assert.strictEqual(h.status, 0, h.stdout);
+    const rebases = h.launches
+      .split("\n")
+      .filter((l) => l.startsWith("humanify ") && l.includes("-rebased "));
+    assert.strictEqual(rebases.length, 4, h.launches);
+    for (const l of rebases) assert.doesNotMatch(l, /--prior-version/);
+    // The scored leg still uses the rebuilt base as its prior.
+    assert.match(
+      h.launches,
+      /"prior": "<TMP>\/work\/<LABEL>\/2\.1\.85-rebased\//
+    );
+    // Recorded: per pair (run config -> manifest) and for the label.
+    assert.strictEqual(
+      h.launches.match(/"baseMode": "scratch"/g)?.length,
+      4,
+      h.launches
+    );
+    assert.match(h.results, /pipeline\.json: .*"baseMode":"scratch"/);
+    assert.match(h.stdout, /BASE: scratch/);
+  });
+
+  it("--seeded-base seeds every rebase with the ARCHIVE prior, and records it", () => {
+    const h = runHarness([
+      "--bin",
+      "<TMP>/shims/humanify",
+      "--force-mixed",
+      "--seeded-base"
+    ]);
+    const rebases = h.launches
+      .split("\n")
+      .filter((l) => l.startsWith("humanify ") && l.includes("-rebased "));
+    assert.strictEqual(rebases.length, 4, h.launches);
+    for (const l of rebases) {
+      assert.match(
+        l,
+        /--prior-version <TMP>\/priors\/claude-code-[\d.]+\/\.humanify\/humanified\.js/
+      );
+    }
+    assert.strictEqual(h.launches.match(/"baseMode": "seeded"/g)?.length, 4);
+    assert.match(h.results, /pipeline\.json: .*"baseMode":"seeded"/);
+  });
+
+  it("--archive-prior: no rebuild at all, the archive tree is the base", () => {
+    const h = runHarness([
+      "--bin",
+      "<TMP>/shims/humanify",
+      "--force-mixed",
+      "--archive-prior"
+    ]);
+    assert.strictEqual(h.status, 0, h.stdout);
+    assert.doesNotMatch(h.launches, /-rebased /);
+    assert.strictEqual(h.launches.match(/"baseMode": "archive"/g)?.length, 4);
+    assert.match(h.results, /pipeline\.json: .*"baseMode":"archive"/);
+  });
+
+  it("--seeded-base and --archive-prior together are refused before anything launches", () => {
+    const h = runHarness([
+      "--bin",
+      "<TMP>/shims/humanify",
+      "--force-mixed",
+      "--seeded-base",
+      "--archive-prior"
+    ]);
+    assert.strictEqual(h.status, 2, h.stdout);
+    assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
   });
 
   it("WITHOUT --bin the harness builds and runs the repo's own binary — the TS mode is gone", () => {

@@ -139,10 +139,20 @@ Below-floor when the stem is minted.
 
 ### rebased prior / reference label
 
-`REBASE_PRIOR=1` regenerates each pair's _from_ version with the current
-pipeline before scoring, so the diff measures the pipeline against its
-own output, not an old archive. Result folders like
-`floor-guard-rebased` are committed **references** to compare against.
+`REBASE_PRIOR=1` (now the default; env vars are gone) regenerates each
+pair's _from_ version with the current pipeline before scoring. Result
+folders like `floor-guard-rebased` are committed **references** to compare
+against.
+
+### base mode (scratch / seeded / archive)
+
+How the rebased prior is produced (README, "The base"). **scratch** (the
+default since 2026-10-03): rebuilt with no prior — pure current-pipeline
+output. **seeded** (`--seeded-base`): rebuilt with the archive as its
+prior, inheriting the archive's names — the protocol of every reference
+before 2026-10-03, which is why those are comparable only to seeded runs.
+**archive** (`--archive-prior`): no rebuild. The leaderboard refuses to
+compare labels on different modes without `--force-mixed`.
 
 ### healing hop
 

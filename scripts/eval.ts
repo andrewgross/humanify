@@ -24,6 +24,10 @@ import {
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import {
+  type BaseMode,
+  labelBaseModes
+} from "../experiments/lib/run-manifest.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const RESULTS = path.join(REPO, "experiments/034-eval-harness/results");
@@ -143,6 +147,11 @@ function parseFlags(
 
 const SCORE_FLAGS: Record<string, FlagKind> = {
   "--force-mixed": "bool",
+  // The base mode (run.sh header): default SCRATCH — each v-1 rebuilt by
+  // the current pipeline with no prior. --seeded-base rebuilds it seeded by
+  // the archive (the protocol of every reference before 2026-10-03);
+  // --archive-prior scores against the archive tree itself. Exclusive.
+  "--seeded-base": "bool",
   "--archive-prior": "bool",
   "--pairs": "value",
   "--heap-mb": "value",
@@ -170,20 +179,70 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
  * `eval score`'s arguments: the label, and the flags handed to run.sh in
  * the order given. Every flag is validated here, before anything runs.
  */
-export function scoreArgs(
-  args: string[]
-): { label: string; force: boolean; passthrough: string[] } | string {
+export function scoreArgs(args: string[]):
+  | {
+      label: string;
+      force: boolean;
+      baseMode: BaseMode;
+      passthrough: string[];
+    }
+  | string {
   const parsed = parseFlags(args, SCORE_FLAGS);
   if (typeof parsed === "string") return parsed;
   const label = parsed.positional[0];
   if (!label || parsed.positional.length > 1) {
     return "usage: eval score <label> [flags]";
   }
+  const seeded = parsed.flags["--seeded-base"] === true;
+  const archive = parsed.flags["--archive-prior"] === true;
+  if (seeded && archive) {
+    return "--seeded-base and --archive-prior are exclusive: one base mode per run";
+  }
   return {
     label,
     force: parsed.flags["--force-mixed"] === true,
+    baseMode: archive ? "archive" : seeded ? "seeded" : "scratch",
     passthrough: parsed.given
   };
+}
+
+/**
+ * Refuse a label already holding cards on ANOTHER base mode: summarize
+ * totals every card in the directory, so a scratch re-run into a seeded
+ * label would read as one run on one base. The label's `pipeline.json`
+ * names its mode; a label from before that field is read from its run
+ * manifests (`labelBaseModes` — a rebased prior then WAS seeded).
+ */
+export function guardBaseMode(
+  dir: string,
+  label: string,
+  requested: BaseMode,
+  force: boolean
+): string | null {
+  if (!fs.existsSync(path.join(dir, "commit.txt"))) return null;
+  let recorded: string[] = [];
+  try {
+    const mode = JSON.parse(
+      fs.readFileSync(path.join(dir, "pipeline.json"), "utf8")
+    )?.baseMode;
+    if (typeof mode === "string") recorded = [mode];
+  } catch {
+    /* no pipeline.json, or one from before baseMode existed */
+  }
+  if (recorded.length === 0) recorded = labelBaseModes(dir);
+  const foreign = recorded.filter((m) => m !== requested);
+  if (foreign.length === 0) return null;
+  if (force) {
+    console.log(
+      `!! MIXED BASE MODES in label '${label}' (${recorded.join(" + ")} + ${requested}) — forced.`
+    );
+    return null;
+  }
+  return (
+    `label '${label}' holds cards scored on a ${recorded.join(" + ")} base; this run would add ${requested}-base cards.\n` +
+    `The summary would total them as one run on one base.\n` +
+    `Pick a new label, or pass --force-mixed if mixing is deliberate.`
+  );
 }
 
 /**
@@ -225,10 +284,12 @@ const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--pipeline-arg <arg>]... ...",
+      "score <label> [--pairs a,b] [--seeded-base | --archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--pipeline-arg <arg>]... ...",
     description:
       "Cold scored run of the Rust binary over the eval pairs (the harness builds target/release/humanify unless --bin names another); cards + summary under results/<label>. " +
-      "Defaults are the gate-valid protocol: fresh-generated bases, no LLM cache, cold + warm self-hop.",
+      "Defaults are the gate-valid protocol: SCRATCH bases (each v-1 rebuilt by the current pipeline with no prior), no LLM cache, cold + warm self-hop. " +
+      "--seeded-base rebuilds each v-1 seeded by the archive (it inherits the archive's names) — the protocol every reference before 2026-10-03 was scored on, comparable only to seeded labels; " +
+      "--archive-prior scores against the archive tree with no rebuild.",
     proves:
       "how the CURRENT TREE's cross-version diff decomposes (KPIs), pipeline exit, boot",
     cannotProve:
@@ -239,8 +300,11 @@ const VERBS: Verb[] = [
         console.error(`eval score: ${parsed}`);
         return 2;
       }
-      const { label, force, passthrough } = parsed;
-      const err = guardLabel(label, force) ?? guardPipeline(label, force);
+      const { label, force, baseMode, passthrough } = parsed;
+      const err =
+        guardLabel(label, force) ??
+        guardPipeline(label, force) ??
+        guardBaseMode(path.join(RESULTS, label), label, baseMode, force);
       if (err) {
         console.error(err);
         return 2;
@@ -251,9 +315,17 @@ const VERBS: Verb[] = [
           `PARTIAL: --pairs ${passthrough[pairsAt + 1]} — this label will not cover the full pair set.`
         );
       }
-      if (passthrough.includes("--archive-prior")) {
+      if (baseMode === "archive") {
         console.log(
-          "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than fresh bases; not comparable to the standing reference."
+          "ARCHIVE-PRIOR MODE: scoring against archive bases — KPIs read ~3.7x worse than rebuilt bases; not comparable to the standing reference."
+        );
+      } else if (baseMode === "seeded") {
+        console.log(
+          "SEEDED-BASE MODE: each base rebuilt with the archive as its prior — it inherits the archive's names. Comparable only to seeded labels (every reference scored before 2026-10-03)."
+        );
+      } else {
+        console.log(
+          "SCRATCH BASES (default): each base rebuilt with no prior — a full cold run per base. NOT comparable to the seeded references (main-2026-09-18 and every label before 2026-10-03); the leaderboard refuses the mix."
         );
       }
       // --force-mixed passes through too: run.sh needs it to accept a binary
@@ -380,8 +452,9 @@ const VERBS: Verb[] = [
   },
   {
     name: "leaderboard",
-    usage: "leaderboard <label> [label...]",
-    description: "Compare labels' totals side by side.",
+    usage: "leaderboard <label> [label...] [--force-mixed]",
+    description:
+      "Compare labels' totals side by side. Prints each label's base mode, and REFUSES labels scored on different base modes (scratch / seeded / archive) unless --force-mixed.",
     proves: "relative KPI movement between labels",
     cannotProve:
       "that a sub-noise-floor delta is real; only novel/realLn have proven draw-invariance",

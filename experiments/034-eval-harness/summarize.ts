@@ -19,7 +19,11 @@ import {
   runStatusBanner,
   verdictBanner
 } from "../lib/invariants.js";
-import { isScorecardShape, loadManifests } from "../lib/run-manifest.js";
+import {
+  isScorecardShape,
+  labelBaseModes,
+  loadManifests
+} from "../lib/run-manifest.js";
 
 /** What produced a label's numbers, gathered from its per-pair manifests.
  * Sorted and de-duplicated so the JSON is stable and a mixed label is
@@ -29,16 +33,27 @@ export interface LabelProvenance {
   models: string[];
   endpoints: string[];
   reasoningEfforts: string[];
+  /** How each pair's base was produced (scratch / seeded / archive —
+   *  `BaseMode`, run-manifest.ts). More than one = a mixed label. */
+  baseModes: string[];
 }
 
-function labelProvenance(dir: string): LabelProvenance {
+export function labelProvenance(dir: string): LabelProvenance {
   const manifests = loadManifests(dir);
   const uniq = (xs: string[]) => [...new Set(xs)].sort();
   return {
     models: uniq(manifests.map((m) => m.config.model)),
     endpoints: uniq(manifests.map((m) => m.config.endpoint)),
-    reasoningEfforts: uniq(manifests.map((m) => m.config.reasoningEffort))
+    reasoningEfforts: uniq(manifests.map((m) => m.config.reasoningEffort)),
+    baseModes: labelBaseModes(dir)
   };
+}
+
+/** The summary's base-mode line (see `BaseMode` in run-manifest.ts). */
+function baseModeLine(modes: string[]): string {
+  if (modes.length === 1) return `BASE: ${modes[0]}`;
+  if (modes.length === 0) return "BASE: UNKNOWN (no run manifests)";
+  return `!! BASE: MIXED (${modes.join(" + ")}) — this label's pairs were scored on different bases`;
 }
 
 function loadScorecards(dir: string): Scorecard[] {
@@ -264,9 +279,14 @@ function main() {
   // confident deltas — the same failure as applying bands from a foreign
   // commit, one level up. A SET, not a value: a label whose pairs disagree is
   // itself mixed, which is worth seeing.
+  const provenance = labelProvenance(dir);
+  // The base mode leads the banner, always: a scratch label and a seeded one
+  // measure different bases, and a reader must not have to open a manifest
+  // to learn which this is (2026-10-03).
+  banner.unshift(baseModeLine(provenance.baseModes));
   const summary = {
     model,
-    provenance: labelProvenance(dir),
+    provenance,
     pairs: cards,
     totals,
     runStatuses,
