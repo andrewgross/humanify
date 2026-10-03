@@ -206,7 +206,7 @@ fn trail_json(trail: &PlacementTrail) -> Vec<Value> {
 /// failed (the TS threw).
 fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String> {
     let code = row["code"].as_str().unwrap();
-    let mut input = split_input(code)?;
+    let mut input = split_input(code, crate::toolchain::BundleLayout::SingleWrapperFunction)?;
     let ts_hashes: Vec<String> = row["hashes"]
         .as_array()
         .unwrap()
@@ -295,7 +295,12 @@ fn every_captured_ts_split_call_replays_exactly() {
         }));
         if row["hashes"].is_null() {
             // Not wrapper-shaped: the TS returned null.
-            if split_input(row["code"].as_str().unwrap()).is_ok() {
+            if split_input(
+                row["code"].as_str().unwrap(),
+                crate::toolchain::BundleLayout::SingleWrapperFunction,
+            )
+            .is_ok()
+            {
                 failures.push(format!("call {k}: TS found no wrapper, Rust did"));
             }
             continue;

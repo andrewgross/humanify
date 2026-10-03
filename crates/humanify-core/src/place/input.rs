@@ -18,7 +18,7 @@ use oxc_allocator::Allocator;
 use serde_json::Value;
 
 use crate::ingest::{Ingest, program_estree_json};
-use crate::modules::wrapper::{find_wrapper_function, recognize_wrapper_function};
+use crate::toolchain::BundleLayout;
 use crate::twins::statement_inventory_from_json;
 
 /// The wrapper body, ready for placement.
@@ -36,8 +36,9 @@ pub struct SplitInput {
 /// The prior release's top-level statement TEXTS — prior-version.ts's
 /// `MatcherCarry.statementTexts` (`topLevelStatements(priorGraph)`): the
 /// wrapper body's statements when the wrapper gate passes, else the
-/// program's, each sliced from the text.
-pub fn top_level_statement_texts(text: &str) -> Result<Vec<String>, String> {
+/// program's, each sliced from the text. The wrapper is the one the run's
+/// bundle `layout` finds.
+pub fn top_level_statement_texts(text: &str, layout: BundleLayout) -> Result<Vec<String>, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, text, "prior.js");
     if !ingest.errors.is_empty() {
@@ -46,7 +47,7 @@ pub fn top_level_statement_texts(text: &str) -> Result<Vec<String>, String> {
             ingest.errors.len()
         ));
     }
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let program_json = program_estree_json(ingest.program);
     let (inventory, _) = statement_inventory_from_json(
         &program_json,
@@ -66,14 +67,15 @@ pub fn top_level_statement_texts(text: &str) -> Result<Vec<String>, String> {
 /// null: a parse failure, no wrapper, or fewer than two statements. The
 /// ≥50 wrapper-binding threshold is measured on `text` itself — the right
 /// default for every text that has no recorded ORIGINAL (prior releases,
-/// the standalone owners, the tests).
-pub fn split_input(text: &str) -> Result<SplitInput, String> {
-    split_input_with_original_bundle(text, None)
+/// the standalone owners, the tests). The wrapper is the one the run's
+/// bundle `layout` finds.
+pub fn split_input(text: &str, layout: BundleLayout) -> Result<SplitInput, String> {
+    split_input_with_original_bundle(text, None, layout)
 }
 
 /// [`split_input`] with the ≥50 threshold read from the run's ORIGINAL
 /// input bundle instead of the text at hand. `original_binding_count` is
-/// [`crate::modules::wrapper::original_bundle_binding_count`]'s verdict on
+/// [`BundleLayout::original_bundle_binding_count`]'s verdict on
 /// the ORIGINAL text (what the unpack stage saw): `Some(_)` means the
 /// input already cleared the frozen gate, and the text at hand only has
 /// to be one wrapper IIFE by GRAMMAR — the vendor extraction removed one
@@ -88,6 +90,7 @@ pub fn split_input(text: &str) -> Result<SplitInput, String> {
 pub fn split_input_with_original_bundle(
     text: &str,
     original_binding_count: Option<usize>,
+    layout: BundleLayout,
 ) -> Result<SplitInput, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, text, "shipped.js");
@@ -101,8 +104,8 @@ pub fn split_input_with_original_bundle(
         // The input settled "is this really a bundled app?"; the text at
         // hand only owes the GRAMMAR (the tight WP1.5 recognition — a
         // non-bundle stays unsplittable however bundled its input was).
-        Some(_) => recognize_wrapper_function(ingest.program, ingest.semantic()),
-        None => find_wrapper_function(ingest.program, ingest.semantic()),
+        Some(_) => layout.recognize_wrapper(ingest.program, ingest.semantic()),
+        None => layout.find_wrapper(ingest.program, ingest.semantic()),
     }
     .ok_or("not stable-splittable: no recognizable bundle wrapper")?;
     let program_json = program_estree_json(ingest.program);

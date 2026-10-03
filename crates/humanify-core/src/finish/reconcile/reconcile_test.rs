@@ -85,6 +85,7 @@ fn reconcile_and_carry_match_the_ts() {
         &ledger,
         &result.renames,
         crate::rename::name_profile::NameProfile::Bun,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     )
     .unwrap();
     assert_eq!(carry.code.as_deref(), fx["carry"]["code"].as_str());
@@ -418,6 +419,7 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
         &ledger,
         &result.renames,
         crate::rename::name_profile::NameProfile::Bun,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     )
     .unwrap();
     assert_eq!(carry.carried, 2);

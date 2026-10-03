@@ -13,8 +13,13 @@ fn call_sites(text: &str) -> Vec<(String, Vec<String>)> {
     let allocator = Allocator::default();
     let ingest = crate::prior::parse_side(&allocator, text, "input.js").expect("parses");
     let json = crate::ingest::program_estree_json(ingest.program);
-    let parts =
-        crate::prior::build_side_parts(&ingest, &json, "input.js", crate::graph::Eligibility::All);
+    let parts = crate::prior::build_side_parts(
+        &ingest,
+        &json,
+        "input.js",
+        crate::graph::Eligibility::All,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    );
     let view = TextView::build(ingest.semantic());
     let ng = build_naming_graph(ingest.semantic(), &parts.graph, &view);
     parts
@@ -257,6 +262,7 @@ impl humanify_model::llm::NameProvider for SuffixProvider {
 
 fn ledger_config() -> super::NamingConfig {
     super::NamingConfig {
+        layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
         tuning: crate::toolchain::BundlerTuning::Default,

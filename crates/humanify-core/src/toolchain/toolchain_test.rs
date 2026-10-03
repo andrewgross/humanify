@@ -215,3 +215,71 @@ fn bun_verdicts_need_only_the_universal_list() {
         NeverRename::UNIVERSAL
     );
 }
+
+/// A wrapper IIFE declaring `n` names directly in its scope.
+fn wrapper_with(n: usize) -> String {
+    let decls: Vec<String> = (0..n).map(|i| format!("var v{i}={i};")).collect();
+    format!("(function(){{{}return v0;}})();", decls.concat())
+}
+
+type WrapperSpans = Option<(oxc_span::Span, oxc_span::Span, usize)>;
+
+fn spans_of(w: Option<crate::modules::wrapper::WrapperFunction>) -> WrapperSpans {
+    w.map(|w| (w.span, w.body_span, w.binding_count))
+}
+
+/// P9: the bundle layout ANSWERS the layout questions (where the wrapper
+/// is, with and without the run's input gate, and the input gate itself)
+/// by delegating to the one grammar owner, `modules::wrapper` — the same
+/// answers, byte for byte.
+#[test]
+fn the_single_wrapper_layout_answers_through_the_wrapper_grammar() {
+    use crate::modules::wrapper as owner;
+    let layout = BundleLayout::SingleWrapperFunction;
+    for n in [3usize, 49, 50, 60] {
+        let src = wrapper_with(n);
+        let allocator = oxc_allocator::Allocator::default();
+        let ingest = crate::ingest::Ingest::parse(&allocator, &src, "input.js");
+        assert!(ingest.errors.is_empty());
+        let (p, s) = (ingest.program, ingest.semantic());
+        assert_eq!(
+            spans_of(layout.find_wrapper(p, s)),
+            spans_of(owner::find_wrapper_function(p, s)),
+            "find, n={n}"
+        );
+        assert_eq!(
+            spans_of(layout.recognize_wrapper(p, s)),
+            spans_of(owner::recognize_wrapper_function(p, s)),
+            "recognize, n={n}"
+        );
+        // The threshold gate: under 50 names the grammar still recognises
+        // the wrapper, the gate refuses it.
+        assert_eq!(layout.find_wrapper(p, s).is_some(), n >= 50, "n={n}");
+        assert!(layout.recognize_wrapper(p, s).is_some(), "n={n}");
+        assert_eq!(
+            layout.original_bundle_binding_count(&src),
+            owner::original_bundle_binding_count(&src),
+            "original gate, n={n}"
+        );
+    }
+    // No wrapper at all: every answer is "none".
+    let plain = "var a=1;console.log(a);";
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, plain, "input.js");
+    let (p, s) = (ingest.program, ingest.semantic());
+    assert!(layout.find_wrapper(p, s).is_none());
+    assert!(layout.recognize_wrapper(p, s).is_none());
+    assert!(layout.original_bundle_binding_count(plain).is_err());
+}
+
+/// P9 (review R5): the wrapper's parameters are the CommonJS entry
+/// context, by POSITION — Node's/Bun's `(exports, require, module,
+/// __filename, __dirname)`. The runnable emit reads the roles from the
+/// layout, not from a list of its own.
+#[test]
+fn the_single_wrapper_layout_names_the_commonjs_parameter_roles_by_position() {
+    assert_eq!(
+        BundleLayout::SingleWrapperFunction.wrapper_parameter_roles(),
+        &["exports", "require", "module", "filename", "dirname"]
+    );
+}

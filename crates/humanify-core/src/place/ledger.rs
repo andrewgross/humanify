@@ -122,6 +122,7 @@ alignment and fossil matching run WITHOUT prior hashes this hop"
 pub fn settle_prior_hashes(
     ledger: &mut StableSplitLedger,
     prior_text: Option<&str>,
+    layout: crate::toolchain::BundleLayout,
 ) -> PriorHashes {
     if ledger.hashes_current() {
         return PriorHashes::Current;
@@ -134,7 +135,7 @@ pub fn settle_prior_hashes(
                 .map_or("(absent)".to_string(), |v| v.to_string())
         ));
     };
-    match rederive_stale_era_hashes(ledger, text) {
+    match rederive_stale_era_hashes(ledger, text, layout) {
         Ok(r) => PriorHashes::Rederived(r),
         Err(e) => PriorHashes::Refused(e),
     }
@@ -166,6 +167,7 @@ pub fn settle_prior_hashes(
 pub fn rederive_stale_era_hashes(
     ledger: &mut StableSplitLedger,
     prior_text: &str,
+    layout: crate::toolchain::BundleLayout,
 ) -> Result<Rederived, String> {
     let Some(recorded_version) = ledger.hash_version else {
         return Err("the ledger records no hashVersion (pre-WP5.6e): no era to re-derive".into());
@@ -180,7 +182,7 @@ pub fn rederive_stale_era_hashes(
         .as_ref()
         .filter(|h| h.len() == ledger.order.len())
         .ok_or("the ledger records no per-statement hashes")?;
-    let current = super::input::split_input(prior_text)?.hashes;
+    let current = super::input::split_input(prior_text, layout)?.hashes;
     if current.len() != recorded.len() {
         return Err(format!(
             "the prior text has {} wrapper statements, the ledger {}",

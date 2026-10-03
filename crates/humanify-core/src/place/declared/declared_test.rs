@@ -11,9 +11,13 @@ const VECTORS: &str = include_str!("../../../../../test/parity/wp51-declared.jso
 #[test]
 fn every_statement_declares_what_babel_says_in_babels_order() {
     let doc: Value = serde_json::from_str(VECTORS).expect("vectors");
-    let (_, values) =
-        statement_inventory_with_values(doc["code"].as_str().unwrap(), "shipped", None)
-            .expect("inventory");
+    let (_, values) = statement_inventory_with_values(
+        doc["code"].as_str().unwrap(),
+        "shipped",
+        None,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("inventory");
     let rows = doc["rows"].as_array().unwrap();
     assert_eq!(values.len(), rows.len());
     let strs = |v: &Value| -> Vec<String> {

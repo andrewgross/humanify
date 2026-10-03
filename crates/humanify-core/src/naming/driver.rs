@@ -67,6 +67,10 @@ pub struct NamingConfig {
     pub never_rename: crate::rename::eligibility::NeverRename,
     /// The run's per-bundler tuning (the toolchain's P14 piece).
     pub tuning: crate::toolchain::BundlerTuning,
+    /// The run's bundle layout (the toolchain's P9 piece): where each
+    /// side's top-level statements are — the match sides, the freezes, the
+    /// family permute's module scope.
+    pub layout: crate::toolchain::BundleLayout,
     /// The minifier name profile selected once from detection
     /// (`rename::name_profile::select_name_profile`) — every name-shape
     /// question of the stage is asked under it.
@@ -188,6 +192,7 @@ pub fn run_naming<P: NameProvider>(
     let opts = EraOptions {
         never_rename: config.never_rename,
         tuning: config.tuning,
+        layout: config.layout,
         name_profile: config.name_profile,
         params: &config.params,
         naming_floor: config.naming_floor,
@@ -207,6 +212,7 @@ pub fn run_naming<P: NameProvider>(
                 fresh: input.fresh,
                 prior,
                 never_rename: opts.never_rename,
+                layout: config.layout,
                 fast: config.fast.on(),
                 same_program_check: true,
             },
@@ -228,7 +234,7 @@ pub fn run_naming<P: NameProvider>(
                 let prior_members = input
                     .prior
                     .filter(|_| permute_may_run)
-                    .map(|p| PriorMembers::of(p, config.name_profile));
+                    .map(|p| PriorMembers::of(p, config.name_profile, config.layout));
                 (Some(validate::baseline_of(input.fresh)), prior_members)
             },
             run_era,
@@ -456,10 +462,14 @@ pub fn run_naming<P: NameProvider>(
     {
         let text = resolved;
         let permuted = match prior_members.take() {
-            Some(members) => {
-                run_family_permute_with(&text, members, &eligible, config.name_profile)
-            }
-            None => run_family_permute(&text, prior, &eligible, config.name_profile),
+            Some(members) => run_family_permute_with(
+                &text,
+                members,
+                &eligible,
+                config.name_profile,
+                config.layout,
+            ),
+            None => run_family_permute(&text, prior, &eligible, config.name_profile, config.layout),
         };
         if let Ok(p) = permuted {
             add_claims(&mut out.claims, &p.claims);

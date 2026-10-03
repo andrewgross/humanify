@@ -140,6 +140,7 @@ fn module_bindings_rows_and_edges() {
         "input.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let mb: Vec<_> = graph
         .module_bindings
@@ -194,6 +195,7 @@ fn mb_edge_from_object_key_position() {
         "input.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let pp = graph
         .module_bindings

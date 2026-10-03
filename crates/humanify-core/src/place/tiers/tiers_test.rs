@@ -16,7 +16,13 @@ const CODE: &str = "function alpha(x) { return x + 1; }\nvar beta = alpha(2);\nc
 
 /// (statements placed by the hash tier, each row's `hashMiss`).
 fn run(hash_version: Option<u64>) -> (usize, Vec<Option<String>>) {
-    let (inv, body) = statement_inventory_with_values(CODE, "shipped", None).expect("inventory");
+    let (inv, body) = statement_inventory_with_values(
+        CODE,
+        "shipped",
+        None,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("inventory");
     let spans: Vec<(u32, u32)> = inv
         .statements
         .iter()

@@ -636,6 +636,7 @@ fn pipeline_body(
         &bundled_code,
         Path::new(out_dir),
         toolchain.unpack.piece,
+        toolchain.layout.piece,
         provider,
         &mut dispatch_log,
         prior_path,
@@ -785,6 +786,7 @@ fn pipeline_body(
                     prior: prior.as_deref(),
                     flags: dump_flags(opts, settings, &toolchain),
                     regions: &regions,
+                    layout: toolchain.layout.piece,
                 },
                 renderer,
             )?;
@@ -872,6 +874,7 @@ struct DumpContext<'a> {
     prior: Option<&'a str>,
     flags: humanify_model::js::JsValue,
     regions: &'a [humanify_core::libdetect::CommentRegion],
+    layout: humanify_core::toolchain::BundleLayout,
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
@@ -998,6 +1001,7 @@ impl RunReports<'_> {
                 outcome: self.outcome,
                 split: self.split,
                 comment_regions: ctx.regions,
+                layout: ctx.layout,
                 extra_trail: &self.post_split.trail,
             },
         )
@@ -1402,6 +1406,7 @@ fn naming_config(
     NamingConfig {
         never_rename: toolchain.never_rename.piece,
         tuning: toolchain.tuning.piece,
+        layout: toolchain.layout.piece,
         name_profile: toolchain.name_profile.piece,
         skip_libraries: settings.skip_libraries,
         reconcile_prior_diff: settings.levers.reconcile_prior_diff,

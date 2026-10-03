@@ -51,7 +51,7 @@ pub mod role;
 use crate::graph::UnifiedGraph;
 use crate::hash::statement_hash::statement_hash;
 use crate::ingest::Ingest;
-use crate::modules::wrapper::find_wrapper_function;
+use crate::toolchain::BundleLayout;
 
 /// The fresh side's anchor: the pre-rename minified text.
 pub const FRESH_ANCHOR: &str = "fresh";
@@ -127,13 +127,15 @@ impl SideInventory {
 /// modules::wrapper's 50-binding threshold is that gate's owner), else the
 /// program body. The wrapper's body block is located in the ESTree
 /// serialization BY SPAN (the gate's `body_span`), so no second
-/// wrapper-form walk exists to fall out of date with the owner.
+/// wrapper-form walk exists to fall out of date with the owner. The
+/// wrapper is the one the run's bundle `layout` finds.
 pub fn statement_inventory(
     text: &str,
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
+    layout: BundleLayout,
 ) -> Result<SideInventory, String> {
-    statement_inventory_inner(text, anchor, graph, false).map(|(inv, _)| inv)
+    statement_inventory_inner(text, anchor, graph, false, layout).map(|(inv, _)| inv)
 }
 
 /// [`statement_inventory`] plus the statements' ESTree JSON subtrees — the
@@ -147,8 +149,9 @@ pub fn statement_inventory_with_values(
     text: &str,
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
+    layout: BundleLayout,
 ) -> Result<(SideInventory, Vec<Value>), String> {
-    statement_inventory_inner(text, anchor, graph, true)
+    statement_inventory_inner(text, anchor, graph, true, layout)
 }
 
 fn statement_inventory_inner(
@@ -156,6 +159,7 @@ fn statement_inventory_inner(
     anchor: &'static str,
     graph: Option<&UnifiedGraph>,
     retain_values: bool,
+    layout: BundleLayout,
 ) -> Result<(SideInventory, Vec<Value>), String> {
     let allocator = oxc_allocator::Allocator::default();
     let ingest = Ingest::parse(&allocator, text, anchor);
@@ -168,7 +172,7 @@ fn statement_inventory_inner(
 
     // The wrapper gate (TS `graph.wrapperPath`): presence decides between
     // the wrapper body and the program body.
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
 
     // The ESTree substrate per statement: serialize the PROGRAM once (one
     // JSON, the partition dump's own settings), then take each side's

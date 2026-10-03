@@ -13,7 +13,13 @@ const VECTORS: &str = include_str!("../../../../../../test/parity/wp51-tokens.js
 fn every_module_token_list_equals_the_ts() {
     let doc: Value = serde_json::from_str(VECTORS).expect("vectors");
     let code = doc["code"].as_str().unwrap();
-    let (inv, values) = statement_inventory_with_values(code, "shipped", None).expect("inventory");
+    let (inv, values) = statement_inventory_with_values(
+        code,
+        "shipped",
+        None,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("inventory");
     let spans: Vec<(u32, u32)> = inv
         .statements
         .iter()

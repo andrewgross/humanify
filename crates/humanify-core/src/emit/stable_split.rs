@@ -13,7 +13,6 @@ use oxc_allocator::Allocator;
 
 use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
 use crate::ingest::Ingest;
-use crate::modules::wrapper::recognize_wrapper_function;
 use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
 use crate::place::input::{SplitInput, split_input_with_original_bundle};
@@ -69,6 +68,10 @@ pub struct SplitOptions<'a, 'n> {
     /// None: the historical gate on the shipped text itself (the
     /// standalone owners and the tests).
     pub original_bundle: Option<&'a str>,
+    /// The run's bundle layout (the toolchain's P9 piece): the input
+    /// gate, the wrapper body every text here is sliced from, and the
+    /// wrapper parameters' roles in the runnable emit.
+    pub layout: crate::toolchain::BundleLayout,
 }
 
 /// `StableSplitStats`.
@@ -201,13 +204,12 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // module, and a mid-size app whose vendor half dominates is expected
     // to land under the threshold on it. Both the shipped and the fresh
     // (pre-rename) texts consume the same verdict.
+    let layout = options.layout;
     let original_binding_count = match options.original_bundle {
-        Some(original) => Some(crate::modules::wrapper::original_bundle_binding_count(
-            original,
-        )?),
+        Some(original) => Some(layout.original_bundle_binding_count(original)?),
         None => None,
     };
-    let input = split_input_with_original_bundle(shipped, original_binding_count)?;
+    let input = split_input_with_original_bundle(shipped, original_binding_count, layout)?;
     drop(ph);
     let ph = phase("split:assign");
     let mut own_trail = PlacementTrail::default();
@@ -229,6 +231,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             switches: options.placement,
             namer: options.namer,
             reviser: options.reviser,
+            layout,
         },
         options.prior,
         trail,
@@ -243,7 +246,8 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // Grammar only: the ≥50 gate was already settled — on this text (the
     // historical split_input path) or on the run's ORIGINAL input — by
     // split_input_with_original_bundle above, over the same bytes.
-    let wrapper = recognize_wrapper_function(ingest.program, ingest.semantic())
+    let wrapper = layout
+        .recognize_wrapper(ingest.program, ingest.semantic())
         .ok_or("no recognizable bundle wrapper")?;
     let view = wrapper_view(ingest.semantic(), wrapper.span).ok_or("wrapper node not found")?;
     let statements = &view.body.statements;
@@ -315,6 +319,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         &input.body,
         &assignment,
         original_binding_count,
+        layout,
     )?;
     let mut forced_exports: Vec<(String, String)> = vendor_bridges
         .iter()
@@ -341,6 +346,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             facts: &facts,
             switches: options.align,
             forced_exports: &forced_exports,
+            layout,
         }))
     };
     drop(ph);
@@ -468,17 +474,18 @@ fn resolve_vendor_bridges(
     fresh: Option<&str>,
     body: &[Value],
     assignment: &[String],
-    // The run's input-bundle gate verdict — the FRESH text is the same
-    // post-extraction runtime (pre-rename), so it owes the same GRAMMAR
-    // and reads the same ORIGINAL threshold.
+    // The run's input-bundle gate verdict and bundle layout — the FRESH
+    // text is the same post-extraction runtime (pre-rename), so it owes
+    // the same GRAMMAR and reads the same ORIGINAL threshold.
     original_binding_count: Option<usize>,
+    layout: crate::toolchain::BundleLayout,
 ) -> Result<Vec<VendorBridge>, String> {
     if captures.is_empty() {
         return Ok(Vec::new());
     }
     let fresh = fresh
         .ok_or("vendor bridge: the manifest carries captures but the run has no fresh text")?;
-    let fresh_input = split_input_with_original_bundle(fresh, original_binding_count)?;
+    let fresh_input = split_input_with_original_bundle(fresh, original_binding_count, layout)?;
     let fresh_body = &fresh_input.body;
     if fresh_body.len() != body.len() {
         return Err(format!(

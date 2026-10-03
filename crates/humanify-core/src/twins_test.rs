@@ -81,7 +81,13 @@ fn inventory_of(
     anchor: &'static str,
     graph: Option<&crate::graph::UnifiedGraph>,
 ) -> SideInventory {
-    statement_inventory(text, anchor, graph).expect("clean ingest")
+    statement_inventory(
+        text,
+        anchor,
+        graph,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("clean ingest")
 }
 
 // ── the unique-tier join on renamed + reordered code ─────────────────────
@@ -224,6 +230,7 @@ fn graph_rows_assign_to_their_enclosing_statement() {
         "input.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let fresh = inventory_of(&fresh_bundle(), FRESH_ANCHOR, Some(&graph));
 

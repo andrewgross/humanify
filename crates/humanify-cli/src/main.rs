@@ -312,6 +312,7 @@ fn run_libdetect(
         None,
     );
     let adapter = toolchain.unpack.piece;
+    let layout = toolchain.layout.piece;
     let files: Vec<UnpackedFile> = match files_json {
         Some(path) => {
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -324,6 +325,7 @@ fn run_libdetect(
             let shim = shim_script.map(webcrack_shim);
             run_adapter(
                 adapter,
+                layout,
                 &code,
                 dir,
                 AdapterRun {
@@ -433,13 +435,12 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .map_err(|e| format!("cannot read {input}: {e}"))?;
     let out = Path::new(out_dir);
-    let adapter = humanify_core::toolchain::resolve_toolchain(
+    let toolchain = humanify_core::toolchain::resolve_toolchain(
         &humanify_core::detect::detect_bundle(&code),
         None,
         None,
-    )
-    .unpack
-    .piece;
+    );
+    let adapter = toolchain.unpack.piece;
     let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
     let client = args
         .llm_cache
@@ -460,6 +461,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
     // the namer, the prior and the shim, and takes what it uses.
     let outcome = match run_adapter(
         adapter,
+        toolchain.layout.piece,
         &code,
         out,
         AdapterRun {
