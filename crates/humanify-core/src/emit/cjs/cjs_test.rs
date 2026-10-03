@@ -46,6 +46,7 @@ fn replay(v: &Value) -> Result<(), String> {
     let facts = bundle_load_order_facts(&view.body.statements, code, false);
     let names = vec![None; order.len()];
     let got = emit_runnable_cjs(&RunnableInput {
+        layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         code,
         semantic: ingest.semantic(),
         scopes: &scopes,

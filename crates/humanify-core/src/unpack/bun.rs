@@ -35,7 +35,6 @@ use crate::modules::vendor_names::{
     load_prior_vendor_names, name_fallback_factories_with_llm, order_by_prior_manifest,
     stable_stem,
 };
-use crate::modules::wrapper::find_wrapper_function;
 use crate::modules::{
     BunModuleClassification, CarriedName, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
     NameSource, classify_bun_modules, factory_arg_function, identify_cjs_factory,
@@ -223,15 +222,21 @@ pub struct BunUnpackOptions<'n> {
     /// The adapter running this flow — its vendor-record stamp is the
     /// manifest's `adapter` field (`UnpackAdapter::vendor_record_stamp`).
     pub adapter: crate::unpack::UnpackAdapter,
+    /// The run's bundle layout (the toolchain's P9 piece): the container
+    /// the factory classification scans.
+    pub layout: crate::toolchain::BundleLayout,
 }
 
 impl Default for BunUnpackOptions<'_> {
+    /// The Bun adapter's own pieces (the tests' and standalone owners'
+    /// default; the pipeline passes the run's toolchain).
     fn default() -> Self {
         BunUnpackOptions {
             namer: None,
             prior: None,
             manifest_prior_order_disabled: false,
             adapter: crate::unpack::UnpackAdapter::Bun,
+            layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         }
     }
 }
@@ -347,7 +352,7 @@ pub fn unpack_bun(
     // the regex floor: on broken input the two parsers recover differently,
     // and the regex path is the one both sides define the same way.
     let mut classification = if ingest.errors.is_empty() {
-        classify(code, &ingest)
+        classify(code, &ingest, options.layout)
     } else {
         None
     };
@@ -525,9 +530,14 @@ pub fn unpack_bun(
 }
 
 /// The AST classification on the parsed input (`classifyWithAst` minus the
-/// naming, which the caller sequences around the hook).
-fn classify(code: &str, ingest: &Ingest<'_>) -> Option<BunModuleClassification> {
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+/// naming, which the caller sequences around the hook), inside the
+/// container the run's bundle `layout` finds.
+fn classify(
+    code: &str,
+    ingest: &Ingest<'_>,
+    layout: crate::toolchain::BundleLayout,
+) -> Option<BunModuleClassification> {
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let tables = SymbolTables::build(ingest.semantic());
     classify_bun_modules(
         code,

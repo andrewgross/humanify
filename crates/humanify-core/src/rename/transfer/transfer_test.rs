@@ -80,6 +80,7 @@ fn synthetic_pairs_match_the_ts_probe() {
         let expected: Vec<TransferRow> =
             serde_json::from_value(case["transfers"].clone()).expect("rows");
         let input = PriorMatchInput {
+            layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
             fresh: case["fresh"].as_str().unwrap(),
             prior: case["prior"].as_str().unwrap(),
             never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
@@ -111,6 +112,7 @@ fn with_run<R>(code: &str, f: impl FnOnce(&mut TransferRun<'_, '_>) -> R) -> R {
         "input.js",
         &[],
         Eligibility::All,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let rename = RenameState::new(
         semantic,

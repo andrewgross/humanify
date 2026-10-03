@@ -141,6 +141,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     let minifier = enum_name(toolchain.minifier);
     let name_profile = toolchain.name_profile.piece;
     let never_rename = toolchain.never_rename.piece;
+    let layout = toolchain.layout.piece;
 
     // Stage 3: unpack into the work dir (a default temp dir is removed
     // afterwards; the dump embeds everything the harness needs).
@@ -162,6 +163,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         .map(|s| crate::unminify::webcrack_shim(Path::new(s)));
     let result = humanify_core::unpack::run_adapter(
         adapter,
+        layout,
         &code,
         Path::new(&work_dir),
         humanify_core::unpack::AdapterRun {
@@ -187,10 +189,11 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     // same index — and the parse-count pin (tests/match_prior_side_cache)
     // holds the amortization in place.
     let mut run = MatchRun::default();
-    let built = humanify_core::prior::with_prior_match_side(&prior, |side| {
+    let built = humanify_core::prior::with_prior_match_side(&prior, layout, |side| {
         let ctx = MatchContext {
             prior: &prior,
             never_rename,
+            layout,
             name_profile,
             multi,
             side,
@@ -281,6 +284,7 @@ struct MatchRun {
 struct MatchContext<'a, 's> {
     prior: &'a str,
     never_rename: humanify_core::rename::eligibility::NeverRename,
+    layout: humanify_core::toolchain::BundleLayout,
     name_profile: humanify_core::rename::name_profile::NameProfile,
     multi: bool,
     side: &'a humanify_core::prior::StageSide<'a, 's>,
@@ -305,6 +309,7 @@ impl MatchRun {
         let MatchContext {
             prior,
             never_rename,
+            layout,
             name_profile,
             multi,
             side,
@@ -333,6 +338,7 @@ impl MatchRun {
         let section = humanify_core::prior::match_stage_with_prior(
             &fresh,
             never_rename,
+            layout,
             *side,
             !multi,
             |stage| {

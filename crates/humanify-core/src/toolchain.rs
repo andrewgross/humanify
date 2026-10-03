@@ -142,11 +142,15 @@ impl InteropHelpers {
     }
 }
 
-/// P9 — where the bundle's top-level statements are. ONE grammar: the
-/// whole program inside a single wrapper function declaring at least 50
-/// names (`modules::wrapper`). Its ten readers still call
-/// `modules::wrapper` directly (spec I25 — the container refactor, Part 4
-/// step 7); the slot names the rule the run is on.
+/// P9 — where the bundle's top-level statements are. ONE implementation:
+/// the whole program inside a single wrapper function declaring at least
+/// 50 names (Bun's CommonJS bytecode wrapper, esbuild's `--format=iife`),
+/// whose grammar lives in `modules::wrapper`. Every pipeline reader asks
+/// the run's value (the match sides, the graph's module scope, the twins'
+/// statement inventory, the naming freezes, the family permute, the
+/// unpack's classification, the split and its runnable emit, the finish's
+/// bundle carry — review R1/R9/R5, 2026-10-04); a second layout (an ES
+/// module's own top level) is a second variant here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BundleLayout {
     SingleWrapperFunction,
@@ -156,6 +160,63 @@ impl BundleLayout {
     pub fn name(self) -> &'static str {
         match self {
             BundleLayout::SingleWrapperFunction => "single-wrapper-function",
+        }
+    }
+
+    /// The container holding the bundle's top-level statements, with the
+    /// layout's "is this really a bundled app?" gate measured on the text
+    /// `program` came from (≥50 names for the wrapper). None: the text has
+    /// no container under this layout — readers fall back to the program
+    /// scope / body.
+    pub fn find_wrapper(
+        self,
+        program: &oxc_ast::ast::Program<'_>,
+        semantic: &oxc_semantic::Semantic<'_>,
+    ) -> Option<crate::modules::wrapper::WrapperFunction> {
+        match self {
+            BundleLayout::SingleWrapperFunction => {
+                crate::modules::wrapper::find_wrapper_function(program, semantic)
+            }
+        }
+    }
+
+    /// The container by SHAPE only, no gate — for a text whose run already
+    /// settled the gate on its ORIGINAL input
+    /// ([`Self::original_bundle_binding_count`]): the split's
+    /// post-extraction runtime and the finish's bundle.
+    pub fn recognize_wrapper(
+        self,
+        program: &oxc_ast::ast::Program<'_>,
+        semantic: &oxc_semantic::Semantic<'_>,
+    ) -> Option<crate::modules::wrapper::WrapperFunction> {
+        match self {
+            BundleLayout::SingleWrapperFunction => {
+                crate::modules::wrapper::recognize_wrapper_function(program, semantic)
+            }
+        }
+    }
+
+    /// The run's input-bundle gate on the ORIGINAL text (what the unpack
+    /// saw): Ok(the container's binding count) when it is a bundled app
+    /// under this layout, else why not.
+    pub fn original_bundle_binding_count(self, original: &str) -> Result<usize, String> {
+        match self {
+            BundleLayout::SingleWrapperFunction => {
+                crate::modules::wrapper::original_bundle_binding_count(original)
+            }
+        }
+    }
+
+    /// The wrapper's parameters' roles in the bundle's entry context, BY
+    /// POSITION (review R5): Node's/Bun's CommonJS wrapper
+    /// `(exports, require, module, __filename, __dirname)`. The runnable
+    /// emit binds each named parameter to the shared context's property
+    /// of that role.
+    pub fn wrapper_parameter_roles(self) -> &'static [&'static str] {
+        match self {
+            BundleLayout::SingleWrapperFunction => {
+                &["exports", "require", "module", "filename", "dirname"]
+            }
         }
     }
 }

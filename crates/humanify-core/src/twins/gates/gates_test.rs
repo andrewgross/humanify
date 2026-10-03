@@ -262,6 +262,7 @@ fn with_twin_sides_classified(
     run: impl FnOnce(TwinSides<'_>),
 ) {
     let input = PriorMatchInput {
+        layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         fresh: fresh_code,
         prior: prior_code,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
@@ -345,6 +346,7 @@ fn with_gate_sides(
         "prior.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let fresh_graph = build_unified_graph(
         fresh_ingest.semantic(),
@@ -352,15 +354,24 @@ fn with_gate_sides(
         "fresh.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
     let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
-    let (prior_inventory, prior_values) =
-        statement_inventory_with_values(prior_code, PRIOR_ANCHOR, Some(&prior_graph))
-            .expect("prior inventory");
-    let (fresh_inventory, fresh_values) =
-        statement_inventory_with_values(fresh_code, FRESH_ANCHOR, Some(&fresh_graph))
-            .expect("fresh inventory");
+    let (prior_inventory, prior_values) = statement_inventory_with_values(
+        prior_code,
+        PRIOR_ANCHOR,
+        Some(&prior_graph),
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("prior inventory");
+    let (fresh_inventory, fresh_values) = statement_inventory_with_values(
+        fresh_code,
+        FRESH_ANCHOR,
+        Some(&fresh_graph),
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("fresh inventory");
 
     let claimed: HashSet<String> = claimed.iter().map(|s| s.to_string()).collect();
     let identity_pairs: Vec<(String, String)> = identity_pairs

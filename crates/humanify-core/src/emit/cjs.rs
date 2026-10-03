@@ -66,8 +66,8 @@ pub struct WrapperView<'a> {
     pub body: &'a FunctionBody<'a>,
 }
 
-/// Locate the wrapper function node whose span `find_wrapper_function`
-/// reported.
+/// Locate the wrapper function node whose span the run's bundle layout
+/// (`toolchain::BundleLayout`) reported.
 pub fn wrapper_view<'a>(semantic: &Semantic<'a>, span: Span) -> Option<WrapperView<'a>> {
     for node in semantic.nodes().iter() {
         match node.kind() {
@@ -148,6 +148,10 @@ pub struct RunnableInput<'a, 's> {
     /// emit's export set is driven by app-file references — leaving the
     /// vendor bridge nothing to require.
     pub forced_exports: &'s [(String, String)],
+    /// The run's bundle layout: the wrapper parameters' roles in the
+    /// shared bundle context (review R5 — by position for the CommonJS
+    /// wrapper).
+    pub layout: crate::toolchain::BundleLayout,
 }
 
 /// The emitted tree plus what the ledger records from it.
@@ -566,12 +570,12 @@ impl Plan<'_, '_> {
 
     /// `planWrapperContext`.
     fn plan_wrapper_context(&mut self) -> Result<(), String> {
-        const CONTEXT_PROPS: [&str; 5] = ["exports", "require", "module", "filename", "dirname"];
+        let roles = self.input.layout.wrapper_parameter_roles();
         let var_name = self.reserve_bundle_var();
         let mut ctx_files = HashSet::new();
         let params = self.input.wrapper.params.clone();
         for (i, param) in params.iter().enumerate() {
-            let (Some(prop), Some(param)) = (CONTEXT_PROPS.get(i), param) else {
+            let (Some(prop), Some(param)) = (roles.get(i), param) else {
                 continue;
             };
             self.plan_context_binding(param, &format!("{var_name}.{prop}"), &mut ctx_files)?;

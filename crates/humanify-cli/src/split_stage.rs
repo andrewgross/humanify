@@ -104,7 +104,14 @@ fn load_prior_split_ledger(
     let prior_text = input
         .prior_version
         .and_then(|p| std::fs::read_to_string(p).ok());
-    renderer.message(&settle_prior_hashes(&mut ledger, prior_text.as_deref()).describe());
+    renderer.message(
+        &settle_prior_hashes(
+            &mut ledger,
+            prior_text.as_deref(),
+            input.toolchain.layout.piece,
+        )
+        .describe(),
+    );
     Ok(Some(ledger))
 }
 
@@ -314,6 +321,7 @@ fn split_before_commit(
             vendor_captures: &vendor_captures,
             vendor_fresh: input.fresh,
             original_bundle: input.input_bundle,
+            layout: input.toolchain.layout.piece,
         },
     )?;
     report_namer(&namer, renderer);
@@ -417,6 +425,7 @@ fn commit_and_finish(
         name_profile: input.toolchain.name_profile.piece,
         never_rename: input.toolchain.never_rename.piece,
         interop: input.toolchain.interop.piece,
+        layout: input.toolchain.layout.piece,
     };
     drop(ph);
     let mut report = FinishReport::default();

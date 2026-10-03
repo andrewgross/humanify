@@ -14,7 +14,13 @@ use crate::twins::statement_inventory_with_values;
 /// Inventory + hashes for a program-body fixture (no wrapper at these
 /// sizes).
 fn inventory_of(code: &str) -> (Vec<String>, Vec<serde_json::Value>) {
-    let (inv, values) = statement_inventory_with_values(code, "fresh", None).expect("inventory");
+    let (inv, values) = statement_inventory_with_values(
+        code,
+        "fresh",
+        None,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("inventory");
     let hashes: Vec<String> = inv.statements.iter().map(|s| s.hash.clone()).collect();
     (hashes, values)
 }

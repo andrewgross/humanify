@@ -18,7 +18,13 @@ struct Body {
 
 fn body_of(lines: &[&str]) -> Body {
     let code = lines.join("\n");
-    let (inv, values) = statement_inventory_with_values(&code, "shipped", None).expect("inventory");
+    let (inv, values) = statement_inventory_with_values(
+        &code,
+        "shipped",
+        None,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("inventory");
     Body {
         values,
         spans: inv

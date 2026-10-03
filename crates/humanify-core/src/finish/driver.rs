@@ -65,6 +65,9 @@ pub struct FinishInput<'a> {
     /// The run's interop helpers (the relink's helper file —
     /// `toolchain::InteropHelpers`, P8).
     pub interop: crate::toolchain::InteropHelpers,
+    /// The run's bundle layout (the bundle carry's wrapper body —
+    /// `toolchain::BundleLayout`, P9).
+    pub layout: crate::toolchain::BundleLayout,
 }
 
 /// The Bun manifest as the finish reads it (`BunModulesManifest`).
@@ -294,6 +297,7 @@ pub fn finish_stage(
         input.switches,
         input.name_profile,
         input.never_rename,
+        input.layout,
         report,
     )?;
     Ok((relinked, reconciled))
@@ -337,6 +341,7 @@ pub fn reconcile_post_split(
     switches: FinishSwitches,
     name_profile: NameProfile,
     never_rename: NeverRename,
+    layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,
 ) -> Result<Option<ReconcileReport>, String> {
     let Some(prior_version) = prior_version else {
@@ -385,7 +390,14 @@ pub fn reconcile_post_split(
     }
     let carry = {
         let _ph = crate::profiling::phase("split:finish:carry");
-        carry_into_bundle(output_dir, &ledger, &result.renames, name_profile, report)
+        carry_into_bundle(
+            output_dir,
+            &ledger,
+            &result.renames,
+            name_profile,
+            layout,
+            report,
+        )
     };
     report.messages.push(format!(
         "Post-split reconcile: restored {} prior name(s) across {} of {} file(s){}",
@@ -414,11 +426,12 @@ fn carry_into_bundle(
     ledger: &JsValue,
     renames: &[super::reconcile::PostSplitRename],
     profile: NameProfile,
+    layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,
 ) -> Option<CarryResult> {
     let bundle_path = output_dir.join(METADATA_DIR).join("humanified.js");
     let bundle = read_utf8(&bundle_path).ok()?;
-    let carry = match carry_renames_into_bundle(&bundle, ledger, renames, profile) {
+    let carry = match carry_renames_into_bundle(&bundle, ledger, renames, profile, layout) {
         Ok(c) => c,
         Err(_) => return None, // "bundle carry skipped" (debug only)
     };

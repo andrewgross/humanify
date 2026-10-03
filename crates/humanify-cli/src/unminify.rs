@@ -58,6 +58,7 @@ pub fn unpack_bundle(
     code: &str,
     out_dir: &Path,
     adapter: UnpackAdapter,
+    layout: humanify_core::toolchain::BundleLayout,
     provider: &dyn NameProvider,
     log: &mut humanify_core::artifact_dump::DispatchLog,
     prior_version: Option<&Path>,
@@ -92,6 +93,7 @@ pub fn unpack_bundle(
     let shim = repo_webcrack_shim();
     let outcome = run_adapter(
         adapter,
+        layout,
         code,
         out_dir,
         AdapterRun {

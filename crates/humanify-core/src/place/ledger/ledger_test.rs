@@ -24,7 +24,12 @@ fn ts_of(rust: &str) -> String {
 }
 
 fn ts_ledger() -> (StableSplitLedger, Vec<String>) {
-    let rust = split_input(&prior()).expect("wrapper").hashes;
+    let rust = split_input(
+        &prior(),
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("wrapper")
+    .hashes;
     assert_eq!(rust.len(), 5);
     assert_eq!(rust[1], rust[2], "the fixture needs one shared class");
     let ts: Vec<String> = rust.iter().map(|h| ts_of(h)).collect();
@@ -66,7 +71,12 @@ fn ts_ledger() -> (StableSplitLedger, Vec<String>) {
 #[test]
 fn a_ts_era_ledger_is_rekeyed_class_for_class() {
     let (mut ledger, rust) = ts_ledger();
-    let report = rederive_stale_era_hashes(&mut ledger, &prior()).expect("bijection");
+    let report = rederive_stale_era_hashes(
+        &mut ledger,
+        &prior(),
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("bijection");
     assert_eq!(
         report,
         Rederived {
@@ -99,7 +109,14 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
     let (mut ledger, _) = ts_ledger();
     let before = format!("{ledger:?}");
     let short = prior().replace("  c(b);\n", "");
-    assert!(rederive_stale_era_hashes(&mut ledger, &short).is_err());
+    assert!(
+        rederive_stale_era_hashes(
+            &mut ledger,
+            &short,
+            crate::toolchain::BundleLayout::SingleWrapperFunction
+        )
+        .is_err()
+    );
     assert_eq!(format!("{ledger:?}"), before);
     assert!(!ledger.hashes_current());
 
@@ -107,20 +124,39 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
     let (mut ledger, _) = ts_ledger();
     ledger.hashes.as_mut().unwrap()[2] = "ts-split".into();
     let before = format!("{ledger:?}");
-    let err = rederive_stale_era_hashes(&mut ledger, &prior()).unwrap_err();
+    let err = rederive_stale_era_hashes(
+        &mut ledger,
+        &prior(),
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .unwrap_err();
     assert!(err.contains("not a bijection"), "{err}");
     assert_eq!(format!("{ledger:?}"), before);
 
     // An emitted hash that no statement carries.
     let (mut ledger, _) = ts_ledger();
     ledger.emit_hashes.as_mut().unwrap()[0] = "ts-ghost".into();
-    assert!(rederive_stale_era_hashes(&mut ledger, &prior()).is_err());
+    assert!(
+        rederive_stale_era_hashes(
+            &mut ledger,
+            &prior(),
+            crate::toolchain::BundleLayout::SingleWrapperFunction
+        )
+        .is_err()
+    );
     assert!(!ledger.hashes_current());
 
     // No recorded era (pre-WP5.6e): nothing to re-derive from.
     let (mut ledger, _) = ts_ledger();
     ledger.hash_version = None;
-    assert!(rederive_stale_era_hashes(&mut ledger, &prior()).is_err());
+    assert!(
+        rederive_stale_era_hashes(
+            &mut ledger,
+            &prior(),
+            crate::toolchain::BundleLayout::SingleWrapperFunction
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -135,7 +171,12 @@ fn an_older_rust_era_ledger_is_rekeyed_from_the_prior_text() {
     // lesson).
     let (mut ledger, rust) = ts_ledger();
     ledger.hash_version = Some(2);
-    let report = rederive_stale_era_hashes(&mut ledger, &prior()).expect("bijection");
+    let report = rederive_stale_era_hashes(
+        &mut ledger,
+        &prior(),
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("bijection");
     assert_eq!(
         report,
         Rederived {

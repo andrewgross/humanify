@@ -55,6 +55,7 @@ fn a_declined_emit_persists_the_ts_aliases() {
     let outcome = stable_split(
         code,
         SplitOptions {
+            layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
             regime: Regime::Tiers,
             prior: Some(&prior),
             carry: None,
@@ -131,6 +132,7 @@ fn bridge_options<'a>(
     fresh: Option<&'a str>,
 ) -> SplitOptions<'a, 'a> {
     SplitOptions {
+        layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         regime: Regime::Cluster,
         prior: None,
         carry: None,
@@ -279,6 +281,7 @@ fn dominant_vendor_runtime(deps: usize) -> String {
 
 fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
     SplitOptions {
+        layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         regime: Regime::Cluster,
         prior: None,
         carry: None,

@@ -13,8 +13,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use oxc_allocator::Allocator;
-use oxc_ast::AstKind;
-use oxc_ast::ast::{ArrowFunctionBody, FunctionBody};
 use oxc_semantic::Semantic;
 use oxc_span::GetSpan;
 
@@ -31,6 +29,9 @@ use crate::trail::Anchor;
 use super::reconcile::{PostSplitRename, ident_at, statement_of, substitution_text};
 use super::relink::parse_or_err;
 use super::vendor_inherit::file_signature;
+
+#[cfg(test)]
+mod carry_test;
 
 /// `BundleCarryResult`.
 #[derive(Clone, Debug, Default)]
@@ -69,32 +70,40 @@ fn strings(v: Option<&JsValue>) -> Vec<String> {
     }
 }
 
-/// `wrapperBody(ast, expected)`: the first Babel function (pre-order)
-/// whose block body holds exactly `expected` statements — its statement
-/// spans. No fallback to the program body.
-fn wrapper_body(semantic: &Semantic<'_>, expected: usize) -> Option<Vec<(u32, u32)>> {
-    let spans = |body: &FunctionBody<'_>| -> Vec<(u32, u32)> {
-        body.statements
-            .iter()
-            .map(|s| (s.span().start, s.span().end))
-            .collect()
-    };
-    for node in semantic.nodes().iter() {
-        let body = match node.kind() {
-            AstKind::Function(f) => f.body.as_deref(),
-            AstKind::ArrowFunctionExpression(a) => match &a.body {
-                ArrowFunctionBody::FunctionBody(b) => Some(&**b),
-                _ => None,
-            },
-            _ => None,
-        };
-        if let Some(body) = body
-            && body.statements.len() == expected
-        {
-            return Some(spans(body));
-        }
+/// The bundle's top-level statement spans — the wrapper body the run's
+/// bundle `layout` finds (by SHAPE: the split already settled the input
+/// gate on the run's original bundle, and this is the split's own
+/// shipped text renamed). `expected` is the ledger's statement count; a
+/// wrapper holding any other count is NOT the text the ledger describes,
+/// and the carry abstains rather than guess. No fallback to the program
+/// body.
+///
+/// This replaced the TS `wrapperBody(ast, expected)` rule — "the first
+/// function (pre-order) whose block body holds exactly `expected`
+/// statements" — which agreed with the layout on Bun only because the
+/// wrapper is the outermost function, and otherwise went on to an inner
+/// function with that count and carried renames into the wrong statements
+/// (review R9, 2026-10-04).
+pub(crate) fn wrapper_body(
+    layout: crate::toolchain::BundleLayout,
+    program: &oxc_ast::ast::Program<'_>,
+    semantic: &Semantic<'_>,
+    expected: usize,
+) -> Result<Vec<(u32, u32)>, &'static str> {
+    let wrapper = layout
+        .recognize_wrapper(program, semantic)
+        .ok_or("wrapper-body-not-found")?;
+    let view =
+        crate::emit::cjs::wrapper_view(semantic, wrapper.span).ok_or("wrapper-body-not-found")?;
+    if view.body.statements.len() != expected {
+        return Err("wrapper-statement-count-mismatch");
     }
-    None
+    Ok(view
+        .body
+        .statements
+        .iter()
+        .map(|s| (s.span().start, s.span().end))
+        .collect())
 }
 
 /// One located rename: its bundle statement index.
@@ -224,12 +233,15 @@ fn occurrences_of(
 }
 
 /// `carryRenamesIntoBundle(bundleCode, ledger, renames)`. An `Err` is the
-/// TS's throw (the caller logs "bundle carry skipped").
+/// TS's throw (the caller logs "bundle carry skipped"). `layout` is the
+/// run's bundle layout (the toolchain's P9 piece): it says where the
+/// bundle's top-level statements are.
 pub fn carry_renames_into_bundle(
     bundle: &str,
     ledger: &JsValue,
     renames: &[PostSplitRename],
     profile: NameProfile,
+    layout: crate::toolchain::BundleLayout,
 ) -> Result<CarryResult, String> {
     let mut result = CarryResult::default();
     if renames.is_empty() {
@@ -241,13 +253,12 @@ pub fn carry_renames_into_bundle(
         JsValue::Object(o) => strings(o.get("order")).len(),
         _ => 0,
     };
-    let Some(body) = wrapper_body(ingest.semantic(), order_len) else {
-        set(
-            &mut result.abstained,
-            "wrapper-body-not-found",
-            renames.len(),
-        );
-        return Ok(result);
+    let body = match wrapper_body(layout, ingest.program, ingest.semantic(), order_len) {
+        Ok(body) => body,
+        Err(reason) => {
+            set(&mut result.abstained, reason, renames.len());
+            return Ok(result);
+        }
     };
     let targets = resolve_targets(renames, ledger, body.len(), &mut result.abstained);
     let mut state = RenameState::new(ingest.semantic(), Anchor::Shipped, profile);

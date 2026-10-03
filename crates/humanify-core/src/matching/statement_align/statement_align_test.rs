@@ -74,6 +74,7 @@ fn with_fn_pair<T>(
         "test.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let next_graph = crate::graph::build_unified_graph(
         next_ingest.semantic(),
@@ -81,6 +82,7 @@ fn with_fn_pair<T>(
         "test.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let prior_program_json =
         parse_json_unbounded(&prior_ingest.program.to_estree_json(false, true));

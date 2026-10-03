@@ -222,6 +222,7 @@ impl AdapterOutcome {
 /// the same way everywhere.
 pub fn run_adapter(
     adapter: UnpackAdapter,
+    layout: crate::toolchain::BundleLayout,
     code: &str,
     out_dir: &Path,
     run: AdapterRun<'_>,
@@ -238,6 +239,7 @@ pub fn run_adapter(
                     prior: run.prior,
                     manifest_prior_order_disabled: run.manifest_prior_order_disabled,
                     adapter,
+                    layout,
                 },
             )?)))
         }

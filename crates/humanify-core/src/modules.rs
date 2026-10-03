@@ -1126,7 +1126,7 @@ pub mod modules_dump {
     use oxc_allocator::Allocator;
     use serde_json::{Value, json};
 
-    use super::{classify_bun_modules, wrapper::find_wrapper_function};
+    use super::classify_bun_modules;
     use crate::hash::serialize::SymbolTables;
     use crate::ingest::Ingest;
 
@@ -1202,6 +1202,7 @@ pub mod modules_dump {
     /// the wrapper it ran against (None when no helper scan hit).
     pub fn classify_site(
         text: &str,
+        layout: crate::toolchain::BundleLayout,
     ) -> Result<
         Option<(
             super::BunModuleClassification,
@@ -1220,7 +1221,7 @@ pub mod modules_dump {
         if !ingest.errors.is_empty() {
             return Err(format!("oxc: {} diagnostic(s)", ingest.errors.len()));
         }
-        let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
+        let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
         let tables = SymbolTables::build(ingest.semantic());
         let classification = classify_bun_modules(
             text,

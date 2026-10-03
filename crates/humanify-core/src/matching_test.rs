@@ -92,6 +92,7 @@ fn with_harness<T>(
         "input.js",
         &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     run(&ingest, &unified, &tables)
 }

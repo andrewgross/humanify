@@ -646,13 +646,15 @@ fn build_function_graph_with_json(
 /// wireModuleBindingCallees).
 ///
 /// `never_rename` is the run's never-rename lists (the toolchain's P7
-/// piece, `crate::toolchain`).
+/// piece) and `layout` its bundle layout (P9 — which scope is "module
+/// level"), both from `crate::toolchain`.
 pub fn build_unified_graph(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
     never_rename: crate::rename::eligibility::NeverRename,
+    layout: crate::toolchain::BundleLayout,
 ) -> UnifiedGraph {
     build_unified_graph_with_eligibility(
         semantic,
@@ -660,6 +662,7 @@ pub fn build_unified_graph(
         file_name,
         factories,
         Eligibility::SkipSet(never_rename),
+        layout,
     )
 }
 
@@ -679,6 +682,7 @@ pub fn build_unified_graph_with_eligibility(
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility,
+    layout: crate::toolchain::BundleLayout,
 ) -> UnifiedGraph {
     let program_json = crate::ingest::program_estree_json(program);
     build_unified_graph_with_json(
@@ -688,6 +692,7 @@ pub fn build_unified_graph_with_eligibility(
         file_name,
         factories,
         eligibility,
+        layout,
     )
 }
 
@@ -701,6 +706,7 @@ pub fn build_unified_graph_with_json(
     file_name: &str,
     factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility,
+    layout: crate::toolchain::BundleLayout,
 ) -> UnifiedGraph {
     let (graph, function_by_symbol) =
         build_function_graph_with_json(semantic, program_json, file_name, factories);
@@ -709,6 +715,7 @@ pub fn build_unified_graph_with_json(
         program,
         factories,
         eligibility,
+        layout,
         &function_by_symbol,
         &graph.functions,
     );
@@ -1084,15 +1091,16 @@ fn build_module_bindings(
     program: &oxc_ast::ast::Program<'_>,
     factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility,
+    layout: crate::toolchain::BundleLayout,
     function_by_symbol: &HashMap<SymbolId, usize>,
     functions: &[GraphFunction],
 ) -> Vec<ModuleBindingNode> {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
 
-    // The container scope: the wrapper's own scope when a wrapper exists,
-    // else the program's (the TS targetScope).
-    let wrapper = crate::modules::wrapper::find_wrapper_function(program, semantic);
+    // The container scope: the layout's wrapper's own scope when a wrapper
+    // exists, else the program's (the TS targetScope).
+    let wrapper = layout.find_wrapper(program, semantic);
     let container_scope = wrapper.as_ref().map_or_else(
         || container_scope_of_program(scoping, nodes),
         |w| {

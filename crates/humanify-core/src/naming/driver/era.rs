@@ -56,6 +56,8 @@ pub struct EraOptions<'o> {
     pub never_rename: crate::rename::eligibility::NeverRename,
     /// `NamingConfig::tuning`.
     pub tuning: crate::toolchain::BundlerTuning,
+    /// `NamingConfig::layout`.
+    pub layout: crate::toolchain::BundleLayout,
     /// `NamingConfig::name_profile`.
     pub name_profile: crate::rename::name_profile::NameProfile,
     pub params: &'o CacheKeyParams,
@@ -416,11 +418,14 @@ pub fn fresh_era<P: NameProvider>(
         &json,
         "input.js",
         crate::graph::Eligibility::SkipSet(opts.never_rename),
+        opts.layout,
     );
     let semantic = ingest.semantic();
     let graph = &parts.graph;
-    let wrapper =
-        crate::modules::wrapper::find_wrapper_function(ingest.program, semantic).map(|w| w.span);
+    let wrapper = opts
+        .layout
+        .find_wrapper(ingest.program, semantic)
+        .map(|w| w.span);
     let freeze = PreFreeze {
         library: classify_library_functions(
             &json,

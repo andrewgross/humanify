@@ -50,6 +50,8 @@ pub struct PlacementGate<'a> {
     pub namer: Option<&'a mut dyn SplitNamer>,
     /// The cluster regime's holistic top-level reviser.
     pub reviser: Option<&'a mut dyn TreeReviser>,
+    /// The run's bundle layout (`prior_text`'s top-level statements).
+    pub layout: crate::toolchain::BundleLayout,
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
@@ -150,7 +152,11 @@ pub fn assign_regime(
             let prior = prior.ok_or("the tiers regime needs --prior-ledger")?;
             let carry = match gate.carry {
                 Some(c) => Some(c),
-                None => read_carry(gate.prior_text.as_deref(), gate.match_map.as_deref())?,
+                None => read_carry(
+                    gate.prior_text.as_deref(),
+                    gate.match_map.as_deref(),
+                    gate.layout,
+                )?,
             };
             let (assignment, stats) = assign_with_prior(
                 &TierInput {
@@ -187,12 +193,13 @@ pub fn assign_regime(
 fn read_carry(
     prior_text: Option<&Path>,
     match_map: Option<&Path>,
+    layout: crate::toolchain::BundleLayout,
 ) -> Result<Option<PriorCarry>, String> {
     let Some(prior_text) = prior_text else {
         return Ok(None);
     };
     let text = fs::read_to_string(prior_text).map_err(|e| format!("prior text: {e}"))?;
-    let statement_texts = top_level_statement_texts(&text)?;
+    let statement_texts = top_level_statement_texts(&text, layout)?;
     let match_map: HashMap<String, String> = match match_map {
         Some(path) => read_json(path)?,
         None => HashMap::new(),

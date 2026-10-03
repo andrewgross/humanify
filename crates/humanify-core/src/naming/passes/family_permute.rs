@@ -28,13 +28,13 @@ use super::sweep::{is_statement, statement_parent};
 use crate::babel_view::DiffLines;
 use crate::hash::statement_hash::statement_hash;
 use crate::ingest::{Ingest, program_estree_json};
-use crate::modules::wrapper::find_wrapper_function;
 use crate::naming::waves::render::render_program;
 use crate::rename::eligibility::Eligibility;
 use crate::rename::floor::{is_decorated_descriptive, is_minifier_token};
 use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
+use crate::toolchain::BundleLayout;
 use crate::trail::{Anchor, StrategyTrail};
 
 /// A bucket member (`BucketMember`): its name and masked usage contexts.
@@ -205,10 +205,15 @@ fn statement_json_index<'v>(
     out
 }
 
-/// The wrapper function's Babel scope when its body is a block.
-fn wrapper_scope(semantic: &Semantic<'_>, state: &RenameState) -> Option<BScopeId> {
+/// The wrapper function's Babel scope when its body is a block — the
+/// wrapper the run's bundle `layout` finds.
+fn wrapper_scope(
+    semantic: &Semantic<'_>,
+    state: &RenameState,
+    layout: BundleLayout,
+) -> Option<BScopeId> {
     let program = semantic.nodes().program();
-    let wrapper = find_wrapper_function(program, semantic)?;
+    let wrapper = layout.find_wrapper(program, semantic)?;
     let view = state.view();
     let node = semantic.nodes().iter().find(|n| {
         n.kind().span() == wrapper.span
@@ -232,6 +237,7 @@ fn wrapper_scope(semantic: &Semantic<'_>, state: &RenameState) -> Option<BScopeI
 fn collect_members(
     semantic: &Semantic<'_>,
     state: &RenameState,
+    layout: BundleLayout,
 ) -> Result<Vec<MemberInfo>, String> {
     let text = semantic.source_text();
     let lines: Vec<&str> = text.split('\n').collect();
@@ -239,7 +245,7 @@ fn collect_members(
     let view = state.view();
     let nodes = semantic.nodes();
     let mut scopes = Vec::new();
-    if let Some(w) = wrapper_scope(semantic, state) {
+    if let Some(w) = wrapper_scope(semantic, state, layout) {
         scopes.push(w);
     }
     scopes.push(view.program_scope());
@@ -492,14 +498,15 @@ pub struct FamilyPermuteOutcome {
 pub struct PriorMembers(Result<HashMap<String, Vec<MemberInfo>>, String>);
 
 impl PriorMembers {
-    pub fn of(prior_text: &str, profile: NameProfile) -> PriorMembers {
-        PriorMembers(prior_by_hash(prior_text, profile))
+    pub fn of(prior_text: &str, profile: NameProfile, layout: BundleLayout) -> PriorMembers {
+        PriorMembers(prior_by_hash(prior_text, profile, layout))
     }
 }
 
 fn prior_by_hash(
     prior_text: &str,
     profile: NameProfile,
+    layout: BundleLayout,
 ) -> Result<HashMap<String, Vec<MemberInfo>>, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, prior_text);
@@ -509,7 +516,7 @@ fn prior_by_hash(
     let semantic = ingest.semantic();
     let state =
         RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default(), profile);
-    Ok(by_hash(collect_members(semantic, &state)?)
+    Ok(by_hash(collect_members(semantic, &state, layout)?)
         .into_iter()
         .collect())
 }
@@ -521,11 +528,12 @@ pub fn run_family_permute(
     prior_text: &str,
     eligible: &Eligibility,
     profile: NameProfile,
+    layout: BundleLayout,
 ) -> Result<FamilyPermuteOutcome, String> {
     let ph = crate::profiling::phase("permute:prior-by-hash");
-    let prior = PriorMembers::of(prior_text, profile);
+    let prior = PriorMembers::of(prior_text, profile, layout);
     drop(ph);
-    run_family_permute_with(code, prior, eligible, profile)
+    run_family_permute_with(code, prior, eligible, profile, layout)
 }
 
 /// [`run_family_permute`] over a prior index built beforehand (the same
@@ -535,6 +543,7 @@ pub fn run_family_permute_with(
     prior: PriorMembers,
     eligible: &Eligibility,
     profile: NameProfile,
+    layout: BundleLayout,
 ) -> Result<FamilyPermuteOutcome, String> {
     let prior = prior.0?;
     let ph = crate::profiling::phase("permute:fresh-members");
@@ -546,7 +555,7 @@ pub fn run_family_permute_with(
     let semantic = ingest.semantic();
     let mut state =
         RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default(), profile);
-    let fresh = by_hash(collect_members(semantic, &state)?);
+    let fresh = by_hash(collect_members(semantic, &state, layout)?);
     drop(ph);
     let ph = crate::profiling::phase("permute:plan+apply");
     let (to_apply, buckets) = plan_bucket_moves(&fresh, &prior, eligible, profile);

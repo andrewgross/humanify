@@ -25,6 +25,7 @@ fn with_fn<R>(code: &str, name: Option<&str>, f: impl FnOnce(&mut RenameState, &
         "input.js",
         &[],
         Eligibility::All,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let mut state = RenameState::new(
         semantic,

@@ -60,15 +60,18 @@ use crate::matching::cascade::{
 };
 use crate::matching::statement_context::StatementContexts;
 use crate::rename::eligibility::NeverRename;
+use crate::toolchain::BundleLayout;
 
 /// The texts and flags the match stage runs on: the FORMATTED fresh text,
 /// the prior version's code, the run's never-rename lists (the fresh
-/// side's rename-eligibility skip set — the toolchain's P7 piece).
+/// side's rename-eligibility skip set — the toolchain's P7 piece) and the
+/// run's bundle layout (where each side's top-level statements are — P9).
 #[derive(Clone, Copy)]
 pub struct PriorMatchInput<'t> {
     pub fresh: &'t str,
     pub prior: &'t str,
     pub never_rename: NeverRename,
+    pub layout: BundleLayout,
     /// The fast schedule (the relaxed default and `--sequential` alike):
     /// build the prior side's graph on a thread of its own
     /// (from its own parse of the same text — the AST is not `Send`),
@@ -146,6 +149,7 @@ pub fn match_prior_version<T>(
         fresh,
         prior,
         never_rename,
+        layout,
         same_program_check,
         fast,
     } = input;
@@ -166,12 +170,17 @@ pub fn match_prior_version<T>(
         // this thread builds the fresh side, then parses the prior again
         // for the AST the later stages walk.
         let (prior_side, fresh_side) = crate::par::beside(
-            || prior_side_owned(prior),
+            || prior_side_owned(prior, layout),
             || -> Result<_, String> {
                 let fresh_ingest = parse_side(&fresh_allocator, fresh, "input.js")?;
                 let fresh_json = crate::ingest::program_estree_json(fresh_ingest.program);
-                let fresh_parts =
-                    build_side_parts(&fresh_ingest, &fresh_json, "input.js", fresh_eligibility);
+                let fresh_parts = build_side_parts(
+                    &fresh_ingest,
+                    &fresh_json,
+                    "input.js",
+                    fresh_eligibility,
+                    layout,
+                );
                 let prior_ingest = parse_prior(&prior_allocator, prior)?;
                 Ok((fresh_ingest, fresh_json, fresh_parts, prior_ingest))
             },
@@ -193,13 +202,23 @@ pub fn match_prior_version<T>(
         drop(ph);
         let ph = phase("prior:graph-fresh");
         // ── the fresh side (the pipeline's own eligibility) ─────────────
-        let fresh_parts =
-            build_side_parts(&fresh_ingest, &fresh_json, "input.js", fresh_eligibility);
+        let fresh_parts = build_side_parts(
+            &fresh_ingest,
+            &fresh_json,
+            "input.js",
+            fresh_eligibility,
+            layout,
+        );
         drop(ph);
         // ── the prior side (ALL bindings eligible — prior-version.ts:284-288)
         let _ph = phase("prior:graph-prior");
-        let prior_parts =
-            build_side_parts(&prior_ingest, &prior_json, "prior.js", Eligibility::All);
+        let prior_parts = build_side_parts(
+            &prior_ingest,
+            &prior_json,
+            "prior.js",
+            Eligibility::All,
+            layout,
+        );
         (
             fresh_ingest,
             prior_ingest,
@@ -222,6 +241,7 @@ pub fn match_prior_version<T>(
         &prior_parts.graph,
         &prior_parts.tables,
         "prior",
+        layout,
     )?;
     let fresh_deps = build_side_dependents(
         &fresh_ingest,
@@ -229,6 +249,7 @@ pub fn match_prior_version<T>(
         &fresh_parts.graph,
         &fresh_parts.tables,
         "fresh",
+        layout,
     )?;
     drop(ph);
     run_match_stage(
@@ -258,6 +279,7 @@ pub fn match_prior_version<T>(
 /// this function — `run` is the frame.
 pub fn with_prior_match_side<T>(
     prior: &str,
+    layout: BundleLayout,
     run: impl FnOnce(&StageSide<'_, '_>) -> Result<T, String>,
 ) -> Result<T, String> {
     use crate::profiling::phase;
@@ -266,8 +288,8 @@ pub fn with_prior_match_side<T>(
     let ingest = parse_prior(&allocator, prior)?;
     let json = crate::ingest::program_estree_json(ingest.program);
     // The prior side's eligibility is ALL bindings (prior-version.ts:284-288).
-    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All);
-    let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "prior")?;
+    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All, layout);
+    let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "prior", layout)?;
     drop(ph);
     run(&stage_side(&ingest, &json, &parts, &deps))
 }
@@ -282,6 +304,7 @@ pub fn with_prior_match_side<T>(
 pub fn match_stage_with_prior<T>(
     fresh: &str,
     never_rename: NeverRename,
+    layout: BundleLayout,
     prior: StageSide<'_, '_>,
     same_program_check: bool,
     consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
@@ -296,8 +319,9 @@ pub fn match_stage_with_prior<T>(
         &json,
         "input.js",
         Eligibility::SkipSet(never_rename),
+        layout,
     );
-    let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "fresh")?;
+    let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "fresh", layout)?;
     drop(ph);
     run_match_stage(
         stage_side(&ingest, &json, &parts, &deps),
@@ -494,11 +518,11 @@ pub(crate) fn program_jsons(fresh: &Ingest<'_>, prior: &Ingest<'_>) -> (Value, V
 
 /// The prior side's program JSON and built parts from a parse of its own
 /// (everything returned is plain data: the parse dies here).
-fn prior_side_owned(prior: &str) -> Result<(Value, SideParts), String> {
+fn prior_side_owned(prior: &str, layout: BundleLayout) -> Result<(Value, SideParts), String> {
     let allocator = Allocator::default();
     let ingest = parse_prior(&allocator, prior)?;
     let json = crate::ingest::program_estree_json(ingest.program);
-    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All);
+    let parts = build_side_parts(&ingest, &json, "prior.js", Eligibility::All, layout);
     Ok((json, parts))
 }
 
@@ -529,17 +553,19 @@ struct SideDependents<'g> {
 
 /// Build one side's dependents (see [`SideDependents`]) from its parse,
 /// program JSON and built parts. `anchor` names the side in the twins'
-/// inventory ("prior" / "fresh").
+/// inventory ("prior" / "fresh"); `layout` is the run's bundle layout,
+/// which finds the side's wrapper.
 fn build_side_dependents<'g>(
     ingest: &Ingest<'_>,
     program_json: &Value,
     graph: &'g crate::graph::UnifiedGraph,
     tables: &SymbolTables,
     anchor: &'static str,
+    layout: BundleLayout,
 ) -> Result<SideDependents<'g>, String> {
     let index = crate::matching::build_fingerprint_index(graph, ingest.semantic(), tables);
     let graph_side = GraphSide::build(graph, ingest.semantic());
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let (inventory, inventory_values) = crate::twins::statement_inventory_from_json(
         program_json,
         wrapper.as_ref().map(|w| w.body_span),
@@ -583,14 +609,16 @@ fn stage_side<'a, 's>(
 
 /// Build one side: the Bun classification, the unified graph, the
 /// statement contexts and the session-id spans — all over the side's one
-/// program JSON.
+/// program JSON. `layout` is the run's bundle layout (the toolchain's P9
+/// piece): the classification's container and the graph's module scope.
 pub(crate) fn build_side_parts(
     ingest: &Ingest<'_>,
     program_json: &Value,
     file_name: &str,
     eligibility: Eligibility,
+    layout: BundleLayout,
 ) -> SideParts {
-    let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
     let tables = SymbolTables::build(ingest.semantic());
     let factories = crate::modules::classify_bun_modules(
         ingest.text,
@@ -608,6 +636,7 @@ pub(crate) fn build_side_parts(
         file_name,
         &factories,
         eligibility,
+        layout,
     );
     let ctx = StatementContexts::build_with_json(
         &graph,

@@ -88,6 +88,7 @@ fn the_finish_reconcile_records_its_constituent_spans() {
         FinishSwitches::default(),
         crate::rename::name_profile::NameProfile::Bun,
         crate::rename::eligibility::NeverRename::UNIVERSAL,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
         &mut report,
     )
     .expect("the reconcile runs");

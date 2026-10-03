@@ -262,7 +262,7 @@ are both.
 | P6 Library detection                        | 4      | **EXISTS**              | add a detector or reuse the vendor-record one                                                                       |
 | P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04) | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain       |
 | P8 Interop helpers for vendored code        | 3, 12  | **PARTIAL** (slot)      | Bun's shapes and Bun's helper file only (I16-I18); the helper file now comes from the toolchain's `InteropHelpers`  |
-| P9 Bundle layout ("container") grammar      | 7-12   | **MISSING** (slot)      | one hard-coded grammar with ~10 callers (I25); the toolchain names it, the callers do not read it yet               |
+| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)      | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level      |
 | P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)        | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                             |
 | P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**             | per-adapter flag exists; the grammar itself is one shared shape list                                                |
 | P12 Load-order helper shapes                | 11     | **PARTIAL**             | registrar by shape works for both; lazy-init is Bun's text only (I27)                                               |
@@ -525,7 +525,7 @@ module.
 finish's relink writes `interop.relink_runtime()`. The helper SHAPES in
 `unpack/bun/scope.rs` are not behind it yet.
 
-### P9 — Bundle layout ("container") grammar (stages 7-12) — MISSING
+### P9 — Bundle layout ("container") grammar (stages 7-12) — PARTIAL (seam real, one implementation)
 
 **Question:** where are the bundle's top-level statements — the list the
 split slices into files, the scope whose names are "module-level"?
@@ -553,6 +553,29 @@ one that opens ESM-format bundles from every bundler.
 **Slot (2026-10-04):** `toolchain::BundleLayout` (one value,
 `SingleWrapperFunction`). It is recorded, but the ten callers still read
 `modules/wrapper.rs` directly — that routing is the refactor above.
+
+**Seam (2026-10-04, branch `feat/bundle-layout-seam`, finding #77):** the
+first half of the refactor above is done. `BundleLayout` answers the four
+layout questions the pipeline asks, delegating to `modules/wrapper.rs`:
+`find_wrapper` (the container, with the ≥50-name gate on the text at
+hand), `recognize_wrapper` (the container by shape only, for a text whose
+run already passed the gate on its original input),
+`original_bundle_binding_count` (that input gate) and
+`wrapper_parameter_roles` (the wrapper parameters' roles by position —
+`exports, require, module, filename, dirname` — review R5, read by the
+runnable emit). Every pipeline reader takes the run's value from the
+toolchain: the graph's module scope, both match sides, the twins'
+statement inventory, the fresh-era freeze, the family permute, the unpack's
+classification, the split (input gate, wrapper body, vendor bridges,
+stale-ledger re-derivation, placement carry), the runnable emit, the
+artifact dump's classification sites, and the finish's bundle carry — which
+had a SECOND rule of its own ("the first function with exactly N
+statements", review R9) and now uses `recognize_wrapper` plus a count check
+that abstains (`wrapper-statement-count-mismatch`) instead of carrying into
+an inner function. Byte-identical on the e2e fixtures and a stub-LLM real
+Bun pair. Left for the ES-module half: a second layout variant, one parse
+mode per run (R10), and the entry-context call the emit writes
+(`init(module, require, …)`) which still assumes CommonJS.
 
 ### P10 — Name profile: what a minifier-made name looks like (stage 9) — EXISTS (landed #75; chosen by the toolchain since 2026-10-04)
 
@@ -769,7 +792,9 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
 7. **The container seam and "which file is the app"** (P9, P13): the large
    refactor that opens ESM-format bundles and a webpack split. Plan it as
    its own piece of work; it touches the split, the emit and the matching
-   inventory.
+   inventory. (P9's routing half is done — finding #77: every reader asks
+   `BundleLayout`; what remains is the second layout. P13 is unchanged:
+   one rule, `AppFile::LastProcessed`.)
 8. **Measurement for other bundlers** (H2): an eval pair from a non-Bun app,
    so a change aimed at esbuild or webpack can be judged on something other
    than Claude Code.
