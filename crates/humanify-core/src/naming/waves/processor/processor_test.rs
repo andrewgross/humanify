@@ -1156,3 +1156,61 @@ console.log(r({ type: "plugin" }, true));
         }
     }
 }
+
+/// The axios http adapter of 2.1.215 (`ref-scratch-0f338ffa-r1`'s rebase,
+/// 2026-10-03), reduced. An ENCLOSING scope already holds a binding named
+/// `requestOptions` (the SDK's private-field WeakMap), so the name is in
+/// every inner function's used set. A nested callback's param was already
+/// decorated to `requestOptionsVal` in an earlier wave. The adapter's `t`
+/// is asked alone and the model answers `requestOptions`:
+///
+/// - the one-id window's only answer collides, so the all-failed rule
+///   exhausts it on the spot — no disclosed round-2;
+/// - the resolution tail decorates it to `requestOptionsVal`, which the
+///   nested callback holds and `t` is read inside it (`shadows-child`);
+/// - the tail gave up and recorded IDENTITY: `t` shipped unrenamed, never
+///   re-asked, with no trail row — the leftover meter called it
+///   "model-chosen".
+///
+/// A valid answer must land (the ladder steps past a scope-unsafe
+/// decoration, as it steps past a taken one) or be re-asked — never dropped.
+#[test]
+fn a_valid_answer_whose_decoration_is_scope_unsafe_still_lands() {
+    let fresh = r#"var Sx = new WeakMap();
+function g() {
+  return Sx;
+}
+var h = function (t) {
+  g();
+  return run(async function (n) {
+    n.pipe({
+      transform(c, requestOptionsVal, b) {
+        b(t.limit, c, requestOptionsVal);
+      }
+    });
+    return t.url;
+  });
+};
+console.log(h);
+"#;
+    let out = run_scripted(fresh, |id, _| match id {
+        "Sx" | "t" => "requestOptions".to_string(),
+        // the nested callback keeps the decoration it already holds
+        "requestOptionsVal" => "requestOptionsVal".to_string(),
+        other => plain_name(other),
+    });
+    let code = out.code.as_deref().expect("shipped");
+    assert!(
+        code.contains("var requestOptions = new WeakMap();")
+            && code.contains("transform(cNamed, requestOptionsVal, bNamed)"),
+        "precondition: an enclosing scope holds the answer, the nested callback its decoration:\n{code}"
+    );
+    assert!(
+        !code.contains("function (t)"),
+        "the adapter's `t` was answered `requestOptions` and silently kept:\n{code}"
+    );
+    assert!(
+        code.contains("function (requestOptionsVar)"),
+        "the answer lands on the next scope-safe decoration:\n{code}"
+    );
+}
