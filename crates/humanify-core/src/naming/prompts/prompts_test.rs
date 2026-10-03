@@ -240,6 +240,7 @@ fn rejects(id: &str, failed: &[&str], invalid: &[bool]) -> PriorRejects {
             .map(|(n, inv)| PriorReject {
                 name: n.to_string(),
                 invalid: *inv,
+                borrowed: None,
             })
             .collect(),
     )])

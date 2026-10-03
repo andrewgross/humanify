@@ -353,8 +353,12 @@ fn missing_line(f: &RenameFailures) -> String {
 /// One disclosure line for a rejected suggestion (the two renderers'
 /// shared wording — a barrier/sweep re-ask reuses it per ACCUMULATED
 /// entry, a lane round-2 once per id from `previous_attempt`).
-fn failure_line(name: &str, sug: &str, invalid: bool) -> String {
-    if invalid {
+fn failure_line(name: &str, sug: &str, invalid: bool, borrowed: Option<&str>) -> String {
+    if let Some(stem) = borrowed {
+        format!(
+            "- \"{name}\" was suggested as \"{sug}\" which reuses the minified name \"{stem}\" from elsewhere in the code; suggest a descriptive name\n"
+        )
+    } else if invalid {
         format!(
             "- \"{name}\" was suggested as \"{sug}\" which is not allowed (reserved word, global built-in, or invalid syntax)\n"
         )
@@ -380,12 +384,12 @@ fn render_retry_diagnostics(
         match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
             Some(list) => {
                 for r in list {
-                    s += &failure_line(name, &r.name, r.invalid);
+                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref());
                 }
             }
             None => {
                 s += &match js_record::get_truthy(prev, name) {
-                    Some(sug) => failure_line(name, &sug, false),
+                    Some(sug) => failure_line(name, &sug, false, None),
                     None => format!("- \"{name}\" had a duplicate/conflicting name\n"),
                 };
             }
@@ -396,7 +400,7 @@ fn render_retry_diagnostics(
     }
     for name in &f.invalid {
         s += &match js_record::get_truthy(prev, name) {
-            Some(sug) => failure_line(name, &sug, true),
+            Some(sug) => failure_line(name, &sug, true, None),
             None => format!("- \"{name}\" had an invalid suggested name\n"),
         };
     }
@@ -555,12 +559,12 @@ pub fn build_module_level_retry_prefix(
         match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
             Some(list) => {
                 for r in list {
-                    s += &failure_line(name, &r.name, r.invalid);
+                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref());
                 }
             }
             None => {
                 if let Some(sug) = js_record::get_truthy(prev, name) {
-                    s += &failure_line(name, &sug, false);
+                    s += &failure_line(name, &sug, false, None);
                 }
             }
         }
@@ -570,7 +574,7 @@ pub fn build_module_level_retry_prefix(
     }
     for name in &f.invalid {
         if let Some(sug) = js_record::get_truthy(prev, name) {
-            s += &failure_line(name, &sug, true);
+            s += &failure_line(name, &sug, true, None);
         }
     }
     s += &missing_line(f);

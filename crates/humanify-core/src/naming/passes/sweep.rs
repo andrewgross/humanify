@@ -30,7 +30,11 @@
 //! statement); one request per group, every prompt pre-built; responses
 //! are applied in group-build order, so completion order never decides a
 //! conflict. The ANSWER filter is `rename::floor::is_sweep_answer_acceptable`
-//! — junk shapes stay refused, but a single-letter answer may land.
+//! — junk shapes stay refused, but a single-letter answer may land — and,
+//! FIRST, the answer-quality question the wave barrier asks too
+//! (`rename::floor::borrowed_minified_stem`, 2026-10-03): an answer that
+//! borrows a minified name as a word gets a disclosed re-ask naming the
+//! stem, and is EXHAUSTED when the budget dies — never applied.
 
 use std::collections::{HashMap, HashSet};
 
@@ -49,9 +53,12 @@ use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
 use crate::naming::code_window::MAX_CODE_LINES;
 use crate::naming::prompts::{render_system_prompt, render_user_prompt};
 use crate::naming::waves::generate::TextView;
+use crate::naming::waves::processor::{BORROWED_STEM, disclose_reject};
 use crate::naming::waves::render::{Occurrences, program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{is_convention_carveout, is_sweep_answer_acceptable};
+use crate::rename::floor::{
+    MinifiedStems, borrowed_minified_stem, is_convention_carveout, is_sweep_answer_acceptable,
+};
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Anchor, Attempt, Outcome, StrategyTrail, Tier};
@@ -412,6 +419,37 @@ struct ReaskCtx<'c> {
     limit: usize,
     spent: usize,
     carried: &'c HashMap<String, Vec<(String, &'static str)>>,
+    /// The program's original minified names (the borrowed-stem refusal).
+    stems: &'c MinifiedStems,
+}
+
+impl ReaskCtx<'_> {
+    /// A rejected suggestion of a reaskable class: seed a disclosed
+    /// re-ask while the target has budget, else mark it EXHAUSTED (it is
+    /// still not properly renamed — the ledger keeps it targetable).
+    fn reask_or_exhaust(
+        &self,
+        state: &mut RenameState,
+        target: &MintedBinding,
+        suggestion: String,
+        class: crate::naming::reask::ReaskClass,
+        code: &'static str,
+        reasks: &mut Vec<SweepReask>,
+    ) {
+        if crate::naming::reask::reask_again(self.limit, self.spent, class) {
+            let mut rejects = self.carried.get(&target.name).cloned().unwrap_or_default();
+            rejects.push((suggestion.clone(), code));
+            reasks.push(SweepReask {
+                target: target.clone(),
+                suggestion,
+                class,
+                code,
+                rejects,
+            });
+        } else if crate::naming::reask::should_reask(class) {
+            state.mark_exhausted(target.binding);
+        }
+    }
 }
 
 /// Apply one group's suggestions (`applyGroupResponse`). `renames[name]`
@@ -439,6 +477,28 @@ fn apply_group_response(
     let mut reasks = Vec::new();
     for target in &group.targets {
         let suggestion = renames.get(&target.name).filter(|s| !s.is_empty());
+        // The ONE answer-quality question the wave barrier asks too
+        // (Fix A, 2026-10-03): an answer borrowing a minified name as a
+        // word is refused like an invalid answer — a disclosed re-ask
+        // naming the stem, then EXHAUSTED; never applied.
+        if let Some(junk) = suggestion
+            .filter(|s| *s != target.name && borrowed_minified_stem(s, reask.stems).is_some())
+        {
+            skipped += 1;
+            let row = Attempt::new(Tier::CoverageSweep, Outcome::Rejected)
+                .proposed(junk.to_string())
+                .reason(BORROWED_STEM);
+            state.record(target.binding, &target.name, row, true);
+            reask.reask_or_exhaust(
+                state,
+                target,
+                junk.to_string(),
+                crate::naming::reask::ReaskClass::InvalidSuggestion,
+                BORROWED_STEM,
+                &mut reasks,
+            );
+            continue;
+        }
         let Some(new_name) =
             suggestion.filter(|s| *s != target.name && is_sweep_answer_acceptable(s))
         else {
@@ -478,22 +538,10 @@ fn apply_group_response(
         state.record(target.binding, &target.name, row, true);
         if let Some(r) = attempt.reason {
             let class = crate::naming::reask::class_of(r);
-            if crate::naming::reask::reask_again(reask.limit, reask.spent, class) {
-                let mut rejects = reask.carried.get(&target.name).cloned().unwrap_or_default();
-                rejects.push((new_name.clone(), r.as_str()));
-                reasks.push(SweepReask {
-                    target: target.clone(),
-                    suggestion: new_name,
-                    class,
-                    code: r.as_str(),
-                    rejects,
-                });
-            } else if crate::naming::reask::should_reask(class) {
-                // The budget died on a class a re-ask could have fixed:
-                // the identifier is STILL not properly renamed — the
-                // ledger keeps it targetable (later rounds, later runs).
-                state.mark_exhausted(target.binding);
-            }
+            // The budget dying on a class a re-ask could have fixed
+            // leaves the identifier EXHAUSTED — the ledger keeps it
+            // targetable (later rounds, later runs).
+            reask.reask_or_exhaust(state, target, new_name, class, r.as_str(), &mut reasks);
         }
     }
     (named, skipped, reasks)
@@ -571,6 +619,7 @@ pub fn sweep_minted_names<P: NameProvider>(
     window: usize,
     reask_limit: usize,
     decided: Option<&DecidedNames>,
+    stems: &MinifiedStems,
 ) -> SweepResult {
     let targets = collect_sweep_targets(semantic, state, eligible, taint, decided);
     if targets.is_empty() {
@@ -617,6 +666,7 @@ pub fn sweep_minted_names<P: NameProvider>(
         limit: reask_limit,
         spent: 0,
         carried: &none,
+        stems,
     };
     let mut reasks: Vec<SweepReask> = Vec::new();
     for (g, response) in groups.iter().zip(responses) {
@@ -651,6 +701,7 @@ pub fn sweep_minted_names<P: NameProvider>(
             params,
             window,
             reask_limit,
+            stems,
             &mut result,
         );
     }
@@ -723,6 +774,7 @@ fn sweep_reask<P: NameProvider>(
     params: &CacheKeyParams,
     window: usize,
     limit: usize,
+    stems: &MinifiedStems,
     result: &mut SweepResult,
 ) {
     // Re-asks each pending target has already had (loop iteration k is
@@ -765,10 +817,7 @@ fn sweep_reask<P: NameProvider>(
                     t.name.clone(),
                     rejects
                         .iter()
-                        .map(|(name, code)| humanify_model::llm::PriorReject {
-                            name: name.clone(),
-                            invalid: *code == "invalid-target",
-                        })
+                        .map(|(name, code)| disclose_reject(name, Some(code), stems))
                         .collect(),
                 ));
             }
@@ -829,6 +878,7 @@ fn sweep_reask<P: NameProvider>(
             limit,
             spent,
             carried: &carried,
+            stems,
         };
         let mut next: Vec<SweepReask> = Vec::new();
         for (narrow, response) in owners.into_iter().zip(responses) {
@@ -893,6 +943,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     ledger: bool,
     reask_limit: usize,
     decided: &DecidedNames,
+    stems: &MinifiedStems,
 ) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
@@ -918,6 +969,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
         prompt_window,
         reask_limit,
         Some(decided),
+        stems,
     );
     drop(ph);
     let code = (sweep.named > 0).then(|| render_program(semantic, &state));

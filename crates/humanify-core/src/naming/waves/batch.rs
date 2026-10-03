@@ -121,6 +121,10 @@ struct IdState {
     /// retry call for the ask trace. Recording only: the retry still rides
     /// the duplicate failure preamble, so the flow is byte-unchanged.
     last_rejection: Option<RejectionReason>,
+    /// The model's OWN last word for this id, before the strategy's
+    /// transform (the prior-name snap) — what a later disclosure must
+    /// name when the applied name differs (Fix B, 2026-10-03).
+    last_raw: Option<String>,
     trail: Option<Vec<RoundAttempt>>,
 }
 
@@ -252,6 +256,12 @@ pub struct Lane {
     /// provider throw counts) — the straggler's round reads it.
     attempted_calls: u64,
     pub report: LaneReport,
+    /// old name → the model's own word, for every claimed rename whose
+    /// applied name differs from it (a prior-name snap, or the
+    /// resolution tail's decoration): a barrier re-ask discloses THIS
+    /// word, not ours — disclosing `requestTimeoutMsVal` when the model
+    /// said `requestTimeoutMs` invited it to re-offer the same word.
+    pub proposed: HashMap<String, String>,
 }
 
 impl Lane {
@@ -287,6 +297,7 @@ impl Lane {
             finished: false,
             attempted_calls: 0,
             report: LaneReport::default(),
+            proposed: HashMap::new(),
         }
     }
 
@@ -424,6 +435,7 @@ impl Lane {
         self.calls += 1;
         // `callNum`: this call's 1-based position among the answered ones.
         let round = self.report.finish_reasons.len() as u64 + 1;
+        self.record_raw(&raw, &batch);
         let renames = match env.transform {
             Some(t) => transform(&raw, t),
             None => raw,
@@ -472,6 +484,7 @@ impl Lane {
         };
         self.calls += 1;
         self.report.finish_reasons.push(finish);
+        self.record_raw(&renames, &pending.batch);
         let mut v = self.validate(&renames, &pending.batch, env);
         self.apply_valid(&mut v, env, round);
         for name in &pending.batch {
@@ -583,7 +596,26 @@ impl Lane {
         (applied, late)
     }
 
+    /// The model's own words for this call's ids (before any transform).
+    fn record_raw(&mut self, raw: &Renames, batch: &[String]) {
+        for name in batch {
+            if let Some(w) = raw.get(name).filter(|w| !w.is_empty())
+                && let Some(s) = self.states.get_mut(name)
+            {
+                s.last_raw = Some(w.to_string());
+            }
+        }
+    }
+
     fn claim(&mut self, old: &str, new: &str) {
+        if let Some(w) = self
+            .states
+            .get(old)
+            .and_then(|s| s.last_raw.as_deref())
+            .filter(|w| *w != new)
+        {
+            self.proposed.insert(old.to_string(), w.to_string());
+        }
         self.claimed.insert(new.to_string());
         self.effects.push(LaneEffect::Rename {
             old: old.to_string(),

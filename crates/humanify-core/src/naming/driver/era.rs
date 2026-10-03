@@ -218,6 +218,10 @@ pub struct NamingEra {
     pub capture: Option<EraCapture>,
     /// `--probe shingle-probe`'s debug lines, close-pair order.
     pub probe_lines: Vec<String>,
+    /// The fresh program's minified names an answer may not borrow
+    /// (`rename::floor::MinifiedStems`) — the deferred sweep reads a
+    /// RENAMED text, so it gets the original names from here.
+    pub stems: crate::rename::floor::MinifiedStems,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -466,6 +470,7 @@ fn run_era<P: NameProvider>(
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
     let single_epoch = start.single_epoch;
+    let stems = crate::rename::floor::MinifiedStems::of_program(semantic);
     let inputs = WaveInputs {
         semantic,
         graph,
@@ -485,6 +490,7 @@ fn run_era<P: NameProvider>(
         tunables: opts.tunables,
         fast: opts.fast,
         window: opts.prompt_window,
+        stems: &stems,
     };
     let fn_hashes: Vec<(String, String)> = graph
         .functions
@@ -554,6 +560,7 @@ fn run_era<P: NameProvider>(
         ledger: None,
         capture: None,
         probe_lines: Vec::new(),
+        stems: crate::rename::floor::MinifiedStems::default(),
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");
@@ -576,6 +583,7 @@ fn run_era<P: NameProvider>(
                 // The in-era sweep holds the records itself: per-binding
                 // exact, no cross-text join.
                 None,
+                &stems,
             )
         });
         era.floor = Some(FloorCounts {
@@ -634,6 +642,7 @@ fn run_era<P: NameProvider>(
     let outcome = state.finish();
     era.trail = outcome.trail;
     era.exhausted_names = outcome.exhausted_names;
+    era.stems = stems;
     era
 }
 /// The pending close-matched functions' prior-version context: the prior
