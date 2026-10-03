@@ -66,7 +66,19 @@ fn name_of(id: &str) -> String {
         "q1" => "eventHooks".to_string(),
         "e" => "eventHooks".to_string(),
         "a" => "eventHooks".to_string(),
-        other => format!("{other}Named"),
+        other => plain_name(other),
+    }
+}
+
+/// The stub's descriptive answer for an id: `<id>Named` — upper-cased
+/// when the id is itself a borrowable minified name (`p00`, `v05`): its
+/// own name as a word would be refused as a borrowed stem (Fix A,
+/// 2026-10-03), which these pins are not about.
+fn plain_name(id: &str) -> String {
+    if crate::rename::floor::is_borrowable_stem(id) {
+        format!("{}Named", id.to_uppercase())
+    } else {
+        format!("{id}Named")
     }
 }
 
@@ -287,7 +299,7 @@ fn a_cross_lane_collision_gets_exactly_one_disclosed_reask() {
     );
     let code = out.code.expect("shipped");
     assert!(
-        code.contains("var eventNameKey = eventHooks + p01Named;"),
+        code.contains("var eventNameKey = eventHooks + P01Named;"),
         "{code}"
     );
 }
@@ -793,4 +805,179 @@ fn a_zero_reask_budget_gives_up_on_the_ladder_and_stays_counted() {
         "the disabled re-ask still records the collision's repair: {:?}",
         out.processor.contention
     );
+}
+
+/// A provider answering through a closure over (identifier, the request):
+/// the borrowed-stem and do-not-list pins script their answers per round.
+struct ScriptProvider<F: Fn(&str, &humanify_model::llm::BatchRenameRequest) -> String> {
+    answer: F,
+}
+
+impl<F: Fn(&str, &humanify_model::llm::BatchRenameRequest) -> String>
+    humanify_model::llm::NameProvider for ScriptProvider<F>
+{
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        calls
+            .into_iter()
+            .map(|c| {
+                let entries: Vec<(String, Option<String>)> = c
+                    .request
+                    .identifiers
+                    .iter()
+                    .map(|id| (id.clone(), Some((self.answer)(id, &c.request))))
+                    .collect();
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: humanify_model::llm::Renames::from_entries(entries),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+fn run_scripted(
+    fresh: &str,
+    answer: impl Fn(&str, &humanify_model::llm::BatchRenameRequest) -> String,
+) -> crate::naming::driver::NamingOutcome {
+    crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &plain_config(),
+        &ScriptProvider { answer },
+        &mut retain_log(),
+    )
+    .expect("the stage runs")
+}
+
+/// The barrier re-asks (the disclosed ones carry `prior_rejects`).
+fn barrier_reasks(out: &crate::naming::driver::NamingOutcome) -> Vec<&super::DispatchRecord> {
+    out.waves
+        .dispatches
+        .iter()
+        .filter(|d| d.request.prior_rejects.is_some())
+        .collect()
+}
+
+const BORROWING_PROGRAM: &str = "var H6t = 1;\n\
+     function RHe(p) {\n  return p + H6t;\n}\n\
+     console.log(RHe(2), H6t);\n";
+
+/// Fix A (2026-10-03): an answer that wears ANOTHER binding's minified
+/// name as a word (`H6tClass` borrows `H6t`) is refused like an invalid
+/// answer — a disclosed re-ask that names the borrowed stem — and the
+/// re-asked descriptive name lands. Before: the junk applied and, since
+/// the provenance sweep no longer re-targets decided names, stayed.
+#[test]
+fn a_borrowed_minified_stem_answer_is_refused_and_reasked() {
+    let out = run_scripted(BORROWING_PROGRAM, |id, r| match id {
+        "RHe" if r.prior_rejects.is_some() => "addBaseCount".to_string(),
+        "RHe" => "H6tClass".to_string(),
+        "H6t" => "baseCount".to_string(),
+        other => format!("{other}Named"),
+    });
+    let code = out.code.as_deref().expect("shipped");
+    assert!(!code.contains("H6tClass"), "the junk never lands: {code}");
+    assert!(code.contains("function addBaseCount("), "{code}");
+    let reasks = barrier_reasks(&out);
+    assert_eq!(reasks.len(), 1, "one disclosed re-ask");
+    let prompt = &reasks[0].user_prompt;
+    assert!(
+        prompt.contains(
+            "- \"RHe\" was suggested as \"H6tClass\" which reuses the minified name \"H6t\""
+        ),
+        "the re-ask names the borrowed stem: {prompt}"
+    );
+    assert!(
+        prompt.contains("DO NOT suggest these names: H6tClass"),
+        "{prompt}"
+    );
+}
+
+/// Fix A, the budget: a model that keeps borrowing runs the re-ask budget
+/// out and the binding stays UNRENAMED — never the junk, never a suffix
+/// ladder built on the junk (`H6tClassVal`).
+#[test]
+fn a_stubborn_borrowed_stem_exhausts_and_stays_unrenamed() {
+    let out = run_scripted(BORROWING_PROGRAM, |id, _| match id {
+        "RHe" => "H6tClass".to_string(),
+        "H6t" => "baseCount".to_string(),
+        other => format!("{other}Named"),
+    });
+    let code = out.code.as_deref().expect("shipped");
+    assert!(!code.contains("H6tClass"), "no junk, no ladder: {code}");
+    assert!(code.contains("function RHe("), "left unrenamed: {code}");
+    assert_eq!(
+        barrier_reasks(&out).len(),
+        2,
+        "the default budget: two re-asks"
+    );
+}
+
+/// Fix B (2026-10-03): the do-not list discloses the word the MODEL said.
+/// `a`'s lane hears `eventHooks` (taken by the function renamed in an
+/// earlier wave), exhausts, and its resolution tail decorates it to
+/// `eventHooksVal` — which a sibling lane's answer wins at the barrier.
+/// The re-ask must disclose `eventHooks`, the model's own word: before
+/// the fix it showed `eventHooksVal`, so the model re-offered `eventHooks`
+/// and collided again.
+#[test]
+fn the_reask_discloses_the_models_own_word_not_our_decoration() {
+    let mut params = String::new();
+    for i in 0..20 {
+        params.push_str(&format!("p{i:02}, "));
+    }
+    params.push_str("p19x");
+    let mut vars = String::new();
+    for i in 0..15 {
+        vars.push_str(&format!("  var v{i:02} = p{i:02};\n"));
+    }
+    vars.push_str("  var a = e0(p01);\n");
+    let fresh = format!(
+        "function e0(z) {{\n  return z;\n}}\n\
+         function hooks({params}) {{\n{vars}  return a + v00 + v05;\n}}\n\
+         console.log(hooks(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1));\n"
+    );
+    let out = run_scripted(&fresh, |id, r| match id {
+        "e0" => "eventHooks".to_string(),
+        "a" if r.prior_rejects.is_some() => "eventNameKey".to_string(),
+        "a" => "eventHooks".to_string(),
+        "v05" => "eventHooksVal".to_string(),
+        other => plain_name(other),
+    });
+    let reask = barrier_reasks(&out)
+        .into_iter()
+        .find(|d| d.request.identifiers == ["a"])
+        .unwrap_or_else(|| {
+            panic!(
+                "a's barrier re-ask: {:#?}",
+                out.waves
+                    .dispatches
+                    .iter()
+                    .map(|d| &d.user_prompt)
+                    .collect::<Vec<_>>()
+            )
+        });
+    assert!(
+        reask
+            .user_prompt
+            .contains("- \"a\" was suggested as \"eventHooks\" but that conflicts"),
+        "the model's own word is disclosed: {}",
+        reask.user_prompt
+    );
+    assert!(
+        reask
+            .user_prompt
+            .contains("DO NOT suggest these names: eventHooks\n"),
+        "the do-not list carries the model's word, not our decoration: {}",
+        reask.user_prompt
+    );
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var eventNameKey = "), "{code}");
 }

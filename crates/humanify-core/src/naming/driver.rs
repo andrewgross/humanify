@@ -247,6 +247,7 @@ pub fn run_naming<P: NameProvider>(
         ledger,
         capture,
         probe_lines,
+        stems,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -371,6 +372,7 @@ pub fn run_naming<P: NameProvider>(
             config.emit_rename_ledger,
             config.tunables.reask_limit,
             &decided,
+            &stems,
         ) {
             Ok(o) => {
                 ledger_stages.extend(o.ledger.map(|l| (text.clone(), l)));

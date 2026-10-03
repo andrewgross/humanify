@@ -61,6 +61,7 @@ use crate::naming::report::{
 use crate::naming::snap::{build_prior_stem_index, snap_suggestion_to_prior, snap_to_known_prior};
 use crate::naming::validation::resolve_conflict;
 use crate::rename::eligibility::Eligibility;
+use crate::rename::floor::{MinifiedStems, borrowed_minified_stem};
 use crate::rename::transfer::lifecycle::Lifecycle;
 use crate::rename::transfer::owned::{
     BindingInfo, collect_owned_binding_infos, collect_shadowed_block_bindings,
@@ -122,6 +123,9 @@ pub struct WaveInputs<'a, 's> {
     /// backfill headroom — finding #65's bounded prompt window; the
     /// rate limiter's slot count plus headroom, never the whole round).
     pub window: usize,
+    /// The program's original minified names an answer may not borrow
+    /// as a word (`rename::floor::borrowed_minified_stem`).
+    pub stems: &'a MinifiedStems,
 }
 
 /// The prompt window when nothing configures it (tests; the CLI sizes it
@@ -351,6 +355,33 @@ struct Entry {
     /// (suggestion, rejection code — None for a used-set collision).
     /// Empty for a lane's first-round entry; nonempty marks a re-ask entry.
     rejects: Vec<(String, Option<&'static str>)>,
+    /// The model's OWN word behind `new` (a prior-name snap or the lane's
+    /// decoration can make them differ) — what a rejection discloses.
+    proposed: String,
+}
+
+/// The rejection code of an answer refused for borrowing a minified name
+/// as a word (`rename::floor::borrowed_minified_stem`) — no applier code:
+/// the answer never reached the applier.
+pub(crate) const BORROWED_STEM: &str = "borrowed-minified-stem";
+
+/// One disclosed prior rejection: the model's word, whether it was an
+/// invalid target, and — for a borrowed-stem refusal — the stem it
+/// borrowed (the re-ask names it). Shared by the barrier and the sweep.
+pub(crate) fn disclose_reject(
+    name: &str,
+    code: Option<&str>,
+    stems: &MinifiedStems,
+) -> PriorReject {
+    let borrowed = (code == Some(BORROWED_STEM))
+        .then(|| borrowed_minified_stem(name, stems).map(str::to_string))
+        .flatten();
+    PriorReject {
+        name: name.to_string(),
+        invalid: code == Some(RejectionReason::InvalidTarget.as_str())
+            || code == Some(BORROWED_STEM),
+        borrowed,
+    }
 }
 
 /// A barrier rejection seeding a retry, with the re-ask cause it was
@@ -369,7 +400,8 @@ struct RetryItem {
     id: String,
     index: usize,
     prev_name: String,
-    /// The item's FULL reject history (prev_name is its last entry): the
+    /// The item's FULL reject history — the MODEL's words, each with its
+    /// rejection code (its last entry is the word behind `prev_name`): the
     /// retry's prompt discloses all of it.
     rejects: Vec<(String, Option<&'static str>)>,
     target: ApplyTarget,
@@ -1871,15 +1903,14 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         let mut prev = JsRecord::default();
         let mut prior = PriorRejects::default();
         for item in &r.seed.items {
-            prev.set(&item.id, &item.prev_name);
+            // The model's own last word (Fix B): never our decoration.
+            let last = item.rejects.last().map_or(&item.prev_name, |(n, _)| n);
+            prev.set(&item.id, last);
             prior.0.push((
                 item.id.clone(),
                 item.rejects
                     .iter()
-                    .map(|(name, code)| PriorReject {
-                        name: name.clone(),
-                        invalid: *code == Some(RejectionReason::InvalidTarget.as_str()),
-                    })
+                    .map(|(name, code)| disclose_reject(name, *code, self.inp.stems))
                     .collect(),
             ));
         }
@@ -1919,16 +1950,24 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             Strategy::Fn { f, .. } => self.fn_transform(*f),
             Strategy::Module { .. } => Some(self.module_transform(r.strategy)),
         };
-        let mut picked: Vec<String> = Vec::new();
+        let mut picked: Vec<(String, String)> = Vec::new();
         for item in &r.seed.items {
             let raw = renames.get(&item.id);
             let transformed = raw.map(|raw| match &transform {
                 Some(t) => t(&item.id, raw),
                 None => raw.to_string(),
             });
-            let candidate = match transformed {
-                Some(t) if !t.is_empty() && t != item.id && is_valid_rename_target(&t) => t,
-                _ => item.prev_name.clone(),
+            // (the applied candidate, the model's own word behind it)
+            let candidate = match (transformed, raw) {
+                (Some(t), Some(raw))
+                    if !t.is_empty() && t != item.id && is_valid_rename_target(&t) =>
+                {
+                    (t, raw.to_string())
+                }
+                _ => {
+                    let word = item.rejects.last().map_or(&item.prev_name, |(n, _)| n);
+                    (item.prev_name.clone(), word.clone())
+                }
             };
             picked.push(candidate);
         }
@@ -1938,7 +1977,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             Strategy::Module { .. } => Live::Module,
         };
         let node_index = self.ctxs[r.seed.ctx].node_index;
-        for (item, candidate) in r.seed.items.iter().zip(picked) {
+        for (item, (candidate, proposed)) in r.seed.items.iter().zip(picked) {
             let seq = self.next_seq();
             self.entries.push(Entry {
                 node_index,
@@ -1953,6 +1992,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 target: item.target.clone(),
                 live,
                 rejects: item.rejects.clone(),
+                proposed,
             });
         }
     }
@@ -1985,9 +2025,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             }
             // The item's accumulated history: the entry's prior failures
             // plus the one that just seeded this re-ask — every further
-            // retry discloses all of it.
+            // retry discloses all of it. The MODEL's word is disclosed
+            // (Fix B, 2026-10-03): our decoration `ONE_HOUR_MSVal` in the
+            // do-not list let the model re-offer `ONE_HOUR_MS` and collide
+            // again (233 of 869 first re-asks in the seeded candidate run).
             let mut rejects = entry.rejects.clone();
-            rejects.push((entry.new.clone(), cause_code));
+            rejects.push((entry.proposed.clone(), cause_code));
             seeds[i].items.push(RetryItem {
                 id: entry.old,
                 index: entry.binding_index,
@@ -2532,11 +2575,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             Strategy::Fn { set, .. } => (Live::Fn(*set), Some(*set)),
             Strategy::Module { .. } => (Live::Module, None),
         };
+        let mut proposed = lr.lane.proposed;
         for effect in lr.lane.effects {
             let (old, new, identity) = match effect {
                 LaneEffect::Rename { old, new } => (old, new, false),
                 LaneEffect::Identity { name } => (name.clone(), name, true),
             };
+            let proposed = proposed.remove(&old).unwrap_or_else(|| new.clone());
             let ctx = &self.ctxs[lr.ctx];
             let binding_index = ctx
                 .order
@@ -2572,6 +2617,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 target,
                 live,
                 rejects: Vec::new(),
+                proposed,
             });
         }
     }
@@ -2878,7 +2924,11 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
                 continue;
             }
-            let taken = self.live_has(entry.live, &entry.new);
+            // Fix A (2026-10-03): an answer wearing one of the program's
+            // minified names as a word is refused BEFORE it can apply —
+            // the invalid-answer path (a disclosed re-ask, then give-up).
+            let borrowed = borrowed_minified_stem(&entry.new, self.inp.stems).is_some();
+            let taken = borrowed || self.live_has(entry.live, &entry.new);
             let (applied, reason) = if taken {
                 (false, None)
             } else {
@@ -2891,7 +2941,14 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 }
                 continue;
             }
-            let class = reask::barrier_class(reason);
+            let (class, cause_code) = if borrowed {
+                (reask::ReaskClass::InvalidSuggestion, Some(BORROWED_STEM))
+            } else {
+                (
+                    reask::barrier_class(reason),
+                    reason.map(RejectionReason::as_str),
+                )
+            };
             // A first-pass rejection reads as a duplicate until its retry
             // overwrites it (`recordWaveRejectionOutcome`).
             let first_pass = entry.rejects.is_empty();
@@ -2904,7 +2961,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     entry,
                     winner_old,
                     cause: class,
-                    cause_code: reason.map(RejectionReason::as_str),
+                    cause_code,
                 });
             } else if first_pass && !reask::should_reask(class) {
                 // Unrecoverable (`no-binding`, `stale-binding`,
@@ -2912,6 +2969,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 // trail row keeps them loud, and the counter keeps them
                 // visible in the processor report.
                 self.processor.unrecoverable_rejections += 1;
+            } else if borrowed {
+                // Still borrowing when the budget died: never the junk,
+                // never a decoration built on it — the binding stays
+                // unrenamed and EXHAUSTED (the sweep keeps it a target).
+                let suggestion = entry.new.clone();
+                self.give_up(&entry, &suggestion);
             } else {
                 // The re-ask budget is spent (or disabled) and the class
                 // was reaskable: the deterministic suffix ladder, then the
@@ -2935,20 +2998,25 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     self.record_retry_outcome(entry.ctx, &entry.old, &variant);
                     self.winners.insert(variant, entry.old.clone());
                 } else {
-                    self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
-                    let attempts = entry.rejects.len() as u64 + 1;
-                    self.record_retry_give_up(entry.ctx, &entry.old, &suggestion, attempts);
-                    // The decision ledger: the budget died before a name
-                    // could land — the identifier is still not properly
-                    // renamed and STAYS a sweep target (the mark overrides
-                    // the identity keep recorded above).
-                    if let Some(b) = entry.binding.as_ref() {
-                        self.state.mark_exhausted(b.binding);
-                    }
+                    self.give_up(&entry, &suggestion);
                 }
             }
         }
         rejections
+    }
+
+    /// The terminal give-up of a reaskable rejection whose budget died:
+    /// identity bookkeeping, the give-up record, and the EXHAUSTED mark.
+    fn give_up(&mut self, entry: &Entry, suggestion: &str) {
+        self.record_identity(entry.ctx, &entry.old, entry.binding.as_ref());
+        let attempts = entry.rejects.len() as u64 + 1;
+        self.record_retry_give_up(entry.ctx, &entry.old, suggestion, attempts);
+        // The decision ledger: the budget died before a name could land —
+        // the identifier is still not properly renamed and STAYS a sweep
+        // target (the mark overrides the identity keep recorded above).
+        if let Some(b) = entry.binding.as_ref() {
+            self.state.mark_exhausted(b.binding);
+        }
     }
 
     /// `recordWaveIdentity`.

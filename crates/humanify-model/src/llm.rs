@@ -81,6 +81,12 @@ pub struct RenameFailures {
 pub struct PriorReject {
     pub name: String,
     pub invalid: bool,
+    /// The program's minified name this suggestion borrowed as a word
+    /// (`H6t` in `H6tClass`) when it was refused for that — the re-ask
+    /// names the stem. Absent from the key material when None, so every
+    /// other re-ask keys exactly as before.
+    #[serde(default)]
+    pub borrowed: Option<String>,
 }
 
 /// An insertion-ordered `Record<string, PriorReject[]>` (`StrMap`'s
@@ -113,6 +119,9 @@ impl PriorRejects {
                                     let mut o = JsObject::new();
                                     o.insert("name", JsValue::str(&r.name));
                                     o.insert("invalid", JsValue::Bool(r.invalid));
+                                    if let Some(stem) = &r.borrowed {
+                                        o.insert("borrowed", JsValue::str(stem));
+                                    }
                                     JsValue::Object(o)
                                 })
                                 .collect(),
@@ -155,7 +164,16 @@ impl<'de> serde::Deserialize<'de> for PriorRejects {
                                 _ => None,
                             })
                             .unwrap_or(false);
-                        Ok(PriorReject { name, invalid })
+                        let borrowed = fields
+                            .entries()
+                            .iter()
+                            .find(|(k, _)| k == "borrowed")
+                            .and_then(|(_, v)| v.as_str().map(str::to_string));
+                        Ok(PriorReject {
+                            name,
+                            invalid,
+                            borrowed,
+                        })
                     }
                     _ => Err(serde::de::Error::custom("a reject must be an object")),
                 })

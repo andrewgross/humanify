@@ -28,6 +28,12 @@
 //!   This stays a STRING question by nature ("is this candidate junk?"),
 //!   unchanged by the provenance decision: a single letter passes, junk
 //!   shapes (`a1b`, `_`-tails, `$`) stay refused.
+//!   Since 2026-10-03 its BORROWED-STEM half ([`borrowed_minified_stem`]:
+//!   `H6tClass` wears the program's minified `H6t`) is asked by EVERY
+//!   LLM naming site — the wave barrier and the sweep alike. The shape
+//!   half stays the sweep's alone, a declared difference: replayed over
+//!   the main pass's recorded answers it would refuse `iv`, `fd`, `x1`,
+//!   `is2017OrLater`, `LZ77Compressor` (461 answers, mostly real names).
 
 /// Short words that are real names, not mints (`SHORT_WORDS`). The ten
 /// single letters a/b/e/i/j/k/n/t/x/y left this list 2026-09-30 (Andrew:
@@ -159,6 +165,136 @@ pub fn is_sweep_answer_acceptable(name: &str) -> bool {
     !is_bun_token(name) || is_single_letter(name)
 }
 
+/// Technical terms that carry a digit and look like a minifier stem but
+/// are real vocabulary (`p2sBytes`, `x5cArray`, `LZ77Worker`,
+/// `zodCidrV4` read as `CidRv4`) — the ones the 2026-10-03 replay over
+/// 1.46M recorded answers found the model using legitimately, plus their
+/// obvious siblings. Matched case-insensitively ANYWHERE in the answer —
+/// a term that overlaps the candidate stem exempts it. The
+/// [`DOMAIN_STEMS`] are NOT here: [`is_bun_token`] already keeps them out
+/// of the stem set, and matching their short entries (`v8`, `es5`)
+/// anywhere would exempt real borrowings (`initAv8`, `initializeS56`).
+const TECH_TERMS: &[&str] = &[
+    "p2c", "p2s", "b2c", "x5c", "x5t", "lz4", "lz77", "x10", "x11", "ie9", "ie10", "ie11", "md4",
+    "cidrv4", "cidrv6", "sigv4", "es256", "es384", "es512", "rs256", "hs256", "ps256", "vp8",
+    "vp8l", "vp9", "mp3", "mp4", "h264", "h265", "x86", "x64", "arm64",
+];
+
+/// The shape of a minified name another answer can BORROW as a word: a
+/// minifier token ([`is_bun_token`]) of at least three UTF-16 units that
+/// carries a digit — `H6t`, `uo7`, `D0u`, `A0n`, `da1`. Two-unit tokens
+/// (`V2`, `y1`, `T4`) and digitless ones (`Etl`, `Ctl`) are left out on
+/// purpose: in the replay they were mostly real words (`isV1Enabled`,
+/// `y1Coordinate`), and precision comes first — a wrongly refused good
+/// name forces a worse one.
+pub fn is_borrowable_stem(name: &str) -> bool {
+    js_len(name) >= 3 && name.bytes().any(|b| b.is_ascii_digit()) && is_bun_token(name)
+}
+
+/// The program's ORIGINAL minified binding names that have the
+/// borrowable shape ([`is_borrowable_stem`]) — read once from the fresh
+/// (pre-rename) text, so a neighbour renamed earlier in the run still
+/// counts: the model saw its minified name in the code it was shown.
+#[derive(Clone, Debug, Default)]
+pub struct MinifiedStems(std::collections::HashSet<String>);
+
+impl MinifiedStems {
+    /// The borrowable names among `names` (every binding name of the
+    /// input program).
+    pub fn from_names<'n>(names: impl IntoIterator<Item = &'n str>) -> Self {
+        MinifiedStems(
+            names
+                .into_iter()
+                .filter(|n| is_borrowable_stem(n))
+                .map(str::to_string)
+                .collect(),
+        )
+    }
+
+    /// Every symbol name of a parsed program (the fresh text's semantic).
+    pub fn of_program(semantic: &oxc_semantic::Semantic<'_>) -> Self {
+        let scoping = semantic.scoping();
+        Self::from_names(scoping.symbol_ids().map(|s| scoping.symbol_name(s)))
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.0.contains(name)
+    }
+}
+
+/// The word segments of a name, as byte ranges: split at `_` / `$`, and
+/// before an ASCII capital that follows a lowercase letter or a digit
+/// (`envVarD0u` → env, Var, D0u; `H6tClass` → H6t, Class).
+fn word_segments(name: &str) -> Vec<(usize, usize)> {
+    let b = name.as_bytes();
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    for (i, &c) in b.iter().enumerate() {
+        if c == b'_' || c == b'$' {
+            if let Some(s) = start.take() {
+                out.push((s, i));
+            }
+            continue;
+        }
+        match start {
+            None => start = Some(i),
+            Some(s)
+                if c.is_ascii_uppercase()
+                    && (b[i - 1].is_ascii_lowercase() || b[i - 1].is_ascii_digit()) =>
+            {
+                out.push((s, i));
+                start = Some(i);
+            }
+            Some(_) => {}
+        }
+    }
+    if let Some(s) = start {
+        out.push((s, b.len()));
+    }
+    out
+}
+
+/// Whether a [`TECH_TERMS`] entry overlaps the byte range `a..b`.
+fn tech_term_covers(name: &str, a: usize, b: usize) -> bool {
+    let lower = name.to_ascii_lowercase();
+    TECH_TERMS.iter().any(|t| {
+        lower
+            .match_indices(t)
+            .any(|(p, _)| p < b && a < p + t.len())
+    })
+}
+
+/// WHAT ANSWER MAY LAND, the borrowed-stem half — the ONE answer-quality
+/// question every LLM naming site asks (the wave barrier for function,
+/// module and shadowed lanes; the coverage sweep): does the model's
+/// answer wear one of the program's ORIGINAL minified names as a word
+/// (`H6tClass`, `uo7Instance`, `envVarD0u`, `setMethodH6t`)? Returns the
+/// borrowed stem. Such an answer is refused like an invalid one — a
+/// disclosed re-ask naming the stem, within the `--rename-retries`
+/// budget, then the binding stays unrenamed and EXHAUSTED; never applied,
+/// never decorated.
+///
+/// Precision first (the 2026-10-03 replay, docs/rust-port/16-findings-
+/// queue.md): the stem must be a word segment, never the whole answer;
+/// it must have the borrowable shape ([`is_borrowable_stem`]) AND be a
+/// binding name of this program; a CONSTANT_CASE answer and a segment a
+/// technical term covers (`p2sBytes`, `b2cLoginHosts`, `x5cArray`) are
+/// exempt. `is2017OrLater` / `sha256Hash` pass because `is2017` and
+/// `sha256` are not minified bindings.
+pub fn borrowed_minified_stem<'a>(answer: &'a str, stems: &MinifiedStems) -> Option<&'a str> {
+    if is_constant_case(answer) {
+        return None;
+    }
+    word_segments(answer).into_iter().find_map(|(a, b)| {
+        let segment = &answer[a..b];
+        let borrowed = (a, b) != (0, answer.len())
+            && stems.contains(segment)
+            && is_borrowable_stem(segment)
+            && !tech_term_covers(answer, a, b);
+        borrowed.then_some(segment)
+    })
+}
+
 /// A deliberate convention placeholder: all-underscore (`_`, `__`) or
 /// `$`-only. The ONE name-shape exception that survives in the coverage
 /// sweep's target path under the 2026-09-30 provenance decision — these
@@ -210,3 +346,6 @@ pub fn is_half_mint_head(name: &str) -> bool {
     let lens = [2usize, 3, 3, 3];
     heads.iter().zip(lens).any(|(&ok, len)| ok && tail_at(len))
 }
+
+#[cfg(test)]
+mod floor_test;

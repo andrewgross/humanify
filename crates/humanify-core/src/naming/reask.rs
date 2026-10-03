@@ -10,8 +10,12 @@
 //!   `shadows-child`, `target-free-name`). A re-ask that DISCLOSES the
 //!   previous suggestion can fix it.
 //! - [`ReaskClass::InvalidSuggestion`] — the suggestion is not a legal
-//!   rename target (`invalid-target`). The lane loop already re-asks
-//!   these; a site without that loop (the sweep) may re-ask too.
+//!   rename target (`invalid-target`), or it borrows one of the program's
+//!   minified names as a word (`borrowed-minified-stem`, 2026-10-03 —
+//!   refused at the barrier and in the sweep; a budget that dies on it
+//!   leaves the binding unrenamed and EXHAUSTED, never decorated). The
+//!   lane loop already re-asks invalid targets; a site without that loop
+//!   (the sweep) may re-ask too.
 //! - [`ReaskClass::Unrecoverable`] — no suggestion can fix it:
 //!   `no-binding` / `stale-binding` are internal state bugs (retrying
 //!   hides them — they stay loud), `exported-name` rejects EVERY name for

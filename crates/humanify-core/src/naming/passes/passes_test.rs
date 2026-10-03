@@ -102,6 +102,7 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(provider.asks.get(), 2, "exactly one re-ask (it applied)");
     assert_eq!(r.reasked, 1, "the retry is recorded");
@@ -184,6 +185,7 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(
         stubborn.asks.get(),
@@ -284,6 +286,7 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(provider.asks.get(), 3, "bounded: no third re-ask");
     assert_eq!(r.reasked, 2, "one re-ask round each");
@@ -356,6 +359,7 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     let asked: Vec<String> = provider.asked.borrow().iter().flatten().cloned().collect();
     assert!(
@@ -429,6 +433,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(r.named, 2, "the letter answer applied");
     let code = render_program(semantic, &state);
@@ -465,6 +470,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(
         (r2.named, r2.dispatches.len()),
@@ -528,6 +534,7 @@ fn sweep_junk_answers_are_still_refused() {
         usize::MAX,
         2,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(r.named, 0, "no junk answer applied");
     assert_eq!(r.skipped, 2);
@@ -544,6 +551,90 @@ fn sweep_junk_answers_are_still_refused() {
         ["still-below-floor", "still-below-floor"],
         "both junk answers are refused as still-below-floor"
     );
+}
+
+/// Fix A (2026-10-03) in the sweep: the sweep asks the SAME answer-quality
+/// question as the main pass. `setMethodH6t` wears the program's minified
+/// `H6t` as a word — its shape alone passes the sweep's junk filter (the
+/// stem is at the END), so before the fix it applied. Refused, it gets a
+/// disclosed re-ask naming the stem, and the descriptive re-ask lands.
+#[test]
+fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
+    let text = "var H6t = {};\nfunction f() {\n  var Kq_ = two(H6t);\n  return Kq_;\n}";
+    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
+    struct Borrowing {
+        reasks: std::cell::Cell<usize>,
+    }
+    impl NameProvider for Borrowing {
+        fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+            calls
+                .into_iter()
+                .map(|c| {
+                    let retry = c.request.prior_rejects.is_some();
+                    if retry {
+                        self.reasks.set(self.reasks.get() + 1);
+                        assert!(
+                            c.user_prompt.contains(
+                                "- \"Kq_\" was suggested as \"setMethodH6t\" which reuses the minified name \"H6t\""
+                            ),
+                            "the re-ask names the borrowed stem: {}",
+                            c.user_prompt
+                        );
+                    }
+                    let renames: Vec<(String, Option<String>)> = c
+                        .request
+                        .identifiers
+                        .iter()
+                        .map(|id| {
+                            let answer = match id.as_str() {
+                                "Kq_" if retry => "methodSetter",
+                                "Kq_" => "setMethodH6t",
+                                _ => id.as_str(),
+                            };
+                            (id.clone(), Some(answer.to_string()))
+                        })
+                        .collect();
+                    Ok(BatchRenameResponse {
+                        renames: Renames::from_entries(renames),
+                        finish_reason: None,
+                        usage: None,
+                    })
+                })
+                .collect()
+        }
+    }
+    let provider = Borrowing {
+        reasks: std::cell::Cell::new(0),
+    };
+    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+    let r = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &provider,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
+        None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
+    );
+    let code = render_program(semantic, &state);
+    assert!(
+        !code.contains("setMethodH6t"),
+        "the junk never lands: {code}"
+    );
+    assert!(code.contains("var methodSetter = two(H6t);"), "{code}");
+    assert_eq!(provider.reasks.get(), 1, "one disclosed re-ask");
+    assert_eq!(r.reasked, 1);
 }
 
 /// Finding #64's never-asked class, generalized by Andrew's 2026-09-30
@@ -742,6 +833,7 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
         false,
         2,
         &decided,
+        &crate::rename::floor::MinifiedStems::default(),
     )
     .expect("the sweep parses its text");
     let asked = provider.asked.borrow().clone();
@@ -829,6 +921,7 @@ fn the_sweep_reask_budget_is_configurable() {
         usize::MAX,
         1,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(one.asks.get(), 2, "a single-reask budget is the old bound");
     assert_eq!(r.reasked, 1);
@@ -851,6 +944,7 @@ fn the_sweep_reask_budget_is_configurable() {
         usize::MAX,
         0,
         None,
+        &crate::rename::floor::MinifiedStems::of_program(semantic),
     );
     assert_eq!(zero.asks.get(), 1, "a zero budget never re-asks");
     assert_eq!(r.reasked, 0);
