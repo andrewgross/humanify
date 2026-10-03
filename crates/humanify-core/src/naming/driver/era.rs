@@ -54,6 +54,8 @@ use crate::twins::gates::PrivateRenameSet;
 pub struct EraOptions<'o> {
     pub bundler: Option<&'o str>,
     pub minifier: Option<&'o str>,
+    /// `NamingConfig::name_profile`.
+    pub name_profile: crate::rename::name_profile::NameProfile,
     pub params: &'o CacheKeyParams,
     /// `namingFloor`.
     pub naming_floor: bool,
@@ -280,7 +282,8 @@ pub fn prior_era<P: NameProvider>(
     let graph = stage.fresh.graph;
     let ph = crate::profiling::phase("era:transfer");
     let freeze = crate::rename::transfer::library_freeze(stage, opts.library, opts.skip_libraries)?;
-    let (outcome, twins) = crate::rename::transfer::apply_prior_version(stage, &freeze)?;
+    let (outcome, twins) =
+        crate::rename::transfer::apply_prior_version(stage, &freeze, opts.name_profile)?;
     drop(ph);
     let probe_lines = if opts.shingle_probe {
         shingle_probe_lines(stage)
@@ -432,7 +435,7 @@ pub fn fresh_era<P: NameProvider>(
     let n_fns = graph.functions.len();
     let n_bindings = graph.module_bindings.len();
     let start = WaveStart {
-        rename: RenameState::new(semantic, Anchor::Fresh),
+        rename: RenameState::new(semantic, Anchor::Fresh, opts.name_profile),
         fn_state,
         binding_state,
         transferred: vec![Default::default(); n_fns],
@@ -470,7 +473,7 @@ fn run_era<P: NameProvider>(
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
     let single_epoch = start.single_epoch;
-    let stems = crate::rename::floor::MinifiedStems::of_program(semantic);
+    let stems = crate::rename::floor::MinifiedStems::of_program(opts.name_profile, semantic);
     let inputs = WaveInputs {
         semantic,
         graph,
@@ -560,7 +563,7 @@ fn run_era<P: NameProvider>(
         ledger: None,
         capture: None,
         probe_lines: Vec::new(),
-        stems: crate::rename::floor::MinifiedStems::default(),
+        stems: crate::rename::floor::MinifiedStems::empty(opts.name_profile),
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");

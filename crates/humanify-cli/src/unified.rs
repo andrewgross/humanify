@@ -655,6 +655,7 @@ fn pipeline_body(
     // Stages 6-9 per file.
     let mut failures = Failures::default();
     let prompt_window = naming_config.prompt_window;
+    let name_profile = naming_config.name_profile;
     let mut naming = NamingRun {
         opts,
         config: naming_config,
@@ -691,6 +692,7 @@ fn pipeline_body(
             output_dir: Path::new(out_dir),
             input_file: Path::new(input),
             processed_source: Some(source),
+            name_profile,
             prior_version: prior_path,
             split_ledger: opts.split_ledger.as_deref(),
             split_pure: opts.split_pure,
@@ -1384,6 +1386,7 @@ fn naming_config(
     NamingConfig {
         bundler: Some(enum_name(config.bundler_type)),
         minifier: Some(enum_name(config.minifier_type)),
+        name_profile: crate::pipeline_config::name_profile_of(config),
         skip_libraries: settings.skip_libraries,
         reconcile_prior_diff: settings.levers.reconcile_prior_diff,
         naming_floor: settings.levers.naming_floor,

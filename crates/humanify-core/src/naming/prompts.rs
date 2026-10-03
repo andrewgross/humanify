@@ -26,6 +26,7 @@ use humanify_model::llm::{BatchRenameRequest, PriorRejects, RenameFailures, StrM
 
 use super::js_record;
 use crate::rename::floor::is_minified_echo;
+use crate::rename::name_profile::NameProfile;
 
 /// System prompt for batch renaming all identifiers in a function at once.
 pub const BATCH_RENAME_SYSTEM_PROMPT: &str = "You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -149,6 +150,10 @@ pub struct RetryInput<'a> {
     pub prior_rejects: Option<&'a PriorRejects>,
     pub prior_version_code: Option<&'a str>,
     pub already_renamed: Option<&'a StrMap>,
+    /// The run's minifier name profile: an identifier returned as itself
+    /// is told it IS the minified name only when it is a minifier token
+    /// under it (`rename::floor::is_minified_echo`).
+    pub name_profile: NameProfile,
 }
 
 fn non_empty(s: Option<&str>) -> Option<&str> {
@@ -354,11 +359,17 @@ fn missing_line(f: &RenameFailures) -> String {
 /// One disclosure line for a rejected suggestion (the two renderers'
 /// shared wording — a barrier/sweep re-ask reuses it per ACCUMULATED
 /// entry, a lane round-2 once per id from `previous_attempt`).
-fn failure_line(name: &str, sug: &str, invalid: bool, borrowed: Option<&str>) -> String {
+fn failure_line(
+    name: &str,
+    sug: &str,
+    invalid: bool,
+    borrowed: Option<&str>,
+    profile: NameProfile,
+) -> String {
     if sug == name {
         // An echo refusal (`rename::floor::is_minified_echo`, round 2,
         // 2026-10-03): the "suggestion" IS the minified name.
-        echo_line(name)
+        echo_line(name, profile)
     } else if let Some(stem) = borrowed {
         format!(
             "- \"{name}\" was suggested as \"{sug}\" which reuses the minified name \"{stem}\" from elsewhere in the code; suggest a descriptive name\n"
@@ -378,8 +389,8 @@ fn failure_line(name: &str, sug: &str, invalid: bool, borrowed: Option<&str>) ->
 /// multi-letter minified name is told it IS the minified name (round 2,
 /// 2026-10-03 — the echo refusal, `rename::floor::is_minified_echo`); any
 /// other name keeps the generic wording.
-fn echo_line(name: &str) -> String {
-    if is_minified_echo(name, name) {
+fn echo_line(name: &str, profile: NameProfile) -> String {
+    if is_minified_echo(profile, name, name) {
         format!("- \"{name}\" is the minified name; suggest a descriptive name\n")
     } else {
         format!("- \"{name}\" was returned as itself — you MUST suggest a DIFFERENT name\n")
@@ -395,29 +406,30 @@ fn render_retry_diagnostics(
     prev: &StrMap,
     f: &RenameFailures,
     prior: Option<&PriorRejects>,
+    profile: NameProfile,
 ) -> String {
     let mut s = String::from("Your previous rename suggestions had issues:\n");
     for name in &f.duplicates {
         match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
             Some(list) => {
                 for r in list {
-                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref());
+                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref(), profile);
                 }
             }
             None => {
                 s += &match js_record::get_truthy(prev, name) {
-                    Some(sug) => failure_line(name, &sug, false, None),
+                    Some(sug) => failure_line(name, &sug, false, None, profile),
                     None => format!("- \"{name}\" had a duplicate/conflicting name\n"),
                 };
             }
         }
     }
     for name in &f.unchanged {
-        s += &echo_line(name);
+        s += &echo_line(name, profile);
     }
     for name in &f.invalid {
         s += &match js_record::get_truthy(prev, name) {
-            Some(sug) => failure_line(name, &sug, true, None),
+            Some(sug) => failure_line(name, &sug, true, None, profile),
             None => format!("- \"{name}\" had an invalid suggested name\n"),
         };
     }
@@ -429,7 +441,12 @@ fn render_retry_diagnostics(
 /// (`buildBatchRenameRetryBody`) — the request's `promptBody`, which is
 /// cache-key material.
 pub fn build_batch_rename_retry_body(i: &RetryInput<'_>) -> String {
-    let mut p = render_retry_diagnostics(i.previous_attempt, i.failures, i.prior_rejects);
+    let mut p = render_retry_diagnostics(
+        i.previous_attempt,
+        i.failures,
+        i.prior_rejects,
+        i.name_profile,
+    );
     p += &format!("\n{}", render_already_renamed(i.already_renamed));
     p += "\nPlease suggest DIFFERENT names for these remaining identifiers:\n\n";
     p += &format!("```javascript\n{}\n```\n\n", i.code);
@@ -570,28 +587,29 @@ pub fn build_module_level_retry_prefix(
     prev: &StrMap,
     f: &RenameFailures,
     prior: Option<&PriorRejects>,
+    profile: NameProfile,
 ) -> String {
     let mut s = String::from("Your previous rename suggestions had issues:\n");
     for name in &f.duplicates {
         match prior.and_then(|p| p.get(name)).filter(|l| !l.is_empty()) {
             Some(list) => {
                 for r in list {
-                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref());
+                    s += &failure_line(name, &r.name, r.invalid, r.borrowed.as_deref(), profile);
                 }
             }
             None => {
                 if let Some(sug) = js_record::get_truthy(prev, name) {
-                    s += &failure_line(name, &sug, false, None);
+                    s += &failure_line(name, &sug, false, None, profile);
                 }
             }
         }
     }
     for name in &f.unchanged {
-        s += &echo_line(name);
+        s += &echo_line(name, profile);
     }
     for name in &f.invalid {
         if let Some(sug) = js_record::get_truthy(prev, name) {
-            s += &failure_line(name, &sug, true, None);
+            s += &failure_line(name, &sug, true, None, profile);
         }
     }
     s += &missing_line(f);
@@ -604,7 +622,7 @@ pub fn build_module_level_retry_prefix(
 /// (`previousAttempt || {}`), else the first-round prompt. The retry
 /// prompt discloses the request's ACCUMULATED `priorRejects` when a
 /// barrier/sweep re-ask set them.
-pub fn render_user_prompt(r: &BatchRenameRequest) -> String {
+pub fn render_user_prompt(r: &BatchRenameRequest, profile: NameProfile) -> String {
     if let Some(user) = non_empty(r.user_prompt.as_deref()) {
         return user.to_string();
     }
@@ -619,6 +637,7 @@ pub fn render_user_prompt(r: &BatchRenameRequest) -> String {
             prior_rejects: r.prior_rejects.as_ref(),
             prior_version_code: r.prior_version_code.as_deref(),
             already_renamed: r.already_renamed.as_ref(),
+            name_profile: profile,
         });
     }
     build_batch_rename_prompt(r)

@@ -26,6 +26,7 @@ use crate::naming::report::{
 };
 use crate::naming::validation::{resolve_conflict, sanitize_identifier};
 use crate::rename::floor::is_minified_echo;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RejectionReason;
 use crate::rename::validated::target::is_valid_rename_target;
 
@@ -194,6 +195,8 @@ pub struct LaneEnv<'e> {
     /// `transformSuggestion` (the prior-name snap), when the strategy has
     /// one.
     pub transform: Option<&'e Transform<'e>>,
+    /// The run's minifier name profile (the echo refusal's token shape).
+    pub name_profile: NameProfile,
 }
 
 /// One call the lane wants made.
@@ -750,7 +753,7 @@ impl Lane {
                 sanitize_identifier(raw)
             };
             if suggested == name.as_str() {
-                if is_minified_echo(name, &suggested) {
+                if is_minified_echo(env.name_profile, name, &suggested) {
                     echoed.insert(name.clone());
                 }
                 left.push(name.clone());

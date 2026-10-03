@@ -50,6 +50,7 @@ use std::collections::HashSet;
 use oxc_semantic::Semantic;
 
 use crate::graph::UnifiedGraph;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RejectionReason, RenameState};
 use crate::twins::gates::{PrivateRenameSet, TwinTransferPair};
@@ -328,11 +329,14 @@ pub fn run_transfer_pipeline(
 /// pre-transfer freezes included): settle the exact matches, gate the
 /// statement twins over those states, run `TRANSFER_PIPELINE`. Returns the
 /// outcome and the twins' gate output (the dump's `twin-gates.json`).
+/// `profile` is the run's minifier name profile (the fresh state's
+/// carried rule and vote candidacy read it).
 pub fn apply_prior_version(
     stage: &crate::prior::MatchStage<'_, '_>,
     freeze: &PreFreeze,
+    profile: NameProfile,
 ) -> Result<(TransferOutcome, crate::twins::gates::TwinGateOutput), String> {
-    stage::apply_prior_version(stage, freeze)
+    stage::apply_prior_version(stage, freeze, profile)
 }
 
 /// The statement twins over the settled states alone — the SAME inputs
@@ -341,8 +345,9 @@ pub fn apply_prior_version(
 pub fn statement_twins(
     stage: &crate::prior::MatchStage<'_, '_>,
     freeze: &PreFreeze,
+    profile: NameProfile,
 ) -> Result<crate::twins::gates::TwinGateOutput, String> {
-    stage::statement_twins(stage, freeze)
+    stage::statement_twins(stage, freeze, profile)
 }
 
 pub use stage::{PreFreeze, library_freeze, pre_transfer_states};

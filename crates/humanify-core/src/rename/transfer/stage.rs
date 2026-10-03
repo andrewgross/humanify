@@ -19,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::modules::soundness::collect_eval_with_taint;
 use crate::prior::MatchStage;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
 use crate::trail::Anchor;
 use crate::twins::gates::{RowState, TwinGateOutput, TwinInputs, compute_gated_statement_twins};
@@ -59,6 +60,7 @@ pub fn library_freeze(
 pub(super) fn apply_prior_version(
     stage: &MatchStage<'_, '_>,
     freeze: &PreFreeze,
+    profile: NameProfile,
 ) -> Result<(TransferOutcome, TwinGateOutput), String> {
     use crate::profiling::phase;
     let fresh_semantic = stage.fresh.ingest.semantic();
@@ -76,7 +78,7 @@ pub(super) fn apply_prior_version(
         fresh_state,
         fn_state,
         binding_state,
-    } = settle(stage, &fresh_rows, freeze)?;
+    } = settle(stage, &fresh_rows, freeze, profile)?;
     drop(ph);
     let ph = phase("transfer:gate-twins");
     let twin_output = gate_twins(stage, &evidence, &fn_state, &binding_state)?;
@@ -170,6 +172,7 @@ pub(super) fn apply_prior_version(
 pub(super) fn statement_twins(
     stage: &MatchStage<'_, '_>,
     freeze: &PreFreeze,
+    profile: NameProfile,
 ) -> Result<TwinGateOutput, String> {
     let fresh_rows = SideRows::build(
         stage.fresh.graph,
@@ -177,7 +180,7 @@ pub(super) fn statement_twins(
         stage.fresh.tables,
         stage.fresh.json,
     );
-    let settled = settle(stage, &fresh_rows, freeze)?;
+    let settled = settle(stage, &fresh_rows, freeze, profile)?;
     gate_twins(
         stage,
         &settled.evidence,
@@ -204,10 +207,11 @@ fn settle(
     stage: &MatchStage<'_, '_>,
     fresh_rows: &SideRows<'_, '_>,
     freeze: &PreFreeze,
+    profile: NameProfile,
 ) -> Result<Settled, String> {
-    let fresh_state = RenameState::new(stage.fresh.ingest.semantic(), Anchor::Fresh);
+    let fresh_state = RenameState::new(stage.fresh.ingest.semantic(), Anchor::Fresh, profile);
     let prior_semantic = stage.prior.ingest.semantic();
-    let prior_state = RenameState::new(prior_semantic, Anchor::Fresh);
+    let prior_state = RenameState::new(prior_semantic, Anchor::Fresh, profile);
     let prior_rows = SideRows::build(
         stage.prior.graph,
         prior_semantic,

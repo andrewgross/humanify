@@ -17,6 +17,9 @@ pub struct PipelineConfig {
     pub minifier_type: MinifierType,
     /// The selected unpack adapter's name ("webcrack", "bun", "passthrough").
     pub unpack_adapter_name: &'static str,
+    /// The selected minifier name profile's name ("bun", "esbuild", …;
+    /// `humanify_core::rename::name_profile`).
+    pub name_profile_name: &'static str,
 }
 
 js_record! {

@@ -44,7 +44,11 @@ fn run_case(preset: &str, prior: &str, next: &str) -> Value {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, next);
     assert!(ingest.errors.is_empty());
-    let mut state = RenameState::new(ingest.semantic(), Anchor::Generated);
+    let mut state = RenameState::new(
+        ingest.semantic(),
+        Anchor::Generated,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let diff = compute_normal_diff(prior, next).unwrap();
     let eligible = Eligibility::new(Some("bun"), Some("bun"));
     let opts = options(preset, prior);

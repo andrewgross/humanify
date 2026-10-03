@@ -21,7 +21,11 @@ use crate::trail::Anchor;
 /// each scope's bindings in map order, then rename in that order.
 fn rename_all(source: &str, renames: &[(String, String)]) -> (RenameLedger, String) {
     with_semantic(source, false, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let mut pending: Vec<(BScopeId, String, String)> = Vec::new();
         for s in 0..state.view().scopes.len() as u32 {
             for (name, _) in state.bindings_in(BScopeId(s)) {
@@ -238,7 +242,11 @@ fn a_recrawled_walk_lists_entries_in_declaration_order() {
     use crate::rename::validated::ledger::{BIG_SOURCE_BYTES, parse_clears_scope_cache};
     let source = "var a = 1;\nvar b = 2;\nuse(a, b);\n";
     with_semantic(source, false, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         let program = state.view().program_scope();
         for (from, to) in [("b", "second"), ("a", "first")] {
             let attempt = state.attempt_validated_rename(
@@ -319,7 +327,11 @@ fn a_bundle_sized_ledger_replays_in_linear_time() {
 fn render_and_replay(source: &str, renames: &[(&str, &str)]) -> (String, String) {
     use crate::naming::waves::render::render_program;
     with_semantic(source, true, |semantic| {
-        let mut state = RenameState::new(semantic, Anchor::Fresh);
+        let mut state = RenameState::new(
+            semantic,
+            Anchor::Fresh,
+            crate::rename::name_profile::NameProfile::Bun,
+        );
         for (from, to) in renames {
             let scope = (0..state.view().scopes.len() as u32)
                 .map(BScopeId)

@@ -17,6 +17,7 @@ use super::{ReconcileOptions, ReconcileResult, collect_word_tokens, hunks, recon
 use crate::ingest::Ingest;
 use crate::naming::waves::render::{program_edits, render_program};
 use crate::rename::eligibility::Eligibility;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
 use crate::trail::{Anchor, StrategyTrail};
 
@@ -64,6 +65,7 @@ pub fn run_prior_diff_reconciliation(
     code: &str,
     prior_text: &str,
     eligible: &Eligibility,
+    profile: NameProfile,
     trail: StrategyTrail,
     ledger: Option<LedgerWalk>,
 ) -> Result<PriorDiffOutcome, (String, StrategyTrail)> {
@@ -83,7 +85,7 @@ pub fn run_prior_diff_reconciliation(
     };
     drop(ph);
     let ph = crate::profiling::phase("reconcile:options");
-    let mut state = RenameState::with_trail(semantic, Anchor::Generated, trail);
+    let mut state = RenameState::with_trail(semantic, Anchor::Generated, trail, profile);
     let opts = pipeline_options(prior_text);
     drop(ph);
     let ph = crate::profiling::phase("reconcile:apply");

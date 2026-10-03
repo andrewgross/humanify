@@ -31,7 +31,8 @@ use crate::ingest::{Ingest, program_estree_json};
 use crate::modules::wrapper::find_wrapper_function;
 use crate::naming::waves::render::render_program;
 use crate::rename::eligibility::Eligibility;
-use crate::rename::floor::{is_bun_token, is_decorated_descriptive};
+use crate::rename::floor::{is_decorated_descriptive, is_minifier_token};
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::scopes::{BScopeId, BindingId};
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Anchor, StrategyTrail};
@@ -52,11 +53,11 @@ pub struct ContextAssignment {
 }
 
 /// `isRestorableTarget`: a real descriptive word, never a mint.
-fn is_restorable_target(name: &str) -> bool {
+fn is_restorable_target(profile: NameProfile, name: &str) -> bool {
     if name.encode_utf16().count() <= 2 || name.starts_with("__") {
         return false;
     }
-    if is_bun_token(name) && !is_decorated_descriptive(name) {
+    if is_minifier_token(profile, name) && !is_decorated_descriptive(profile, name) {
         return false;
     }
     let b = name.as_bytes();
@@ -70,6 +71,7 @@ pub fn assign_bucket(
     fresh: &[BucketMember],
     prior: &[BucketMember],
     is_eligible: &dyn Fn(&str) -> bool,
+    profile: NameProfile,
 ) -> Vec<ContextAssignment> {
     let fresh_ctx: Vec<HashSet<&str>> = fresh
         .iter()
@@ -99,7 +101,7 @@ pub fn assign_bucket(
             .get(f.name.as_str())
             .map_or(0, |&own| support(fi, own));
         for (pi, p) in prior.iter().enumerate() {
-            if !is_restorable_target(&p.name) {
+            if !is_restorable_target(profile, &p.name) {
                 continue;
             }
             let w = support(fi, pi);
@@ -337,6 +339,7 @@ fn plan_bucket_moves(
     fresh: &[(String, Vec<MemberInfo>)],
     prior: &HashMap<String, Vec<MemberInfo>>,
     eligible: &Eligibility,
+    profile: NameProfile,
 ) -> (Vec<PlannedMove>, usize) {
     let mut to_apply = Vec::new();
     let mut buckets = 0;
@@ -352,6 +355,7 @@ fn plan_bucket_moves(
             &by_decl_order(fresh_members),
             &by_decl_order(prior_members),
             &is_eligible,
+            profile,
         );
         if moves.is_empty() {
             continue;
@@ -488,19 +492,23 @@ pub struct FamilyPermuteOutcome {
 pub struct PriorMembers(Result<HashMap<String, Vec<MemberInfo>>, String>);
 
 impl PriorMembers {
-    pub fn of(prior_text: &str) -> PriorMembers {
-        PriorMembers(prior_by_hash(prior_text))
+    pub fn of(prior_text: &str, profile: NameProfile) -> PriorMembers {
+        PriorMembers(prior_by_hash(prior_text, profile))
     }
 }
 
-fn prior_by_hash(prior_text: &str) -> Result<HashMap<String, Vec<MemberInfo>>, String> {
+fn prior_by_hash(
+    prior_text: &str,
+    profile: NameProfile,
+) -> Result<HashMap<String, Vec<MemberInfo>>, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, prior_text);
     if !ingest.errors.is_empty() {
         return Err(format!("prior text does not parse: {}", ingest.errors[0]));
     }
     let semantic = ingest.semantic();
-    let state = RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default());
+    let state =
+        RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default(), profile);
     Ok(by_hash(collect_members(semantic, &state)?)
         .into_iter()
         .collect())
@@ -512,11 +520,12 @@ pub fn run_family_permute(
     code: &str,
     prior_text: &str,
     eligible: &Eligibility,
+    profile: NameProfile,
 ) -> Result<FamilyPermuteOutcome, String> {
     let ph = crate::profiling::phase("permute:prior-by-hash");
-    let prior = PriorMembers::of(prior_text);
+    let prior = PriorMembers::of(prior_text, profile);
     drop(ph);
-    run_family_permute_with(code, prior, eligible)
+    run_family_permute_with(code, prior, eligible, profile)
 }
 
 /// [`run_family_permute`] over a prior index built beforehand (the same
@@ -525,6 +534,7 @@ pub fn run_family_permute_with(
     code: &str,
     prior: PriorMembers,
     eligible: &Eligibility,
+    profile: NameProfile,
 ) -> Result<FamilyPermuteOutcome, String> {
     let prior = prior.0?;
     let ph = crate::profiling::phase("permute:fresh-members");
@@ -534,11 +544,12 @@ pub fn run_family_permute_with(
         return Err(format!("text does not parse: {}", ingest.errors[0]));
     }
     let semantic = ingest.semantic();
-    let mut state = RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default());
+    let mut state =
+        RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default(), profile);
     let fresh = by_hash(collect_members(semantic, &state)?);
     drop(ph);
     let ph = crate::profiling::phase("permute:plan+apply");
-    let (to_apply, buckets) = plan_bucket_moves(&fresh, &prior, eligible);
+    let (to_apply, buckets) = plan_bucket_moves(&fresh, &prior, eligible, profile);
     if to_apply.is_empty() {
         return Ok(FamilyPermuteOutcome {
             buckets,

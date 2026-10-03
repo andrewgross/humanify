@@ -72,6 +72,8 @@ pub struct SplitStageInput<'a> {
     /// the split is handed); the wrapper GRAMMAR still reads the shipped
     /// text.
     pub input_bundle: Option<&'a str>,
+    /// The run's minifier name profile (the finish's post-split reconcile).
+    pub name_profile: humanify_core::rename::name_profile::NameProfile,
 }
 
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
@@ -410,6 +412,7 @@ fn commit_and_finish(
         // Finding #60: the vendor captures the split resolved to owner
         // files + live accessor names, for the finish's vendor bridge.
         bridges: outcome.vendor_bridges.clone(),
+        name_profile: input.name_profile,
     };
     drop(ph);
     let mut report = FinishReport::default();

@@ -271,7 +271,11 @@ fn with_twin_sides_classified(
     };
     match_prior_version(input, |stage| {
         let freeze = crate::rename::transfer::library_freeze(stage, library, true)?;
-        let output = statement_twins(stage, &freeze)?;
+        let output = statement_twins(
+            stage,
+            &freeze,
+            crate::rename::name_profile::NameProfile::Bun,
+        )?;
         let fn_matches: HashMap<String, String> = stage.function_result.matches.to_hash_map();
         let matched_ids: HashSet<&String> = stage
             .binding_result

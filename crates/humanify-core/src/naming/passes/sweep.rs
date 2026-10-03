@@ -475,6 +475,7 @@ fn apply_group_response(
 ) -> (usize, usize, Vec<SweepReask>) {
     let (mut named, mut skipped) = (0, 0);
     let mut reasks = Vec::new();
+    let profile = state.name_profile();
     for target in &group.targets {
         let suggestion = renames.get(&target.name).filter(|s| !s.is_empty());
         // The ONE answer-quality question the wave barrier asks too
@@ -501,7 +502,7 @@ fn apply_group_response(
             continue;
         }
         let Some(new_name) =
-            suggestion.filter(|s| *s != target.name && is_sweep_answer_acceptable(s))
+            suggestion.filter(|s| *s != target.name && is_sweep_answer_acceptable(profile, s))
         else {
             skipped += 1;
             let reason = match suggestion {
@@ -581,7 +582,7 @@ fn classify_bindings(
             // below-floor read that splits carried (model-chosen) names
             // from descriptively renamed ones.
             if d.renamed_to.contains(&e.name) {
-                if crate::rename::floor::is_below_floor_name(&e.name) {
+                if crate::rename::floor::is_below_floor_name(state.name_profile(), &e.name) {
                     p.model_chosen += 1;
                 } else {
                     p.renamed += 1;
@@ -728,7 +729,7 @@ fn sweep_call(
     params: &CacheKeyParams,
 ) -> LlmCall {
     let system_prompt = render_system_prompt(&request);
-    let user_prompt = render_user_prompt(&request);
+    let user_prompt = render_user_prompt(&request, state.name_profile());
     if log.mode() != RecordMode::Off {
         let dispatch = SweepDispatch {
             cache_key: cache_key_of(&request, params),
@@ -957,7 +958,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     let semantic = ingest.semantic();
     let ph = crate::profiling::phase("sweep:names");
     let taint = collect_eval_with_taint(semantic);
-    let mut state = RenameState::with_trail(semantic, anchor, trail);
+    let mut state = RenameState::with_trail(semantic, anchor, trail, stems.profile());
     let sweep = sweep_minted_names(
         semantic,
         &mut state,

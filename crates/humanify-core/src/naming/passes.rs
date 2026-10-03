@@ -52,6 +52,7 @@ use oxc_allocator::Allocator;
 
 use crate::ingest::Ingest;
 use crate::rename::eligibility::Eligibility;
+use crate::rename::name_profile::NameProfile;
 use crate::rename::validated::RenameState;
 use crate::trail::{Anchor, StrategyTrail};
 use census::{MintedCensus, collect_free_references, collect_minted_bindings, summarize_census};
@@ -59,16 +60,22 @@ use census::{MintedCensus, collect_free_references, collect_minted_bindings, sum
 /// The end-of-run census of the shipped text (plugin.ts: after the
 /// permute's traverse-cache clear, so the walk sees a FRESH crawl — scope
 /// maps in registration order under the final names, as a new parse).
-pub fn census_of_text(text: &str, eligible: &Eligibility) -> Result<MintedCensus, String> {
+pub fn census_of_text(
+    text: &str,
+    eligible: &Eligibility,
+    profile: NameProfile,
+) -> Result<MintedCensus, String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     if !ingest.errors.is_empty() {
         return Err(format!("shipped text does not parse: {}", ingest.errors[0]));
     }
     let semantic = ingest.semantic();
-    let state = RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default());
+    let state =
+        RenameState::with_trail(semantic, Anchor::Shipped, StrategyTrail::default(), profile);
     let walk = collect_minted_bindings(semantic, &state, eligible);
     Ok(summarize_census(
+        profile,
         &walk.entries,
         walk.total_bindings,
         collect_free_references(&state),

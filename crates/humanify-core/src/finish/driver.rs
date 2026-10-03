@@ -14,6 +14,7 @@ use humanify_model::js::{JsValue, stringify};
 
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::Eligibility;
+use crate::rename::name_profile::NameProfile;
 use crate::unpack::bun::{bun_manifest_path, find_prior_tree_root};
 
 use super::carry::{CarryResult, carry_renames_into_bundle};
@@ -54,6 +55,9 @@ pub struct FinishInput<'a> {
     /// the split computed from the manifest's capture records. Empty for
     /// review trees, declines and bundles without captures.
     pub bridges: Vec<VendorBridge>,
+    /// The run's minifier name profile (the post-split reconcile's
+    /// shape questions; `rename::name_profile`).
+    pub name_profile: NameProfile,
 }
 
 /// The Bun manifest as the finish reads it (`BunModulesManifest`).
@@ -275,6 +279,7 @@ pub fn finish_stage(
         input.output_dir,
         input.prior_version,
         input.switches,
+        input.name_profile,
         report,
     )?;
     Ok((relinked, reconciled))
@@ -316,6 +321,7 @@ pub fn reconcile_post_split(
     output_dir: &Path,
     prior_version: Option<&Path>,
     switches: FinishSwitches,
+    name_profile: NameProfile,
     report: &mut FinishReport,
 ) -> Result<Option<ReconcileReport>, String> {
     let Some(prior_version) = prior_version else {
@@ -341,6 +347,7 @@ pub fn reconcile_post_split(
             read_fresh: &read_fresh,
             read_prior: &read_prior,
             eligible: &eligible,
+            name_profile,
             disabled: switches.post_split_reconcile_disabled,
         })
     };
@@ -363,7 +370,7 @@ pub fn reconcile_post_split(
     }
     let carry = {
         let _ph = crate::profiling::phase("split:finish:carry");
-        carry_into_bundle(output_dir, &ledger, &result.renames, report)
+        carry_into_bundle(output_dir, &ledger, &result.renames, name_profile, report)
     };
     report.messages.push(format!(
         "Post-split reconcile: restored {} prior name(s) across {} of {} file(s){}",
@@ -391,11 +398,12 @@ fn carry_into_bundle(
     output_dir: &Path,
     ledger: &JsValue,
     renames: &[super::reconcile::PostSplitRename],
+    profile: NameProfile,
     report: &mut FinishReport,
 ) -> Option<CarryResult> {
     let bundle_path = output_dir.join(METADATA_DIR).join("humanified.js");
     let bundle = read_utf8(&bundle_path).ok()?;
-    let carry = match carry_renames_into_bundle(&bundle, ledger, renames) {
+    let carry = match carry_renames_into_bundle(&bundle, ledger, renames, profile) {
         Ok(c) => c,
         Err(_) => return None, // "bundle carry skipped" (debug only)
     };

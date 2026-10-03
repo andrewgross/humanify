@@ -79,7 +79,11 @@ fn private_rename_sets_apply_in_order() {
     ];
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
-    let state = RenameState::new(ingest.semantic(), Anchor::Fresh);
+    let state = RenameState::new(
+        ingest.semantic(),
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let edits = private_rename_edits(text, &sets);
     assert_eq!(
         render_program_with(ingest.semantic(), &state, &edits),
@@ -95,7 +99,11 @@ fn shorthand_specifiers_keep_the_module_name() {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, text);
     let semantic = ingest.semantic();
-    let mut state = RenameState::new(semantic, Anchor::Fresh);
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
     let program = state.view().program_scope();
     for (old, new) in [("a", "alpha"), ("b", "beta")] {
         let attempt = state.attempt_validated_rename(

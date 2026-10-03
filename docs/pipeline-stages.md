@@ -24,7 +24,7 @@ editing the caller.
 | 6   | Format                   | `format` (`core::format`, the native formatter)                           | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json) |
 | 7   | Build the function graph | `graph`                                                                   | **no**                                                                                              |
 | 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                            | **no** — the cascade is hard-coded order, see below                                                 |
-| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                           | **no** — levers toggle passes, they do not select a strategy                                        |
+| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                           | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes          |
 | 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                        | **partly** — a real registry, but not selectable from outside                                       |
 | 11  | Split (one path)         | `emit::stable_split`                                                      | **no** — prior present → inherit layout; no prior → clustered fresh grouping                        |
 | 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                              |
@@ -74,7 +74,14 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
 **Two** stages have a real registry — 2 (unpack) and 4 (library detection) —
 both the same shape: an array, selection by name or `supports()`, a fallback
 last. Stage 10 (`PLACEMENT_TIERS`) is a registry internally but is not
-selectable from outside. (Stage 11's split-adapter registry was deleted with
+selectable from outside. Stage 9 gained a third, smaller one on
+2026-10-03: the minifier **name profile** (`rename::name_profile`,
+`NAME_PROFILES` — bun, esbuild, terser, swc, none), the shape knowledge
+behind "does this name look minifier-made?". It is chosen once, next to the
+unpack adapter (`select_name_profile`, from the `--minifier`/`--bundler`
+flags or a definitive bun/esbuild bundler verdict; an unsure input stays on
+bun), and passed down; it changes which names count as minted and which
+answers are refused, not which passes run. (Stage 11's split-adapter registry was deleted with
 the legacy splitter, 2026-08-12.) The unpack registry gained **esbuild** as
 its second bundler (exp075's module form, ported 2026-10-02): the same
 vendor-extraction implementation as bun — the two differ only in the factory

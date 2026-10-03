@@ -139,6 +139,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     let adapter = humanify_core::unpack::select_unpack_adapter(config.unpack_adapter_name)?;
     let bundler = enum_name(config.bundler_type);
     let minifier = enum_name(config.minifier_type);
+    let name_profile = crate::pipeline_config::name_profile_of(&config);
 
     // Stage 3: unpack into the work dir (a default temp dir is removed
     // afterwards; the dump embeds everything the harness needs).
@@ -187,6 +188,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
             prior: &prior,
             bundler: &bundler,
             minifier: &minifier,
+            name_profile,
             multi,
             side,
         };
@@ -284,6 +286,7 @@ struct MatchContext<'a, 's> {
     prior: &'a str,
     bundler: &'a str,
     minifier: &'a str,
+    name_profile: humanify_core::rename::name_profile::NameProfile,
     multi: bool,
     side: &'a humanify_core::prior::StageSide<'a, 's>,
 }
@@ -308,6 +311,7 @@ impl MatchRun {
             prior,
             bundler,
             minifier,
+            name_profile,
             multi,
             side,
         } = *ctx;
@@ -340,7 +344,8 @@ impl MatchRun {
             !multi,
             |stage| {
                 let freeze = humanify_core::rename::transfer::library_freeze(stage, None, false)?;
-                let twins = humanify_core::rename::transfer::statement_twins(stage, &freeze)?;
+                let twins =
+                    humanify_core::rename::transfer::statement_twins(stage, &freeze, name_profile)?;
                 let section = file_section(stage, &twins, &fresh, prior, path, !multi)?;
                 self.matched_any = true;
                 if multi {

@@ -167,7 +167,7 @@ fn is_shorthand_property_value(
 fn factory_refs(ingest: &Ingest<'_>, lookup: &FactoryLookup) -> Vec<FactoryRef> {
     let semantic = ingest.semantic();
     let nodes = semantic.nodes();
-    let state = RenameState::new(semantic, Anchor::Generated);
+    let state = RenameState::for_lookups(semantic, Anchor::Generated);
     let mut refs = Vec::new();
     for node in nodes.iter() {
         let AstKind::IdentifierReference(ident) = node.kind() else {
@@ -318,7 +318,7 @@ fn apply_vendor_bridges(
     let ingest = parse_or_err(&allocator, code)?;
     let semantic = ingest.semantic();
     let nodes = semantic.nodes();
-    let state = RenameState::new(semantic, Anchor::Generated);
+    let state = RenameState::for_lookups(semantic, Anchor::Generated);
     let mut splices: Vec<(usize, usize, bool, String)> = Vec::new();
     for node in nodes.iter() {
         let AstKind::IdentifierReference(ident) = node.kind() else {

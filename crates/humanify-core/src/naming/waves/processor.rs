@@ -382,7 +382,7 @@ pub(crate) fn answer_refusal(
     answer: &str,
     stems: &MinifiedStems,
 ) -> Option<&'static str> {
-    if is_minified_echo(old, answer) {
+    if is_minified_echo(stems.profile(), old, answer) {
         Some(MINIFIED_ECHO)
     } else if answer != old && borrowed_minified_stem(answer, stems).is_some() {
         Some(BORROWED_STEM)
@@ -1539,6 +1539,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 prior_rejects: call.prior_rejects.as_ref(),
                 prior_version_code: prior_context.as_deref(),
                 already_renamed: already.as_ref(),
+                name_profile: self.state.name_profile(),
             })
         });
         BatchRenameRequest {
@@ -1852,8 +1853,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         let prev = StrMap(call.prev.0.clone());
         let mut body = None;
         if is_retry {
-            let prefix =
-                build_module_level_retry_prefix(&prev, &call.failures, call.prior_rejects.as_ref());
+            let prefix = build_module_level_retry_prefix(
+                &prev,
+                &call.failures,
+                call.prior_rejects.as_ref(),
+                self.state.name_profile(),
+            );
             user = format!("{prefix}\n{user}");
             body = Some(format!(
                 "{prefix}\n{}",
@@ -2584,6 +2589,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     used: &used,
                     would_reject: &reject,
                     transform: transform.as_deref(),
+                    name_profile: self.state.name_profile(),
                 };
                 f(&env)
             }
@@ -2605,6 +2611,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     used: &used,
                     would_reject: &reject,
                     transform: Some(&*transform),
+                    name_profile: self.state.name_profile(),
                 };
                 f(&env)
             }
@@ -2740,7 +2747,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         // render is now its own span; the dispatch spans carry the rest.
         let ph = crate::profiling::phase("waves:prompt-render");
         let system_prompt = render_system_prompt(&request);
-        let user_prompt = render_user_prompt(&request);
+        let user_prompt = render_user_prompt(&request, self.state.name_profile());
         drop(ph);
         let prepared = match self.log.mode() {
             RecordMode::Off => Prepared::None,
@@ -2851,7 +2858,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             ReplaySource::Lane { lane, call } => self.lane_request(&lanes[*lane], call),
         };
         let system_prompt = render_system_prompt(&request);
-        let user_prompt = render_user_prompt(&request);
+        let user_prompt = render_user_prompt(&request, self.state.name_profile());
         let cache_key = cache_key_of(&request, &self.inp.params);
         DispatchRecord {
             seq: 0,
@@ -2896,7 +2903,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         if self.log.mode() == RecordMode::Full && !self.log.retains() {
             let ph = crate::profiling::phase("waves:prompt-render");
             let system_prompt = render_system_prompt(&request);
-            let user_prompt = render_user_prompt(&request);
+            let user_prompt = render_user_prompt(&request, self.state.name_profile());
             drop(ph);
             let prepared = Prepared::Replay(Replay {
                 ctx,

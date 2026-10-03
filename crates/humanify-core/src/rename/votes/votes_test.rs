@@ -59,7 +59,11 @@ impl Case {
 
     fn run(self, code: &str) -> (PinResult, Vec<String>, bool) {
         with_semantic(code, true, |semantic| {
-            let mut state = RenameState::new(semantic, Anchor::Fresh);
+            let mut state = RenameState::new(
+                semantic,
+                Anchor::Fresh,
+                crate::rename::name_profile::NameProfile::Bun,
+            );
             let scope = state.view().program_scope();
             let req = PinRequest {
                 votes: &self.votes,
@@ -223,26 +227,44 @@ fn pins_a_collision_decorated_descriptive_name() {
 #[test]
 fn rank_prefers_exact_votes_over_totals() {
     let v = votes(&[("writeConfig", 2, 2), ("persistSettings", 3, 0)]);
-    assert_eq!(rank_vote_suggestion(&v).as_deref(), Some("writeConfig"));
+    assert_eq!(
+        rank_vote_suggestion(&v, crate::rename::name_profile::NameProfile::Bun).as_deref(),
+        Some("writeConfig")
+    );
 }
 
 #[test]
 fn rank_abstains_on_a_tie() {
     let v = votes(&[("writeConfig", 1, 1), ("persistSettings", 1, 1)]);
-    assert_eq!(rank_vote_suggestion(&v), None);
+    assert_eq!(
+        rank_vote_suggestion(&v, crate::rename::name_profile::NameProfile::Bun),
+        None
+    );
 }
 
 #[test]
 fn rank_excludes_below_floor_names() {
     let v = votes(&[("M2_", 3, 3), ("writeConfig", 1, 1)]);
-    assert_eq!(rank_vote_suggestion(&v).as_deref(), Some("writeConfig"));
-    assert_eq!(rank_vote_suggestion(&votes(&[("M2_", 2, 2)])), None);
+    assert_eq!(
+        rank_vote_suggestion(&v, crate::rename::name_profile::NameProfile::Bun).as_deref(),
+        Some("writeConfig")
+    );
+    assert_eq!(
+        rank_vote_suggestion(
+            &votes(&[("M2_", 2, 2)]),
+            crate::rename::name_profile::NameProfile::Bun
+        ),
+        None
+    );
 }
 
 #[test]
 fn rank_breaks_an_exact_tie_by_total() {
     let v = votes(&[("writeConfig", 3, 1), ("persistSettings", 1, 1)]);
-    assert_eq!(rank_vote_suggestion(&v).as_deref(), Some("writeConfig"));
+    assert_eq!(
+        rank_vote_suggestion(&v, crate::rename::name_profile::NameProfile::Bun).as_deref(),
+        Some("writeConfig")
+    );
 }
 
 #[test]
