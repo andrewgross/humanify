@@ -99,6 +99,11 @@ standalone `split` command are all deleted; future input formats (webpack,
 electron) should join as upfront detection + explicit pipeline pieces, not as
 fallbacks.
 
+[`plugin-spec.md`](./plugin-spec.md) (2026-10-03) inventories every place
+the pipeline still assumes Bun (or another specific bundler/minifier) and
+specifies what a new bundler or minifier plugin must supply, piece by piece,
+marking which pieces are a real plug point today.
+
 Everything else is a fixed call. That is not automatically wrong — a seam with
 one implementation is speculative generality — but it is worth knowing which
 is which before planning work that assumes a plug point exists.
