@@ -117,11 +117,18 @@ impl ModuleWrapperGrammar {
 }
 
 /// P8 — how a vendored module's references to the bundle's interop helpers
-/// keep working in the runnable tree: the helper file the finish writes
-/// beside the vendor files. ONE implementation: Bun's (`__commonJS`,
-/// `__esm`, `__toESM`, `__toCommonJS`), which esbuild's factories also
-/// run under. The helper SHAPES the unpack recognises
-/// (`unpack::bun::scope`, spec I16/I17) are not yet behind this slot.
+/// keep working in the runnable tree, end to end: which bundle bindings
+/// ARE interop helpers (by shape — the unpack's scope plan,
+/// `unpack::bun::scope`, spec I16), the standard names a vendored body's
+/// references are rewritten to (and whose prior use in the bundle keeps a
+/// factory in the app, spec I17), the helper file the finish writes beside
+/// the vendor files and binds those names from, and the module helper
+/// every vendored factory is wrapped in. ONE implementation: Bun's
+/// (`__commonJS`, `__esm`, `__toESM`, `__toCommonJS`), which esbuild's
+/// factories also run under — no part of the esbuild adapter differs here
+/// today (esbuild's `__toCommonJS` does not match Bun's shape and falls to
+/// the bridge, spec I16). A second implementation is where a new
+/// bundler's helpers land.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InteropHelpers {
     Bun,
@@ -134,10 +141,53 @@ impl InteropHelpers {
         }
     }
 
-    /// The helper file's text (`.humanify/__bun-runtime.js`).
+    /// The helper file's text (written at [`InteropHelpers::runtime_file`]).
     pub fn relink_runtime(self) -> &'static str {
         match self {
             InteropHelpers::Bun => crate::finish::relink::BUN_RELINK_RUNTIME,
+        }
+    }
+
+    /// The helper file's path in the output tree (`.humanify/__bun-runtime.js`).
+    pub fn runtime_file(self) -> String {
+        match self {
+            InteropHelpers::Bun => format!(
+                "{}/{}",
+                crate::place::layout::METADATA_DIR,
+                crate::finish::relink::BUN_RELINK_RUNTIME_FILE
+            ),
+        }
+    }
+
+    /// The helper every vendored factory is wrapped in (`exports.f =
+    /// __commonJS(F)`), bound from the helper file.
+    pub fn module_helper(self) -> &'static str {
+        match self {
+            InteropHelpers::Bun => "__commonJS",
+        }
+    }
+
+    /// The standard names of the interop helpers a vendored body may call:
+    /// the unpack rewrites a recognised helper reference to one of these,
+    /// and the relink binds each one a body names free from the helper
+    /// file. A bundle that already uses one of these names keeps the
+    /// helpers' callers in the app (spec I17).
+    pub fn canonical_names(self) -> &'static [&'static str] {
+        match self {
+            InteropHelpers::Bun => &crate::unpack::bun::scope::BUN_INTEROP_NAMES,
+        }
+    }
+
+    /// Is `init` (the initializer of a never-written bundle binding) one
+    /// of this bundler's interop helpers? Its standard name, by shape
+    /// (spec I16).
+    pub fn recognise(
+        self,
+        code: &str,
+        init: &oxc_ast::ast::Expression<'_>,
+    ) -> Option<&'static str> {
+        match self {
+            InteropHelpers::Bun => crate::unpack::bun::scope::bun_helper_shape(code, init),
         }
     }
 }

@@ -7,22 +7,23 @@
 //! [`finish_split_output`] then [`reconcile_post_split`] — the reconcile
 //! runs only when the finish succeeded (a throw ends the TS stage).
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use humanify_model::js::{JsValue, stringify};
 
+use crate::modules::vendor_names::BunModulesManifest;
 use crate::place::layout::METADATA_DIR;
 use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
-use crate::unpack::bun::{bun_manifest_path, find_prior_tree_root};
+use crate::unpack::bun::{BUN_MODULES_MANIFEST, VENDOR_DIR, find_prior_tree_root};
 
 use super::carry::{CarryResult, carry_renames_into_bundle};
 use super::reconcile::{PostSplitInput, PostSplitResult, post_split_reconcile};
 
 use super::relink::{
-    FactoryLookup, VendorBridge, bun_relink_runtime_filename, relink_factory_references,
-    wrap_extracted_factory,
+    FactoryLookup, VendorBridge, relink_factory_references, wrap_extracted_factory,
 };
 use super::scaffold::{detect_external_packages, read_utf8, write_runnable_scaffold};
 use super::vendor_inherit::VendorBodyInheritor;
@@ -68,60 +69,101 @@ pub struct FinishInput<'a> {
     /// The run's bundle layout (the bundle carry's wrapper body —
     /// `toolchain::BundleLayout`, P9).
     pub layout: crate::toolchain::BundleLayout,
+    /// The vendor record THIS run's unpack adapter wrote (None when it
+    /// wrote none) — the re-link's only source (toolchain review R6).
+    pub vendor_record: Option<&'a BunModulesManifest>,
+    /// Every path the split wrote (the tree), so a vendor-folder file the
+    /// split placed is never mistaken for an earlier run's leftover.
+    pub split_files: Vec<&'a str>,
 }
 
-/// The Bun manifest as the finish reads it (`BunModulesManifest`).
+/// The vendor record as the finish reads it (`BunModulesManifest`).
 struct Manifest {
     runtime_file: Option<String>,
     /// (fileName, runtimeIdentifier), manifest order.
     factories: Vec<(String, Option<String>)>,
 }
 
-/// `loadBunManifest(outputDir)`: None when absent, not stamped by an
-/// adapter that writes this vendor record (the unpack registry's answer,
-/// `UnpackAdapter::of_vendor_record_stamp` — a new vendor-extracting
-/// adapter is accepted by registering it, never by editing a list here;
-/// docs/plugin-spec.md I14), or factory-less.
-fn load_bun_manifest(output_dir: &Path) -> Result<Option<Manifest>, String> {
-    let path = bun_manifest_path(output_dir);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let text = read_utf8(&path)?;
-    let JsValue::Object(obj) = JsValue::parse(&text)? else {
-        return Err(format!("{}: not an object", path.display()));
-    };
-    let str_field = |o: &humanify_model::js::JsObject, k: &str| match o.get(k) {
-        Some(JsValue::String(s)) => Some(s.clone()),
-        _ => None,
-    };
-    let stamp = str_field(&obj, "adapter");
-    if stamp
-        .as_deref()
-        .and_then(crate::unpack::UnpackAdapter::of_vendor_record_stamp)
-        .is_none()
-    {
-        return Ok(None);
-    }
-    let factories: Vec<(String, Option<String>)> = match obj.get("factories") {
-        Some(JsValue::Array(items)) => items
-            .iter()
-            .filter_map(|f| match f {
-                JsValue::Object(o) => {
-                    Some((str_field(o, "fileName")?, str_field(o, "runtimeIdentifier")))
-                }
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
-    };
+/// The vendor record THIS run's adapter wrote, as the re-link reads it:
+/// None when the run wrote none, when its stamp is not a registered
+/// vendor-record adapter's (`UnpackAdapter::of_vendor_record_stamp` — a new
+/// vendor-extracting adapter is accepted by registering it, never by
+/// editing a list here; docs/plugin-spec.md I14), or when it is
+/// factory-less.
+///
+/// The record comes from the run, never from the output folder: the finish
+/// used to read whatever `vendor/_bun-modules.json` sat there, and nothing
+/// clears that folder, so a run into the folder of an EARLIER run re-linked
+/// the earlier run's vendor files (toolchain review R6).
+fn this_runs_manifest(record: Option<&BunModulesManifest>) -> Option<Manifest> {
+    let record = record?;
+    crate::unpack::UnpackAdapter::of_vendor_record_stamp(record.adapter)?;
+    let factories: Vec<(String, Option<String>)> = record
+        .factories
+        .iter()
+        .map(|e| (e.file_name.clone(), e.runtime_identifier.clone()))
+        .collect();
     if factories.is_empty() {
-        return Ok(None);
+        return None;
     }
-    Ok(Some(Manifest {
-        runtime_file: str_field(&obj, "runtimeFile"),
+    Some(Manifest {
+        runtime_file: record.runtime_file.clone(),
         factories,
-    }))
+    })
+}
+
+/// Files under the output folder's `vendor/` that THIS run did not write —
+/// neither its vendor record (and the files it lists) nor the split's
+/// tree. They can only be left from an earlier run into the same folder.
+/// The finish never re-links, rewrites or deletes them (they may be the
+/// user's); it names them so nobody mistakes them for this run's output.
+fn leftover_vendor_files(
+    output_dir: &Path,
+    record: Option<&BunModulesManifest>,
+    split_files: &[&str],
+) -> Vec<String> {
+    let mut written: HashSet<String> = split_files.iter().map(|f| (*f).to_string()).collect();
+    if let Some(r) = record {
+        written.insert(format!("{VENDOR_DIR}/{BUN_MODULES_MANIFEST}"));
+        written.extend(r.factories.iter().map(|e| e.file_name.clone()));
+    }
+    let mut leftovers = Vec::new();
+    let mut stack = vec![output_dir.join(VENDOR_DIR)];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let rel = crate::libdetect::relative_posix(output_dir, &path);
+            if !written.contains(&rel) {
+                leftovers.push(rel);
+            }
+        }
+    }
+    leftovers.sort();
+    leftovers
+}
+
+/// The loud line for [`leftover_vendor_files`].
+fn leftover_warning(leftovers: &[String]) -> String {
+    let shown: Vec<&str> = leftovers.iter().take(5).map(String::as_str).collect();
+    format!(
+        "WARNING — {} file(s) under {VENDOR_DIR}/ were not written by this run (left from an \
+         earlier run into this output folder?); they are not part of this tree and were left \
+         untouched, not re-linked — use an empty output folder for a clean tree: {}{}",
+        leftovers.len(),
+        shown.join(", "),
+        if leftovers.len() > shown.len() {
+            ", …"
+        } else {
+            ""
+        }
+    )
 }
 
 /// `runnableEntryFile(files)`: the first key matching `/^_*index\.js$/`.
@@ -160,7 +202,7 @@ fn relink_bun_modules(
         .iter()
         .filter_map(|(file, id)| id.clone().map(|id| (id, file.clone())))
         .collect();
-    let runtime_path = output_dir.join(bun_relink_runtime_filename());
+    let runtime_path = output_dir.join(interop.runtime_file());
     if let Some(dir) = runtime_path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
     }
@@ -170,8 +212,9 @@ fn relink_bun_modules(
     for (file_name, _) in &manifest.factories {
         let abs = output_dir.join(file_name);
         let body = read_utf8(&abs)?;
-        let (rendered, bridged) = wrap_extracted_factory(&body, file_name, &lookup, bridges)
-            .map_err(|e| format!("{file_name}: {e}"))?;
+        let (rendered, bridged) =
+            wrap_extracted_factory(&body, file_name, &lookup, bridges, interop)
+                .map_err(|e| format!("{file_name}: {e}"))?;
         bridged_reads += bridged;
         let bytes = match inherit.as_mut() {
             Some(i) => i.bytes_for(file_name, rendered),
@@ -214,7 +257,11 @@ pub fn finish_split_output(
     report: &mut FinishReport,
 ) -> Result<bool, String> {
     let output_dir = input.output_dir;
-    let manifest = load_bun_manifest(output_dir)?;
+    let manifest = this_runs_manifest(input.vendor_record);
+    let leftovers = leftover_vendor_files(output_dir, input.vendor_record, &input.split_files);
+    if !leftovers.is_empty() {
+        report.messages.push(leftover_warning(&leftovers));
+    }
     if let (Some(runnable), Some(manifest)) = (input.runnable, manifest.as_ref()) {
         let prior_root: Option<PathBuf> = if input.switches.vendor_inherit_disabled {
             None

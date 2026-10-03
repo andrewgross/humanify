@@ -269,22 +269,34 @@ fn library_names_from_paths() {
     }
 }
 
+/// R14: ONE vendor-record detector, chosen by "does the adapter write a
+/// vendor record?" — every registered adapter that does gets it, every
+/// adapter that does not gets the default. (It used to be two detectors,
+/// `Bun` and `Esbuild`, selected by adapter equality.)
 #[test]
-fn registry_selects_bun_only_behind_the_bun_adapter() {
+fn registry_selects_the_vendor_record_detector_behind_every_record_writer() {
+    for adapter in crate::unpack::ADAPTERS {
+        let want = if adapter.vendor_record_stamp().is_some() {
+            LibraryDetector::VendorRecord
+        } else {
+            LibraryDetector::Default
+        };
+        assert_eq!(LibraryDetector::for_adapter(adapter), want, "{adapter:?}");
+    }
     assert_eq!(
         LibraryDetector::for_adapter(UnpackAdapter::Bun),
-        LibraryDetector::Bun
+        LibraryDetector::VendorRecord
+    );
+    assert_eq!(
+        LibraryDetector::for_adapter(UnpackAdapter::Esbuild),
+        LibraryDetector::VendorRecord
     );
     assert_eq!(
         LibraryDetector::for_adapter(UnpackAdapter::Webcrack),
         LibraryDetector::Default
     );
-    assert_eq!(
-        LibraryDetector::for_adapter(UnpackAdapter::Passthrough),
-        LibraryDetector::Default
-    );
     assert!(LibraryDetector::Default.supports(UnpackAdapter::Bun));
-    assert!(!LibraryDetector::Bun.supports(UnpackAdapter::Passthrough));
+    assert!(!LibraryDetector::VendorRecord.supports(UnpackAdapter::Passthrough));
 }
 
 #[test]
@@ -376,7 +388,7 @@ fn bun_banner_scan_reaches_past_1kb_and_never_mixes() {
     );
     let app = t.write("app.js", "function app() { return 1; }");
     let r = detect_libraries(
-        LibraryDetector::Bun,
+        LibraryDetector::VendorRecord,
         &files(&[&react, &lodash, &license, &multi, &app]),
     )
     .unwrap();
@@ -429,7 +441,7 @@ fn bun_manifest_classifies_factories_by_root_relative_path() {
         ]),
     );
     let r = detect_libraries(
-        LibraryDetector::Bun,
+        LibraryDetector::VendorRecord,
         &files(&[&axios, &lib, &vendor_runtime, &runtime]),
     )
     .unwrap();
@@ -462,7 +474,11 @@ fn bun_manifest_found_from_a_nested_first_file() {
             ("vendor/@scope/pkg/index.js", "@scope/pkg"),
         ]),
     );
-    let r = detect_libraries(LibraryDetector::Bun, &files(&[&nested, &flat, &runtime])).unwrap();
+    let r = detect_libraries(
+        LibraryDetector::VendorRecord,
+        &files(&[&nested, &flat, &runtime]),
+    )
+    .unwrap();
     let got: Vec<(&Path, Option<&str>)> = r
         .library_files
         .iter()

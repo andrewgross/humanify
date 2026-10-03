@@ -3,10 +3,24 @@
 //! string was produced by the TS functions themselves
 //! (`relinkFactoryReferences` / `wrapExtractedFactory`, 2026-09-25).
 
-use super::{
-    BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, relink_factory_references,
-    wrap_extracted_factory,
-};
+use super::{BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, relink_factory_references};
+
+/// `wrap_extracted_factory` with Bun's interop helpers (the only P8
+/// implementation; every expected string below is Bun's wrapping).
+fn wrap_extracted_factory(
+    body: &str,
+    from_file: &str,
+    lookup: &FactoryLookup,
+    bridges: &[VendorBridge],
+) -> Result<(String, usize), String> {
+    super::wrap_extracted_factory(
+        body,
+        from_file,
+        lookup,
+        bridges,
+        crate::toolchain::InteropHelpers::Bun,
+    )
+}
 
 fn lookup(entries: &[(&str, &str)]) -> FactoryLookup {
     entries

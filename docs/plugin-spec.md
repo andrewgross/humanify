@@ -41,6 +41,22 @@ is kept for the record. Neutral: byte-identical output against main's
 binary on the five e2e fixture pairs and a stub-LLM Claude Code pair
 (2.1.118 → 2.1.119, trees and asks).
 
+**Update 2026-10-04 (finding #78, branch `fix/finish-own-vendor-and-interop`;
+toolchain review R4, R6, R14).** P5: the split and the finish read the
+vendor record THIS run's adapter wrote, handed down in memory — never the
+one lying in the output folder, which may be an earlier run's (a vendor-less
+bundle run into an esbuild run's folder used to re-link the stale vendor
+files and fail the finish); files under `vendor/` this run did not write are
+left alone and named in a WARNING. P8: the helper shapes (I16), the
+reserved names (I17), the helper file's name (`.humanify/__bun-runtime.js`)
+and the bound module helper are answered by the toolchain's
+`InteropHelpers` piece (Bun's is the only implementation; nothing in the
+esbuild adapter differs). P6: the two identical library detectors are one,
+`LibraryDetector::VendorRecord`, chosen by "does the adapter write a vendor
+record?". Byte-identical output vs main on the five e2e fixture pairs and
+the stub-LLM 2.1.118 → 2.1.119 pair; the stats `libraryDetector` row now
+reads `vendor-record`.
+
 ## Words used here
 
 - **Bundler** — the tool that glued many source files into one file (Bun,
@@ -165,11 +181,11 @@ given).
 
 #### Stage 3 — what a vendored module may still reach (`unpack/bun/scope.rs`, `finish/relink.rs`)
 
-| #   | where                                               | what it assumes                                                                                                                                                                                 | belongs to | status    | sev    |
-| --- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | --------- | ------ |
-| I16 | `unpack/bun/scope.rs:332` (`helper_shape`)          | the two module-interop helpers are recognised by Bun's exact shape: `__toESM` = 3-parameter arrow mentioning `"default"` and `.__esModule`; `__toCommonJS` = 1-parameter arrow with a `WeakMap` | Bun        | harmless  | Low    |
-| I17 | `unpack/bun/scope.rs:236` (`canonical_names_taken`) | if the bundle already uses the names `__toESM` / `__toCommonJS`, every factory that calls those helpers stays in the app, together with every factory that depends on it                        | Bun        | **wrong** | Medium |
-| I18 | `finish/relink.rs:47` (`BUN_RELINK_RUNTIME`)        | the helper file written into `.humanify/__bun-runtime.js` is Bun's implementation of `__commonJS`, `__esm`, `__toESM`, `__toCommonJS`                                                           | Bun        | harmless  | Low    |
+| #   | where                                               | what it assumes                                                                                                                                                                                 | belongs to | status                                                                                                      | sev    |
+| --- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------- | ------ |
+| I16 | `unpack/bun/scope.rs:332` (`helper_shape`)          | the two module-interop helpers are recognised by Bun's exact shape: `__toESM` = 3-parameter arrow mentioning `"default"` and `.__esModule`; `__toCommonJS` = 1-parameter arrow with a `WeakMap` | Bun        | harmless — behind `InteropHelpers::recognise` since 2026-10-04 (#78)                                        | Low    |
+| I17 | `unpack/bun/scope.rs:236` (`canonical_names_taken`) | if the bundle already uses the names `__toESM` / `__toCommonJS`, every factory that calls those helpers stays in the app, together with every factory that depends on it                        | Bun        | **wrong** — the names are `InteropHelpers::canonical_names` since 2026-10-04 (#78); the esbuild fix is open | Medium |
+| I18 | `finish/relink.rs:47` (`BUN_RELINK_RUNTIME`)        | the helper file written into `.humanify/__bun-runtime.js` is Bun's implementation of `__commonJS`, `__esm`, `__toESM`, `__toCommonJS`                                                           | Bun        | harmless — `InteropHelpers::relink_runtime` / `runtime_file` (#76, #78)                                     | Low    |
 
 - **I16:** esbuild's `__toCommonJS` has no `WeakMap`, so it is not
   recognised and falls to the next rule (a "bridged read" through the file
@@ -252,24 +268,24 @@ are both.
 
 ### Summary
 
-| piece                                       | stage  | status                  | a new plugin today must…                                                                                            |
-| ------------------------------------------- | ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| P1 Detection signals                        | 1      | **PARTIAL**             | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything |
-| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04) | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                    |
-| P3 Module wrapper grammar (factories)       | 3, 8-9 | **PARTIAL** (slot)      | extend the shared factory owners; they run on every input, not just theirs (I10); the toolchain names the slot      |
-| P4 Original source-path handover            | 3      | **EXISTS**              | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                          |
-| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04) | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the finish reads the registry   |
-| P6 Library detection                        | 4      | **EXISTS**              | add a detector or reuse the vendor-record one                                                                       |
-| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04) | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain       |
-| P8 Interop helpers for vendored code        | 3, 12  | **PARTIAL** (slot)      | Bun's shapes and Bun's helper file only (I16-I18); the helper file now comes from the toolchain's `InteropHelpers`  |
-| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)      | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level      |
-| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)        | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                             |
-| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**             | per-adapter flag exists; the grammar itself is one shared shape list                                                |
-| P12 Load-order helper shapes                | 11     | **PARTIAL**             | registrar by shape works for both; lazy-init is Bun's text only (I27)                                               |
-| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)      | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                       |
-| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04) | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                              |
-| P15 Formatting                              | 6      | not a plugin piece      | nothing — the formatter undoes generic idioms and is a frozen spec                                                  |
-| P16 Fixtures and tests                      | gate   | **PARTIAL**             | see the test list in each piece and the checklist                                                                   |
+| piece                                       | stage  | status                        | a new plugin today must…                                                                                                                      |
+| ------------------------------------------- | ------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 Detection signals                        | 1      | **PARTIAL**                   | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything                           |
+| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                              |
+| P3 Module wrapper grammar (factories)       | 3, 8-9 | **PARTIAL** (slot)            | extend the shared factory owners; they run on every input, not just theirs (I10); the toolchain names the slot                                |
+| P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                    |
+| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78) |
+| P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                               |
+| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04)       | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain                                 |
+| P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)              |
+| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                |
+| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                       |
+| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                          |
+| P12 Load-order helper shapes                | 11     | **PARTIAL**                   | registrar by shape works for both; lazy-init is Bun's text only (I27)                                                                         |
+| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                 |
+| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                        |
+| P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                            |
+| P16 Fixtures and tests                      | gate   | **PARTIAL**                   | see the test list in each piece and the checklist                                                                                             |
 
 Rules every piece must keep (they come from the repo's history, not from
 taste):
@@ -429,7 +445,7 @@ minified build).
 factory and lazy init. **Fallback:** absent. **Tests:** the
 `esbuild-bundle` fixture's records.
 
-### P5 — Vendor record, vendor names and the prior carry (stages 3, 5) — PARTIAL
+### P5 — Vendor record, vendor names and the prior carry (stages 3, 5) — EXISTS
 
 **Question:** what is each vendored module called, and how does that name
 survive to the next release?
@@ -458,16 +474,38 @@ finish asks `UnpackAdapter::of_vendor_record_stamp`, the library detector
 is chosen from the adapter value (`LibraryDetector::for_adapter`), and the
 unpack writes `adapter.vendor_record_stamp()` into the record.
 
+**The run's own record (2026-10-04, finding #78, toolchain review R6):**
+the finish used to re-link whatever `vendor/_bun-modules.json` it found in
+the output folder, and nothing clears that folder — so a run into the folder
+of an earlier run re-linked the EARLIER run's vendor files (a vendor-less
+bundle run into an esbuild run's folder failed its finish re-parsing them;
+a different Bun build would have pulled stale modules into its runnable
+tree). Now the record the adapter wrote is handed down in memory
+(`Unpacked::vendor_record` → `SplitStageInput` → `FinishInput`); the split's
+vendor captures (`unpack::bun::vendor_captures`) and the re-link
+(`finish::driver::this_runs_manifest`) read only it. Files under `vendor/`
+that this run did not write are never re-linked, rewritten or deleted (they
+may be the user's) — the finish names them in a WARNING. Still reading the
+folder: library detection's vendor-record layer (it runs only right after
+its adapter rewrote the record) and the `--dump-artifacts` partitions
+family.
+
 **Tests:** a prior → next-release pair in the e2e fixture (the existing
-bundle fixtures run fresh, then with `--prior-version`).
+bundle fixtures run fresh, then with `--prior-version`);
+`a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files`
+(crates/humanify-cli/tests/pipeline_stages.rs).
 
 ### P6 — Library detection (stage 4) — EXISTS
 
-`libdetect::LibraryDetector` (`libdetect.rs:102-138`): a registry chosen by
-adapter name — `bun` and `esbuild` read the vendor record, `default`
-(banner comments and webcrack's module paths) supports everything. A plugin
-that writes the vendor record can reuse the vendor-record detector; one
-that does not gets `default`. Tests: `libdetect_test.rs`.
+`libdetect::LibraryDetector`: a registry of two — `vendor-record` (reads
+the vendor record) and `default` (banner comments and webcrack's module
+paths; supports everything). Since 2026-10-04 (finding #78, toolchain
+review R14) the vendor-record detector is chosen by "does the run's adapter
+write a vendor record?" (`UnpackAdapter::vendor_record_stamp`), so a
+plugin that writes the record gets it with no edit here; one that does not
+gets `default`. (It used to be two identical detectors, `bun` and
+`esbuild`, each chosen by adapter equality — a third record-writing adapter
+would silently have got `default`.) Tests: `libdetect_test.rs`.
 
 ### P7 — Never-rename helper names (stages 7-9) — PARTIAL
 
@@ -497,7 +535,7 @@ reconcile now also refuses `_extends` / `_inherits`, as naming always did.
 
 **Tests:** the existing `skip-list.json` parity table, extended per plugin.
 
-### P8 — Interop helpers for vendored code (stages 3, 12) — PARTIAL
+### P8 — Interop helpers for vendored code (stages 3, 12) — EXISTS (one implementation)
 
 **Question:** when a vendored module refers to something outside itself,
 how is that reference kept working in the runnable tree?
@@ -522,8 +560,23 @@ the input bundle), with a fixture that has a CommonJS module requiring an ES
 module.
 
 **Slot (2026-10-04):** `toolchain::InteropHelpers` (one value, `Bun`); the
-finish's relink writes `interop.relink_runtime()`. The helper SHAPES in
-`unpack/bun/scope.rs` are not behind it yet.
+finish's relink writes `interop.relink_runtime()`.
+
+**The whole piece behind the slot (2026-10-04, finding #78, toolchain
+review R4):** `InteropHelpers` now answers every interop question —
+`recognise` (the helper shapes, I16; Bun's implementation is
+`unpack::bun::scope::bun_helper_shape`), `canonical_names` (the standard
+names a vendored reference is rewritten to and the relink binds; a bundle
+already using one keeps the helpers' callers in the app, I17),
+`runtime_file` (`.humanify/__bun-runtime.js`), `module_helper`
+(`__commonJS`, the wrap `exports.f = __commonJS(F)`) and `relink_runtime`.
+The unpack's scope plan gets the run's piece through `AdapterRun::interop`;
+the relink and the `match` verb's vendor wrapping take it as an argument.
+Bun's is the only implementation: nothing in the esbuild adapter differs
+today (esbuild's `__toCommonJS` does not match Bun's shape and takes the
+bridge route, I16). Fixing I17 for unminified esbuild is a separate,
+esbuild-only behaviour change — a second `InteropHelpers` value is where it
+lands. Byte-identical on Bun and the esbuild fixtures.
 
 ### P9 — Bundle layout ("container") grammar (stages 7-12) — PARTIAL (seam real, one implementation)
 
@@ -738,11 +791,12 @@ For a new **bundler** (say, rollup or webpack 5) today:
    `identify_cjs_factory` / `factory_arg_function`, and check what the
    change does to every OTHER bundler's input (they run everywhere).
 4. If it reuses the vendor record (P5): return its stamp from
-   `UnpackAdapter::vendor_record_stamp` (the finish then re-links it), and
-   add a `LibraryDetector` that `supports` the adapter if it needs its own.
-5. Interop helpers (P8): add their shapes to `scope.rs` and their
-   implementation to the relink helper file, or accept that factories using
-   them stay in the app.
+   `UnpackAdapter::vendor_record_stamp` (the finish then re-links it, and
+   the vendor-record library detector is chosen for it automatically).
+5. Interop helpers (P8): add an `InteropHelpers` value — its shapes
+   (`recognise`), standard names, helper file and module helper — and
+   choose it in `resolve_toolchain`; or accept that factories using them
+   stay in the app.
 6. Never-rename names (P7): add a list only if the always-on rules miss
    them.
 7. Lazy init (P12) and module-layout record (P11): add shapes if the bundler

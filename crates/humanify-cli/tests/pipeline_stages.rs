@@ -463,3 +463,88 @@ fn the_profile_names_the_split_finish_constituents() {
         );
     }
 }
+
+/// Every file under `dir` (recursively), as path relative to `dir` → bytes.
+fn snapshot(dir: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                let rel = p.strip_prefix(dir).unwrap().display().to_string();
+                out.insert(rel, std::fs::read(&p).unwrap());
+            }
+        }
+    }
+    out
+}
+
+/// R6 (toolchain review 2026-10-04): the finish re-linked whatever vendor
+/// record it found in the output folder, not the one THIS run wrote, and
+/// nothing clears that folder. Re-running a different, vendor-less bundle
+/// into the folder of an earlier esbuild run pulled the earlier run's
+/// vendor files into the new runnable tree (re-wrapped in place). The
+/// finish now re-links only the record this run's adapter wrote, leaves
+/// files it did not write alone, and says so loudly.
+#[test]
+fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
+    let s = Scratch::new("stale-vendor");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js");
+    let out = s.out().display().to_string();
+    let first = run(
+        &s.0,
+        &[
+            &fixture.display().to_string(),
+            "--api-key",
+            "k",
+            "--split",
+            "-o",
+            &out,
+        ],
+    );
+    let err = stderr(&first);
+    assert_eq!(first.status.code(), Some(0), "{err}");
+    assert!(
+        err.contains("Re-linked"),
+        "the first run re-links its own:\n{err}"
+    );
+    assert!(
+        !err.contains("not written by this run"),
+        "a clean folder has no leftovers:\n{err}"
+    );
+    let vendor_before = snapshot(&s.out().join("vendor"));
+    assert!(
+        vendor_before.len() > 2,
+        "the esbuild run wrote vendor files"
+    );
+
+    // A different bundle with no vendor modules at all, into the SAME folder.
+    let input = s.write("plain-wrapper.js", &wrapped());
+    let second = run(&s.0, &[&input, "--api-key", "k", "--split", "-o", &out]);
+    let err = stderr(&second);
+    assert_eq!(second.status.code(), Some(0), "{err}");
+    // On main the finish re-parsed the earlier run's (already re-linked)
+    // vendor files as bare factories and the whole finish failed:
+    // "Post-split step failed (vendor/lib_….js: Unexpected token)".
+    assert!(
+        !err.contains("Post-split step failed"),
+        "the finish completes:\n{err}"
+    );
+    assert!(
+        !err.contains("Re-linked"),
+        "this run wrote no vendor record, so nothing is re-linked:\n{err}"
+    );
+    assert_eq!(
+        snapshot(&s.out().join("vendor")),
+        vendor_before,
+        "the earlier run's vendor files are left exactly as they were"
+    );
+    assert!(
+        err.contains("WARNING") && err.contains("not written by this run"),
+        "the leftovers are reported:\n{err}"
+    );
+}

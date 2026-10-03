@@ -94,33 +94,36 @@ fn map_set<V>(map: &mut Vec<(PathBuf, V)>, key: &Path, value: V) {
 // The registry (index.ts)
 // ---------------------------------------------------------------------------
 
-/// The registered detectors, in registry order: the two vendor-manifest
-/// bundlers (bun, esbuild) first, default last (the fallback — it supports
-/// every config). The manifest-driven layer reads the same
-/// `vendor/_bun-modules.json` either adapter writes.
+/// The registered detectors, in registry order: the vendor-record detector
+/// first, default last (the fallback — it supports every config).
+///
+/// The vendor-record detector reads `vendor/_bun-modules.json`, the one
+/// record format every vendor-extracting adapter writes, and is chosen by
+/// "does the run's adapter write a vendor record?"
+/// (`UnpackAdapter::vendor_record_stamp`) — not by adapter NAME. Until
+/// 2026-10-04 it was registered twice, as `Bun` and `Esbuild`, each picked
+/// by adapter equality and both running the same function, so a third
+/// vendor-record adapter would silently have got `Default` (toolchain
+/// review R14; the spec I14 shape).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LibraryDetector {
-    Bun,
-    Esbuild,
+    VendorRecord,
     Default,
 }
 
 impl LibraryDetector {
     pub fn name(self) -> &'static str {
         match self {
-            LibraryDetector::Bun => "bun",
-            LibraryDetector::Esbuild => "esbuild",
+            LibraryDetector::VendorRecord => "vendor-record",
             LibraryDetector::Default => "default",
         }
     }
 
-    /// `supports(config)`: the manifest-driven detectors only behind their
-    /// own unpack adapters.
+    /// `supports(config)`: the vendor-record detector only behind an
+    /// adapter that writes the record.
     pub fn supports(self, adapter: crate::unpack::UnpackAdapter) -> bool {
-        use crate::unpack::UnpackAdapter;
         match self {
-            LibraryDetector::Bun => adapter == UnpackAdapter::Bun,
-            LibraryDetector::Esbuild => adapter == UnpackAdapter::Esbuild,
+            LibraryDetector::VendorRecord => adapter.vendor_record_stamp().is_some(),
             LibraryDetector::Default => true,
         }
     }
@@ -128,14 +131,10 @@ impl LibraryDetector {
     /// `selectLibraryDetector(config)`: the first registered detector that
     /// supports the run's adapter (the toolchain's P6 piece).
     pub fn for_adapter(adapter: crate::unpack::UnpackAdapter) -> LibraryDetector {
-        [
-            LibraryDetector::Bun,
-            LibraryDetector::Esbuild,
-            LibraryDetector::Default,
-        ]
-        .into_iter()
-        .find(|d| d.supports(adapter))
-        .unwrap_or(LibraryDetector::Default)
+        [LibraryDetector::VendorRecord, LibraryDetector::Default]
+            .into_iter()
+            .find(|d| d.supports(adapter))
+            .unwrap_or(LibraryDetector::Default)
     }
 }
 
@@ -145,7 +144,7 @@ pub fn detect_libraries(
     files: &[UnpackedFile],
 ) -> Result<LibraryDetectionResult, String> {
     match detector {
-        LibraryDetector::Bun | LibraryDetector::Esbuild => detect_bun(files),
+        LibraryDetector::VendorRecord => detect_vendor_record(files),
         LibraryDetector::Default => detect_default(files),
     }
 }
@@ -538,7 +537,7 @@ pub fn relative_posix(from: &Path, to: &Path) -> String {
     parts.join("/")
 }
 
-fn detect_bun(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, String> {
+fn detect_vendor_record(files: &[UnpackedFile]) -> Result<LibraryDetectionResult, String> {
     let mut result = LibraryDetectionResult::default();
     if let Some(found) = load_manifest(files) {
         let (manifest, root) = found?;

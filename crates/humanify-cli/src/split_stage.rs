@@ -76,6 +76,11 @@ pub struct SplitStageInput<'a> {
     /// never-rename lists (the post-split reconcile) and its interop
     /// helpers (the relink).
     pub toolchain: humanify_core::toolchain::Toolchain,
+    /// The vendor record THIS run's unpack adapter wrote (None when the
+    /// adapter writes none, or fell back to a single file). The split's
+    /// vendor captures and the finish's re-link read it — never whatever
+    /// record happens to sit in the output folder (toolchain review R6).
+    pub vendor_record: Option<&'a humanify_core::modules::vendor_names::BunModulesManifest>,
 }
 
 /// `loadPriorSplitLedger`: `--split-ledger` wins, else the ledger beside
@@ -301,7 +306,7 @@ fn split_before_commit(
         renderer.message("Split naming: LLM-naming fresh module mints");
     }
     let switches = input.switches;
-    let vendor_captures = humanify_core::unpack::bun::read_vendor_captures(input.output_dir);
+    let vendor_captures = humanify_core::unpack::bun::vendor_captures(input.vendor_record);
     let outcome = stable_split(
         code,
         SplitOptions {
@@ -426,6 +431,8 @@ fn commit_and_finish(
         never_rename: input.toolchain.never_rename.piece,
         interop: input.toolchain.interop.piece,
         layout: input.toolchain.layout.piece,
+        vendor_record: input.vendor_record,
+        split_files: outcome.files.iter().map(|(p, _)| p.as_str()).collect(),
     };
     drop(ph);
     let mut report = FinishReport::default();

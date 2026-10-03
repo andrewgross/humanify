@@ -8,7 +8,9 @@
 use std::path::{Path, PathBuf};
 
 use humanify_core::libdetect::{LibraryDetector, MixedFileDetection, detect_libraries};
-use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer, VendorNamingStats};
+use humanify_core::modules::vendor_names::{
+    BunModulesManifest, ProviderVendorNamer, VendorNamer, VendorNamingStats,
+};
 use humanify_core::profiling::Profiler;
 use humanify_core::unpack::webcrack::WebcrackShim;
 use humanify_core::unpack::{
@@ -46,6 +48,11 @@ pub struct Unpacked {
     /// The vendor namer's tally (`VendorNamingStats`) — all zero when the
     /// adapter never ran the LLM pass.
     pub vendor_naming: VendorNamingStats,
+    /// The vendor record THIS run's adapter wrote (None when it writes
+    /// none, or fell back to a single file) — handed to the split and the
+    /// finish in memory, so neither trusts whatever record sits in the
+    /// output folder (toolchain review R6).
+    pub vendor_record: Option<BunModulesManifest>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -59,6 +66,7 @@ pub fn unpack_bundle(
     out_dir: &Path,
     adapter: UnpackAdapter,
     layout: humanify_core::toolchain::BundleLayout,
+    interop: humanify_core::toolchain::InteropHelpers,
     provider: &dyn NameProvider,
     log: &mut humanify_core::artifact_dump::DispatchLog,
     prior_version: Option<&Path>,
@@ -97,18 +105,20 @@ pub fn unpack_bundle(
         code,
         out_dir,
         AdapterRun {
+            interop,
             namer: Some(&mut namer as &mut dyn VendorNamer),
             prior: prior_vendor,
             manifest_prior_order_disabled,
             webcrack_shim: Some(&shim),
         },
     )?;
-    let files = match outcome {
+    let (files, vendor_record) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
-            outcome.result.files
+            let outcome = *outcome;
+            (outcome.result.files, outcome.manifest)
         }
-        AdapterOutcome::Files(result) => result.files,
+        AdapterOutcome::Files(result) => (result.files, None),
     };
     span.end(Some(
         JsObject::new()
@@ -123,6 +133,7 @@ pub fn unpack_bundle(
     Ok(Unpacked {
         files,
         vendor_naming: namer.stats,
+        vendor_record,
     })
 }
 
