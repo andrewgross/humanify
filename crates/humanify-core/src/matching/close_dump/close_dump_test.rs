@@ -56,16 +56,14 @@ fn with_close_pair<T>(
         prior_ingest.program,
         "prior.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let fresh_graph = build_unified_graph(
         fresh_ingest.semantic(),
         fresh_ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
     let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);

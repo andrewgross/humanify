@@ -12,12 +12,13 @@ use serde_json::Value;
 use crate::detect::detect_bundle;
 use crate::modules::CarriedName;
 use crate::modules::vendor_names::{VendorNameRequest, VendorNamer};
+use crate::toolchain::Reason;
 use crate::unpack::bun::{
     BunUnpackOptions, ExtractedModule, PriorVendor, extract_factory_bodies, find_prior_tree_root,
     identify_bun_require, load_prior_vendor, rewrite_require_calls, unpack_bun,
 };
 use crate::unpack::webcrack::parse_shim_output;
-use crate::unpack::{UnpackAdapter, select_adapter, select_unpack_adapter};
+use crate::unpack::{UnpackAdapter, choose_adapter};
 use humanify_model::detection::BundlerType;
 
 const BUN_BUNDLE: &str = concat!(
@@ -108,7 +109,7 @@ const PLAIN: &str =
 #[test]
 fn selects_webcrack_for_webpack() {
     assert_eq!(
-        select_adapter(&detect_bundle(WEBPACK), None).name(),
+        choose_adapter(&detect_bundle(WEBPACK), None).piece.name(),
         "webcrack"
     );
 }
@@ -116,14 +117,19 @@ fn selects_webcrack_for_webpack() {
 #[test]
 fn selects_webcrack_for_browserify() {
     assert_eq!(
-        select_adapter(&detect_bundle(BROWSERIFY), None).name(),
+        choose_adapter(&detect_bundle(BROWSERIFY), None)
+            .piece
+            .name(),
         "webcrack"
     );
 }
 
 #[test]
 fn selects_bun_for_bun_cjs() {
-    assert_eq!(select_adapter(&detect_bundle(BUN_HEAD), None).name(), "bun");
+    assert_eq!(
+        choose_adapter(&detect_bundle(BUN_HEAD), None).piece.name(),
+        "bun"
+    );
 }
 
 #[test]
@@ -131,7 +137,7 @@ fn selects_esbuild_for_esbuild() {
     // The pre-exp075-port behavior was passthrough (no esbuild reader);
     // the TS-era reference (ac56eac0) established the module form.
     assert_eq!(
-        select_adapter(&detect_bundle(ESBUILD), None).name(),
+        choose_adapter(&detect_bundle(ESBUILD), None).piece.name(),
         "esbuild"
     );
 }
@@ -139,7 +145,7 @@ fn selects_esbuild_for_esbuild() {
 #[test]
 fn selects_passthrough_for_unknown() {
     assert_eq!(
-        select_adapter(&detect_bundle(PLAIN), None).name(),
+        choose_adapter(&detect_bundle(PLAIN), None).piece.name(),
         "passthrough"
     );
 }
@@ -147,7 +153,9 @@ fn selects_passthrough_for_unknown() {
 #[test]
 fn respects_bundler_override() {
     assert_eq!(
-        select_adapter(&detect_bundle(PLAIN), Some(BundlerType::Webpack)).name(),
+        choose_adapter(&detect_bundle(PLAIN), Some(BundlerType::Webpack))
+            .piece
+            .name(),
         "webcrack"
     );
 }
@@ -155,23 +163,58 @@ fn respects_bundler_override() {
 #[test]
 fn override_to_unknown_is_ignored() {
     assert_eq!(
-        select_adapter(&detect_bundle(WEBPACK), Some(BundlerType::Unknown)).name(),
+        choose_adapter(&detect_bundle(WEBPACK), Some(BundlerType::Unknown))
+            .piece
+            .name(),
         "webcrack"
     );
 }
 
 #[test]
-fn select_by_name_and_unknown_name_errors() {
-    assert_eq!(select_unpack_adapter("bun"), Ok(UnpackAdapter::Bun));
-    assert_eq!(select_unpack_adapter("esbuild"), Ok(UnpackAdapter::Esbuild));
+fn the_adapter_choice_says_why() {
     assert_eq!(
-        select_unpack_adapter("nope"),
-        Err("No unpack adapter named \"nope\"".to_string())
+        choose_adapter(&detect_bundle(BUN_HEAD), None).reason,
+        Reason::Detected
+    );
+    assert_eq!(
+        choose_adapter(&detect_bundle(PLAIN), Some(BundlerType::Webpack)).reason,
+        Reason::Flag
+    );
+    assert_eq!(
+        choose_adapter(&detect_bundle(PLAIN), None).reason,
+        Reason::Fallback
+    );
+    // A forced bundler with no adapter of its own lands on passthrough
+    // (it supports everything) — a fallback, not the flag's choice.
+    assert_eq!(
+        choose_adapter(&detect_bundle(BUN_HEAD), Some(BundlerType::Rollup)),
+        crate::toolchain::Chosen {
+            piece: UnpackAdapter::Passthrough,
+            reason: Reason::Fallback
+        }
     );
     assert!(UnpackAdapter::Bun.provides_module_fossils());
     assert!(UnpackAdapter::Esbuild.provides_module_fossils());
     assert!(!UnpackAdapter::Webcrack.provides_module_fossils());
     assert!(!UnpackAdapter::Passthrough.provides_module_fossils());
+}
+
+/// The vendor-record stamps come from the registry: every adapter that
+/// writes the record is found by its stamp, nothing else is.
+#[test]
+fn vendor_record_stamps_round_trip_through_the_registry() {
+    for a in crate::unpack::ADAPTERS {
+        match a.vendor_record_stamp() {
+            Some(stamp) => assert_eq!(UnpackAdapter::of_vendor_record_stamp(stamp), Some(a)),
+            None => assert_eq!(UnpackAdapter::of_vendor_record_stamp(a.name()), None),
+        }
+    }
+    assert_eq!(UnpackAdapter::Bun.vendor_record_stamp(), Some("bun"));
+    assert_eq!(
+        UnpackAdapter::Esbuild.vendor_record_stamp(),
+        Some("esbuild")
+    );
+    assert_eq!(UnpackAdapter::of_vendor_record_stamp("webcrack"), None);
 }
 
 // ---- adapters/bun.test.ts --------------------------------------------------
@@ -609,10 +652,13 @@ const ESBUILD_OBJECT_BUNDLE: &str = concat!(
 #[test]
 fn esbuild_object_factories_extract_with_their_source_paths() {
     let t = TempDir::new("esbuild");
-    let outcome = crate::unpack::bun::unpack_esbuild(
+    let outcome = unpack_bun(
         ESBUILD_OBJECT_BUNDLE,
         &t.0,
-        BunUnpackOptions::default(),
+        BunUnpackOptions {
+            adapter: UnpackAdapter::Esbuild,
+            ..BunUnpackOptions::default()
+        },
     )
     .expect("unpack runs");
     let manifest = read_manifest(&t.0);
@@ -661,8 +707,15 @@ fn esbuilds_minified_form_extracts_through_the_bun_marker() {
         "var done=c();\n",
     );
     let t = TempDir::new("esbuild-min");
-    crate::unpack::bun::unpack_esbuild(minified, &t.0, BunUnpackOptions::default())
-        .expect("unpack runs");
+    unpack_bun(
+        minified,
+        &t.0,
+        BunUnpackOptions {
+            adapter: UnpackAdapter::Esbuild,
+            ..BunUnpackOptions::default()
+        },
+    )
+    .expect("unpack runs");
     let entries = factories(&read_manifest(&t.0));
     assert_eq!(entries.len(), 1);
     assert!(

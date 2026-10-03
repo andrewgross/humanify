@@ -297,8 +297,8 @@ fn run_libdetect(
     files_json: Option<&str>,
     shim_script: Option<&str>,
 ) -> Result<String, String> {
-    use humanify_core::libdetect::{detect_libraries, select_library_detector};
-    use humanify_core::unpack::{UnpackedFile, bun, run_adapter, select_adapter};
+    use humanify_core::libdetect::detect_libraries;
+    use humanify_core::unpack::{AdapterRun, UnpackedFile, run_adapter};
     use humanify_model::js::{JsObject, JsValue, stringify};
     use std::path::Path;
 
@@ -306,7 +306,12 @@ fn run_libdetect(
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .map_err(|e| format!("cannot read {input}: {e}"))?;
     let dir = Path::new(unpack_dir);
-    let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
+    let toolchain = humanify_core::toolchain::resolve_toolchain(
+        &humanify_core::detect::detect_bundle(&code),
+        None,
+        None,
+    );
+    let adapter = toolchain.unpack.piece;
     let files: Vec<UnpackedFile> = match files_json {
         Some(path) => {
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
@@ -321,13 +326,16 @@ fn run_libdetect(
                 adapter,
                 &code,
                 dir,
-                bun::BunUnpackOptions::default(),
-                shim.as_ref(),
+                AdapterRun {
+                    webcrack_shim: shim.as_ref(),
+                    ..AdapterRun::default()
+                },
             )?
+            .into_result()
             .files
         }
     };
-    let detector = select_library_detector(adapter.name());
+    let detector = toolchain.library_detector.piece;
     let result = detect_libraries(detector, &files)?;
 
     let rel = |p: &Path| JsValue::str(humanify_core::libdetect::relative_posix(dir, p));
@@ -418,31 +426,21 @@ struct UnpackArgs {
 /// summary line (+ the LLM cache counts when replaying).
 fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String> {
     use humanify_core::modules::vendor_names::{ProviderVendorNamer, VendorNamer};
-    use humanify_core::unpack::{UnpackAdapter, bun, gate, run_adapter, select_adapter};
+    use humanify_core::unpack::{AdapterOutcome, AdapterRun, bun, gate, run_adapter};
     use std::path::Path;
 
     let code = std::fs::read(input)
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .map_err(|e| format!("cannot read {input}: {e}"))?;
     let out = Path::new(out_dir);
-    let adapter = select_adapter(&humanify_core::detect::detect_bundle(&code), None);
-    if !matches!(adapter, UnpackAdapter::Bun | UnpackAdapter::Esbuild) {
-        let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
-        let result = run_adapter(
-            adapter,
-            &code,
-            out,
-            bun::BunUnpackOptions::default(),
-            shim.as_ref(),
-        )?;
-        println!(
-            "unpack: adapter={} files={}",
-            adapter.name(),
-            result.files.len()
-        );
-        return Ok(());
-    }
-
+    let adapter = humanify_core::toolchain::resolve_toolchain(
+        &humanify_core::detect::detect_bundle(&code),
+        None,
+        None,
+    )
+    .unpack
+    .piece;
+    let shim = args.webcrack_shim.as_deref().map(webcrack_shim);
     let client = args
         .llm_cache
         .as_ref()
@@ -458,16 +456,29 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         batches: Vec::new(),
     });
     let prior = args.prior_version.as_deref().map(Path::new);
-    let outcome = bun::unpack_bun(
+    // The one dispatch site (`unpack::run_adapter`): every adapter gets
+    // the namer, the prior and the shim, and takes what it uses.
+    let outcome = match run_adapter(
+        adapter,
         &code,
         out,
-        bun::BunUnpackOptions {
+        AdapterRun {
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
             prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,
-            adapter: adapter.name(),
+            webcrack_shim: shim.as_ref(),
         },
-    )?;
+    )? {
+        AdapterOutcome::VendorRecord(outcome) => outcome,
+        AdapterOutcome::Files(result) => {
+            println!(
+                "unpack: adapter={} files={}",
+                adapter.name(),
+                result.files.len()
+            );
+            return Ok(());
+        }
+    };
     let mut sources: Vec<(String, usize)> = Vec::new();
     // How THIS run named each module (a carry counts as carry-over) — the
     // run-state source, not the manifest's origin label (finding #71).

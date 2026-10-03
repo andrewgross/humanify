@@ -11,6 +11,8 @@
 
 use std::collections::HashSet;
 
+use humanify_model::detection::{BundlerType, MinifierType};
+
 /// Universal — the Node.js module system.
 const UNIVERSAL: &[&str] = &["exports", "require", "module", "__filename", "__dirname"];
 
@@ -54,18 +56,84 @@ const SWC: &[&str] = &[
     "_tagged_template_literal",
 ];
 
-/// The skip-set for a bundler+minifier combination (`createSkipSet`). The
-/// TS caches per combination; the Rust builds are cheap enough to build
-/// per call — the sets are tiny.
-pub fn create_skip_set(bundler: Option<&str>, minifier: Option<&str>) -> HashSet<&'static str> {
+/// The never-rename helper lists one run uses (docs/plugin-spec.md P7): at
+/// most one bundler runtime list and one minifier helper list on top of
+/// [`UNIVERSAL`]. Chosen once per run by the toolchain
+/// (`crate::toolchain::resolve_toolchain`) and carried as a value to every
+/// eligibility question — the naming stage, the match stage's graphs and
+/// the post-split reconcile alike, so they cannot answer differently.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NeverRename {
+    bundler: Option<BundlerHelpers>,
+    minifier: Option<MinifierHelpers>,
+}
+
+/// The bundlers whose runtime helper names have a list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BundlerHelpers {
+    Webpack,
+    Esbuild,
+}
+
+/// The minifiers whose helper names have a list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MinifierHelpers {
+    Swc,
+}
+
+impl NeverRename {
+    /// Only the universal list (and the two always-on shape rules).
+    pub const UNIVERSAL: NeverRename = NeverRename {
+        bundler: None,
+        minifier: None,
+    };
+
+    /// The lists for a bundler + minifier verdict (`createSkipSet`'s
+    /// selection): webpack's and esbuild's runtime names, swc's helpers.
+    pub fn for_verdicts(bundler: BundlerType, minifier: MinifierType) -> NeverRename {
+        NeverRename {
+            bundler: match bundler {
+                BundlerType::Webpack => Some(BundlerHelpers::Webpack),
+                BundlerType::Esbuild => Some(BundlerHelpers::Esbuild),
+                _ => None,
+            },
+            minifier: match minifier {
+                MinifierType::Swc => Some(MinifierHelpers::Swc),
+                _ => None,
+            },
+        }
+    }
+
+    /// The recorded name: the lists in use, `+`-joined, or `universal`.
+    pub fn name(self) -> String {
+        let mut parts = Vec::new();
+        match self.bundler {
+            Some(BundlerHelpers::Webpack) => parts.push("webpack"),
+            Some(BundlerHelpers::Esbuild) => parts.push("esbuild"),
+            None => {}
+        }
+        if self.minifier == Some(MinifierHelpers::Swc) {
+            parts.push("swc");
+        }
+        if parts.is_empty() {
+            "universal".to_string()
+        } else {
+            parts.join("+")
+        }
+    }
+}
+
+/// The skip-set for one run's lists (`createSkipSet`). The TS caches per
+/// combination; the Rust builds are cheap enough to build per call — the
+/// sets are tiny.
+pub fn create_skip_set(lists: NeverRename) -> HashSet<&'static str> {
     let mut set: HashSet<&'static str> = UNIVERSAL.iter().copied().collect();
-    if bundler == Some("webpack") {
-        set.extend(WEBPACK.iter().copied());
+    match lists.bundler {
+        Some(BundlerHelpers::Webpack) => set.extend(WEBPACK.iter().copied()),
+        Some(BundlerHelpers::Esbuild) => set.extend(ESBUILD.iter().copied()),
+        None => {}
     }
-    if bundler == Some("esbuild") {
-        set.extend(ESBUILD.iter().copied());
-    }
-    if minifier == Some("swc") {
+    if lists.minifier == Some(MinifierHelpers::Swc) {
         set.extend(SWC.iter().copied());
     }
     set
@@ -118,8 +186,8 @@ fn is_swc_helper_shape(name: &str) -> bool {
 
 /// True when the identifier is eligible for renaming (`createIsEligible`):
 /// false for the skip-set entries and the two pattern rules, true otherwise.
-pub fn is_eligible(name: &str, bundler: Option<&str>, minifier: Option<&str>) -> bool {
-    Eligibility::new(bundler, minifier).is_eligible(name)
+pub fn is_eligible(name: &str, lists: NeverRename) -> bool {
+    Eligibility::new(lists).is_eligible(name)
 }
 
 /// `createIsEligible(bundler, minifier)` as a value: the skip set built
@@ -130,9 +198,9 @@ pub struct Eligibility {
 }
 
 impl Eligibility {
-    pub fn new(bundler: Option<&str>, minifier: Option<&str>) -> Eligibility {
+    pub fn new(lists: NeverRename) -> Eligibility {
         Eligibility {
-            skip: create_skip_set(bundler, minifier),
+            skip: create_skip_set(lists),
         }
     }
 

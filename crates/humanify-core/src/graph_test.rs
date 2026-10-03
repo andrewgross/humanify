@@ -139,8 +139,7 @@ fn module_bindings_rows_and_edges() {
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let mb: Vec<_> = graph
         .module_bindings
@@ -194,8 +193,7 @@ fn mb_edge_from_object_key_position() {
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let pp = graph
         .module_bindings

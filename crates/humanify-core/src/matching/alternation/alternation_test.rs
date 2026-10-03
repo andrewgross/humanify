@@ -146,8 +146,7 @@ fn with_harness<T>(
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     run(&ingest, &unified, &tables)
 }
@@ -480,16 +479,14 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
         prior_ingest.program,
         "prior.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let fresh_graph = crate::graph::build_unified_graph(
         fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let prior_ctx = StatementContexts::build(
         &prior_graph,

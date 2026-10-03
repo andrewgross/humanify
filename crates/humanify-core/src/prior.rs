@@ -59,16 +59,16 @@ use crate::matching::cascade::{
     MatchOptions, Side, assign_interchangeable_pools, match_functions, resolve_ambiguous_by_ordinal,
 };
 use crate::matching::statement_context::StatementContexts;
+use crate::rename::eligibility::NeverRename;
 
 /// The texts and flags the match stage runs on: the FORMATTED fresh text,
-/// the prior version's code, the detected bundler/minifier (the fresh
-/// side's rename-eligibility skip set).
+/// the prior version's code, the run's never-rename lists (the fresh
+/// side's rename-eligibility skip set — the toolchain's P7 piece).
 #[derive(Clone, Copy)]
 pub struct PriorMatchInput<'t> {
     pub fresh: &'t str,
     pub prior: &'t str,
-    pub bundler: Option<&'t str>,
-    pub minifier: Option<&'t str>,
+    pub never_rename: NeverRename,
     /// The fast schedule (the relaxed default and `--sequential` alike):
     /// build the prior side's graph on a thread of its own
     /// (from its own parse of the same text — the AST is not `Send`),
@@ -145,8 +145,7 @@ pub fn match_prior_version<T>(
     let PriorMatchInput {
         fresh,
         prior,
-        bundler,
-        minifier,
+        never_rename,
         same_program_check,
         fast,
     } = input;
@@ -159,7 +158,7 @@ pub fn match_prior_version<T>(
     let ph = phase("prior:parse+json");
     let fresh_allocator = Allocator::default();
     let prior_allocator = Allocator::default();
-    let fresh_eligibility = Eligibility::SkipSet { bundler, minifier };
+    let fresh_eligibility = Eligibility::SkipSet(never_rename);
     let (fresh_ingest, prior_ingest, fresh_json, prior_json, fresh_parts, prior_parts) = if fast {
         drop(ph);
         let _ph = phase("prior:sides-parallel");
@@ -282,8 +281,7 @@ pub fn with_prior_match_side<T>(
 /// false and run the identical assert over the union of their pairs).
 pub fn match_stage_with_prior<T>(
     fresh: &str,
-    bundler: Option<&str>,
-    minifier: Option<&str>,
+    never_rename: NeverRename,
     prior: StageSide<'_, '_>,
     same_program_check: bool,
     consume: impl FnOnce(&MatchStage<'_, '_>) -> Result<T, String>,
@@ -297,7 +295,7 @@ pub fn match_stage_with_prior<T>(
         &ingest,
         &json,
         "input.js",
-        Eligibility::SkipSet { bundler, minifier },
+        Eligibility::SkipSet(never_rename),
     );
     let deps = build_side_dependents(&ingest, &json, &parts.graph, &parts.tables, "fresh")?;
     drop(ph);
@@ -590,7 +588,7 @@ pub(crate) fn build_side_parts(
     ingest: &Ingest<'_>,
     program_json: &Value,
     file_name: &str,
-    eligibility: Eligibility<'_>,
+    eligibility: Eligibility,
 ) -> SideParts {
     let wrapper = crate::modules::wrapper::find_wrapper_function(ingest.program, ingest.semantic());
     let tables = SymbolTables::build(ingest.semantic());

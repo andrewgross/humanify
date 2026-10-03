@@ -106,16 +106,14 @@ fn with_sides<T>(
         old_ingest.program,
         "test.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let new_graph = crate::graph::build_unified_graph(
         new_ingest.semantic(),
         new_ingest.program,
         "test.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let old_fn_index = build_fingerprint_index(&old_graph, old_ingest.semantic(), &old_tables);
     let new_fn_index = build_fingerprint_index(&new_graph, new_ingest.semantic(), &new_tables);

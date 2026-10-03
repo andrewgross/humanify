@@ -14,7 +14,7 @@ use crate::output_validation::{
     FreeNameMeasure, OutputParseFailure, OutputSemanticFailure, ParserError, build_excerpt,
     compare_semantics, describe_parse_error, format_divergence,
 };
-use crate::pipeline_config::{build_pipeline_config, pipeline_selection_record};
+use crate::pipeline_config::pipeline_selection_record;
 use crate::progress::{LineRenderer, ProgressRenderer, TtyRenderer};
 use crate::report::{
     report_internal_errors, report_parse_failures, report_semantic_failures, report_vendor_naming,
@@ -226,7 +226,7 @@ fn stage_fingerprints_match() {
 }
 
 #[test]
-fn selection_matches_build_pipeline_config() {
+fn selection_matches_the_resolved_toolchain() {
     let v = vectors();
     let cases = v["selection"].as_array().unwrap();
     for case in cases {
@@ -239,8 +239,8 @@ fn selection_matches_build_pipeline_config() {
         let m = o
             .get("minifierOverride")
             .map(|x| serde_json::from_value(x.clone()).unwrap());
-        let config = build_pipeline_config(&detection, b, m);
-        let record = pipeline_selection_record(&config);
+        let toolchain = humanify_core::toolchain::resolve_toolchain(&detection, b, m);
+        let record = pipeline_selection_record(&toolchain);
         assert_eq!(
             humanify_model::js::stringify(&record.to_js()),
             case["recordJson"].as_str().unwrap(),

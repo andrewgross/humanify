@@ -104,8 +104,10 @@ pub struct WaveInputs<'a, 's> {
     pub close: &'a [Option<CloseContext>],
     /// Per module-binding row: `suggestedName`.
     pub suggested: &'a [Option<String>],
-    /// `options.bundlerType === "esbuild"` (module groups of 15).
-    pub esbuild: bool,
+    /// How many module-level names one request carries (the toolchain's
+    /// per-bundler tuning, `toolchain::BundlerTuning` — esbuild 15, else
+    /// 10).
+    pub module_group_size: usize,
     pub params: CacheKeyParams,
     /// ONE scope epoch: no prior version, so `clearBabelCacheAfterPriorMatch`
     /// never ran — every traversal reuses the graph build's cached paths
@@ -1192,7 +1194,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
 
     /// `groupByProximity(mbNodes, 50, max)`.
     fn group_by_proximity(&self, mbs: &[usize]) -> Vec<Vec<usize>> {
-        let max = if self.inp.esbuild { 15 } else { 10 };
+        let max = self.inp.module_group_size;
         let line = |j: usize| self.inp.ng.mb_text[j].declaration_line;
         let mut sorted = mbs.to_vec();
         sorted.sort_by_key(|&j| line(j));

@@ -14,20 +14,20 @@ had written down.
 Ordered as they execute. "Pluggable" means a strategy can be selected without
 editing the caller.
 
-| #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)       | pluggable?                                                                                          |
-| --- | ------------------------ | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1   | Detect bundler/minifier  | `detect` → `humanify_cli::pipeline_config`                                | **yes** — `--bundler` / `--minifier` override detection                                             |
-| 2   | Select unpack adapter    | `unpack` (adapter selection)                                              | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), chosen by name, passthrough last     |
-| 3   | Unpack the bundle        | `unpack` (the selected adapter; webpack/browserify via the webcrack shim) | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_esbuild`)  |
-| 4   | Detect libraries         | `libdetect`                                                               | **yes** — registry of 3, `supports()`, default last                                                 |
-| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over)                     | injected namer, one implementation — a seam, not a registry                                         |
-| 6   | Format                   | `format` (`core::format`, the native formatter)                           | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json) |
-| 7   | Build the function graph | `graph`                                                                   | **no**                                                                                              |
-| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                            | **no** — the cascade is hard-coded order, see below                                                 |
-| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                           | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes          |
-| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                        | **partly** — a real registry, but not selectable from outside                                       |
-| 11  | Split (one path)         | `emit::stable_split`                                                      | **no** — prior present → inherit layout; no prior → clustered fresh grouping                        |
-| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                         | **no**                                                                                              |
+| #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)  | pluggable?                                                                                          |
+| --- | ------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | Detect bundler/minifier  | `detect` → `toolchain::resolve_toolchain` (every plugin piece, once) | **yes** — `--bundler` / `--minifier` override detection                                             |
+| 2   | Select unpack adapter    | `unpack::choose_adapter` (called by the toolchain)                   | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), `supports()`, passthrough last       |
+| 3   | Unpack the bundle        | `unpack::run_adapter` (the ONE dispatch site; webcrack via its shim) | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_bun`)      |
+| 4   | Detect libraries         | `libdetect`                                                          | **yes** — registry of 3, `supports()`, default last                                                 |
+| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over)                | injected namer, one implementation — a seam, not a registry                                         |
+| 6   | Format                   | `format` (`core::format`, the native formatter)                      | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json) |
+| 7   | Build the function graph | `graph`                                                              | **no**                                                                                              |
+| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                       | **no** — the cascade is hard-coded order, see below                                                 |
+| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                      | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes          |
+| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                   | **partly** — a real registry, but not selectable from outside                                       |
+| 11  | Split (one path)         | `emit::stable_split`                                                 | **no** — prior present → inherit layout; no prior → clustered fresh grouping                        |
+| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                    | **no**                                                                                              |
 
 Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
 binary; the TypeScript names used below (`stableSplitFromCode`,
@@ -70,6 +70,20 @@ Stages 4, 5, 7, 8, 12 and all three post-placement passes. In particular:
   is consumed by a _future_ run.
 
 ## Strategy selection: where the seams actually are
+
+**The toolchain (2026-10-04, finding #76).** Every plugin piece a run uses
+is chosen ONCE, at stage 1, by `humanify_core::toolchain::resolve_toolchain`
+— from the detection verdict and the `--bundler` / `--minifier` flags — and
+handed to the stages that need it as a value (`Toolchain`): the unpack
+adapter, the vendor record's stamp, the library detector, the never-rename
+lists, the name profile, the module-layout record, the per-bundler tuning,
+and four slots that hold today's only implementation (the module wrapper
+grammar, the interop helpers, the bundle layout, which unpacked file is
+the app). No stage below it compares bundler or minifier names. Each choice
+and its reason (flag / detected / fallback / only-implementation) is
+written to the `--stats-json` `toolchain` block and logged at `-vv`, so a
+run's plugin choice is visible. The registries below are what the
+toolchain selects FROM. docs/plugin-spec.md is the per-piece status.
 
 **Two** stages have a real registry — 2 (unpack) and 4 (library detection) —
 both the same shape: an array, selection by name or `supports()`, a fallback

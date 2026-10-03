@@ -62,8 +62,11 @@ use library::RecordedName;
 /// Rust honours).
 #[derive(Clone, Debug)]
 pub struct NamingConfig {
-    pub bundler: Option<String>,
-    pub minifier: Option<String>,
+    /// The run's never-rename lists (the toolchain's P7 piece,
+    /// `crate::toolchain`).
+    pub never_rename: crate::rename::eligibility::NeverRename,
+    /// The run's per-bundler tuning (the toolchain's P14 piece).
+    pub tuning: crate::toolchain::BundlerTuning,
     /// The minifier name profile selected once from detection
     /// (`rename::name_profile::select_name_profile`) — every name-shape
     /// question of the stage is asked under it.
@@ -183,8 +186,8 @@ pub fn run_naming<P: NameProvider>(
     let has_prior = input.prior.is_some();
     let deferred = config.sweep_deferred(has_prior);
     let opts = EraOptions {
-        bundler: config.bundler.as_deref(),
-        minifier: config.minifier.as_deref(),
+        never_rename: config.never_rename,
+        tuning: config.tuning,
         name_profile: config.name_profile,
         params: &config.params,
         naming_floor: config.naming_floor,
@@ -203,8 +206,7 @@ pub fn run_naming<P: NameProvider>(
             PriorMatchInput {
                 fresh: input.fresh,
                 prior,
-                bundler: opts.bundler,
-                minifier: opts.minifier,
+                never_rename: opts.never_rename,
                 fast: config.fast.on(),
                 same_program_check: true,
             },
@@ -304,7 +306,7 @@ pub fn run_naming<P: NameProvider>(
         // The fresh text itself does not parse: nothing can be validated.
         None => validate::Verdict::ParseFailed,
     };
-    let eligible = Eligibility::new(opts.bundler, opts.minifier);
+    let eligible = Eligibility::new(opts.never_rename);
     let trail = std::mem::take(&mut out.trail);
     // -- the prior-diff reconcile (on a valid output only) -----------------
     let reconcile_gates = config.reconcile_prior_diff && !config.source_map;
@@ -749,6 +751,7 @@ impl NamingOutcome {
                 claims_recorded: c.claims_recorded as f64,
             },
             selection: None,
+            toolchain: None,
             reask: Some(reask_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),

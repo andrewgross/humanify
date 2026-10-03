@@ -91,8 +91,7 @@ fn with_harness<T>(
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     run(&ingest, &unified, &tables)
 }

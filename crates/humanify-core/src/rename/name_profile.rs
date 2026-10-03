@@ -115,7 +115,7 @@ impl NameProfile {
     /// their OWN renamer (bun, esbuild). webpack/parcel/rollup/browserify
     /// delegate minification to a plugin whose choice the bundle does not
     /// reveal — no guess.
-    fn of_bundler(kind: BundlerType) -> Option<NameProfile> {
+    pub(crate) fn of_bundler(kind: BundlerType) -> Option<NameProfile> {
         match kind {
             BundlerType::Bun => Some(NameProfile::Bun),
             BundlerType::Esbuild => Some(NameProfile::Esbuild),

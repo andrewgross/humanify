@@ -60,8 +60,7 @@ fn consumed_classification_joins_by_fresh_span() {
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let json = program_estree_json(ingest.program);
     let lib_start = fresh.find("function (z)").unwrap() as u32;

@@ -1,48 +1,10 @@
-//! Stages 1-2's selection (TS: `src/pipeline/config.ts`,
-//! `src/pipeline/selection-record.ts`). The adapter choice is the unpack
-//! registry's (`humanify_core::unpack::select_adapter`, the one owner of
-//! registry order and each adapter's `supports()`); this module only
-//! records it in the config.
+//! Stages 1-2's records (TS: `src/pipeline/selection-record.ts`). The
+//! selection itself is the run's toolchain (`humanify_core::toolchain::
+//! resolve_toolchain`, the one place a run's plugin pieces are chosen);
+//! this module only writes down what it chose.
 
-use humanify_model::detection::{BundlerDetectionResult, BundlerType, DetectionTier, MinifierType};
-use humanify_model::pipeline::{PipelineConfig, PipelineSelectionRecord};
-
-/// `buildPipelineConfig(detection, {bundlerOverride, minifierOverride})`:
-/// an override other than "unknown" wins (and makes the bundler tier
-/// definitive).
-pub fn build_pipeline_config(
-    detection: &BundlerDetectionResult,
-    bundler_override: Option<BundlerType>,
-    minifier_override: Option<MinifierType>,
-) -> PipelineConfig {
-    let bundler = bundler_override.filter(|b| *b != BundlerType::Unknown);
-    let minifier = minifier_override.filter(|m| *m != MinifierType::Unknown);
-    PipelineConfig {
-        bundler_type: bundler.unwrap_or(detection.bundler.kind),
-        bundler_tier: if bundler.is_some() {
-            DetectionTier::Definitive
-        } else {
-            detection.bundler.tier
-        },
-        minifier_type: minifier.unwrap_or(detection.minifier.kind),
-        unpack_adapter_name: humanify_core::unpack::select_adapter(detection, bundler_override)
-            .name(),
-        name_profile_name: humanify_core::rename::name_profile::select_name_profile(
-            detection,
-            bundler_override,
-            minifier_override,
-        )
-        .name(),
-    }
-}
-
-/// The run's minifier name profile, as the config recorded it.
-pub fn name_profile_of(
-    config: &PipelineConfig,
-) -> humanify_core::rename::name_profile::NameProfile {
-    humanify_core::rename::name_profile::name_profile_named(config.name_profile_name)
-        .expect("the config records a registered profile")
-}
+use humanify_core::toolchain::Toolchain;
+use humanify_model::pipeline::{PipelineSelectionRecord, ToolchainPieceRecord};
 
 /// The TS string literal of a serde-lowercase enum.
 pub fn enum_name<T: serde::Serialize>(v: T) -> String {
@@ -52,12 +14,26 @@ pub fn enum_name<T: serde::Serialize>(v: T) -> String {
         .expect("a unit enum serializes to its string literal")
 }
 
-/// `pipelineSelectionRecord(config)`.
-pub fn pipeline_selection_record(config: &PipelineConfig) -> PipelineSelectionRecord {
+/// `pipelineSelectionRecord(config)`: the four TS fields (frozen by the
+/// TS vectors).
+pub fn pipeline_selection_record(toolchain: &Toolchain) -> PipelineSelectionRecord {
     PipelineSelectionRecord {
-        bundler: enum_name(config.bundler_type),
-        bundler_tier: enum_name(config.bundler_tier),
-        minifier: enum_name(config.minifier_type),
-        unpack_adapter: config.unpack_adapter_name.to_string(),
+        bundler: enum_name(toolchain.bundler),
+        bundler_tier: enum_name(toolchain.bundler_tier),
+        minifier: enum_name(toolchain.minifier),
+        unpack_adapter: toolchain.unpack.piece.name().to_string(),
     }
+}
+
+/// The stats file's `toolchain` block: every piece, its choice, and why.
+pub fn toolchain_record(toolchain: &Toolchain) -> Vec<ToolchainPieceRecord> {
+    toolchain
+        .record()
+        .into_iter()
+        .map(|r| ToolchainPieceRecord {
+            piece: r.piece.to_string(),
+            choice: r.choice,
+            reason: r.reason.name().to_string(),
+        })
+        .collect()
 }

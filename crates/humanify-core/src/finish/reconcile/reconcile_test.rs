@@ -47,7 +47,7 @@ fn reconcile_and_carry_match_the_ts() {
     };
     let read_fresh = |f: &str| fresh.get(f).cloned();
     let read_prior = |f: &str| prior.get(f).cloned();
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
@@ -104,7 +104,7 @@ fn reconcile_and_carry_match_the_ts() {
 fn the_kill_switch_does_nothing() {
     let mut ledger = JsValue::parse("{\"files\":[\"a.js\"],\"order\":[]}").unwrap();
     let read = |_: &str| Some("var a = 1;\n".to_string());
-    let eligible = Eligibility::new(None, None);
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
@@ -133,7 +133,7 @@ fn a_non_ascii_identifier_is_left_intact() {
     .unwrap();
     let read_fresh = |_: &str| Some(fresh.to_string());
     let read_prior = |_: &str| Some(prior.to_string());
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
@@ -284,7 +284,7 @@ fn scramble_run(
         prior.get(f).cloned()
     };
     let mut ledger = JsValue::parse(ledger_text).unwrap();
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,
@@ -389,7 +389,7 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
     .unwrap();
     let read_fresh = |_: &str| Some(fresh.to_string());
     let read_prior = |_: &str| Some(prior.to_string());
-    let eligible = Eligibility::new(Some("bun"), Some("bun"));
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
     let result = post_split_reconcile(PostSplitInput {
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         ledger: &mut ledger,

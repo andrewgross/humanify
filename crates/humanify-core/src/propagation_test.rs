@@ -54,8 +54,7 @@ fn with_pair<T>(
         old_ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let old_index = build_fingerprint_index(&old_graph, old_ingest.semantic(), &old_tables);
 
@@ -72,8 +71,7 @@ fn with_pair<T>(
         new_ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let new_index = build_fingerprint_index(&new_graph, new_ingest.semantic(), &new_tables);
 

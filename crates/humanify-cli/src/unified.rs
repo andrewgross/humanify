@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
-use humanify_core::unpack::select_unpack_adapter;
+use humanify_core::toolchain::{Toolchain, resolve_toolchain};
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
 use humanify_model::detection::{
@@ -43,7 +43,7 @@ use humanify_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConf
 use crate::commander::{OptionValues, ValueSource};
 use crate::kill_switches::{Switch, SwitchState};
 use crate::log::{debug_reset_output, debug_set_output, verbose};
-use crate::pipeline_config::{build_pipeline_config, enum_name};
+use crate::pipeline_config::enum_name;
 use crate::progress::{ProgressRenderer, create_progress_renderer};
 use crate::settings::{Settings, SettingsInput, resolve_settings};
 use crate::unminify::{filter_libraries, report_vendor_naming, unpack_bundle};
@@ -595,7 +595,7 @@ fn pipeline_body(
     use humanify_core::profiling::phase;
     let ph = phase("read+detect");
     let bundled_code = read_utf8(input)?;
-    let (config, adapter, fossil_split) = detect_stage(&bundled_code, opts, switches, profiler)?;
+    let (toolchain, fossil_split) = detect_stage(&bundled_code, opts, switches, profiler);
     let prior = load_prior_version_code(opts, renderer)?;
     drop(ph);
 
@@ -616,7 +616,7 @@ fn pipeline_body(
     // WITHOUT either flag nothing per ask survives its dispatch — the
     // accumulated dispatch records were the ~99GB holder of a full-bundle
     // fresh run.
-    let naming_config = naming_config(settings, &config, opts, switches);
+    let naming_config = naming_config(settings, &toolchain, opts, switches);
     let mut dispatch_log = match opts.dump_artifacts.as_deref() {
         Some(dir) => humanify_core::artifact_dump::DispatchLog::dump(
             naming_config.params.clone(),
@@ -635,7 +635,7 @@ fn pipeline_body(
     let unpacked = unpack_bundle(
         &bundled_code,
         Path::new(out_dir),
-        adapter,
+        toolchain.unpack.piece,
         provider,
         &mut dispatch_log,
         prior_path,
@@ -646,7 +646,12 @@ fn pipeline_body(
     drop(ph);
     let ph = phase("library-detection");
     let (files_to_process, mixed_files) = if settings.skip_libraries {
-        let filtered = filter_libraries(unpacked.files, adapter, profiler, renderer)?;
+        let filtered = filter_libraries(
+            unpacked.files,
+            toolchain.library_detector.piece,
+            profiler,
+            renderer,
+        )?;
         (filtered.files_to_process, filtered.mixed_files)
     } else {
         (unpacked.files, Vec::new())
@@ -655,7 +660,6 @@ fn pipeline_body(
     // Stages 6-9 per file.
     let mut failures = Failures::default();
     let prompt_window = naming_config.prompt_window;
-    let name_profile = naming_config.name_profile;
     let mut naming = NamingRun {
         opts,
         config: naming_config,
@@ -667,7 +671,12 @@ fn pipeline_body(
     };
     drop(ph);
     let ph = phase("format+naming");
-    let last = naming.run(&files_to_process, &mut failures, renderer)?;
+    let last = naming.run(
+        &files_to_process,
+        toolchain.app_file.piece,
+        &mut failures,
+        renderer,
+    )?;
     drop(ph);
     renderer.message(&format!(
         "Done! You can find your unminified code in {out_dir}"
@@ -692,7 +701,7 @@ fn pipeline_body(
             output_dir: Path::new(out_dir),
             input_file: Path::new(input),
             processed_source: Some(source),
-            name_profile,
+            toolchain,
             prior_version: prior_path,
             split_ledger: opts.split_ledger.as_deref(),
             split_pure: opts.split_pure,
@@ -749,7 +758,7 @@ fn pipeline_body(
                 outcome,
                 &post_split.claims,
                 &unpacked.vendor_naming,
-                &config,
+                &toolchain,
                 renderer,
             )?;
         }
@@ -774,7 +783,7 @@ fn pipeline_body(
                     output_dir: Path::new(out_dir),
                     minified: &bundled_code,
                     prior: prior.as_deref(),
-                    flags: dump_flags(opts, settings, &config),
+                    flags: dump_flags(opts, settings, &toolchain),
                     regions: &regions,
                 },
                 renderer,
@@ -870,14 +879,14 @@ struct DumpContext<'a> {
 fn dump_flags(
     opts: &CommandOptions,
     settings: &Settings,
-    config: &humanify_model::pipeline::PipelineConfig,
+    toolchain: &Toolchain,
 ) -> humanify_model::js::JsValue {
     use humanify_model::js::{JsObject, JsValue};
     let mut f = JsObject::new();
     f.insert("split", JsValue::Bool(opts.split));
     f.insert("splitPure", JsValue::Bool(opts.split_pure));
-    f.insert("bundler", JsValue::str(enum_name(config.bundler_type)));
-    f.insert("minifier", JsValue::str(enum_name(config.minifier_type)));
+    f.insert("bundler", JsValue::str(enum_name(toolchain.bundler)));
+    f.insert("minifier", JsValue::str(enum_name(toolchain.minifier)));
     f.insert("skipLibraries", JsValue::Bool(settings.skip_libraries));
     f.insert(
         "reconcilePriorDiff",
@@ -1014,41 +1023,44 @@ impl RunReports<'_> {
     }
 }
 
-/// Stages 1-2: detect, build the pipeline config, select the unpack
-/// adapter, decide the fossil split (once, from the adapter's capability).
+/// Stages 1-2: detect, resolve the run's toolchain (every plugin piece,
+/// chosen ONCE — `humanify_core::toolchain`), decide the fossil split
+/// (once, from the adapter's capability).
 fn detect_stage(
     bundled_code: &str,
     opts: &CommandOptions,
     switches: &SwitchState,
     profiler: &humanify_core::profiling::Profiler,
-) -> Result<
-    (
-        humanify_model::pipeline::PipelineConfig,
-        humanify_core::unpack::UnpackAdapter,
-        bool,
-    ),
-    Crash,
-> {
+) -> (Toolchain, bool) {
     let span = profiler.pipeline_span("detection");
     let detection = humanify_core::detect::detect_bundle(bundled_code);
-    let config = build_pipeline_config(
+    let toolchain = resolve_toolchain(
         &detection,
         parse_enum::<BundlerType>(&opts.bundler),
         parse_enum::<MinifierType>(&opts.minifier),
     );
-    let bundler_name = enum_name(config.bundler_type);
+    let bundler_name = enum_name(toolchain.bundler);
+    let adapter = toolchain.unpack.piece;
     span.end(Some(
         humanify_model::profiling::JsObject::new()
             .with("bundler", bundler_name.clone())
-            .with("adapter", config.unpack_adapter_name),
+            .with("adapter", adapter.name()),
     ));
     verbose().log(&format!(
         "Bundle detection: bundler={bundler_name} ({}), minifier={}, adapter={}",
-        enum_name(config.bundler_tier),
-        enum_name(config.minifier_type),
-        config.unpack_adapter_name
+        enum_name(toolchain.bundler_tier),
+        enum_name(toolchain.minifier),
+        adapter.name()
     ));
-    let adapter = select_unpack_adapter(config.unpack_adapter_name)?;
+    verbose().debug(&format!(
+        "Toolchain: {}",
+        toolchain
+            .record()
+            .iter()
+            .map(|r| format!("{}={} ({})", r.piece, r.choice, r.reason.name()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
     let fossil_split =
         adapter.provides_module_fossils() && !switches.switch_on(Switch::FossilSplit);
     if fossil_split {
@@ -1062,7 +1074,7 @@ fn detect_stage(
             .collect();
         verbose().debug(&format!("Detection signals: {}", signals.join(", ")));
     }
-    Ok((config, adapter, fossil_split))
+    (toolchain, fossil_split)
 }
 
 /// The last processed file: its naming outcome, its unpacked path, and
@@ -1093,11 +1105,12 @@ struct NamingRun<'a> {
 }
 
 impl NamingRun<'_> {
-    /// Every file named; the last one's outcome (what the split reads) and
-    /// its path.
+    /// Every file named; the app file's outcome (what the split reads) and
+    /// its path — the toolchain's P13 rule picks which file that is.
     fn run(
         &mut self,
         files: &[humanify_core::unpack::UnpackedFile],
+        app_file: humanify_core::toolchain::AppFile,
         failures: &mut Failures,
         renderer: &mut dyn ProgressRenderer,
     ) -> Result<Option<NamedFile>, Crash> {
@@ -1127,11 +1140,13 @@ impl NamingRun<'_> {
                     .map_err(|e| Crash(node_fs_error(&e, "open", &path)))?;
             }
             failures.record(&outcome, &path, &formatted.text);
-            last = Some(NamedFile {
-                outcome,
-                path: file.path.clone(),
-                fresh: formatted.text,
-            });
+            if last.is_none() || app_file.replaces_earlier() {
+                last = Some(NamedFile {
+                    outcome,
+                    path: file.path.clone(),
+                    fresh: formatted.text,
+                });
+            }
         }
         Ok(last)
     }
@@ -1245,7 +1260,7 @@ fn write_stats_json(
     outcome: &NamingOutcome,
     later_claims: &humanify_core::rename::validated::RenameClaimStats,
     vendor: &humanify_core::modules::vendor_names::VendorNamingStats,
-    config: &humanify_model::pipeline::PipelineConfig,
+    toolchain: &Toolchain,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(), Crash> {
     if outcome.coverage.is_none() {
@@ -1260,7 +1275,8 @@ fn write_stats_json(
             batches_failed: vendor.batches_failed as f64,
         });
     }
-    stats.selection = Some(crate::pipeline_config::pipeline_selection_record(config));
+    stats.selection = Some(crate::pipeline_config::pipeline_selection_record(toolchain));
+    stats.toolchain = Some(crate::pipeline_config::toolchain_record(toolchain));
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
     renderer.message(&format!("Eval stats written to {dest}"));
@@ -1379,14 +1395,14 @@ impl Failures {
 /// The plugin options the naming stage decides by (createRenamePlugin's).
 fn naming_config(
     settings: &Settings,
-    config: &humanify_model::pipeline::PipelineConfig,
+    toolchain: &Toolchain,
     opts: &CommandOptions,
     switches: &SwitchState,
 ) -> NamingConfig {
     NamingConfig {
-        bundler: Some(enum_name(config.bundler_type)),
-        minifier: Some(enum_name(config.minifier_type)),
-        name_profile: crate::pipeline_config::name_profile_of(config),
+        never_rename: toolchain.never_rename.piece,
+        tuning: toolchain.tuning.piece,
+        name_profile: toolchain.name_profile.piece,
         skip_libraries: settings.skip_libraries,
         reconcile_prior_diff: settings.levers.reconcile_prior_diff,
         naming_floor: settings.levers.naming_floor,

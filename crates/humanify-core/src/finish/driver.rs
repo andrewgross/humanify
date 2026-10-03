@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use humanify_model::js::{JsValue, stringify};
 
 use crate::place::layout::METADATA_DIR;
-use crate::rename::eligibility::Eligibility;
+use crate::rename::eligibility::{Eligibility, NeverRename};
 use crate::rename::name_profile::NameProfile;
 use crate::unpack::bun::{bun_manifest_path, find_prior_tree_root};
 
@@ -21,8 +21,8 @@ use super::carry::{CarryResult, carry_renames_into_bundle};
 use super::reconcile::{PostSplitInput, PostSplitResult, post_split_reconcile};
 
 use super::relink::{
-    BUN_RELINK_RUNTIME, FactoryLookup, VendorBridge, bun_relink_runtime_filename,
-    relink_factory_references, wrap_extracted_factory,
+    FactoryLookup, VendorBridge, bun_relink_runtime_filename, relink_factory_references,
+    wrap_extracted_factory,
 };
 use super::scaffold::{detect_external_packages, read_utf8, write_runnable_scaffold};
 use super::vendor_inherit::VendorBodyInheritor;
@@ -58,6 +58,13 @@ pub struct FinishInput<'a> {
     /// The run's minifier name profile (the post-split reconcile's
     /// shape questions; `rename::name_profile`).
     pub name_profile: NameProfile,
+    /// The run's never-rename lists (the post-split reconcile's
+    /// eligibility — the SAME lists the naming stage used; it hard-coded
+    /// Bun's until 2026-10-04, docs/plugin-spec.md I21).
+    pub never_rename: NeverRename,
+    /// The run's interop helpers (the relink's helper file —
+    /// `toolchain::InteropHelpers`, P8).
+    pub interop: crate::toolchain::InteropHelpers,
 }
 
 /// The Bun manifest as the finish reads it (`BunModulesManifest`).
@@ -67,9 +74,11 @@ struct Manifest {
     factories: Vec<(String, Option<String>)>,
 }
 
-/// `loadBunManifest(outputDir)`: None when absent, not a vendor-extraction
-/// adapter's (bun's or esbuild's — the two that write this manifest
-/// format), or factory-less.
+/// `loadBunManifest(outputDir)`: None when absent, not stamped by an
+/// adapter that writes this vendor record (the unpack registry's answer,
+/// `UnpackAdapter::of_vendor_record_stamp` — a new vendor-extracting
+/// adapter is accepted by registering it, never by editing a list here;
+/// docs/plugin-spec.md I14), or factory-less.
 fn load_bun_manifest(output_dir: &Path) -> Result<Option<Manifest>, String> {
     let path = bun_manifest_path(output_dir);
     if !path.exists() {
@@ -83,10 +92,12 @@ fn load_bun_manifest(output_dir: &Path) -> Result<Option<Manifest>, String> {
         Some(JsValue::String(s)) => Some(s.clone()),
         _ => None,
     };
-    if !matches!(
-        str_field(&obj, "adapter").as_deref(),
-        Some("bun" | "esbuild")
-    ) {
+    let stamp = str_field(&obj, "adapter");
+    if stamp
+        .as_deref()
+        .and_then(crate::unpack::UnpackAdapter::of_vendor_record_stamp)
+        .is_none()
+    {
         return Ok(None);
     }
     let factories: Vec<(String, Option<String>)> = match obj.get("factories") {
@@ -138,6 +149,7 @@ fn relink_bun_modules(
     split_files: &[String],
     prior_root: Option<&Path>,
     bridges: &[VendorBridge],
+    interop: crate::toolchain::InteropHelpers,
     report: &mut FinishReport,
 ) -> Result<(), String> {
     let lookup: FactoryLookup = manifest
@@ -149,7 +161,7 @@ fn relink_bun_modules(
     if let Some(dir) = runtime_path.parent() {
         fs::create_dir_all(dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
     }
-    write_file(&runtime_path, BUN_RELINK_RUNTIME)?;
+    write_file(&runtime_path, interop.relink_runtime())?;
     let mut inherit = prior_root.map(VendorBodyInheritor::new);
     let mut bridged_reads = 0usize;
     for (file_name, _) in &manifest.factories {
@@ -219,6 +231,7 @@ pub fn finish_split_output(
                 runnable,
                 prior_root.as_deref(),
                 &input.bridges,
+                input.interop,
                 report,
             )?;
         }
@@ -280,6 +293,7 @@ pub fn finish_stage(
         input.prior_version,
         input.switches,
         input.name_profile,
+        input.never_rename,
         report,
     )?;
     Ok((relinked, reconciled))
@@ -322,6 +336,7 @@ pub fn reconcile_post_split(
     prior_version: Option<&Path>,
     switches: FinishSwitches,
     name_profile: NameProfile,
+    never_rename: NeverRename,
     report: &mut FinishReport,
 ) -> Result<Option<ReconcileReport>, String> {
     let Some(prior_version) = prior_version else {
@@ -333,7 +348,7 @@ pub fn reconcile_post_split(
         let _ph = crate::profiling::phase("split:finish:reconcile-ledger");
         (
             JsValue::parse(&read_utf8(&ledger_path)?)?,
-            Eligibility::new(Some("bun"), Some("bun")),
+            Eligibility::new(never_rename),
         )
     };
     let read_fresh = |f: &str| read_opt(output_dir, f);

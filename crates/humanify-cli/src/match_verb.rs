@@ -67,7 +67,7 @@ use humanify_model::detection::{
 };
 use serde_json::{Value, json};
 
-use crate::pipeline_config::{build_pipeline_config, enum_name};
+use crate::pipeline_config::enum_name;
 
 /// The dump's schema version for the SINGLE-FILE shape (every exp092
 /// corpus dump): each `files[]` section embeds the full prior
@@ -128,18 +128,19 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         ));
     }
 
-    // Stages 1-2: detect, then the same config the pipeline builds
-    // (the bundler/minifier names feed the fresh side's eligibility).
+    // Stages 1-2: detect, then the same toolchain the pipeline resolves
+    // (its never-rename lists feed the fresh side's eligibility).
     let detection = humanify_core::detect::detect_bundle(&code);
-    let config = build_pipeline_config(
+    let toolchain = humanify_core::toolchain::resolve_toolchain(
         &detection,
         parse_override::<BundlerType>(args.bundler, &SELECTABLE_BUNDLERS, "bundler")?,
         parse_override::<MinifierType>(args.minifier, &SELECTABLE_MINIFIERS, "minifier")?,
     );
-    let adapter = humanify_core::unpack::select_unpack_adapter(config.unpack_adapter_name)?;
-    let bundler = enum_name(config.bundler_type);
-    let minifier = enum_name(config.minifier_type);
-    let name_profile = crate::pipeline_config::name_profile_of(&config);
+    let adapter = toolchain.unpack.piece;
+    let bundler = enum_name(toolchain.bundler);
+    let minifier = enum_name(toolchain.minifier);
+    let name_profile = toolchain.name_profile.piece;
+    let never_rename = toolchain.never_rename.piece;
 
     // Stage 3: unpack into the work dir (a default temp dir is removed
     // afterwards; the dump embeds everything the harness needs).
@@ -163,9 +164,12 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         adapter,
         &code,
         Path::new(&work_dir),
-        humanify_core::unpack::bun::BunUnpackOptions::default(),
-        shim.as_ref(),
-    )?;
+        humanify_core::unpack::AdapterRun {
+            webcrack_shim: shim.as_ref(),
+            ..Default::default()
+        },
+    )?
+    .into_result();
 
     // A MULTI-file tree (>= 2 candidates) is the raw-bundle regime: the
     // prior side is hoisted to the dump's top level once, and the
@@ -186,8 +190,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
     let built = humanify_core::prior::with_prior_match_side(&prior, |side| {
         let ctx = MatchContext {
             prior: &prior,
-            bundler: &bundler,
-            minifier: &minifier,
+            never_rename,
             name_profile,
             multi,
             side,
@@ -212,14 +215,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
         let _ = std::fs::remove_dir_all(&work_dir);
     }
     let prior_block = multi.then(|| run.hoisted_prior_block()).transpose()?;
-    let meta = dump_meta(
-        &run,
-        args,
-        &bundler,
-        &minifier,
-        config.unpack_adapter_name,
-        multi,
-    );
+    let meta = dump_meta(&run, args, &bundler, &minifier, adapter.name(), multi);
     let mut dump = json!({
         "schemaVersion": if multi {
             MATCH_DUMP_SCHEMA_VERSION_MULTI_FILE
@@ -284,8 +280,7 @@ struct MatchRun {
 /// (multi = the raw-bundle regime).
 struct MatchContext<'a, 's> {
     prior: &'a str,
-    bundler: &'a str,
-    minifier: &'a str,
+    never_rename: humanify_core::rename::eligibility::NeverRename,
     name_profile: humanify_core::rename::name_profile::NameProfile,
     multi: bool,
     side: &'a humanify_core::prior::StageSide<'a, 's>,
@@ -309,8 +304,7 @@ impl MatchRun {
     ) -> Result<(), String> {
         let MatchContext {
             prior,
-            bundler,
-            minifier,
+            never_rename,
             name_profile,
             multi,
             side,
@@ -338,8 +332,7 @@ impl MatchRun {
         // borrows it (`match_stage_with_prior`), never rebuilds it.
         let section = humanify_core::prior::match_stage_with_prior(
             &fresh,
-            Some(bundler),
-            Some(minifier),
+            never_rename,
             *side,
             !multi,
             |stage| {

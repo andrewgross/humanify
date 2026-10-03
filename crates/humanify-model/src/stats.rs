@@ -14,7 +14,8 @@
 //! (2026-09-29) is always written by the current writer and ABSENT on every
 //! recorded pre-2026-09-29 scorecard — strictly additive, so those files
 //! still strict-parse and re-emit byte-identically. The `waveGauges` block
-//! (2026-10-02, finding #66's instrumentation) follows the same rule.
+//! (2026-10-02, finding #66's instrumentation) and the `toolchain` block
+//! (2026-10-04, the run's plugin pieces) follow the same rule.
 //!
 //! Every record's key order was read from its TS construction site (cited)
 //! and is proven by the byte round trip over the oracle runs' stats files.
@@ -334,7 +335,7 @@ js_record! {
     }
 }
 
-pub use crate::pipeline::PipelineSelectionRecord;
+pub use crate::pipeline::{PipelineSelectionRecord, ToolchainPieceRecord};
 
 js_record! {
     /// The 2026-09-28 collision-retry fixes' counters (ProcessorReport's
@@ -438,6 +439,11 @@ js_record! {
         /// from this writer (all-zero included); ABSENT on every earlier
         /// recorded scorecard — the `reask` precedent, verbatim.
         wave_gauges: Option<WaveGaugesStats> = "waveGauges",
+        /// The `toolchain` block (2026-10-04): the plugin pieces the run
+        /// used and why each was chosen. ALWAYS written on runs from this
+        /// writer; ABSENT on every earlier recorded scorecard — the
+        /// `reask` precedent, verbatim.
+        toolchain: Option<Vec<ToolchainPieceRecord>> = "toolchain",
     }
 }
 

@@ -350,8 +350,10 @@ pub struct ManifestCapture {
 /// The manifest (`BunModulesManifest`).
 #[derive(Serialize, Clone, Debug)]
 pub struct BunModulesManifest {
-    /// Always "bun" — distinguishes from other adapters that might write
-    /// JSON here.
+    /// The stamp of the adapter that wrote the record
+    /// (`UnpackAdapter::vendor_record_stamp`: "bun" or "esbuild") — the
+    /// finish re-links only records a registered vendor-record adapter
+    /// wrote.
     pub adapter: &'static str,
     /// Which function wrote the `structuralHash` bytes
     /// (`super::FACTORY_HASH_VERSION`). Absent from every TS-written

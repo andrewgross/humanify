@@ -223,8 +223,7 @@ fn graph_rows_assign_to_their_enclosing_statement() {
         ingest.program,
         "input.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let fresh = inventory_of(&fresh_bundle(), FRESH_ANCHOR, Some(&graph));
 

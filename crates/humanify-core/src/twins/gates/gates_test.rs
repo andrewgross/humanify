@@ -264,8 +264,7 @@ fn with_twin_sides_classified(
     let input = PriorMatchInput {
         fresh: fresh_code,
         prior: prior_code,
-        bundler: None,
-        minifier: None,
+        never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
         fast: false,
         same_program_check: true,
     };
@@ -345,16 +344,14 @@ fn with_gate_sides(
         prior_ingest.program,
         "prior.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let fresh_graph = build_unified_graph(
         fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
         &[],
-        None,
-        None,
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
     );
     let prior_side = GraphSide::build(&prior_graph, prior_ingest.semantic());
     let fresh_side = GraphSide::build(&fresh_graph, fresh_ingest.semantic());
