@@ -205,8 +205,9 @@ carried by content) or refused with a WARNING line. Details:
 `experiments/034-eval-harness/README.md`, "Scoring a Rust binary".
 
 **The self-hop gate has two halves (00-control §3, 2026-09-25).** The COLD
-self-hop never reads 0: every cold run on record differs by 92–180 bundle
-lines, because the LLM re-rolls. That count must fall inside the range in
+self-hop rarely reads 0, because the LLM re-rolls: on the scratch-base
+protocol the three same-commit reference runs read 2, 32 and 184 bundle lines
+(the seeded-era range was 92–180). That count must fall inside the range in
 `experiments/034-eval-harness/self-hop-reference.json` (2.1.216 only). The
 WARM self-hop (always run) replays a scratch copy
 of the cache the cold leg filled, and it must be byte-identical with 0 cache
@@ -216,9 +217,10 @@ cache or on another version.
 
 ```bash
 experiments/034-eval-harness/run.sh <label>   # score current tree on 4 pairs (~1hr)
-npx tsx experiments/034-eval-harness/leaderboard.ts archive-shipped session-2026-08-05 <label>
-#   ^ both references are SEEDED-base: <label> must be scored with --seeded-base,
-#     or the leaderboard refuses the mix (--force-mixed to show it anyway)
+npx tsx experiments/034-eval-harness/leaderboard.ts ref-scratch-0f338ffa-r1 <label>
+#   ^ the current reference (scratch bases, the default). Comparing against a
+#     SEEDED-base label (everything before 2026-10-03) needs --seeded-base on
+#     <label>, or the leaderboard refuses the mix (--force-mixed to show it anyway)
 ```
 
 Confirm the **reducible** KPIs (`noise`, `reloc`, `mints`) went **down** and that
@@ -235,11 +237,21 @@ circulated before the bands existed is superseded folklore. Details:
 name.** Check a reference's `*-run-status.json` before citing it: absent is
 UNKNOWN, not passing.
 
-- **`main-2026-09-18` — the current valid cold reference**, scored at
+- **`ref-scratch-0f338ffa-r1/r2/r3` — the current valid cold reference**
+  (2026-10-03), the first on SCRATCH bases (the default): three same-commit
+  cold repeats of main `0f338ffa` on the 8× gpt-oss-20b server (vLLM 0.30,
+  nginx in front, `-c 472`). All 12 pairs exit 0, boots OK, warm self-hops
+  byte-identical. They set the committed `noise-bands.json` and the self-hop
+  range. novel 4,188 / realLn 416,377 (byte-equal across all three and to
+  every prior reference); treeLn 147,218–147,234; noiseLn 47,593–48,969;
+  vendorLn ~1,500. Every movement vs the shipped binary on scratch bases
+  (`control-843826be-scratch`) was reviewed against the outputs:
+  `/work/post-cutover-notes.md` (2026-10-03) and `/work/eval-review-2026-10-03-ref/`.
+- `main-2026-09-18` — the last SEEDED-base reference, scored at
   `1813577` (main; exp088 skeleton-vote merged, model back on gpt-oss-20b
   :8000). Four pairs, all exit 0, `cache +0` on every pair, SEEDED bases
   (rebuilt with the archive as prior — compare only against `--seeded-base`
-  runs; there is no scratch-base reference yet). Hold columns byte-equal to ALL THREE prior references (novel 4,188
+  runs). Hold columns byte-equal to ALL THREE prior references (novel 4,188
   / realLn 416,377). 215→216 tree churn ex-build 24,768 (was 24,947),
   nameOnlyLines 4,544 (was 4,734 — the exp088 merge). **Boot verdicts were
   RE-RECORDED after the run:** the harness's own boot check failed on all

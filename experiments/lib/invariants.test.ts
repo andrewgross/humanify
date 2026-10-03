@@ -293,12 +293,14 @@ describe("the 5b self-hop gate: cold inside the reference range, warm byte-ident
     ...over
   });
 
-  it("the committed reference is the four cold self-hops on record", () => {
+  it("the committed reference is the scratch-base protocol's three cold repeats", () => {
+    // Re-recorded 2026-10-03: the scratch-base default's same-commit repeats
+    // (ref-scratch-0f338ffa-r1..r3). The seeded-era range was 92-180.
     const ref = loadSelfHopReference();
     assert.strictEqual(ref.version, "2.1.216");
     assert.deepStrictEqual(
       Object.values(ref.coldDiffLines).sort((a, b) => a - b),
-      [92, 96, 114, 180]
+      [2, 32, 184]
     );
   });
 
