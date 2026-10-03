@@ -1812,3 +1812,201 @@ fn optional_chain_nodes_match_babel_shapes() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// numbers are not evidence of change inside a matched function (finding #70)
+// ---------------------------------------------------------------------------
+
+/// The React-compiler memo shape of the 2026-10-02 eval finding (2.1.119
+/// `renderApp`: `.c(126)` → `.c(131)`): one upstream edit renumbers the
+/// memo-cache size and EVERY slot index after it. Prior and next below
+/// differ only by names, by every slot number shifted +5, and by one NEW
+/// slot block (a different shape) inserted in the middle. With exact
+/// numbers no statement that mentions the cache aligns, so the cache
+/// itself and every block-scoped local inside a slot block lose their
+/// carried names. With numbers masked they all carry — and to the RIGHT
+/// slot: the two same-shape slot blocks (`rows`/`cols`) pair in order,
+/// not slid by one onto the inserted block.
+const PRIOR_MEMO: &str = r#"
+    function App(props) {
+      let memoCache = X.c(106);
+      let headerEl;
+      if (memoCache[58] === Symbol.for("react.memo_cache_sentinel")) {
+        let headerTitle = mk.header(props.title);
+        headerEl = headerTitle;
+        memoCache[58] = headerEl;
+      } else headerEl = memoCache[58];
+      let rowsEl;
+      if (memoCache[59] !== props) {
+        let rowItems = mk.rows(props);
+        rowsEl = rowItems;
+        memoCache[59] = props;
+        memoCache[60] = rowsEl;
+      } else rowsEl = memoCache[60];
+      let colsEl;
+      if (memoCache[61] !== props) {
+        let colItems = mk.rows(props);
+        colsEl = colItems;
+        memoCache[61] = props;
+        memoCache[62] = colsEl;
+      } else colsEl = memoCache[62];
+      return mk.render(headerEl, rowsEl, colsEl);
+    }"#;
+
+const NEXT_MEMO: &str = r#"
+    function App(a) {
+      let t = X.c(111);
+      let b;
+      if (t[63] === Symbol.for("react.memo_cache_sentinel")) {
+        let c = mk.header(a.title);
+        b = c;
+        t[63] = b;
+      } else b = t[63];
+      let n;
+      if (t[64] !== a.badge) {
+        let m = mk.badge(a.badge, 3);
+        n = m;
+        t[64] = a.badge;
+        t[65] = n;
+      } else n = t[65];
+      let d;
+      if (t[66] !== a) {
+        let e = mk.rows(a);
+        d = e;
+        t[66] = a;
+        t[67] = d;
+      } else d = t[67];
+      let f;
+      if (t[68] !== a) {
+        let g = mk.rows(a);
+        f = g;
+        t[68] = a;
+        t[69] = f;
+      } else f = t[69];
+      return mk.render(b, n, d, f);
+    }"#;
+
+#[test]
+fn react_memo_slot_renumbering_still_carries_locals_to_the_right_slot() {
+    with_fn_pair(PRIOR_MEMO, NEXT_MEMO, |prior, next| {
+        let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+        let want = [
+            ("t", "memoCache"),
+            ("c", "headerTitle"),
+            ("e", "rowItems"),
+            ("g", "colItems"),
+        ];
+        for (fresh, prior_name) in want {
+            assert_eq!(
+                transfers.get(fresh).map(String::as_str),
+                Some(prior_name),
+                "{fresh} must carry {prior_name} (renumbered memo slots are the same \
+                 statements); transfers={transfers:?}"
+            );
+        }
+        assert!(
+            !transfers.contains_key("m"),
+            "the INSERTED slot's local has no prior counterpart; transfers={transfers:?}"
+        );
+    });
+}
+
+/// The tie-break: two statements identical except for their constants are
+/// one masked group — the exact numbers decide which pairs with which, so
+/// a reorder is followed instead of pairing by position.
+#[test]
+fn same_shape_statements_pair_by_their_constants() {
+    with_fn_pair(
+        r#"function host(input) {
+      let small = input.pick(1);
+      let large = input.pick(2);
+      return [small, large];
+    }"#,
+        r#"function host(q) {
+      let y = q.pick(2);
+      let x = q.pick(1);
+      return [x, y];
+    }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(transfers.get("x").map(String::as_str), Some("small"));
+            assert_eq!(transfers.get("y").map(String::as_str), Some("large"));
+        },
+    );
+}
+
+/// A masked group whose counts differ means a same-shape statement was
+/// inserted or removed inside it — nobody can say which renumbered
+/// statement pairs with which, so masking pairs NOTHING there: `y`
+/// (`pick(25)`) must not inherit `second` (`pick(20)`) by position. What
+/// still pairs is exactly what paired before masking existed — a
+/// statement whose constants match exactly (`x`, `pick(10)`). Masking
+/// never creates a transfer in an unequal group, and never removes one
+/// the exact constants proved (the 2.1.198 counterfactual: a block of
+/// `let a = 0; let b = 3; let c = 2; …` counters gained one member, and
+/// refusing the whole masked group lost four correct carries).
+#[test]
+fn a_masked_group_with_unequal_counts_pairs_only_by_exact_constants() {
+    with_fn_pair(
+        r#"function host(input) {
+      let first = input.pick(10);
+      let second = input.pick(20);
+      return [first, second];
+    }"#,
+        r#"function host(q) {
+      let x = q.pick(10);
+      let z = q.pick(15);
+      let y = q.pick(25);
+      return [x, z, y];
+    }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            for fresh in ["y", "z"] {
+                assert!(
+                    !transfers.contains_key(fresh),
+                    "{fresh}: an unequal masked group must pair nothing by position; \
+                     transfers={transfers:?}"
+                );
+            }
+            assert_eq!(
+                transfers.get("x").map(String::as_str),
+                Some("first"),
+                "an exact-constant pair inside an unequal masked group still pairs, \
+                 as it did before masking; transfers={transfers:?}"
+            );
+        },
+    );
+}
+
+/// The positional fallback never CROSSES a pair the constants fixed: prior
+/// `pick(1), pick(2), pick(3)` vs next `pick(2), pick(3), pick(4)` — 2 and
+/// 3 pair by their constants; the leftovers (the removed `pick(1)` and the
+/// added `pick(4)`) sit on opposite sides of those anchors, so pairing them
+/// would contradict the order the constants proved. Refused.
+#[test]
+fn positional_fallback_never_crosses_a_constant_anchored_pair() {
+    with_fn_pair(
+        r#"function host(input) {
+      let one = input.pick(1);
+      let two = input.pick(2);
+      let three = input.pick(3);
+      return [one, two, three];
+    }"#,
+        r#"function host(q) {
+      let b = q.pick(2);
+      let c = q.pick(3);
+      let d = q.pick(4);
+      return [b, c, d];
+    }"#,
+        |prior, next| {
+            let transfers = transfer_map(&compute_body_local_transfers(prior, next));
+            assert_eq!(transfers.get("b").map(String::as_str), Some("two"));
+            assert_eq!(transfers.get("c").map(String::as_str), Some("three"));
+            assert!(
+                !transfers.contains_key("d"),
+                "d (pick(4)) must not inherit `one` (pick(1)) across the anchors; \
+                 transfers={transfers:?}"
+            );
+        },
+    );
+}

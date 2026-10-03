@@ -13,7 +13,10 @@
 //! Precision gates (a wrong transfer is worse than a missed one):
 //! - Statements pair only within equal-count same-hash groups (unique
 //!   hashes are the size-1 case). An unequal group means an edit landed
-//!   inside it, so the whole group is skipped.
+//!   inside it, so the group pairs nothing by position. The GROUP hash
+//!   masks numbers (see "THE NUMBER POLICY" below); inside a group the
+//!   exact numbers break the tie, and a positional pair that would cross
+//!   a pair the numbers fixed is refused.
 //! - Declaration anchor: a function-owned binding transfers only when its
 //!   declaration lives inside an aligned statement — its defining content
 //!   is provably unchanged. Use-sites alone never carry a name.
@@ -76,9 +79,42 @@
 //! the unit hashes actually match the TS's own sha256-16 digests when the
 //! streams do.
 //!
+//! # THE NUMBER POLICY — function identity vs local-name alignment
+//!
+//! Function identity (which prior function a new one IS — MatchKey
+//! fingerprints, statement twins) keeps numbers EXACT (exp093). This
+//! module answers a different question: the function is ALREADY matched,
+//! and the question is which of its statements are the same statement.
+//! Here a number is not evidence of change: a React-compiler component
+//! renumbers its memo cache on every upstream edit (`X.c(126)` →
+//! `X.c(131)`, `cache[58]` → `cache[63]`), and with exact numbers none of
+//! those statements aligned — their locals lost their carried names and
+//! went to the model (finding #70: 2.1.119 `renderApp`, +332 real lines
+//! across the eval). So:
+//! - statements GROUP by the numbers-masked unit hash
+//!   (`HashedUnit::masked_hash`; every number/bigint token reduced to its
+//!   class), with the equal-count rule applied to the masked group;
+//! - inside an equal masked group the EXACT hash is the tie-break:
+//!   same-constant statements pair first (two lines that differ only by a
+//!   constant pair by it), the rest pair by ordinal, and an ordinal pair
+//!   that would cross a constant-fixed pair is refused;
+//! - an unequal masked group pairs nothing by position — masking never
+//!   creates a pair there; only its exact-constant pairs stand, which are
+//!   exactly the pairs the exact-number alignment made. So every pair the
+//!   exact alignment makes is still made, and masking only ADDS pairs
+//!   inside equal-count groups (refusing the whole unequal group instead
+//!   lost correct carries on the real 2.1.198 pair: a run of
+//!   `let a = 0; let b = 3; …` counters that gained one member);
+//! - the declaration-anchor and unanimity gates are untouched, and the
+//!   snap gate's definition hash and the switch-case test signature keep
+//!   numbers exact (they decide a forced snap and a case pairing — not
+//!   this question).
+//!
 //! Policies, all through the one walk:
 //! - unit hashes and the snap gate's definition hash: strings blurred
-//!   (`preserveLiterals: false`), numbers and bigints EXACT (exp093);
+//!   (`preserveLiterals: false`), numbers and bigints EXACT (exp093) —
+//!   the unit's alignment GROUP key additionally masks the numbers (the
+//!   number policy above);
 //! - switch-case pairing's test signature (TS `computeStructuralSignature`
 //!   :1013 = `hashAndMapPath(path, true)`) — `case "open"` and
 //!   `case "data"` blur to the same statement hash, so a reordered case
@@ -255,7 +291,14 @@ struct HashedUnit<'v> {
     /// The unit's node type (`path.node.type` for the type-unique
     /// remainders).
     type_name: String,
+    /// The unit hash with numbers and bigints EXACT — the tie-break
+    /// inside a masked group (see [`align_statements`]).
     hash: String,
+    /// The same walk with every number/bigint token masked — the
+    /// alignment GROUP key: a renumbered constant (a React memo slot
+    /// shifted by an upstream edit) is not evidence the statement
+    /// changed.
+    masked_hash: String,
     /// (slot, symbol, name) in first-occurrence order.
     mapping: Vec<(String, Option<SymbolId>, String)>,
     /// slot string → index into `mapping`.
@@ -340,6 +383,7 @@ fn hash_units<'v>(units: Vec<&'v Value>, tables: &SymbolTables) -> Vec<HashedUni
             span,
             type_name,
             hash: sha256_16(walk.parts.join("").as_bytes()),
+            masked_hash: sha256_16(walk.numbers_masked().as_bytes()),
             mapping: walk.mapping,
             slot_index,
         }
@@ -350,6 +394,22 @@ fn hash_units<'v>(units: Vec<&'v Value>, tables: &SymbolTables) -> Vec<HashedUni
 struct UnitWalk {
     parts: Vec<String>,
     mapping: Vec<(String, Option<SymbolId>, String)>,
+    /// Indices into `parts` of the number/bigint literal tokens.
+    number_tokens: Vec<usize>,
+}
+
+impl UnitWalk {
+    /// The stream with every number/bigint token replaced by its bare
+    /// class marker (`N`/`B`) — the alignment group key's input. The
+    /// slot ordinals are untouched (a literal never occupies a slot), so
+    /// two units with equal masked streams still have aligned slot sets.
+    fn numbers_masked(&self) -> String {
+        let mut masked = self.parts.clone();
+        for &i in &self.number_tokens {
+            masked[i] = masked[i][..1].to_string();
+        }
+        masked.join("")
+    }
 }
 
 /// The token walk over one node ([`Tokenizer`]) — TS
@@ -361,6 +421,7 @@ fn walk_unit(value: &Value, tables: &SymbolTables, keep: bool) -> UnitWalk {
     UnitWalk {
         parts: tokenizer.parts,
         mapping: tokenizer.mapping,
+        number_tokens: tokenizer.number_tokens,
     }
 }
 
@@ -394,43 +455,124 @@ fn unit_hash(value: &Value, tables: &SymbolTables, keep: bool) -> String {
     sha256_16(walk.parts.join("").as_bytes())
 }
 
-/// Insertion-ordered groups of unit indices by hash (TS `groupByHash`
-/// :79 — a Map keyed by hash, so iteration order is first-seen order).
-fn group_indices<'a>(units: &'a [HashedUnit<'_>]) -> Vec<(&'a str, Vec<usize>)> {
+/// Insertion-ordered groups of the given unit indices by a hash key (TS
+/// `groupByHash` :79 — a Map keyed by hash, so iteration order is
+/// first-seen order).
+fn group_indices<'a>(
+    units: &'a [HashedUnit<'_>],
+    members: impl IntoIterator<Item = usize>,
+    key: fn(&'a HashedUnit<'_>) -> &'a str,
+) -> Vec<(&'a str, Vec<usize>)> {
     let mut order: Vec<(&str, Vec<usize>)> = Vec::new();
     let mut index: HashMap<&str, usize> = HashMap::new();
-    for (i, unit) in units.iter().enumerate() {
-        match index.get(unit.hash.as_str()) {
+    for i in members {
+        let k = key(&units[i]);
+        match index.get(k) {
             Some(&g) => order[g].1.push(i),
             None => {
-                index.insert(unit.hash.as_str(), order.len());
-                order.push((unit.hash.as_str(), vec![i]));
+                index.insert(k, order.len());
+                order.push((k, vec![i]));
             }
         }
     }
     order
 }
 
-/// Content-aligns statements (TS `alignStatements` :97): same-hash groups
-/// with equal counts on both sides pair by ordinal (source order).
-/// Unequal counts mean an insertion or removal landed inside the group
-/// and every pairing after it would shift — skip the group.
+/// The alignment group key: the numbers-masked unit hash.
+fn masked_key<'a>(unit: &'a HashedUnit<'_>) -> &'a str {
+    unit.masked_hash.as_str()
+}
+
+/// The tie-break key: the exact unit hash.
+fn exact_key<'a>(unit: &'a HashedUnit<'_>) -> &'a str {
+    unit.hash.as_str()
+}
+
+/// Content-aligns statements (TS `alignStatements` :97, with the number
+/// policy of finding #70). Statements GROUP by their numbers-masked hash
+/// and [`pair_masked_group`] pairs each group present on both sides. When
+/// the group's counts are equal, its renumbered statements may pair by
+/// position; when they differ, an insertion or removal landed inside the
+/// group and every positional pairing after it would shift — so only the
+/// exact-constant pairs stand there, which is precisely what the
+/// exact-number alignment paired before masking. Every pair the exact
+/// alignment makes is therefore still made; masking only ADDS pairs, and
+/// only inside equal-count groups.
 fn align_statements(prior: &[HashedUnit], next: &[HashedUnit]) -> Vec<(usize, usize)> {
-    let prior_groups = group_indices(prior);
-    let next_groups = group_indices(next);
+    let prior_groups = group_indices(prior, 0..prior.len(), masked_key);
+    let next_groups = group_indices(next, 0..next.len(), masked_key);
     let next_by: HashMap<&str, &Vec<usize>> = next_groups.iter().map(|(h, v)| (*h, v)).collect();
     let mut pairs = Vec::new();
     for (hash, prior_list) in prior_groups {
         let Some(next_list) = next_by.get(hash) else {
             continue;
         };
-        if next_list.len() != prior_list.len() {
-            continue;
-        }
-        for i in 0..prior_list.len() {
-            pairs.push((prior_list[i], next_list[i]));
+        let positional = next_list.len() == prior_list.len();
+        pairs.extend(pair_masked_group(
+            prior,
+            next,
+            &prior_list,
+            next_list,
+            positional,
+        ));
+    }
+    pairs
+}
+
+/// Pairs one masked group (both lists in source order).
+///
+/// 1. ANCHORS: inside the group, statements whose EXACT hashes (numbers
+///    included) form an equal-count subgroup pair by ordinal — two lines
+///    that differ only by a constant pair by that constant, so a reorder
+///    is followed. These are exactly the pairs the exact-number
+///    alignment made.
+/// 2. Only when `positional` (the group's counts are equal on both
+///    sides): the rest pair by ordinal among themselves (their counts are
+///    equal because the group's and every anchored subgroup's are) — the
+///    renumbered statements, whose constants match nothing. A leftover
+///    pair that would CROSS an anchor (before it on one side, after it on
+///    the other) contradicts the order the constants proved — a removed
+///    statement and an added one meeting across the anchors — and is
+///    refused.
+///
+/// A group with no numbers has one exact subgroup equal to itself, so it
+/// pairs exactly as before (ordinal, source order, equal counts only).
+/// The output is in prior source order.
+fn pair_masked_group(
+    prior: &[HashedUnit],
+    next: &[HashedUnit],
+    prior_list: &[usize],
+    next_list: &[usize],
+    positional: bool,
+) -> Vec<(usize, usize)> {
+    let prior_exact = group_indices(prior, prior_list.iter().copied(), exact_key);
+    let next_exact = group_indices(next, next_list.iter().copied(), exact_key);
+    let next_exact_by: HashMap<&str, &Vec<usize>> =
+        next_exact.iter().map(|(h, v)| (*h, v)).collect();
+    let mut anchors: Vec<(usize, usize)> = Vec::new();
+    for (hash, prior_sub) in &prior_exact {
+        if let Some(next_sub) = next_exact_by.get(hash)
+            && next_sub.len() == prior_sub.len()
+        {
+            anchors.extend(prior_sub.iter().copied().zip(next_sub.iter().copied()));
         }
     }
+    if !positional {
+        anchors.sort_unstable();
+        return anchors;
+    }
+    let anchored_prior: BTreeSet<usize> = anchors.iter().map(|&(p, _)| p).collect();
+    let anchored_next: BTreeSet<usize> = anchors.iter().map(|&(_, n)| n).collect();
+    let rest_prior = prior_list.iter().filter(|i| !anchored_prior.contains(i));
+    let rest_next = next_list.iter().filter(|i| !anchored_next.contains(i));
+    let crosses = |p: usize, n: usize| anchors.iter().any(|&(ap, an)| (p < ap) != (n < an));
+    let mut pairs: Vec<(usize, usize)> = rest_prior
+        .zip(rest_next)
+        .map(|(&p, &n)| (p, n))
+        .filter(|&(p, n)| !crosses(p, n))
+        .collect();
+    pairs.extend(anchors);
+    pairs.sort_unstable();
     pairs
 }
 
@@ -1421,6 +1563,9 @@ struct Tokenizer<'a> {
     /// literals (false); content shingles and the switch-case test
     /// signature keep them verbatim (true).
     keep: bool,
+    /// Indices into `parts` of every number/bigint literal token — what
+    /// [`UnitWalk::numbers_masked`] masks for the alignment group key.
+    number_tokens: Vec<usize>,
     tables: &'a SymbolTables,
     /// Inside an oxc ChainExpression subtree: babel delimits the same nodes
     /// with Optional* types instead of a wrapper, so the walk translates
@@ -1438,6 +1583,7 @@ impl<'a> Tokenizer<'a> {
             label_slots: HashMap::new(),
             counter: 0,
             keep,
+            number_tokens: Vec::new(),
             tables,
             chain: false,
         }
@@ -1488,6 +1634,11 @@ impl<'a> Tokenizer<'a> {
         }
 
         if let Some(tokens) = literal_tokens(map, &node_type, self.keep) {
+            if let [token] = tokens.as_slice()
+                && (token.starts_with("N=") || token.starts_with("B="))
+            {
+                self.number_tokens.push(self.parts.len());
+            }
             self.parts.extend(tokens);
             return;
         }
