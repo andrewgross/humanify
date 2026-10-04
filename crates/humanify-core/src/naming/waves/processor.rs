@@ -38,6 +38,7 @@ use super::generate::TextView;
 use super::graph_ext::{NamingGraph, NodeRef};
 use super::jsset::{JsRecord, JsSet};
 use super::nodes::FnNode;
+use super::prompt_text::Snippet;
 use super::render::{FnPrinter, Occurrences};
 use super::taken::TakenNames;
 use super::used_set::{NameLayer, UsedSet};
@@ -1304,9 +1305,8 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         drop(ph);
         let _ph = crate::profiling::phase("setup:build-context");
         let eligible = self.inp.eligible;
-        let ctx = build_context(&view, &self.inp.ng.fn_call_sites[f], |n: &str| {
-            eligible.is_eligible(n)
-        });
+        let callsites = self.call_site_texts(f);
+        let ctx = build_context(&view, &callsites, |n: &str| eligible.is_eligible(n));
         let chain = self.scope_chain(f);
         let layers = self.used_layers(&chain);
         // The taken view over the SAME chain's renamed-name snapshots —
@@ -1326,6 +1326,20 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             },
             self.sets.len() - 1,
         )
+    }
+
+    /// The function's call sites under the CURRENT names (prompt_text),
+    /// distinct as printed.
+    fn call_site_texts(&self, f: usize) -> Vec<String> {
+        let printer = self.printer();
+        let mut out: Vec<String> = Vec::new();
+        for site in &self.inp.ng.fn_call_sites[f] {
+            let code = site.render(&printer);
+            if !out.contains(&code) {
+                out.push(code);
+            }
+        }
+        out
     }
 
     fn context_view(&self, f: usize) -> ContextView {
@@ -1821,34 +1835,42 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             unreachable!("a module strategy");
         };
         let graph = self.inp.graph;
-        let by_name: HashMap<&str, usize> = batch
-            .iter()
-            .map(|&j| (graph.module_bindings[j].name.as_str(), j))
-            .collect();
         let remaining = &call.batch;
-        let mut declarations: Vec<String> = Vec::new();
-        for id in remaining {
-            if let Some(&j) = by_name.get(id.as_str()) {
-                let d = &self.inp.ng.mb_text[j].declaration;
-                if !declarations.contains(d) {
-                    declarations.push(d.clone());
+        // The asked bindings print under their minified names (that is
+        // what is asked); everything else under the names current now.
+        let keep: Vec<BindingId> = remaining
+            .iter()
+            .filter_map(|n| self.state.binding_in(self.target_scope, n))
+            .collect();
+        let printer = self.printer();
+        let render = |snippets: &[Snippet]| -> Vec<String> {
+            let mut out: Vec<String> = Vec::new();
+            for s in snippets {
+                let code = s.render(&printer, &keep);
+                if !code.is_empty() && !out.contains(&code) {
+                    out.push(code);
                 }
             }
-        }
+            out
+        };
         let is_retry = call.round > 1;
         let prompt_names = if is_retry {
             build_retry_used_names(windowed, &call.prev)
         } else {
             windowed.clone()
         };
+        let mut declarations = Vec::new();
         let mut assignment = Vec::new();
         let mut usage = Vec::new();
         let mut suggested = Vec::new();
         for &j in batch {
             let name = graph.module_bindings[j].name.clone();
-            let t = &self.inp.ng.mb_text[j];
-            assignment.push((name.clone(), t.assignments.clone()));
-            usage.push((name.clone(), t.usages.clone()));
+            if remaining.contains(&name) {
+                let t = &self.inp.ng.mb_text[j];
+                declarations.push((name.clone(), t.declaration.render(&printer, &keep)));
+                assignment.push((name.clone(), render(&t.assignments)));
+                usage.push((name.clone(), render(&t.usages)));
+            }
             if let Some(s) = &self.inp.suggested[j]
                 && !s.is_empty()
             {
@@ -1856,7 +1878,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             }
         }
         let input = ModuleLevelInput {
-            declarations,
+            declarations: StrMap(dedup_record(declarations)),
             assignment_context: ArrayRecord(dedup_record(assignment)),
             usage_examples: ArrayRecord(dedup_record(usage)),
             identifiers: remaining.clone(),

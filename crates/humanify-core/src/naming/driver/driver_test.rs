@@ -20,14 +20,34 @@ fn call_sites(text: &str) -> Vec<(String, Vec<String>)> {
         crate::graph::Eligibility::All,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
-    let view = TextView::build(ingest.semantic());
-    let ng = build_naming_graph(ingest.semantic(), &parts.graph, &view);
+    let semantic = ingest.semantic();
+    let view = TextView::build(semantic);
+    let ng = build_naming_graph(semantic, &parts.graph, &view);
+    // Printed as a prompt prints them, under a state with no renames.
+    let state = crate::rename::validated::RenameState::new(
+        semantic,
+        crate::trail::Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
+    let occ = crate::naming::waves::render::Occurrences::build(semantic, &state);
+    let fns = crate::naming::waves::render::FnPrinter::nodes(semantic, &parts.graph);
+    let printer = crate::naming::waves::render::FnPrinter {
+        semantic,
+        view: &view,
+        graph: &parts.graph,
+        state: &state,
+        occ: &occ,
+        fns: &fns,
+    };
     parts
         .graph
         .functions
         .iter()
-        .zip(ng.fn_call_sites)
-        .map(|(f, s)| (f.session_id.clone(), s))
+        .zip(&ng.fn_call_sites)
+        .map(|(f, s)| {
+            let codes = s.iter().map(|c| c.render(&printer)).collect();
+            (f.session_id.clone(), codes)
+        })
         .collect()
 }
 
@@ -952,4 +972,159 @@ console.log(require_dep().label(appCounter));
             "{name} is not left to the coverage sweep: {rows:#?}"
         );
     }
+}
+
+/// A provider naming every requested identifier a fresh descriptive word
+/// (`renamedA`, `renamedB`, … — never a minified stem, so no answer is
+/// refused) and keeping every user prompt it was sent, in dispatch order.
+#[derive(Default)]
+struct RecordingProvider {
+    prompts: std::sync::Mutex<Vec<String>>,
+    minted: std::sync::Mutex<usize>,
+}
+
+impl RecordingProvider {
+    fn mint(&self) -> String {
+        let mut n = self.minted.lock().expect("lock");
+        let mut k = *n;
+        *n += 1;
+        let mut word = String::from("renamed");
+        loop {
+            word.push(char::from(b'A' + (k % 26) as u8));
+            k /= 26;
+            if k == 0 {
+                return word;
+            }
+        }
+    }
+}
+
+impl humanify_model::llm::NameProvider for RecordingProvider {
+    fn run_wave(
+        &self,
+        calls: Vec<humanify_model::llm::LlmCall>,
+    ) -> Vec<Result<humanify_model::llm::BatchRenameResponse, humanify_model::llm::LlmError>> {
+        let mut seen = self.prompts.lock().expect("lock");
+        seen.extend(calls.iter().map(|c| c.user_prompt.clone()));
+        drop(seen);
+        calls
+            .into_iter()
+            .map(|c| {
+                Ok(humanify_model::llm::BatchRenameResponse {
+                    renames: humanify_model::llm::Renames::from_entries(
+                        c.request
+                            .identifiers
+                            .iter()
+                            .map(|i| (i.clone(), Some(self.mint()))),
+                    ),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+/// Every user prompt a fresh run of `fresh` sends, in dispatch order.
+fn prompts_of(fresh: &str, group: usize) -> Vec<String> {
+    let provider = RecordingProvider::default();
+    let mut config = ledger_config();
+    config.module_group_size = group;
+    super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &provider,
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    provider.prompts.into_inner().expect("lock")
+}
+
+/// The one prompt that asks for `id` in its first round.
+fn first_ask<'p>(prompts: &'p [String], id: &str) -> &'p str {
+    let module = format!("Identifier: {id}\n");
+    prompts
+        .iter()
+        .find(|p| {
+            p.contains(&module)
+                || p.lines().any(|l| {
+                    l.strip_prefix("Identifiers to rename: ")
+                        .is_some_and(|ids| ids.split(", ").any(|i| i == id))
+                })
+        })
+        .unwrap_or_else(|| panic!("no prompt asks for {id}: {prompts:#?}"))
+}
+
+/// `word` appears in `text` as a whole identifier.
+fn mentions(text: &str, word: &str) -> bool {
+    text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
+        .any(|t| t == word)
+}
+
+/// 2026-10-04 (refusal outcomes): a prompt shows the code under the names
+/// CURRENT at the moment of asking. `Co9`, `W` and `PT8` are all named
+/// before `JT8` is asked; its declaration used to be the text captured at
+/// graph time — `var JT8 = W(() => { PT8 = Co9; })` — so the only words
+/// the model could see were the minified ones it then borrowed. The asked
+/// identifier itself keeps its minified name (that is what is asked).
+#[test]
+fn a_module_prompt_shows_the_names_already_applied() {
+    let fresh = "function Co9(x) {\n  return x + 1;\n}\nvar PT8;\nvar JT8 = W(() => {\n  PT8 = Co9;\n});\nfunction W(f) {\n  return f;\n}\nJT8();\nconsole.log(PT8(2));\n";
+    let prompts = prompts_of(fresh, 1);
+    let jt8 = first_ask(&prompts, "JT8");
+    assert!(jt8.contains("var JT8 = "), "the asked name stays: {jt8}");
+    for stale in ["Co9", "W", "PT8"] {
+        assert!(
+            !mentions(jt8, stale),
+            "{stale} was named before JT8 was asked: {jt8}"
+        );
+    }
+}
+
+/// The same for a function's call sites ("This function is called as:"):
+/// `Co9` is named in the first wave, its caller `h` in the second, and the
+/// call site of `h` inside `k` reads `Co9`'s new name.
+#[test]
+fn a_call_site_shows_the_names_already_applied() {
+    let fresh = "function Co9(x) {\n  return x + 1;\n}\nfunction h(y) {\n  return Co9(y) * 2;\n}\nfunction k() {\n  return h(Co9(1));\n}\nconsole.log(k());\n";
+    let prompts = prompts_of(fresh, 1);
+    let h = first_ask(&prompts, "h");
+    let sites = h
+        .split("This function is called as:\n")
+        .nth(1)
+        .unwrap_or_else(|| panic!("h's call sites are shown: {h}"));
+    let sites = sites.split("\n\n").next().unwrap_or_default();
+    assert!(mentions(sites, "h"), "{sites}");
+    assert!(!mentions(h, "Co9"), "Co9 was named before h was asked: {h}");
+}
+
+/// A usage excerpt shows the line that MENTIONS the asked identifier: the
+/// only use of `x0u` sits deep inside a long registration call, past the
+/// ten lines a positional cut keeps (2.1.197's env-var table: the excerpt
+/// stopped before `GOOGLE_CLOUD_WORKSTATIONS: () => x0u`).
+#[test]
+fn a_usage_excerpt_includes_the_line_naming_the_identifier() {
+    let mut fresh = String::from("var x0u = process.env.WS;\nregister({\n");
+    for i in 0..20 {
+        fresh += &format!("  KEY_{i}: () => {i},\n");
+    }
+    fresh += "  GOOGLE_CLOUD_WORKSTATIONS: () => x0u,\n";
+    for i in 20..30 {
+        fresh += &format!("  KEY_{i}: () => {i},\n");
+    }
+    fresh += "});\n";
+    let prompts = prompts_of(&fresh, 1);
+    let ask = first_ask(&prompts, "x0u");
+    let usage = ask
+        .split("  Usage:\n")
+        .nth(1)
+        .unwrap_or_else(|| panic!("a usage is shown: {ask}"));
+    assert!(
+        usage.contains("GOOGLE_CLOUD_WORKSTATIONS: () => x0u"),
+        "{ask}"
+    );
 }

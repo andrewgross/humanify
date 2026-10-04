@@ -7,8 +7,10 @@
 //! `assignments`, `usages`, `declarationLine` — collectAssignmentContext,
 //! collectUsageExamples, getDeclarationText).
 //!
-//! Everything here is computed at GRAPH-BUILD time in the TS, i.e. over
-//! the ORIGINAL (minified) names — no rename overlay is read.
+//! The structure here is computed at GRAPH-BUILD time over the ORIGINAL
+//! (minified) names. The prompt TEXTS are not: the graph records WHICH
+//! code a prompt shows (spans — [`super::prompt_text`]) and the prompt
+//! prints it at ask time under the names current then (2026-10-04).
 //!
 //! ORDER is decision input (15-porting-lessons §4): the wave membership
 //! iterates the node order, the prompt's "This function calls:" list is
@@ -19,13 +21,14 @@
 use std::collections::{HashMap, HashSet};
 
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Expression, PropertyKey};
-use oxc_semantic::{AstNodes, NodeId, Semantic};
+use oxc_ast::ast::Expression;
+use oxc_semantic::{AstNodes, NodeId, Semantic, SymbolId};
 use oxc_span::{GetSpan, Span};
 
-use humanify_model::js::{trim, utf16_len, utf16_prefix};
+use humanify_model::js::{utf16_len, utf16_prefix};
 
 use super::generate::TextView;
+use super::prompt_text::{CallSite, Cap, Snippet};
 use crate::babel_view::unparen;
 use crate::graph::UnifiedGraph;
 
@@ -38,14 +41,15 @@ pub enum NodeRef {
     Mb(usize),
 }
 
-/// A module binding's prompt material (ModuleBindingNode's text fields).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// A module binding's prompt material (ModuleBindingNode's text fields)
+/// — which code to show, printed at ask time ([`Snippet::render`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MbText {
-    pub declaration: String,
+    pub declaration: Snippet,
     /// `identifier.loc.start.line`.
     pub declaration_line: u32,
-    pub assignments: Vec<String>,
-    pub usages: Vec<String>,
+    pub assignments: Vec<Snippet>,
+    pub usages: Vec<Snippet>,
 }
 
 /// The naming graph over one fresh text.
@@ -63,8 +67,9 @@ pub struct NamingGraph {
     pub fn_scope_parent: Vec<Option<usize>>,
     /// `fn.internalCallees` in Set insertion order.
     pub fn_callees: Vec<Vec<usize>>,
-    /// `fn.callSites[].code`.
-    pub fn_call_sites: Vec<Vec<String>>,
+    /// `fn.callSites`: the first five distinct sites (distinct over the
+    /// original text), printed at ask time ([`CallSite::render`]).
+    pub fn_call_sites: Vec<Vec<CallSite>>,
     pub mb_text: Vec<MbText>,
 }
 
@@ -82,10 +87,6 @@ impl NamingGraph {
 const MAX_CALL_SITES: usize = 5;
 /// Cap on assignment + usage snippets per module binding.
 const MAX_CONTEXT_SNIPPETS: usize = 10;
-const MAX_SNIPPET_CHARS: usize = 800;
-const MAX_SNIPPET_LINES: usize = 10;
-const MAX_DECLARATION_LINES: usize = 10;
-const MAX_DECLARATION_CHARS: usize = 1000;
 
 /// Build the naming graph (`buildUnifiedGraph`'s wave-side extras).
 pub fn build_naming_graph(
@@ -298,10 +299,11 @@ fn call_sites(
     view: &TextView<'_>,
     calls: &[CallTarget],
     fn_node: &[NodeId],
-) -> Vec<Vec<String>> {
+) -> Vec<Vec<CallSite>> {
     let nodes = semantic.nodes();
     let fn_nodes: HashSet<NodeId> = fn_node.iter().copied().collect();
-    let mut sites: Vec<Vec<String>> = vec![Vec::new(); graph.functions.len()];
+    let mut codes: Vec<Vec<String>> = vec![Vec::new(); graph.functions.len()];
+    let mut sites: Vec<Vec<CallSite>> = vec![Vec::new(); graph.functions.len()];
     for c in calls {
         if !c.identifier_callee || sites[c.target].len() >= MAX_CALL_SITES {
             continue;
@@ -309,11 +311,12 @@ fn call_sites(
         if !inside_graph_function(nodes, c.node, &fn_nodes) {
             continue;
         }
-        let Some(code) = gather_call_site_code(nodes, view, c.node) else {
+        let Some((code, site)) = gather_call_site(nodes, view, c) else {
             continue;
         };
-        if !sites[c.target].contains(&code) {
-            sites[c.target].push(code);
+        if !codes[c.target].contains(&code) {
+            codes[c.target].push(code);
+            sites[c.target].push(site);
         }
     }
     sites
@@ -324,13 +327,15 @@ fn inside_graph_function(nodes: &AstNodes<'_>, node: NodeId, fn_nodes: &HashSet<
 }
 
 /// `gatherCallSiteCode`: the statement parent's compact code, expanded
-/// with up to two preceding siblings when short, capped at 200 units.
-fn gather_call_site_code(
+/// with up to two preceding siblings when short, capped at 200 units —
+/// over the ORIGINAL names (the distinctness key), with the site's spans
+/// for the ask-time print.
+fn gather_call_site(
     nodes: &AstNodes<'_>,
     view: &TextView<'_>,
-    call: NodeId,
-) -> Option<String> {
-    let stmt = statement_parent(nodes, call)?;
+    call: &CallTarget,
+) -> Option<(String, CallSite)> {
+    let stmt = statement_parent(nodes, call.node)?;
     let mut code = compact_statement(nodes, view, stmt);
     if utf16_len(&code) < 80
         && let Some(expanded) = expand_with_siblings(nodes, view, stmt)
@@ -340,7 +345,17 @@ fn gather_call_site_code(
     if utf16_len(&code) > 200 {
         code = format!("{}...", utf16_prefix(&code, 197));
     }
-    Some(code)
+    let callee = match nodes.kind(call.node) {
+        AstKind::CallExpression(c) => c.callee.span(),
+        _ => call.span,
+    };
+    let site = CallSite {
+        stmt: nodes.get_node(stmt).span(),
+        semicolon: needs_standalone_semicolon(nodes, stmt),
+        siblings: sibling_spans(nodes, stmt),
+        callee,
+    };
+    Some((code, site))
 }
 
 /// The compact print of a statement (a standalone `VariableDeclaration`
@@ -367,6 +382,17 @@ fn needs_standalone_semicolon(nodes: &AstNodes<'_>, stmt: NodeId) -> bool {
 /// siblings of its BLOCK (a function body is babel's BlockStatement),
 /// compact, newline-joined, when that fits 200 units.
 fn expand_with_siblings(nodes: &AstNodes<'_>, view: &TextView<'_>, stmt: NodeId) -> Option<String> {
+    let lines: Vec<String> = sibling_spans(nodes, stmt)?
+        .iter()
+        .map(|s| view.compact(*s))
+        .collect();
+    let combined = lines.join("\n");
+    (utf16_len(&combined) <= 200).then_some(combined)
+}
+
+/// The statement and up to two preceding siblings of its BLOCK (a
+/// function body is babel's BlockStatement); None outside a block.
+fn sibling_spans(nodes: &AstNodes<'_>, stmt: NodeId) -> Option<Vec<Span>> {
     let parent = nodes.parent_node(stmt);
     let siblings: Vec<Span> = match parent.kind() {
         AstKind::BlockStatement(b) => b.body.iter().map(GetSpan::span).collect(),
@@ -375,12 +401,7 @@ fn expand_with_siblings(nodes: &AstNodes<'_>, view: &TextView<'_>, stmt: NodeId)
     };
     let own = nodes.get_node(stmt).span();
     let idx = siblings.iter().position(|s| *s == own)?;
-    let lines: Vec<String> = siblings[idx.saturating_sub(2)..=idx]
-        .iter()
-        .map(|s| view.compact(*s))
-        .collect();
-    let combined = lines.join("\n");
-    (utf16_len(&combined) <= 200).then_some(combined)
+    Some(siblings[idx.saturating_sub(2)..=idx].to_vec())
 }
 
 /// babel `isStatement` over an oxc node (the Statement alias). An
@@ -515,48 +536,42 @@ fn module_binding_texts(
 ) -> Vec<MbText> {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
-    let names: HashMap<&str, usize> = graph
+    let by_symbol: HashMap<SymbolId, usize> = graph
         .module_bindings
         .iter()
         .enumerate()
-        .map(|(i, b)| (b.name.as_str(), i))
+        .map(|(i, b)| (b.symbol, i))
         .collect();
     let mut texts: Vec<MbText> = graph
         .module_bindings
         .iter()
-        .map(|b| MbText {
-            declaration: declaration_text(nodes, view, scoping.symbol_declaration(b.symbol)),
-            declaration_line: view.line_of(b.span.start),
-            assignments: Vec::new(),
-            usages: Vec::new(),
+        .map(|b| {
+            let id = scoping.symbol_span(b.symbol);
+            MbText {
+                declaration: declaration_snippet(
+                    nodes,
+                    scoping.symbol_declaration(b.symbol),
+                    (id.start, id.size()),
+                ),
+                declaration_line: view.line_of(b.span.start),
+                assignments: Vec::new(),
+                usages: Vec::new(),
+            }
         })
         .collect();
-    collect_assignment_context(nodes, view, &names, &mut texts);
-    collect_usage_examples(semantic, view, &names, &mut texts);
+    collect_assignment_context(semantic, view, &by_symbol, &mut texts);
+    collect_usage_examples(semantic, view, graph, &mut texts);
     texts
 }
 
-/// `capDeclarationText`.
-fn cap_declaration_text(code: String) -> String {
-    let lines: Vec<&str> = code.split('\n').collect();
-    let mut text = if lines.len() > MAX_DECLARATION_LINES {
-        format!("{}\n  // ...", lines[..MAX_DECLARATION_LINES].join("\n"))
-    } else {
-        code.clone()
-    };
-    if utf16_len(&text) > MAX_DECLARATION_CHARS {
-        text = format!("{}…", utf16_prefix(&text, MAX_DECLARATION_CHARS));
-    }
-    text
-}
-
-/// `getDeclarationText` (graph time — original names).
-fn declaration_text(nodes: &AstNodes<'_>, view: &TextView<'_>, decl: NodeId) -> String {
+/// `getDeclarationText`'s node: a declarator prints its whole declaration
+/// (capped), an import specifier its whole import declaration (UNCAPPED),
+/// anything else itself (capped).
+fn declaration_snippet(nodes: &AstNodes<'_>, decl: NodeId, id: (u32, u32)) -> Snippet {
     match nodes.kind(decl) {
         AstKind::VariableDeclarator(_) => {
-            cap_declaration_text(statement_code(nodes, view, nodes.parent_id(decl)))
+            statement_snippet(nodes, nodes.parent_id(decl), Some(id), Cap::Declaration)
         }
-        // `getImportSpecifierText`: the whole import declaration, UNCAPPED.
         AstKind::ImportSpecifier(_)
         | AstKind::ImportDefaultSpecifier(_)
         | AstKind::ImportNamespaceSpecifier(_) => {
@@ -564,61 +579,86 @@ fn declaration_text(nodes: &AstNodes<'_>, view: &TextView<'_>, decl: NodeId) -> 
             while !matches!(nodes.kind(cur), AstKind::ImportDeclaration(_)) {
                 cur = nodes.parent_id(cur);
             }
-            statement_code(nodes, view, cur)
+            statement_snippet(nodes, cur, Some(id), Cap::Whole)
         }
-        _ => cap_declaration_text(view.pretty(nodes.get_node(decl).span(), &[], true)),
+        _ => Snippet {
+            span: nodes.get_node(decl).span(),
+            layout: Vec::new(),
+            semicolon: false,
+            mention: Some(id),
+            cap: Cap::Declaration,
+        },
     }
 }
 
-/// `truncateSnippet`.
-fn truncate_snippet(code: &str) -> Option<String> {
-    let lines: Vec<&str> = code.split('\n').take(MAX_SNIPPET_LINES).collect();
-    let joined = lines.join("\n");
-    let mut snippet = trim(&joined).to_string();
-    if utf16_len(&snippet) > MAX_SNIPPET_CHARS {
-        snippet = format!("{}…", utf16_prefix(&snippet, MAX_SNIPPET_CHARS));
-    }
-    (!snippet.is_empty()).then_some(snippet)
-}
-
-/// A statement's pretty print as babel prints it alone. A for-head
-/// `VariableDeclaration` has no parent then: babel adds the terminating
-/// semicolon and, when a declarator has an init and there are several,
-/// breaks the declarators onto indented lines (`commaSeparatorWithNewline`
-/// — inline in the head because `isFor(parent)` suppressed it).
-fn statement_code(nodes: &AstNodes<'_>, view: &TextView<'_>, stmt: NodeId) -> String {
+/// A statement as babel prints it alone. A for-head `VariableDeclaration`
+/// has no parent then: babel adds the terminating semicolon and, when a
+/// declarator has an init and there are several, breaks the declarators
+/// onto indented lines (`commaSeparatorWithNewline` — inline in the head
+/// because `isFor(parent)` suppressed it).
+fn statement_snippet(
+    nodes: &AstNodes<'_>,
+    stmt: NodeId,
+    mention: Option<(u32, u32)>,
+    cap: Cap,
+) -> Snippet {
     let span = nodes.get_node(stmt).span();
-    if !needs_standalone_semicolon(nodes, stmt) {
-        return view.pretty(span, &[], true);
-    }
-    let mut edits = Vec::new();
-    if let AstKind::VariableDeclaration(d) = nodes.kind(stmt)
+    let semicolon = needs_standalone_semicolon(nodes, stmt);
+    let mut layout = Vec::new();
+    if semicolon
+        && let AstKind::VariableDeclaration(d) = nodes.kind(stmt)
         && d.declarations.len() > 1
         && d.declarations.iter().any(|x| x.init.is_some())
     {
         for w in d.declarations.windows(2) {
-            edits.push(super::generate::Replacement {
+            layout.push(super::generate::Replacement {
                 span: Span::new(w[0].span.end, w[1].span.start),
                 text: ",\n  ".to_string(),
             });
         }
     }
-    let mut code = view.pretty(span, &edits, true);
-    code.push(';');
+    Snippet {
+        span,
+        layout,
+        semicolon,
+        mention,
+        cap,
+    }
+}
+
+/// A snippet's text over the ORIGINAL names — the graph-time distinctness
+/// key (two sites printing alike are one).
+fn original_text(view: &TextView<'_>, s: &Snippet) -> String {
+    let mut code = view.pretty(s.span, &s.layout, true);
+    if s.semicolon {
+        code.push(';');
+    }
     code
 }
 
-/// `extractAssignmentTargetName`: by NAME, never by binding.
-fn assignment_target_name<'n>(
-    left: &'n oxc_ast::ast::AssignmentTarget<'_>,
-    names: &HashMap<&str, usize>,
-) -> Option<&'n str> {
+/// The module binding an identifier reference resolves to.
+fn module_binding_of(
+    scoping: &oxc_semantic::Scoping,
+    reference: Option<oxc_semantic::ReferenceId>,
+    by_symbol: &HashMap<SymbolId, usize>,
+) -> Option<usize> {
+    let symbol = scoping.get_reference(reference?).symbol_id()?;
+    by_symbol.get(&symbol).copied()
+}
+
+/// The module binding an assignment WRITES — the binding itself, or the
+/// object of a member write (`x.p = …`, drilling through one level for
+/// `x.prototype.m = …`). Resolved through the scope (2026-10-04: by NAME
+/// it also caught every same-named local of an inner scope).
+fn assignment_target(
+    scoping: &oxc_semantic::Scoping,
+    left: &oxc_ast::ast::AssignmentTarget<'_>,
+    by_symbol: &HashMap<SymbolId, usize>,
+) -> Option<usize> {
     use oxc_ast::ast::AssignmentTarget as T;
     let object = match left {
         T::AssignmentTargetIdentifier(id) => {
-            return names
-                .contains_key(id.name.as_str())
-                .then_some(id.name.as_str());
+            return module_binding_of(scoping, id.reference_id.get(), by_symbol);
         }
         T::StaticMemberExpression(m) => &m.object,
         T::ComputedMemberExpression(m) => &m.object,
@@ -626,17 +666,14 @@ fn assignment_target_name<'n>(
         _ => return None,
     };
     let object = unparen(object);
-    // x.prototype.m — drill through one level.
     if let Some(inner) = member_object(object)
         && let Expression::Identifier(id) = unparen(inner)
-        && names.contains_key(id.name.as_str())
+        && let Some(j) = module_binding_of(scoping, id.reference_id.get(), by_symbol)
     {
-        return Some(id.name.as_str());
+        return Some(j);
     }
-    if let Expression::Identifier(id) = object
-        && names.contains_key(id.name.as_str())
-    {
-        return Some(id.name.as_str());
+    if let Expression::Identifier(id) = object {
+        return module_binding_of(scoping, id.reference_id.get(), by_symbol);
     }
     None
 }
@@ -651,179 +688,91 @@ fn member_object<'n>(e: &'n Expression<'_>) -> Option<&'n Expression<'n>> {
     }
 }
 
-/// `collectAssignmentContext`: every AssignmentExpression, pre-order.
+/// `collectAssignmentContext`: every AssignmentExpression, pre-order, the
+/// statement around it — distinct over the original text, ten at most.
 fn collect_assignment_context(
-    nodes: &AstNodes<'_>,
+    semantic: &Semantic<'_>,
     view: &TextView<'_>,
-    names: &HashMap<&str, usize>,
+    by_symbol: &HashMap<SymbolId, usize>,
     texts: &mut [MbText],
 ) {
+    let nodes = semantic.nodes();
+    let scoping = semantic.scoping();
+    let mut seen: Vec<Vec<String>> = vec![Vec::new(); texts.len()];
     for node in nodes.iter() {
         let AstKind::AssignmentExpression(a) = node.kind() else {
             continue;
         };
-        let Some(name) = assignment_target_name(&a.left, names) else {
+        let Some(i) = assignment_target(scoping, &a.left, by_symbol) else {
             continue;
         };
-        let i = names[name];
         if texts[i].assignments.len() >= MAX_CONTEXT_SNIPPETS {
             continue;
         }
-        let code = match find_statement_ancestor(nodes, node.id()) {
-            Some(stmt) => statement_code(nodes, view, stmt),
-            None => view.pretty(node.span(), &[], true),
+        let mention = Some((a.span.start, a.left.span().size()));
+        let snippet = match find_statement_ancestor(nodes, node.id()) {
+            Some(stmt) => statement_snippet(nodes, stmt, mention, Cap::Snippet),
+            None => Snippet {
+                span: a.span,
+                layout: Vec::new(),
+                semicolon: false,
+                mention,
+                cap: Cap::Snippet,
+            },
         };
-        if let Some(snippet) = truncate_snippet(&code)
-            && !texts[i].assignments.contains(&snippet)
-        {
-            texts[i].assignments.push(snippet);
-        }
+        push_distinct(view, &mut seen[i], &mut texts[i].assignments, snippet);
     }
 }
 
-/// One babel `Identifier` visit position: its start, the node the
-/// ancestor walk starts FROM (the identifier's parent, or the owner node
-/// an embedded name lives in — inclusive), its name, and babel's
-/// `isBindingIdentifier()` verdict.
-struct IdentPos<'n> {
-    start: u32,
-    walk_from: NodeId,
-    name: &'n str,
-    is_binding: bool,
-}
-
-/// Every position babel's `Identifier` visitor sees, in traversal order,
-/// with the positional `isBindingIdentifier` (lesson 3: TRUE for unary /
-/// update arguments and every write target; FALSE for keys, member
-/// properties, private names and shorthand-pattern KEYS).
-fn identifier_positions<'n>(semantic: &'n Semantic<'_>) -> Vec<IdentPos<'n>> {
-    let nodes = semantic.nodes();
-    let scoping = semantic.scoping();
-    let mut out: Vec<IdentPos<'n>> = Vec::new();
-    for node in nodes.iter() {
-        let id = node.id();
-        match node.kind() {
-            AstKind::IdentifierReference(r) => {
-                let mut parent = nodes.parent_id(id);
-                while matches!(nodes.kind(parent), AstKind::ParenthesizedExpression(_)) {
-                    parent = nodes.parent_id(parent);
-                }
-                let write = r
-                    .reference_id
-                    .get()
-                    .is_some_and(|rid| scoping.get_reference(rid).is_write());
-                let unary = matches!(
-                    nodes.kind(parent),
-                    AstKind::UnaryExpression(_) | AstKind::UpdateExpression(_)
-                );
-                out.push(IdentPos {
-                    start: r.span.start,
-                    walk_from: nodes.parent_id(id),
-                    name: r.name.as_str(),
-                    is_binding: write || unary,
-                });
-            }
-            AstKind::BindingIdentifier(b) => out.push(IdentPos {
-                start: b.span.start,
-                walk_from: nodes.parent_id(id),
-                name: b.name.as_str(),
-                is_binding: true,
-            }),
-            AstKind::StaticMemberExpression(m) => out.push(IdentPos {
-                start: m.property.span.start,
-                walk_from: id,
-                name: m.property.name.as_str(),
-                is_binding: false,
-            }),
-            AstKind::ObjectProperty(p) => push_key(&mut out, &p.key, id),
-            AstKind::MethodDefinition(m) => push_key(&mut out, &m.key, id),
-            AstKind::PropertyDefinition(p) => push_key(&mut out, &p.key, id),
-            AstKind::BindingProperty(p) => push_key(&mut out, &p.key, id),
-            AstKind::AssignmentTargetPropertyProperty(p) => push_key(&mut out, &p.name, id),
-            AstKind::AssignmentTargetPropertyIdentifier(p) => out.push(IdentPos {
-                // The shorthand's KEY (babel clones it apart from the
-                // value): a non-binding position.
-                start: p.binding.span.start,
-                walk_from: id,
-                name: p.binding.name.as_str(),
-                is_binding: false,
-            }),
-            AstKind::PrivateIdentifier(p) => out.push(IdentPos {
-                start: p.span.start,
-                walk_from: nodes.parent_id(id),
-                name: p.name.as_str(),
-                is_binding: false,
-            }),
-            AstKind::BreakStatement(b) => {
-                if let Some(l) = &b.label {
-                    out.push(IdentPos {
-                        start: l.span.start,
-                        walk_from: id,
-                        name: l.name.as_str(),
-                        is_binding: false,
-                    });
-                }
-            }
-            AstKind::ContinueStatement(c) => {
-                if let Some(l) = &c.label {
-                    out.push(IdentPos {
-                        start: l.span.start,
-                        walk_from: id,
-                        name: l.name.as_str(),
-                        is_binding: false,
-                    });
-                }
-            }
-            _ => {}
-        }
+/// Keep `s` when its original text is new and non-blank.
+fn push_distinct(view: &TextView<'_>, seen: &mut Vec<String>, out: &mut Vec<Snippet>, s: Snippet) {
+    let code = original_text(view, &s);
+    let key = humanify_model::js::trim(&code);
+    if key.is_empty() || seen.iter().any(|k| k == key) {
+        return;
     }
-    // Traversal order: by start (a shorthand key precedes its value —
-    // babel visits key then value; a stable sort keeps that).
-    out.sort_by_key(|p| p.start);
-    out
+    seen.push(key.to_string());
+    out.push(s);
 }
 
-fn push_key<'n>(out: &mut Vec<IdentPos<'n>>, key: &'n PropertyKey<'_>, owner: NodeId) {
-    if let PropertyKey::StaticIdentifier(k) = key {
-        out.push(IdentPos {
-            start: k.span.start,
-            walk_from: owner,
-            name: k.name.as_str(),
-            is_binding: false,
-        });
-    }
-}
-
-/// `collectUsageExamples`: the statement (or declaration) around each
-/// non-binding identifier position named like a module binding, capped so
-/// assignments + usages stay within ten.
+/// `collectUsageExamples`: the statement (or declaration) around each READ
+/// of a module binding, in source order, distinct, capped so assignments +
+/// usages stay within ten. Reads are the binding's resolved references
+/// (2026-10-04): by NAME the walk also took property keys, member names
+/// and same-named inner locals — lines that never mention the binding.
 fn collect_usage_examples(
     semantic: &Semantic<'_>,
     view: &TextView<'_>,
-    names: &HashMap<&str, usize>,
+    graph: &UnifiedGraph,
     texts: &mut [MbText],
 ) {
     let nodes = semantic.nodes();
-    for pos in identifier_positions(semantic) {
-        let Some(&i) = names.get(pos.name) else {
-            continue;
-        };
+    let scoping = semantic.scoping();
+    for (i, b) in graph.module_bindings.iter().enumerate() {
+        let mut reads: Vec<(u32, u32, NodeId)> = scoping
+            .get_resolved_reference_ids(b.symbol)
+            .iter()
+            .map(|&r| scoping.get_reference(r))
+            .filter(|r| !r.is_write())
+            .map(|r| {
+                let span = nodes.get_node(r.node_id()).span();
+                (span.start, span.size(), r.node_id())
+            })
+            .collect();
+        reads.sort_unstable();
         let remaining = MAX_CONTEXT_SNIPPETS.saturating_sub(texts[i].assignments.len());
-        if texts[i].usages.len() >= remaining || pos.is_binding {
-            continue;
-        }
-        let stmt = std::iter::once(pos.walk_from)
-            .chain(nodes.ancestor_ids(pos.walk_from))
-            .find(|&a| is_babel_statement(nodes, a) || is_babel_declaration(nodes, a));
-        let Some(stmt) = stmt else { continue };
-        let code = statement_code(nodes, view, stmt);
-        if code.is_empty() {
-            continue;
-        }
-        if let Some(snippet) = truncate_snippet(&code)
-            && !texts[i].usages.contains(&snippet)
-        {
-            texts[i].usages.push(snippet);
+        let mut seen = Vec::new();
+        for (start, len, node) in reads {
+            if texts[i].usages.len() >= remaining {
+                break;
+            }
+            let from = nodes.parent_id(node);
+            let stmt = std::iter::once(from)
+                .chain(nodes.ancestor_ids(from))
+                .find(|&a| is_babel_statement(nodes, a) || is_babel_declaration(nodes, a));
+            let Some(stmt) = stmt else { continue };
+            let snippet = statement_snippet(nodes, stmt, Some((start, len)), Cap::Snippet);
+            push_distinct(view, &mut seen, &mut texts[i].usages, snippet);
         }
     }
 }

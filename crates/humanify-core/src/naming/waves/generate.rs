@@ -328,7 +328,41 @@ impl<'a> TextView<'a> {
     /// `generate(node, { compact: true }).code`: the node's tokens with
     /// only babel's forced spaces between them.
     pub fn compact(&self, span: Span) -> String {
-        let toks = self.tokens(span);
+        self.compact_with(span, &[])
+    }
+
+    /// [`TextView::compact`] with `edits` applied (a renamed identifier, a
+    /// re-formed property): the source tokens an edit covers give way to
+    /// the edit's own tokens, spaced by the same compact rules.
+    pub fn compact_with(&self, span: Span, edits: &[Replacement]) -> String {
+        let mut toks = self.tokens(span);
+        let mut inside: Vec<&Replacement> = edits
+            .iter()
+            .filter(|r| r.span.start >= span.start && r.span.end <= span.end)
+            .collect();
+        if !inside.is_empty() {
+            inside.sort_by_key(|r| (r.span.start, r.span.end));
+            let mut spliced: Vec<Tok<'_>> = Vec::with_capacity(toks.len());
+            let mut next = inside.iter().peekable();
+            for t in toks {
+                while let Some(r) = next.peek()
+                    && r.span.start <= t.start
+                {
+                    spliced.extend(replacement_tokens(r));
+                    next.next();
+                }
+                if !inside
+                    .iter()
+                    .any(|r| r.span.start <= t.start && t.start < r.span.end)
+                {
+                    spliced.push(t);
+                }
+            }
+            for r in next {
+                spliced.extend(replacement_tokens(r));
+            }
+            toks = spliced;
+        }
         let mut out = String::with_capacity((span.end - span.start) as usize);
         let mut prev: Option<&Tok<'_>> = None;
         for t in &toks {
@@ -362,6 +396,7 @@ impl<'a> TextView<'a> {
             if raw_idx < self.raws.len() && self.raws[raw_idx].0 == p {
                 let (s, e, kind) = self.raws[raw_idx];
                 toks.push(Tok {
+                    start: s,
                     text: &self.text[s as usize..e as usize],
                     word: kind == RawKind::Regex,
                     int: false,
@@ -380,6 +415,7 @@ impl<'a> TextView<'a> {
             }
             if let Some(&(e, int)) = self.numbers.get(&p) {
                 toks.push(Tok {
+                    start: p,
                     text: &self.text[p as usize..e as usize],
                     word: true,
                     int,
@@ -389,6 +425,7 @@ impl<'a> TextView<'a> {
             }
             if let Some(&e) = self.bigints.get(&p) {
                 toks.push(Tok {
+                    start: p,
                     text: &self.text[p as usize..e as usize],
                     word: true,
                     int: false,
@@ -402,6 +439,7 @@ impl<'a> TextView<'a> {
                     p += utf8_len(bytes[p as usize]) as u32;
                 }
                 toks.push(Tok {
+                    start: s,
                     text: &self.text[s as usize..p as usize],
                     word: true,
                     int: false,
@@ -410,6 +448,7 @@ impl<'a> TextView<'a> {
             }
             let len = punct_len(&bytes[p as usize..span.end as usize]);
             toks.push(Tok {
+                start: p,
                 text: &self.text[p as usize..(p as usize + len)],
                 word: false,
                 int: false,
@@ -422,12 +461,45 @@ impl<'a> TextView<'a> {
 
 /// One compact-mode token.
 struct Tok<'a> {
+    /// Its source offset (an edit's replacement tokens carry the edit's).
+    start: u32,
     text: &'a str,
     /// Printed through `word()` (identifier, keyword, number, regex,
     /// bigint): babel's lastChar -3 / -2 marker.
     word: bool,
     /// An integer number literal (lastChar -2: a following `.` spaces).
     int: bool,
+}
+
+/// An edit's text as compact tokens: identifier words and the `:` of a
+/// re-formed shorthand property (`key: value`) — the only shapes the
+/// rename overlay writes.
+fn replacement_tokens(r: &Replacement) -> Vec<Tok<'_>> {
+    let mut out = Vec::new();
+    let bytes = r.text.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if matches!(b, b' ' | b'\n' | b'\t') {
+            i += 1;
+            continue;
+        }
+        let s = i;
+        if is_ident_start(b) {
+            while i < bytes.len() && is_ident_part(bytes[i]) {
+                i += utf8_len(bytes[i]);
+            }
+        } else {
+            i += punct_len(&bytes[i..]);
+        }
+        out.push(Tok {
+            start: r.span.start,
+            text: &r.text[s..i],
+            word: is_ident_start(b),
+            int: false,
+        });
+    }
+    out
 }
 
 /// Babel's compact spacing (printer.js `word` / `token` / `tokenChar`).

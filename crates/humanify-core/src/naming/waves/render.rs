@@ -138,6 +138,19 @@ impl Occurrences {
     /// (`{ key }` whose value is renamed prints `{ key: value }`) and the
     /// `{ key: v = d }` -> `{ key = d }` collapse.
     pub fn edits(&self, text: &str, state: &RenameState, span: Span) -> Vec<Replacement> {
+        self.edits_except(text, state, span, &[])
+    }
+
+    /// [`Occurrences::edits`] with the bindings in `keep` left under their
+    /// ORIGINAL names — a prompt's asked identifiers, which are asked BY
+    /// that name (`naming::waves::graph_ext::PromptText`).
+    pub fn edits_except(
+        &self,
+        text: &str,
+        state: &RenameState,
+        span: Span,
+        keep: &[BindingId],
+    ) -> Vec<Replacement> {
         let occ = &self.occ;
         let mut out = Vec::new();
         let lo = occ.partition_point(|o| o.0 < span.start);
@@ -148,8 +161,12 @@ impl Occurrences {
             if *end > span.end {
                 continue;
             }
-            let current = state.name_of(*b);
             let original = &text[*start as usize..*end as usize];
+            let current = if keep.contains(b) {
+                original
+            } else {
+                state.name_of(*b)
+            };
             if let Some(r) = alias_collapse(form, current, *start, *end) {
                 out.push(r);
                 continue;
@@ -180,7 +197,10 @@ impl Occurrences {
                 continue;
             }
             let original = &text[left.start as usize..left.end as usize];
-            let current = self.current_at(state, left.start).unwrap_or(original);
+            let current = self
+                .binding_at(left.start)
+                .filter(|b| !keep.contains(b))
+                .map_or(original, |b| state.name_of(b));
             if current == key && original != key {
                 // `key: v = d` prints as `key = d`: drop `key: ` — the left
                 // identifier (renamed to the key) carries the name.
@@ -195,11 +215,13 @@ impl Occurrences {
 
     /// The current name of the occurrence starting at `start`.
     pub fn current_at<'s>(&self, state: &'s RenameState, start: u32) -> Option<&'s str> {
+        self.binding_at(start).map(|b| state.name_of(b))
+    }
+
+    /// The binding of the occurrence starting at `start`.
+    pub fn binding_at(&self, start: u32) -> Option<BindingId> {
         let i = self.occ.partition_point(|o| o.0 < start);
-        self.occ
-            .get(i)
-            .filter(|o| o.0 == start)
-            .map(|o| state.name_of(o.2))
+        self.occ.get(i).filter(|o| o.0 == start).map(|o| o.2)
     }
 }
 
