@@ -1131,3 +1131,96 @@ fn the_sweep_reask_budget_is_configurable() {
         "the declined `f` and `used` plus the rejected `Kq_` stay skipped-but-counted"
     );
 }
+
+/// A declining provider that records every sweep ask's (identifiers, code).
+struct RecordingDecliner {
+    asks: std::cell::RefCell<Vec<(Vec<String>, String)>>,
+}
+
+impl NameProvider for RecordingDecliner {
+    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+        calls
+            .into_iter()
+            .map(|c| {
+                self.asks
+                    .borrow_mut()
+                    .push((c.request.identifiers.clone(), c.request.code.clone()));
+                Ok(BatchRenameResponse {
+                    renames: Renames::default(),
+                    finish_reason: None,
+                    usage: None,
+                })
+            })
+            .collect()
+    }
+}
+
+/// A big wrapper (the Claude Code shape): `filler` lines of calls, then
+/// the targets, deep past line 500.
+fn big_wrapper(filler: usize, tail: &str) -> String {
+    let mut text = String::from("function wrap() {\n");
+    for i in 0..filler {
+        text += &format!("  one({i});\n");
+    }
+    text += tail;
+    text += "}\n";
+    text
+}
+
+/// The bug (2026-10-04, /work/refusal-outcomes-2026-10-04/): the sweep
+/// showed the FIRST 500 lines of the group's code, so a target declared
+/// past line 500 of a big wrapper was asked BLIND — 300 of 306 sweep asks
+/// on the real builds. Now every asked identifier is in the code shown:
+/// the sweep windows around each target's declaration and uses.
+#[test]
+fn a_sweep_target_past_line_500_is_shown_in_its_window() {
+    let text = big_wrapper(700, "  var Kq_ = two();\n  one(Kq_);\n  return Kq_;\n");
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, &text);
+    let semantic = ingest.semantic();
+    let taint = collect_eval_with_taint(semantic);
+    let params = humanify_model::llm::CacheKeyParams::default();
+    let provider = RecordingDecliner {
+        asks: std::cell::RefCell::new(Vec::new()),
+    };
+    let mut state = RenameState::new(
+        semantic,
+        Anchor::Fresh,
+        crate::rename::name_profile::NameProfile::Bun,
+    );
+    let mut log = crate::artifact_dump::DispatchLog::retain_for_tests(params.clone());
+    let r = sweep_minted_names(
+        semantic,
+        &mut state,
+        &eligible,
+        &taint,
+        &provider,
+        &mut log,
+        Anchor::Fresh,
+        &params,
+        usize::MAX,
+        2,
+        None,
+        &crate::rename::floor::MinifiedStems::empty(crate::rename::name_profile::NameProfile::Bun),
+    );
+    let asks = provider.asks.borrow();
+    assert!(
+        asks.iter().any(|(ids, _)| ids.iter().any(|n| n == "Kq_")),
+        "the deep target is asked: {:?}",
+        asks.iter().map(|(ids, _)| ids).collect::<Vec<_>>()
+    );
+    for (ids, code) in asks.iter() {
+        assert!(
+            code.split('\n').count() <= crate::naming::code_window::MAX_CODE_LINES + 1,
+            "the window respects the code budget"
+        );
+        let missing = crate::naming::shown::unshown(code, ids);
+        assert!(
+            missing.is_empty(),
+            "every asked identifier is in the code shown; missing {missing:?}"
+        );
+    }
+    assert_eq!(r.not_shown, 0, "nothing needed refusing");
+    assert_eq!(r.targets_asked, r.targets_shown);
+}

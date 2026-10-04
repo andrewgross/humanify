@@ -709,6 +709,40 @@ fn reask_stats(
     reask
 }
 
+/// The stats record's `promptGuard` block (2026-10-04): the waves'
+/// per-site tally plus the sweeps' asked / shown / refused counts.
+fn prompt_guard_stats(
+    processor: &ProcessorReport,
+    pre_sweep: Option<&SweepResult>,
+    deferred_sweep: Option<&SweepResult>,
+) -> humanify_model::stats::PromptGuardStats {
+    let g = &processor.prompt_guard;
+    let mut out = humanify_model::stats::PromptGuardStats {
+        fn_asked: g.fn_asked as f64,
+        fn_unshown: g.fn_unshown as f64,
+        retry_asked: g.retry_asked as f64,
+        retry_unshown: g.retry_unshown as f64,
+        module_asked: g.module_asked as f64,
+        module_unshown: g.module_unshown as f64,
+        sweep_asked: 0.0,
+        sweep_unshown: 0.0,
+        sweep_refused: 0.0,
+        examples: g.examples.clone(),
+    };
+    for sweep in [pre_sweep, deferred_sweep].into_iter().flatten() {
+        out.sweep_asked += sweep.targets_asked as f64;
+        out.sweep_unshown += (sweep.targets_asked - sweep.targets_shown) as f64;
+        out.sweep_refused += sweep.not_shown as f64;
+        out.examples.extend(
+            sweep
+                .not_shown_examples
+                .iter()
+                .map(|n| format!("sweep:{n}")),
+        );
+    }
+    out
+}
+
 impl NamingOutcome {
     /// The `--stats-json` record's naming half (`writeEvalStats`, minus
     /// `vendorNaming` and `selection`, which other stages own).
@@ -765,6 +799,11 @@ impl NamingOutcome {
             },
             selection: None,
             toolchain: None,
+            prompt_guard: Some(prompt_guard_stats(
+                &self.processor,
+                self.pre_sweep.as_ref(),
+                self.deferred_sweep.as_ref().map(|(_, run)| &run.result),
+            )),
             reask: Some(reask_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),

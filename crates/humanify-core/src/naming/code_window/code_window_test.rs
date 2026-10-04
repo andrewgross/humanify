@@ -174,3 +174,26 @@ fn shows_an_identifier_whose_declaration_loc_is_outside_the_range() {
     });
     assert!(r.contains("qt"));
 }
+
+/// The prompt guard's audit (2026-10-04): when the loc mapping cannot be
+/// trusted the selection USED to fall back to the flat first-500 cut, so a
+/// requested identifier declared past line 500 was asked blind. With the
+/// requested names known, every one is located in the generated code and
+/// windowed — the flat cut is left only for a selection that names no
+/// identifier.
+#[test]
+fn an_untrusted_mapping_still_windows_every_requested_identifier() {
+    let code = make_lines(600).replace("  line(550);", "  var Qz = line(550);");
+    let anchors = [Some(630)];
+    let names = ["Qz".to_string()];
+    let r = select_function_code(&FunctionCodeSelection {
+        fn_start_line: Some(100),
+        fn_end_line: Some(650),
+        anchor_start_lines: Some(&anchors),
+        identifier_names: Some(&names),
+        ..sel(&code)
+    });
+    assert!(r.contains("var Qz = line(550);"), "{r}");
+    assert!(line_count(&r) <= MAX_CODE_LINES);
+    assert!(crate::naming::shown::unshown(&r, &names).is_empty());
+}

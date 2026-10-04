@@ -98,8 +98,12 @@ impl DecidedNames {
             ..DecidedNames::default()
         };
         for entry in trail.entries() {
+            // A prompt-guard refusal (`naming::shown`) is not an ask: the
+            // model never saw the identifier.
             let asked = entry.attempts.iter().any(|a| {
-                a.outcome != Outcome::Vote && matches!(a.tier, Tier::Llm | Tier::CoverageSweep)
+                a.outcome != Outcome::Vote
+                    && matches!(a.tier, Tier::Llm | Tier::CoverageSweep)
+                    && a.reason.as_deref() != Some(crate::naming::shown::NOT_SHOWN)
             });
             if asked {
                 d.asked.insert(entry.old_name.clone());
@@ -250,14 +254,14 @@ fn group_key_span(semantic: &Semantic<'_>, state: &RenameState, binding: Binding
     }
 }
 
-/// `capCode`.
-fn cap_code(code: String) -> String {
-    let lines: Vec<&str> = code.split('\n').collect();
-    if lines.len() <= MAX_CODE_LINES {
-        return code;
-    }
-    lines[..MAX_CODE_LINES].join("\n")
-}
+/// Reference lines (beyond the declaration's own window) each target's
+/// window adds: the declaration says what it is, a use says what it does.
+const USE_ANCHORS: usize = 2;
+/// A use within this many lines after (or half as many before) the
+/// declaration already sits in the declaration's window.
+const USE_NEAR: i64 = 40;
+/// How many refused names the stats keep as examples.
+const NOT_SHOWN_EXAMPLES: usize = 20;
 
 /// `Object.keys(scope.getAllBindings())`.
 fn all_binding_names(state: &RenameState, from: BScopeId) -> Vec<String> {
@@ -282,11 +286,124 @@ struct SweepGroup {
     used_names: Vec<String>,
 }
 
+/// What the sweep shows, and what it could not show.
+struct BuiltGroups {
+    groups: Vec<SweepGroup>,
+    /// Targets the guard refused: the code their ask would show does not
+    /// contain them (`naming::shown`). Never asked, never applied.
+    not_shown: Vec<MintedBinding>,
+}
+
+/// One target's window anchors: 1-based lines of the group's rendered
+/// code — its declaration, then up to [`USE_ANCHORS`] uses outside the
+/// declaration's window. Lines come from the binding's own spans when the
+/// rendered code keeps the source's line structure (the main path's
+/// mapping rule, `code_window::resolve_anchors`), else from the target's
+/// whole-token occurrences in the rendered code.
+fn target_anchors(
+    view: &TextView<'_>,
+    state: &RenameState,
+    span: Span,
+    lines: &[&str],
+    t: &MintedBinding,
+) -> Vec<i64> {
+    let start = i64::from(view.line_of(span.start));
+    let mapped = i64::from(view.line_of(span.end)) - start + 1 == lines.len() as i64;
+    let mut out: Vec<i64> = if mapped {
+        let b = state.view().binding(t.binding);
+        std::iter::once(b.id_span)
+            .chain(b.refs.iter().map(|r| r.span))
+            .filter(|s| s.start >= span.start && s.end <= span.end)
+            .map(|s| i64::from(view.line_of(s.start)) - start + 1)
+            .collect()
+    } else {
+        lines
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| crate::naming::code_window::line_has_identifier(l, &t.name))
+            .map(|(i, _)| i as i64 + 1)
+            .collect()
+    };
+    let Some(&decl) = out.first() else {
+        return out;
+    };
+    let mut uses: Vec<i64> = out
+        .drain(1..)
+        .filter(|l| *l < decl - USE_NEAR / 2 || *l > decl + USE_NEAR)
+        .collect();
+    uses.sort_unstable();
+    uses.dedup();
+    out.extend(uses.into_iter().take(USE_ANCHORS));
+    out
+}
+
+/// One batch being filled: its anchors, the name each anchor belongs to
+/// (the selection's positional rescue list), its targets.
+type Batch = (Vec<i64>, Vec<String>, Vec<MintedBinding>);
+
+/// Split an oversized group's targets into batches whose windows fit the
+/// code budget at the default padding, in target order, and window each
+/// batch's code through the main path's selection
+/// (`code_window::select_function_code`). A target with no anchor gets no
+/// window of its own — the guard refuses it unless a neighbour's window
+/// happens to show it.
+fn windowed_batches(
+    view: &TextView<'_>,
+    state: &RenameState,
+    span: Span,
+    code: &str,
+    bucket: Vec<MintedBinding>,
+) -> Vec<(String, Vec<MintedBinding>)> {
+    use crate::naming::code_window::{
+        FunctionCodeSelection, fits_at_default_pads, select_function_code,
+    };
+    let lines: Vec<&str> = code.split('\n').collect();
+    let line_count = lines.len() as i64;
+    let mut batches: Vec<Batch> = Vec::new();
+    let mut cur: Batch = Default::default();
+    for t in bucket {
+        let anchors = target_anchors(view, state, span, &lines, &t);
+        let mut joined = cur.0.clone();
+        joined.extend(&anchors);
+        if !cur.2.is_empty() && !fits_at_default_pads(&joined, line_count) {
+            batches.push(std::mem::take(&mut cur));
+        }
+        cur.1
+            .extend(std::iter::repeat_n(t.name.clone(), anchors.len()));
+        cur.0.extend(anchors);
+        cur.2.push(t);
+    }
+    if !cur.2.is_empty() {
+        batches.push(cur);
+    }
+    batches
+        .into_iter()
+        .map(|(anchors, names, targets)| {
+            let anchor_lines: Vec<Option<i64>> = anchors.into_iter().map(Some).collect();
+            let shown = select_function_code(&FunctionCodeSelection {
+                code,
+                session_id: "",
+                fn_start_line: Some(1),
+                fn_end_line: Some(line_count),
+                anchor_start_lines: Some(&anchor_lines),
+                identifier_names: Some(&names),
+            });
+            (shown, targets)
+        })
+        .collect()
+}
+
+/// Build the sweep's groups. A group's code is its key node's rendered
+/// text; over [`MAX_CODE_LINES`] it is no longer the flat HEAD of that
+/// text (`capCode`, which asked 300 of 306 real sweep targets blind,
+/// 2026-10-04) but a window around each target's declaration and uses,
+/// batched to fit the budget. The guard (`naming::shown`) then refuses
+/// any target its batch's code still does not contain.
 fn build_groups(
     semantic: &Semantic<'_>,
     state: &RenameState,
     targets: Vec<MintedBinding>,
-) -> Vec<SweepGroup> {
+) -> BuiltGroups {
     let mut order: Vec<Span> = Vec::new();
     let mut by_key: HashMap<(u32, u32), Vec<MintedBinding>> = HashMap::new();
     for t in targets {
@@ -301,21 +418,63 @@ fn build_groups(
     }
     let view = TextView::build(semantic);
     let occ = Occurrences::build(semantic, state);
-    order
-        .into_iter()
-        .map(|span| {
-            let bucket = by_key
-                .remove(&(span.start, span.end))
-                .expect("every key has its bucket");
-            let scope = state.scope_of_binding(bucket[0].binding);
-            let code = view.pretty(span, &occ.edits(view.text, state, span), true);
-            SweepGroup {
-                code: cap_code(code),
-                used_names: all_binding_names(state, scope),
-                targets: bucket,
+    let mut built = BuiltGroups {
+        groups: Vec::new(),
+        not_shown: Vec::new(),
+    };
+    for span in order {
+        let bucket = by_key
+            .remove(&(span.start, span.end))
+            .expect("every key has its bucket");
+        let scope = state.scope_of_binding(bucket[0].binding);
+        let used_names = all_binding_names(state, scope);
+        let code = view.pretty(span, &occ.edits(view.text, state, span), true);
+        let batches = if code.split('\n').count() <= MAX_CODE_LINES {
+            vec![(code, bucket)]
+        } else {
+            windowed_batches(&view, state, span, &code, bucket)
+        };
+        for (code, batch) in batches {
+            let (shown, refused) = split_shown(&code, batch);
+            built.not_shown.extend(refused);
+            if !shown.is_empty() {
+                built.groups.push(SweepGroup {
+                    code,
+                    used_names: used_names.clone(),
+                    targets: shown,
+                });
             }
-        })
-        .collect()
+        }
+    }
+    built
+}
+
+/// The guard's split of one batch: (targets `code` shows, targets it
+/// does not).
+fn split_shown(code: &str, batch: Vec<MintedBinding>) -> (Vec<MintedBinding>, Vec<MintedBinding>) {
+    batch
+        .into_iter()
+        .partition(|t| crate::naming::shown::shows(code, &t.name))
+}
+
+/// The guard's refusal: a target the shown code did not contain is never
+/// asked. Its trail row says why, and it stays a target (EXHAUSTED, not
+/// decided — it never had an honest ask).
+fn refuse_not_shown(
+    state: &mut RenameState,
+    refused: Vec<MintedBinding>,
+    result: &mut SweepResult,
+) {
+    for t in refused {
+        let row = Attempt::new(Tier::CoverageSweep, Outcome::Abstained)
+            .reason(crate::naming::shown::NOT_SHOWN);
+        state.record(t.binding, &t.name, row, true);
+        state.mark_exhausted(t.binding);
+        result.not_shown += 1;
+        if result.not_shown_examples.len() < NOT_SHOWN_EXAMPLES {
+            result.not_shown_examples.push(t.name);
+        }
+    }
 }
 
 /// One recorded sweep dispatch (the dump's `site: "sweep"` prompt row).
@@ -383,6 +542,17 @@ pub struct SweepResult {
     /// bindings — feeds the run-level name joins (`DecidedNames`, the
     /// survivor split).
     pub exhausted_names: Vec<String>,
+    /// Identifiers the sweep's dispatches asked about (re-asks included,
+    /// a target asked twice counts twice) — the prompt guard's universe.
+    pub targets_asked: usize,
+    /// Of [`Self::targets_asked`], those the ask's shown code contained
+    /// (`naming::shown`, measured at dispatch) — should equal it.
+    pub targets_shown: usize,
+    /// Targets the guard refused before asking: the code their ask would
+    /// show did not contain them (never asked, never applied).
+    pub not_shown: usize,
+    /// The first refused names (examples for the stats).
+    pub not_shown_examples: Vec<String>,
 }
 
 /// One pending re-ask's seed: the LAST suggestion the model made, the
@@ -633,11 +803,12 @@ pub fn sweep_minted_names<P: NameProvider>(
             ..SweepResult::default()
         };
     }
-    let groups = build_groups(semantic, state, targets);
+    let BuiltGroups { groups, not_shown } = build_groups(semantic, state, targets);
     let mut result = SweepResult {
         groups: groups.len(),
         ..SweepResult::default()
     };
+    refuse_not_shown(state, not_shown, &mut result);
     // One bounded window of rendered prompts at a time (finding #65) —
     // the rows are recorded (and streamed) in group-build order either way.
     let mut responses = Vec::with_capacity(groups.len());
@@ -728,6 +899,13 @@ fn sweep_call(
     result: &mut SweepResult,
     params: &CacheKeyParams,
 ) -> LlmCall {
+    // The guard's measurement at the dispatch point: every identifier
+    // asked, and how many the shown code contains (build_groups refused
+    // the rest, so the two counts agree — fail loud when they do not).
+    result.targets_asked += request.identifiers.len();
+    result.targets_shown += request.identifiers.len()
+        - crate::naming::shown::unshown(&request.code, &request.identifiers).len();
+    crate::naming::shown::debug_assert_all_shown("sweep", &request.code, &request.identifiers);
     let system_prompt = render_system_prompt(&request);
     let user_prompt = render_user_prompt(&request, state.name_profile());
     if log.mode() != RecordMode::Off {
@@ -801,7 +979,13 @@ fn sweep_reask<P: NameProvider>(
             .map(|(k, (_, _, _, rejects))| (k.clone(), rejects.clone()))
             .collect();
         let targets: Vec<MintedBinding> = pending.into_iter().map(|r| r.target).collect();
-        let fresh = build_groups(semantic, state, targets);
+        let BuiltGroups {
+            groups: fresh,
+            not_shown,
+        } = build_groups(semantic, state, targets);
+        // A re-asked target its rebuilt window no longer shows is refused
+        // like a first-round one (the window follows the current names).
+        refuse_not_shown(state, not_shown, result);
         let mut owners = Vec::with_capacity(fresh.len());
         let mut round_responses = Vec::with_capacity(fresh.len());
         let mut round_calls = Vec::with_capacity(fresh.len());
@@ -990,3 +1174,6 @@ pub fn run_deferred_sweep<P: NameProvider>(
         ledger,
     })
 }
+
+#[cfg(test)]
+mod sweep_test;

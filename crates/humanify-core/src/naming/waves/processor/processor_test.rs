@@ -480,6 +480,35 @@ fn long_code_keeps_the_signature_and_referencing_lines_with_context() {
     );
 }
 
+/// The prompt guard's audit (2026-10-04): the snippet kept the first 80
+/// line indices in LINE order, so an identifier used often early on could
+/// crowd a later one out entirely — the retry then asked about a name its
+/// code did not contain. Every retried identifier now keeps its first
+/// occurrence (with context) whatever the budget.
+#[test]
+fn every_retried_identifier_survives_the_snippet_budget() {
+    let mut lines = vec!["function f(a) {".to_string()];
+    for i in 0..300 {
+        // `a` on every other line for the first 200 lines: its windows
+        // alone exceed the 80-line budget.
+        lines.push(if i < 200 && i % 2 == 0 {
+            format!("  use(a, {i});")
+        } else {
+            format!("  x{i}();")
+        });
+    }
+    lines[250] = "  var zz = make();".to_string();
+    lines.push("}".to_string());
+    let code = lines.join("\n");
+    let ids = ["a".to_string(), "zz".to_string()];
+    let out = extract_retry_snippet(&code, &ids);
+    assert!(
+        crate::naming::shown::unshown(&out, &ids).is_empty(),
+        "both retried identifiers are shown:\n{out}"
+    );
+    assert!(out.contains("var zz = make();"));
+}
+
 #[test]
 fn retry_used_names_lead_with_the_collided_suggestions_capped_at_25() {
     let mut prev = JsRecord::default();

@@ -25,6 +25,9 @@
 //! - [`ask_trace`] — the ask record's reason taxonomy ("why was this
 //!   identifier asked", `--dump-asks`): recording only, no decision reads
 //!   it; the re-ask causes reuse `reask`'s classes verbatim.
+//! - [`shown`] — the one owner of "does this prompt show what it asks
+//!   about": an asked identifier absent from the code shown is never
+//!   asked and its answer never applied (2026-10-04).
 
 pub mod ask_trace;
 pub mod code_window;
@@ -36,6 +39,7 @@ pub mod prompts;
 pub mod reask;
 pub mod reconcile;
 pub mod report;
+pub mod shown;
 pub mod snap;
 pub mod validation;
 pub mod waves;
