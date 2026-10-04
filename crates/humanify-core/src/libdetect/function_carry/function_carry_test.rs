@@ -59,7 +59,6 @@ fn consumed_classification_joins_by_fresh_span() {
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

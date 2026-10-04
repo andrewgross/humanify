@@ -145,7 +145,6 @@ fn with_harness<T>(
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -479,7 +478,6 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
         prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -487,7 +485,6 @@ fn with_two_sides(prior_code: &str, fresh_code: &str, run: impl FnOnce(&TwoSides
         fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

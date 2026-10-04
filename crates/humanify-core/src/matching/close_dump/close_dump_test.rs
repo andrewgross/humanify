@@ -55,7 +55,6 @@ fn with_close_pair<T>(
         prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -63,7 +62,6 @@ fn with_close_pair<T>(
         fresh_ingest.semantic(),
         fresh_ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

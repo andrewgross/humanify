@@ -53,7 +53,6 @@ fn with_pair<T>(
         old_ingest.semantic(),
         old_ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -71,7 +70,6 @@ fn with_pair<T>(
         new_ingest.semantic(),
         new_ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

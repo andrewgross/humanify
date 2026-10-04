@@ -90,7 +90,6 @@ fn with_harness<T>(
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

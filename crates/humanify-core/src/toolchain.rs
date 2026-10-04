@@ -99,12 +99,14 @@ pub struct Chosen<T> {
 /// factory argument in either form (`modules::factory_arg_function`); the
 /// classification of every `var X = HELPER(factory)` in the container
 /// (`modules::classify_bun_modules`). Every pipeline caller asks the run's
-/// value (toolchain review R11/R2/R7, 2026-10-04): the unpack's
-/// classification and extraction, the naming stage's third-party skip
-/// (`prior::build_side_parts`, spec I10 — behaviour unchanged), the
-/// artifact dump's classification sites, and the fresh-grouping split's
-/// vendor bucket (`place::assign::cluster`, which used to tally its own
-/// "most-used higher-order callee"). A second grammar (webpack's module
+/// value (toolchain review R11/R7, 2026-10-04): the unpack's
+/// classification and extraction, the artifact dump's classification
+/// sites, and the fresh-grouping split's vendor bucket
+/// (`place::assign::cluster`, which used to tally its own "most-used
+/// higher-order callee"). The UNPACK is the one place that decides which
+/// code is a bundled module: the naming stage no longer re-runs the
+/// grammar per file (finding #80, review R2, spec I10) — a factory the
+/// unpack kept in the app is app code. A second grammar (webpack's module
 /// table, rollup's) is a second variant here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModuleWrapperGrammar {

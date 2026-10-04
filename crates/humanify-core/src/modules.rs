@@ -403,14 +403,6 @@ pub struct FactoryNameCounts {
     pub fallback: usize,
 }
 
-/// True when a span sits inside ANY factory body (the isInsideFactoryBody
-/// skip, by span containment).
-pub fn is_inside_factory_body(span: Span, factories: &[FactoryRecord]) -> bool {
-    factories
-        .iter()
-        .any(|f| span.start >= f.body_span.start && span.end <= f.body_span.end)
-}
-
 /// The version of the factory `structuralHash` bytes a vendor manifest
 /// carries (`hashVersion`). A manifest stamped with ANY other version —
 /// the TS (no stamp; bytes are `bun-module-classification.ts`'s) or an

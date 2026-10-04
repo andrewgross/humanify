@@ -19,7 +19,6 @@ fn call_sites(text: &str) -> Vec<(String, Vec<String>)> {
         "input.js",
         crate::graph::Eligibility::All,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
-        crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
     );
     let view = TextView::build(ingest.semantic());
     let ng = build_naming_graph(ingest.semantic(), &parts.graph, &view);
@@ -264,7 +263,6 @@ impl humanify_model::llm::NameProvider for SuffixProvider {
 fn ledger_config() -> super::NamingConfig {
     super::NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
-        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
         tuning: crate::toolchain::BundlerTuning::Default,
@@ -879,4 +877,79 @@ fn the_stats_reask_block_maps_the_processor_and_sweep_counters() {
         None,
     );
     assert_eq!(empty, humanify_model::stats::ReaskStats::default());
+}
+
+/// Finding #80 (toolchain review R2, spec I10): which code is a bundled
+/// module is the UNPACKER's decision, made once. A factory the esbuild
+/// unpack left in the app (its body writes an app binding, so a vendor
+/// file could not hold it) is APP code: its inner functions are named in
+/// the main naming waves, with call-graph context — never pulled out by a
+/// second, naming-time factory scan and left to the coverage sweep's
+/// one-function-per-ask fallback. (The naming stage used to re-run the
+/// module grammar on every file: on Bun's formatted text it never fired,
+/// on esbuild's it found the kept factory and skipped it.)
+#[test]
+fn a_factory_the_unpacker_kept_in_the_app_is_named_in_the_main_waves() {
+    // The app text as the esbuild unpack hands it on (top level: too few
+    // bindings for the bundle layout to call it a wrapper), with the one
+    // factory it kept.
+    let fresh = "var __getOwnPropNames = Object.getOwnPropertyNames;
+var appCounter = 0;
+var __commonJS = (cb, mod) =>
+  function __require() {
+    return (
+      mod ||
+        (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod),
+      mod.exports
+    );
+  };
+var require_dep = __commonJS({
+  \"src/dep.cjs\"(exports, module) {
+    appCounter = appCounter + 1;
+    function doubled(x) {
+      return x * 2;
+    }
+    function label(x) {
+      return `v:${doubled(x)}`;
+    }
+    module.exports = { doubled, label };
+  }
+});
+console.log(require_dep().label(appCounter));
+";
+    let mut config = ledger_config();
+    config.emit_rename_ledger = false;
+    let mut log = crate::artifact_dump::DispatchLog::asks(config.params.clone());
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &SuffixProvider,
+        &mut log,
+    )
+    .expect("the stage runs");
+    assert!(out.code.is_some(), "shipped");
+    let rows: Vec<String> = log
+        .ask_rows()
+        .iter()
+        .map(humanify_model::js::stringify)
+        .collect();
+    let asked_in = |site: &str, name: &str| {
+        rows.iter().any(|r| {
+            r.contains(&format!("\"site\":\"{site}\"")) && r.contains(&format!("\"{name}\""))
+        })
+    };
+    for name in ["doubled", "label"] {
+        assert!(
+            asked_in("naming", name),
+            "{name} is asked in the main waves: {rows:#?}"
+        );
+        assert!(
+            !asked_in("sweep", name),
+            "{name} is not left to the coverage sweep: {rows:#?}"
+        );
+    }
 }

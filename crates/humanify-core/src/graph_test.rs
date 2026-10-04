@@ -9,7 +9,7 @@ fn graph_of(code: &str) -> (Allocator, crate::graph::FunctionGraph) {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
-    let (graph, _symbols) = build_function_graph(ingest.semantic(), "input.js", &[]);
+    let (graph, _symbols) = build_function_graph(ingest.semantic(), "input.js");
     (allocator, graph)
 }
 
@@ -75,52 +75,25 @@ fn graph_hashes_are_rename_invariant() {
     );
 }
 
-/// The third-party skip: functions inside a classified factory body never
-/// enter the graph, and calls INTO them resolve to no edge (the oracle's
-/// member set — the WP1.4 one-edge divergence this closes).
+/// Every function in the text is a graph row, factory bodies included:
+/// which code is a bundled module is the UNPACKER's decision (finding #80).
+/// A factory still in the text is one the unpack kept in the app — app
+/// code, named with its call graph — so the graph no longer re-detects
+/// factories and skips their bodies (the old naming-time scan, spec I10).
 #[test]
-fn graph_skips_factory_body_functions() {
-    use crate::hash::serialize::SymbolTables;
-    use crate::modules::{classify_bun_modules, wrapper::find_wrapper_function};
-
+fn graph_rows_every_function_including_a_factory_left_in_the_app() {
     let src = "var d=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports),tO8=d((q,m)=>{var helper=(x)=>x*2; return helper(3);}); var caller=()=>tO8(1);";
-    let allocator = oxc_allocator::Allocator::default();
-    let ingest = crate::ingest::Ingest::parse(&allocator, src, "input.js");
-    assert!(ingest.errors.is_empty());
-    let tables = SymbolTables::build(ingest.semantic());
-    let wrapper = find_wrapper_function(ingest.program, ingest.semantic());
-    let classification = classify_bun_modules(
-        src,
-        ingest.program,
-        ingest.semantic(),
-        wrapper.as_ref().map(|w| w.body_span),
-        &tables,
-    )
-    .expect("helper present");
-    assert_eq!(classification.factories.len(), 1);
-
-    let (graph, _symbols) =
-        build_function_graph(ingest.semantic(), "input.js", &classification.factories);
-    // Everything inside the factory body [body_span] is out: the factory
-    // arrow itself and `helper`. The HELPER DEFINITION's two arrows (the
-    // `var d=(I,A)=>()=>…` — outside any factory body) and `caller`
-    // remain.
-    let body = classification.factories[0].body_span;
-    let inside: Vec<_> = graph
-        .functions
-        .iter()
-        .filter(|f| f.span.start >= body.start && f.span.end <= body.end)
-        .collect();
-    assert!(inside.is_empty(), "factory-body functions must be skipped");
-    assert_eq!(graph.functions.len(), 3);
-    // And the call into tO8 resolved to NO edge: the factory arrow was
-    // skipped, so the declarator's binding maps to nothing.
-    let caller = graph
-        .functions
-        .iter()
-        .find(|f| f.span.start == 129)
-        .expect("caller present");
-    assert!(caller.internal_callees.is_empty());
+    let (_a, graph) = graph_of(src);
+    // The helper definition's two arrows, the factory arrow, `helper`, and
+    // `caller`.
+    assert_eq!(graph.functions.len(), 5);
+    assert!(
+        graph
+            .functions
+            .iter()
+            .any(|f| src[f.span.start as usize..f.span.end as usize] == *"(x)=>x*2"),
+        "the factory's inner function is a row"
+    );
 }
 
 /// The module-binding half: rows, the three skips, and both edge kinds
@@ -138,7 +111,6 @@ fn module_bindings_rows_and_edges() {
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -193,7 +165,6 @@ fn mb_edge_from_object_key_position() {
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
