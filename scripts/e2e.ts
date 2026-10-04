@@ -51,7 +51,9 @@
  * `esbuild-bundle`, a real esbuild 0.27.2 iife build) ARE split trees:
  * every leg runs with `--split`, and the boot step compares the input
  * bundle's observable behavior (stdout + exit of `node <input>`) with
- * `node run.cjs` in the emitted runnable graph. The legacy-golden step
+ * `node run.cjs` in the emitted runnable graph (`bun-bundle`, a real Bun
+ * CJS build, runs its input the way Bun's loader does —
+ * BUN_CJS_LOADER). The legacy-golden step
  * only runs for pairs with committed goldens — a post-flip fixture has
  * no pre-flip golden to prove anything against, so the comparison is
  * skipped with a printed note instead of silently committed against
@@ -201,15 +203,46 @@ function asModule(file: string, dir: string): string {
 }
 
 /**
+ * Bun's CommonJS output (`bun build --format=cjs`, first line
+ * `// @bun @bun-cjs`) is ONE function expression,
+ * `(function(exports, require, module, __filename, __dirname) {…})`, that
+ * Bun's loader calls; Node evaluating the file as-is calls nothing and
+ * prints nothing. This does what Bun's loader does: evaluate the file to
+ * that function and call it with a real CommonJS module for the file.
+ */
+const BUN_CJS_LOADER = `
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+const Module = require("node:module");
+const file = path.resolve(process.argv[1]);
+const mod = new Module(file, null);
+mod.filename = file;
+mod.paths = Module._nodeModulePaths(path.dirname(file));
+const wrapper = vm.runInThisContext(fs.readFileSync(file, "utf8"), { filename: file });
+wrapper.call(mod.exports, mod.exports, Module.createRequire(file), mod, file, path.dirname(file));
+`;
+
+/** True for Bun's CommonJS output (its `// @bun … @bun-cjs` first line). */
+function isBunCjs(file: string): boolean {
+  const first = fs.readFileSync(file, "utf8").split("\n", 1)[0] ?? "";
+  return /^\/\/ @bun\b.*@bun-cjs\b/.test(first);
+}
+
+/**
  * A BUNDLE fixture's observable behavior: what the file prints and how it
  * exits when Node runs it AS-IS, in its own directory (a split tree's
- * run.cjs requires its sibling files — no copying it away).
+ * run.cjs requires its sibling files — no copying it away). A Bun CJS
+ * bundle runs through BUN_CJS_LOADER, as Bun would run it.
  */
 function behaviorOf(
   file: string,
   label: string
 ): { stdout: string; status: number } {
-  const r = spawnSync(process.execPath, [path.basename(file)], {
+  const args = isBunCjs(file)
+    ? ["-e", BUN_CJS_LOADER, path.basename(file)]
+    : [path.basename(file)];
+  const r = spawnSync(process.execPath, args, {
     encoding: "utf8",
     cwd: path.dirname(file)
   });

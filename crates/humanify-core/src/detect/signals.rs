@@ -1,23 +1,36 @@
 //! The per-bundler and per-minifier signal detectors (TS:
 //! src/detection/signals/*.ts, WPB.1). Each TS regex is ported as a hand
 //! matcher over `js_text`'s primitives; the TS pattern sits in each doc
-//! comment so the two can be read side by side. Signal ORDER is part of
-//! the output (`detect_bundle` keeps the first definitive bundler and the
+//! comment so the two can be read side by side. Every bundler signal
+//! carries its [`SignalStrength`]: the bundler verdict is the STRONGEST
+//! signal's bundler (`detect::pick_bundler`; the ranking's rules are on
+//! `SignalStrength`), never the first one listed. Signal order is still
+//! part of the output (the `signals` list; the minifier verdict keeps the
 //! first highest-tier minifier), so every detector emits in the TS's order.
 
-use humanify_model::detection::{BundlerType, DetectionSignal, DetectionTier, MinifierType};
+use humanify_model::detection::{
+    BundlerType, DetectionSignal, DetectionTier, MinifierType, SignalStrength,
+};
 
 use super::js_text::{
     contains_word, eat, eat_quote, is_line_terminator, is_word_boundary, js_prefix, skip_js_space,
 };
 
-fn bundler_signal(source: &str, pattern: &str, bundler: BundlerType) -> DetectionSignal {
+/// A bundler signal; its tier follows from its strength
+/// ([`SignalStrength::tier`]).
+fn bundler_signal(
+    source: &str,
+    pattern: &str,
+    bundler: BundlerType,
+    strength: SignalStrength,
+) -> DetectionSignal {
     DetectionSignal {
         source: source.to_string(),
         pattern: pattern.to_string(),
         bundler: Some(bundler),
         minifier: None,
-        tier: DetectionTier::Definitive,
+        tier: strength.tier(),
+        strength: Some(strength),
     }
 }
 
@@ -33,35 +46,39 @@ fn minifier_signal(
         bundler: None,
         minifier: Some(minifier),
         tier,
+        strength: None,
     }
 }
 
 /// TS `SignalPattern`: a test over the scanned text + the pattern label.
 type SignalPattern = (fn(&str) -> bool, &'static str);
 
-/// TS `matchPatterns` (pattern-helper.ts): one definitive signal per
-/// matching pattern, in table order.
+/// TS `matchPatterns` (pattern-helper.ts): one signal per matching
+/// pattern, in table order, all of one strength.
 fn match_patterns(
     code: &str,
     source: &str,
     bundler: BundlerType,
+    strength: SignalStrength,
     patterns: &[SignalPattern],
 ) -> Vec<DetectionSignal> {
     patterns
         .iter()
         .filter(|(test, _)| test(code))
-        .map(|(_, pattern)| bundler_signal(source, pattern, bundler))
+        .map(|(_, pattern)| bundler_signal(source, pattern, bundler, strength))
         .collect()
 }
 
 // ---- webpack.ts ---------------------------------------------------------------
 
-/// `/__webpack_require__/`, `/__webpack_modules__/`, `/webpackChunk/`.
+/// `/__webpack_require__/`, `/__webpack_modules__/`, `/webpackChunk/` —
+/// webpack's own runtime names.
 pub fn detect_webpack(code: &str) -> Vec<DetectionSignal> {
     match_patterns(
         code,
         "webpack",
         BundlerType::Webpack,
+        SignalStrength::OwnRuntimeName,
         &[
             (|c| c.contains("__webpack_require__"), "__webpack_require__"),
             (|c| c.contains("__webpack_modules__"), "__webpack_modules__"),
@@ -81,7 +98,9 @@ fn has_exports_close(code: &str) -> bool {
 }
 
 /// TS `detectBrowserify`: nothing when `__webpack_require__` appears;
-/// else `/\[0\]\.call\(/` + `/\.exports\s*\}/`, then `/installedModules/`.
+/// else `/\[0\]\.call\(/` + `/\.exports\s*\}/` (a shape), then
+/// `/installedModules/` — one common word, so a weak token: `likely`, a
+/// verdict the toolchain does not act on (review R19).
 pub fn detect_browserify(code: &str) -> Vec<DetectionSignal> {
     if code.contains("__webpack_require__") {
         return Vec::new();
@@ -92,6 +111,7 @@ pub fn detect_browserify(code: &str) -> Vec<DetectionSignal> {
             "browserify",
             "browserify module call pattern",
             BundlerType::Browserify,
+            SignalStrength::Shape,
         ));
     }
     if code.contains("installedModules") {
@@ -99,6 +119,7 @@ pub fn detect_browserify(code: &str) -> Vec<DetectionSignal> {
             "browserify",
             "installedModules (no webpack)",
             BundlerType::Browserify,
+            SignalStrength::WeakToken,
         ));
     }
     signals
@@ -118,12 +139,14 @@ fn has_var_export(code: &str) -> bool {
 }
 
 /// `/\b__commonJS\b/`, `/\b__toESM\b/`, `/\b__toCommonJS\b/`,
-/// `/\bvar\s+__export\b/`, `/\b__require\b/`.
+/// `/\bvar\s+__export\b/`, `/\b__require\b/` — esbuild's runtime helper
+/// names, which Bun's runtime writes too: shared helper names.
 pub fn detect_esbuild(code: &str) -> Vec<DetectionSignal> {
     match_patterns(
         code,
         "esbuild-bundler",
         BundlerType::Esbuild,
+        SignalStrength::SharedHelperName,
         &[
             (|c| contains_word(c, "__commonJS"), "__commonJS"),
             (|c| contains_word(c, "__toESM"), "__toESM"),
@@ -148,12 +171,14 @@ fn has_bundle_loader_require(code: &str) -> bool {
     })
 }
 
-/// `/parcelRequire/`, `require("_bundle_loader")`.
+/// `/parcelRequire/`, `require("_bundle_loader")` — parcel's own runtime
+/// names.
 pub fn detect_parcel(code: &str) -> Vec<DetectionSignal> {
     match_patterns(
         code,
         "parcel",
         BundlerType::Parcel,
+        SignalStrength::OwnRuntimeName,
         &[
             (|c| c.contains("parcelRequire"), "parcelRequire"),
             (has_bundle_loader_require, "require(\"_bundle_loader\")"),
@@ -200,14 +225,16 @@ fn has_create_require_import(code: &str) -> bool {
     })
 }
 
-/// TS `detectBunBundler`: the `// @bun` banner alone is definitive; else
-/// the `{exports:{}}` factory + the `createRequire` import together.
+/// TS `detectBunBundler`: the `// @bun` banner (the strongest signal
+/// there is); else the `{exports:{}}` factory + the `createRequire` import
+/// together (a shape).
 pub fn detect_bun_bundler(code: &str) -> Vec<DetectionSignal> {
     if has_bun_banner(code) {
         return vec![bundler_signal(
             "bun-bundler",
             "// @bun banner",
             BundlerType::Bun,
+            SignalStrength::Banner,
         )];
     }
     if has_cjs_factory(code) && has_create_require_import(code) {
@@ -215,6 +242,7 @@ pub fn detect_bun_bundler(code: &str) -> Vec<DetectionSignal> {
             "bun-bundler",
             "{exports:{}} + createRequire import",
             BundlerType::Bun,
+            SignalStrength::Shape,
         )];
     }
     Vec::new()

@@ -112,6 +112,84 @@ fn flags_decide_and_say_so() {
     assert_eq!(t.name_profile.reason, Reason::Detected);
 }
 
+/// A Bun build carrying esbuild's helper names (every unminified `bun
+/// build` does): the banner outranks them, the run gets Bun's pieces, and
+/// every piece the bundler decided records that a conflict was settled by
+/// strength (review R3).
+#[test]
+fn a_conflict_settled_by_strength_is_recorded_on_every_bundler_piece() {
+    let code = format!("// @bun\n{ESBUILD}");
+    let t = resolve_toolchain(&detect_bundle(&code), None, None);
+    assert_eq!(t.bundler, BundlerType::Bun);
+    assert_eq!(t.bundler_tier, DetectionTier::Definitive);
+    assert_eq!(
+        t.unpack,
+        Chosen {
+            piece: UnpackAdapter::Bun,
+            reason: Reason::DetectedByStrength
+        }
+    );
+    assert_eq!(t.library_detector.reason, Reason::DetectedByStrength);
+    assert_eq!(
+        t.name_profile,
+        Chosen {
+            piece: NameProfile::Bun,
+            reason: Reason::DetectedByStrength
+        }
+    );
+    assert_eq!(t.never_rename.reason, Reason::DetectedByStrength);
+    assert_eq!(t.tuning.piece, BundlerTuning::Default);
+    let reasons: Vec<&str> = t.record().iter().map(|r| r.reason.name()).collect();
+    assert!(reasons.contains(&"detected-by-strength"));
+    assert!(!reasons.contains(&"detected"));
+    // A flag still decides, and says so.
+    let t = resolve_toolchain(&detect_bundle(&code), Some(BundlerType::Esbuild), None);
+    assert_eq!(t.unpack.reason, Reason::Flag);
+}
+
+/// Two bundlers tied at the strongest rank: no verdict, the do-nothing
+/// adapter, and the record says the fallback came from a tie.
+#[test]
+fn a_tie_falls_back_and_says_why() {
+    let t = resolve_toolchain(
+        &detect_bundle("var parcelRequire; __webpack_require__(1);"),
+        None,
+        None,
+    );
+    assert_eq!(t.bundler, BundlerType::Unknown);
+    assert_eq!(
+        t.unpack,
+        Chosen {
+            piece: UnpackAdapter::Passthrough,
+            reason: Reason::FallbackOnTie
+        }
+    );
+    assert_eq!(t.name_profile.reason, Reason::FallbackOnTie);
+    assert_eq!(Reason::FallbackOnTie.name(), "fallback-on-tie");
+    assert_eq!(Reason::DetectedByStrength.name(), "detected-by-strength");
+}
+
+/// A `likely` bundler verdict (a weak token alone: `installedModules`) is
+/// reported, never acted on — the toolchain takes definitive verdicts
+/// only (review R19: it used to send such input to webcrack).
+#[test]
+fn a_likely_verdict_is_not_acted_on() {
+    let d = detect_bundle("var installedModules = {};\nfunction f(){}\n");
+    assert_eq!(d.bundler.kind, BundlerType::Browserify);
+    assert_eq!(d.bundler.tier, DetectionTier::Likely);
+    let t = resolve_toolchain(&d, None, None);
+    assert_eq!(t.bundler, BundlerType::Unknown);
+    assert_eq!(t.bundler_tier, DetectionTier::Unknown);
+    assert_eq!(
+        t.unpack,
+        Chosen {
+            piece: UnpackAdapter::Passthrough,
+            reason: Reason::Fallback
+        }
+    );
+    assert_eq!(t.name_profile.reason, Reason::Fallback);
+}
+
 /// The minifier DETECTION verdict is not newly trusted: it moves only the
 /// never-rename lists (swc's helpers — what the naming stage always read),
 /// never the name profile.

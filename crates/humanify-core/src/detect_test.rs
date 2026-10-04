@@ -9,13 +9,15 @@
 //!    `\b` is ASCII-only, `.` stops at all four line terminators, and the
 //!    scan windows (16K, 200) count UTF-16 code units, not bytes.
 
-use humanify_model::detection::{BundlerType, DetectionTier, MinifierType};
+use humanify_model::detection::{
+    BundlerType, ConflictResolution, DetectionTier, MinifierType, SignalStrength,
+};
 
-use crate::detect::detect_bundle;
 use crate::detect::signals::{
     detect_browserify, detect_bun_bundler, detect_bun_minifier, detect_esbuild,
     detect_esbuild_minifier, detect_parcel, detect_swc_minifier, detect_terser, detect_webpack,
 };
+use crate::detect::{detect_bundle, pick_bundler};
 
 // ---- layer 1: detect.test.ts ------------------------------------------------
 
@@ -198,7 +200,9 @@ fn browserify_signals() {
     let s = detect_browserify("var installedModules = {};");
     assert_eq!(s.len(), 1);
     assert_eq!(s[0].bundler, Some(BundlerType::Browserify));
-    assert_eq!(s[0].tier, DetectionTier::Definitive);
+    // One common word: a weak token, `likely` (review R19).
+    assert_eq!(s[0].tier, DetectionTier::Likely);
+    assert_eq!(s[0].strength, Some(SignalStrength::WeakToken));
     assert!(
         detect_browserify("var installedModules = {}; function __webpack_require__(id) {}")
             .is_empty()
@@ -397,5 +401,162 @@ fn result_serializes_as_the_ts_json() {
     assert_eq!(
         serde_json::to_string(&r).unwrap(),
         r#"{"bundler":{"type":"parcel","tier":"definitive"},"minifier":{"type":"terser","tier":"unknown"},"signals":[{"source":"parcel","pattern":"parcelRequire","bundler":"parcel","tier":"definitive"},{"source":"terser","pattern":"void 0","minifier":"terser","tier":"unknown"}]}"#
+    );
+}
+
+// ---- layer 4: the verdict is decided by strength, not list order ------------
+// (toolchain review R3/R19, 2026-10-04; the rules are on `SignalStrength`)
+
+/// A real `bun build --target=bun --format=cjs` (Bun 1.3.14, unminified):
+/// the `// @bun @bun-cjs` banner AND esbuild's helper names, which Bun's
+/// runtime writes too (test/e2e/fixtures/bun-bundle/README.md).
+const REAL_BUN_BUILDS: [&str; 2] = [
+    include_str!("../../../test/e2e/fixtures/bun-bundle/build/v1.0.0/build/index.js"),
+    include_str!("../../../test/e2e/fixtures/bun-bundle/build/v1.1.0/build/index.js"),
+];
+
+#[test]
+fn a_real_unminified_bun_build_is_detected_as_bun() {
+    for build in REAL_BUN_BUILDS {
+        let r = detect_bundle(build);
+        // The build carries both bundlers' signals: the conflict is real.
+        assert!(
+            r.signals
+                .iter()
+                .any(|s| s.bundler == Some(BundlerType::Esbuild))
+        );
+        assert_eq!(r.bundler.kind, BundlerType::Bun);
+        assert_eq!(r.bundler.tier, DetectionTier::Definitive);
+        let conflict = r.bundler.conflict.expect("two bundlers named: a conflict");
+        assert_eq!(conflict.resolution, ConflictResolution::Strength);
+        assert_eq!(conflict.candidates[0].bundler, BundlerType::Bun);
+        assert_eq!(conflict.candidates[0].strength, SignalStrength::Banner);
+        assert_eq!(conflict.candidates[1].bundler, BundlerType::Esbuild);
+        assert_eq!(
+            conflict.candidates[1].strength,
+            SignalStrength::SharedHelperName
+        );
+    }
+}
+
+#[test]
+fn a_bun_banner_outranks_esbuild_helper_names() {
+    // R3's sample: list order (esbuild before bun) used to win.
+    let code = "// @bun\nvar __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);\n";
+    let r = detect_bundle(code);
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    assert_eq!(r.bundler.tier, DetectionTier::Definitive);
+}
+
+#[test]
+fn the_ranking_is_banner_runtime_name_shape_shared_helper_weak_token() {
+    use SignalStrength as S;
+    assert!(S::Banner > S::OwnRuntimeName);
+    assert!(S::OwnRuntimeName > S::Shape);
+    assert!(S::Shape > S::SharedHelperName);
+    assert!(S::SharedHelperName > S::WeakToken);
+    assert_eq!(S::WeakToken.tier(), DetectionTier::Likely);
+    for s in [S::SharedHelperName, S::Shape, S::OwnRuntimeName, S::Banner] {
+        assert_eq!(s.tier(), DetectionTier::Definitive);
+    }
+}
+
+#[test]
+fn every_bundler_signal_carries_its_strength() {
+    use SignalStrength as S;
+    let cases: [(&str, S); 6] = [
+        (WEBPACK, S::OwnRuntimeName),
+        (PARCEL, S::OwnRuntimeName),
+        (ESBUILD, S::SharedHelperName),
+        (BUN, S::Shape),
+        ("// @bun\n", S::Banner),
+        ("var installedModules = {};", S::WeakToken),
+    ];
+    for (code, strength) in cases {
+        let r = detect_bundle(code);
+        let bundler_signals: Vec<_> = r.signals.iter().filter(|s| s.bundler.is_some()).collect();
+        assert!(!bundler_signals.is_empty(), "{code}");
+        assert!(
+            bundler_signals.iter().all(|s| s.strength == Some(strength)),
+            "{code}"
+        );
+    }
+    let b = detect_bundle(BROWSERIFY);
+    assert!(b.signals.iter().any(|s| s.strength == Some(S::Shape)));
+    // Minifier signals carry no bundler strength.
+    assert!(
+        detect_bundle(GENERIC_MINIFIED)
+            .signals
+            .iter()
+            .all(|s| s.strength.is_none())
+    );
+}
+
+#[test]
+fn the_verdict_does_not_depend_on_signal_order() {
+    let code = "// @bun\nvar __commonJS = 1; var x = __toESM(y);";
+    let mut signals = detect_bundle(code).signals;
+    let forward = pick_bundler(&signals);
+    signals.reverse();
+    let backward = pick_bundler(&signals);
+    assert_eq!(forward.kind, BundlerType::Bun);
+    assert_eq!(forward.kind, backward.kind);
+    assert_eq!(forward.tier, backward.tier);
+    assert_eq!(
+        forward.conflict.map(|c| c.resolution),
+        backward.conflict.map(|c| c.resolution)
+    );
+}
+
+#[test]
+fn installed_modules_alone_is_only_a_likely_browserify() {
+    let r = detect_bundle("var installedModules = {};");
+    assert_eq!(r.bundler.kind, BundlerType::Browserify);
+    assert_eq!(r.bundler.tier, DetectionTier::Likely);
+    assert!(r.bundler.conflict.is_none());
+}
+
+#[test]
+fn a_definitive_signal_outranks_a_weak_token_of_another_bundler() {
+    // A Bun banner plus a stray `installedModules`: Bun, with the weak
+    // token listed as the outranked candidate.
+    let r = detect_bundle("// @bun\nvar installedModules = {};");
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    assert_eq!(r.bundler.tier, DetectionTier::Definitive);
+    let c = r.bundler.conflict.expect("two bundlers named");
+    assert_eq!(c.resolution, ConflictResolution::Strength);
+    assert_eq!(c.candidates.len(), 2);
+    assert_eq!(c.candidates[1].strength, SignalStrength::WeakToken);
+}
+
+#[test]
+fn a_tie_at_the_strongest_rank_is_unknown_and_says_so() {
+    // Two bundlers' own runtime names: list order used to say webpack.
+    let r = detect_bundle("var parcelRequire; __webpack_require__(1);");
+    assert_eq!(r.bundler.kind, BundlerType::Unknown);
+    assert_eq!(r.bundler.tier, DetectionTier::Unknown);
+    let c = r.bundler.conflict.expect("a tie is a conflict");
+    assert_eq!(c.resolution, ConflictResolution::Tie);
+    let mut named: Vec<_> = c.candidates.iter().map(|k| k.bundler).collect();
+    named.sort_by_key(|b| format!("{b:?}"));
+    assert_eq!(named, vec![BundlerType::Parcel, BundlerType::Webpack]);
+}
+
+#[test]
+fn signals_of_one_bundler_are_no_conflict() {
+    let r = detect_bundle(ESBUILD);
+    assert_eq!(r.bundler.kind, BundlerType::Esbuild);
+    assert!(r.bundler.conflict.is_none());
+    // ... and the serialized verdict keeps its pre-ranking shape.
+    let json = serde_json::to_string(&r.bundler).unwrap();
+    assert_eq!(json, r#"{"type":"esbuild","tier":"definitive"}"#);
+}
+
+#[test]
+fn a_conflict_serializes_with_its_candidates() {
+    let r = detect_bundle("// @bun\nvar __commonJS = 1;");
+    assert_eq!(
+        serde_json::to_string(&r.bundler).unwrap(),
+        r#"{"type":"bun","tier":"definitive","conflict":{"resolution":"strength","candidates":[{"bundler":"bun","pattern":"// @bun banner","strength":"banner"},{"bundler":"esbuild","pattern":"__commonJS","strength":"shared-helper-name"}]}}"#
     );
 }

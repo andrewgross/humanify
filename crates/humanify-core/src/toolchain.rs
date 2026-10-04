@@ -38,9 +38,13 @@
 //! - P13 which unpacked file is the app — [`AppFile`].
 //!
 //! SELECTION RULES (the name-profile precedent, finding #75): the flags
-//! decide first; a DEFINITIVE bundler detection next (the bundler verdict
-//! is never anything else — `detect::pick_bundler`); otherwise the Bun
-//! pieces / today's defaults. The minifier DETECTION verdict is measured
+//! decide first; a DEFINITIVE bundler detection next (a `likely` verdict —
+//! a weak token alone — is never acted on, review R19); otherwise the Bun
+//! pieces / today's defaults. The bundler verdict is decided by signal
+//! strength (`detect::pick_bundler`); when its signals named another
+//! bundler too, every piece the bundler decided records it
+//! (`detected-by-strength`, or `fallback-on-tie` when two bundlers tied
+//! and detection picked none — review R3). The minifier DETECTION verdict is measured
 //! unreliable and nothing newly reads it: the only piece that reads it is
 //! the never-rename lists (swc's helper names), exactly as the naming
 //! stage always has. Every choice is recorded with its [`Reason`]
@@ -48,7 +52,9 @@
 
 use std::collections::HashSet;
 
-use humanify_model::detection::{BundlerDetectionResult, BundlerType, DetectionTier, MinifierType};
+use humanify_model::detection::{
+    BundlerDetectionResult, BundlerType, ConflictResolution, DetectionTier, MinifierType,
+};
 
 use crate::libdetect::LibraryDetector;
 use crate::rename::eligibility::NeverRename;
@@ -65,9 +71,16 @@ pub enum Reason {
     Flag,
     /// Detection decided it (for a bundler: a definitive verdict).
     Detected,
+    /// A definitive bundler verdict whose signals named another bundler
+    /// too, settled by signal strength (the verdict's `conflict`; e.g. a
+    /// Bun build's banner over the esbuild helper names Bun also writes).
+    DetectedByStrength,
     /// Nothing confident was known: the default (Bun's piece, or the
     /// adapter registry's do-nothing last entry).
     Fallback,
+    /// The fallback, because two bundlers tied at the strongest signal
+    /// rank and detection refused to pick one (the verdict's `conflict`).
+    FallbackOnTie,
     /// The slot has one implementation today; every input gets it.
     OnlyImplementation,
 }
@@ -78,7 +91,9 @@ impl Reason {
         match self {
             Reason::Flag => "flag",
             Reason::Detected => "detected",
+            Reason::DetectedByStrength => "detected-by-strength",
             Reason::Fallback => "fallback",
+            Reason::FallbackOnTie => "fallback-on-tie",
             Reason::OnlyImplementation => "only-implementation",
         }
     }
@@ -423,6 +438,54 @@ fn only<T>(piece: T) -> Chosen<T> {
 /// `resolve_toolchain`: THE place a run's plugin pieces are chosen. An
 /// override of `unknown` is no override (the CLI's sentinel).
 pub fn resolve_toolchain(
+    detection: &BundlerDetectionResult,
+    bundler_override: Option<BundlerType>,
+    minifier_override: Option<MinifierType>,
+) -> Toolchain {
+    let detection = &definitive_only(detection);
+    let settled = settle_conflict(detection);
+    let mut toolchain = resolve_pieces(detection, bundler_override, minifier_override);
+    for reason in [
+        &mut toolchain.unpack.reason,
+        &mut toolchain.library_detector.reason,
+        &mut toolchain.never_rename.reason,
+        &mut toolchain.name_profile.reason,
+        &mut toolchain.tuning.reason,
+    ] {
+        *reason = settled(*reason);
+    }
+    toolchain
+}
+
+/// The verdict the toolchain acts on: a DEFINITIVE bundler verdict, else
+/// `unknown`. A `likely` verdict (a weak token alone, e.g.
+/// `installedModules` — review R19) is reported by detection and never
+/// picks a piece. The conflict, if any, is kept.
+fn definitive_only(detection: &BundlerDetectionResult) -> BundlerDetectionResult {
+    let mut acted = detection.clone();
+    if acted.bundler.tier != DetectionTier::Definitive {
+        acted.bundler.kind = BundlerType::Unknown;
+        acted.bundler.tier = DetectionTier::Unknown;
+    }
+    acted
+}
+
+/// How a bundler-decided piece's reason reads when detection had to settle
+/// a conflict between bundlers (review R3): `detected` becomes
+/// `detected-by-strength`, and a fallback forced by a tie becomes
+/// `fallback-on-tie`. A flag, or a verdict without a conflict, reads as
+/// before.
+fn settle_conflict(detection: &BundlerDetectionResult) -> impl Fn(Reason) -> Reason {
+    let resolution = detection.bundler.conflict.as_ref().map(|c| c.resolution);
+    move |reason| match (resolution, reason) {
+        (Some(ConflictResolution::Strength), Reason::Detected) => Reason::DetectedByStrength,
+        (Some(ConflictResolution::Tie), Reason::Fallback) => Reason::FallbackOnTie,
+        _ => reason,
+    }
+}
+
+/// Every piece from the (definitive-only) verdict and the flags.
+fn resolve_pieces(
     detection: &BundlerDetectionResult,
     bundler_override: Option<BundlerType>,
     minifier_override: Option<MinifierType>,

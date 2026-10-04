@@ -292,24 +292,24 @@ are both.
 
 ### Summary
 
-| piece                                       | stage  | status                        | a new plugin today must…                                                                                                                                            |
-| ------------------------------------------- | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1 Detection signals                        | 1      | **PARTIAL**                   | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything                                                 |
-| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                                                    |
-| P3 Module wrapper grammar (factories)       | 3, 8-9 | **EXISTS** (seam, 2026-10-04) | add a `ModuleWrapperGrammar` value (helper, classification, factory argument, lazy-init helpers); every caller asks the run's (#79); the unpack alone decides (#80) |
-| P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                                          |
-| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78)                       |
-| P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                                                     |
-| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04)       | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain                                                       |
-| P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)                                    |
-| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                                      |
-| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                                             |
-| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                                                |
-| P12 Load-order helper shapes                | 11     | **EXISTS** (2026-10-04)       | registrar by shape works for both; lazy-init comes from the module grammar, Bun's and esbuild's shapes (#79)                                                        |
-| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                                       |
-| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                                              |
-| P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                                                  |
-| P16 Fixtures and tests                      | gate   | **PARTIAL**                   | see the test list in each piece and the checklist                                                                                                                   |
+| piece                                       | stage  | status                        | a new plugin today must…                                                                                                                                                                                             |
+| ------------------------------------------- | ------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 Detection signals                        | 1      | **PARTIAL**                   | add a signal function (each signal with its strength) + list entry + enum value; the bundler verdict is by strength, not order (2026-10-04, #81); minifier verdicts are not yet trustworthy enough to drive anything |
+| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                                                                                                     |
+| P3 Module wrapper grammar (factories)       | 3, 8-9 | **EXISTS** (seam, 2026-10-04) | add a `ModuleWrapperGrammar` value (helper, classification, factory argument, lazy-init helpers); every caller asks the run's (#79); the unpack alone decides (#80)                                                  |
+| P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                                                                                           |
+| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78)                                                                        |
+| P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                                                                                                      |
+| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04)       | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain                                                                                                        |
+| P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)                                                                                     |
+| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                                                                                       |
+| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                                                                                              |
+| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                                                                                                 |
+| P12 Load-order helper shapes                | 11     | **EXISTS** (2026-10-04)       | registrar by shape works for both; lazy-init comes from the module grammar, Bun's and esbuild's shapes (#79)                                                                                                         |
+| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                                                                                        |
+| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                                                                                               |
+| P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                                                                                                   |
+| P16 Fixtures and tests                      | gate   | **PARTIAL**                   | see the test list in each piece and the checklist                                                                                                                                                                    |
 
 Rules every piece must keep (they come from the repo's history, not from
 taste):
@@ -341,28 +341,64 @@ and how sure are we?
 
 **Interface today:** a plain function `fn(&str) -> Vec<DetectionSignal>`
 over the first 16K characters, listed in `BUNDLER_DETECTORS`
-(`detect.rs:30`) or called from `detect_minifier` (`signals.rs:342`). Each
+(`detect.rs`) or called from `detect_minifier` (`signals.rs`). Each
 signal names a bundler OR a minifier, with a tier (`definitive`, `likely`,
-`unknown`). The bundler verdict is the first `definitive` bundler signal; the
-minifier verdict is the highest-tier minifier signal. `--bundler` /
-`--minifier` override both (`humanify_core::toolchain::resolve_toolchain`,
-where every piece is chosen from the verdicts).
+`unknown`); every bundler signal also carries a **strength**
+(`SignalStrength`). The minifier verdict is the highest-tier minifier
+signal. `--bundler` / `--minifier` override both
+(`humanify_core::toolchain::resolve_toolchain`, where every piece is chosen
+from the verdicts).
+
+**The bundler verdict is decided by STRENGTH, never by list order**
+(2026-10-04, toolchain review R3/R19; `detect::pick_bundler`, the rules
+written on `humanify_model::detection::SignalStrength`). Strongest first:
+
+1. **banner** — the bundler wrote its own name into the header
+   (`// @bun`);
+2. **own runtime name** — a runtime name only this bundler declares
+   (`__webpack_require__`, `__webpack_modules__`, `webpackChunk`,
+   `parcelRequire`, `require("_bundle_loader")`); a vendored library can
+   mention one, so it ranks under a banner;
+3. **shape** — two pieces that together only this bundler writes
+   (browserify's `[0].call(` + `.exports}`, Bun's `{exports:{}}` +
+   `createRequire` import); each piece alone is common text;
+4. **shared helper name** — a name more than one bundler writes: esbuild's
+   `__commonJS`, `__toESM`, `__toCommonJS`, `var __export`, `__require` are
+   Bun's too (a real `bun build` writes them — `test/e2e/fixtures/bun-bundle`);
+5. **weak token** — one common word (`installedModules`): tier `likely`,
+   the only rank that is not `definitive`.
+
+The verdict is the bundler whose strongest signal outranks every other
+bundler's, at that signal's tier. Two bundlers sharing the strongest rank
+is a **tie**: the verdict is `unknown`. Whenever the signals name more than
+one bundler, the verdict carries a `conflict` (`resolution`: `strength` or
+`tie`, and every candidate at its strongest signal, strongest first), and
+every toolchain piece the bundler decided records it: `detected-by-strength`
+or `fallback-on-tie` instead of `detected` / `fallback`. The toolchain acts
+on a **definitive** verdict only: a `likely` one is reported, never used
+(it used to send any file with the word `installedModules` to webcrack).
+On every walked Claude Code release (126 versions, 808 input files) only the
+banner fires, so the verdicts and the toolchain are byte-identical to before.
 
 **A plugin must provide:**
 
 - a value in `BundlerType` / `MinifierType` and in `SELECTABLE_*`
   (`humanify-model/src/detection.rs`) — the names are also the CLI values;
-- a signal function. A bundler signal must be **definitive** (it alone picks
-  the unpacker), so it must be a shape no other bundler writes. A minifier
-  signal should say how sure it is, and should be able to say **"not
-  minified"** (I5).
+- a signal function, each bundler signal with its **strength** from the
+  ranking above. Only a `definitive` verdict picks the unpacker; a name
+  another bundler also writes is a shared helper name, not the bundler's
+  own. A minifier signal should say how sure it is, and should be able to
+  say **"not minified"** (I5).
 - signals that survive minification. A bundler's helper names do not (I2);
   its structural shapes do (`{exports:{}}`, the lazy-init shape).
 
-**Bun today:** `// @bun` first line, or the factory marker plus the
-`createRequire` import. Minifier: the `$aB` count (I3, noisy).
-**esbuild today:** helper names — unminified builds only (I2); the minifier
-signal actually detects an unminified build (I5).
+**Bun today:** `// @bun` first line (banner), or the factory marker plus
+the `createRequire` import (shape). Minifier: the `$aB` count (I3, noisy).
+An unminified Bun build also fires every esbuild helper name; the banner
+outranks them (`bun-bundle` e2e fixture).
+**esbuild today:** helper names (shared helper names — Bun writes them
+too) — unminified builds only (I2); the minifier signal actually detects an
+unminified build (I5).
 **Fallback:** bundler `unknown` → the do-nothing adapter (the whole input as
 `index.js`); minifier `unknown` → today nothing changes, because only swc's
 list reads it.
@@ -375,7 +411,9 @@ a sturdier signal. Until then a name profile chosen from an `unknown` or
 
 **Tests a plugin must ship:** a `detect_test.rs` case per signal, with a
 real build's opening bytes, including the minified form; a negative case
-showing another bundler's real output does NOT fire it.
+showing another bundler's real output does NOT fire it — or, when it does
+(as esbuild's names fire on Bun's output), a case showing the ranking
+still names the right bundler.
 
 ### P2 — Unpack adapter: choosing and running it (stages 2-3) — PARTIAL
 
@@ -882,9 +920,11 @@ there is no cross-version quality measurement for any other bundler.
 For a new **bundler** (say, rollup or webpack 5) today:
 
 1. Detection (P1): add the `BundlerType` value, a signal function in
-   `detect/signals.rs`, its entry in `BUNDLER_DETECTORS`, and the
-   `SELECTABLE_BUNDLERS` entry. Write positive tests with minified and
-   unminified real builds, and negative tests on Bun/esbuild output.
+   `detect/signals.rs` (each signal ranked by `SignalStrength` — the
+   verdict is decided by strength, so the list position does not matter),
+   its entry in `BUNDLER_DETECTORS`, and the `SELECTABLE_BUNDLERS` entry.
+   Write positive tests with minified and unminified real builds, and
+   negative tests on Bun/esbuild output.
 2. Unpacker (P2): add the `UnpackAdapter` value, its `supports` rule and
    `name`, and its arm in the one dispatch site, `unpack::run_adapter`.
    Write the app's own code last.

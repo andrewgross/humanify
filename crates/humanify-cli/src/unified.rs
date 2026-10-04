@@ -1060,6 +1060,25 @@ fn detect_stage(
         enum_name(toolchain.minifier),
         adapter.name()
     ));
+    if let Some(conflict) = &detection.bundler.conflict {
+        let named: Vec<String> = conflict
+            .candidates
+            .iter()
+            .map(|c| {
+                format!(
+                    "{} ({}: {})",
+                    enum_name(c.bundler),
+                    enum_name(c.strength),
+                    c.pattern
+                )
+            })
+            .collect();
+        verbose().log(&format!(
+            "Bundle detection conflict, settled by {}: {}",
+            enum_name(conflict.resolution),
+            named.join(" > ")
+        ));
+    }
     verbose().debug(&format!(
         "Toolchain: {}",
         toolchain
