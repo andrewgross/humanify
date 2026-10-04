@@ -68,6 +68,17 @@ whose own "most-used wrapper" guess is gone. P12: one lazy-init recogniser
 I27 closed. Byte-identical vs main on the five e2e fixture pairs and the
 stub-LLM 2.1.118 → 2.1.119 pair.
 
+**Update 2026-10-04 (finding #80, branch `fix/naming-uses-unpacked-factories`;
+toolchain review R2).** I10 CLOSED: the naming stage no longer re-runs the
+module grammar on every file. Which code is a bundled module is the
+UNPACKER's decision, made once: what it extracted is in `vendor/` files of
+its own, and a factory it kept in the app is app code, named in the main
+waves with call-graph context (on esbuild such a factory used to be skipped
+and left to the coverage sweep). No unpacker (passthrough, webcrack) means
+no factory list: everything in the file is app code. Byte-identical vs main
+on the real Bun pair and the five existing e2e fixture pairs; a sixth
+fixture, `esbuild-kept-factory`, holds the changed case.
+
 ## Words used here
 
 - **Bundler** — the tool that glued many source files into one file (Bun,
@@ -164,16 +175,16 @@ given).
 
 #### Stages 2-3 — choosing and running the unpacker (`crates/humanify-core/src/unpack/`, `modules/`)
 
-| #   | where                                                                                              | what it assumes                                                                                                                                                                                                                                                                                            | belongs to   | status                    | sev    |
-| --- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------- | ------ |
-| I8  | `unpack.rs:61-148` (`UnpackAdapter`, `ADAPTERS`, `select_adapter`)                                 | the adapter list; each adapter says which detected bundler it takes                                                                                                                                                                                                                                        | all          | selected                  | Low    |
-| I9  | `unpack.rs:152` (`run_adapter`), `humanify-cli/src/unminify.rs:88`, `humanify-cli/src/main.rs:429` | the adapter is RUN from three places; two of them special-case `Bun \| Esbuild` with `matches!` to pass the vendor namer and the prior — **FIXED 2026-10-04**: `unpack::run_adapter` is the one dispatch site; every caller hands it `AdapterRun` (namer, prior, shim) and each adapter takes what it uses | Bun, esbuild | fixed                     | Medium |
-| I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them                                                                                       | Bun, esbuild | **wrong** by construction | Medium |
-| I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                       | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                                                                                                         | Bun          | harmless                  | Low    |
-| I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                  | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                                                                                                               | Bun          | harmless (naming only)    | Low    |
-| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                          | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                  | Low    |
-| I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                     | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"` — **FIXED 2026-10-04**: it accepts the stamp of any registered adapter that writes the record (`UnpackAdapter::of_vendor_record_stamp`)                                                                            | Bun, esbuild | fixed                     | Medium |
-| I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                         | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                                                                                                            | Bun, esbuild | harmless (by shape)       | Low    |
+| #   | where                                                                                              | what it assumes                                                                                                                                                                                                                                                                                            | belongs to   | status                                                                | sev    |
+| --- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------------------- | ------ |
+| I8  | `unpack.rs:61-148` (`UnpackAdapter`, `ADAPTERS`, `select_adapter`)                                 | the adapter list; each adapter says which detected bundler it takes                                                                                                                                                                                                                                        | all          | selected                                                              | Low    |
+| I9  | `unpack.rs:152` (`run_adapter`), `humanify-cli/src/unminify.rs:88`, `humanify-cli/src/main.rs:429` | the adapter is RUN from three places; two of them special-case `Bun \| Esbuild` with `matches!` to pass the vendor namer and the prior — **FIXED 2026-10-04**: `unpack::run_adapter` is the one dispatch site; every caller hands it `AdapterRun` (namer, prior, shim) and each adapter takes what it uses | Bun, esbuild | fixed                                                                 | Medium |
+| I10 | `modules.rs:181` (`identify_cjs_factory`) via `prior.rs:597` → `graph.rs:1479,1599`                | EVERY input file (any bundler) is searched for Bun's `{exports:{}}` marker, then esbuild's `__commonJS`; whatever is found marks "third-party factory" bodies, and the naming stage skips every function inside them                                                                                       | Bun, esbuild | fixed (#80: the naming-time scan is deleted; the unpack decides once) | Medium |
+| I11 | `unpack/bun.rs:897` (`identify_bun_require`)                                                       | the module `require` is Bun's `createRequire(import.meta.url)` alias, rewritten back to `require(` in vendor files                                                                                                                                                                                         | Bun          | harmless                                                              | Low    |
+| I12 | `unpack/bun.rs:55`, `modules/vendor_names.rs:352`                                                  | the vendor record is named `vendor/_bun-modules.json` / `BunModulesManifest` for both adapters; its doc still says the stamp is "always bun"                                                                                                                                                               | Bun          | harmless (naming only)                                                | Low    |
+| I13 | `unpack/bun.rs:152` (`load_prior_vendor`)                                                          | a prior tree's vendor record is read whatever adapter wrote it                                                                                                                                                                                                                                             | all          | harmless                                                              | Low    |
+| I14 | `finish/driver.rs:83-87` (`load_bun_manifest`)                                                     | the finish re-links vendor files only when the record's stamp is `"bun"` or `"esbuild"` — **FIXED 2026-10-04**: it accepts the stamp of any registered adapter that writes the record (`UnpackAdapter::of_vendor_record_stamp`)                                                                            | Bun, esbuild | fixed                                                                 | Medium |
+| I15 | `modules.rs:58`, `modules.rs:478` (`factory_arg_function`)                                         | the two factory spellings (function passed directly; esbuild's `{"path"(exports, module){…}}`) are both accepted on every input                                                                                                                                                                            | Bun, esbuild | harmless (by shape)                                                   | Low    |
 
 - **I9 example:** add a third vendor-extracting adapter to `run_adapter`
   only, and `humanify unminify` routes it through the generic branch with
@@ -185,7 +196,9 @@ given).
   (a different `o`, say a memoiser) has its whole body treated as
   third-party code and none of its functions are named. Nothing reports it.
   Not observed on a real build; the shape makes it possible on any input,
-  because the check runs whatever was detected.
+  because the check runs whatever was detected. **FIXED 2026-10-04 (#80):**
+  the naming stage no longer searches for factories; only the unpack does,
+  and only when a bundler adapter was chosen.
 - **I14 example:** a new adapter writes the same vendor record with its own
   stamp; `finish` silently skips the re-link, and the vendor files are left
   as bare factory expressions the runnable tree cannot load.
@@ -279,24 +292,24 @@ are both.
 
 ### Summary
 
-| piece                                       | stage  | status                        | a new plugin today must…                                                                                                                      |
-| ------------------------------------------- | ------ | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1 Detection signals                        | 1      | **PARTIAL**                   | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything                           |
-| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                              |
-| P3 Module wrapper grammar (factories)       | 3, 8-9 | **EXISTS** (seam, 2026-10-04) | add a `ModuleWrapperGrammar` value (helper, classification, factory argument, lazy-init helpers); every caller asks the run's (#79); I10 open |
-| P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                    |
-| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78) |
-| P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                               |
-| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04)       | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain                                 |
-| P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)              |
-| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                |
-| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                       |
-| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                          |
-| P12 Load-order helper shapes                | 11     | **EXISTS** (2026-10-04)       | registrar by shape works for both; lazy-init comes from the module grammar, Bun's and esbuild's shapes (#79)                                  |
-| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                 |
-| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                        |
-| P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                            |
-| P16 Fixtures and tests                      | gate   | **PARTIAL**                   | see the test list in each piece and the checklist                                                                                             |
+| piece                                       | stage  | status                        | a new plugin today must…                                                                                                                                            |
+| ------------------------------------------- | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 Detection signals                        | 1      | **PARTIAL**                   | add a signal function + list entry + enum value; minifier verdicts are not yet trustworthy enough to drive anything                                                 |
+| P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                                                    |
+| P3 Module wrapper grammar (factories)       | 3, 8-9 | **EXISTS** (seam, 2026-10-04) | add a `ModuleWrapperGrammar` value (helper, classification, factory argument, lazy-init helpers); every caller asks the run's (#79); the unpack alone decides (#80) |
+| P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                                          |
+| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78)                       |
+| P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                                                     |
+| P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04)       | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain                                                       |
+| P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)                                    |
+| P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                                      |
+| P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                                             |
+| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                                                |
+| P12 Load-order helper shapes                | 11     | **EXISTS** (2026-10-04)       | registrar by shape works for both; lazy-init comes from the module grammar, Bun's and esbuild's shapes (#79)                                                        |
+| P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                                       |
+| P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                                              |
+| P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                                                  |
+| P16 Fixtures and tests                      | gate   | **PARTIAL**                   | see the test list in each piece and the checklist                                                                                                                   |
 
 Rules every piece must keep (they come from the repo's history, not from
 taste):
@@ -399,7 +412,7 @@ toolchain, which also records why (flag / detected / fallback).
 
 **Tests:** `unpack_test.rs` cases for selection; the e2e fixture below.
 
-### P3 — Module wrapper grammar: finding the bundled modules (stages 3, 8-9) — EXISTS (seam real, one implementation; I10 open)
+### P3 — Module wrapper grammar: finding the bundled modules (stages 3, 8-9) — EXISTS (seam real, one implementation; I10 closed)
 
 **Question:** where are the bundled third-party modules, and what is each
 module's body?
@@ -420,16 +433,17 @@ module's body?
   rewrite in vendor bodies (Bun only, I11).
 
 **Must guarantee:** a factory is something whose body runs only as a
-module (precision: everything inside is skipped by naming and moved to
-`vendor/`); the structural hash ignores the minified names so the same
-library joins across releases.
+module (precision: everything inside is moved to `vendor/`); the structural
+hash ignores the minified names so the same library joins across releases.
+A factory the unpack keeps in the app (it reaches a binding a vendor file
+cannot resolve) is app code from then on (#80).
 
-**Where Bun is wired in:** the helper search runs on EVERY processed file,
-whatever was detected, because the naming stage calls the classifier too
-(`prior.rs:597` → `graph.rs:1479,1599`), and it matches the helper by
-name rather than by binding (I10). The plugin's grammar should be passed in
-from the adapter selection, and the naming stage should receive the
-unpacker's factory list rather than re-detect it.
+**Where Bun is wired in:** the helper is matched by name rather than by
+binding. Until #80 the search also ran on EVERY processed file, whatever
+was detected, because the naming stage called the classifier too (I10);
+now only the unpack runs it, once, and naming takes the unpack's split of
+the code as given (extracted modules are vendor files; what stayed is app
+code).
 
 **Fallback:** no helper found → no factories → nothing skipped, nothing
 extracted.
@@ -460,8 +474,8 @@ behaviour change in the clustered regime only (passthrough/webcrack input
 or `--disable fossil-split`); default Bun and esbuild runs place by fossils.
 Byte-identical on the five e2e fixture pairs and the stub-LLM real Bun pair.
 
-**I10 / R2 is unchanged and measured (#79):** the naming stage still
-re-runs the grammar on every processed file. On the esbuild fixtures it
+**I10 / R2 — measured in #79, CLOSED in #80 (below):** the naming stage
+re-ran the grammar on every processed file. On the esbuild fixtures it
 FINDS `__commonJS` on every naming input (both sides) but no factory is
 left in the app (the unpack extracted them all), so it skips nothing —
 switching it off changes neither tree nor asks. When a factory does stay
@@ -472,7 +486,33 @@ instead, one function per ask without call-graph context (5 sweep asks
 instead of 5 wave asks); on Bun's formatted text the grammar never fires
 (the formatter splits `{exports:{}}`), so the same factory would be named
 in the waves. Whether to pass the unpacker's factory list down or retire
-the naming-time detection is a separate decision.
+the naming-time detection was a separate decision.
+
+**I10 closed (2026-10-04, finding #80, Andrew's call: one source of truth,
+the unpacker's).** Applied to the files naming actually sees, the
+unpacker's factory list contains nothing to skip: every module it
+extracted is no longer in the app text (it is a `vendor/` file, named or
+filtered as a whole file, as before), and every factory it kept is app
+code by its own decision. So "use the unpacker's list" is exactly "naming
+does no factory scan": `prior::build_side_parts` no longer classifies, the
+graph's factory skip (`build_*_graph`'s `factories` argument,
+`modules::is_inside_factory_body`) is deleted, and `module_wrappers` left
+`NamingConfig` / `EraOptions` / `PriorMatchInput` / the `match` verb. With
+no unpacker (passthrough, webcrack) there is no factory list: the whole
+file is app code. On Bun this matches what the scan did (it never fired on
+formatted text); elsewhere it changes one thing: a passthrough input that
+still holds esbuild's `__commonJS` factories (an esbuild bundle the
+detector was not sure of) used to have those factory bodies dropped from
+naming and from prior matching, and now names them as app code — the
+same answer the Bun-formatted text always got. Red/green
+`a_factory_the_unpacker_kept_in_the_app_is_named_in_the_main_waves`;
+e2e fixture `esbuild-kept-factory` (the one-line variant, plus the report
+line that proves the factory's app write survives). Byte-identical vs main
+`8f9a5057` on the real Bun pair (fresh and prior, trees and asks) and the
+five existing fixture pairs; on `esbuild-kept-factory` the trees are
+identical under the stub and the asks move: fresh 6 sweep asks → 1 (the
+five inner functions are wave asks), prior 2 sweep asks → 0 (the new
+`tripled` is a wave ask).
 
 **Tests:** `modules_test.rs` cases for the helper and argument shapes from a
 real build (minified AND unminified), and a negative case (the helper's
@@ -900,10 +940,9 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
    re-detecting on every file (I10). Neutral on Bun input (same grammar,
    same answer); changes behaviour only on other bundlers, which is the
    point. **First half DONE 2026-10-04** (finding #79): every caller asks
-   the toolchain's `ModuleWrapperGrammar`; the naming stage still
-   re-detects (unchanged behaviour, measured in #79) — whether to pass the
-   unpacker's list down or retire the naming-time detection is Andrew's
-   call.
+   the toolchain's `ModuleWrapperGrammar`. **Second half DONE 2026-10-04**
+   (finding #80): the naming stage takes the unpacker's decision — no
+   per-file re-detection; a factory kept in the app is app code.
 5. **Recognise minified esbuild** (I2), with a committed minified esbuild
    fixture first. The extraction code already handles the shape.
 6. **Per-plugin interop helpers and lazy-init shapes** (I16-I18, I27), with

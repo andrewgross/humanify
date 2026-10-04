@@ -263,7 +263,6 @@ fn with_twin_sides_classified(
 ) {
     let input = PriorMatchInput {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
-        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         fresh: fresh_code,
         prior: prior_code,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
@@ -345,7 +344,6 @@ fn with_gate_sides(
         prior_ingest.semantic(),
         prior_ingest.program,
         "prior.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -353,7 +351,6 @@ fn with_gate_sides(
         fresh_ingest.semantic(),
         fresh_ingest.program,
         "fresh.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

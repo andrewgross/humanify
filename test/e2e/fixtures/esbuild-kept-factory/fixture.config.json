@@ -1,0 +1,14 @@
+{
+  "package": "esbuild-kept-factory",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "esbuild-bundle's two builds with one factory the unpack must KEEP in the app: its body writes an app binding (appCounter), so no vendor file could hold it. That factory is app code — named in the main naming waves with its call graph (finding #80), and the report prints appCounter so the boot step proves the write survives naming and the split."
+    }
+  ]
+}

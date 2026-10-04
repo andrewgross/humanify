@@ -492,19 +492,17 @@ fn analyze_call_edges(
     }
 }
 
-/// Build the function graph over the semantic.
-///
-/// `factories` = the Bun CJS classification's factory records (empty when
-/// the bundle has no CJS factory helper): functions inside any factory
-/// body are THIRD-PARTY and are skipped (the TS buildFunctionGraph's
-/// classification skip — the member set must match the oracle's).
+/// Build the function graph over the semantic: every function in the text
+/// is a row. Which code is a bundled third-party module is the UNPACKER's
+/// decision, made once (finding #80): the modules it extracted are vendor
+/// files of their own, and a factory it kept in the app is app code — the
+/// graph never re-detects factories to skip.
 pub fn build_function_graph(
     semantic: &Semantic<'_>,
     file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
 ) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let program_json = crate::ingest::program_estree_json(semantic.nodes().program());
-    build_function_graph_with_json(semantic, &program_json, file_name, factories)
+    build_function_graph_with_json(semantic, &program_json, file_name)
 }
 
 /// [`build_function_graph`] over the side's already-parsed program
@@ -513,7 +511,6 @@ fn build_function_graph_with_json(
     semantic: &Semantic<'_>,
     program_json: &Value,
     file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
 ) -> (FunctionGraph, HashMap<SymbolId, usize>) {
     let nodes = semantic.nodes();
     let scoping = semantic.scoping();
@@ -528,7 +525,7 @@ fn build_function_graph_with_json(
     }
 
     // --- pass 1: collect functions -------------------------------------
-    let (mut entries, idx_by_node) = collect_function_entries(nodes, factories);
+    let (mut entries, idx_by_node) = collect_function_entries(nodes);
 
     // The per-function canonical hash + features, over each function's
     // subtree of the side's program JSON ([`entry_outputs`]).
@@ -652,7 +649,6 @@ pub fn build_unified_graph(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
     file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
     never_rename: crate::rename::eligibility::NeverRename,
     layout: crate::toolchain::BundleLayout,
 ) -> UnifiedGraph {
@@ -660,7 +656,6 @@ pub fn build_unified_graph(
         semantic,
         program,
         file_name,
-        factories,
         Eligibility::SkipSet(never_rename),
         layout,
     )
@@ -680,7 +675,6 @@ pub fn build_unified_graph_with_eligibility(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
     file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility,
     layout: crate::toolchain::BundleLayout,
 ) -> UnifiedGraph {
@@ -690,7 +684,6 @@ pub fn build_unified_graph_with_eligibility(
         program,
         &program_json,
         file_name,
-        factories,
         eligibility,
         layout,
     )
@@ -704,16 +697,14 @@ pub fn build_unified_graph_with_json(
     program: &oxc_ast::ast::Program<'_>,
     program_json: &Value,
     file_name: &str,
-    factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility,
     layout: crate::toolchain::BundleLayout,
 ) -> UnifiedGraph {
     let (graph, function_by_symbol) =
-        build_function_graph_with_json(semantic, program_json, file_name, factories);
+        build_function_graph_with_json(semantic, program_json, file_name);
     let module_bindings = build_module_bindings(
         semantic,
         program,
-        factories,
         eligibility,
         layout,
         &function_by_symbol,
@@ -1089,7 +1080,6 @@ fn assign_redeclarations_and_hashes(
 fn build_module_bindings(
     semantic: &Semantic<'_>,
     program: &oxc_ast::ast::Program<'_>,
-    factories: &[crate::modules::FactoryRecord],
     eligibility: Eligibility,
     layout: crate::toolchain::BundleLayout,
     function_by_symbol: &HashMap<SymbolId, usize>,
@@ -1123,7 +1113,7 @@ fn build_module_bindings(
         }
         let decl_node_id = scoping.symbol_declaration(symbol);
         let decl_node = nodes.get_node(decl_node_id);
-        if should_skip_binding(&decl_node.kind(), decl_node.span(), factories) {
+        if should_skip_binding(&decl_node.kind()) {
             continue;
         }
         // The row key = the SYMBOL's declaration span — the binding
@@ -1283,7 +1273,7 @@ fn build_module_bindings(
 /// positions babel records as constantViolations (see
 /// [`babel_reference_node_ids`]); `findEnclosingFunction` (:671) walks
 /// the parent chain to the first Function ancestor — one that is not a
-/// graph row answers null (the factory-skip semantics), so a top-level
+/// graph row answers null, so a top-level
 /// reference adds nothing.
 fn apply_binding_caller_edges(
     rows: &mut [ModuleBindingNode],
@@ -1409,8 +1399,8 @@ pub(crate) fn is_babel_assignment_target(
 /// that a method's body sits under an inner Function node BELOW the
 /// MethodDefinition row (babel has ONE ClassMethod node) — so an unrowed
 /// Function whose parent is a method row continues through it, and any
-/// other unrowed Function/Arrow answers None (the factory-skip stop,
-/// babel's `fnByNode.get(...) ?? null`).
+/// other unrowed Function/Arrow answers None (defensive since finding #80
+/// made every function a row; babel's `fnByNode.get(...) ?? null`).
 pub(crate) fn nearest_row_function_from_ref(
     nodes: &oxc_semantic::AstNodes<'_>,
     reference: NodeId,
@@ -1441,7 +1431,7 @@ pub(crate) fn nearest_row_function_from_ref(
                 prev = parent;
                 parent = grand;
             }
-            // An unrowed method (factory-skipped) — babel's isFunction()
+            // An unrowed method (defensive, as above) — babel's isFunction()
             // fires on it and fnByNode misses → null. A plain ObjectProperty
             // is only a container and does not stop the walk.
             AstKind::MethodDefinition(_) => return None,
@@ -1471,16 +1461,9 @@ fn container_scope_of_program(
         .find(|sid| scoping.get_node_id(*sid) == program_id)
 }
 
-/// The three shouldSkipBinding skips.
-fn should_skip_binding(
-    kind: &AstKind<'_>,
-    span: Span,
-    factories: &[crate::modules::FactoryRecord],
-) -> bool {
-    // Skip bindings inside any third-party CJS factory body.
-    if crate::modules::is_inside_factory_body(span, factories) {
-        return true;
-    }
+/// The shouldSkipBinding skips (the third-party factory-body skip went
+/// with the naming-time factory scan, finding #80).
+fn should_skip_binding(kind: &AstKind<'_>) -> bool {
     // Function declarations are processed as FunctionNodes.
     if matches!(kind, AstKind::Function(_)) {
         return true;
@@ -1559,10 +1542,7 @@ fn function_node_for_symbol(
 /// ObjectProperty with method=true or a Get/Set kind, whose value is a
 /// plain Function node — the METHOD node is the row (babel's span starts
 /// at the key; the inner Function node would be a duplicate).
-fn collect_function_entries(
-    nodes: &AstNodes<'_>,
-    factories: &[crate::modules::FactoryRecord],
-) -> (Vec<FnEntry>, HashMap<NodeId, usize>) {
+fn collect_function_entries(nodes: &AstNodes<'_>) -> (Vec<FnEntry>, HashMap<NodeId, usize>) {
     let mut entries: Vec<FnEntry> = Vec::new();
     let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
     for node in nodes.iter() {
@@ -1596,11 +1576,6 @@ fn collect_function_entries(
         let Some(span) = entry_kind else {
             continue;
         };
-        // Third-party factory bodies: the TS skips the whole subtree
-        // (path.skip()) — no node inside a factory body enters the graph.
-        if crate::modules::is_inside_factory_body(span, factories) {
-            continue;
-        }
         let entry = FnEntry {
             node_id: node.id(),
             span,

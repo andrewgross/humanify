@@ -105,7 +105,6 @@ fn with_sides<T>(
         old_ingest.semantic(),
         old_ingest.program,
         "test.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -113,7 +112,6 @@ fn with_sides<T>(
         new_ingest.semantic(),
         new_ingest.program,
         "test.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

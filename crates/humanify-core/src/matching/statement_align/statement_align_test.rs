@@ -72,7 +72,6 @@ fn with_fn_pair<T>(
         prior_ingest.semantic(),
         prior_ingest.program,
         "test.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
@@ -80,7 +79,6 @@ fn with_fn_pair<T>(
         next_ingest.semantic(),
         next_ingest.program,
         "test.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

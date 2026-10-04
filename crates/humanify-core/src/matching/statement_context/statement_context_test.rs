@@ -18,7 +18,6 @@ fn contexts_of(code: &str) -> (String, &'static UnifiedGraph, StatementContexts)
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     )));

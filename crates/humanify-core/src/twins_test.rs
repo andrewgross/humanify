@@ -228,7 +228,6 @@ fn graph_rows_assign_to_their_enclosing_statement() {
         ingest.semantic(),
         ingest.program,
         "input.js",
-        &[],
         crate::rename::eligibility::NeverRename::UNIVERSAL,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );

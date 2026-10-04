@@ -60,9 +60,7 @@ fn identify_matches_the_real_minified_marker() {
 
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
-use crate::modules::{
-    FactoryRecord, classify_bun_modules, is_inside_factory_body, name_cjs_factories,
-};
+use crate::modules::{FactoryRecord, classify_bun_modules, name_cjs_factories};
 use std::collections::HashMap;
 
 const HELPER: &str = "var x=(I,A)=>()=>(A||I((A = {exports:{}}).exports, A), A.exports);";
@@ -203,19 +201,6 @@ fn classify_real_minified_shape() {
     assert_eq!(factories[0].content_hash.len(), 16);
     // lineRange is 1-indexed.
     assert_eq!(factories[0].line_range.0, 1);
-}
-
-/// The factory-body containment skip.
-#[test]
-fn factory_body_containment_skips() {
-    let src = format!("{HELPER} var tO8=x((q,m)=>{{module.exports=1;}}); var notFactory=1;");
-    let factories = classify_of(&src);
-    assert_eq!(factories.len(), 1);
-    // A span inside the factory body is contained; the sibling var is not.
-    let inside = factories[0].body_span;
-    assert!(is_inside_factory_body(inside, &factories));
-    let after = oxc_span::Span::new(factories[0].span.end, factories[0].span.end + 3);
-    assert!(!is_inside_factory_body(after, &factories));
 }
 
 // ── the naming cascade ───────────────────────────────────────────────
