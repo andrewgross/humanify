@@ -58,7 +58,21 @@
  * no pre-flip golden to prove anything against, so the comparison is
  * skipped with a printed note instead of silently committed against
  * itself.
-
+ *
+ * DETECTION is recorded for every pair: `humanify detect --toolchain` on
+ * the v1 input (bundler, minifier, unpack adapter, bundle layout) is
+ * printed first, and a fixture's `expect` block (bundler, unpack adapter,
+ * a non-empty vendor/) is checked LAST, after the run steps — so a fixture
+ * whose detection is wrong is still run, split and booted end to end.
+ *
+ * KNOWN GAPS (`KNOWN_GAPS` below): a fixture that exposes a gap the
+ * pipeline has today (a minified esbuild build detected as unknown — spec
+ * I2; an ES-module or top-level CommonJS bundle the split cannot read —
+ * spec I25) must fail EXACTLY as its entry declares. It is printed as a
+ * KNOWN GAP and the
+ * stage stays green; failing any other way, or PASSING, fails the stage —
+ * so the fix that closes a gap is told to delete the entry, and the
+ * fixture becomes a passing case.
  *
  * Pass/fail, never advisory. Exit 1 on the first failure, naming it.
  */
@@ -100,11 +114,160 @@ interface VersionPair {
 interface FixtureConfig {
   versionPairs: VersionPair[];
   bundle?: boolean;
+  expect?: FixtureExpectations;
 }
 
+/**
+ * What a fixture's input MUST be recognised as, and what the run must do
+ * with it — checked after every other step passed, so a fixture with a
+ * known detection gap is still run, split and booted end to end first.
+ *
+ *   - `bundler` — `humanify detect`'s bundler verdict on the v1 input;
+ *   - `unpackAdapter` — the toolchain's unpack adapter for it
+ *     (`detect --toolchain`, the same resolution the run makes);
+ *   - `vendor` — the fresh split tree's `vendor/` holds at least one
+ *     extracted dependency (bundle fixtures).
+ */
+interface FixtureExpectations {
+  bundler?: string;
+  unpackAdapter?: string;
+  vendor?: boolean;
+}
+
+/** `humanify detect --toolchain`'s verdict on one input, as recorded. */
+interface Detection {
+  bundler: string;
+  bundlerTier?: string;
+  minifier?: string;
+  unpackAdapter: string;
+  bundleLayout?: string;
+}
+
+/**
+ * A gap the pipeline HAS today, recorded by a fixture that exposes it.
+ * The fixture runs like every other; it must then fail, and fail with a
+ * message containing `error` — that keeps the stage green while the gap
+ * is open, and gives its fix a red test to turn green. The entry is the
+ * contract, both ways (`judgeKnownGap`):
+ *
+ *   - the fixture fails some OTHER way → the stage fails (the gap moved;
+ *     re-read it before re-declaring);
+ *   - the fixture PASSES → the stage fails: the gap is fixed, so delete
+ *     the entry and the fixture joins the gate as a passing case.
+ *
+ * Keyed by fixture: every pair of the fixture is held to the entry.
+ */
+export interface KnownGap {
+  fixture: string;
+  /** The spec / review / finding item the gap is filed under. */
+  spec: string;
+  reason: string;
+  /** A substring of the failure, exact as the pipeline or harness says it. */
+  error: string;
+}
+
+/** The one bundle layout the split knows, and the builds it does not. */
+const TOP_LEVEL_LAYOUT_GAP = {
+  spec: "docs/plugin-spec.md I25 (P9 bundle layout); toolchain review R1, R10",
+  reason:
+    "the bundle's statements sit at the TOP LEVEL (an ES module, or esbuild's --format=cjs, where Node's module wrapper is implicit) — no wrapper function in the text, the only bundle layout the split knows — so --split exits 1 after unpack and naming, and no prior can be produced for the v2 leg",
+  error: "the run's input bundle has no recognizable bundle wrapper"
+};
+
+export const KNOWN_GAPS: KnownGap[] = [
+  {
+    fixture: "esbuild-minified",
+    spec: "docs/plugin-spec.md I2; toolchain review R18",
+    reason:
+      "esbuild's detector reads its helper NAMES (`__commonJS`, `__toESM`, …), which --minify shortens to letters: the build detects as unknown, gets the do-nothing (passthrough) adapter and keeps every dependency in the app — no vendor/ (the split still runs and boots)",
+    error: "detection: bundler is unknown, expected esbuild"
+  },
+  { fixture: "esbuild-cjs", ...TOP_LEVEL_LAYOUT_GAP },
+  { fixture: "esbuild-esm", ...TOP_LEVEL_LAYOUT_GAP },
+  { fixture: "bun-esm-minified", ...TOP_LEVEL_LAYOUT_GAP }
+];
+
+/** How a fixture's outcome reads against its known-gap entry, if any. */
+export function judgeKnownGap(
+  gap: KnownGap | undefined,
+  failure: string | null
+): { verdict: "pass" | "known-gap" | "fail"; message: string } {
+  if (!gap) {
+    return failure === null
+      ? { verdict: "pass", message: "" }
+      : { verdict: "fail", message: failure };
+  }
+  if (failure === null) {
+    return {
+      verdict: "fail",
+      message: `known gap "${gap.fixture}" (${gap.spec}) now PASSES — the gap is fixed: delete its KNOWN_GAPS entry in scripts/e2e.ts so the fixture gates as a passing case`
+    };
+  }
+  if (!failure.includes(gap.error)) {
+    return {
+      verdict: "fail",
+      message: `known gap "${gap.fixture}" (${gap.spec}) changed: expected a failure containing ${JSON.stringify(gap.error)}, got:\n${failure}`
+    };
+  }
+  const quoted =
+    failure.split("\n").find((l) => l.includes(gap.error)) ?? gap.error;
+  return {
+    verdict: "known-gap",
+    message: `KNOWN GAP ${gap.fixture} (${gap.spec}): ${gap.reason}\n    fails as declared: ${quoted.trim()}`
+  };
+}
+
+/** KNOWN_GAPS entries that name no fixture, or a fixture twice. */
+export function staleKnownGaps(gaps: KnownGap[], fixtures: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const g of gaps) {
+    if (seen.has(g.fixture)) {
+      out.push(`KNOWN_GAPS declares "${g.fixture}" twice`);
+    } else if (!fixtures.includes(g.fixture)) {
+      out.push(`KNOWN_GAPS entry "${g.fixture}" names no fixture`);
+    }
+    seen.add(g.fixture);
+  }
+  return out;
+}
+
+/** Each expectation the observed run missed, as one line. */
+export function expectationFailures(
+  expect: FixtureExpectations | undefined,
+  observed: Detection,
+  vendorFiles: number
+): string[] {
+  const out: string[] = [];
+  if (expect?.bundler !== undefined && observed.bundler !== expect.bundler) {
+    out.push(
+      `detection: bundler is ${observed.bundler}, expected ${expect.bundler}`
+    );
+  }
+  if (
+    expect?.unpackAdapter !== undefined &&
+    observed.unpackAdapter !== expect.unpackAdapter
+  ) {
+    out.push(
+      `toolchain: unpack adapter is ${observed.unpackAdapter}, expected ${expect.unpackAdapter}`
+    );
+  }
+  if (expect?.vendor && vendorFiles === 0) {
+    out.push(
+      "unpack: the split tree's vendor/ is empty, expected the extracted dependencies"
+    );
+  }
+  return out;
+}
+
+/**
+ * A check failed. Thrown, not exited on, so the stage can hold a
+ * known-gap fixture to its declared failure (`judgeKnownGap`).
+ */
+class E2EFailure extends Error {}
+
 function fail(msg: string): never {
-  console.error(`E2E FAILED: ${msg}`);
-  process.exit(1);
+  throw new E2EFailure(msg);
 }
 
 export { stubAnswer };
@@ -257,21 +420,56 @@ function hasGolden(dir: string): boolean {
   return fs.existsSync(dir);
 }
 
-function fixturePairs(): Array<{
+interface FixturePair {
   name: string;
   pair: VersionPair;
   bundle: boolean;
-}> {
-  const out: Array<{ name: string; pair: VersionPair; bundle: boolean }> = [];
+  expect?: FixtureExpectations;
+}
+
+function fixturePairs(): FixturePair[] {
+  const out: FixturePair[] = [];
   for (const name of fs.readdirSync(FIXTURES).sort()) {
     const cfgPath = path.join(FIXTURES, name, "fixture.config.json");
     if (!fs.existsSync(cfgPath)) continue;
     const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf8")) as FixtureConfig;
     for (const pair of cfg.versionPairs) {
-      out.push({ name, pair, bundle: cfg.bundle === true });
+      out.push({ name, pair, bundle: cfg.bundle === true, expect: cfg.expect });
     }
   }
   return out;
+}
+
+/**
+ * `humanify detect --toolchain` on one input: its second line is the
+ * resolved selection + toolchain, the same resolution a run makes.
+ */
+function detectionOf(file: string, label: string): Detection {
+  const r = spawnSync(BIN, ["detect", "--toolchain", file], {
+    encoding: "utf8"
+  });
+  if (r.status !== 0) fail(`${label}: detect --toolchain failed\n${r.stderr}`);
+  const lines = r.stdout.trim().split("\n");
+  const resolved = JSON.parse(lines[lines.length - 1]) as {
+    selection: Detection;
+    toolchain: Array<{ piece: string; choice: string }>;
+  };
+  return {
+    ...resolved.selection,
+    bundleLayout: resolved.toolchain.find((p) => p.piece === "bundleLayout")
+      ?.choice
+  };
+}
+
+function describeDetection(d: Detection): string {
+  return `bundler=${d.bundler} (${d.bundlerTier}), minifier=${d.minifier}, unpack=${d.unpackAdapter}, layout=${d.bundleLayout}`;
+}
+
+/** The extracted dependencies a split tree's vendor/ holds. */
+function vendorFileCount(tree: string): number {
+  const dir = path.join(tree, "vendor");
+  if (!fs.existsSync(dir)) return 0;
+  return treeFiles(dir).filter((f) => f.endsWith(".js")).length;
 }
 
 function inputOf(name: string, version: string): string {
@@ -343,15 +541,38 @@ async function priorLeg(
   assertIdenticalTrees(prior, again, label);
 }
 
+/**
+ * One fixture pair, end to end: what detection and the toolchain say
+ * about the input (always printed — the record of today's behaviour),
+ * the run steps, and last the fixture's declared expectations.
+ */
 async function checkPair(
+  { name, pair, bundle, expect }: FixturePair,
+  endpoint: string,
+  scratch: string
+): Promise<void> {
+  const label = `${name} ${pair.v1}->${pair.v2}`;
+  const detection = detectionOf(inputOf(name, pair.v1), label);
+  console.log(
+    `  ${label}: detect v${pair.v1}: ${describeDetection(detection)}`
+  );
+  const root = path.join(scratch, `${name}-${pair.v1}-${pair.v2}`);
+  await runPair(name, pair, endpoint, root, bundle);
+  const vendorFiles = bundle ? vendorFileCount(path.join(root, "fresh")) : 0;
+  if (bundle)
+    console.log(`  ${label}: fresh split tree vendor/: ${vendorFiles} file(s)`);
+  const missed = expectationFailures(expect, detection, vendorFiles);
+  if (missed.length > 0) fail(`${label}: ${missed.join("; ")}`);
+}
+
+async function runPair(
   name: string,
   pair: VersionPair,
   endpoint: string,
-  scratch: string,
+  root: string,
   bundle: boolean
 ): Promise<void> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
-  const root = path.join(scratch, `${name}-${pair.v1}-${pair.v2}`);
   const fresh = path.join(root, "fresh");
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
@@ -513,6 +734,30 @@ function compareGolden(
   }
 }
 
+/**
+ * Runs one pair and holds it to its known-gap entry: the pair's failure
+ * (an E2EFailure — anything else is a harness bug and propagates) or its
+ * pass, read by `judgeKnownGap`. Returns true for a recorded known gap.
+ */
+async function judgedPair(
+  fp: FixturePair,
+  endpoint: string,
+  scratch: string
+): Promise<boolean> {
+  let failure: string | null = null;
+  try {
+    await checkPair(fp, endpoint, scratch);
+  } catch (e) {
+    if (!(e instanceof E2EFailure)) throw e;
+    failure = e.message;
+  }
+  const gap = KNOWN_GAPS.find((g) => g.fixture === fp.name);
+  const judged = judgeKnownGap(gap, failure);
+  if (judged.verdict === "fail") fail(judged.message);
+  if (judged.verdict === "known-gap") console.log(`  ${judged.message}`);
+  return judged.verdict === "known-gap";
+}
+
 async function main(): Promise<void> {
   if (!fs.existsSync(BIN)) {
     fail(
@@ -521,29 +766,38 @@ async function main(): Promise<void> {
   }
   const pairs = fixturePairs();
   if (pairs.length === 0) fail(`no fixture pairs under ${FIXTURES}`);
+  const stale = staleKnownGaps(
+    KNOWN_GAPS,
+    pairs.map((p) => p.name)
+  );
+  if (stale.length > 0) fail(stale.join("\n"));
   const server = await startStub();
   const { port } = server.address() as AddressInfo;
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "humanify-e2e-"));
+  let gaps = 0;
   try {
-    for (const { name, pair, bundle } of pairs) {
-      await checkPair(
-        name,
-        pair,
-        `http://127.0.0.1:${port}/v1`,
-        scratch,
-        bundle
-      );
+    for (const fp of pairs) {
+      if (await judgedPair(fp, `http://127.0.0.1:${port}/v1`, scratch)) {
+        gaps++;
+      }
     }
   } finally {
     server.close();
     fs.rmSync(scratch, { recursive: true, force: true });
   }
-  console.log(`e2e: ${pairs.length} fixture pair(s) passed`);
+  console.log(
+    `e2e: ${pairs.length - gaps} fixture pair(s) passed, ${gaps} known gap(s) failed exactly as declared`
+  );
 }
 
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === path.resolve(import.meta.filename)
 ) {
-  void main();
+  main().catch((e: unknown) => {
+    console.error(
+      `E2E FAILED: ${e instanceof E2EFailure ? e.message : e instanceof Error ? e.stack : String(e)}`
+    );
+    process.exit(1);
+  });
 }

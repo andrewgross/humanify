@@ -4,6 +4,10 @@
   "sourceStrategy": { "type": "local" },
   "entryPoints": ["index.js"],
   "bundle": true,
+  "expect": {
+    "bundler": "esbuild",
+    "unpackAdapter": "esbuild"
+  },
   "versionPairs": [
     {
       "v1": "1.0.0",
