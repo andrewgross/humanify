@@ -225,6 +225,31 @@ fn stage_fingerprints_match() {
     );
 }
 
+/// The TS-captured record, with ONE declared departure (finding #81,
+/// review R19, 2026-10-04): the toolchain acts on a DEFINITIVE bundler
+/// verdict only, so a `likely` verdict with no `--bundler` flag selects
+/// as `unknown` → passthrough (the TS acted on it: webcrack / esbuild).
+/// The six affected vectors are synthetic — the TS detector never emitted
+/// a `likely` bundler verdict; the first real one is `installedModules`
+/// alone, which used to send any file containing that word to webcrack.
+fn expected_selection(
+    case: &serde_json::Value,
+    detection: &humanify_model::detection::BundlerDetectionResult,
+    bundler_flag: Option<humanify_model::detection::BundlerType>,
+) -> String {
+    use humanify_model::detection::{BundlerType, DetectionTier};
+    let captured = case["recordJson"].as_str().unwrap().to_string();
+    let flagged = bundler_flag.is_some_and(|b| b != BundlerType::Unknown);
+    if flagged || detection.bundler.tier == DetectionTier::Definitive {
+        return captured;
+    }
+    let mut record: serde_json::Value = serde_json::from_str(&captured).unwrap();
+    record["bundler"] = "unknown".into();
+    record["bundlerTier"] = "unknown".into();
+    record["unpackAdapter"] = "passthrough".into();
+    serde_json::to_string(&record).unwrap()
+}
+
 #[test]
 fn selection_matches_the_resolved_toolchain() {
     let v = vectors();
@@ -243,7 +268,7 @@ fn selection_matches_the_resolved_toolchain() {
         let record = pipeline_selection_record(&toolchain);
         assert_eq!(
             humanify_model::js::stringify(&record.to_js()),
-            case["recordJson"].as_str().unwrap(),
+            expected_selection(case, &detection, b),
             "{case}"
         );
     }
