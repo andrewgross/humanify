@@ -47,6 +47,12 @@ enum Command {
         /// of the read + detection spans; the summary goes to stderr.
         #[arg(long)]
         profile: Option<String>,
+        /// Also print, on a second line, the toolchain the run would
+        /// resolve from this verdict with no `--bundler`/`--minifier` flag:
+        /// the stats file's `selection` and `toolchain` blocks (every
+        /// plugin piece, its choice, and why).
+        #[arg(long)]
+        toolchain: bool,
     },
     /// WPB.2's unpack stage: detect the bundler, select the unpack adapter
     /// and write its tree (bun and esbuild: vendor/*.js + runtime.js +
@@ -190,7 +196,11 @@ fn main() {
     }
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Detect { input, profile }) => run_detect(&input, profile.as_deref()),
+        Some(Command::Detect {
+            input,
+            profile,
+            toolchain,
+        }) => run_detect(&input, profile.as_deref(), toolchain),
         Some(Command::Unpack {
             input,
             out_dir,
@@ -563,8 +573,9 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
 /// detection run inside spans shaped like the TS pipeline's
 /// (`file-io:read` {path, bytes} and `detection` {bundler}; the TS
 /// detection span's `adapter` key arrives with the unpack adapter
-/// registry, WPB.2).
-fn run_detect(input: &str, profile: Option<&str>) {
+/// registry, WPB.2). With `--toolchain`, a second line: the toolchain
+/// resolved from the verdict (no flags), as the stats file records it.
+fn run_detect(input: &str, profile: Option<&str>, toolchain: bool) {
     use humanify_core::profiling::{Profiler, format_profile_summary, to_trace_events};
     use humanify_model::profiling::{JsObject, trace_tid};
 
@@ -591,6 +602,9 @@ fn run_detect(input: &str, profile: Option<&str>) {
         "{}",
         serde_json::to_string(&verdict).expect("a detection verdict serializes")
     );
+    if toolchain {
+        println!("{}", toolchain_line(&verdict));
+    }
     if let Some(path) = profile {
         let report = profiler.finalize(Some(input));
         let trace =
@@ -602,6 +616,24 @@ fn run_detect(input: &str, profile: Option<&str>) {
         eprintln!("{}", format_profile_summary(&report));
         eprintln!("Profile written to {path}");
     }
+}
+
+/// `detect --toolchain`'s second line: `{"selection":…,"toolchain":[…]}`,
+/// the two blocks a run's stats file carries, resolved with no flags.
+fn toolchain_line(verdict: &humanify_model::detection::BundlerDetectionResult) -> String {
+    use humanify_cli::pipeline_config::{pipeline_selection_record, toolchain_record};
+    use humanify_model::js::{JsObject, JsValue, stringify};
+    use humanify_model::jsshape::JsType;
+
+    let resolved = humanify_core::toolchain::resolve_toolchain(verdict, None, None);
+    let pieces = toolchain_record(&resolved)
+        .iter()
+        .map(JsType::to_js)
+        .collect();
+    let mut line = JsObject::new();
+    line.insert("selection", pipeline_selection_record(&resolved).to_js());
+    line.insert("toolchain", JsValue::Array(pieces));
+    stringify(&JsValue::Object(line))
 }
 
 /// `humanify format`: the native formatter on one file.
