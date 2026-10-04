@@ -27,6 +27,7 @@ fn verdict(
             kind: bundler,
             tier: bundler_tier,
             version: None,
+            conflict: None,
         },
         minifier: MinifierVerdict {
             kind: minifier,

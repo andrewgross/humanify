@@ -63,8 +63,63 @@ pub const SELECTABLE_MINIFIERS: [MinifierType; 5] = [
     MinifierType::None,
 ];
 
+/// How strongly one BUNDLER signal names its bundler — the bundler verdict
+/// is decided by this ranking, never by the order the detectors run in
+/// (toolchain review R3/R19, 2026-10-04; docs/plugin-spec.md P1). Declared
+/// weakest-first so the derived `Ord` is the ranking. The rules:
+///
+/// 1. [`Banner`](Self::Banner) — the bundler wrote its own name into the
+///    output's header (`// @bun`). Nothing else writes it by accident.
+/// 2. [`OwnRuntimeName`](Self::OwnRuntimeName) — a runtime name that only
+///    this bundler's runtime declares (`__webpack_require__`,
+///    `webpackChunk`, `parcelRequire`, `require("_bundle_loader")`). A
+///    vendored library can MENTION one (`typeof __webpack_require__`), so
+///    it ranks under a banner.
+/// 3. [`Shape`](Self::Shape) — two structural pieces that together only
+///    this bundler writes (browserify's `[0].call(` + `.exports}`; Bun's
+///    `{exports:{}}` + `createRequire` import). Each piece alone is
+///    common minified text, so the pair ranks under a name that carries
+///    the bundler's own name.
+/// 4. [`SharedHelperName`](Self::SharedHelperName) — a helper name more
+///    than one bundler writes: esbuild's runtime names (`__commonJS`,
+///    `__toESM`, `__toCommonJS`, `var __export`, `__require`) are also
+///    Bun's (Bun's runtime copies them; checked on a real `bun build`,
+///    test/e2e/fixtures/bun-bundle). They say "esbuild-family" and lose to
+///    anything more specific.
+/// 5. [`WeakToken`](Self::WeakToken) — one common word that suggests a
+///    bundler but proves nothing (`installedModules`, a local name in
+///    webpack 4 bootstraps and in hand-written loaders). The only rank
+///    whose tier is `likely`, not `definitive`; the toolchain acts on
+///    definitive verdicts only.
+///
+/// Two DIFFERENT bundlers sharing the strongest rank is a tie: the verdict
+/// is `unknown` and the conflict says so (never the first one listed).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[serde(rename_all = "kebab-case")]
+pub enum SignalStrength {
+    WeakToken,
+    SharedHelperName,
+    Shape,
+    OwnRuntimeName,
+    Banner,
+}
+
+impl SignalStrength {
+    /// The tier a signal of this strength carries: `likely` for a weak
+    /// token, `definitive` for everything else.
+    pub fn tier(self) -> DetectionTier {
+        match self {
+            SignalStrength::WeakToken => DetectionTier::Likely,
+            _ => DetectionTier::Definitive,
+        }
+    }
+}
+
 /// TS `DetectionSignal`. Exactly one of `bundler` / `minifier` is set by
-/// every detector.
+/// every detector. `strength` is set on every bundler signal (None on a
+/// minifier signal) and is NOT serialized — the `detect` JSON keeps its
+/// shape; a verdict that had to choose between bundlers shows the
+/// strengths in its `conflict`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct DetectionSignal {
     pub source: String,
@@ -74,10 +129,39 @@ pub struct DetectionSignal {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub minifier: Option<MinifierType>,
     pub tier: DetectionTier,
+    #[serde(skip)]
+    pub strength: Option<SignalStrength>,
+}
+
+/// How a bundler conflict was settled.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictResolution {
+    /// The verdict's strongest signal outranks every other bundler's.
+    Strength,
+    /// Two or more bundlers share the strongest rank: no verdict.
+    Tie,
+}
+
+/// One bundler a signal named, at its strongest signal.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct ConflictCandidate {
+    pub bundler: BundlerType,
+    pub pattern: String,
+    pub strength: SignalStrength,
+}
+
+/// Signals named more than one bundler: every candidate (strongest first)
+/// and how the verdict was reached.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct BundlerConflict {
+    pub resolution: ConflictResolution,
+    pub candidates: Vec<ConflictCandidate>,
 }
 
 /// TS `BundlerDetectionResult["bundler"]`. `version` is declared by the TS
-/// type but never set by any detector.
+/// type but never set by any detector. `conflict` is present only when
+/// the signals named more than one bundler.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct BundlerVerdict {
     #[serde(rename = "type")]
@@ -85,6 +169,8 @@ pub struct BundlerVerdict {
     pub tier: DetectionTier,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub conflict: Option<BundlerConflict>,
 }
 
 /// TS `BundlerDetectionResult["minifier"]`.
