@@ -4,8 +4,8 @@
 use humanify_model::detection::{BundlerType, DetectionTier, MinifierType};
 
 use super::{
-    AppFile, BundleLayout, BundlerTuning, Chosen, InteropHelpers, ModuleWrapperGrammar, Reason,
-    resolve_toolchain,
+    AppFile, BundleLayout, BundlerTuning, COMMONJS_CONTEXT, Chosen, InteropHelpers,
+    ModuleWrapperGrammar, Reason, is_commonjs_context_name, resolve_toolchain,
 };
 use crate::detect::detect_bundle;
 use crate::libdetect::LibraryDetector;
@@ -311,10 +311,52 @@ fn the_single_wrapper_layout_answers_through_the_wrapper_grammar() {
 /// layout, not from a list of its own.
 #[test]
 fn the_single_wrapper_layout_names_the_commonjs_parameter_roles_by_position() {
+    let roles: Vec<&str> = BundleLayout::SingleWrapperFunction
+        .wrapper_parameter_roles()
+        .iter()
+        .map(|c| c.role)
+        .collect();
     assert_eq!(
-        BundleLayout::SingleWrapperFunction.wrapper_parameter_roles(),
-        &["exports", "require", "module", "filename", "dirname"]
+        roles,
+        ["exports", "require", "module", "filename", "dirname"]
     );
+}
+
+/// Toolchain review R21: "what the CommonJS module system hands the
+/// bundle" is ONE list (`COMMONJS_CONTEXT`), and every reader asks it —
+/// the never-rename set, the unpack's "resolved in the vendor file
+/// anyway", the proximity window's always-kept names, the known-globals
+/// report and the wrapper's parameter roles. They used to be five lists.
+#[test]
+fn the_commonjs_context_names_have_one_owner_and_every_reader_agrees() {
+    let names: Vec<&str> = COMMONJS_CONTEXT.iter().map(|c| c.name).collect();
+    assert_eq!(
+        names,
+        ["exports", "require", "module", "__filename", "__dirname"]
+    );
+    let by_position: Vec<&str> = BundleLayout::SingleWrapperFunction
+        .wrapper_parameter_roles()
+        .iter()
+        .map(|c| c.name)
+        .collect();
+    assert_eq!(by_position, names);
+    for name in names {
+        assert!(is_commonjs_context_name(name), "{name}");
+        assert!(
+            !crate::rename::eligibility::is_eligible(name, NeverRename::UNIVERSAL),
+            "{name} is never renamed"
+        );
+        assert!(
+            crate::rename::votes::proximity::is_well_known_name(name),
+            "{name} is always kept by the proximity window"
+        );
+        assert!(
+            crate::modules::known_globals::is_known_global(name),
+            "{name} is a known global"
+        );
+    }
+    assert!(!is_commonjs_context_name("process"));
+    assert!(!is_commonjs_context_name("filename"));
 }
 
 /// P3 (toolchain review R11/R2/R7/R12): the module grammar answers which

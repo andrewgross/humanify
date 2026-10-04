@@ -13,8 +13,9 @@ use std::collections::HashSet;
 
 use humanify_model::detection::{BundlerType, MinifierType};
 
-/// Universal — the Node.js module system.
-const UNIVERSAL: &[&str] = &["exports", "require", "module", "__filename", "__dirname"];
+/// Universal — what the CommonJS module system hands every module (the
+/// toolchain's one list, `crate::toolchain::COMMONJS_CONTEXT`).
+const UNIVERSAL: &[&str] = &crate::toolchain::COMMONJS_CONTEXT_NAMES;
 
 /// Webpack runtime.
 const WEBPACK: &[&str] = &[
@@ -35,25 +36,53 @@ const ESBUILD: &[&str] = &[
     "__publicField",
 ];
 
-/// SWC helpers.
-const SWC: &[&str] = &[
-    "_interop_require_default",
-    "_interop_require_wildcard",
-    "_class_call_check",
-    "_create_class",
-    "_inherits",
-    "_create_super",
-    "_sliced_to_array",
-    "_to_consumable_array",
-    "_object_spread",
-    "_object_spread_props",
-    "_async_to_generator",
-    "_ts_generator",
-    "_define_property",
-    "_object_destructuring_empty",
-    "_extends",
-    "_object_without_properties",
-    "_tagged_template_literal",
+/// One swc runtime helper name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SwcHelper {
+    pub name: &'static str,
+    /// Does seeing this name say the input was compiled by swc? False for
+    /// the names Babel's helpers share (`_inherits`, `_extends`): Babel
+    /// output carries them too, so minifier detection must not read them.
+    pub detection_marker: bool,
+}
+
+const fn swc(name: &'static str) -> SwcHelper {
+    SwcHelper {
+        name,
+        detection_marker: true,
+    }
+}
+
+const fn shared_with_babel(name: &'static str) -> SwcHelper {
+    SwcHelper {
+        name,
+        detection_marker: false,
+    }
+}
+
+/// swc's runtime helper names — THE list (toolchain review R20; the
+/// minifier detector held a second, 15-name copy with nothing saying why
+/// it left two out). Every one is never renamed under a swc verdict; the
+/// swc minifier signal (`detect::signals::detect_swc_minifier`) reads only
+/// the [`SwcHelper::detection_marker`] ones.
+pub const SWC_HELPERS: &[SwcHelper] = &[
+    swc("_interop_require_default"),
+    swc("_interop_require_wildcard"),
+    swc("_class_call_check"),
+    swc("_create_class"),
+    shared_with_babel("_inherits"),
+    swc("_create_super"),
+    swc("_sliced_to_array"),
+    swc("_to_consumable_array"),
+    swc("_object_spread"),
+    swc("_object_spread_props"),
+    swc("_async_to_generator"),
+    swc("_ts_generator"),
+    swc("_define_property"),
+    swc("_object_destructuring_empty"),
+    shared_with_babel("_extends"),
+    swc("_object_without_properties"),
+    swc("_tagged_template_literal"),
 ];
 
 /// The never-rename helper lists one run uses (docs/plugin-spec.md P7): at
@@ -134,7 +163,7 @@ pub fn create_skip_set(lists: NeverRename) -> HashSet<&'static str> {
         None => {}
     }
     if lists.minifier == Some(MinifierHelpers::Swc) {
-        set.extend(SWC.iter().copied());
+        set.extend(SWC_HELPERS.iter().map(|h| h.name));
     }
     set
 }

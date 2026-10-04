@@ -84,7 +84,6 @@ fn reconcile_and_carry_match_the_ts() {
         bundle,
         &ledger,
         &result.renames,
-        crate::rename::name_profile::NameProfile::Bun,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     )
     .unwrap();
@@ -418,7 +417,6 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
         &bundle,
         &ledger,
         &result.renames,
-        crate::rename::name_profile::NameProfile::Bun,
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     )
     .unwrap();

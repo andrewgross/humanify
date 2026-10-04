@@ -85,6 +85,23 @@ fn vendor_stem_floors_minified_residue() {
     assert_eq!(vendor_stem_for("axios", "body"), "axios");
 }
 
+/// Toolchain review R28: the `lib_<hash8>` fallback has ONE spelling
+/// owner (`modules::hash_fallback_name`). The text floor hashes the body
+/// (sha256) because it has no classification to take a structural hash
+/// from — `modules::content_fallback_name` — and its strings are exactly
+/// what the floor wrote before (pinned), and are recognised as fallbacks.
+#[test]
+fn the_text_floor_is_spelled_by_the_one_fallback_owner() {
+    use crate::modules::{content_fallback_name, hash_fallback_name, is_hash_fallback_name};
+    assert_eq!(content_fallback_name("body"), "lib_230d8358");
+    assert_eq!(vendor_stem_for("H", "body"), content_fallback_name("body"));
+    assert!(is_hash_fallback_name(&content_fallback_name("body")));
+    assert_eq!(
+        hash_fallback_name("230d8358ffffffff"),
+        content_fallback_name("body")
+    );
+}
+
 // ---------------------------------------------------------------------------
 // File-name sanitization + uniquify
 // ---------------------------------------------------------------------------

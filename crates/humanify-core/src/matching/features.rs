@@ -55,7 +55,11 @@ use crate::hash::serialize::SymbolTables;
 /// TS `KNOWN_GLOBALS` (structural-hash.ts :11-102), verbatim — grouped by
 /// the source's comment banners. `$` is deliberately absent (:95-97): it is
 /// the first name in minifier alphabets, so treating it as jQuery would make
-/// features rename-variant across versions.
+/// features rename-variant across versions. A FROZEN fingerprint
+/// vocabulary, not an answer to "what does the module system hand the
+/// bundle" (that is `toolchain::COMMONJS_CONTEXT`): it names `require`,
+/// `__dirname` and `__filename` but not `exports`/`module`, and changing it
+/// changes every match key (toolchain review R21, declared).
 const KNOWN_GLOBALS: &[&str] = &[
     // Browser APIs
     "fetch",

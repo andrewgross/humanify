@@ -16,13 +16,15 @@ pub struct ProximityBinding {
     pub ref_lines: Vec<u32>,
 }
 
-/// Names always kept regardless of proximity.
-pub const WELL_KNOWN_NAMES: [&str; 32] = [
-    "exports",
-    "require",
-    "module",
-    "__filename",
-    "__dirname",
+/// Names always kept regardless of proximity: the CommonJS context
+/// (`crate::toolchain::COMMONJS_CONTEXT`, the one list) and these globals.
+/// Membership only — the result keeps the caller's name order.
+pub fn is_well_known_name(name: &str) -> bool {
+    crate::toolchain::is_commonjs_context_name(name) || WELL_KNOWN_GLOBALS.contains(&name)
+}
+
+/// The always-kept globals beyond the CommonJS context.
+const WELL_KNOWN_GLOBALS: [&str; 27] = [
     "console",
     "process",
     "Buffer",
@@ -99,7 +101,7 @@ pub fn get_proximate_used_names<'a, S: AsRef<str>>(
         }
     };
     for name in names.clone() {
-        if WELL_KNOWN_NAMES.contains(&name) {
+        if is_well_known_name(name) {
             push(&mut result, name);
         }
     }
@@ -152,7 +154,7 @@ pub fn get_proximate_used_names<'a, S: AsRef<str>>(
 pub struct ProximityWindow {
     /// The used names, in insertion order (the serial `all_used_names`).
     used: Vec<String>,
-    /// Whether `used[i]` is a [`WELL_KNOWN_NAMES`] member.
+    /// Whether `used[i]` is well known ([`is_well_known_name`]).
     well_known: Vec<bool>,
     /// The serial `is_droppable` per name: eligibility AND not-taken.
     droppable: Vec<bool>,
@@ -180,7 +182,7 @@ impl ProximityWindow {
         let mut well_known = Vec::with_capacity(n);
         let mut droppable = Vec::with_capacity(n);
         for name in &used {
-            well_known.push(WELL_KNOWN_NAMES.contains(&name.as_str()));
+            well_known.push(is_well_known_name(name));
             droppable.push(is_droppable(name));
         }
         let mut bindings = vec![None; n];

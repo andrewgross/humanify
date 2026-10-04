@@ -65,8 +65,11 @@ pub struct NamingConfig {
     /// The run's never-rename lists (the toolchain's P7 piece,
     /// `crate::toolchain`).
     pub never_rename: crate::rename::eligibility::NeverRename,
-    /// The run's per-bundler tuning (the toolchain's P14 piece).
-    pub tuning: crate::toolchain::BundlerTuning,
+    /// How many module-level names one naming request carries — the one
+    /// number the run's per-bundler tuning (the toolchain's P14 piece,
+    /// `BundlerTuning::module_group_size`) decides for this stage. The
+    /// stage is handed the number, not the bundler-keyed type (review R23).
+    pub module_group_size: usize,
     /// The run's bundle layout (the toolchain's P9 piece): where each
     /// side's top-level statements are — the match sides, the freezes, the
     /// family permute's module scope.
@@ -191,7 +194,7 @@ pub fn run_naming<P: NameProvider>(
     let deferred = config.sweep_deferred(has_prior);
     let opts = EraOptions {
         never_rename: config.never_rename,
-        tuning: config.tuning,
+        module_group_size: config.module_group_size,
         layout: config.layout,
         name_profile: config.name_profile,
         params: &config.params,

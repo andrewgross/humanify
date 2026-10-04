@@ -4,6 +4,9 @@
 use std::collections::HashSet;
 
 use super::*;
+// The legality predicates' owner (toolchain review R25): these tests pin
+// the sanitizer's view of the same tables.
+use crate::rename::validated::target::is_valid_identifier;
 
 fn used(names: &[&str]) -> HashSet<String> {
     names.iter().map(|s| s.to_string()).collect()

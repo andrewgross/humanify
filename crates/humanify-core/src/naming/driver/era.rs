@@ -54,8 +54,8 @@ use crate::twins::gates::PrivateRenameSet;
 pub struct EraOptions<'o> {
     /// `NamingConfig::never_rename`.
     pub never_rename: crate::rename::eligibility::NeverRename,
-    /// `NamingConfig::tuning`.
-    pub tuning: crate::toolchain::BundlerTuning,
+    /// `NamingConfig::module_group_size`.
+    pub module_group_size: usize,
     /// `NamingConfig::layout`.
     pub layout: crate::toolchain::BundleLayout,
     /// `NamingConfig::name_profile`.
@@ -491,7 +491,7 @@ fn run_era<P: NameProvider>(
         transferred_pairs: &start.transferred_pairs,
         close: &start.close,
         suggested: &start.suggested,
-        module_group_size: opts.tuning.module_group_size(),
+        module_group_size: opts.module_group_size,
         params: opts.params.clone(),
         single_epoch: start.single_epoch,
         tunables: opts.tunables,

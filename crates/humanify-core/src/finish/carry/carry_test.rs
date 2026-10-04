@@ -11,7 +11,6 @@ use oxc_span::GetSpan;
 
 use super::{carry_renames_into_bundle, wrapper_body};
 use crate::finish::reconcile::PostSplitRename;
-use crate::rename::name_profile::NameProfile;
 use crate::toolchain::BundleLayout;
 
 const LAYOUT: BundleLayout = BundleLayout::SingleWrapperFunction;
@@ -144,8 +143,7 @@ fn a_wrapper_whose_count_disagrees_with_the_ledger_abstains_instead_of_guessing(
     );
 
     let renames = [rename("x", "count")];
-    let carry =
-        carry_renames_into_bundle(bundle, &ledger, &renames, NameProfile::Bun, LAYOUT).unwrap();
+    let carry = carry_renames_into_bundle(bundle, &ledger, &renames, LAYOUT).unwrap();
     assert_eq!(carry.code, None);
     assert_eq!(carry.carried, 0);
     assert_eq!(
@@ -163,14 +161,8 @@ fn a_bundle_without_a_wrapper_abstains_wrapper_body_not_found() {
         "{\"files\":[\"a.js\"],\"order\":[\"a.js\",\"a.js\"],\"emitIndexes\":[0,1]}",
     )
     .unwrap();
-    let carry = carry_renames_into_bundle(
-        bundle,
-        &ledger,
-        &[rename("a", "alpha")],
-        NameProfile::Bun,
-        LAYOUT,
-    )
-    .unwrap();
+    let carry =
+        carry_renames_into_bundle(bundle, &ledger, &[rename("a", "alpha")], LAYOUT).unwrap();
     assert_eq!(carry.code, None);
     assert_eq!(
         carry.abstained,

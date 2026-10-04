@@ -205,3 +205,20 @@ fn the_bun_profile_reproduces_the_frozen_battery() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// Toolchain review R25: the host globals a rename must never take are ONE
+/// list (naming's sanitizer and validated rename held two copies of the
+/// same tables). `Bun` was reserved and `Deno` was not, so a model answer
+/// `Deno` could shadow the global in a Deno-targeted bundle; both are
+/// reserved now. (No Claude Code release declares a `Deno` binding — its
+/// references are all to the global.)
+#[test]
+fn host_globals_bun_and_deno_are_never_rename_targets() {
+    for host in ["Bun", "Deno"] {
+        assert!(!is_valid_rename_target(host), "{host}");
+        assert_eq!(
+            crate::naming::validation::sanitize_identifier(host),
+            format!("{host}_")
+        );
+    }
+}

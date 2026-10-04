@@ -1409,7 +1409,7 @@ fn naming_config(
 ) -> NamingConfig {
     NamingConfig {
         never_rename: toolchain.never_rename.piece,
-        tuning: toolchain.tuning.piece,
+        module_group_size: toolchain.tuning.piece.module_group_size(),
         layout: toolchain.layout.piece,
         name_profile: toolchain.name_profile.piece,
         skip_libraries: settings.skip_libraries,

@@ -278,7 +278,7 @@ pub struct RenameState {
     opt_outs: TrailOptOuts,
     /// The run's minifier name profile — the carried rule's "below the
     /// floor" is its shape question (`rename::name_profile`). None only
-    /// for a [`RenameState::for_lookups`] state, which never renames.
+    /// for a [`RenameState::for_replay`] state, which asks no shape question.
     profile: Option<NameProfile>,
 }
 
@@ -288,11 +288,15 @@ impl RenameState {
         RenameState::with_trail(semantic, anchor, StrategyTrail::enabled(), profile)
     }
 
-    /// A state for SCOPE LOOKUPS only (the finish's relink: "is this free
-    /// reference shadowed here?"). It never applies a rename, so it needs
-    /// no name profile; asking it for one ([`RenameState::name_profile`],
-    /// which every apply does) is a bug and panics.
-    pub fn for_lookups(semantic: &Semantic<'_>, anchor: Anchor) -> RenameState {
+    /// A state that asks NO name-shape question (toolchain review R24): the
+    /// finish's relink (scope lookups only — "is this free reference
+    /// shadowed here?") and its bundle carry (a REPLAY of renames already
+    /// decided and applied in the split tree). Renames apply under every
+    /// guard, with the same trail; the carried-names record — kept only
+    /// for the coverage sweep, which never follows a replay — is not kept.
+    /// Asking it for a profile ([`RenameState::name_profile`], which every
+    /// naming-pass shape question does) is a bug and panics.
+    pub fn for_replay(semantic: &Semantic<'_>, anchor: Anchor) -> RenameState {
         RenameState::build(semantic, anchor, StrategyTrail::enabled(), None)
     }
 
@@ -347,8 +351,9 @@ impl RenameState {
     /// The run's minifier name profile, for every shape question asked
     /// against this state's names.
     pub fn name_profile(&self) -> NameProfile {
-        self.profile
-            .expect("a renaming state carries the run's name profile (for_lookups never renames)")
+        self.profile.expect(
+            "a naming pass carries the run's name profile (a replay state asks no shape question)",
+        )
     }
 
     // -- reads ---------------------------------------------------------------
@@ -812,8 +817,10 @@ impl RenameState {
         self.post_check(scope, old_name, new_name);
         self.claims.claims_recorded += 1;
         // exp066 provenance rule: a below-floor name deliberately APPLIED is
-        // carried — the sweep must not re-roll it this run.
-        if is_below_floor_name(self.name_profile(), new_name)
+        // carried — the sweep must not re-roll it this run. A replay state
+        // has no profile and no sweep after it: nothing to record.
+        if let Some(profile) = self.profile
+            && is_below_floor_name(profile, new_name)
             && let Some(carried) = self.binding_in(scope, new_name)
         {
             self.carried.insert(carried);

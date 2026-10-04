@@ -70,3 +70,39 @@ fn pattern_rules_match_the_ts() {
     assert!(is_eligible("A9_", NeverRename::UNIVERSAL));
     assert!(!is_eligible("", NeverRename::UNIVERSAL));
 }
+
+/// Toolchain review R20: swc's helper names are ONE list. The never-rename
+/// set holds all of them; minifier DETECTION fires only on the ones marked
+/// as markers — `_inherits` and `_extends` are Babel's helper names too
+/// (`_extends({}, y)` is Babel output), so seeing one says nothing about
+/// swc. The two used to be separate lists (15 vs 17 names) with nothing
+/// saying why they differed.
+#[test]
+fn swc_helpers_are_one_list_and_detection_reads_only_its_markers() {
+    use crate::detect::signals::detect_swc_minifier;
+    use crate::rename::eligibility::SWC_HELPERS;
+
+    let swc = create_skip_set(NeverRename::for_verdicts(
+        BundlerType::Unknown,
+        MinifierType::Swc,
+    ));
+    let universal = create_skip_set(NeverRename::UNIVERSAL);
+    let mut swc_only: Vec<&str> = swc.difference(&universal).copied().collect();
+    swc_only.sort();
+    let mut listed: Vec<&str> = SWC_HELPERS.iter().map(|h| h.name).collect();
+    listed.sort();
+    assert_eq!(
+        swc_only, listed,
+        "the never-rename swc list IS the helper list"
+    );
+    let mut not_markers: Vec<&str> = Vec::new();
+    for helper in SWC_HELPERS {
+        let fires = !detect_swc_minifier(&format!("var a = {}(b);", helper.name)).is_empty();
+        assert_eq!(fires, helper.detection_marker, "{}", helper.name);
+        if !helper.detection_marker {
+            not_markers.push(helper.name);
+        }
+    }
+    not_markers.sort();
+    assert_eq!(not_markers, ["_extends", "_inherits"]);
+}

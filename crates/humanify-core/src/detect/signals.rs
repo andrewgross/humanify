@@ -305,29 +305,17 @@ pub fn detect_bun_minifier(code: &str) -> Vec<DetectionSignal> {
     Vec::new()
 }
 
-/// TS `SWC_HELPER_MARKERS`: swc's snake_case, multi-word runtime helpers.
-const SWC_HELPER_MARKERS: [&str; 15] = [
-    "_interop_require_default",
-    "_interop_require_wildcard",
-    "_class_call_check",
-    "_create_class",
-    "_create_super",
-    "_sliced_to_array",
-    "_to_consumable_array",
-    "_object_spread",
-    "_object_spread_props",
-    "_async_to_generator",
-    "_ts_generator",
-    "_define_property",
-    "_object_destructuring_empty",
-    "_object_without_properties",
-    "_tagged_template_literal",
-];
-
 /// TS `detectSwcMinifier`: `\b(?:m1|m2|...)\b`. The backtracking
 /// alternation matches iff some marker occurs word-bounded on both sides.
+/// The markers are swc's helper names that Babel does not share — the
+/// one swc list's `detection_marker` entries
+/// (`rename::eligibility::SWC_HELPERS`, toolchain review R20).
 pub fn detect_swc_minifier(code: &str) -> Vec<DetectionSignal> {
-    if SWC_HELPER_MARKERS.iter().any(|m| contains_word(code, m)) {
+    if crate::rename::eligibility::SWC_HELPERS
+        .iter()
+        .filter(|h| h.detection_marker)
+        .any(|h| contains_word(code, h.name))
+    {
         return vec![minifier_signal(
             "swc-minifier",
             "swc snake_case helper names",

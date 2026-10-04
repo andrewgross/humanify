@@ -575,9 +575,10 @@ impl Plan<'_, '_> {
         let mut ctx_files = HashSet::new();
         let params = self.input.wrapper.params.clone();
         for (i, param) in params.iter().enumerate() {
-            let (Some(prop), Some(param)) = (roles.get(i), param) else {
+            let (Some(context), Some(param)) = (roles.get(i), param) else {
                 continue;
             };
+            let prop = context.role;
             self.plan_context_binding(param, &format!("{var_name}.{prop}"), &mut ctx_files)?;
         }
         self.plan_top_level_this(&var_name, &mut ctx_files);

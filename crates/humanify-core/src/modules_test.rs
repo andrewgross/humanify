@@ -532,7 +532,10 @@ fn direct_eval_taints_but_local_eval_does_not() {
 
 /// The lists are a VERBATIM port of the TS — the committed fixture
 /// (generated from src/analysis/known-globals.ts by the WP1.5 work) is the
-/// exact-equality oracle.
+/// exact-equality oracle. One re-cut since (toolchain review R21,
+/// 2026-10-04): the TS `node` list's five CommonJS names moved, unchanged,
+/// to their own `commonjs` environment read from the toolchain's one list
+/// — same membership, so `is_known_global` answers exactly as before.
 #[test]
 fn known_globals_match_the_ts_lists_exactly() {
     let path = concat!(

@@ -321,18 +321,80 @@ impl BundleLayout {
         }
     }
 
-    /// The wrapper's parameters' roles in the bundle's entry context, BY
+    /// The wrapper's parameters in the bundle's entry context, BY
     /// POSITION (review R5): Node's/Bun's CommonJS wrapper
-    /// `(exports, require, module, __filename, __dirname)`. The runnable
-    /// emit binds each named parameter to the shared context's property
-    /// of that role.
-    pub fn wrapper_parameter_roles(self) -> &'static [&'static str] {
+    /// `(exports, require, module, __filename, __dirname)` — the
+    /// [`COMMONJS_CONTEXT`]. The runnable emit binds each named parameter
+    /// to the shared context's property of that `role`.
+    pub fn wrapper_parameter_roles(self) -> &'static [ContextName] {
         match self {
-            BundleLayout::SingleWrapperFunction => {
-                &["exports", "require", "module", "filename", "dirname"]
-            }
+            BundleLayout::SingleWrapperFunction => &COMMONJS_CONTEXT,
         }
     }
+}
+
+/// One name the module system hands a module's code, and its role in the
+/// runnable tree's shared entry context.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContextName {
+    /// The binding the code sees (`__filename`).
+    pub name: &'static str,
+    /// The shared context's property for it (`filename`).
+    pub role: &'static str,
+}
+
+/// What Node's CommonJS module wrapper hands every module, in its
+/// parameter order: `(exports, require, module, __filename, __dirname)`.
+/// THE list (toolchain review R21 — it used to be five): the single
+/// wrapper layout's parameters ([`BundleLayout::wrapper_parameter_roles`]),
+/// the never-rename set (`rename::eligibility`), the unpack's "resolved in
+/// the vendor file anyway" (`unpack::bun::scope`, a vendor file runs under
+/// Node's wrapper), the proximity window's always-kept names
+/// (`rename::votes::proximity`) and the known-globals report
+/// (`modules::known_globals`, its `commonjs` environment). An ES module has
+/// none of them (it has `import.meta`); never-renaming them there is the
+/// safe direction. NOT read by the match fingerprint's vocabulary
+/// (`matching::features::KNOWN_GLOBALS`): that is a frozen hash input that
+/// names `require`, `__dirname` and `__filename` among ~100 globals, and
+/// changing it changes match keys.
+pub const COMMONJS_CONTEXT: [ContextName; 5] = [
+    ContextName {
+        name: "exports",
+        role: "exports",
+    },
+    ContextName {
+        name: "require",
+        role: "require",
+    },
+    ContextName {
+        name: "module",
+        role: "module",
+    },
+    ContextName {
+        name: "__filename",
+        role: "filename",
+    },
+    ContextName {
+        name: "__dirname",
+        role: "dirname",
+    },
+];
+
+/// [`COMMONJS_CONTEXT`]'s names, for the readers that hold plain name
+/// lists.
+pub const COMMONJS_CONTEXT_NAMES: [&str; 5] = {
+    let mut names = [""; 5];
+    let mut i = 0;
+    while i < COMMONJS_CONTEXT.len() {
+        names[i] = COMMONJS_CONTEXT[i].name;
+        i += 1;
+    }
+    names
+};
+
+/// Is `name` one the CommonJS module system hands a module?
+pub fn is_commonjs_context_name(name: &str) -> bool {
+    COMMONJS_CONTEXT_NAMES.contains(&name)
 }
 
 /// P13 — which of the unpacked files is the bundle's own code (what the
