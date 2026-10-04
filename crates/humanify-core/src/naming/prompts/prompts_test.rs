@@ -169,7 +169,7 @@ fn retry_lists_missing_identifiers() {
 fn module_body_caps_used_names() {
     let used: Vec<String> = (0..8000).map(|i| format!("descriptiveName{i}")).collect();
     let input = ModuleLevelInput {
-        declarations: strs(&["var ab = 1;"]),
+        declarations: map(&[("ab", "var ab = 1;")]),
         assignment_context: ArrayRecord(vec![("ab".into(), vec![])]),
         usage_examples: ArrayRecord(vec![("ab".into(), vec![])]),
         identifiers: strs(&["ab"]),
@@ -588,7 +588,7 @@ Names already in use (MUST avoid ALL of these): taken\n\
 #[test]
 fn snapshot_module_level_prompt() {
     let input = ModuleLevelInput {
-        declarations: strs(&["var ab = 1;"]),
+        declarations: map(&[("ab", "var ab = 1;")]),
         assignment_context: ArrayRecord(vec![("ab".into(), strs(&["ab = 2;"]))]),
         usage_examples: ArrayRecord(vec![("ab".into(), strs(&["f(ab)"]))]),
         identifiers: strs(&["ab"]),

@@ -127,7 +127,10 @@ impl<'de> serde::Deserialize<'de> for ArrayRecord {
 /// arguments bar the eligibility predicate).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ModuleLevelInput {
-    pub declarations: Vec<String>,
+    /// Each asked identifier's OWN declaration (2026-10-04: a substring
+    /// search over the batch's declarations could show a neighbour's
+    /// declaration that merely mentions the id).
+    pub declarations: StrMap,
     pub assignment_context: ArrayRecord,
     pub usage_examples: ArrayRecord,
     pub identifiers: Vec<String>,
@@ -511,16 +514,6 @@ pub fn build_batch_rename_retry_prompt(i: &RetryInput<'_>) -> String {
     )
 }
 
-/// `declByIdentifier`: for each identifier, the declarations that contain
-/// it as a SUBSTRING (`decl.includes(id)`), in declaration order; only the
-/// first is ever shown.
-fn first_declaration<'a>(declarations: &'a [String], id: &str) -> Option<&'a str> {
-    declarations
-        .iter()
-        .find(|d| d.contains(id))
-        .map(String::as_str)
-}
-
 fn indented_block(s: &mut String, title: &str, items: &[String]) {
     if items.is_empty() {
         return;
@@ -541,7 +534,7 @@ fn identifier_profile(input: &ModuleLevelInput, id: &str) -> String {
     if let Some(name) = suggested {
         s += &format!("  Prior version name: {name}\n");
     }
-    if let Some(decl) = first_declaration(&input.declarations, id) {
+    if let Some(decl) = js_record::get_truthy(&input.declarations, id) {
         s += &format!("  Declaration: {decl}\n");
     }
     indented_block(
