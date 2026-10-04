@@ -265,7 +265,7 @@ fn ledger_config() -> super::NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
-        tuning: crate::toolchain::BundlerTuning::Default,
+        module_group_size: 10,
         skip_libraries: true,
         reconcile_prior_diff: true,
         naming_floor: true,

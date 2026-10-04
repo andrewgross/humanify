@@ -26,7 +26,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 
 use humanify_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
 
@@ -69,16 +68,14 @@ pub fn strip_js_extension(name: &str) -> String {
 
 /// Vendor file stem from an UNTRUSTED candidate (a binding or raw factory
 /// var): trailing ".js" stripped, and minified residue floored to
-/// `lib_<sha256(bodyText)[:8]>` — the same fallback family the naming
-/// cascade uses.
+/// `lib_<sha256(bodyText)[:8]>` — `modules::content_fallback_name`, the
+/// one fallback spelling over the body text (no classification here).
 pub fn vendor_stem_for(candidate: &str, body_text: &str) -> String {
     let stem = strip_js_extension(candidate);
     if is_vendor_worthy_binding(&stem) {
         return stem;
     }
-    let digest = Sha256::digest(body_text.as_bytes());
-    let hash: String = digest[..4].iter().map(|b| format!("{b:02x}")).collect();
-    format!("lib_{hash}")
+    super::content_fallback_name(body_text)
 }
 
 // ---------------------------------------------------------------------------

@@ -417,6 +417,28 @@ fn below_floor_applied_names_are_carried() {
     });
 }
 
+/// Toolchain review R24: replaying renames that were already decided (the
+/// finish's bundle carry) asks no name-shape question, so it is handed no
+/// name profile. The same renames apply, under the same guards, with the
+/// same trail; only the carried-names record — which exists for the
+/// coverage sweep, and no sweep follows a replay — is not kept.
+#[test]
+fn a_replay_state_applies_renames_without_a_name_profile() {
+    with_semantic("var a = 1, b = 2, c = 3;", true, |semantic| {
+        let mut state = RenameState::for_replay(semantic, Anchor::Shipped);
+        let p = state.view().program_scope();
+        assert!(attempt(&mut state, p, "a", "q7").applied, "below the floor");
+        assert!(attempt(&mut state, p, "b", "count").applied);
+        assert!(
+            !attempt(&mut state, p, "c", "document").applied,
+            "still guarded"
+        );
+        assert_eq!(state.carried_count(), 0, "no sweep follows a replay");
+        assert_eq!(state.applied().len(), 2);
+        assert_eq!(state.trail().entries().len(), 3);
+    });
+}
+
 /// Babel's map order is a decision input downstream: a renamed name moves
 /// to the END of `Object.keys(scope.bindings)`.
 #[test]

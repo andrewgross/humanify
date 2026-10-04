@@ -199,15 +199,13 @@ const BROWSER: &[&str] = &[
     "AbortPaymentEvent",
 ];
 
-/// Node.js and CommonJS module plumbing.
+/// Node.js host globals. The CommonJS module plumbing (`require`,
+/// `module`, `exports`, `__filename`, `__dirname`) is its own environment,
+/// read from the toolchain's one list (`toolchain::COMMONJS_CONTEXT`,
+/// review R21).
 const NODE: &[&str] = &[
-    "require",
-    "module",
-    "exports",
     "process",
     "Buffer",
-    "__dirname",
-    "__filename",
     "global",
     "setImmediate",
     "clearImmediate",
@@ -232,10 +230,11 @@ const ALT_RUNTIME: &[&str] = &[
 /// Environments this module knows about. Add a set, add a key
 /// (GLOBAL_ENVIRONMENTS — key order matters to `known_globals` with no
 /// arguments: the TS Object.keys order is declaration order).
-pub const GLOBAL_ENVIRONMENTS: [(&str, &[&str]); 5] = [
+pub const GLOBAL_ENVIRONMENTS: [(&str, &[&str]); 6] = [
     ("ecmascript", ECMASCRIPT),
     ("web", WEB),
     ("browser", BROWSER),
+    ("commonjs", &crate::toolchain::COMMONJS_CONTEXT_NAMES),
     ("node", NODE),
     ("altRuntime", ALT_RUNTIME),
 ];

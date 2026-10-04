@@ -584,7 +584,12 @@ structural hash → an LLM guess → `lib_<hash>`. The prior is read by
 
 **Already generic:** the record format, the naming ladder and the content
 re-key do not depend on the bundler. A new vendor-extracting plugin should
-reuse them.
+reuse them. The `lib_<hash8>` fallback has one spelling owner,
+`modules::hash_fallback_name` (finding #81, review R28): a classified
+module passes its structural hash; a body with no classification (the
+unpack's floor for an unrecorded module, the fresh grouping's vendor
+bucket) passes `sha256(text)` through `modules::content_fallback_name`.
+The text floor named none of the 1,493 vendor files on the real Bun pair.
 
 **Where Bun is wired in:** the finish's re-link only reads records stamped
 `"bun"` or `"esbuild"` (I14); library detection selects by the same two
@@ -656,6 +661,12 @@ graphs, the `match` verb and the post-split reconcile alike. On Bun and
 esbuild input the change is invisible: their lists add nothing the two
 always-on rules miss. It differs only for an swc-detected input, where the
 reconcile now also refuses `_extends` / `_inherits`, as naming always did.
+swc's helper names are ONE list, `rename::eligibility::SWC_HELPERS`
+(finding #81, review R20): the never-rename set takes all 17, and the swc
+minifier signal (`detect::signals::detect_swc_minifier`) reads only the 15
+marked `detection_marker` — `_extends` and `_inherits` are Babel helper
+names too, so seeing one says nothing about swc. Contents unchanged on both
+sides (the `skip-list.json` table and the detector's tests pin them).
 
 **Tests:** the existing `skip-list.json` parity table, extended per plugin.
 
@@ -740,7 +751,15 @@ run already passed the gate on its original input),
 `original_bundle_binding_count` (that input gate) and
 `wrapper_parameter_roles` (the wrapper parameters' roles by position —
 `exports, require, module, filename, dirname` — review R5, read by the
-runnable emit). Every pipeline reader takes the run's value from the
+runnable emit). Since finding #81 (review R21) those roles ARE
+`toolchain::COMMONJS_CONTEXT` — the one list of what Node's CommonJS
+wrapper hands a module (name + role). The never-rename set, the unpack's
+"resolved in the vendor file anyway", the proximity window's always-kept
+names and the known-globals report (its `commonjs` environment) read it
+too; they used to be five lists. The match fingerprint's vocabulary
+(`matching::features::KNOWN_GLOBALS`) is declared NOT to: it is a frozen
+hash input. Still open: the emit's entry call and shared-context runtime
+spell the names in their own text. Every pipeline reader takes the run's value from the
 toolchain: the graph's module scope, both match sides, the twins'
 statement inventory, the fresh-era freeze, the family permute, the unpack's
 classification, the split (input gate, wrapper body, vendor bridges,
@@ -785,7 +804,10 @@ input stays on Bun, and `--minifier none` counts nothing as minted. Only
 the flags and a definitive bun/esbuild bundler verdict select another
 profile. The esbuild/terser/swc profile does NOT yet cover the digit-free
 3-letter names below — none of the three measured minifiers' digit-free
-names can be told from words by shape alone.
+names can be told from words by shape alone. Paths that ask no shape
+question are handed no profile (finding #81, review R24): the finish's
+relink and its bundle carry (a replay of renames already decided) use
+`RenameState::for_replay`; asking that state for a profile panics.
 
 **Interface this spec needs:** a `NameProfile` value, chosen once from the
 minifier verdict and passed to every caller above, answering at least:
@@ -881,8 +903,9 @@ Two knobs keyed on the bundler: the module-level naming group size (esbuild
 15, else 10 — selected, I23) and the module lane width (a table that nothing
 reads, I24). A plugin may set its own values; the defaults apply otherwise.
 The dead lane table should be deleted or wired in. **DONE 2026-10-04:** the
-group size is `toolchain::BundlerTuning::module_group_size`, carried on
-`NamingConfig`; the lane table is deleted.
+group size is `toolchain::BundlerTuning::module_group_size`; the lane
+table is deleted. Since finding #81 (review R23) the naming stage is handed
+the NUMBER (`NamingConfig::module_group_size`), not the bundler-keyed type.
 
 ### P15 — Formatting (stage 6) — not a plugin piece
 

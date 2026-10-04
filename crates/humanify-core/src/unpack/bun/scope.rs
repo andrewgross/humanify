@@ -62,10 +62,6 @@ const TO_ESM: &str = "__toESM";
 const TO_COMMON_JS: &str = "__toCommonJS";
 pub(crate) const BUN_INTEROP_NAMES: [&str; 2] = [TO_ESM, TO_COMMON_JS];
 
-/// The names Node's CommonJS wrapper binds in every vendor file — a bundle
-/// wrapper's parameters of these names resolve there too.
-const CJS_WRAPPER_NAMES: [&str; 5] = ["exports", "require", "module", "__filename", "__dirname"];
-
 /// The decision for one bundle.
 #[derive(Debug, Default)]
 pub struct ScopePlan {
@@ -279,7 +275,9 @@ fn classify_capture(
     }
     let is_param = matches!(nodes.kind(decl), AstKind::FormalParameter(_))
         || matches!(nodes.parent_kind(decl), AstKind::FormalParameter(_));
-    if (is_param && CJS_WRAPPER_NAMES.contains(&name)) || Some(name) == require_var {
+    // Node's CommonJS wrapper binds these names in every vendor file, so a
+    // bundle wrapper's parameter of one of them resolves there too.
+    if (is_param && crate::toolchain::is_commonjs_context_name(name)) || Some(name) == require_var {
         return Capture::Resolved;
     }
     let never_written = scoping.symbol_redeclarations(symbol).is_empty()

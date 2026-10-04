@@ -174,14 +174,10 @@
     "NodeFilter",
     "AbortPaymentEvent"
   ],
+  "commonjs": ["exports", "require", "module", "__filename", "__dirname"],
   "node": [
-    "require",
-    "module",
-    "exports",
     "process",
     "Buffer",
-    "__dirname",
-    "__filename",
     "global",
     "setImmediate",
     "clearImmediate",

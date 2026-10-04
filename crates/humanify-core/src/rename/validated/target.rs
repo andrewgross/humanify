@@ -7,9 +7,17 @@
 //!
 //! `GLOBAL_BUILTINS` is DERIVED in the TS (the `globals` package's builtin +
 //! nodeBuiltin + shared-node-browser sets, plus a curated host list), so the
-//! lists below are GENERATED from the TS at `test/parity/wp31-names.json`
-//! (`npx tsx test/parity/wp31-name-probe.mjs`) and the unit test asserts
-//! exact equality — a `globals` bump that moves the set reds it.
+//! lists below were GENERATED from the TS at `test/parity/wp31-names.json`
+//! (by the since-retired `wp31-name-probe.mjs`) and the unit test asserts
+//! exact equality — post-cutover the pin is ours.
+//!
+//! THE legality tables (toolchain review R25, 2026-10-04): the naming
+//! stage's sanitizer (`naming::validation`) held a second copy of both
+//! with the same members; it reads these now. One deliberate change with
+//! it: `Deno` joined `Bun` among the host globals a rename may never take
+//! (a model answer `Deno` could shadow the global in a Deno-targeted
+//! bundle). No Claude Code release declares a `Deno` binding — every
+//! reference is to the global — so only that answer is affected.
 
 /// `RESERVED_WORDS`, sorted (byte order).
 pub const RESERVED_WORDS: &[&str] = &[
@@ -94,6 +102,7 @@ pub const GLOBAL_BUILTINS: &[&str] = &[
     "DataView",
     "Date",
     "DecompressionStream",
+    "Deno",
     "DisposableStack",
     "Error",
     "ErrorEvent",

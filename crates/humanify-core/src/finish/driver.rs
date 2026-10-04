@@ -437,14 +437,7 @@ pub fn reconcile_post_split(
     }
     let carry = {
         let _ph = crate::profiling::phase("split:finish:carry");
-        carry_into_bundle(
-            output_dir,
-            &ledger,
-            &result.renames,
-            name_profile,
-            layout,
-            report,
-        )
+        carry_into_bundle(output_dir, &ledger, &result.renames, layout, report)
     };
     report.messages.push(format!(
         "Post-split reconcile: restored {} prior name(s) across {} of {} file(s){}",
@@ -472,13 +465,12 @@ fn carry_into_bundle(
     output_dir: &Path,
     ledger: &JsValue,
     renames: &[super::reconcile::PostSplitRename],
-    profile: NameProfile,
     layout: crate::toolchain::BundleLayout,
     report: &mut FinishReport,
 ) -> Option<CarryResult> {
     let bundle_path = output_dir.join(METADATA_DIR).join("humanified.js");
     let bundle = read_utf8(&bundle_path).ok()?;
-    let carry = match carry_renames_into_bundle(&bundle, ledger, renames, profile, layout) {
+    let carry = match carry_renames_into_bundle(&bundle, ledger, renames, layout) {
         Ok(c) => c,
         Err(_) => return None, // "bundle carry skipped" (debug only)
     };

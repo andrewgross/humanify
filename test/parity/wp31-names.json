@@ -79,6 +79,7 @@
     "DataView",
     "Date",
     "DecompressionStream",
+    "Deno",
     "DisposableStack",
     "Error",
     "ErrorEvent",

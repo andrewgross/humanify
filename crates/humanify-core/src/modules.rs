@@ -511,9 +511,25 @@ pub fn factory_arg_function<'a>(arg: &'a oxc_ast::ast::Expression<'a>) -> Option
     }
 }
 
-/// `lib_<first 8 chars of structuralHash>` (hashFallbackName).
+/// `lib_<first 8 chars of the hash>` (hashFallbackName) — THE spelling of
+/// "nothing identified this module" (toolchain review R28). A classified
+/// module passes its structural hash (rename-invariant, so the name holds
+/// across releases); text with no classification goes through
+/// [`content_fallback_name`].
 pub fn hash_fallback_name(structural_hash: &str) -> String {
     format!("lib_{}", &structural_hash[..8.min(structural_hash.len())])
+}
+
+/// The fallback for a module body that has NO classification to take a
+/// structural hash from — the unpack's file-name floor for an unrecorded
+/// module and the fresh grouping's vendor bucket: [`hash_fallback_name`]
+/// over `sha256(body_text)`. Two inputs, one spelling: on the real Bun
+/// pair every one of the 1,493 vendor files is named from a structural
+/// hash (this floor wrote none), as on the esbuild fixtures.
+pub fn content_fallback_name(body_text: &str) -> String {
+    let digest = Sha256::digest(body_text.as_bytes());
+    let hex: String = digest[..4].iter().map(|b| format!("{b:02x}")).collect();
+    hash_fallback_name(&hex)
 }
 
 /// True when `name` is the hash fallback — identifies NO package, only that
