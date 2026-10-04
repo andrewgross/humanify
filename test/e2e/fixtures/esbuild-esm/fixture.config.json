@@ -1,0 +1,19 @@
+{
+  "package": "esbuild-esm",
+  "repo": "",
+  "sourceStrategy": { "type": "local" },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "expect": {
+    "bundler": "esbuild",
+    "unpackAdapter": "esbuild",
+    "vendor": true
+  },
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A real esbuild 0.27.2 `--bundle --format=esm --platform=node` build (unminified) of the shared node-app source (test/e2e/fixtures/node-app): the same app as esbuild-minified, as an ES module — top-level statements, a real `import { basename } from \"node:path\"`, no wrapper function. KNOWN GAP (plugin-spec I25, the P9 bundle layout): --split fails with no recognizable bundle wrapper. v1.1.0 perturbs the last dep (adds tripled), the late module's output and the lazy stamp."
+    }
+  ]
+}

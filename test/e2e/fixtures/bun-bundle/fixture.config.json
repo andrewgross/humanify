@@ -4,6 +4,7 @@
   "sourceStrategy": { "type": "local" },
   "entryPoints": ["index.js"],
   "bundle": true,
+  "expect": { "bundler": "bun", "unpackAdapter": "bun", "vendor": true },
   "versionPairs": [
     {
       "v1": "1.0.0",

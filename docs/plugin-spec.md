@@ -1008,6 +1008,10 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
    per-file re-detection; a factory kept in the app is app code.
 5. **Recognise minified esbuild** (I2), with a committed minified esbuild
    fixture first. The extraction code already handles the shape.
+   **Fixture committed 2026-10-04:** `test/e2e/fixtures/esbuild-minified`
+   (a declared known gap in `scripts/e2e.ts`: detected unknown →
+   passthrough, no `vendor/`; with `--bundler esbuild` the same build
+   extracts 26 vendor files and boots — the fix is detection alone).
 6. **Per-plugin interop helpers and lazy-init shapes** (I16-I18, I27), with
    a fixture that has CommonJS requiring an ES module. (Lazy-init: one
    recogniser, Bun's and esbuild's shapes, behind `ModuleWrapperGrammar` —
@@ -1017,7 +1021,12 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
    its own piece of work; it touches the split, the emit and the matching
    inventory. (P9's routing half is done — finding #77: every reader asks
    `BundleLayout`; what remains is the second layout. P13 is unchanged:
-   one rule, `AppFile::LastProcessed`.)
+   one rule, `AppFile::LastProcessed`.) **Fixtures committed 2026-10-04**
+   (declared known gaps in `scripts/e2e.ts`, all failing "no recognizable
+   bundle wrapper" after unpack + naming): `esbuild-esm`,
+   `bun-esm-minified`, and `esbuild-cjs` — esbuild's `--format=cjs` is
+   top-level too (Node's module wrapper is implicit), and it is the layout
+   real Node CLIs ship (pnpm, wrangler).
 8. **Measurement for other bundlers** (H2): an eval pair from a non-Bun app,
    so a change aimed at esbuild or webpack can be judged on something other
    than Claude Code.
