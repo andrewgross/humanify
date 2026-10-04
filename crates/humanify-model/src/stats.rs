@@ -413,6 +413,28 @@ js_record! {
 }
 
 js_record! {
+    /// The prompt guard's counters (`naming::shown`, 2026-10-04): per
+    /// prompt site, identifiers ASKED and those the shown code did NOT
+    /// contain (`*Unshown` — every site windows its subjects by
+    /// construction, so non-zero is a finding), plus the sweep's
+    /// refusals (targets never asked because their window lacked them).
+    /// Counts sum over the run's sweeps.
+    pub struct PromptGuardStats {
+        fn_asked: f64 = "fnAsked",
+        fn_unshown: f64 = "fnUnshown",
+        retry_asked: f64 = "retryAsked",
+        retry_unshown: f64 = "retryUnshown",
+        module_asked: f64 = "moduleAsked",
+        module_unshown: f64 = "moduleUnshown",
+        sweep_asked: f64 = "sweepAsked",
+        sweep_unshown: f64 = "sweepUnshown",
+        sweep_refused: f64 = "sweepRefused",
+        /// The first unshown / refused identifiers, `site:name`.
+        examples: Vec<String> = "examples",
+    }
+}
+
+js_record! {
     /// The whole `--stats-json` object (writeEvalStats' literal, plus the
     /// 2026-09-29 `reask` and 2026-10-02 `waveGauges` additions — the
     /// deliberate post-cutover bumps, nested so the top level stays
@@ -444,6 +466,11 @@ js_record! {
         /// writer; ABSENT on every earlier recorded scorecard — the
         /// `reask` precedent, verbatim.
         toolchain: Option<Vec<ToolchainPieceRecord>> = "toolchain",
+        /// The `promptGuard` block (2026-10-04): does each prompt show
+        /// what it asks about. ALWAYS written on runs from this writer;
+        /// ABSENT on every earlier recorded scorecard — the `reask`
+        /// precedent, verbatim.
+        prompt_guard: Option<PromptGuardStats> = "promptGuard",
     }
 }
 

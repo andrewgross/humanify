@@ -550,6 +550,19 @@ fn identifier_profile(input: &ModuleLevelInput, id: &str) -> String {
     s
 }
 
+/// The CODE a module-level prompt shows for `id` — its profile's
+/// Declaration, Assignments and Usage texts, exactly as
+/// [`identifier_profile`] picks them (the prompt guard's input,
+/// `naming::shown`; the header and prior-name lines are not code).
+pub fn module_shown_text(input: &ModuleLevelInput, id: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    parts.extend(js_record::get_truthy(&input.declarations, id).map(|d| d.into_owned()));
+    for record in [&input.assignment_context, &input.usage_examples] {
+        parts.extend(record.get(id).unwrap_or_default().iter().cloned());
+    }
+    parts.join("\n")
+}
+
 /// The module-level prompt without its response-format tail
 /// (`buildModuleLevelRenameBody`). The used-names line lists only the
 /// NON-droppable names, first 200: `is_droppable` is the caller's

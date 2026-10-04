@@ -288,4 +288,6 @@ pub struct ProcessorReport {
     /// they collided with a name in use, handed to the barrier undecorated
     /// for the disclosed re-ask (finding #74's open item, 2026-10-04).
     pub collision_handoffs: usize,
+    /// The prompt guard's per-site tally (`naming::shown`, 2026-10-04).
+    pub prompt_guard: crate::naming::shown::GuardTally,
 }

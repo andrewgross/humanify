@@ -2262,6 +2262,99 @@
           ]
         }
       }
+    },
+    {
+      "name": "promptGuard",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "fnAsked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "fnUnshown",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "retryAsked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "retryUnshown",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "moduleAsked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "moduleUnshown",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "sweepAsked",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "sweepUnshown",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "sweepRefused",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "examples",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "array",
+              "items": {
+                "kind": "string"
+              }
+            }
+          }
+        ]
+      }
     }
   ]
 }

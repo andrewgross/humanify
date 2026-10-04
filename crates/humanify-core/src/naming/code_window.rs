@@ -5,7 +5,10 @@
 //! a window around each requested identifier's declaration line, merged,
 //! with elision markers between. Anchors are input-file lines mapped onto
 //! generated lines — exact only when the generated line count equals the
-//! function's loc span; otherwise (or with no locs) the legacy flat cut.
+//! function's loc span; otherwise each requested name's first occurrence
+//! in the generated code anchors its window (2026-10-04 — the legacy flat
+//! cut, which could drop a requested identifier, is left only for a
+//! selection naming none).
 //!
 //! Line math is the TS's exactly: lines are `code.split("\n")` (a `\r`
 //! stays on its line; a trailing newline makes an empty last line), counts
@@ -111,6 +114,13 @@ fn build_windows(anchors: &[i64], line_count: i64, pad_before: i64, pad_after: i
     merge_windows(windows)
 }
 
+/// Whether windows around `anchors` (1-based lines of a `line_count`-line
+/// code) fit the code budget at the DEFAULT padding — the coverage sweep
+/// batches its targets so no batch's windows need shrinking (2026-10-04).
+pub fn fits_at_default_pads(anchors: &[i64], line_count: i64) -> bool {
+    total_lines(&build_windows(anchors, line_count, PAD_BEFORE, PAD_AFTER)) <= MAX_CODE_LINES as i64
+}
+
 fn render_windows(lines: &[&str], windows: &[Window]) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut prev_end = 0;
@@ -154,6 +164,19 @@ fn resolve_anchors(sel: &FunctionCodeSelection<'_>, lines: &[&str]) -> Option<Ve
         }
     }
     Some(anchors)
+}
+
+/// Anchors from the requested names' first whole-token occurrences in the
+/// generated code (no loc mapping needed); None without names.
+fn rescue_anchors(sel: &FunctionCodeSelection<'_>, lines: &[&str]) -> Option<Vec<i64>> {
+    let names = sel.identifier_names.filter(|n| !n.is_empty())?;
+    Some(
+        names
+            .iter()
+            .map(|name| first_occurrence_line(lines, name))
+            .filter(|l| *l > 0)
+            .collect(),
+    )
 }
 
 fn is_ident_unit(u: u16) -> bool {
@@ -204,7 +227,11 @@ pub fn select_function_code(sel: &FunctionCodeSelection<'_>) -> String {
     if lines.len() <= MAX_CODE_LINES {
         return sel.code.to_string();
     }
-    let Some(anchors) = resolve_anchors(sel, &lines) else {
+    // An untrusted loc mapping no longer means the flat head (2026-10-04,
+    // the prompt guard's audit — `naming::shown`): every requested name is
+    // located in the GENERATED code instead, so none is asked blind. Only
+    // a selection that names no identifier keeps the flat cut.
+    let Some(anchors) = resolve_anchors(sel, &lines).or_else(|| rescue_anchors(sel, &lines)) else {
         return flat_cut(&lines);
     };
     let line_count = lines.len() as i64;

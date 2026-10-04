@@ -611,6 +611,12 @@ struct Run<'a, 's, 'p, 'l, P: NameProvider> {
     /// `defer-shadowed` (on by default): the previous wave's round-B lanes,
     /// riding with this wave's round A.
     deferred: Vec<LaneRun>,
+    /// The prompt guard's per-site tally (`naming::shown`): built inside
+    /// the `&self` request builders, so a cell.
+    guard: std::cell::RefCell<crate::naming::shown::GuardTally>,
+    /// Set while a replayed record is rebuilt (the request was already
+    /// built and tallied once, at dispatch).
+    replaying: std::cell::Cell<bool>,
 }
 
 /// Run the LLM naming waves over the transfer stage's state
@@ -697,12 +703,15 @@ pub fn run_waves<P: NameProvider>(
         processor: ProcessorReport::default(),
         fn_ctx: HashMap::new(),
         deferred: Vec::new(),
+        guard: Default::default(),
+        replaying: Default::default(),
     };
     run.used = run.module_used_names();
     run.wave_loop();
     // `processUnified`'s tail: after the module reports (pushed at
     // settle), every function's report in graph node order.
     let mut processor = std::mem::take(&mut run.processor);
+    processor.prompt_guard = run.guard.take();
     for node in &inp.ng.order {
         if let NodeRef::Fn(f) = *node
             && let Some(&ctx) = run.fn_ctx.get(&f)
@@ -1552,6 +1561,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         } else {
             full_code
         };
+        let site = if is_retry {
+            crate::naming::shown::Site::Retry
+        } else {
+            crate::naming::shown::Site::Fn
+        };
+        self.guard_note(site, &code, remaining);
         let windowed =
             self.windowed_used_names(f, remaining, &binding_map, &self.sets[*set], taken);
         let used_for_prompt = if is_retry {
@@ -1593,6 +1608,40 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             already_renamed: already,
             prior_name_hints: close.and_then(|c| c.hints.clone()),
         }
+    }
+
+    /// The prompt guard's measurement of one function ask (`naming::shown`):
+    /// every asked identifier must be in the code shown.
+    fn guard_note(&self, site: crate::naming::shown::Site, code: &str, asked: &[String]) {
+        if self.replaying.get() {
+            return;
+        }
+        let unshown = crate::naming::shown::unshown(code, asked);
+        self.guard.borrow_mut().note(site, asked.len(), &unshown);
+    }
+
+    /// The prompt guard's measurement of one module ask: each identifier's
+    /// own shown text (declaration + assignments + usages) must hold it.
+    fn guard_note_module(&self, input: &ModuleLevelInput) {
+        if self.replaying.get() {
+            return;
+        }
+        let unshown: Vec<&str> = input
+            .identifiers
+            .iter()
+            .map(String::as_str)
+            .filter(|id| {
+                !crate::naming::shown::shows(
+                    &crate::naming::prompts::module_shown_text(input, id),
+                    id,
+                )
+            })
+            .collect();
+        self.guard.borrow_mut().note(
+            crate::naming::shown::Site::Module,
+            input.identifiers.len(),
+            &unshown,
+        );
     }
 
     /// `selectRequestCode`.
@@ -1885,6 +1934,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             used_names: prompt_names.clone(),
             suggested_names: Some(StrMap(dedup_record(suggested))),
         };
+        self.guard_note_module(&input);
         let eligible = |n: &str| self.is_eligible(n);
         // The builder-side filter shares the droppable rule the windowed
         // list was built with: an applied name stays listed.
@@ -2899,10 +2949,12 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         retries: &[RetryRun],
         lanes: &[LaneRun],
     ) -> DispatchRecord {
+        self.replaying.set(true);
         let request = match &replay.source {
             ReplaySource::Retry(r) => self.retry_request(&retries[*r]),
             ReplaySource::Lane { lane, call } => self.lane_request(&lanes[*lane], call),
         };
+        self.replaying.set(false);
         let system_prompt = render_system_prompt(&request);
         let user_prompt = render_user_prompt(&request, self.state.name_profile());
         let cache_key = cache_key_of(&request, &self.inp.params);
@@ -3339,20 +3391,43 @@ pub fn extract_retry_snippet(code: &str, identifiers: &[String]) -> String {
     if lines.len() <= RETRY_SNIPPET_MIN_LINES {
         return code.to_string();
     }
-    let mut keep: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
-    keep.insert(0);
+    let around = |i: usize| {
+        i.saturating_sub(RETRY_SNIPPET_CONTEXT_LINES)
+            ..=(i + RETRY_SNIPPET_CONTEXT_LINES).min(lines.len() - 1)
+    };
+    // Every retried identifier's FIRST occurrence is kept whatever the
+    // budget (the prompt guard's audit, 2026-10-04 — `naming::shown`):
+    // the budget used to be the first 80 line indices in line order, so an
+    // identifier used often early could crowd a later one out entirely.
+    let mut kept: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+    kept.insert(0);
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut rest: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
     for (i, line) in lines.iter().enumerate() {
-        if !identifiers
+        let held: Vec<&str> = identifiers
             .iter()
-            .any(|id| crate::naming::code_window::line_has_identifier(line, id))
-        {
+            .map(String::as_str)
+            .filter(|id| crate::naming::code_window::line_has_identifier(line, id))
+            .collect();
+        if held.is_empty() {
             continue;
         }
-        let from = i.saturating_sub(RETRY_SNIPPET_CONTEXT_LINES);
-        let to = (i + RETRY_SNIPPET_CONTEXT_LINES).min(lines.len() - 1);
-        keep.extend(from..=to);
+        if held.iter().any(|id| seen.insert(id)) {
+            kept.extend(around(i));
+        } else {
+            rest.extend(around(i));
+        }
     }
-    let kept: Vec<usize> = keep.into_iter().take(RETRY_SNIPPET_MAX_LINES).collect();
+    // Then the other occurrences in line order, up to the budget. When the
+    // first occurrences all sit inside the old line-order prefix this is
+    // exactly that prefix.
+    for i in rest {
+        if kept.len() >= RETRY_SNIPPET_MAX_LINES {
+            break;
+        }
+        kept.insert(i);
+    }
+    let kept: Vec<usize> = kept.into_iter().collect();
     let mut parts: Vec<&str> = Vec::new();
     let mut prev: Option<usize> = None;
     for &i in &kept {
