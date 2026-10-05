@@ -325,7 +325,7 @@ fn parse_unbounded(json: &str) -> Result<Value, String> {
 /// The block statement whose span is `target`, as its body array — the
 /// wrapper-gate's body block, located in the serialization by the span the
 /// gate already computed. Iterative (the AST's depth).
-fn block_body_by_span(root: &Value, target: Span) -> Option<&Vec<Value>> {
+pub(crate) fn block_body_by_span(root: &Value, target: Span) -> Option<&Vec<Value>> {
     let mut stack: Vec<&Value> = vec![root];
     while let Some(value) = stack.pop() {
         match value {

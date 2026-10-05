@@ -28,6 +28,9 @@
 //! - [`shown`] — the one owner of "does this prompt show what it asks
 //!   about": an asked identifier absent from the code shown is never
 //!   asked and its answer never applied (2026-10-04).
+//! - [`plumbing`] — the names the pipeline chooses for the bundler's own
+//!   runtime plumbing (the lazy-init helper), never asked of the model
+//!   (2026-10-05).
 
 pub mod ask_trace;
 pub mod code_window;
@@ -35,6 +38,7 @@ pub mod context;
 pub mod driver;
 pub mod js_record;
 pub mod passes;
+pub mod plumbing;
 pub mod prompts;
 pub mod reask;
 pub mod reconcile;

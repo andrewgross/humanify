@@ -1430,6 +1430,7 @@ fn naming_config(
         never_rename: toolchain.never_rename.piece,
         module_group_size: toolchain.tuning.piece.module_group_size(),
         layout: toolchain.layout.piece,
+        module_wrappers: toolchain.module_wrappers.piece,
         name_profile: toolchain.name_profile.piece,
         skip_libraries: settings.skip_libraries,
         reconcile_prior_diff: settings.levers.reconcile_prior_diff,

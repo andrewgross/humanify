@@ -283,6 +283,7 @@ impl humanify_model::llm::NameProvider for SuffixProvider {
 fn ledger_config() -> super::NamingConfig {
     super::NamingConfig {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
+        module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         name_profile: crate::rename::name_profile::NameProfile::Bun,
         never_rename: crate::rename::eligibility::NeverRename::UNIVERSAL,
         module_group_size: 10,
@@ -1100,6 +1101,86 @@ fn a_call_site_shows_the_names_already_applied() {
     let sites = sites.split("\n\n").next().unwrap_or_default();
     assert!(mentions(sites, "h"), "{sites}");
     assert!(!mentions(h, "Co9"), "Co9 was named before h was asked: {h}");
+}
+
+/// Bun's lazy-init helper (`__esm`, minified to `b`) with two module
+/// initializers that call it — the shape of every lazy-init wrapper.
+const LAZY_INIT_BUNDLE: &str = "var b = (e, t) => () => (e && (t = e(e = 0)), t);\nvar r;\nvar o = b(() => {\n  r = 1;\n});\nvar s = b(() => {\n  o();\n});\ns();\nconsole.log(r);\n";
+
+/// Does any prompt ask for `id` (a module ask or a function ask)?
+fn asks_for(prompts: &[String], id: &str) -> bool {
+    let module = format!("Identifier: {id}\n");
+    prompts.iter().any(|p| {
+        p.contains(&module)
+            || p.lines().any(|l| {
+                [
+                    "Identifiers to rename: ",
+                    "Identifiers still needing names: ",
+                ]
+                .iter()
+                .any(|h| {
+                    l.strip_prefix(h)
+                        .is_some_and(|ids| ids.split(", ").any(|i| i == id))
+                })
+            })
+    })
+}
+
+/// 2026-10-05 (Andrew's decision (a), the "Once" pattern): the lazy-init
+/// helper is plumbing the toolchain recognises by shape, so the PIPELINE
+/// names it — Bun's and esbuild's own name for it, `__esm` — and the model
+/// is never asked. In 2.1.197/198 the model had named it `once`; every
+/// wrapper prompt then showed `once(() => …)` and 40% of the wrapper
+/// answers echoed it (`initErrorHandlingOnce`, 1,642 names in 2.1.198).
+#[test]
+fn the_lazy_init_helper_is_named_by_the_pipeline_not_the_model() {
+    let provider = RecordingProvider::default();
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh: LAZY_INIT_BUNDLE,
+            prior: None,
+            library: None,
+        },
+        &ledger_config(),
+        &provider,
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let prompts = provider.prompts.into_inner().expect("lock");
+    assert!(
+        !asks_for(&prompts, "b"),
+        "the helper is never asked: {prompts:#?}"
+    );
+    let wrapper = first_ask(&prompts, "o");
+    assert!(
+        wrapper.contains("__esm(() => {"),
+        "a wrapper's prompt shows the helper's plumbing name: {wrapper}"
+    );
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var __esm = ("), "{code}");
+    assert_eq!(code.matches("__esm(() => {").count(), 2, "{code}");
+}
+
+/// With a prior whose helper carried a MODEL name (`once`, the 2.1.197
+/// tree), the exact-match transfer would hand that name on; the plumbing
+/// name wins, and no post pass (reconcile, family permute) reverts it.
+#[test]
+fn the_plumbing_name_overrides_a_model_name_carried_from_the_prior() {
+    let prior = "var once = (e, t) => () => (e && (t = e(e = 0)), t);\nvar counter;\nvar initCounterOnce = once(() => {\n  counter = 1;\n});\nvar initAppOnce = once(() => {\n  initCounterOnce();\n});\ninitAppOnce();\nconsole.log(counter);\n";
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh: LAZY_INIT_BUNDLE,
+            prior: Some(prior),
+            library: None,
+        },
+        &ledger_config(),
+        &RecordingProvider::default(),
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var __esm = ("), "{code}");
+    assert!(!mentions(&code, "once"), "{code}");
 }
 
 /// A usage excerpt shows the line that MENTIONS the asked identifier: the
