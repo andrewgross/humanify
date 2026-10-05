@@ -136,6 +136,11 @@ pub struct Attempt {
     /// span; the diagnostics print it as UTF-16 `start:end`) — the llm
     /// tier records it.
     pub scope_block: Option<oxc_span::Span>,
+    /// The model's own answer KEY when it was not the asked identifier
+    /// verbatim and the answer-key owner (`naming::answer_keys`) matched
+    /// it tolerantly (`y$` for the asked `y$_`, finding #85). None for an
+    /// exact key and for every non-LLM tier.
+    pub answer_key: Option<String>,
 }
 
 impl Attempt {
@@ -148,7 +153,14 @@ impl Attempt {
             proposed_name: None,
             ref_count: None,
             scope_block: None,
+            answer_key: None,
         }
+    }
+
+    /// The tolerantly matched answer key (None leaves the row as it was).
+    pub fn answer_key(mut self, key: Option<&str>) -> Attempt {
+        self.answer_key = key.map(str::to_string);
+        self
     }
 
     pub fn reason(mut self, reason: impl Into<String>) -> Attempt {
@@ -237,6 +249,7 @@ impl TrailEntry {
                     outcome: a.outcome.as_str().to_string(),
                     reason: a.reason.clone(),
                     proposed_name: a.proposed_name.clone(),
+                    answer_key: a.answer_key.clone(),
                 })
                 .collect(),
         }

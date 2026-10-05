@@ -245,7 +245,7 @@ struct Replay {
 
 enum ReplaySource {
     Retry(usize),
-    Lane { lane: usize, call: LaneCall },
+    Lane { lane: usize, call: Box<LaneCall> },
 }
 
 /// One not-yet-started item of a pipelined round, in dispatch order: the
@@ -359,6 +359,10 @@ struct Entry {
     /// The model's OWN word behind `new` (a prior-name snap or the lane's
     /// decoration can make them differ) — what a rejection discloses.
     proposed: String,
+    /// The model's answer KEY when the answer-key owner matched it
+    /// tolerantly (`naming::answer_keys`, finding #85) — the trail row
+    /// records it. None for an exact key.
+    answer_key: Option<String>,
 }
 
 /// One rejected suggestion of a re-asked identifier, as its re-ask
@@ -2094,8 +2098,19 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         request
     }
 
-    /// `collectWaveRetryEntries` from the retry's response.
+    /// `collectWaveRetryEntries` from the retry's response, read through
+    /// the ONE answer-key owner (`naming::answer_keys`, finding #85): a
+    /// mangled key lands on its one asked id (its entry carries the key
+    /// for the trail); a key that is a live name is never a misspelling.
     fn collect_retry_entries(&mut self, r: &RetryRun, renames: &Renames) {
+        let live = match &self.strategies[r.strategy] {
+            Strategy::Fn { set, .. } => Live::Fn(*set),
+            Strategy::Module { .. } => Live::Module,
+        };
+        let asked: Vec<String> = r.seed.items.iter().map(|i| i.id.clone()).collect();
+        let keyed =
+            crate::naming::answer_keys::key_answer(renames, &asked, &|k| self.live_has(live, k));
+        let renames = &keyed.renames;
         let transform: Option<Box<Transform<'_>>> = match &self.strategies[r.strategy] {
             Strategy::Fn { f, .. } => self.fn_transform(*f),
             Strategy::Module { .. } => Some(self.module_transform(r.strategy)),
@@ -2122,12 +2137,9 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             picked.push(candidate);
         }
         drop(transform);
-        let live = match &self.strategies[r.strategy] {
-            Strategy::Fn { set, .. } => Live::Fn(*set),
-            Strategy::Module { .. } => Live::Module,
-        };
         let node_index = self.ctxs[r.seed.ctx].node_index;
         for (item, (candidate, proposed)) in r.seed.items.iter().zip(picked) {
+            let answer_key = keyed.answer_key(&item.id).map(str::to_string);
             let seq = self.next_seq();
             self.entries.push(Entry {
                 node_index,
@@ -2143,6 +2155,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 live,
                 rejects: item.rejects.clone(),
                 proposed,
+                answer_key,
             });
         }
     }
@@ -2472,7 +2485,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     site,
                     ReplaySource::Lane {
                         lane,
-                        call: call.clone(),
+                        call: Box::new(call.clone()),
                     },
                 ))
             }
@@ -2734,6 +2747,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             Strategy::Module { .. } => (Live::Module, None),
         };
         let mut proposed = lr.lane.proposed;
+        let mut answer_keys = lr.lane.answer_keys;
         for effect in lr.lane.effects {
             let (old, new, identity) = match effect {
                 LaneEffect::Rename { old, new } => (old, new, false),
@@ -2743,6 +2757,11 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 LaneEffect::Echo { name } => (name.clone(), name, false),
             };
             let proposed = proposed.remove(&old).unwrap_or_else(|| new.clone());
+            let answer_key = if identity {
+                None
+            } else {
+                answer_keys.remove(&old)
+            };
             let ctx = &self.ctxs[lr.ctx];
             let binding_index = ctx
                 .order
@@ -2779,6 +2798,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 live,
                 rejects: Vec::new(),
                 proposed,
+                answer_key,
             });
         }
     }
@@ -3260,7 +3280,8 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     return (false, Some(RejectionReason::NoBinding));
                 };
                 let f = *f;
-                let (ok, reason) = self.llm_rename(b.scope, &entry.old, name);
+                let (ok, reason) =
+                    self.llm_rename(b.scope, &entry.old, name, entry.answer_key.as_deref());
                 if !ok {
                     return (false, reason);
                 }
@@ -3295,7 +3316,8 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                     return (false, Some(RejectionReason::NoBinding));
                 };
                 let scope = self.inp.rows.modules[j].scope;
-                let (ok, reason) = self.llm_rename(scope, &entry.old, name);
+                let (ok, reason) =
+                    self.llm_rename(scope, &entry.old, name, entry.answer_key.as_deref());
                 if !ok {
                     return (false, reason);
                 }
@@ -3324,12 +3346,15 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
 
     /// `applyLlmRename`: validated rename + the `llm` trail row on the
     /// binding `scope.getBinding(old)` resolves (captured BEFORE). Returns
-    /// the attempt and its rejection reason (None on success).
+    /// the attempt and its rejection reason (None on success). The row
+    /// carries the model's answer key when it was matched tolerantly
+    /// (finding #85).
     fn llm_rename(
         &mut self,
         scope: BScopeId,
         old: &str,
         new: &str,
+        answer_key: Option<&str>,
     ) -> (bool, Option<RejectionReason>) {
         let trail_binding = self.state.get_binding(scope, old);
         // Both captured BEFORE the rename: the count the guards saw
@@ -3353,7 +3378,8 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             };
             let mut row = Attempt::new(Tier::Llm, outcome)
                 .proposed(new)
-                .scope_block(scope_block);
+                .scope_block(scope_block)
+                .answer_key(answer_key);
             if let Some(reason) = attempt.reason {
                 row = row.reason(reason.as_str());
             }

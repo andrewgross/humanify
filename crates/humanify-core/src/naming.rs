@@ -29,6 +29,7 @@
 //!   about": an asked identifier absent from the code shown is never
 //!   asked and its answer never applied (2026-10-04).
 
+pub mod answer_keys;
 pub mod ask_trace;
 pub mod code_window;
 pub mod context;

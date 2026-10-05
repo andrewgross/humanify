@@ -61,7 +61,16 @@ pub enum ReaskClass {
     InvalidSuggestion,
     /// No suggestion can fix it — record and stay loud, never re-ask.
     Unrecoverable,
+    /// No suggestion arrived under the asked identifier's key, and the
+    /// answer used keys that belong to no asked identifier
+    /// (`naming::answer_keys`, finding #85) — a re-ask that names those
+    /// keys and the ones to use can fix it. Never an applier rejection.
+    AnswerKey,
 }
+
+/// The code a key-mismatch re-ask records (no applier code: the answer
+/// never reached the applier).
+pub const ANSWER_KEY_MISMATCH: &str = "answer-key-mismatch";
 
 /// Classify a rejection reason (the one owner of the taken/unusable vs
 /// unrecoverable split).

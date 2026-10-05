@@ -27,6 +27,7 @@ fn failures(dup: &[&str], inv: &[&str], miss: &[&str], unch: &[&str]) -> RenameF
         invalid: strs(inv),
         missing: strs(miss),
         unchanged: strs(unch),
+        stray_keys: Vec::new(),
     }
 }
 

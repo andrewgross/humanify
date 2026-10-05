@@ -96,6 +96,7 @@ fn lane_reask_causes_derive_from_the_failure_lists_in_render_order() {
         invalid: i.iter().map(|s| s.to_string()).collect(),
         missing: m.iter().map(|s| s.to_string()).collect(),
         unchanged: u.iter().map(|s| s.to_string()).collect(),
+        stray_keys: Vec::new(),
     };
     assert_eq!(
         RetryCause::of_failures(&mk(&["a"], &[], &[], &[])),
