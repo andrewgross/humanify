@@ -478,7 +478,7 @@ prior:
     cd /Users/andrewgross/Development/humanify-lever1v2   # branch worktree
     NODE_OPTIONS="--max-old-space-size=14336" npx tsx src/index.ts \
       /Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js \
-      --split --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b \
+      --split --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
       --api-key local --reasoning-effort low -c 32 -o /tmp/probe-X \
       --llm-cache /tmp/eval-work/llm-cache \
       --prior-version /tmp/eval-work/e-decorated-exemption-rebased/2.1.215-rebased/.humanify/humanified.js \

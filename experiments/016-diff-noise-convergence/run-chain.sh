@@ -28,7 +28,7 @@ V119="$INPUTS/claude-code-2.1.119/binary-decompiled/src/entrypoints/index.js"
 PRIOR_V120="${PRIOR_V120:-/tmp/exp016-r1/cc-120/runtime.js}"
 OUT="${CHAIN_OUT:-/tmp/exp016-chain}"
 
-ENDPOINT="${HUMANIFY_ENDPOINT:-http://192.168.1.234:8000/v1}"
+ENDPOINT="${HUMANIFY_ENDPOINT:?set HUMANIFY_ENDPOINT to the LLM base URL, e.g. http://<llm-host>:8000/v1}"
 MODEL="${HUMANIFY_MODEL:-openai/gpt-oss-20b}"
 REASONING_EFFORT="${HUMANIFY_REASONING_EFFORT:-low}"
 export HUMANIFY_API_KEY="${HUMANIFY_API_KEY:-local}"

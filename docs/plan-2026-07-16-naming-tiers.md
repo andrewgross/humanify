@@ -72,7 +72,7 @@ CONSTRAINTS (user, 2026-07-16):
   stable-split.ts (acceptProposedName/BAD_STEM/segmentStem), split-namer.ts
   (LLM prompt). Vendor naming is SEPARATE (unpack/vendor-namer.ts) — do NOT
   kebab vendor names.
-- Local LLM for regen: http://192.168.1.234:8000/v1 openai/gpt-oss-20b
+- Local LLM for regen: http://<llm-host>:8000/v1 openai/gpt-oss-20b
   (reference_local_llm). Full run cmd in results doc / validation/ scripts.
 - Validation harness: unpacked-claude-code/validation/analyze-tree.mts.
 - Tick tiers here as done; one commit per tier (or sub-part).

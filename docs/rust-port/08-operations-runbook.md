@@ -355,7 +355,7 @@ Fresh bundle, local vLLM endpoint (walk defaults, walk-versions.sh:22-30):
 
 ```
 target/release/humanify bundle.js --split \
-  --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b \
+  --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
   --api-key local --reasoning-effort low -c 32 -o out/2.1.89
 ```
 
@@ -365,7 +365,7 @@ Cross-version hop — the prior is the previous run's
 ```
 target/release/humanify bundle.js --split \
   --prior-version out/2.1.89/.humanify/humanified.js \
-  --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b \
+  --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
   --api-key local --reasoning-effort low -c 32 -o out/2.1.90
 ```
 

@@ -231,7 +231,7 @@ git -C "$R" diff "${FLT[@]}" v2.1.215 v2.1.216 | grep -E '^[-+]var [A-Za-z_$][\w
 cd ~/Development/humanify
 npx tsx src/index.ts \
   ~/Development/claude-code-versions/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js \
-  --split --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b \
+  --split --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
   --api-key local --reasoning-effort low -c 32 -o /tmp/rebuild-216 \
   --prior-version ~/Development/unpacked-claude-code/versions/claude-code-2.1.215/.humanify/humanified.js \
   -vv --log-file /tmp/w216.log

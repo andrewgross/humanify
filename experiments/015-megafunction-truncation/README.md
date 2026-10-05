@@ -160,9 +160,9 @@ every binding is either renamed or visible in the request's code.
 
 ### The LLM box (required for A/B runs)
 
-- Endpoint `http://192.168.1.234:8000/v1`, model `openai/gpt-oss-20b`
+- Endpoint `http://<llm-host>:8000/v1`, model `openai/gpt-oss-20b`
   (vLLM, 4 replicas, ~28K tok/s aggregate), `HUMANIFY_API_KEY=local`.
-- Check it's up: `curl -s -m 3 http://192.168.1.234:8000/v1/models`.
+- Check it's up: `curl -s -m 3 http://<llm-host>:8000/v1/models`.
   Ask Andrew to power it on if unreachable.
 - Throughput knobs (baked into the harness as overridable env):
   `HUMANIFY_CONCURRENCY=120`, `HUMANIFY_MODULE_CONCURRENCY=40`,

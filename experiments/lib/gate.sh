@@ -40,7 +40,7 @@ set -uo pipefail
 #   --cache <dir>       pinned LLM cache (default <workdir>/exp054-cache)
 #   --priors <dir>      prior-tree root (default <workdir>/exp050-cold)
 #   --inputs-base <dir> override pairs.json inputsBase
-#   --endpoint <url>    override pairs.json endpoint
+#   --endpoint <url>    LLM endpoint (default: .humanify.local.json, llm-endpoint.sh)
 WORK="/work"
 FLAG="post-split-reconcile"
 TRAIL="post-split-reconcile"
@@ -76,7 +76,8 @@ PRIOR_ROOT="${PRIORS_OVERRIDE:-$WORK/exp050-cold}"
 RESULTS="$REPO/experiments/034-eval-harness/results"
 
 INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
-ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
+source "$HERE/llm-endpoint.sh"
+ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")

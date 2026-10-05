@@ -310,7 +310,7 @@ single-file baseline; a "misc" file accreting >5% of statements.
 - Red/green TDD; `npm run check` green before every commit; biome
   complexity ≤ 15; colocated `*.test.ts`; branch
   `exp023-stable-split` off `main`; do NOT merge — Andrew reviews.
-- The LLM box (`http://192.168.1.234:8000/v1`, `openai/gpt-oss-20b`,
+- The LLM box (`http://<llm-host>:8000/v1`, `openai/gpt-oss-20b`,
   key `local`) is owned hardware — wall-clock is the only budget.
 
 ## Runbook

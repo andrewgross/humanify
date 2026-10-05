@@ -609,7 +609,7 @@ impl<T: NameProvider + ?Sized> NameProvider for &T {
 /// Endpoint configuration (types.ts `LLMConfig`), resolved by the CLI.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LlmConfig {
-    /// Base URL, e.g. "http://192.168.1.234:8000/v1".
+    /// Base URL, e.g. "http://<llm-host>:8000/v1".
     pub endpoint: String,
     pub api_key: String,
     pub model: String,

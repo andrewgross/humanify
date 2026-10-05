@@ -198,7 +198,7 @@ Everything runs off the exp013 harness; no new run infra needed.
 ### 1. Produce a fresh cross-version diff
 
 ```bash
-# Needs the local LLM box (http://192.168.1.234:8000/v1, gpt-oss-20b) up.
+# Needs the local LLM box (http://<llm-host>:8000/v1, gpt-oss-20b) up.
 git worktree add /tmp/humanify-run-014 HEAD
 ln -s "$PWD/node_modules" /tmp/humanify-run-014/node_modules
 PHASE2_OUT=/tmp/exp014 bash /tmp/humanify-run-014/experiments/013-bun-cjs-classification/run-phase2.sh

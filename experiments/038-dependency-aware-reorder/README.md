@@ -160,7 +160,7 @@ choice; keep it.
     IN=/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js
     PRIOR=/tmp/eval-work/leverb-sweep/2.1.216-rebased/.humanify/humanified.js
     NODE_OPTIONS="--max-old-space-size=14336" npx tsx src/index.ts "$IN" --split \
-      --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b --api-key local \
+      --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b --api-key local \
       --reasoning-effort low -c 32 -o /tmp/eval-work/leverb/216-on-v3 \
       --llm-cache /tmp/eval-work/llm-cache --prior-version "$PRIOR" \
       -vv --log-file /tmp/eval-work/leverb/216-on-v3.log > /tmp/eval-work/leverb/216-on-v3.stdout 2>&1

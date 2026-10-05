@@ -8,7 +8,7 @@ against a live production run.
 
 ## Deployment facts (verify on the box)
 
-- Endpoint: `http://192.168.1.234:8000/v1` (OpenAI-compatible)
+- Endpoint: `http://<llm-host>:8000/v1` (OpenAI-compatible)
 - Server: **vLLM 0.13.0** (`GET /version`); Prometheus metrics live at
   `GET /metrics` — use `vllm:num_requests_running`,
   `vllm:generation_tokens_total`, `vllm:prompt_tokens_total`,
@@ -135,7 +135,7 @@ or the pinned worktree `/tmp/humanify-run-main`):
 cd /tmp/humanify-run-main && HUMANIFY_API_KEY=local \
 node --import tsx/esm src/index.ts \
   /Users/andrewgross/Development/humanify/test/e2e/fixtures/preact/minified/v10.24.0/terser-default.js \
-  -o /tmp/smoke-preact --endpoint http://192.168.1.234:8000/v1 \
+  -o /tmp/smoke-preact --endpoint http://<llm-host>:8000/v1 \
   --model openai/gpt-oss-20b
 ```
 
@@ -148,7 +148,7 @@ not junk.
 Raw-throughput probe without our client (isolates server changes):
 
 ```bash
-vllm bench serve --backend openai-chat --base-url http://192.168.1.234:8000 \
+vllm bench serve --backend openai-chat --base-url http://<llm-host>:8000 \
   --model openai/gpt-oss-20b --num-prompts 500 --max-concurrency 70 \
   --random-input-len 1200 --random-output-len 480
 ```
@@ -157,7 +157,7 @@ vllm bench serve --backend openai-chat --base-url http://192.168.1.234:8000 \
 
 - **A production run is likely in flight** (Runs A/B take ~2 h + ~1–2 h;
   they auto-chain). Before restarting vLLM, check activity:
-  `curl -s http://192.168.1.234:8000/metrics | grep num_requests_running`.
+  `curl -s http://<llm-host>:8000/metrics | grep num_requests_running`.
   Client-side progress: `ps aux | grep 'tsx/esm /tmp/humanify-run-main'`
   on this machine. Restarting mid-run kills hours of work — the client
   contains request failures as "unrenamed" rather than crashing, so a

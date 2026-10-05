@@ -57,6 +57,9 @@ experiments/092-match-ground-truth/.runs/
 # rather than by decision.
 .devcontainer/
 docs/plan-server-migration.md
+# The LLM server's address (experiments/lib/llm-endpoint.sh). Per-machine,
+# and private: test/no-private-addresses.test.ts fails on one in a tracked file.
+.humanify.local.json
 experiments/*/results/*
 
 # Rust workspace build output (rust-port migration)

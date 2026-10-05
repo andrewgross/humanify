@@ -164,7 +164,7 @@ era-reset (already landed) — the hang is upstream of the relink.
   cd /Users/andrewgross/Development/humanify
   npx tsx src/index.ts \
     /Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.172/binary-decompiled/src/entrypoints/index.js \
-    --split --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b \
+    --split --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b \
     --api-key local --reasoning-effort low -c 32 -o /tmp/thrash-172 \
     --prior-version /Users/andrewgross/Development/unpacked-claude-code/versions/claude-code-2.1.170/.humanify/humanified.js \
     -vv --log-file /tmp/w172.log

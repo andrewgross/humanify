@@ -319,6 +319,6 @@ legitimately nondeterministic and small; don't chase it.
   `leaderboard.ts`, `pairs.json`, committed `results/{archive-shipped,baseline-main}`).
 - Inputs: `~/Development/claude-code-versions/inputs/claude-code-2.1.<v>/binary-decompiled/src/entrypoints/index.js`.
 - Priors: `~/Development/unpacked-claude-code/versions/claude-code-2.1.<v>/.humanify/{humanified.js,split-ledger.json}`.
-- LLM endpoint (local): `http://192.168.1.234:8000/v1`, model `openai/gpt-oss-20b`, `--reasoning-effort low`.
+- LLM endpoint (local): `http://<llm-host>:8000/v1`, model `openai/gpt-oss-20b`, `--reasoning-effort low`.
 - Levers detail: `docs/plan-eval-driven-noise-levers.md`. Split diagnosis:
   `docs/plan-split-assignment-stability.md`. Prior levers: `docs/plan-naming-noise-levers.md`.

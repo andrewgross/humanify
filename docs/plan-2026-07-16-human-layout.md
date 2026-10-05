@@ -86,7 +86,7 @@ regenerated from scratch after this lands (user said so explicitly).
 - `npm run check` before every commit; pre-commit biome is stricter on
   cognitive complexity than npm run check — `npx biome check <file>` first.
 - Unit tests colocated (\*.test.ts). Cluster tests: src/split/cluster-assign.test.ts.
-- Local LLM for any live naming runs: http://192.168.1.234:8000/v1,
+- Local LLM for any live naming runs: http://<llm-host>:8000/v1,
   model openai/gpt-oss-20b (reference_local_llm memory).
 - Tick items here as they complete, one commit per item (or small group).
 - Item 10's compare script: experiments-style; put tree-stats helper under
