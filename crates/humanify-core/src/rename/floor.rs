@@ -50,7 +50,10 @@
 
 use crate::rename::name_profile::NameProfile;
 
-/// Short words that are real names, not mints (`SHORT_WORDS`). The ten
+/// Short words that are real names, not mints (`SHORT_WORDS`). An OPEN
+/// list of general programming vocabulary, collected from false positives
+/// seen on Claude Code runs (the only app measured) — not app vocabulary;
+/// add a general word when another app trips on it. The ten
 /// single letters a/b/e/i/j/k/n/t/x/y left this list 2026-09-30 (Andrew:
 /// "remove the limit on single character names not being processed" —
 /// every profile treats them as minted now); the real two/three-letter
@@ -63,6 +66,10 @@ const SHORT_WORDS: &[&str] = &[
 ];
 
 /// Domain stems a mint-shaped head is allowed to carry (`DOMAIN_STEMS`).
+/// An OPEN list of general programming vocabulary (encodings, hashes,
+/// protocols, cloud/standards names), collected from false positives in
+/// Claude Code census dumps (`k8s`, `b64`, `u2f`, `x509` from 2.1.216) —
+/// not app vocabulary; other apps will need more (`ed25519`, `p256`, …).
 const DOMAIN_STEMS: &[&str] = &[
     "e164", "ec2", "s3", "sha1", "sha256", "sha512", "md5", "utf8", "utf16", "base64", "http2",
     "oauth2", "i18n", "l10n", "a11y", "es5", "es6", "es2015", "ipv4", "ipv6", "v8", "w3c", "k8s",
@@ -232,7 +239,9 @@ pub fn is_sweep_answer_acceptable(profile: NameProfile, name: &str) -> bool {
 /// are real vocabulary (`p2sBytes`, `x5cArray`, `LZ77Worker`,
 /// `zodCidrV4` read as `CidRv4`) — the ones the 2026-10-03 replay over
 /// 1.46M recorded answers found the model using legitimately, plus their
-/// obvious siblings. Matched case-insensitively ANYWHERE in the answer —
+/// obvious siblings. Those answers were all from Claude Code runs; the
+/// terms are general (JOSE, compression, codecs, CPU arches, networking),
+/// and the list is OPEN. Matched case-insensitively ANYWHERE in the answer —
 /// a term that overlaps the candidate stem exempts it. The
 /// [`DOMAIN_STEMS`] are NOT here: [`is_minifier_token`] already keeps them
 /// out of the stem set, and matching their short entries (`v8`, `es5`)

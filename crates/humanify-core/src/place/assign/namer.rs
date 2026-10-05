@@ -227,7 +227,10 @@ pub fn tree_reviser_call(folders: &[FolderSummary]) -> LlmCall {
 }
 
 /// The model context assumed when none is configured (`--context-tokens`):
-/// gpt-oss-20b's, the measurement default.
+/// a default for the local model the measurements run on (gpt-oss-20b's
+/// window). Nothing app-specific; a server with another window should pass
+/// `--context-tokens` (a value below the real window only makes the
+/// split-naming batches smaller).
 pub const DEFAULT_CONTEXT_TOKENS: u64 = 32_768;
 
 /// Conservative prompt-bytes per token. Finding #39's refused prompts ran

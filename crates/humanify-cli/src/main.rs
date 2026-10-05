@@ -72,8 +72,13 @@ enum Command {
         /// misses fail the batch). Without it the LLM pass is skipped.
         #[arg(long)]
         llm_cache: Option<String>,
+        /// The vendor namer's model. The default is the local model the
+        /// measurements run on (part of the cache key, so it must match the
+        /// cache being replayed); name your own server's model otherwise.
         #[arg(long, default_value = "openai/gpt-oss-20b")]
         model: String,
+        /// Reasoning effort sent with the vendor namer's requests (the
+        /// local model's measured setting; part of the cache key too).
         #[arg(long, default_value = "low")]
         reasoning_effort: String,
         #[arg(long)]
