@@ -1222,7 +1222,10 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         Ok(bindings)
     }
 
-    /// `groupByProximity(mbNodes, 50, max)`.
+    /// `groupByProximity(mbNodes, 50, max)`: the TS's 50 was a RADIUS, and
+    /// it compared against `radius * 2` — so a group spans at most 100
+    /// lines from its first binding (the `<= 100` below, which is right),
+    /// and holds at most `module_group_size` bindings.
     fn group_by_proximity(&self, mbs: &[usize]) -> Vec<Vec<usize>> {
         let max = self.inp.module_group_size;
         let line = |j: usize| self.inp.ng.mb_text[j].declaration_line;

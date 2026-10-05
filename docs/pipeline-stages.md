@@ -9,6 +9,11 @@ from. `vendor/` alone went unscored for thirteen experiments at 2.4× the entire
 measured `src/` noise (measurement-pitfalls rule 8), and it is a stage nobody
 had written down.
 
+The tuned numbers each stage runs with — where each lives, what it was
+measured on (almost always Claude Code, often nothing), and whether it depends
+on the app, the bundler or the model — are in
+[`tuning-values.md`](./tuning-values.md).
+
 ## The stages
 
 Ordered as they execute. "Pluggable" means a strategy can be selected without
