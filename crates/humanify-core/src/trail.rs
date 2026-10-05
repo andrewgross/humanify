@@ -49,6 +49,9 @@ pub enum Tier {
     ReconcileDescriptive,
     ReconcileConsumer,
     ReconcileLastResort,
+    /// A name the pipeline chooses for the bundler's own runtime plumbing
+    /// (`naming::plumbing`): never asked of the model.
+    ToolchainPlumbing,
 }
 
 impl Tier {
@@ -75,6 +78,7 @@ impl Tier {
             Tier::ReconcileDescriptive => "reconcile-descriptive",
             Tier::ReconcileConsumer => "reconcile-consumer",
             Tier::ReconcileLastResort => "reconcile-last-resort",
+            Tier::ToolchainPlumbing => "toolchain-plumbing",
         }
     }
 }

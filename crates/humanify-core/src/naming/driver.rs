@@ -74,6 +74,10 @@ pub struct NamingConfig {
     /// side's top-level statements are — the match sides, the freezes, the
     /// family permute's module scope.
     pub layout: crate::toolchain::BundleLayout,
+    /// The run's module wrapper grammar (the toolchain's P3 piece): which
+    /// bindings are the bundler's lazy-init helper, the plumbing the
+    /// pipeline names itself (`naming::plumbing`).
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
     /// The minifier name profile selected once from detection
     /// (`rename::name_profile::select_name_profile`) — every name-shape
     /// question of the stage is asked under it.
@@ -181,6 +185,9 @@ pub struct NamingOutcome {
     pub capture: Option<era::EraCapture>,
     /// `--probe shingle-probe`'s debug lines (the CLI logs them).
     pub probe_lines: Vec<String>,
+    /// The names the pipeline chose for the bundler's plumbing (the
+    /// lazy-init helper, `naming::plumbing`) — on the trail too.
+    pub plumbing: crate::naming::plumbing::PlumbingNames,
 }
 
 /// Run the naming stage.
@@ -196,6 +203,7 @@ pub fn run_naming<P: NameProvider>(
         never_rename: config.never_rename,
         module_group_size: config.module_group_size,
         layout: config.layout,
+        module_wrappers: config.module_wrappers,
         name_profile: config.name_profile,
         params: &config.params,
         naming_floor: config.naming_floor,
@@ -265,6 +273,7 @@ pub fn run_naming<P: NameProvider>(
         capture,
         probe_lines,
         stems,
+        plumbing,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -297,6 +306,7 @@ pub fn run_naming<P: NameProvider>(
         rename_ledger: None,
         capture,
         probe_lines,
+        plumbing,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep

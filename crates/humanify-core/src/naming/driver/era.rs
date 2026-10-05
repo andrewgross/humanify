@@ -58,6 +58,8 @@ pub struct EraOptions<'o> {
     pub module_group_size: usize,
     /// `NamingConfig::layout`.
     pub layout: crate::toolchain::BundleLayout,
+    /// `NamingConfig::module_wrappers`.
+    pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
     /// `NamingConfig::name_profile`.
     pub name_profile: crate::rename::name_profile::NameProfile,
     pub params: &'o CacheKeyParams,
@@ -228,6 +230,9 @@ pub struct NamingEra {
     /// (`rename::floor::MinifiedStems`) — the deferred sweep reads a
     /// RENAMED text, so it gets the original names from here.
     pub stems: crate::rename::floor::MinifiedStems,
+    /// The names the pipeline chose for the bundler's plumbing
+    /// (`naming::plumbing`).
+    pub plumbing: crate::naming::plumbing::PlumbingNames,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -273,6 +278,9 @@ struct WaveStart {
     suggested: Vec<Option<String>>,
     private: Vec<PrivateRenameSet>,
     single_epoch: bool,
+    /// The lazy-init helpers the toolchain recognised (fresh-text names):
+    /// the plumbing the pipeline names itself (`naming::plumbing`).
+    lazy_init_helpers: std::collections::HashSet<String>,
 }
 
 /// The era over a prior-version match stage.
@@ -329,6 +337,11 @@ pub fn prior_era<P: NameProvider>(
         suggested: outcome.binding_suggested,
         private: outcome.private_renames,
         single_epoch: false,
+        lazy_init_helpers: crate::naming::plumbing::lazy_init_helpers_of(
+            opts.module_wrappers,
+            stage.fresh.json,
+            stage.fresh.wrapper.map(|w| w.body_span),
+        ),
     };
     let ph = crate::profiling::phase("era:naming-graph");
     let naming = Naming::build(semantic, graph);
@@ -422,10 +435,13 @@ pub fn fresh_era<P: NameProvider>(
     );
     let semantic = ingest.semantic();
     let graph = &parts.graph;
-    let wrapper = opts
-        .layout
-        .find_wrapper(ingest.program, semantic)
-        .map(|w| w.span);
+    let found = opts.layout.find_wrapper(ingest.program, semantic);
+    let wrapper = found.as_ref().map(|w| w.span);
+    let lazy_init_helpers = crate::naming::plumbing::lazy_init_helpers_of(
+        opts.module_wrappers,
+        &json,
+        found.as_ref().map(|w| w.body_span),
+    );
     let freeze = PreFreeze {
         library: classify_library_functions(
             &json,
@@ -448,6 +464,7 @@ pub fn fresh_era<P: NameProvider>(
         suggested: vec![None; n_bindings],
         private: Vec::new(),
         single_epoch: true,
+        lazy_init_helpers,
     };
     let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
@@ -459,7 +476,7 @@ pub fn fresh_era<P: NameProvider>(
 /// The shared body: waves, library prefix, floor, generate.
 fn run_era<P: NameProvider>(
     naming: &Naming<'_, '_>,
-    start: WaveStart,
+    mut start: WaveStart,
     library: Vec<(usize, String)>,
     prior: Option<(PriorStats, PendingCarry)>,
     opts: &EraOptions<'_>,
@@ -473,6 +490,14 @@ fn run_era<P: NameProvider>(
     let semantic = naming.semantic;
     let graph = naming.graph;
     let eligible = Eligibility::new(opts.never_rename);
+    // The plumbing the pipeline names itself, before any prompt shows it
+    // (and over whatever name the transfer carried).
+    let plumbing = crate::naming::plumbing::name_lazy_init_helper(
+        graph,
+        &start.lazy_init_helpers,
+        &mut start.rename,
+        &mut start.binding_state,
+    );
     let ph = crate::profiling::phase("era:occurrences+rows");
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
@@ -568,6 +593,7 @@ fn run_era<P: NameProvider>(
         capture: None,
         probe_lines: Vec::new(),
         stems: crate::rename::floor::MinifiedStems::empty(opts.name_profile),
+        plumbing,
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");
