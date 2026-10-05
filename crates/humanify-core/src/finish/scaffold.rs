@@ -331,11 +331,10 @@ pub fn readme_source(entry_file: &str, dependencies: &[(String, String)]) -> Str
     format!(
         "# Running this tree
 
-{deps}Then boot it:
+{deps}Then run it, passing whatever arguments the original program takes:
 
 ```sh
-node {r} --version
-node {r} --help
+node {r} [arguments]
 ```
 
 `{r}` loads `{entry_file}`, which requires every module in
@@ -351,7 +350,7 @@ under Bun — Node has no `Bun` global, so a real workload will stop at the
 first such call regardless of syntax support:
 
 ```sh
-bun {r} --version
+bun {r} [arguments]
 ```
 "
     )

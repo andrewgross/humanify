@@ -94,7 +94,7 @@ pub fn program() -> CliCommand {
         .option(
             "--context-tokens <n>",
             "Model context window in tokens; sizes the batched split-naming \
-             prompts (default: 32768)",
+             prompts (default: 32768, the local measurement model's window)",
             None,
         )
         .option(
@@ -123,8 +123,8 @@ pub fn program() -> CliCommand {
             "--llm-cache <dir>",
             "Cache LLM responses on disk keyed by request content. \
              Repeated prompts become deterministic \
-             across sessions and reruns are nearly free — the serving-drift \
-             countermeasure the 034 eval README describes.",
+             across sessions and reruns are nearly free — it also pins \
+             answers against a server whose replies drift between runs.",
             None,
         )
         .option(

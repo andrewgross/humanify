@@ -22,7 +22,8 @@ Options:
                                  (default derived from -c)
   --max-tokens <n>               Per-request completion token budget
   --context-tokens <n>           Model context window in tokens; sizes the
-                                 batched split-naming prompts (default: 32768)
+                                 batched split-naming prompts (default: 32768,
+                                 the local measurement model's window)
   --disable <passes>             Comma-separated pass switches to turn OFF for
                                  ablation (unknown names are fatal and list the
                                  valid set)
@@ -35,9 +36,9 @@ Options:
                                  "300000")
   --llm-cache <dir>              Cache LLM responses on disk keyed by request
                                  content. Repeated prompts become deterministic
-                                 across sessions and reruns are nearly free —
-                                 the serving-drift countermeasure the 034 eval
-                                 README describes.
+                                 across sessions and reruns are nearly free — it
+                                 also pins answers against a server whose
+                                 replies drift between runs.
   --reasoning-effort <level>     Reasoning effort for reasoning models: low,
                                  medium, or high (no env fallback; default:
                                  server-side default). 'low' is ~8x faster on

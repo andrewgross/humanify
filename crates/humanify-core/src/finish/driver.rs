@@ -322,7 +322,7 @@ pub fn finish_split_output(
             )
         };
         report.messages.push(format!(
-            "Runnable scaffold: run.cjs + package.json ({deps}) — `npm install && node run.cjs --version`"
+            "Runnable scaffold: run.cjs + package.json ({deps}) — `npm install && node run.cjs [arguments]`"
         ));
     }
     Ok(input.runnable.is_some() && manifest.is_some())
