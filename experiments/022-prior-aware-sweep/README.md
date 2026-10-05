@@ -168,9 +168,9 @@ Red/green TDD is the house rule: failing test first, then the fix.
 ### The LLM box
 
 Owned hardware — do NOT ration tokens, only wall-clock time matters.
-Endpoint `http://192.168.1.234:8000/v1`, model `openai/gpt-oss-20b`,
+Endpoint `http://<llm-host>:8000/v1`, model `openai/gpt-oss-20b`,
 `HUMANIFY_API_KEY=local`. Check: `curl -s -m 3
-http://192.168.1.234:8000/v1/models`. Knobs: `HUMANIFY_CONCURRENCY=120`,
+http://<llm-host>:8000/v1/models`. Knobs: `HUMANIFY_CONCURRENCY=120`,
 `HUMANIFY_REASONING_EFFORT=low`.
 
 ### The steady-state measurement protocol (BOTH legs floored)

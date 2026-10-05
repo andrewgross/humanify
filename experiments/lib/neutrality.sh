@@ -49,7 +49,7 @@ set -uo pipefail
 #                     are void (null-control proven, 2026-08-11).
 #   --priors <dir>    root holding the prior trees (default <workdir>/exp050-cold)
 #   --inputs-base <dir>  override pairs.json inputsBase
-#   --endpoint <url>     LLM endpoint override (default pairs.json)
+#   --endpoint <url>     LLM endpoint (default: .humanify.local.json, llm-endpoint.sh)
 #   --candidate-cmd '<argv>'  per-leg pipeline command (RUNBOOK §7): replaces
 #                     the leg's own `target/release/humanify` (built by this
 #                     script at that leg's commit) with the
@@ -110,7 +110,8 @@ FROM="${PAIR%%:*}"
 TO="${PAIR##*:}"
 
 INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
-ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
+source "$HERE/llm-endpoint.sh"
+ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")

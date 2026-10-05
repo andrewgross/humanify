@@ -49,7 +49,7 @@ the main checkout, read only; trees under `/tmp/eval-work/<label>/`):
 `npm run eval -- score cutover-smoke --pairs '85->86'` — no `--bin`, so the
 harness built and scored `target/release/humanify` at the branch's first
 cutover commit (8c8c685, clean tree). Cold (`cache +0`, every prompt live),
-run alone, endpoint `http://192.168.1.234:8000/v1` (`openai/gpt-oss-20b`,
+run alone, endpoint `http://<llm-host>:8000/v1` (`openai/gpt-oss-20b`,
 low, concurrency 32). Label `cutover-smoke` (untracked, as every label).
 
 | check                 | result                                                                                                                                    |

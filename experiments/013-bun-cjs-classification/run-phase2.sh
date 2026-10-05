@@ -7,7 +7,7 @@
 #   Then:  diff stats vs the 167,944-line / 30,745-hunk baseline.
 #
 # Requires the local LLM endpoint to be up. Override via env:
-#   HUMANIFY_ENDPOINT (default http://192.168.1.234:8000/v1)
+#   HUMANIFY_ENDPOINT (required, e.g. http://<llm-host>:8000/v1)
 #   HUMANIFY_MODEL    (default openai/gpt-oss-20b)
 #   HUMANIFY_API_KEY  (default "local")
 set -euo pipefail
@@ -18,7 +18,7 @@ V119="$INPUTS/claude-code-2.1.119/binary-decompiled/src/entrypoints/index.js"
 V120="$INPUTS/claude-code-2.1.120/binary-decompiled/src/entrypoints/index.js"
 OUT="${PHASE2_OUT:-/tmp/exp013-phase2}"
 
-ENDPOINT="${HUMANIFY_ENDPOINT:-http://192.168.1.234:8000/v1}"
+ENDPOINT="${HUMANIFY_ENDPOINT:?set HUMANIFY_ENDPOINT to the LLM base URL, e.g. http://<llm-host>:8000/v1}"
 MODEL="${HUMANIFY_MODEL:-openai/gpt-oss-20b}"
 # A/B on the preact smoke (2026-07-06): low effort cut the smoke from
 # 2m9s to 9.9s (output tokens 75.6K → 8.8K) with equal name quality and

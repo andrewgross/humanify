@@ -69,7 +69,7 @@ generic — a specific-but-imperfect name beats a generic one.
 
 ## Runbook
 
-- Box: `http://192.168.1.234:8000/v1`, `openai/gpt-oss-20b`,
+- Box: `http://<llm-host>:8000/v1`, `openai/gpt-oss-20b`,
   `HUMANIFY_API_KEY=local`, `HUMANIFY_REASONING_EFFORT=low`. Owned
   hardware — wall-clock is the only budget.
 - Artifacts: `/tmp/e023-final/120` (fresh tree), `/tmp/e022/120F.js`

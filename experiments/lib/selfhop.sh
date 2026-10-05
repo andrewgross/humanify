@@ -26,7 +26,7 @@ set -uo pipefail
 #   --tag <label>       results label prefix
 #   --cache <dir>       pinned LLM cache (default <workdir>/exp054-cache)
 #   --inputs-base <dir> override pairs.json inputsBase
-#   --endpoint <url>    override pairs.json endpoint
+#   --endpoint <url>    LLM endpoint (default: .humanify.local.json, llm-endpoint.sh)
 WORK="/work"
 FLAG="post-split-reconcile"
 TO="2.1.216"
@@ -56,7 +56,8 @@ CFG="$REPO/experiments/034-eval-harness/pairs.json"
 CACHE="${CACHE_OVERRIDE:-$WORK/exp054-cache}"
 INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
 INPUT="$INPUTS/claude-code-$TO/binary-decompiled/src/entrypoints/index.js"
-ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
+source "$HERE/llm-endpoint.sh"
+ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")

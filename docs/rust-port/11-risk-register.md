@@ -37,8 +37,6 @@ probe is a milestone (R7 re-probes at every upgrade, R13 at M1).
 | R13 | two-stacks limbo / morale                        | medium                              | medium                                 | M1 itself, at 25.5% of the surface (10 §5)                                           | phase-2 go/no-go (README); PORTING.md progress line + REMAINING count (10 §4)                                                                                                                                                                      | M1 slips past the 10 §7 forecast band                                                                                                |
 | R14 | LLM endpoint dependence during parity            | low                                 | medium (blocks cold events only)       | one warm replay pair with the endpoint at a dead port; success proves server-free    | warm oracle cache; schedule cold events (phase 0, re-warms, 5b, 6) around the endpoint                                                                                                                                                             | endpoint or model change (cache invalidates) (probe run 2026-09-19: PASSED, both legs +0 writes with the endpoint dead — RUNBOOK §5) |
 
-
-
 **R1 RESULT (2026-09-19, wp1.1 session): PASSED.** oxc-parser (npm latest) vs
 @babel/parser with errorRecovery, over the 8 corpus bundles + one
 TS-beautified humanified.js: 0 errors both sides on all nine; top-level
@@ -436,7 +434,7 @@ re-forecast period, triggers the honest conversation the go/no-go exists for.
 deliberately server-independent: cache hits are disk reads returning
 zero-spend usage (`src/llm/cached-provider.ts:141-149`) and the cache wrapper
 is outermost, so a fully warm replay never contacts
-`http://192.168.1.234:8000/v1` (`experiments/034-eval-harness/pairs.json`) —
+`http://<llm-host>:8000/v1` (`.humanify.local.json`, RUNBOOK §1) —
 phases 1–5a gates run through endpoint outages. Cold events DO need the
 server and get scheduled around it: the phase-0 cache capture, re-warms after
 prompt-changing oracle re-dumps (07 §10 — a warm oracle whose cache predates

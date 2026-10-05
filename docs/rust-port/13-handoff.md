@@ -75,12 +75,12 @@ still holds. What did change is the measurement environment around it:
   downgrade Node or add an override to make it compile: the exact Node pin
   protects byte-identical output.
 - **The LLM server is owned, not rented.** Two vLLM endpoints on the same
-  box: `http://192.168.1.234:8000/v1` serves `openai/gpt-oss-20b` (the
+  box: `http://<llm-host>:8000/v1` serves `openai/gpt-oss-20b` (the
   measurement model, pinned in `experiments/034-eval-harness/pairs.json`);
-  `:8100` serves GLM-5.3-Flash-NVFP4 (quality runs). Inside the container
-  the LB is `host.docker.internal:8000` via `EVAL_ENDPOINT`. Tokens cost
+  `:8100` serves GLM-5.3-Flash-NVFP4 (quality runs). The address itself is
+  local config, not in the repo (RUNBOOK §1, `.humanify.local.json`). Tokens cost
   nothing; the only cost is wall-clock. Check it is up with
-  `curl -s -m 3 http://192.168.1.234:8000/v1/models`; if unreachable, ask
+  `curl -s -m 3 http://<llm-host>:8000/v1/models`; if unreachable, ask
   Andrew to power it on. API key is `dummy`.
 - **Fixtures.** Claude Code bundles live under
   `/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.<v>/`

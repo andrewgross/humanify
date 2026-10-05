@@ -40,6 +40,7 @@ would all read as dead. As entries, knip still audits everything they import —
 
 ## What is NOT here yet
 
-`pairs.json` is still read three ways (two shell, one TS) and only the shell
-paths honour `EVAL_ENDPOINT` / `EVAL_INPUTS_BASE`. Cache-dir variables are still
+`pairs.json` is still read three ways (two shell, one TS). The LLM endpoint is
+no longer in it: every shell instrument resolves it through `llm-endpoint.sh`
+(`--endpoint`, else the git-ignored `.humanify.local.json`). Cache-dir variables are still
 per-script (`GATE_CACHE`, `SELFHOP_CACHE`, `ISOLATION_CACHE`, two hard-coded).

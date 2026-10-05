@@ -358,9 +358,9 @@ npx tsx experiments/021-naming-floor/census-minted-tokens.ts \
 
 ### The LLM box (needed for workstream 2 and lineage runs)
 
-- Endpoint `http://192.168.1.234:8000/v1`, model `openai/gpt-oss-20b`,
+- Endpoint `http://<llm-host>:8000/v1`, model `openai/gpt-oss-20b`,
   `HUMANIFY_API_KEY=local`.
-- Check it's up: `curl -s -m 3 http://192.168.1.234:8000/v1/models`.
+- Check it's up: `curl -s -m 3 http://<llm-host>:8000/v1/models`.
   If unreachable, do offline dev and ask Andrew to power it on.
 - Knobs (baked into the harness, overridable): `HUMANIFY_CONCURRENCY=120`,
   `HUMANIFY_MODULE_CONCURRENCY=40`, `HUMANIFY_MAX_TOKENS=2000`,

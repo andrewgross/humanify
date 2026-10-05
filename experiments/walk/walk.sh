@@ -13,7 +13,8 @@
 #                                 that tree symlinks the repo node_modules,
 #                                 which lost `commander` at the cutover)
 #       [--resume]                continue a walk in <dir>; finished hops skipped
-#       [--endpoint <url>]        LLM endpoint override (default pairs.json)
+#       [--endpoint <url>]        LLM endpoint (default: .humanify.local.json,
+#                                 experiments/lib/llm-endpoint.sh)
 #       [--inputs-base <dir>]     override pairs.json inputsBase
 #       [--slots <wrapper>]       run each hop's pipeline through this slot
 #                                 wrapper (default /work/heavy-run.sh: one of
@@ -46,8 +47,8 @@
 #   cards/<a>__<b>.json     the eval scorecard of hop a->b (report.ts card)
 #
 # Rules this obeys (CLAUDE.md): cold — no --llm-cache, ever (rule 10); the
-# endpoint/model come from 034's pairs.json so a walk and the eval ask the
-# same model; the boot gate pins BOOT_GATE_MODEL (lib/boot-gate.sh); each
+# model comes from 034's pairs.json and the endpoint from the same owner the
+# eval asks (lib/llm-endpoint.sh), so a walk and the eval ask the same model; the boot gate pins BOOT_GATE_MODEL (lib/boot-gate.sh); each
 # pipeline run holds one /work/heavy-run.sh slot, so a Rust and a TS walk
 # launched together run concurrently without joining an OOM pile-up. Only the
 # pipeline holds a slot — the boot gate and background scoring do not.
@@ -120,7 +121,8 @@ command -v jq >/dev/null || { echo "walk.sh: jq required" >&2; exit 2; }
 source "$REPO/experiments/lib/boot-gate.sh"
 
 INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
-ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
+source "$REPO/experiments/lib/llm-endpoint.sh"
+ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")

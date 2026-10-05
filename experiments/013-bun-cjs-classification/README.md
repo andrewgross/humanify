@@ -39,7 +39,7 @@ runs validate the actual user-visible outcome.
 
 - v119 bundle: `/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.119/binary-decompiled/src/entrypoints/index.js` (13.7 MB)
 - v120 bundle: `/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.120/binary-decompiled/src/entrypoints/index.js` (13.8 MB)
-- LLM endpoint: `http://192.168.1.234:8000/v1` (local vLLM, `openai/gpt-oss-20b`)
+- LLM endpoint: `http://<llm-host>:8000/v1` (local vLLM, `openai/gpt-oss-20b`)
 - Branch: `experiment/cross-version-caching` (this branch)
 
 ## Procedure
@@ -47,7 +47,7 @@ runs validate the actual user-visible outcome.
 ### Step 1: Humanify v119 (Run A)
 
 ```bash
-HUMANIFY_ENDPOINT=http://192.168.1.234:8000/v1 \
+HUMANIFY_ENDPOINT=http://<llm-host>:8000/v1 \
 HUMANIFY_API_KEY=local \
 HUMANIFY_MODEL=openai/gpt-oss-20b \
 node --max-old-space-size=8192 --import tsx/esm src/index.ts \
@@ -71,7 +71,7 @@ Expected:
 Only after Run A completes successfully:
 
 ```bash
-HUMANIFY_ENDPOINT=http://192.168.1.234:8000/v1 \
+HUMANIFY_ENDPOINT=http://<llm-host>:8000/v1 \
 HUMANIFY_API_KEY=local \
 HUMANIFY_MODEL=openai/gpt-oss-20b \
 node --max-old-space-size=8192 --import tsx/esm src/index.ts \

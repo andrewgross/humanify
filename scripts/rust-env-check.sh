@@ -27,9 +27,19 @@ inputs=/Users/andrewgross/Development/claude-code-versions/inputs
 n=$(ls -d "$inputs"/claude-code-2.1.* 2>/dev/null | wc -l); [ "$n" -gt 0 ] && say "corpus bundles" "$n versions under $inputs" || die "corpus bundles" "none under $inputs"
 [ -d /work ] && say "/work" "$(df -h /work | awk 'NR==2{print $4" free"}')" || die "/work" "missing — the eval workdir"
 [ -d /work/neutrality-cache ] && say "neutrality cache" "$(du -sh /work/neutrality-cache | cut -f1)" || say "neutrality cache" "absent (a warm cache is captured at WP0.4)"
+# --llm [url...]: probe the eval's endpoint (experiments/lib/llm-endpoint.sh:
+# .humanify.local.json) plus any base URLs given (e.g. the GLM server on :8100).
 if [ "${1:-}" = "--llm" ]; then
-  for ep in http://192.168.1.234:8000/v1/models http://192.168.1.234:8100/v1/models; do
-    m=$(curl -s -m 3 "$ep" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null); [ -n "$m" ] && say "llm $ep" "$m" || say "llm $ep" "unreachable (fine for parity work; needed for cold gates)"
+  shift
+  source "$REPO/experiments/lib/llm-endpoint.sh"
+  eps=("$@")
+  if configured=$(resolve_llm_endpoint "" "$REPO" 2>/dev/null); then
+    eps=("$configured" ${eps[@]+"${eps[@]}"})
+  else
+    say "llm" "skipped — no endpoint in $LLM_LOCAL_CONFIG (fine for parity work; needed for cold gates)"
+  fi
+  for ep in ${eps[@]+"${eps[@]}"}; do
+    m=$(curl -s -m 3 "$ep/models" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"][0]["id"])' 2>/dev/null); [ -n "$m" ] && say "llm $ep" "$m" || say "llm $ep" "unreachable (fine for parity work; needed for cold gates)"
   done
 fi
 [ $fail -eq 0 ] && echo "RUST ENV OK" || { echo "RUST ENV NOT OK"; exit 1; }

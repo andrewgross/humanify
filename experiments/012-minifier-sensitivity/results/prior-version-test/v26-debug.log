@@ -187,7 +187,7 @@ Model: openai/gpt-oss-20b
 Identifiers: l
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -355,7 +355,7 @@ Model: openai/gpt-oss-20b
 Identifiers: Provider
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -572,7 +572,7 @@ Model: openai/gpt-oss-20b
 Identifiers: r, l, i, t
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -750,7 +750,7 @@ Model: openai/gpt-oss-20b
 Identifiers: eventProxy, eventProxyCapture
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -855,7 +855,7 @@ Model: openai/gpt-oss-20b
 Identifiers: CAPTURE_REGEX, eventClock
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -956,7 +956,7 @@ Model: openai/gpt-oss-20b
 Identifiers: o, r, l, i, a
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -1124,7 +1124,7 @@ Model: openai/gpt-oss-20b
 Identifiers: r, l, i, a, e, o
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -1326,7 +1326,7 @@ Model: openai/gpt-oss-20b
 Identifiers: n, e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -1481,7 +1481,7 @@ Model: openai/gpt-oss-20b
 Identifiers: caughtError
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -1645,7 +1645,7 @@ Model: openai/gpt-oss-20b
 Identifiers: prevDebounce, rerenderQueue, defer, depthSort
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -1816,7 +1816,7 @@ Model: openai/gpt-oss-20b
 Identifiers: Provider
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -2034,7 +2034,7 @@ Model: openai/gpt-oss-20b
 Identifiers: n
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -2189,7 +2189,7 @@ Model: openai/gpt-oss-20b
 Identifiers: IS_NON_DIMENSIONAL, isArray, options, options_default, vnodeId
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -2417,7 +2417,7 @@ Model: openai/gpt-oss-20b
 Identifiers: MODE_HYDRATE, MODE_SUSPENDED, INSERT_VNODE, MATCHED, SVG_NAMESPACE, XHTML_NAMESPACE, MATH_NAMESPACE, UNDEFINED, EMPTY_OBJ, EMPTY_ARR
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -2826,7 +2826,7 @@ Model: openai/gpt-oss-20b
 Identifiers: error
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -2978,7 +2978,7 @@ Model: openai/gpt-oss-20b
 Identifiers: error
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -3129,7 +3129,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e, n, ContextProvider
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -3330,7 +3330,7 @@ Model: openai/gpt-oss-20b
 Identifiers: RESET_MODE, slice, isValidElement
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -3456,7 +3456,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -3653,7 +3653,7 @@ Model: openai/gpt-oss-20b
 Identifiers: i
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -3763,7 +3763,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -3926,7 +3926,7 @@ Model: openai/gpt-oss-20b
 Identifiers: l, e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -4211,7 +4211,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -4492,7 +4492,7 @@ Model: openai/gpt-oss-20b
 Identifiers: styleBreakLabel
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -4770,7 +4770,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -4928,7 +4928,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5058,7 +5058,7 @@ Model: openai/gpt-oss-20b
 Identifiers: renderError
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5187,7 +5187,7 @@ Model: openai/gpt-oss-20b
 Identifiers: renderError
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5313,7 +5313,7 @@ Model: openai/gpt-oss-20b
 Identifiers: n
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5445,7 +5445,7 @@ Model: openai/gpt-oss-20b
 Identifiers: n
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5636,7 +5636,7 @@ Model: openai/gpt-oss-20b
 Identifiers: o, r
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5809,7 +5809,7 @@ Model: openai/gpt-oss-20b
 Identifiers: o, r, l, i
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -5957,7 +5957,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e, t
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -6098,7 +6098,7 @@ Model: openai/gpt-oss-20b
 Identifiers: t, n, o, r, l
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -6277,7 +6277,7 @@ Model: openai/gpt-oss-20b
 Identifiers: o, e, r
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -6486,7 +6486,7 @@ Model: openai/gpt-oss-20b
 Identifiers: d, c, _, p, f, h, m, E, g, y
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -7146,7 +7146,7 @@ Model: openai/gpt-oss-20b
 Identifiers: u, d, c, _, p, f, h, m, E, g
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -7590,7 +7590,7 @@ Model: openai/gpt-oss-20b
 Identifiers: t
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -7749,7 +7749,7 @@ Model: openai/gpt-oss-20b
 Identifiers: caughtError
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -7947,7 +7947,7 @@ Model: openai/gpt-oss-20b
 Identifiers: c, _, p, f, h, m, E, t
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -8186,7 +8186,7 @@ Model: openai/gpt-oss-20b
 Identifiers: o, r, l, i, a, s, u, d
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -8515,7 +8515,7 @@ Model: openai/gpt-oss-20b
 Identifiers: D, C, S, N, v, e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.
@@ -9163,7 +9163,7 @@ Model: openai/gpt-oss-20b
 Identifiers: e
 
 --- HTTP REQUEST ---
-POST http://192.168.1.234:8000/v1/chat/completions
+POST http://<llm-host>:8000/v1/chat/completions
 
 --- SYSTEM PROMPT ---
 You are an expert JavaScript developer helping to deobfuscate minified code.

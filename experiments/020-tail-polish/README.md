@@ -286,9 +286,9 @@ no LLM, instant loop. Then validate at scale (below).
 
 ### The LLM box (only needed to PRODUCE humanified outputs to test on)
 
-- Endpoint `http://192.168.1.234:8000/v1`, model `openai/gpt-oss-20b`
+- Endpoint `http://<llm-host>:8000/v1`, model `openai/gpt-oss-20b`
   (vLLM, 4 replicas, ~28K tok/s), `HUMANIFY_API_KEY=local`.
-- Check it's up: `curl -s -m 3 http://192.168.1.234:8000/v1/models`.
+- Check it's up: `curl -s -m 3 http://<llm-host>:8000/v1/models`.
   If unreachable, ask Andrew to power it on; do all offline dev
   meanwhile.
 - Knobs (overridable env, baked into the harness):

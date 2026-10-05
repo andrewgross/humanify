@@ -195,7 +195,7 @@ naming-floor          deferred sweep named 19 residue binding(s) (77 skipped)   
 
 ```bash
 # LLM box up? (owned hardware — don't ration tokens)
-curl -s -m 3 http://192.168.1.234:8000/v1/models
+curl -s -m 3 http://<llm-host>:8000/v1/models
 
 # the whole offline sim (baselines + mechanism + metrics), ~10 min
 bash experiments/022-prior-aware-sweep/run-sim.sh

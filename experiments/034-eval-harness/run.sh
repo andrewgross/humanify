@@ -26,7 +26,9 @@
 #   --heap-mb <n>          recorded heap (default 65536) — INERT for the
 #                          binary (not a Node process); kept because every
 #                          run manifest records it
-#   --endpoint <url>       LLM endpoint override (default pairs.json)
+#   --endpoint <url>       LLM endpoint (default: llm.endpoint in the git-ignored
+#                          .humanify.local.json at the repo root; a worktree
+#                          also reads the main checkout's — lib/llm-endpoint.sh)
 #   --llm-cache <dir>      opt IN to a response cache — iteration only,
 #                          never valid for a gate run
 #   --no-layout            skip the split-tree churn analysis
@@ -112,6 +114,11 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 [[ -n "$MODEL" ]] || { echo "usage: run.sh <model-label> [flags]" >&2; exit 2; }
+# The LLM server's address is local, untracked configuration (the repo is
+# public): --endpoint, else .humanify.local.json. Resolved before anything is
+# built, so a missing address costs nothing.
+source "$REPO/experiments/lib/llm-endpoint.sh"
+ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 # The base mode (header): scratch | seeded | archive. One per run.
 if [[ "$SEEDED_BASE" == "1" && "$ARCHIVE_PRIOR" == "1" ]]; then
   echo "run.sh: --seeded-base and --archive-prior are exclusive (one base mode per run)" >&2
@@ -181,8 +188,8 @@ command -v jq >/dev/null || { echo "jq required"; exit 1; }
 
 # pairs.json carries the laptop's absolute paths, and the bahadur devcontainer
 # deliberately mirrors them, so the fixture roots resolve unchanged in both
-# places. These env vars cover anywhere that does NOT mirror them -- and the
-# endpoint, which genuinely differs (host.docker.internal inside the container).
+# places. --inputs-base / --priors-base cover anywhere that does NOT mirror
+# them. (The endpoint is resolved above, from local configuration.)
 INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
 PRIORS="${PRIORS_OVERRIDE:-$(jq -r .priorsBase "$CFG")}"
 
@@ -204,7 +211,6 @@ else
   # so omitting the flag IS enough now.
   echo "LLM CACHE: OFF (cold, every prompt live) -- gate-valid"
 fi
-ENDPOINT="${ENDPOINT_OVERRIDE:-$(jq -r .llm.endpoint "$CFG")}"
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")

@@ -347,7 +347,7 @@ full-bundle scale and to produce a fresh diff to characterize.
 ### Command
 
 The harness is already parameterized. From repo root, with the local LLM box
-up (`http://192.168.1.234:8000/v1`, `gpt-oss-20b`):
+up (`http://<llm-host>:8000/v1`, `gpt-oss-20b`):
 
 ```bash
 git worktree add /tmp/humanify-run-120 HEAD          # pin the run to current main

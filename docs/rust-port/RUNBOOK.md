@@ -36,10 +36,27 @@ without it. The boot gate pins `BOOT_GATE_MODEL` (default
 `claude-haiku-4-5-20251001`) because the API refuses the default model to
 every CLI version this project walks.
 
-**LLM.** `http://192.168.1.234:8000/v1` = `openai/gpt-oss-20b` (measurement
-default, pinned in `experiments/034-eval-harness/pairs.json`);
+**LLM.** `http://<llm-host>:8000/v1` = `openai/gpt-oss-20b` (measurement
+default; the model is pinned in `experiments/034-eval-harness/pairs.json`);
 `:8100` = GLM-5.3-Flash-NVFP4 (quality runs). API key: anything. During
 parity work no endpoint is needed at all; §5's R14 probe is the proof.
+
+**Where the server's address lives.** Not in the repo — it is public, and
+`test/no-private-addresses.test.ts` fails on a private-network address in any
+tracked file. Every instrument (`npm run eval -- score`, `run.sh`, `walk.sh`,
+`neutrality.sh`, `gate.sh`, `selfhop.sh`, `scripts/rust-env-check.sh --llm`)
+asks one owner, `experiments/lib/llm-endpoint.sh`, which takes, in order:
+
+1. an explicit `--endpoint <url>` on the instrument;
+2. `llm.endpoint` in `.humanify.local.json` at the checkout's root
+   (git-ignored), e.g.
+   `{"llm": {"endpoint": "http://<llm-host>:8000/v1"}}`;
+3. the same file in the MAIN checkout, so a frozen or detached worktree
+   (`/work/<label>-frozen`, a neutrality baseline leg) needs no copy;
+
+and otherwise stops before building anything, naming both. Set it once per
+machine by creating that file in the main checkout. The resolved address is
+recorded in each run's manifest under `results/` (git-ignored), as before.
 
 **Inputs.** Bundles under
 `/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.<v>/binary-decompiled/src/entrypoints/index.js`

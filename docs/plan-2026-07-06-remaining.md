@@ -375,7 +375,7 @@ cd /tmp/humanify-run-ws4
 PHASE2_OUT=/tmp/exp013-phase4 bash experiments/013-bun-cjs-classification/run-phase2.sh
 ```
 
-Needs the LLM box (http://192.168.1.234:8000/v1, gpt-oss-20b,
+Needs the LLM box (http://<llm-host>:8000/v1, gpt-oss-20b,
 HUMANIFY*API_KEY=local — the script defaults these, plus
 `--reasoning-effort low` as of commit 0c46d0e). Compare against
 PHASE3-RESULTS.md baselines: diff 131,437 lines / 22,983 hunks;

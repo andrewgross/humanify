@@ -15,7 +15,7 @@ reducible KPI inside the band (or lower). Judged per 00-control §3 ("5b control
 | `rust-5b-c3b272f-b`     | same                                              | `c3b272f` | cold repeat                                                               |
 
 All three: exit 0 on every pair, boot gate OK ×4 (both halves), `rebase FAILED`
-count 0. Endpoint `http://192.168.1.234:8000/v1`, `openai/gpt-oss-20b`, low
+count 0. Endpoint `http://<llm-host>:8000/v1`, `openai/gpt-oss-20b`, low
 reasoning, concurrency 32. Results under `experiments/034-eval-harness/results/`
 (untracked, as for every label).
 

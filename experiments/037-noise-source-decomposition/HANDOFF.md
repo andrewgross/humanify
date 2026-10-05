@@ -44,7 +44,7 @@ if (slots.filter(movable).length < 2) return [...slots];
 Add a unit test: two same-hash function stubs stay in bundle order while unique
 neighbors align. Then `npm run typecheck` + `npx tsx --test src/split/stable-split.test.ts`.
 
-## Validate v2 (targeted, ~30-60 min, needs the LLM endpoint 192.168.1.234:8000 up)
+## Validate v2 (targeted, ~30-60 min, needs the LLM endpoint <llm-host>:8000 up)
 
 Do NOT edit src/ while any pipeline run is in flight (`pgrep -f leverb-sweep.sh`,
 `pgrep -f src/index.ts`). Then, for the regression pair + a win pair:
@@ -54,7 +54,7 @@ Do NOT edit src/ while any pipeline run is in flight (`pgrep -f leverb-sweep.sh`
 IN=/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.119/binary-decompiled/src/entrypoints/index.js
 PRIOR=/tmp/eval-work/leverb-sweep/2.1.119-rebased/.humanify/humanified.js   # reuse the sweep's rebased prior
 NODE_OPTIONS=--max-old-space-size=14336 npx tsx src/index.ts "$IN" --split \
-  --endpoint http://192.168.1.234:8000/v1 --model openai/gpt-oss-20b --api-key local \
+  --endpoint http://<llm-host>:8000/v1 --model openai/gpt-oss-20b --api-key local \
   --reasoning-effort low -c 32 -o /tmp/eval-work/leverb/119-on2 --llm-cache /tmp/eval-work/llm-cache \
   --prior-version "$PRIOR" -vv --log-file /tmp/eval-work/leverb/119-on2.log > /tmp/eval-work/leverb/119-on2.stdout 2>&1
 # repeat with HUMANIFY_NO_EMIT_ALIGN=1 -> 119-off2, then:
