@@ -127,6 +127,9 @@ impl From<ReaskClass> for RetryCause {
             ReaskClass::NameTaken => RetryCause::NameTaken,
             ReaskClass::InvalidSuggestion => RetryCause::InvalidSuggestion,
             ReaskClass::Unrecoverable => RetryCause::Unrecoverable,
+            // A key-mismatch re-ask asks again for an id the answer left
+            // unanswered: the lane loop's `missing` cause.
+            ReaskClass::AnswerKey => RetryCause::Missing,
         }
     }
 }

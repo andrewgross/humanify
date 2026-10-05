@@ -32,6 +32,7 @@
 //!   runtime plumbing (the lazy-init helper), never asked of the model
 //!   (2026-10-05).
 
+pub mod answer_keys;
 pub mod ask_trace;
 pub mod code_window;
 pub mod context;

@@ -624,3 +624,58 @@ fn an_invalid_id_exhausted_through_round_two_gets_no_straggler() {
         ]
     );
 }
+
+/// Finding #85, the module lanes' case: the model keyed `y$_` as `y$$_`.
+/// On main the lane read it as MISSING; through the answer-key owner it
+/// is `y$_`'s answer, claimed in the same call, with the model's key kept
+/// for the trail.
+#[test]
+fn a_mangled_answer_key_is_claimed_for_its_one_asked_id() {
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| None;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["y$_", "CbH"]), false);
+    lane.next_call().unwrap();
+    lane.feed(
+        Ok((
+            renames(&[("y$$_", "messageHandler"), ("CbH", "errorHandler")]),
+            None,
+        )),
+        &e,
+    );
+    assert!(lane.next_call().is_none(), "nothing left to ask");
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects,
+        vec![
+            LaneEffect::Rename {
+                old: "y$_".into(),
+                new: "messageHandler".into()
+            },
+            LaneEffect::Rename {
+                old: "CbH".into(),
+                new: "errorHandler".into()
+            },
+        ]
+    );
+    assert_eq!(
+        lane.answer_keys.get("y$_").map(String::as_str),
+        Some("y$$_")
+    );
+}
+
+/// A key two asked ids could own lands on neither: both re-ask in round
+/// 2 as MISSING, and the round-2 discloses the stray key.
+#[test]
+fn an_ambiguous_answer_key_reasks_with_the_stray_key_disclosed() {
+    let used = |_: &str| false;
+    let reject = |_: &str, _: &str| None;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a$_", "a_$", "q"]), false);
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a$", "first"), ("q", "query")]), None)), &e);
+    let retry = lane.next_call().expect("the round-2");
+    assert_eq!(retry.batch, names(&["a$_", "a_$"]));
+    assert_eq!(retry.failures.missing, names(&["a$_", "a_$"]));
+    assert_eq!(retry.failures.stray_keys, names(&["a$"]));
+}

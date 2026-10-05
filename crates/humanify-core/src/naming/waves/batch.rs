@@ -277,6 +277,15 @@ pub struct Lane {
     /// word, not ours — disclosing `requestTimeoutMsVal` when the model
     /// said `requestTimeoutMs` invited it to re-offer the same word.
     pub proposed: HashMap<String, String>,
+    /// id → the model's own answer KEY, for every id whose latest answer
+    /// the answer-key owner matched tolerantly (`naming::answer_keys`,
+    /// finding #85: `y$$_` answering `y$_`) — the barrier's trail row
+    /// records it.
+    pub answer_keys: HashMap<String, String>,
+    /// id → the latest answer's STRAY keys (keys that belonged to no asked
+    /// id), for every id that answer left unanswered: its round-2
+    /// discloses them beside the MISSING line.
+    stray_for: HashMap<String, Vec<String>>,
     /// Whether a re-ask budget exists (`--rename-retries` > 0): a colliding
     /// answer the all-failed rule cut off goes to the barrier's disclosed
     /// re-ask instead of the tail's ladder (2026-10-04).
@@ -318,6 +327,8 @@ impl Lane {
             attempted_calls: 0,
             report: LaneReport::default(),
             proposed: HashMap::new(),
+            answer_keys: HashMap::new(),
+            stray_for: HashMap::new(),
             handoff: crate::naming::reask::REASK_LIMIT > 0,
         }
     }
@@ -347,7 +358,16 @@ impl Lane {
             match s.last_failure {
                 Some(FailureReason::Duplicate) => f.duplicates.push(name.clone()),
                 Some(FailureReason::Invalid) => f.invalid.push(name.clone()),
-                Some(FailureReason::Missing) => f.missing.push(name.clone()),
+                Some(FailureReason::Missing) => {
+                    f.missing.push(name.clone());
+                    // The answer that left it unanswered used keys that
+                    // belong to no asked id: name them (finding #85).
+                    for key in self.stray_for.get(name).into_iter().flatten() {
+                        if !f.stray_keys.contains(key) {
+                            f.stray_keys.push(key.clone());
+                        }
+                    }
+                }
                 Some(FailureReason::Unchanged) => f.unchanged.push(name.clone()),
                 None => {}
             }
@@ -438,6 +458,8 @@ impl Lane {
                 s.last_rejection = None;
             }
         }
+        let response =
+            response.map(|(raw, finish)| (self.key_answer(&raw, &pending.batch, env), finish));
         if pending.straggler {
             self.feed_straggler(&pending, response, env);
         } else {
@@ -525,6 +547,26 @@ impl Lane {
                 state.last_suggestion = Some(s.to_string());
             }
         }
+    }
+
+    /// Read a response through the ONE answer-key owner
+    /// (`naming::answer_keys`, finding #85): a mangled key lands on its one
+    /// asked id (remembered in [`Lane::answer_keys`] for the trail); the
+    /// ids the answer left unanswered remember its stray keys for their
+    /// round-2's disclosure. A key that is a name already in use is never
+    /// read as a misspelling.
+    fn key_answer(&mut self, raw: &Renames, batch: &[String], env: &LaneEnv<'_>) -> Renames {
+        let keyed = crate::naming::answer_keys::key_answer(raw, batch, &|k| self.is_used(k, env));
+        for id in batch {
+            self.answer_keys.remove(id);
+            self.stray_for.remove(id);
+            if let Some(key) = keyed.answer_key(id) {
+                self.answer_keys.insert(id.clone(), key.to_string());
+            } else if !keyed.answered(id) && !keyed.stray.is_empty() {
+                self.stray_for.insert(id.clone(), keyed.stray.clone());
+            }
+        }
+        keyed.renames
     }
 
     fn is_used(&self, name: &str, env: &LaneEnv<'_>) -> bool {

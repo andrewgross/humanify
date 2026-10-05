@@ -263,6 +263,11 @@ pub struct TransferAttempt {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "proposedName")]
     pub proposed_name: Option<String>,
+    /// The model's answer key when the answer-key owner matched it
+    /// tolerantly (finding #85); absent for every exact key, so a run
+    /// without one writes the bytes it always wrote.
+    #[serde(rename = "answerKey", default, skip_serializing_if = "Option::is_none")]
+    pub answer_key: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]

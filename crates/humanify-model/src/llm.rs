@@ -71,6 +71,12 @@ pub struct RenameFailures {
     pub invalid: Vec<String>,
     pub missing: Vec<String>,
     pub unchanged: Vec<String>,
+    /// The previous answer's keys that belonged to NO asked identifier
+    /// (`naming::answer_keys`, finding #85) — disclosed beside the
+    /// missing ids so the model is told which keys to use. Absent from
+    /// the key material when empty: every other retry keys as before.
+    #[serde(default)]
+    pub stray_keys: Vec<String>,
 }
 
 /// One previously rejected suggestion of a re-asked identifier (the
@@ -291,6 +297,9 @@ fn failures_to_js(f: &RenameFailures) -> JsValue {
     obj.insert("invalid", JsValue::str_array(&f.invalid));
     obj.insert("missing", JsValue::str_array(&f.missing));
     obj.insert("unchanged", JsValue::str_array(&f.unchanged));
+    if !f.stray_keys.is_empty() {
+        obj.insert("strayKeys", JsValue::str_array(&f.stray_keys));
+    }
     JsValue::Object(obj)
 }
 

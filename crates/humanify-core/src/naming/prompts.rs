@@ -351,14 +351,26 @@ fn render_rejected_names(
     format!("\nDO NOT suggest these names: {}\n", rejected.join(", "))
 }
 
+/// The missing ids, and — when the previous answer used keys that belong
+/// to no asked identifier (`naming::answer_keys`, finding #85) — those
+/// keys, with the instruction to key by the listed identifiers exactly.
+/// Without stray keys the line is byte-for-byte what it always was.
 fn missing_line(f: &RenameFailures) -> String {
     if f.missing.is_empty() {
         return String::new();
     }
-    format!(
+    let mut s = format!(
         "- These identifiers were MISSING from your response: {}\n",
         f.missing.join(", ")
-    )
+    );
+    if !f.stray_keys.is_empty() {
+        let keys: Vec<String> = f.stray_keys.iter().map(|k| format!("\"{k}\"")).collect();
+        s += &format!(
+            "- Your response used keys that are not listed identifiers: {}. Use EXACTLY the listed identifiers, character for character, as the JSON keys.\n",
+            keys.join(", ")
+        );
+    }
+    s
 }
 
 /// One disclosure line for a rejected suggestion (the two renderers'

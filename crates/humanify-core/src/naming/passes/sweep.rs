@@ -555,21 +555,13 @@ pub struct SweepResult {
     pub not_shown_examples: Vec<String>,
 }
 
-/// One pending re-ask's seed: the LAST suggestion the model made, the
-/// applier's rejection of it (class + code, for the ask site), and the
-/// ACCUMULATED reject history the next prompt must disclose.
-type SweepSeed = (
-    String,
-    crate::naming::reask::ReaskClass,
-    &'static str,
-    Vec<(String, &'static str)>,
-);
-
 /// One pending disclosed re-ask: the target, the LAST suggestion the
 /// model made, the applier's rejection of it (`naming::reask` classifies
 /// the reason; the ask trace records class + code), and the ACCUMULATED
 /// history of every suggestion that already failed — each further re-ask
-/// discloses all of it.
+/// discloses all of it. A key-mismatch re-ask (`ReaskClass::AnswerKey`)
+/// has no suggestion: it carries the answer's STRAY keys instead.
+#[derive(Clone)]
 struct SweepReask {
     target: MintedBinding,
     suggestion: String,
@@ -579,6 +571,9 @@ struct SweepReask {
     code: &'static str,
     /// Every prior rejected suggestion, oldest first: (name, code).
     rejects: Vec<(String, &'static str)>,
+    /// The answer keys that belonged to no asked identifier — nonempty
+    /// only for a key-mismatch re-ask (finding #85).
+    stray: Vec<String>,
 }
 
 /// The re-ask context one apply round runs under: the budget
@@ -615,8 +610,35 @@ impl ReaskCtx<'_> {
                 class,
                 code,
                 rejects,
+                stray: Vec::new(),
             });
         } else if crate::naming::reask::should_reask(class) {
+            state.mark_exhausted(target.binding);
+        }
+    }
+
+    /// A target the answer left unanswered while using keys that belong
+    /// to no asked identifier (finding #85): seed a re-ask that discloses
+    /// those keys while the target has budget, else mark it EXHAUSTED.
+    /// Nothing joins the reject history — there was no suggestion.
+    fn reask_key_mismatch(
+        &self,
+        state: &mut RenameState,
+        target: &MintedBinding,
+        stray: &[String],
+        reasks: &mut Vec<SweepReask>,
+    ) {
+        use crate::naming::reask::{ANSWER_KEY_MISMATCH, ReaskClass, reask_again};
+        if reask_again(self.limit, self.spent, ReaskClass::AnswerKey) {
+            reasks.push(SweepReask {
+                target: target.clone(),
+                suggestion: String::new(),
+                class: ReaskClass::AnswerKey,
+                code: ANSWER_KEY_MISMATCH,
+                rejects: self.carried.get(&target.name).cloned().unwrap_or_default(),
+                stray: stray.to_vec(),
+            });
+        } else {
             state.mark_exhausted(target.binding);
         }
     }
@@ -637,6 +659,13 @@ impl ReaskCtx<'_> {
 /// re-ask budget (`naming::reask::reask_again`). Before the 2026-09-28
 /// fix these were counted `skipped` and dropped — the minted name kept
 /// forever.
+///
+/// The answer is read through the ONE answer-key owner
+/// (`naming::answer_keys`, finding #85): a key the model mangled (`y$`
+/// for the asked `y$_`) lands on its one asked target, the match on the
+/// trail row (`answerKey`); a target left unanswered while the answer
+/// used keys that belong to no target is a disclosed RE-ASK
+/// (`ReaskClass::AnswerKey`), not a decline.
 fn apply_group_response(
     state: &mut RenameState,
     group: &SweepGroup,
@@ -646,8 +675,21 @@ fn apply_group_response(
     let (mut named, mut skipped) = (0, 0);
     let mut reasks = Vec::new();
     let profile = state.name_profile();
+    let asked: Vec<String> = group.targets.iter().map(|t| t.name.clone()).collect();
+    let keyed = crate::naming::answer_keys::key_answer(renames, &asked, &|k| {
+        group.used_names.iter().any(|n| n == k)
+    });
     for target in &group.targets {
-        let suggestion = renames.get(&target.name).filter(|s| !s.is_empty());
+        let answer_key = keyed.answer_key(&target.name);
+        if !keyed.answered(&target.name) && !keyed.stray.is_empty() {
+            skipped += 1;
+            let row = Attempt::new(Tier::CoverageSweep, Outcome::Abstained)
+                .reason(crate::naming::reask::ANSWER_KEY_MISMATCH);
+            state.record(target.binding, &target.name, row, true);
+            reask.reask_key_mismatch(state, target, &keyed.stray, &mut reasks);
+            continue;
+        }
+        let suggestion = keyed.renames.get(&target.name).filter(|s| !s.is_empty());
         // The ONE answer-quality question the wave barrier asks too
         // (`answer_refusal`): an answer borrowing a minified name as a
         // word (Fix A, 2026-10-03) or handing a multi-letter minified
@@ -659,7 +701,8 @@ fn apply_group_response(
             skipped += 1;
             let row = Attempt::new(Tier::CoverageSweep, Outcome::Rejected)
                 .proposed(junk.to_string())
-                .reason(code);
+                .reason(code)
+                .answer_key(answer_key);
             state.record(target.binding, &target.name, row, true);
             reask.reask_or_exhaust(
                 state,
@@ -679,7 +722,9 @@ fn apply_group_response(
                 Some(s) if s != target.name => "still-below-floor",
                 _ => "llm-declined",
             };
-            let row = Attempt::new(Tier::CoverageSweep, Outcome::Abstained).reason(reason);
+            let row = Attempt::new(Tier::CoverageSweep, Outcome::Abstained)
+                .reason(reason)
+                .answer_key(answer_key);
             state.record(target.binding, &target.name, row, true);
             continue;
         };
@@ -697,13 +742,16 @@ fn apply_group_response(
         );
         if attempt.applied {
             named += 1;
-            let row = Attempt::new(Tier::CoverageSweep, Outcome::Applied).proposed(new_name);
+            let row = Attempt::new(Tier::CoverageSweep, Outcome::Applied)
+                .proposed(new_name)
+                .answer_key(answer_key);
             state.record(target.binding, &target.name, row, true);
             continue;
         }
         skipped += 1;
-        let mut row =
-            Attempt::new(Tier::CoverageSweep, Outcome::Rejected).proposed(new_name.clone());
+        let mut row = Attempt::new(Tier::CoverageSweep, Outcome::Rejected)
+            .proposed(new_name.clone())
+            .answer_key(answer_key);
         if let Some(r) = attempt.reason {
             row = row.reason(r.as_str());
         }
@@ -932,6 +980,50 @@ fn sweep_call(
     }
 }
 
+/// A re-ask group's disclosure: per target, its last suggestion
+/// (`previous_attempt`), its failure list, and its accumulated reject
+/// history. A collision/invalid seed is a `duplicates` entry (the
+/// suggestion and every prior reject disclosed); a key-mismatch seed
+/// (finding #85) is a `missing` entry, and the answer's stray keys travel
+/// in `stray_keys` so the prompt names them.
+fn reask_disclosure(
+    targets: &[MintedBinding],
+    seed_of: &HashMap<String, SweepReask>,
+    stems: &MinifiedStems,
+) -> (
+    crate::naming::waves::jsset::JsRecord,
+    humanify_model::llm::RenameFailures,
+    humanify_model::llm::PriorRejects,
+) {
+    let mut prev = crate::naming::waves::jsset::JsRecord::default();
+    let mut failures = humanify_model::llm::RenameFailures::default();
+    let mut prior = humanify_model::llm::PriorRejects::default();
+    for t in targets {
+        let seed = seed_of
+            .get(&t.name)
+            .expect("every re-asked target carries its seed");
+        if seed.class == crate::naming::reask::ReaskClass::AnswerKey {
+            failures.missing.push(t.name.clone());
+            for key in &seed.stray {
+                if !failures.stray_keys.contains(key) {
+                    failures.stray_keys.push(key.clone());
+                }
+            }
+            continue;
+        }
+        prev.set(&t.name, &seed.suggestion);
+        failures.duplicates.push(t.name.clone());
+        prior.0.push((
+            t.name.clone(),
+            seed.rejects
+                .iter()
+                .map(|(name, code)| disclose_reject(name, Some(code), None, stems))
+                .collect(),
+        ));
+    }
+    (prev, failures, prior)
+}
+
 /// The sweep's bounded re-ask rounds for the collision-rejected targets —
 /// ONE round per loop iteration, until the budget (`--rename-retries`)
 /// exhausts or every re-asked suggestion settles. The retry request
@@ -965,18 +1057,13 @@ fn sweep_reask<P: NameProvider>(
         // The round's seeds: each target's last suggestion, its latest
         // rejection (class + code, for the ask site), and the accumulated
         // reject history the next prompt must disclose.
-        let seed_of: HashMap<String, SweepSeed> = pending
+        let seed_of: HashMap<String, SweepReask> = pending
             .iter()
-            .map(|r| {
-                (
-                    r.target.name.clone(),
-                    (r.suggestion.clone(), r.class, r.code, r.rejects.clone()),
-                )
-            })
+            .map(|r| (r.target.name.clone(), r.clone()))
             .collect();
         let carried: HashMap<String, Vec<(String, &'static str)>> = seed_of
             .iter()
-            .map(|(k, (_, _, _, rejects))| (k.clone(), rejects.clone()))
+            .map(|(k, seed)| (k.clone(), seed.rejects.clone()))
             .collect();
         let targets: Vec<MintedBinding> = pending.into_iter().map(|r| r.target).collect();
         let BuiltGroups {
@@ -990,23 +1077,7 @@ fn sweep_reask<P: NameProvider>(
         let mut round_responses = Vec::with_capacity(fresh.len());
         let mut round_calls = Vec::with_capacity(fresh.len());
         for g in &fresh {
-            let mut prev = crate::naming::waves::jsset::JsRecord::default();
-            let mut failures = humanify_model::llm::RenameFailures::default();
-            let mut prior = humanify_model::llm::PriorRejects::default();
-            for t in &g.targets {
-                let (suggestion, _, _, rejects) = seed_of
-                    .get(&t.name)
-                    .expect("every re-asked target carries its suggestion");
-                prev.set(&t.name, suggestion);
-                failures.duplicates.push(t.name.clone());
-                prior.0.push((
-                    t.name.clone(),
-                    rejects
-                        .iter()
-                        .map(|(name, code)| disclose_reject(name, Some(code), None, stems))
-                        .collect(),
-                ));
-            }
+            let (prev, failures, prior) = reask_disclosure(&g.targets, &seed_of, stems);
             // The ask site: the group's targets were seeded by applier
             // rejections — the class when they all agree (the usual case:
             // one collision class), their codes in the detail. Recording
@@ -1015,9 +1086,8 @@ fn sweep_reask<P: NameProvider>(
                 .targets
                 .iter()
                 .map(|t| {
-                    let (_, class, code, _) =
-                        seed_of.get(&t.name).expect("every target carries its seed");
-                    (*class, *code)
+                    let seed = seed_of.get(&t.name).expect("every target carries its seed");
+                    (seed.class, seed.code)
                 })
                 .collect();
             let mut codes: Vec<&str> = seeded.iter().map(|(_, c)| *c).collect();
@@ -1175,5 +1245,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     })
 }
 
+#[cfg(test)]
+mod answer_key_test;
 #[cfg(test)]
 mod sweep_test;
