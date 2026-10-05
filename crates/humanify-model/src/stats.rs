@@ -338,6 +338,21 @@ js_record! {
 pub use crate::pipeline::{PipelineSelectionRecord, ToolchainPieceRecord};
 
 js_record! {
+    /// Which split method the bundle got (`place::method`, 2026-10-05):
+    /// `module-markers`, `prior-layout`, `fresh-grouping`, or `not-split`
+    /// (a bundle layout the split does not read — the named output was
+    /// written unsplit), the reason, and the module markers' coverage of
+    /// the app code when it was measured.
+    pub struct SplitMethodStats {
+        method: String = "method",
+        reason: String = "reason",
+        marker_coverage: Option<f64> = "markerCoverage",
+        marker_modules: Option<f64> = "markerModules",
+        threshold: f64 = "threshold",
+    }
+}
+
+js_record! {
     /// The 2026-09-28 collision-retry fixes' counters (ProcessorReport's
     /// lane half + SweepResult's re-ask half, summed over the sweeps) —
     /// added 2026-09-29 (the deliberate schema bump, fix/small-leftovers):
@@ -471,6 +486,11 @@ js_record! {
         /// ABSENT on every earlier recorded scorecard — the `reask`
         /// precedent, verbatim.
         prompt_guard: Option<PromptGuardStats> = "promptGuard",
+        /// The `splitMethod` block (2026-10-05): which split method the
+        /// bundle got, from what it contains, and why. Written on `--split`
+        /// runs; ABSENT on runs without `--split` and on every earlier
+        /// recorded scorecard — the `reask` precedent, verbatim.
+        split_method: Option<SplitMethodStats> = "splitMethod",
     }
 }
 

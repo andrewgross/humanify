@@ -1,4 +1,4 @@
-# esbuild-esm — an ES-module bundle (KNOWN GAP: spec I25)
+# esbuild-esm — an ES-module bundle (split skipped: spec I25)
 
 A real esbuild 0.27.2 build of `../node-app` with
 `--bundle --format=esm --platform=node`, unminified (so this fixture
@@ -7,7 +7,7 @@ isolates the LAYOUT gap from the minified-detection one). Same app as
 `node:path` builtin stays a real `import { basename } from "node:path"`,
 and there is no wrapper function anywhere.
 
-## What it records today (main @ 8883d0b5)
+## What it recorded before finding #87 (main @ 8883d0b5)
 
 ```
 humanify detect --toolchain build/v1.0.0/build/index.js
@@ -37,16 +37,32 @@ The error is the ACCURATE reason. Review R10 predicted a misleading
 "oxc failed to parse the input bundle" (seven parse sites force script
 mode); on this input the wrapper gate answers first. If a layout fix
 reaches those parse sites, this fixture will fail differently and the
-known-gap entry will say "changed".
+e2e will say how it changed.
 
-## The known-gap entry
+## Since finding #87 (2026-10-05): the split is skipped, not an error
 
-`scripts/e2e.ts` `KNOWN_GAPS` holds this fixture to failing with
-`the run's input bundle has no recognizable bundle wrapper`. When ESM
-layout support lands, it must pass the same checks as the others —
-fresh + prior + `--sequential` twice each, byte-deterministic, the split
-tree booting with the input's stdout, `vendor/` non-empty — and the stage
-then tells the fix to delete the entry.
+A layout the split does not read no longer fails the run after naming. The
+fresh run exits 0, prints
+
+```
+WARNING: --split skipped: the run's input bundle has no recognizable bundle
+wrapper (…). The split reads one bundle layout, a single wrapper function
+holding the program (docs/plugin-spec.md P9, I25); the named output is
+written unsplit to <out>/runtime.js
+```
+
+and writes what a run without `--split` writes: the named `runtime.js` and
+the extracted `vendor/`. `--stats-json` records
+`splitMethod.method = "not-split"`; the v2 leg runs with that file as its
+prior. The e2e holds the fixture to exactly that (`expect.splitMethod`):
+fresh + prior + `--sequential` twice each, byte-deterministic, and no
+runnable tree written. The layout itself is still open (spec I25): when a
+second layout lands, this fixture's expectation becomes a split method and
+the boot step runs its tree.
+
+When ESM layout support lands, the fixture must pass the same checks as
+the split ones — the split tree booting with the input's stdout,
+`vendor/` non-empty.
 
 ## The build (PINNED: esbuild 0.27.2)
 

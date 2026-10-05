@@ -5,12 +5,15 @@ One small Node app, two versions, built four ways by `build.sh`:
 | fixture            | bundler        | command                                           | what it records today                    |
 | ------------------ | -------------- | ------------------------------------------------- | ---------------------------------------- |
 | `esbuild-minified` | esbuild 0.27.2 | `--bundle --minify --format=iife --platform=node` | KNOWN GAP: detected as unknown (spec I2) |
-| `esbuild-cjs`      | esbuild 0.27.2 | `--bundle --format=cjs --platform=node`           | KNOWN GAP: `--split` fails (spec I25)    |
-| `esbuild-esm`      | esbuild 0.27.2 | `--bundle --format=esm --platform=node`           | KNOWN GAP: `--split` fails (spec I25)    |
-| `bun-esm-minified` | Bun 1.3.14     | `build --target=bun --format=esm --minify`        | KNOWN GAP: `--split` fails (spec I25)    |
+| `esbuild-cjs`      | esbuild 0.27.2 | `--bundle --format=cjs --platform=node`           | split skipped, named unsplit (spec I25)  |
+| `esbuild-esm`      | esbuild 0.27.2 | `--bundle --format=esm --platform=node`           | split skipped, named unsplit (spec I25)  |
+| `bun-esm-minified` | Bun 1.3.14     | `build --target=bun --format=esm --minify`        | split skipped, named unsplit (spec I25)  |
 
 Every eval pair is Claude Code, which is one shape: Bun, CommonJS wrapper,
 minified. These four are the shapes the pipeline had never been run on.
+Until finding #87 (2026-10-05) the three top-level builds failed `--split`
+after naming; a layout the split does not read now finishes unsplit with a
+WARNING (exit 0).
 
 ## The app
 

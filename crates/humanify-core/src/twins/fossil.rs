@@ -463,6 +463,236 @@ pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<Fossi
     })
 }
 
+/// How much of a bundle's top-level APP code the module markers describe
+/// — the measure the split method is chosen by
+/// ([`crate::place::method`], findings C1/C2 of the 2026-10-05
+/// app-specific scan).
+///
+/// The marker grammar ([`extract_fossil_modules`]) reads every statement
+/// up to an init as that init's module and everything after the last init
+/// as the entry. That is TRUE only when every source file was loaded
+/// lazily (Claude Code's shape: Bun writes a lazy init only for an ES
+/// module that is `require()`d or loaded by `import()`). In a bundle with
+/// eagerly loaded modules, the eager ones emitted before a lazy one are
+/// glued into its file and the rest piles into the entry file.
+///
+/// A statement is COVERED when it sits inside a segment AND is something
+/// a lazy module's top level can hold: a hoisted function or class, a
+/// `var` whose initializers are inert (no call runs at load — literals,
+/// functions, plain property reads, a call that only DEFINES a thunk), the
+/// export registrar call (`__export(ns, { name: () => name })`), or the
+/// init definition itself. Bun moves every other top-level statement of a
+/// lazy module INTO its init, so anything else inside a segment is eager
+/// code glued in (`glued_statements`). The eager tail after the last init
+/// is uncovered too: it all lands in one entry file.
+///
+/// A LOWER bound on the eager code: an eager module holding only
+/// functions and constants has a lazy module's shape and counts as
+/// covered — which is why the method threshold is strict.
+///
+/// Mass is source bytes. Module-factory definitions (calls of the
+/// bundle's module helper, `var require_x = __commonJS(…)`) are vendor
+/// code under every split method and are outside the app mass.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MarkerCoverage {
+    /// Recorded modules (init definitions).
+    pub modules: usize,
+    /// App-code bytes: every top-level statement but module factories.
+    pub app_bytes: u64,
+    /// Bytes of covered statements.
+    pub covered_bytes: u64,
+    /// Statements inside a segment that no lazy module's top level holds.
+    pub glued_statements: usize,
+    /// App statements after the last init (the entry tail).
+    pub tail_statements: usize,
+}
+
+impl MarkerCoverage {
+    /// Covered share of the app code, 0 for no app code.
+    pub fn share(&self) -> f64 {
+        if self.app_bytes == 0 {
+            0.0
+        } else {
+            self.covered_bytes as f64 / self.app_bytes as f64
+        }
+    }
+}
+
+/// An expression that runs no code of the program when evaluated at load:
+/// literals, functions and classes (defined, not called), plain property
+/// reads, operators over those, object/array literals of those, and a
+/// call whose every argument is a function (or an object of functions) —
+/// the bundler's thunk-defining helpers (`__esm(…)`, `__commonJS(…)`,
+/// `__lazy(…)`), which store the function and return.
+fn is_inert(e: &Value) -> bool {
+    let e = unwrap_paren(e);
+    match e.get("type").and_then(Value::as_str).unwrap_or("") {
+        "Literal"
+        | "Identifier"
+        | "ArrowFunctionExpression"
+        | "FunctionExpression"
+        | "ClassExpression" => true,
+        "TemplateLiteral" => all_of(e.get("expressions"), is_inert),
+        "UnaryExpression" => {
+            e.get("operator").and_then(Value::as_str) != Some("delete")
+                && e.get("argument").is_some_and(is_inert)
+        }
+        "BinaryExpression" | "LogicalExpression" => {
+            e.get("left").is_some_and(is_inert) && e.get("right").is_some_and(is_inert)
+        }
+        "ArrayExpression" => all_of(e.get("elements"), |x| {
+            x.is_null()
+                || (x.get("type").and_then(Value::as_str) != Some("SpreadElement") && is_inert(x))
+        }),
+        "ObjectExpression" => all_of(e.get("properties"), |p| {
+            p.get("type").and_then(Value::as_str) == Some("Property")
+                && (p.get("computed") != Some(&Value::Bool(true))
+                    || p.get("key").is_some_and(is_inert))
+                && p.get("value").is_some_and(is_inert)
+        }),
+        "MemberExpression" => {
+            e.get("computed") != Some(&Value::Bool(true)) && e.get("object").is_some_and(is_inert)
+        }
+        "CallExpression" => is_thunk_definition(e),
+        _ => false,
+    }
+}
+
+fn all_of(list: Option<&Value>, test: impl Fn(&Value) -> bool) -> bool {
+    list.and_then(Value::as_array)
+        .is_some_and(|items| items.iter().all(test))
+}
+
+fn is_function(v: &Value) -> bool {
+    matches!(
+        unwrap_paren(v).get("type").and_then(Value::as_str),
+        Some("ArrowFunctionExpression" | "FunctionExpression")
+    )
+}
+
+/// `helper(fn…)` / `helper({ "path"() {…} })`: an identifier call whose
+/// arguments are all functions or objects of functions.
+fn is_thunk_definition(call: &Value) -> bool {
+    ident_name(call.get("callee")).is_some()
+        && call
+            .get("arguments")
+            .and_then(Value::as_array)
+            .is_some_and(|args| {
+                !args.is_empty()
+                    && args.iter().all(|a| {
+                        is_function(a)
+                            || (a.get("type").and_then(Value::as_str) == Some("ObjectExpression")
+                                && all_of(a.get("properties"), |p| {
+                                    p.get("value").is_some_and(is_function)
+                                }))
+                    })
+            })
+}
+
+/// The export registrar call a lazy module keeps at its top level:
+/// `register(namespace, { name: () => binding, … })`.
+fn is_export_registration(stmt: &Value) -> bool {
+    if stmt.get("type").and_then(Value::as_str) != Some("ExpressionStatement") {
+        return false;
+    }
+    let Some(call) = stmt.get("expression").map(unwrap_paren) else {
+        return false;
+    };
+    if call.get("type").and_then(Value::as_str) != Some("CallExpression")
+        || ident_name(call.get("callee")).is_none()
+    {
+        return false;
+    }
+    let Some([target, getters]) = call
+        .get("arguments")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    else {
+        return false;
+    };
+    ident_name(Some(target)).is_some()
+        && getters.get("type").and_then(Value::as_str) == Some("ObjectExpression")
+        && all_of(getters.get("properties"), |p| {
+            p.get("value").map(unwrap_paren).is_some_and(|v| {
+                v.get("type").and_then(Value::as_str) == Some("ArrowFunctionExpression")
+                    && v.get("params")
+                        .and_then(Value::as_array)
+                        .is_some_and(Vec::is_empty)
+            })
+        })
+}
+
+/// Can a lazily loaded module's top level hold this statement?
+fn is_lazy_module_shaped(stmt: &Value) -> bool {
+    match stmt.get("type").and_then(Value::as_str).unwrap_or("") {
+        "FunctionDeclaration" | "ClassDeclaration" => true,
+        "VariableDeclaration" => all_of(stmt.get("declarations"), |d| {
+            d.get("init").is_none_or(|i| i.is_null() || is_inert(i))
+        }),
+        _ => is_export_registration(stmt),
+    }
+}
+
+/// `var x = <factory_helper>(…)` for every declarator: a bundled module's
+/// factory (vendor code under every split method).
+fn is_module_factory_definition(stmt: &Value, factory_helper: Option<&str>) -> bool {
+    let Some(helper) = factory_helper else {
+        return false;
+    };
+    stmt.get("type").and_then(Value::as_str) == Some("VariableDeclaration")
+        && all_of(stmt.get("declarations"), |d| {
+            d.get("init").map(unwrap_paren).is_some_and(|i| {
+                i.get("type").and_then(Value::as_str) == Some("CallExpression")
+                    && ident_name(i.get("callee")) == Some(helper)
+            })
+        })
+}
+
+/// The wrapper indexes of the lazy-init definitions — each recorded
+/// module's last statement — in bundle order.
+pub fn lazy_init_indices(body: &[Value]) -> Vec<usize> {
+    let mut indices: Vec<usize> = find_init_defs(body, &lazy_init_helper_names(body))
+        .into_iter()
+        .map(|r| r.index)
+        .collect();
+    indices.sort_unstable();
+    indices.dedup();
+    indices
+}
+
+/// [`MarkerCoverage`] of a wrapper body: `spans` parallel to `body` (the
+/// byte mass), `factory_helper` the module helper the run's module wrapper
+/// grammar recognised (None: no factories to set aside).
+pub fn marker_coverage(
+    body: &[Value],
+    spans: &[(u32, u32)],
+    factory_helper: Option<&str>,
+) -> MarkerCoverage {
+    let inits: HashSet<usize> = lazy_init_indices(body).into_iter().collect();
+    let last_init = inits.iter().copied().max();
+    let mut c = MarkerCoverage {
+        modules: inits.len(),
+        ..MarkerCoverage::default()
+    };
+    for (i, stmt) in body.iter().enumerate() {
+        if is_module_factory_definition(stmt, factory_helper) && !inits.contains(&i) {
+            continue;
+        }
+        let bytes = spans
+            .get(i)
+            .map_or(0, |&(s, e)| u64::from(e.saturating_sub(s)));
+        c.app_bytes += bytes;
+        if last_init.is_none_or(|last| i > last) {
+            c.tail_statements += 1;
+        } else if inits.contains(&i) || is_lazy_module_shaped(stmt) {
+            c.covered_bytes += bytes;
+        } else {
+            c.glued_statements += 1;
+        }
+    }
+    c
+}
+
 /// A module's cross-version signature (statement-twin.ts :1017): the
 /// segment's hashes joined in the SORTED order the extraction produced.
 pub fn module_signature(m: &FossilModule) -> String {

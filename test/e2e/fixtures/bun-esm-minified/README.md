@@ -1,4 +1,4 @@
-# bun-esm-minified — Bun's ES-module output, production shape (KNOWN GAP: spec I25)
+# bun-esm-minified — Bun's ES-module output, production shape (split skipped: spec I25)
 
 A real Bun 1.3.14 build of `../node-app` with
 `bun build --target=bun --format=esm --minify`.
@@ -10,7 +10,7 @@ and minifying costs this fixture nothing it needs: Bun is recognised by the
 already covered (`bun-bundle`, CommonJS); the minified ESM build is the one
 nobody had run.
 
-## What it records today (main @ 8883d0b5)
+## What it recorded before finding #87 (main @ 8883d0b5)
 
 ```
 humanify detect --toolchain build/v1.0.0/build/index.js
@@ -34,11 +34,26 @@ A fix for ESM layouts has to read both bundlers' helpers: Bun's ESM
 runtime differs from esbuild's (`__toESM` with WeakMap caches,
 `var{getPrototypeOf:…}=Object` destructuring).
 
-## The known-gap entry
+## Since finding #87 (2026-10-05): the split is skipped, not an error
 
-`scripts/e2e.ts` `KNOWN_GAPS` holds this fixture to failing with
-`the run's input bundle has no recognizable bundle wrapper`; once it
-passes, the stage tells the fix to delete the entry.
+A layout the split does not read no longer fails the run after naming. The
+fresh run exits 0, prints
+
+```
+WARNING: --split skipped: the run's input bundle has no recognizable bundle
+wrapper (…). The split reads one bundle layout, a single wrapper function
+holding the program (docs/plugin-spec.md P9, I25); the named output is
+written unsplit to <out>/runtime.js
+```
+
+and writes what a run without `--split` writes: the named `runtime.js` and
+the extracted `vendor/`. `--stats-json` records
+`splitMethod.method = "not-split"`; the v2 leg runs with that file as its
+prior. The e2e holds the fixture to exactly that (`expect.splitMethod`):
+fresh + prior + `--sequential` twice each, byte-deterministic, and no
+runnable tree written. The layout itself is still open (spec I25): when a
+second layout lands, this fixture's expectation becomes a split method and
+the boot step runs its tree.
 
 ## The build (PINNED: Bun 1.3.14)
 

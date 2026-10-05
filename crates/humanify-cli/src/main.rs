@@ -53,6 +53,13 @@ enum Command {
         /// plugin piece, its choice, and why).
         #[arg(long)]
         toolchain: bool,
+        /// Also print, on its own line, the split method a fresh `--split`
+        /// run would give this bundle — the module markers or the fresh
+        /// grouping — the markers' coverage of the app code, and why
+        /// (`{"splitMethod":…}`, the stats file's block). Parses the whole
+        /// bundle.
+        #[arg(long)]
+        split_method: bool,
     },
     /// WPB.2's unpack stage: detect the bundler, select the unpack adapter
     /// and write its tree (bun and esbuild: vendor/*.js + runtime.js +
@@ -205,7 +212,8 @@ fn main() {
             input,
             profile,
             toolchain,
-        }) => run_detect(&input, profile.as_deref(), toolchain),
+            split_method,
+        }) => run_detect(&input, profile.as_deref(), toolchain, split_method),
         Some(Command::Unpack {
             input,
             out_dir,
@@ -580,7 +588,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
 /// detection span's `adapter` key arrives with the unpack adapter
 /// registry, WPB.2). With `--toolchain`, a second line: the toolchain
 /// resolved from the verdict (no flags), as the stats file records it.
-fn run_detect(input: &str, profile: Option<&str>, toolchain: bool) {
+fn run_detect(input: &str, profile: Option<&str>, toolchain: bool, split_method: bool) {
     use humanify_core::profiling::{Profiler, format_profile_summary, to_trace_events};
     use humanify_model::profiling::{JsObject, trace_tid};
 
@@ -610,6 +618,9 @@ fn run_detect(input: &str, profile: Option<&str>, toolchain: bool) {
     if toolchain {
         println!("{}", toolchain_line(&verdict));
     }
+    if split_method {
+        println!("{}", split_method_line(&code, &verdict));
+    }
     if let Some(path) = profile {
         let report = profiler.finalize(Some(input));
         let trace =
@@ -621,6 +632,23 @@ fn run_detect(input: &str, profile: Option<&str>, toolchain: bool) {
         eprintln!("{}", format_profile_summary(&report));
         eprintln!("Profile written to {path}");
     }
+}
+
+/// `detect --split-method`'s line: `{"splitMethod":…}` — the split
+/// method a fresh `--split` run would give the bundle (no flags, no prior).
+fn split_method_line(
+    code: &str,
+    verdict: &humanify_model::detection::BundlerDetectionResult,
+) -> String {
+    use humanify_core::place::method::split_method_of_input;
+    use humanify_model::js::{JsObject, JsValue, stringify};
+    use humanify_model::jsshape::JsType;
+
+    let resolved = humanify_core::toolchain::resolve_toolchain(verdict, None, None);
+    let record = split_method_of_input(code, &resolved).record();
+    let mut line = JsObject::new();
+    line.insert("splitMethod", record.to_js());
+    stringify(&JsValue::Object(line))
 }
 
 /// `detect --toolchain`'s second line: `{"selection":…,"toolchain":[…]}`,

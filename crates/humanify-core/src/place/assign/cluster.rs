@@ -44,7 +44,19 @@ pub struct ClusterConfig {
     pub folder_window: usize,
 }
 
-/// `DEFAULT_CLUSTER_CONFIG`.
+/// `DEFAULT_CLUSTER_CONFIG`: the targets exp029 tuned on ONE app — Claude
+/// Code (the split input `claude-code-2.1.89`, the shape target its real
+/// unbundled tree `claude-code-src-2.1.88`: 1,902 files, 293 folders,
+/// median 129 lines; experiments/029-graph-clustering-split/README.md).
+/// The project-size targets (`target_files`, the top-folder window
+/// `min_top`/`max_top`, `folder_window`) are therefore that app's, and
+/// the pipeline never uses them as-is: [`scaled_cluster_config`] scales
+/// them to the input, and reproduces them EXACTLY at
+/// [`REFERENCE_APP_LINES`]. The per-file budgets (`window`, `min_gap`,
+/// `max_lines`, `max_seg`, `min_lines`) and per-folder sizes (`min_sub`,
+/// `max_sub`, `flat_top`) describe one file / one folder, not a project,
+/// and are kept as they are. The frozen TS split calls replay with these
+/// values verbatim ([`ClusterSizing::Fixed`]).
 pub const DEFAULT_CLUSTER_CONFIG: ClusterConfig = ClusterConfig {
     window: 40,
     min_gap: 4,
@@ -59,6 +71,63 @@ pub const DEFAULT_CLUSTER_CONFIG: ClusterConfig = ClusterConfig {
     flat_top: 8,
     folder_window: 300,
 };
+
+/// The app size [`DEFAULT_CLUSTER_CONFIG`]'s project targets were tuned
+/// at: Claude Code 2.1.89's humanified text, the text the grouping cuts
+/// (its archived run, `unpacked-claude-code/versions/claude-code-2.1.89/
+/// .humanify/humanified.js`: 440,850 lines). 1,700 target files there is
+/// ~259 lines per file.
+pub const REFERENCE_APP_LINES: usize = 440_850;
+
+/// How the grouping's targets are sized.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClusterSizing {
+    /// Scaled to the app's size ([`scaled_cluster_config`]) — the pipeline.
+    ScaledToApp,
+    /// These exact targets (the frozen TS split-call replays).
+    Fixed(ClusterConfig),
+}
+
+impl ClusterSizing {
+    /// The targets for an app of `app_lines` lines.
+    pub fn config_for(self, app_lines: usize) -> ClusterConfig {
+        match self {
+            ClusterSizing::ScaledToApp => scaled_cluster_config(app_lines),
+            ClusterSizing::Fixed(c) => c,
+        }
+    }
+}
+
+/// The fresh grouping's targets for an app of `app_lines` lines (finding
+/// B1). The scaling rule, both halves passing through the reference
+/// point ([`REFERENCE_APP_LINES`] → [`DEFAULT_CLUSTER_CONFIG`] exactly):
+///
+/// - FILES scale linearly: the reference's lines per file are kept, so
+///   `target_files = round(1700 · app_lines / 440,850)`, at least 1 —
+///   a bigger app gets more files, never bigger ones;
+/// - TOP FOLDERS scale with the square root of the file count: the
+///   reference tree has √1700 ≈ 41 files per top folder at the low end of
+///   its 40-100 window, about as many top folders as files per folder.
+///   With `s = √(target_files / 1700)`: `min_top = round(40·s)`,
+///   `max_top = round(100·s)`, `folder_window = round(300·s)` (the folder
+///   seam curve's window, a fraction of a top folder's statements), each
+///   at least 1. A 5,000-line app: 19 files, top folders of 4-11.
+pub fn scaled_cluster_config(app_lines: usize) -> ClusterConfig {
+    let reference = DEFAULT_CLUSTER_CONFIG;
+    let files = (reference.target_files as f64 * app_lines as f64 / REFERENCE_APP_LINES as f64)
+        .round()
+        .max(1.0);
+    let s = (files / reference.target_files as f64).sqrt();
+    let scaled = |v: usize| ((v as f64 * s).round() as usize).max(1);
+    let min_top = scaled(reference.min_top);
+    ClusterConfig {
+        target_files: files as usize,
+        min_top,
+        max_top: scaled(reference.max_top).max(min_top),
+        folder_window: scaled(reference.folder_window),
+        ..reference
+    }
+}
 
 fn node_type(v: &Value) -> &str {
     v.get("type").and_then(Value::as_str).unwrap_or("")
@@ -296,6 +365,51 @@ fn deep_seam_cuts(g: &RefGraph, x: &[f64], cfg: &ClusterConfig) -> Vec<usize> {
     }
     accepted.sort_unstable();
     enforce_budgets(g, x, &accepted, cfg)
+}
+
+/// The seam cuts with the module ends honoured (`module_ends`, body
+/// indexes; `app_idx` maps an app position to its body index): a cut
+/// after every module end, and no seam or statement-budget cut INSIDE a
+/// module under the file line cap (`max_lines`) — a lazily loaded module
+/// is one file, as the markers record it. Applied after the budgets and the tiny-segment merge, so no
+/// module end is ever merged away; a module over the budget keeps the
+/// seams' cuts.
+fn with_module_ends(
+    cuts: Vec<usize>,
+    g: &RefGraph,
+    cfg: &ClusterConfig,
+    app_idx: &[usize],
+    module_ends: &[usize],
+) -> Vec<usize> {
+    if module_ends.is_empty() {
+        return cuts;
+    }
+    let mut pre = vec![0usize; g.n + 1];
+    for i in 0..g.n {
+        pre[i + 1] = pre[i] + g.lines[i];
+    }
+    let mut kept: HashSet<usize> = cuts.into_iter().collect();
+    let mut start = 0;
+    for &end in module_ends {
+        // The first app position after the module's end.
+        let stop = app_idx.partition_point(|&b| b <= end);
+        if stop <= start {
+            continue;
+        }
+        // A module is one source file of the author's: only the line cap
+        // (a file's size), never the statement count, may cut it.
+        let fits = pre[stop] - pre[start] <= cfg.max_lines;
+        if fits {
+            kept.retain(|&c| c <= start || c >= stop);
+        }
+        if stop < g.n {
+            kept.insert(stop);
+        }
+        start = stop;
+    }
+    let mut cuts: Vec<usize> = kept.into_iter().filter(|&c| c > 0 && c < g.n).collect();
+    cuts.sort_unstable();
+    cuts
 }
 
 /// `deepestIn`: the lowest x in [lo, hi], leftmost on ties.
@@ -1227,7 +1341,13 @@ fn factory_callee(stmt: &Value) -> Option<(String, String, usize)> {
 }
 
 /// `assignClustered`: the per-statement file assignment of the fresh
-/// grouping. `code` + `spans` are the rendered text the statements were
+/// grouping. `module_ends` are body indexes after which a file MUST end —
+/// the module markers' boundaries (each lazily loaded module's last
+/// statement) when the markers do not describe the whole bundle
+/// ([`crate::place::method`]): the grouping keeps a lazy module apart from
+/// the code around it (a vendored CommonJS module that `require()`s it
+/// would otherwise share a load-time cycle with that code's file). Empty:
+/// the seams alone decide. `code` + `spans` are the rendered text the statements were
 /// parsed from (vendor stems floor to a content hash; namer evidence).
 /// `module_helper` is the module helper the run's module wrapper grammar
 /// recognised in that text (`ModuleWrapperGrammar::identify_factory_helper`,
@@ -1239,7 +1359,8 @@ pub fn assign_clustered(
     body: &[Value],
     code: Option<(&str, &[(u32, u32)])>,
     module_helper: Option<&str>,
-    cfg: &ClusterConfig,
+    sizing: ClusterSizing,
+    module_ends: &[usize],
     namers: ClusterNamers,
 ) -> Vec<String> {
     let helper = module_helper.map(str::to_string);
@@ -1280,9 +1401,11 @@ pub fn assign_clustered(
         None => vec![""; app_idx.len()],
     };
     let g = build_ref_graph(&app_body, &texts);
+    let cfg = &sizing.config_for(g.lines.iter().sum());
     let x = crossing_curve(&g, cfg.window);
     let x_folder = crossing_curve(&g, cfg.folder_window);
-    let segments = group_segments(&deep_seam_cuts(&g, &x, cfg), &x_folder, g.n, cfg);
+    let cuts = with_module_ends(deep_seam_cuts(&g, &x, cfg), &g, cfg, &app_idx, module_ends);
+    let segments = group_segments(&cuts, &x_folder, g.n, cfg);
     let app = App {
         body: &app_body,
         refs: &g.refs,
@@ -1296,3 +1419,6 @@ pub fn assign_clustered(
     }
     assignment
 }
+
+#[cfg(test)]
+mod cluster_test;

@@ -8,6 +8,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 
 import {
+  apartFailures,
   expectationFailures,
   judgeKnownGap,
   KNOWN_GAPS,
@@ -71,15 +72,7 @@ describe("staleKnownGaps", () => {
   });
 
   it("accepts the committed list against the committed fixtures", () => {
-    assert.deepEqual(
-      staleKnownGaps(KNOWN_GAPS, [
-        "bun-esm-minified",
-        "esbuild-cjs",
-        "esbuild-esm",
-        "esbuild-minified"
-      ]),
-      []
-    );
+    assert.deepEqual(staleKnownGaps(KNOWN_GAPS, ["esbuild-minified"]), []);
   });
 });
 
@@ -87,20 +80,29 @@ describe("expectationFailures", () => {
   const observed = { bundler: "unknown", unpackAdapter: "passthrough" };
 
   it("is empty when nothing is expected", () => {
-    assert.deepEqual(expectationFailures(undefined, observed, 0), []);
+    assert.deepEqual(
+      expectationFailures(undefined, observed, { vendorFiles: 0 }),
+      []
+    );
   });
 
   it("names each expectation the run missed", () => {
     assert.deepEqual(
       expectationFailures(
-        { bundler: "esbuild", unpackAdapter: "esbuild", vendor: true },
+        {
+          bundler: "esbuild",
+          unpackAdapter: "esbuild",
+          vendor: true,
+          splitMethod: "not-split"
+        },
         observed,
-        0
+        { vendorFiles: 0, splitMethod: "fresh-grouping" }
       ),
       [
         "detection: bundler is unknown, expected esbuild",
         "toolchain: unpack adapter is passthrough, expected esbuild",
-        "unpack: the split tree's vendor/ is empty, expected the extracted dependencies"
+        "unpack: the split tree's vendor/ is empty, expected the extracted dependencies",
+        "split: the fresh run's split method is fresh-grouping, expected not-split"
       ]
     );
   });
@@ -108,11 +110,40 @@ describe("expectationFailures", () => {
   it("is empty when every expectation holds", () => {
     assert.deepEqual(
       expectationFailures(
-        { bundler: "bun", unpackAdapter: "bun", vendor: true },
+        {
+          bundler: "bun",
+          unpackAdapter: "bun",
+          vendor: true,
+          splitMethod: "module-markers"
+        },
         { bundler: "bun", unpackAdapter: "bun" },
-        26
+        { vendorFiles: 26, splitMethod: "module-markers" }
       ),
       []
     );
+  });
+});
+
+describe("apartFailures", () => {
+  // Which files of a split tree hold each marker string.
+  const files = new Map([
+    ["src/index.js", "LEDGER# PALETTE#"],
+    ["src/archive.js", "ARCHIVE#"]
+  ]);
+
+  it("names a pair that shares a file (the marker method's pile-up)", () => {
+    assert.deepEqual(apartFailures([["PALETTE#", "LEDGER#"]], files), [
+      'split: "PALETTE#" and "LEDGER#" share src/index.js, expected separate files'
+    ]);
+  });
+
+  it("names a marker no file holds", () => {
+    assert.deepEqual(apartFailures([["ARCHIVE#", "CODEC#"]], files), [
+      'split: no file holds "CODEC#"'
+    ]);
+  });
+
+  it("is empty when every pair sits in separate files", () => {
+    assert.deepEqual(apartFailures([["ARCHIVE#", "PALETTE#"]], files), []);
   });
 });

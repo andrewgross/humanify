@@ -3754,7 +3754,7 @@
     "tree": [
       [
         "a.js",
-        "Object.defineProperty(module.exports, \"xa\", { get: () => xa, enumerable: true, configurable: true });\nconst b = require(\"./b.js\");\n\nvar xa = (function () { return b.yb; })?.();\n"
+        "Object.defineProperty(module.exports, \"xa\", { get: () => xa, enumerable: true, configurable: true });\nconst b = new Proxy({}, { get: (_, k) => require(\"./b.js\")[k], set: (_, k, v) => { require(\"./b.js\")[k] = v; return true; } });\n\nvar xa = (function () { return b.yb; })?.();\n"
       ],
       [
         "b.js",
@@ -3780,7 +3780,8 @@
       39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
       57, 58, 59, 60, 61
     ],
-    "declinedLedger": null
+    "declinedLedger": null,
+    "note": "Re-recorded 2026-10-05 (fix/split-by-bundle-contents): b.js reads a.xa at load while a.js is still in its header (the same hazard), so a.js now loads b.js on first use. Same behaviour as the TS tree (both run; xa and yb stay undefined, as in the bundle); only a.js's require line changed."
   },
   {
     "name": "class field sites",
@@ -6766,7 +6767,7 @@
       ],
       [
         "target.js",
-        "Object.defineProperty(module.exports, \"teamContext\", { get: () => teamContext, enumerable: true, configurable: true });\nObject.defineProperty(module.exports, \"waitForIdle\", { get: () => waitForIdle, enumerable: true, configurable: true });\nconst augmenter = require(\"./augmenter.js\");\n\nvar teamContext = {};\nfunction waitForIdle() { return \"idle\"; }\nfunction readBridge() { return augmenter.bridgeReady; }\n"
+        "Object.defineProperty(module.exports, \"teamContext\", { get: () => teamContext, enumerable: true, configurable: true });\nObject.defineProperty(module.exports, \"waitForIdle\", { get: () => waitForIdle, enumerable: true, configurable: true });\nconst augmenter = new Proxy({}, { get: (_, k) => require(\"./augmenter.js\")[k], set: (_, k, v) => { require(\"./augmenter.js\")[k] = v; return true; } });\n\nvar teamContext = {};\nfunction waitForIdle() { return \"idle\"; }\nfunction readBridge() { return augmenter.bridgeReady; }\n"
       ],
       [
         "augmenter.js",
@@ -6798,7 +6799,8 @@
       39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
       57, 58, 59, 60, 61, 62, 63, 64, 65, 66
     ],
-    "declinedLedger": null
+    "declinedLedger": null,
+    "note": "Re-recorded 2026-10-05 (fix/split-by-bundle-contents): the TS tree crashed at load (TypeError: Cannot convert undefined or null to object) — target.js required augmenter.js in its header although it only uses it inside a function, and augmenter.js reads target.teamContext at load while target.js was still in its header. The emit now simulates Node's load order and target.js loads augmenter.js on first use; the tree runs."
   },
   {
     "name": "ledger layout: barrier refuses the requested order",

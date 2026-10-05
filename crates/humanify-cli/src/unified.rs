@@ -32,6 +32,7 @@ use std::sync::{Arc, Mutex};
 use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
+use humanify_core::place::method::MarkerOffer;
 use humanify_core::toolchain::{Toolchain, resolve_toolchain};
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
@@ -595,7 +596,7 @@ fn pipeline_body(
     use humanify_core::profiling::phase;
     let ph = phase("read+detect");
     let bundled_code = read_utf8(input)?;
-    let (toolchain, fossil_split) = detect_stage(&bundled_code, opts, switches, profiler);
+    let (toolchain, markers) = detect_stage(&bundled_code, opts, switches, profiler);
     let prior = load_prior_version_code(opts, renderer)?;
     drop(ph);
 
@@ -689,6 +690,7 @@ fn pipeline_body(
     let mut placement = humanify_core::place::trail::PlacementTrail::default();
     let mut split_sections = None;
     let mut post_split = crate::split_stage::PostSplitRecords::default();
+    let mut split_method = None;
     if opts.split
         && let Some(NamedFile {
             outcome,
@@ -707,7 +709,7 @@ fn pipeline_body(
             prior_version: prior_path,
             split_ledger: opts.split_ledger.as_deref(),
             split_pure: opts.split_pure,
-            fossil: fossil_split,
+            markers,
             switches,
             provider,
             log: &mut dispatch_log,
@@ -735,7 +737,8 @@ fn pipeline_body(
             matches!(records.ended, crate::split_stage::SplitEnded::Complete),
         )));
         placement = records.trail;
-        split_sections = Some(records.dump);
+        split_sections = records.dump;
+        split_method = Some(records.method);
         post_split = records.post_split;
     }
     if let Some(NamedFile {
@@ -761,6 +764,7 @@ fn pipeline_body(
                 &post_split.claims,
                 &unpacked.vendor_naming,
                 &toolchain,
+                split_method,
                 renderer,
             )?;
         }
@@ -1039,7 +1043,7 @@ fn detect_stage(
     opts: &CommandOptions,
     switches: &SwitchState,
     profiler: &humanify_core::profiling::Profiler,
-) -> (Toolchain, bool) {
+) -> (Toolchain, MarkerOffer) {
     let span = profiler.pipeline_span("detection");
     let detection = humanify_core::detect::detect_bundle(bundled_code);
     let toolchain = resolve_toolchain(
@@ -1088,11 +1092,18 @@ fn detect_stage(
             .collect::<Vec<_>>()
             .join(", ")
     ));
-    let fossil_split =
-        adapter.provides_module_fossils() && !switches.switch_on(Switch::FossilSplit);
-    if fossil_split {
-        verbose().log("Fossil split: module fossils will drive statement assignment");
-    }
+    // The split method is chosen from what the bundle CONTAINS, at the
+    // split (place::method); detection only says whether the toolchain
+    // offers the module markers at all.
+    let markers = if !adapter.provides_module_fossils() {
+        MarkerOffer::NotProvided
+    } else if switches.switch_on(Switch::FossilSplit) {
+        MarkerOffer::Disabled
+    } else {
+        verbose()
+            .log("Module markers offered: the split measures how much of the bundle they cover");
+        MarkerOffer::Offered
+    };
     if !detection.signals.is_empty() {
         let signals: Vec<String> = detection
             .signals
@@ -1101,7 +1112,7 @@ fn detect_stage(
             .collect();
         verbose().debug(&format!("Detection signals: {}", signals.join(", ")));
     }
-    (toolchain, fossil_split)
+    (toolchain, markers)
 }
 
 /// The last processed file: its naming outcome, its unpacked path, and
@@ -1288,6 +1299,7 @@ fn write_stats_json(
     later_claims: &humanify_core::rename::validated::RenameClaimStats,
     vendor: &humanify_core::modules::vendor_names::VendorNamingStats,
     toolchain: &Toolchain,
+    split_method: Option<humanify_model::stats::SplitMethodStats>,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(), Crash> {
     if outcome.coverage.is_none() {
@@ -1304,6 +1316,7 @@ fn write_stats_json(
     }
     stats.selection = Some(crate::pipeline_config::pipeline_selection_record(toolchain));
     stats.toolchain = Some(crate::pipeline_config::toolchain_record(toolchain));
+    stats.split_method = split_method;
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
     renderer.message(&format!("Eval stats written to {dest}"));

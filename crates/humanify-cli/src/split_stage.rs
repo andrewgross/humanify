@@ -15,20 +15,21 @@ use std::path::Path;
 
 use humanify_core::artifact_dump::SplitSections;
 use humanify_core::emit::align::AlignSwitches;
-use humanify_core::emit::stable_split::{SplitOptions, SplitOutcome, stable_split};
+use humanify_core::emit::stable_split::{InputGate, SplitOptions, SplitOutcome, stable_split};
 use humanify_core::finish::driver::{FinishInput, FinishReport, FinishSwitches, finish_stage};
 use humanify_core::place::assign::namer::{
     ProviderSplitNamer, ProviderTreeReviser, SplitNamer, SplitNamerBudget, TreeReviser,
 };
 use humanify_core::place::layout::find_split_ledger_path;
 use humanify_core::place::ledger::{StableSplitLedger, read_ledger, settle_prior_hashes};
-use humanify_core::place::placement_dump::Regime;
+use humanify_core::place::method::{MarkerOffer, method_name, method_record, not_split_record};
 use humanify_core::place::tiers::{PLACEMENT_TIERS, PlacementSwitches, placement_summary};
 use humanify_core::place::trail::PlacementTrail;
 use humanify_core::rename::transfer::carry::PriorCarry;
 use humanify_model::js::{JsObject, JsValue, stringify};
 use humanify_model::jsshape::CountMap;
 use humanify_model::llm::NameProvider;
+use humanify_model::stats::SplitMethodStats;
 
 use crate::kill_switches::{Switch, SwitchState};
 use crate::log::debug_enabled;
@@ -50,8 +51,9 @@ pub struct SplitStageInput<'a> {
     /// `--split-ledger`.
     pub split_ledger: Option<&'a str>,
     pub split_pure: bool,
-    /// Decided once at detection (`fossilSplit`).
-    pub fossil: bool,
+    /// Whether the toolchain offers the module markers (decided once at
+    /// detection); the split itself picks the method from the bundle.
+    pub markers: MarkerOffer,
     pub switches: &'a SwitchState,
     pub provider: &'a dyn NameProvider,
     /// The run's per-dispatch recorder (finding #65): the `folders` site's
@@ -158,11 +160,14 @@ fn tiers_carry(carry: Option<&PriorCarry>) -> Option<humanify_core::place::tiers
     })
 }
 
-/// How the split ended for the caller: complete, or a post-commit step
-/// failed (the tree stays on disk). A pre-commit failure is an Err.
+/// How the split ended for the caller: complete, a post-commit step
+/// failed (the tree stays on disk), or the bundle's layout is not one the
+/// split reads — the named output was written unsplit (a WARNING, never
+/// an error after naming: finding C3). A pre-commit failure is an Err.
 pub enum SplitEnded {
     Complete,
     TreeWrittenPostFailure,
+    NotSplit,
 }
 
 /// What the split hands the run's recorders (`--diagnostics`,
@@ -172,7 +177,10 @@ pub struct SplitRecords {
     pub ended: SplitEnded,
     /// The per-statement placement trail (`placementTrail`).
     pub trail: PlacementTrail,
-    pub dump: SplitSections,
+    /// The dump's split-era sections (None: not split).
+    pub dump: Option<SplitSections>,
+    /// The split method and why (`--stats-json`'s `splitMethod`).
+    pub method: SplitMethodStats,
     /// What the finishing stage's passes recorded into the run's reports:
     /// the post-split reconcile's trail rows (per split file) and the
     /// claims of it and the bundle carry.
@@ -223,10 +231,24 @@ pub fn run_split(
     input: &mut SplitStageInput<'_>,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<SplitRecords, String> {
+    // The layout gate on the run's ORIGINAL input, once: a bundle whose
+    // layout the split does not read finishes UNSPLIT (finding C3).
+    let gate = match input.input_bundle {
+        Some(original) => match input
+            .toolchain
+            .layout
+            .piece
+            .original_bundle_binding_count(original)
+        {
+            Ok(count) => InputGate::Settled(count),
+            Err(why) => return finish_unsplit(code, input, &why, renderer),
+        },
+        None => InputGate::TextAtHand,
+    };
     let mut trail = PlacementTrail::default();
     let ph = humanify_core::profiling::phase("split:compute");
     let (outcome, prior_present) =
-        split_before_commit(code, prior_carry, input, &mut trail, renderer)
+        split_before_commit(code, prior_carry, input, gate, &mut trail, renderer)
             .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
     drop(ph);
     let mut post_split = PostSplitRecords::default();
@@ -260,13 +282,48 @@ pub fn run_split(
         SplitEnded::TreeWrittenPostFailure => {
             renderer.message("Split tree already written; a post-split step failed after commit")
         }
+        SplitEnded::NotSplit => {}
     }
     let dump = split_dump(code, &outcome, &trail);
     Ok(SplitRecords {
         ended,
         trail,
-        dump,
+        dump: Some(dump),
+        method: method_record(&outcome.method),
         post_split,
+    })
+}
+
+/// The bundle's layout is not one the split reads (an ES module's or
+/// esbuild `--format=cjs`'s top level, a program under the ≥50-name
+/// bundle gate): write the NAMED output unsplit — what a run without
+/// `--split` writes — and say so loudly. The naming work is never lost to
+/// a layout the split cannot cut (finding C3; docs/plugin-spec.md P9).
+fn finish_unsplit(
+    code: &str,
+    input: &SplitStageInput<'_>,
+    why: &str,
+    renderer: &mut dyn ProgressRenderer,
+) -> Result<SplitRecords, String> {
+    let written = match input.processed_source {
+        Some(path) => {
+            write_file(path, code)?;
+            path.display().to_string()
+        }
+        None => String::from("(no processed file)"),
+    };
+    renderer.message(&format!(
+        "WARNING: --split skipped: {why}. The split reads one bundle layout, a single \
+wrapper function holding the program (docs/plugin-spec.md P9, I25); the named output \
+is written unsplit to {written}"
+    ));
+    renderer.message(&format!("Next release: --prior-version {written}"));
+    Ok(SplitRecords {
+        ended: SplitEnded::NotSplit,
+        trail: PlacementTrail::default(),
+        dump: None,
+        method: not_split_record(why),
+        post_split: PostSplitRecords::default(),
     })
 }
 
@@ -275,6 +332,7 @@ fn split_before_commit(
     code: &str,
     prior_carry: Option<&PriorCarry>,
     input: &mut SplitStageInput<'_>,
+    gate: InputGate<'_>,
     trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(SplitOutcome, bool), String> {
@@ -288,18 +346,6 @@ fn split_before_commit(
     // The tree reviser keeps its (single) call and records it AFTER the
     // split — it runs last, so its rows land in dispatch order either way.
     let mut reviser = ProviderTreeReviser::retaining(input.provider);
-    let regime = if input.fossil {
-        Regime::Fossil
-    } else if prior.is_some() {
-        Regime::Tiers
-    } else {
-        Regime::Cluster
-    };
-    let (use_namer, use_reviser) = match regime {
-        Regime::Fossil => (prior.is_some(), false),
-        Regime::Tiers => (false, false),
-        Regime::Cluster => (true, true),
-    };
     if prior.is_none() {
         renderer.message("Split naming: LLM-naming folders and files");
     } else {
@@ -310,11 +356,11 @@ fn split_before_commit(
     let outcome = stable_split(
         code,
         SplitOptions {
-            regime,
+            markers: input.markers,
             prior: prior.as_ref(),
             carry: tiers_carry(prior_carry),
-            namer: use_namer.then_some(&mut namer as &mut dyn SplitNamer),
-            reviser: use_reviser.then_some(&mut reviser as &mut dyn TreeReviser),
+            namer: Some(&mut namer as &mut dyn SplitNamer),
+            reviser: Some(&mut reviser as &mut dyn TreeReviser),
             placement: placement_switches(switches),
             align: AlignSwitches {
                 emit_align_disabled: switches.switch_on(Switch::EmitAlign),
@@ -325,11 +371,16 @@ fn split_before_commit(
             trail: Some(trail),
             vendor_captures: &vendor_captures,
             vendor_fresh: input.fresh,
-            original_bundle: input.input_bundle,
+            input_gate: gate,
             layout: input.toolchain.layout.piece,
             module_wrappers: input.toolchain.module_wrappers.piece,
         },
     )?;
+    renderer.message(&format!(
+        "Split method: {} — {}",
+        method_name(outcome.method.regime),
+        outcome.method.reason
+    ));
     report_namer(&namer, renderer);
     if let Some(reason) = &outcome.declined {
         renderer.message(&format!(

@@ -17,6 +17,7 @@ use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
 use crate::place::input::{SplitInput, split_input_with_original_bundle};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
+use crate::place::method::{MarkerOffer, SplitChoice, bundle_marker_coverage, choose_split_method};
 use crate::place::placement_dump::{Placed, PlacementGate, Regime, assign_regime};
 use crate::place::tiers::{PlacementSwitches, PriorCarry, TierStats};
 use crate::place::trail::PlacementTrail;
@@ -34,12 +35,20 @@ use serde_json::Value;
 /// What the split is asked to do (`StableSplitOptions` + the runnable
 /// emit's switches).
 pub struct SplitOptions<'a, 'n> {
-    pub regime: Regime,
+    /// Whether the run's toolchain offers the module markers (P11). The
+    /// split method itself is chosen HERE, from what the bundle contains
+    /// ([`crate::place::method::choose_split_method`]): the markers only
+    /// when they describe the bundle, else the prior's layout or the
+    /// fresh grouping.
+    pub markers: MarkerOffer,
     pub prior: Option<&'a StableSplitLedger>,
     /// The tiers regime's carry (`renameResult.priorCarry`).
     pub carry: Option<PriorCarry>,
-    /// The fossil regime's mint namer / the fresh regime's file namer.
+    /// The fossil regime's mint namer / the fresh regime's file namer —
+    /// handed over whatever the method; the chosen method decides whether
+    /// it is asked ([`namers_used`]).
     pub namer: Option<&'n mut dyn SplitNamer>,
+    /// The fresh regime's holistic top-level reviser (same rule).
     pub reviser: Option<&'n mut dyn TreeReviser>,
     pub placement: PlacementSwitches,
     pub align: AlignSwitches,
@@ -58,16 +67,10 @@ pub struct SplitOptions<'a, 'n> {
     /// the shipped list renames only substitute names in. Required when
     /// `vendor_captures` is non-empty.
     pub vendor_fresh: Option<&'a str>,
-    /// The run's ORIGINAL input bundle — the text the unpack stage saw,
-    /// BEFORE its vendor extraction spliced the CJS factories out.
-    /// Being a bundled app is a property of the INPUT (2026-10-02): the
-    /// frozen ≥50 wrapper-binding threshold reads the ORIGINAL, so a
-    /// mid-size app whose vendor half dominates — which lands UNDER the
-    /// threshold on the post-extraction runtime this split is handed —
-    /// still splits. The wrapper GRAMMAR always reads the shipped text.
-    /// None: the historical gate on the shipped text itself (the
-    /// standalone owners and the tests).
-    pub original_bundle: Option<&'a str>,
+    /// Where the ≥50 wrapper-binding gate ("is this really a bundled
+    /// app?") is read — see [`InputGate`]. The wrapper GRAMMAR always
+    /// reads the shipped text.
+    pub input_gate: InputGate<'a>,
     /// The run's bundle layout (the toolchain's P9 piece): the input
     /// gate, the wrapper body every text here is sliced from, and the
     /// wrapper parameters' roles in the runnable emit.
@@ -75,6 +78,53 @@ pub struct SplitOptions<'a, 'n> {
     /// The run's module wrapper grammar (the toolchain's P3 piece): the
     /// module helper the fresh grouping's vendor bucket takes (review R7).
     pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+}
+
+/// Where the split's ≥50 wrapper-binding gate is read. Being a bundled
+/// app is a property of the run's INPUT (2026-10-02): the post-extraction
+/// runtime this split is handed has lost one wrapper-scope binding per
+/// vendored module, so a mid-size app whose vendor half dominates lands
+/// UNDER the threshold on it and still splits on the strength of its
+/// input.
+#[derive(Clone, Copy, Debug)]
+pub enum InputGate<'a> {
+    /// The historical gate on the shipped text itself (the standalone
+    /// owners and the tests).
+    TextAtHand,
+    /// The run's ORIGINAL input bundle (the text the unpack stage saw,
+    /// before its vendor extraction spliced the CJS factories out).
+    Original(&'a str),
+    /// Already settled on the original by the caller — its container's
+    /// binding count ([`crate::toolchain::BundleLayout::original_bundle_binding_count`]),
+    /// so the original is parsed once per run.
+    Settled(usize),
+}
+
+/// Which of the split's namers the chosen method asks: the marker method
+/// names fresh module mints only on a warm hop (a prior exists), the
+/// prior's layout names nothing, the fresh grouping names files and
+/// folders and revises the top level.
+pub fn namers_used(regime: Regime, prior_present: bool) -> (bool, bool) {
+    match regime {
+        Regime::Fossil => (prior_present, false),
+        Regime::Tiers => (false, false),
+        Regime::Cluster => (true, true),
+    }
+}
+
+/// The module markers' boundaries the fresh grouping keeps as file ends:
+/// when the toolchain offers the markers but they do not describe the
+/// whole bundle (the mixed case), each lazily loaded module still ENDS a
+/// file — the grouping decides everything else. Without it, a small mixed
+/// app's lazy module shared a file with the code that loads its CommonJS
+/// requirer: a load-time cycle through vendor/, and no runnable tree
+/// (the `bun-bundle` fixture). None for the other methods.
+fn module_ends_kept(choice: &SplitChoice, markers: MarkerOffer, body: &[Value]) -> Vec<usize> {
+    if choice.regime == Regime::Cluster && markers == MarkerOffer::Offered {
+        crate::twins::fossil::lazy_init_indices(body)
+    } else {
+        Vec::new()
+    }
 }
 
 /// `StableSplitStats`.
@@ -88,6 +138,8 @@ pub struct SplitStats {
 
 /// What the split stage hands on.
 pub struct SplitOutcome {
+    /// The split method the bundle got, and why.
+    pub method: SplitChoice,
     /// What `writeSplitTree` writes: the runnable tree, or the review tree
     /// when `--split-pure` or the runnable emit declined.
     pub files: Vec<(String, String)>,
@@ -208,11 +260,18 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // to land under the threshold on it. Both the shipped and the fresh
     // (pre-rename) texts consume the same verdict.
     let layout = options.layout;
-    let original_binding_count = match options.original_bundle {
-        Some(original) => Some(layout.original_bundle_binding_count(original)?),
-        None => None,
+    let original_binding_count = match options.input_gate {
+        InputGate::TextAtHand => None,
+        InputGate::Original(original) => Some(layout.original_bundle_binding_count(original)?),
+        InputGate::Settled(count) => Some(count),
     };
     let input = split_input_with_original_bundle(shipped, original_binding_count, layout)?;
+    // The split method, from what the bundle CONTAINS (C1/C2): the markers'
+    // coverage of the app code, module factories set aside.
+    let coverage = bundle_marker_coverage(&input, shipped, options.module_wrappers);
+    let method = choose_split_method(options.markers, options.prior.is_some(), Some(coverage));
+    let (use_namer, use_reviser) = namers_used(method.regime, options.prior.is_some());
+    let module_ends = module_ends_kept(&method, options.markers, &input.body);
     drop(ph);
     let ph = phase("split:assign");
     let mut own_trail = PlacementTrail::default();
@@ -226,16 +285,17 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         &input,
         shipped,
         PlacementGate {
-            regime: options.regime,
+            regime: method.regime,
             prior_ledger: None,
             prior_text: None,
             match_map: None,
             carry: options.carry,
             switches: options.placement,
-            namer: options.namer,
-            reviser: options.reviser,
+            namer: options.namer.filter(|_| use_namer),
+            reviser: options.reviser.filter(|_| use_reviser),
             layout,
             module_wrappers: options.module_wrappers,
+            module_ends,
         },
         options.prior,
         trail,
@@ -364,6 +424,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         _ => Vec::new(),
     };
     let mut outcome = SplitOutcome {
+        method,
         files: Vec::new(),
         runnable: None,
         declined: None,

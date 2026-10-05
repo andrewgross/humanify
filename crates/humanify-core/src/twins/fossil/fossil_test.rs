@@ -286,3 +286,122 @@ var {b}Init = __esm(() => {{ {b} = readConfig(1); }});
     assert_eq!(t1, t2, "the twins are byte-identical in structure");
     assert_ne!(seed, t1, "the seed carries the helper + boot(9)");
 }
+
+/// The marker coverage of a program-body fixture: what share of its app
+/// code (bytes, module-factory definitions excluded) sits in a recorded
+/// module in a shape a lazily loaded module's top level can hold.
+fn coverage_of(code: &str, factory_helper: Option<&str>) -> super::MarkerCoverage {
+    let (inv, values) = statement_inventory_with_values(
+        code,
+        "fresh",
+        None,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+    .expect("inventory");
+    let spans: Vec<(u32, u32)> = inv
+        .statements
+        .iter()
+        .map(|s| (s.span.start, s.span.end))
+        .collect();
+    super::marker_coverage(&values, &spans, factory_helper)
+}
+
+/// Claude Code's shape: every module lazily loaded, so every top-level
+/// statement sits in a segment ending at an init, in a shape Bun leaves at
+/// a lazy module's top level (hoisted functions and classes, `var`s with
+/// no or inert initializers, the export registrar call, the init itself).
+/// Only the entry tail is outside — here one call.
+#[test]
+fn an_all_lazy_bundle_is_covered_by_its_markers() {
+    let code = format!(
+        "\
+{helper}
+var exports_alpha = {{}};
+register(exports_alpha, {{ alphaRead: () => alphaRead }});
+function alphaRead() {{ return alphaValue; }}
+class AlphaBox {{ get() {{ return 1; }} }}
+var alphaValue, alphaLabel = \"alpha\" + 1;
+var alphaInit = __esm(() => {{ alphaValue = readConfig(1); }});
+function betaRead() {{ return betaValue + alphaRead(); }}
+var betaValue;
+var betaInit = __esm(() => {{ alphaInit(); betaValue = readConfig(2); }});
+betaInit();
+",
+        helper = ESM_HELPER
+    );
+    let c = coverage_of(&code, None);
+    assert_eq!(c.modules, 2);
+    assert_eq!(c.glued_statements, 0, "nothing eager inside a segment");
+    assert_eq!(c.tail_statements, 1, "the entry call after the last init");
+    assert!(
+        c.share() > 0.9 && c.share() < 1.0,
+        "everything but the one-line tail: {}",
+        c.share()
+    );
+}
+
+/// A bundle with no markers at all: nothing is covered.
+#[test]
+fn a_bundle_without_markers_has_zero_coverage() {
+    let code = "\
+function pad(n) { return String(n).padStart(2, \"0\"); }
+var import_dep = __toESM(require_dep(), 1);
+function main() { console.log(pad(3)); }
+main();
+";
+    let c = coverage_of(code, None);
+    assert_eq!(c.modules, 0);
+    assert_eq!(c.share(), 0.0);
+    assert_eq!(c.tail_statements, 4, "all of it is the eager tail");
+}
+
+/// The mixed app (finding C2): eager modules emitted BEFORE a lazy one
+/// fall inside its segment. Their top-level side effects (an import's
+/// `__toESM(require_…())`, a call statement) cannot sit at a lazy
+/// module's top level — Bun moves those into the init — so they count as
+/// glued, not covered; the eager tail counts against the markers too.
+#[test]
+fn eager_code_inside_a_segment_and_the_tail_are_not_covered() {
+    let code = format!(
+        "\
+{helper}
+var import_dep = __toESM(require_dep(), 1);
+var eagerTable = buildTable(4);
+setupEager();
+var lateValue;
+var lateInit = __esm(() => {{ lateValue = readConfig(1); }});
+function main() {{ console.log(lateValue); }}
+main();
+",
+        helper = ESM_HELPER
+    );
+    let c = coverage_of(&code, None);
+    assert_eq!(c.modules, 1);
+    assert_eq!(c.glued_statements, 3, "the import, the table, the call");
+    assert_eq!(c.tail_statements, 2);
+    assert!(c.share() < 0.6, "{}", c.share());
+}
+
+/// Module-factory definitions (`var require_x = __commonJS(…)`) are vendor
+/// code: the split sends them to vendor/ under every method, so they are
+/// out of the app mass entirely — a bundle whose vendor half dominates
+/// reads the coverage of its APP half.
+#[test]
+fn module_factory_definitions_are_outside_the_app_mass() {
+    let factory = "var require_big = __commonJS((exports, module) => { module.exports = 1; });\n";
+    let code = format!(
+        "\
+{helper}
+{factories}var lateValue;
+var lateInit = __esm(() => {{ lateValue = readConfig(1); }});
+function main() {{ console.log(lateValue); }}
+main();
+",
+        helper = ESM_HELPER,
+        factories = factory.repeat(20)
+    );
+    let with_vendor = coverage_of(&code, Some("__commonJS"));
+    let without = coverage_of(&code.replace(factory, ""), Some("__commonJS"));
+    assert_eq!(with_vendor.app_bytes, without.app_bytes);
+    assert_eq!(with_vendor.covered_bytes, without.covered_bytes);
+}
