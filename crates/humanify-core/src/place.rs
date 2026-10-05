@@ -4,13 +4,16 @@
 //! grouping/assignment strategies under [`assign`] (`fossil-assign.ts`,
 //! `fossil-match.ts`, `cluster-assign.ts`, `split-namer.ts`).
 //!
-//! Three regimes, chosen exactly as `stableSplitFromCode` chooses them:
+//! Three regimes, chosen from what the bundle CONTAINS by [`method`]
+//! (finding #87 — it used to be from which bundler wrote it):
 //!
-//! - FOSSIL (the adapter provides module fossils — every Bun bundle): the
-//!   bundle's own `__esm` module segments are the files ([`assign::fossil`]);
-//! - PRIOR-CARRIED (a prior ledger, no fossils): the evidence ladder
+//! - FOSSIL (the toolchain offers module markers AND they cover ≥99% of the
+//!   app code — Claude Code's shape): the bundle's own `__esm` module
+//!   segments are the files ([`assign::fossil`]);
+//! - PRIOR-CARRIED (a prior ledger, otherwise): the evidence ladder
 //!   `PLACEMENT_TIERS` ([`tiers`]);
-//! - FRESH (neither): the seam-clustered grouping ([`assign::cluster`]).
+//! - FRESH (neither): the seam-clustered grouping ([`assign::cluster`]),
+//!   sized to the app, keeping any lazy module's end as a file boundary.
 //!
 //! Substrate: the statements' ESTree JSON (the inventory's retained values)
 //! plus their spans into the shipped text — the same subtrees the statement
@@ -25,6 +28,7 @@ pub mod declared;
 pub mod input;
 pub mod layout;
 pub mod ledger;
+pub mod method;
 pub mod placement_dump;
 pub mod stems;
 pub mod tiers;

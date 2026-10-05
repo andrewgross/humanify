@@ -133,8 +133,10 @@ The two High items:
   wrapped in one big function with at least 50 names declared directly
   inside it (Bun's CommonJS wrapper, esbuild's `--format=iife`). An ES-module
   build (esbuild, Bun or rollup with `--format=esm`, which is the default for
-  many modern builds) has its statements at the top level, so `--split` fails
-  with "no recognizable bundle wrapper". Naming still works.
+  many modern builds) has its statements at the top level, so `--split`
+  cannot split it. Naming still works — and since finding #87 (2026-10-05)
+  the run finishes with the named output unsplit and a WARNING, instead of
+  exiting 1 after naming.
 
 ### The findings, by stage
 
@@ -260,9 +262,11 @@ given).
 
 - **I25 example:** `esbuild --bundle --format=esm` writes the modules as
   top-level statements, with `export { … }` at the end — no wrapper. The
-  split refuses: "the run's input bundle has no recognizable bundle wrapper".
-  The function graph falls back to the program scope, so naming runs; only
-  the split tree is missing. Bun's own `--format=esm` output is the same.
+  split cannot read it ("the run's input bundle has no recognizable bundle
+  wrapper"). The function graph falls back to the program scope, so naming
+  runs; only the split tree is missing — written unsplit with a WARNING
+  since #87, it used to exit 1. Bun's own `--format=esm` output is the
+  same.
 - **I26 example:** webcrack unpacks a webpack bundle into one file per
   module. With `--split`, the split is handed whichever module file was
   processed last; the wrapper check on the original bundle then usually
@@ -304,7 +308,7 @@ are both.
 | P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)                                                                                     |
 | P9 Bundle layout ("container") grammar      | 7-12   | **PARTIAL** (seam)            | every reader asks the toolchain's `BundleLayout` (2026-10-04); one implementation — add an ES-module top level                                                                                                       |
 | P10 Name profile (minifier naming shape)    | 9      | **EXISTS** (#75)              | add a `NameProfile` (`rename/name_profile.rs`); chosen by the toolchain                                                                                                                                              |
-| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag exists; the grammar itself is one shared shape list                                                                                                                                                 |
+| P11 Module-layout record ("fossils")        | 8, 10  | **PARTIAL**                   | per-adapter flag OFFERS the markers; the split uses them only when they cover >=99% of the app code (#87); the grammar is one shared shape list                                                                      |
 | P12 Load-order helper shapes                | 11     | **EXISTS** (2026-10-04)       | registrar by shape works for both; lazy-init comes from the module grammar, Bun's and esbuild's shapes (#79)                                                                                                         |
 | P13 Which unpacked file is the app          | 10-12  | **PARTIAL** (slot)            | "the last file processed" (I26) — now the toolchain's `AppFile` rule, read by the naming loop                                                                                                                        |
 | P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                                                                                               |
@@ -736,7 +740,17 @@ takes the selection, then add an "ES-module top level" container and teach
 the emit to write ESM imports/exports. This is the largest item here and the
 one that opens ESM-format bundles from every bundler.
 
-**Fallback:** today's grammar; no wrapper → no split (fail loud).
+**Fallback:** today's grammar; no wrapper → no split. Since finding #87
+(2026-10-05) that is a loud WARNING, not an error after naming: the split
+stage checks the layout on the run's original input BEFORE splitting
+(`BundleLayout::original_bundle_binding_count`, once — the split is handed
+the settled count, `InputGate::Settled`), and on a layout it does not read
+writes the named output unsplit (what a run without `--split` writes),
+prints `WARNING: --split skipped: <reason> … (docs/plugin-spec.md P9,
+I25)`, names that file as the next release's prior and exits 0;
+`--stats-json` records `splitMethod.method = "not-split"`. The
+`esbuild-cjs`, `esbuild-esm` and `bun-esm-minified` fixtures hold that
+behaviour (their known-gap entries are gone).
 
 **Slot (2026-10-04):** `toolchain::BundleLayout` (one value,
 `SingleWrapperFunction`). It is recorded, but the ten callers still read
@@ -835,10 +849,44 @@ names it kept must not).
 **Question:** does the bundle still show which original source file each
 group of statements came from, and how do the files import each other?
 
-**Interface today:** `UnpackAdapter::provides_module_fossils()` turns the
-fossil split on (`humanify-cli/src/unified.rs:1050`); the grammar is
+**Interface today:** `UnpackAdapter::provides_module_fossils()` OFFERS the
+markers (`place::method::MarkerOffer`); the grammar is
 `twins::fossil::extract_fossil_modules` — each original source file ends
 with its lazy-init definition, whose leading init calls are its imports.
+
+**Which split method a bundle gets (finding #87, 2026-10-05):** from what
+the bundle CONTAINS, never from which bundler wrote it — the owner is
+`place::method::choose_split_method`. Bun and esbuild write a lazy-init
+module only for an ES module that is `require()`d or loaded by `import()`;
+the grammar is true only when EVERY source file loaded that way (Claude
+Code's shape). The split measures the markers' coverage
+(`twins::fossil::marker_coverage`): the share of the app code's bytes (module
+factories set aside as vendor code) that sits inside a recorded module in a
+shape a lazy module's top level can hold — hoisted functions and classes,
+`var`s with inert initializers, the export registrar call, the init itself.
+Everything else inside a module is eager code glued in; everything after
+the last init is the entry tail. It is a LOWER bound on the eager code (an
+eager module of functions and constants looks lazy).
+
+- coverage ≥ 99% (`MARKER_COVERAGE_THRESHOLD`) → the module markers;
+- otherwise the prior's layout (with a prior) or the fresh grouping, for
+  the WHOLE bundle — with each lazy module's end kept as a file boundary
+  and a lazy module under the file line cap never cut inside
+  (`assign_clustered`'s `module_ends`): a lazy module shares no file with
+  the code around it, which also keeps the CommonJS module that
+  `require()`s it out of a load-time cycle.
+
+Measured on the text a run splits: Claude Code's eight eval versions
+99.900%–99.963% (2.1.197 lowest; uncovered = the 4–8 statement entry
+tail), so 99% leaves 10× headroom; the fixtures with one planted lazy
+module 17–45%, `bun-mixed` 44%, `bun-plain` 0, `bun-lazy` 99.6%. Why not
+markers for the covered part plus the fresh grouping for the rest: the
+covered part is only an upper bound, so its file boundaries cannot be
+trusted, and on Bun's output the eager code all follows the lazy modules,
+so the boundaries the markers do prove are exactly the module ends the
+fresh grouping now keeps. The choice, coverage and reason go to the run log
+(`Split method: …`) and `--stats-json` (`splitMethod`); `humanify detect
+--split-method <bundle>` prints them for an input.
 
 **A plugin must provide:** whether its bundles carry this record, and the
 init shapes (the grammar covers Bun's and esbuild's, raw and formatted).
@@ -846,10 +894,19 @@ init shapes (the grammar covers Bun's and esbuild's, raw and formatted).
 **Where Bun is wired in:** the grammar is one shared shape list rather than
 per-plugin; matching reads it on every input (I30, harmless by shape).
 
-**Fallback:** no fossils → the split clusters statements itself.
+**Fallback:** markers not offered, absent or under the threshold → the
+fresh grouping (or the prior's layout), as above. The fresh grouping's size
+targets scale to the app (finding B1 of the same scan:
+`place::assign::cluster::scaled_cluster_config` — files linear in the app's
+lines at Claude Code 2.1.89's ~259 lines per file, top-folder sizes with
+the square root of the file count; exactly the old constants at Claude
+Code's size, 440,850 lines).
 
-**Tests:** `place/assign/fossil` and `twins` cases; the `esbuild-bundle`
-fixture's ledger.
+**Tests:** `place/assign/fossil`, `place/method` and `twins` cases; the
+e2e fixtures `bun-plain` (no markers), `bun-mixed` (2 of 6 modules lazy),
+`bun-lazy` (all lazy — the one real build on the marker method), each
+holding its `splitMethod` and which module lands in which file
+(`expect.apart`).
 
 ### P12 — Load-order helper shapes (stage 11) — EXISTS (2026-10-04)
 
@@ -934,8 +991,12 @@ Every plugin must ship, in `test/e2e/fixtures/<bundler>-bundle*/`:
 twice each for byte-determinism, and boots the tree. Plus the per-piece
 unit tests listed above.
 
-Today: two unminified esbuild iife fixtures; no real Bun build, no minified
-build, no ESM-format build (H4). The eval scores Claude Code only (H2), so
+Today (2026-10-05): unminified esbuild iife builds (`esbuild-bundle*`,
+`esbuild-kept-factory`), a minified one (`esbuild-minified`), top-level
+CJS/ESM builds (`esbuild-cjs`, `esbuild-esm`, `bun-esm-minified` — split
+skipped, I25), and four real Bun CJS builds: `bun-bundle`, and `bun-plain`
+/ `bun-mixed` / `bun-lazy` (no / some / all modules lazily loaded — which
+split method a bundle gets, #87). The eval scores Claude Code only (H2), so
 there is no cross-version quality measurement for any other bundler.
 
 ## Part 3 — adding a plugin: checklist

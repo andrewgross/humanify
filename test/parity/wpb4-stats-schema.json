@@ -2355,6 +2355,56 @@
           }
         ]
       }
+    },
+    {
+      "name": "splitMethod",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "object",
+        "props": [
+          {
+            "name": "method",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "reason",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "string"
+            }
+          },
+          {
+            "name": "markerCoverage",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "markerModules",
+            "optional": true,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          },
+          {
+            "name": "threshold",
+            "optional": false,
+            "nullable": false,
+            "type": {
+              "kind": "number"
+            }
+          }
+        ]
+      }
     }
   ]
 }

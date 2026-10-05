@@ -239,6 +239,15 @@ struct Plan<'a, 's> {
     ns_vars: Vec<String>,
     directives: Vec<String>,
     load_time_edges: OrderedSets,
+    /// The load-time edges that read a VALUE — any binding but a hoisted
+    /// function declaration, which is initialized before its file's first
+    /// statement runs and so readable mid-load (the accessor block sits
+    /// before the requires for exactly that).
+    load_time_value_edges: OrderedSets,
+    /// Files whose LAZILY used requires are emitted after their body
+    /// ([`Plan::settle_load_order`]); empty unless a load-order hazard
+    /// was found.
+    deferred: HashSet<usize>,
     bundle_context: Option<BundleContext>,
     /// (start, end) → identifier node (IdentifierReference /
     /// BindingIdentifier): violation targets come back as spans.
@@ -339,6 +348,12 @@ impl Plan<'_, '_> {
         self.requires.entry(reader).or_default().insert(decl_file);
         if is_load_time_site(self.nodes, site, self.input.wrapper.node) {
             self.load_time_edges.add(reader, decl_file);
+            let hoisted = self
+                .get_binding(name)
+                .is_some_and(|b| self.input.scopes.binding(b).kind == BindingKind::Hoisted);
+            if !hoisted {
+                self.load_time_value_edges.add(reader, decl_file);
+            }
         }
     }
 
@@ -638,6 +653,138 @@ impl Plan<'_, '_> {
         }
         Ok(())
     }
+}
+
+impl Plan<'_, '_> {
+    /// A file's requires in emitted order: (loaded in the header, loaded on
+    /// first use). Only a deferred file has on-first-use requires — its
+    /// lazily used files (no load-time read of them), each behind a lazy
+    /// namespace ([`lazy_require_line`]).
+    fn require_lists(&self, file: usize) -> (Vec<usize>, Vec<usize>) {
+        let mut decls: Vec<usize> = self
+            .requires
+            .get(&file)
+            .map(|r| r.iter().copied().collect())
+            .unwrap_or_default();
+        decls.sort_by(|&a, &b| cmp_utf16(&self.input.files[a], &self.input.files[b]));
+        if !self.deferred.contains(&file) {
+            return (decls, Vec::new());
+        }
+        let load_time = self.load_time_edges.get(file);
+        decls.into_iter().partition(|d| load_time.contains(d))
+    }
+
+    /// The entry's require order (`entry_source`): first-statement order,
+    /// then every file.
+    fn entry_order(&self) -> Vec<usize> {
+        let mut seen = HashSet::new();
+        self.stmt_file
+            .iter()
+            .copied()
+            .chain(0..self.input.files.len())
+            .filter(|f| seen.insert(*f))
+            .collect()
+    }
+
+    /// Node's CommonJS load of the emitted tree, simulated from its entry:
+    /// a file runs its header requires, then its body, then its tail
+    /// requires. A HAZARD is a body's load-time read of a file still in its
+    /// header — its bindings not yet assigned (the read sees `undefined`);
+    /// a hoisted function declaration is readable mid-load, so only VALUE
+    /// reads count.
+    /// Returns the load stack from that file to the reader. The
+    /// load-time-cycle check cannot see it: the chain into the reader may
+    /// run through LAZY requires (a file needed only inside functions is
+    /// still required in the header).
+    fn load_order_hazard(&self) -> Option<Vec<usize>> {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Phase {
+            Header,
+            Ran,
+        }
+        fn visit(
+            plan: &Plan<'_, '_>,
+            file: usize,
+            phase: &mut HashMap<usize, Phase>,
+            stack: &mut Vec<usize>,
+        ) -> Option<Vec<usize>> {
+            phase.insert(file, Phase::Header);
+            stack.push(file);
+            // On-first-use requires load whenever first read — never in
+            // the header; the entry loads them in its own order.
+            let (header, _) = plan.require_lists(file);
+            for dep in header {
+                if !phase.contains_key(&dep)
+                    && let Some(path) = visit(plan, dep, phase, stack)
+                {
+                    return Some(path);
+                }
+            }
+            for &dep in plan.load_time_value_edges.get(file) {
+                if dep != file && phase.get(&dep) == Some(&Phase::Header) {
+                    let at = stack.iter().position(|&f| f == dep).unwrap_or(0);
+                    return Some(stack[at..].to_vec());
+                }
+            }
+            phase.insert(file, Phase::Ran);
+            stack.pop();
+            None
+        }
+        let mut phase = HashMap::new();
+        let mut stack = Vec::new();
+        for file in self.entry_order() {
+            if !phase.contains_key(&file)
+                && let Some(path) = visit(self, file, &mut phase, &mut stack)
+            {
+                return Some(path);
+            }
+        }
+        None
+    }
+
+    /// Settle the tree's load order: while the simulated load reads a
+    /// file mid-load ([`Self::load_order_hazard`]), every file on that load
+    /// stack loads its lazily used files on FIRST USE instead of in its
+    /// header. Its body then runs before they load — and a function it
+    /// calls at load that does use one still finds it (the namespace
+    /// loads it then), which a require moved below the body would not.
+    /// Deferring only shortens a header, so it converges; a hazard with
+    /// nothing left to defer is a decline. A tree with no hazard is
+    /// emitted byte for byte as before.
+    fn settle_load_order(&mut self) -> Result<(), String> {
+        while let Some(path) = self.load_order_hazard() {
+            let newly: Vec<usize> = path
+                .iter()
+                .copied()
+                .filter(|&f| !self.deferred.contains(&f))
+                .filter(|&f| {
+                    let load_time = self.load_time_edges.get(f);
+                    self.requires
+                        .get(&f)
+                        .is_some_and(|r| r.iter().any(|d| !load_time.contains(d)))
+                })
+                .collect();
+            if newly.is_empty() {
+                let name = |i: usize| self.input.files[path[i]].as_str();
+                return Err(format!(
+                    "runnable emit: load-order hazard: {} reads {} at load before its body runs",
+                    name(path.len() - 1),
+                    name(0)
+                ));
+            }
+            self.deferred.extend(newly);
+        }
+        Ok(())
+    }
+}
+
+/// A namespace that requires its file on FIRST USE (a deferred file's
+/// lazily used dependency): every cross-file access is `ns.name` (read)
+/// or `ns.name = v` (write), so a get and a set trap cover them.
+fn lazy_require_line(ns: &str, rel: &str) -> String {
+    format!(
+        "const {ns} = new Proxy({{}}, {{ get: (_, k) => require(\"{rel}\")[k], set: (_, k, v) => {{ require(\"{rel}\")[k] = v; return true; }} }});"
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1212,17 +1359,21 @@ impl Plan<'_, '_> {
                 compute_relative_import_path(path, &bc.file_name)
             ));
         }
-        if let Some(reqs) = self.requires.get(&file) {
-            let mut decls: Vec<usize> = reqs.iter().copied().collect();
-            decls.sort_by(|&a, &b| cmp_utf16(&self.input.files[a], &self.input.files[b]));
-            for decl in decls {
-                header.push(format!(
-                    "const {} = require(\"{}\");",
-                    self.ns_vars[decl],
-                    compute_relative_import_path(path, &self.input.files[decl])
-                ));
-            }
-        }
+        let require_line = |decl: usize| {
+            format!(
+                "const {} = require(\"{}\");",
+                self.ns_vars[decl],
+                compute_relative_import_path(path, &self.input.files[decl])
+            )
+        };
+        let (head_reqs, lazy_reqs) = self.require_lists(file);
+        header.extend(head_reqs.into_iter().map(require_line));
+        header.extend(lazy_reqs.into_iter().map(|decl| {
+            lazy_require_line(
+                &self.ns_vars[decl],
+                &compute_relative_import_path(path, &self.input.files[decl]),
+            )
+        }));
         let mut body: Vec<String> = Vec::with_capacity(stmt_idxs.len());
         for &idx in stmt_idxs {
             body.push(self.stmt_text(idx)?);
@@ -1400,6 +1551,8 @@ fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, St
         ns_vars: Vec::new(),
         directives,
         load_time_edges: OrderedSets::default(),
+        load_time_value_edges: OrderedSets::default(),
+        deferred: HashSet::new(),
         bundle_context: None,
         ident_at,
     })
@@ -1610,6 +1763,7 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
         plan.exports.entry(f).or_default().insert(name.clone());
     }
     plan.assert_load_time_acyclic().map_err(with_aliases)?;
+    plan.settle_load_order().map_err(with_aliases)?;
     let by_file = ordered_indexes_by_file(&plan);
     let (emit_hashes, emit_names, emit_indexes) = record_emitted_layout(&plan, &by_file);
     let layout = || EmittedLayout {

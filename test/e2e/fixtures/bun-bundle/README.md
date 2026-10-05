@@ -38,9 +38,14 @@ committed builds; on main @ 342650cf it failed (`esbuild`).
   `__commonJS` factories, extracted to `vendor/`;
 - an ES module (`src/late.js`) reached only through `require()` from a
   CommonJS module (`src/legacy.cjs`), with a top-level side effect — so Bun
-  wraps it in a lazy `__esm` init (`init_late`), the shape the fossil
-  split reads (without one the split refuses: "no \_\_esm init
-  definitions");
+  wraps it in a lazy `__esm` init (`init_late`). It was planted so the
+  module-marker ("fossil") split, then chosen for every Bun bundle, would
+  run at all (without one it refused: "no \_\_esm init definitions").
+  Since finding #87 (2026-10-05) the split method comes from what the
+  bundle contains: this one module covers ~45% of the app code, under the
+  99% threshold, so the bundle takes the fresh grouping (with the lazy
+  module's end kept as a file boundary). `bun-lazy` holds the marker
+  method now;
 - a deterministic 29/30-line stdout report. Node runs Bun's CJS output as
   a bare function expression and calls nothing, so the e2e boot step runs
   the input the way Bun's loader does (`BUN_CJS_LOADER` in

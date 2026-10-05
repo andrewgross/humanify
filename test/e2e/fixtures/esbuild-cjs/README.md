@@ -1,4 +1,4 @@
-# esbuild-cjs — a top-level CommonJS bundle (KNOWN GAP: spec I25)
+# esbuild-cjs — a top-level CommonJS bundle (split skipped: spec I25)
 
 A real esbuild 0.27.2 build of `../node-app` with
 `--bundle --format=cjs --platform=node`, unminified. This is the shape real
@@ -11,7 +11,7 @@ module sit at the TOP LEVEL of the file. Node wraps a CommonJS file in its
 own module function when it loads it, so there is no wrapper in the TEXT —
 unlike Bun's `--format=cjs` (`bun-bundle`), which writes its wrapper out.
 
-## What it records today (main @ 8883d0b5)
+## What it recorded before finding #87 (main @ 8883d0b5)
 
 ```
 humanify detect --toolchain build/v1.0.0/build/index.js
@@ -34,11 +34,26 @@ layout fix should treat "top-level module, implicit wrapper" as one case
 for both formats (the P9 `BundleLayout` slot). Without `--split` the run
 exits 0.
 
-## The known-gap entry
+## Since finding #87 (2026-10-05): the split is skipped, not an error
 
-`scripts/e2e.ts` `KNOWN_GAPS` holds this fixture to failing with
-`the run's input bundle has no recognizable bundle wrapper`; once it
-passes, the stage tells the fix to delete the entry.
+A layout the split does not read no longer fails the run after naming. The
+fresh run exits 0, prints
+
+```
+WARNING: --split skipped: the run's input bundle has no recognizable bundle
+wrapper (…). The split reads one bundle layout, a single wrapper function
+holding the program (docs/plugin-spec.md P9, I25); the named output is
+written unsplit to <out>/runtime.js
+```
+
+and writes what a run without `--split` writes: the named `runtime.js` and
+the extracted `vendor/`. `--stats-json` records
+`splitMethod.method = "not-split"`; the v2 leg runs with that file as its
+prior. The e2e holds the fixture to exactly that (`expect.splitMethod`):
+fresh + prior + `--sequential` twice each, byte-deterministic, and no
+runnable tree written. The layout itself is still open (spec I25): when a
+second layout lands, this fixture's expectation becomes a split method and
+the boot step runs its tree.
 
 ## The build (PINNED: esbuild 0.27.2)
 

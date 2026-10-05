@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::assign::cluster::{ClusterNamers, DEFAULT_CLUSTER_CONFIG, assign_clustered};
+use super::assign::cluster::{ClusterNamers, ClusterSizing, assign_clustered};
 use super::assign::fossil::{FossilOptions, MIN_FOLDER_FILES, assign_fossil};
 use super::assign::namer::{SplitNamer, TreeReviser};
 use super::input::{SplitInput, top_level_statement_texts};
@@ -55,6 +55,10 @@ pub struct PlacementGate<'a> {
     /// The run's module wrapper grammar (P3): the module helper the
     /// cluster regime's vendor bucket takes (review R7).
     pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+    /// The cluster regime's forced file ends (body indexes): the module
+    /// markers' boundaries when the markers do not describe the whole
+    /// bundle ([`crate::place::method`]). Empty: none.
+    pub module_ends: Vec<usize>,
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
@@ -131,7 +135,10 @@ pub fn assign_regime(
                 &input.body,
                 Some((shipped, input.spans.as_slice())),
                 module_helper.as_ref().map(|h| h.name.as_str()),
-                &DEFAULT_CLUSTER_CONFIG,
+                // Scaled to the app (finding B1): exactly the old
+                // constants at Claude Code's size.
+                ClusterSizing::ScaledToApp,
+                &gate.module_ends,
                 ClusterNamers {
                     namer: gate.namer,
                     reviser: gate.reviser,

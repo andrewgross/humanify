@@ -65,10 +65,21 @@
  * a non-empty vendor/) is checked LAST, after the run steps — so a fixture
  * whose detection is wrong is still run, split and booted end to end.
  *
+ * THE SPLIT METHOD (`expect.splitMethod`, `expect.apart`): the fresh run
+ * writes `--stats-json`, and its `splitMethod.method` must be the one the
+ * fixture declares — `module-markers` (the bundle's lazy-init modules
+ * describe it: `bun-lazy`), `fresh-grouping` (they do not: `bun-plain`,
+ * `bun-mixed`, the one-planted-module fixtures), or `not-split` (a bundle
+ * layout the split does not read — an ES module's or esbuild
+ * `--format=cjs`'s top level: the run exits 0 with a WARNING and the named
+ * output unsplit; there is no runnable tree to boot, so the boot step
+ * says so and checks no tree was written). `apart` names marker strings
+ * that must land in DIFFERENT files of the fresh tree's src/ — the
+ * mixed bundle's eager modules used to pile into one src/index.js.
+ *
  * KNOWN GAPS (`KNOWN_GAPS` below): a fixture that exposes a gap the
  * pipeline has today (a minified esbuild build detected as unknown — spec
- * I2; an ES-module or top-level CommonJS bundle the split cannot read —
- * spec I25) must fail EXACTLY as its entry declares. It is printed as a
+ * I2) must fail EXACTLY as its entry declares. It is printed as a
  * KNOWN GAP and the
  * stage stays green; failing any other way, or PASSING, fails the stage —
  * so the fix that closes a gap is told to delete the entry, and the
@@ -126,12 +137,24 @@ interface FixtureConfig {
  *   - `unpackAdapter` — the toolchain's unpack adapter for it
  *     (`detect --toolchain`, the same resolution the run makes);
  *   - `vendor` — the fresh split tree's `vendor/` holds at least one
- *     extracted dependency (bundle fixtures).
+ *     extracted dependency (bundle fixtures);
+ *   - `splitMethod` — the fresh run's `--stats-json` `splitMethod.method`
+ *     (bundle fixtures);
+ *   - `apart` — pairs of marker strings that must sit in DIFFERENT files
+ *     of the fresh tree's src/ (each must be found).
  */
 interface FixtureExpectations {
   bundler?: string;
   unpackAdapter?: string;
   vendor?: boolean;
+  splitMethod?: string;
+  apart?: [string, string][];
+}
+
+/** What the fresh run did, as the expectations read it. */
+interface ObservedRun {
+  vendorFiles: number;
+  splitMethod?: string;
 }
 
 /** `humanify detect --toolchain`'s verdict on one input, as recorded. */
@@ -166,14 +189,6 @@ export interface KnownGap {
   error: string;
 }
 
-/** The one bundle layout the split knows, and the builds it does not. */
-const TOP_LEVEL_LAYOUT_GAP = {
-  spec: "docs/plugin-spec.md I25 (P9 bundle layout); toolchain review R1, R10",
-  reason:
-    "the bundle's statements sit at the TOP LEVEL (an ES module, or esbuild's --format=cjs, where Node's module wrapper is implicit) — no wrapper function in the text, the only bundle layout the split knows — so --split exits 1 after unpack and naming, and no prior can be produced for the v2 leg",
-  error: "the run's input bundle has no recognizable bundle wrapper"
-};
-
 export const KNOWN_GAPS: KnownGap[] = [
   {
     fixture: "esbuild-minified",
@@ -181,10 +196,7 @@ export const KNOWN_GAPS: KnownGap[] = [
     reason:
       "esbuild's detector reads its helper NAMES (`__commonJS`, `__toESM`, …), which --minify shortens to letters: the build detects as unknown, gets the do-nothing (passthrough) adapter and keeps every dependency in the app — no vendor/ (the split still runs and boots)",
     error: "detection: bundler is unknown, expected esbuild"
-  },
-  { fixture: "esbuild-cjs", ...TOP_LEVEL_LAYOUT_GAP },
-  { fixture: "esbuild-esm", ...TOP_LEVEL_LAYOUT_GAP },
-  { fixture: "bun-esm-minified", ...TOP_LEVEL_LAYOUT_GAP }
+  }
 ];
 
 /** How a fixture's outcome reads against its known-gap entry, if any. */
@@ -236,7 +248,7 @@ export function staleKnownGaps(gaps: KnownGap[], fixtures: string[]): string[] {
 export function expectationFailures(
   expect: FixtureExpectations | undefined,
   observed: Detection,
-  vendorFiles: number
+  run: ObservedRun
 ): string[] {
   const out: string[] = [];
   if (expect?.bundler !== undefined && observed.bundler !== expect.bundler) {
@@ -252,10 +264,44 @@ export function expectationFailures(
       `toolchain: unpack adapter is ${observed.unpackAdapter}, expected ${expect.unpackAdapter}`
     );
   }
-  if (expect?.vendor && vendorFiles === 0) {
+  if (expect?.vendor && run.vendorFiles === 0) {
     out.push(
       "unpack: the split tree's vendor/ is empty, expected the extracted dependencies"
     );
+  }
+  if (
+    expect?.splitMethod !== undefined &&
+    run.splitMethod !== expect.splitMethod
+  ) {
+    out.push(
+      `split: the fresh run's split method is ${run.splitMethod}, expected ${expect.splitMethod}`
+    );
+  }
+  return out;
+}
+
+/**
+ * Each `apart` pair that is NOT in separate files: `files` maps a tree's
+ * file (relative path) to its text.
+ */
+export function apartFailures(
+  pairs: [string, string][],
+  files: Map<string, string>
+): string[] {
+  const out: string[] = [];
+  const holders = (marker: string) =>
+    [...files].filter(([, text]) => text.includes(marker)).map(([f]) => f);
+  for (const [a, b] of pairs) {
+    const [inA, inB] = [holders(a), holders(b)];
+    const missing = [a, b].filter((_, i) => [inA, inB][i].length === 0);
+    for (const m of missing) out.push(`split: no file holds "${m}"`);
+    if (missing.length > 0) continue;
+    const shared = inA.find((f) => inB.includes(f));
+    if (shared !== undefined) {
+      out.push(
+        `split: "${a}" and "${b}" share ${shared}, expected separate files`
+      );
+    }
   }
   return out;
 }
@@ -286,7 +332,7 @@ async function runBinary(
   args: string[],
   endpoint: string,
   label: string
-): Promise<void> {
+): Promise<string> {
   const child = spawn(
     BIN,
     [...args, "--endpoint", endpoint, "--api-key", "e2e", "--retries", "0"],
@@ -302,6 +348,43 @@ async function runBinary(
   if (code !== 0) {
     fail(`${label}: the binary exited ${code}\n${stderr.slice(-2000)}`);
   }
+  return stderr;
+}
+
+/**
+ * The prior the next release diffs against, as the run names it on its
+ * `Next release: --prior-version <path>` line: a split tree's
+ * `.humanify/humanified.js`, or — a bundle the split does not read — the
+ * named file written unsplit.
+ */
+function nextReleasePrior(stderr: string, label: string): string {
+  const m = /^Next release: --prior-version (.+)$/m.exec(stderr);
+  if (!m) fail(`${label}: the run named no prior for the next release`);
+  return m[1];
+}
+
+/**
+ * Every file of a split tree's app code, `src/` (path → text); empty when
+ * the run wrote no tree.
+ */
+function appTexts(tree: string): Map<string, string> {
+  const src = path.join(tree, "src");
+  if (!fs.existsSync(src)) return new Map();
+  return new Map(
+    treeFiles(src).map((f) => [
+      `src/${f}`,
+      fs.readFileSync(path.join(src, f), "utf8")
+    ])
+  );
+}
+
+/** The fresh run's `--stats-json` `splitMethod.method`, if written. */
+function splitMethodOf(statsPath: string): string | undefined {
+  if (!fs.existsSync(statsPath)) return undefined;
+  const stats = JSON.parse(fs.readFileSync(statsPath, "utf8")) as {
+    splitMethod?: { method: string };
+  };
+  return stats.splitMethod?.method;
 }
 
 /** Every file under `dir`, relative, sorted. */
@@ -481,8 +564,9 @@ function inputOf(name: string, version: string): string {
 /**
  * Steps 1: the fresh run — the binary humanifies v1 against the stub, and
  * a stub rename MUST land (it proves the whole LLM path ran). A bundle
- * fixture's output is a tree, so the rename check scans every file.
- * Returns the output path the report and the prior legs read.
+ * fixture's output is a tree, so the rename check scans every file, and
+ * its stats file records the split method. Returns the prior reference
+ * the prior legs read (the single file, or the one the run names).
  */
 async function freshLeg(
   name: string,
@@ -493,13 +577,16 @@ async function freshLeg(
   splitArgs: string[]
 ): Promise<string> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
-  await runBinary(
-    [inputOf(name, pair.v1), ...splitArgs, "-o", fresh],
+  const statsArgs = bundle ? ["--stats-json", `${fresh}.stats.json`] : [];
+  const stderr = await runBinary(
+    [inputOf(name, pair.v1), ...splitArgs, ...statsArgs, "-o", fresh],
     endpoint,
     `${label} fresh`
   );
   const freshOut = path.join(fresh, "index.js");
-  if (!fs.existsSync(freshOut)) fail(`${label}: fresh run wrote no index.js`);
+  if (!bundle && !fs.existsSync(freshOut)) {
+    fail(`${label}: fresh run wrote no index.js`);
+  }
   const renamedLanded = bundle
     ? treeFiles(fresh).some((f) =>
         fs.readFileSync(path.join(fresh, f), "utf8").includes("Renamed")
@@ -510,7 +597,7 @@ async function freshLeg(
       `${label}: no stub rename landed — the LLM path did not run end to end`
     );
   }
-  return freshOut;
+  return bundle ? nextReleasePrior(stderr, `${label} fresh`) : freshOut;
 }
 
 /**
@@ -557,11 +644,18 @@ async function checkPair(
     `  ${label}: detect v${pair.v1}: ${describeDetection(detection)}`
   );
   const root = path.join(scratch, `${name}-${pair.v1}-${pair.v2}`);
+  const fresh = path.join(root, "fresh");
   await runPair(name, pair, endpoint, root, bundle);
-  const vendorFiles = bundle ? vendorFileCount(path.join(root, "fresh")) : 0;
+  const vendorFiles = bundle ? vendorFileCount(fresh) : 0;
+  const splitMethod = bundle ? splitMethodOf(`${fresh}.stats.json`) : undefined;
   if (bundle)
-    console.log(`  ${label}: fresh split tree vendor/: ${vendorFiles} file(s)`);
-  const missed = expectationFailures(expect, detection, vendorFiles);
+    console.log(
+      `  ${label}: fresh split method: ${splitMethod}; vendor/: ${vendorFiles} file(s)`
+    );
+  const missed = [
+    ...expectationFailures(expect, detection, { vendorFiles, splitMethod }),
+    ...apartFailures(expect?.apart ?? [], appTexts(fresh))
+  ];
   if (missed.length > 0) fail(`${label}: ${missed.join("; ")}`);
 }
 
@@ -579,7 +673,10 @@ async function runPair(
   // A bundle fixture's output is the runnable split tree.
   const splitArgs = bundle ? ["--split"] : [];
 
-  const freshOut = await freshLeg(
+  // The prior the next release diffs against: the split tree's
+  // humanified source (or the named file a bundle the split does not read
+  // was written to), or the single humanified file.
+  const priorReference = await freshLeg(
     name,
     pair,
     endpoint,
@@ -587,11 +684,6 @@ async function runPair(
     fresh,
     splitArgs
   );
-  // The prior the next release diffs against: the split tree's
-  // humanified source, or the single humanified file.
-  const priorReference = bundle
-    ? path.join(fresh, ".humanify", "humanified.js")
-    : freshOut;
   await priorLeg(name, pair, endpoint, priorReference, prior, again, splitArgs);
   const seqPriorA = await sequencedLeg(
     root,
@@ -603,55 +695,98 @@ async function runPair(
     splitArgs
   );
 
-  if (bundle) {
-    // A bundle's observable identity is its BEHAVIOR — same stdout, same
-    // exit code — input bundle vs split tree, both run in place.
-    for (const [version, out, tag] of [
-      [pair.v1, fresh, "fresh"],
-      [pair.v2, prior, "prior"],
-      [pair.v2, seqPriorA, "sequential"]
-    ] as const) {
-      const want = behaviorOf(
-        inputOf(name, version),
-        `${label} input v${version}`
-      );
-      const got = behaviorOf(
-        path.join(out, "run.cjs"),
-        `${label} ${tag} output v${version}`
-      );
-      if (got.stdout !== want.stdout || got.status !== want.status) {
-        fail(
-          `${label}: v${version}'s split tree behaves differently\n  input:  ${JSON.stringify(want)}\n  output: ${JSON.stringify(got)}`
-        );
+  const legs = { fresh, prior, sequential: seqPriorA };
+  if (!bundle) bootSurfaces(name, pair, root, legs);
+  else if (fs.existsSync(path.join(fresh, "run.cjs"))) {
+    bootTrees(name, pair, legs);
+  } else checkUnsplit(label, legs);
+}
+
+/** The three output legs the boot step reads. */
+interface Legs {
+  fresh: string;
+  prior: string;
+  sequential: string;
+}
+
+/**
+ * A bundle layout the split does not read: the named output was written
+ * unsplit (the fixture's `splitMethod: "not-split"` is checked last). No
+ * runnable tree exists to boot; none may have been written.
+ */
+function checkUnsplit(label: string, legs: Legs): void {
+  for (const out of Object.values(legs)) {
+    for (const f of ["run.cjs", path.join(".humanify", "split-ledger.json")]) {
+      if (fs.existsSync(path.join(out, f))) {
+        fail(`${label}: ${out} holds ${f} but no runnable tree`);
       }
     }
-    console.log(
-      `  ${label}: fresh + prior (+ --sequential, twice) split trees ran, deterministic, boots with the input's behavior`
-    );
-  } else {
-    for (const [version, out, tag] of [
-      [pair.v1, freshOut, "fresh"],
-      [pair.v2, path.join(prior, "index.js"), "prior"],
-      [pair.v2, path.join(seqPriorA, "index.js"), "sequential"]
-    ] as const) {
-      const want = surfaceOf(
-        asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
-        `${label} input v${version}`
-      );
-      const got = surfaceOf(
-        asModule(out, path.join(root, `boot-out-${tag}`)),
-        `${label} ${tag} output v${version}`
-      );
-      if (got !== want) {
-        fail(
-          `${label}: v${version}'s output boots with a different surface\n  input:  ${want}\n  output: ${got}`
-        );
-      }
-    }
-    console.log(
-      `  ${label}: fresh + prior (+ --sequential, twice, vs the legacy goldens) ran, deterministic, boots with the input's surface`
-    );
   }
+  console.log(
+    `  ${label}: fresh + prior (+ --sequential, twice) ran unsplit, deterministic — no runnable tree to boot`
+  );
+}
+
+/**
+ * A bundle's observable identity is its BEHAVIOR — same stdout, same exit
+ * code — input bundle vs split tree, both run in place.
+ */
+function bootTrees(name: string, pair: VersionPair, legs: Legs): void {
+  const label = `${name} ${pair.v1}->${pair.v2}`;
+  for (const [version, out, tag] of [
+    [pair.v1, legs.fresh, "fresh"],
+    [pair.v2, legs.prior, "prior"],
+    [pair.v2, legs.sequential, "sequential"]
+  ] as const) {
+    const want = behaviorOf(
+      inputOf(name, version),
+      `${label} input v${version}`
+    );
+    const got = behaviorOf(
+      path.join(out, "run.cjs"),
+      `${label} ${tag} output v${version}`
+    );
+    if (got.stdout !== want.stdout || got.status !== want.status) {
+      fail(
+        `${label}: v${version}'s split tree behaves differently\n  input:  ${JSON.stringify(want)}\n  output: ${JSON.stringify(got)}`
+      );
+    }
+  }
+  console.log(
+    `  ${label}: fresh + prior (+ --sequential, twice) split trees ran, deterministic, boots with the input's behavior`
+  );
+}
+
+/** A single-module fixture boots with the input's module surface. */
+function bootSurfaces(
+  name: string,
+  pair: VersionPair,
+  root: string,
+  legs: Legs
+): void {
+  const label = `${name} ${pair.v1}->${pair.v2}`;
+  for (const [version, out, tag] of [
+    [pair.v1, legs.fresh, "fresh"],
+    [pair.v2, legs.prior, "prior"],
+    [pair.v2, legs.sequential, "sequential"]
+  ] as const) {
+    const want = surfaceOf(
+      asModule(inputOf(name, version), path.join(root, `boot-in-${version}`)),
+      `${label} input v${version}`
+    );
+    const got = surfaceOf(
+      asModule(path.join(out, "index.js"), path.join(root, `boot-out-${tag}`)),
+      `${label} ${tag} output v${version}`
+    );
+    if (got !== want) {
+      fail(
+        `${label}: v${version}'s output boots with a different surface\n  input:  ${want}\n  output: ${got}`
+      );
+    }
+  }
+  console.log(
+    `  ${label}: fresh + prior (+ --sequential, twice, vs the legacy goldens) ran, deterministic, boots with the input's surface`
+  );
 }
 
 /**
@@ -678,7 +813,7 @@ async function sequencedLeg(
   const goldenDir = path.join(REPO, "test/golden/legacy-default");
   const freshGolden = path.join(goldenDir, `${name}-${pair.v1}-fresh`);
   const priorGolden = path.join(goldenDir, `${name}-${pair.v1}-${pair.v2}`);
-  await runBinary(
+  const seqFreshStderr = await runBinary(
     [inputOf(name, pair.v1), ...splitArgs, ...seqArgs, "-o", seqFreshA],
     endpoint,
     `${label} sequential fresh`
@@ -691,7 +826,7 @@ async function sequencedLeg(
   assertIdenticalTrees(seqFreshA, seqFreshB, `${label} --sequential fresh`);
   compareGolden(seqFreshA, freshGolden, label, "--sequential fresh");
   const seqPriorReference = bundle
-    ? path.join(seqFreshA, ".humanify", "humanified.js")
+    ? nextReleasePrior(seqFreshStderr, `${label} sequential fresh`)
     : path.join(seqFreshA, "index.js");
   const seqPriorArgs = [
     inputOf(name, pair.v2),

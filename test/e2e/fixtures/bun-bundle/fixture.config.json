@@ -4,12 +4,17 @@
   "sourceStrategy": { "type": "local" },
   "entryPoints": ["index.js"],
   "bundle": true,
-  "expect": { "bundler": "bun", "unpackAdapter": "bun", "vendor": true },
+  "expect": {
+    "bundler": "bun",
+    "unpackAdapter": "bun",
+    "vendor": true,
+    "splitMethod": "fresh-grouping"
+  },
   "versionPairs": [
     {
       "v1": "1.0.0",
       "v2": "1.1.0",
-      "description": "A real Bun 1.3.14 build (`bun build --target=bun --format=cjs`, unminified) — Claude Code's own layout: the `// @bun @bun-cjs` banner, one CommonJS wrapper function, and Bun's runtime helpers, which carry esbuild's names (`__commonJS`, `__toESM`, `__export`). 24 local CJS deps plus the real npm package ms@2.1.3 (vendor extraction), an ES module reached through require() so Bun writes a lazy `__esm` init (the fossil split), and a deterministic stdout report. Detection must say Bun: the banner outranks the shared helper names (review R3). v1.1.0 perturbs the last dep (adds tripled), the late module's output and the lazy stamp."
+      "description": "A real Bun 1.3.14 build (`bun build --target=bun --format=cjs`, unminified) — Claude Code's own layout: the `// @bun @bun-cjs` banner, one CommonJS wrapper function, and Bun's runtime helpers, which carry esbuild's names (`__commonJS`, `__toESM`, `__export`). 24 local CJS deps plus the real npm package ms@2.1.3 (vendor extraction), an ES module reached through require() so Bun writes one lazy `__esm` init (~45% of the app code: the split takes the fresh grouping, finding #87), and a deterministic stdout report. Detection must say Bun: the banner outranks the shared helper names (review R3). v1.1.0 perturbs the last dep (adds tripled), the late module's output and the lazy stamp."
     }
   ]
 }

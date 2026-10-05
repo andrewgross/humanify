@@ -6,8 +6,9 @@ use std::collections::HashMap;
 use humanify_model::js::JsValue;
 use serde_json::Value;
 
-use super::{SplitOptions, stable_split};
+use super::{InputGate, SplitOptions, stable_split};
 use crate::place::ledger::StableSplitLedger;
+use crate::place::method::MarkerOffer;
 use crate::place::placement_dump::Regime;
 
 /// Finding #40: a prior ledger whose names place `xa` in a.js and `yb`,
@@ -57,7 +58,7 @@ fn a_declined_emit_persists_the_ts_aliases() {
         SplitOptions {
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
-            regime: Regime::Tiers,
+            markers: MarkerOffer::NotProvided,
             prior: Some(&prior),
             carry: None,
             namer: None,
@@ -69,7 +70,7 @@ fn a_declined_emit_persists_the_ts_aliases() {
             trail: None,
             vendor_captures: &[],
             vendor_fresh: None,
-            original_bundle: None,
+            input_gate: InputGate::TextAtHand,
         },
     )
     .expect("the split runs");
@@ -135,7 +136,7 @@ fn bridge_options<'a>(
     SplitOptions {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
-        regime: Regime::Cluster,
+        markers: MarkerOffer::NotProvided,
         prior: None,
         carry: None,
         namer: None,
@@ -150,7 +151,7 @@ fn bridge_options<'a>(
         // The bridge bundle's own text clears the ≥50 gate — the threshold
         // reads the text at hand here (see the gated tests below for the
         // original-bundle path).
-        original_bundle: None,
+        input_gate: InputGate::TextAtHand,
     }
 }
 
@@ -285,7 +286,7 @@ fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
     SplitOptions {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
-        regime: Regime::Cluster,
+        markers: MarkerOffer::NotProvided,
         prior: None,
         carry: None,
         namer: None,
@@ -297,7 +298,7 @@ fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
         trail: None,
         vendor_captures: &[],
         vendor_fresh: None,
-        original_bundle,
+        input_gate: original_bundle.map_or(InputGate::TextAtHand, InputGate::Original),
     }
 }
 
@@ -474,4 +475,68 @@ fn the_fresh_grouping_vendors_the_modules_the_grammar_recognises() {
         "{:?}",
         vendor_files(&outcome)
     );
+}
+
+// ── the split method comes from what the bundle CONTAINS (C1/C2) ──────
+
+/// Options for a run whose toolchain OFFERS the module markers (every Bun
+/// and esbuild bundle) — the split decides from the bundle itself.
+fn offered_options<'a>() -> SplitOptions<'a, 'a> {
+    SplitOptions {
+        markers: MarkerOffer::Offered,
+        ..gated_options(None)
+    }
+}
+
+const LAZY_HELPER: &str = "  var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n";
+
+/// C1: a Bun app with plain static imports — no lazy-init module at all.
+/// The bundler offers markers, the bundle records none: on main the split
+/// chose the marker method by BUNDLER and failed after naming ("records
+/// no module fossils"); now it takes the fresh grouping.
+#[test]
+fn a_bundle_with_no_markers_splits_by_the_fresh_grouping() {
+    let code = clustered_bundle(LAZY_HELPER);
+    let outcome = stable_split(&code, offered_options()).expect("the split runs");
+    assert_eq!(outcome.method.regime, Regime::Cluster);
+    let c = outcome.method.coverage.expect("measured");
+    assert_eq!(c.modules, 0);
+    assert!(
+        outcome.method.reason.contains("no module markers"),
+        "{}",
+        outcome.method.reason
+    );
+}
+
+/// C2: a mixed bundle — eager code before the one lazy module, more after
+/// it — falls under the threshold and gets the fresh grouping for all.
+#[test]
+fn a_mixed_bundle_splits_by_the_fresh_grouping() {
+    let code = clustered_bundle(&format!(
+        "{LAZY_HELPER}  var eagerTable = buildTable(4);\n  setupEager(eagerTable);\n\
+         \x20 var lateValue;\n  var lateInit = __esm(() => {{ lateValue = readConfig(1); }});\n"
+    ));
+    let outcome = stable_split(&code, offered_options()).expect("the split runs");
+    assert_eq!(outcome.method.regime, Regime::Cluster);
+    let c = outcome.method.coverage.expect("measured");
+    assert_eq!(c.modules, 1);
+    assert_eq!(c.glued_statements, 2);
+}
+
+/// Claude Code's shape — every module lazy, a one-call entry tail — keeps
+/// the marker method.
+#[test]
+fn an_all_lazy_bundle_keeps_the_marker_method() {
+    let mut decls = String::from(LAZY_HELPER);
+    for i in 0..30 {
+        decls.push_str(&format!(
+            "  function read{i:02}() {{ return value{i:02} + {i}; }}\n\
+             \x20 var value{i:02};\n\
+             \x20 var init{i:02} = __esm(() => {{ value{i:02} = readConfig({i}); }});\n"
+        ));
+    }
+    let code = format!("(function () {{\n{decls}  init00();\n}})();\n");
+    let outcome = stable_split(&code, offered_options()).expect("the split runs");
+    assert_eq!(outcome.method.regime, Regime::Fossil);
+    assert_eq!(outcome.method.coverage.map(|c| c.modules), Some(30));
 }

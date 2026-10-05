@@ -809,6 +809,8 @@ impl NamingOutcome {
             },
             selection: None,
             toolchain: None,
+            // The split's, set by the pipeline after it runs.
+            split_method: None,
             prompt_guard: Some(prompt_guard_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),

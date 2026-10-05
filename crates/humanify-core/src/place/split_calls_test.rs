@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use serde_json::{Map, Value, json};
 
 use super::assign::cluster::{
-    ClusterConfig, ClusterNamers, DEFAULT_CLUSTER_CONFIG, assign_clustered,
+    ClusterConfig, ClusterNamers, ClusterSizing, DEFAULT_CLUSTER_CONFIG, assign_clustered,
 };
 use super::assign::fossil::{FossilOptions, assign_fossil};
 use super::assign::namer::{
@@ -272,7 +272,8 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
             &input.body,
             Some((code, input.spans.as_slice())),
             helper.as_ref().map(|h| h.name.as_str()),
-            &cluster_config(&row["clusterConfig"]),
+            ClusterSizing::Fixed(cluster_config(&row["clusterConfig"])),
+            &[],
             ClusterNamers {
                 namer: (row["namer"] == true).then_some(&mut namer as &mut dyn SplitNamer),
                 reviser: (row["reviser"] == true).then_some(&mut reviser as &mut dyn TreeReviser),
