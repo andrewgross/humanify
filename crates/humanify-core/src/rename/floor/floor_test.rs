@@ -196,6 +196,36 @@ fn an_echoed_multi_letter_minified_name_is_refused() {
     assert!(!is_minified_echo(BUN, "yl", "jobItem"), "only an echo");
 }
 
+/// `it2` (iTerm2's CLI — Claude Code's own vocabulary, added from its
+/// 2.1.216 census) is NOT an exempt stem: a 4-unit Bun-shaped mint headed
+/// `it2` is minted like any other (`It2K`, `it2A`). It no longer needs
+/// the exemption it was added for: under the shared renamer shape
+/// (2026-10-06) the model's long `it2…` names are not mint-shaped at all,
+/// so they stay legal answers and are never counted as carried junk.
+#[test]
+fn it2_is_not_an_exempt_stem_and_model_chosen_it2_names_stay_legal() {
+    use super::{is_below_floor_name, is_minifier_token, is_sweep_answer_acceptable};
+    for name in ["It2K", "it2A", "it2"] {
+        assert!(is_minifier_token(BUN, name), "{name}");
+    }
+    for name in [
+        "it2Command",
+        "it2CliAvailable",
+        "it2Path",
+        "it2ExecutablePath",
+        "It2SetupWizard",
+        "it2_setup",
+    ] {
+        assert!(!is_minifier_token(BUN, name), "{name}");
+        assert!(!is_below_floor_name(BUN, name), "{name}");
+        assert!(is_sweep_answer_acceptable(BUN, name), "{name}");
+    }
+    // The general suffix-required stems keep exempting their names.
+    for name in ["h1Ti", "v1Cl", "x0Of"] {
+        assert!(!is_minifier_token(BUN, name), "{name}");
+    }
+}
+
 /// 2026-10-06 (scan B1): the Bun profile's `$`-anywhere and `_`-tail
 /// shape rules were what refused an answer copying a `$`/`_`-bearing
 /// minified name (`initJw$`, `assignUw_`, `n$_Result` — recorded answers

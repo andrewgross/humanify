@@ -82,7 +82,11 @@ const DOMAIN_STEMS: &[&str] = &[
 ];
 
 /// Stems that count only with a word tail (`SUFFIX_REQUIRED_STEMS`).
-const SUFFIX_REQUIRED_STEMS: &[&str] = &["h1", "h2", "h3", "h4", "h5", "h6", "it2", "v1", "x0"];
+/// General vocabulary only: `it2` (iTerm2's CLI, Claude Code's own
+/// vocabulary from its 2.1.216 census) was removed 2026-10-06 — no app's
+/// words in a pipeline rule, and under the shared renamer shape the
+/// model's `it2Command` is not mint-shaped anyway.
+const SUFFIX_REQUIRED_STEMS: &[&str] = &["h1", "h2", "h3", "h4", "h5", "h6", "v1", "x0"];
 
 /// UTF-16 length (JS `name.length`).
 fn js_len(name: &str) -> usize {
