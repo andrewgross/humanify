@@ -987,6 +987,7 @@ fn sweep_call(
 /// (finding #85) is a `missing` entry, and the answer's stray keys travel
 /// in `stray_keys` so the prompt names them.
 fn reask_disclosure(
+    state: &RenameState,
     targets: &[MintedBinding],
     seed_of: &HashMap<String, SweepReask>,
     stems: &MinifiedStems,
@@ -1013,15 +1014,37 @@ fn reask_disclosure(
         }
         prev.set(&t.name, &seed.suggestion);
         failures.duplicates.push(t.name.clone());
+        let scope = state.scope_of_binding(t.binding);
         prior.0.push((
             t.name.clone(),
             seed.rejects
                 .iter()
-                .map(|(name, code)| disclose_reject(name, Some(code), None, stems))
+                .map(|(name, code)| {
+                    // WHO holds a taken name, where the scopes know
+                    // (2026-10-06: every retry prompt says it).
+                    let held_by = name_taken_reason(code)
+                        .and_then(|r| state.name_holder(scope, &t.name, name, Some(r)))
+                        .map(crate::naming::prompts::holder_phrase);
+                    disclose_reject(name, Some(code), held_by, stems)
+                })
                 .collect(),
         ));
     }
     (prev, failures, prior)
+}
+
+/// The applier rejection a sweep reject code names, when it is a
+/// name-taken class (`naming::reask::class_of`).
+fn name_taken_reason(code: &str) -> Option<crate::rename::validated::RejectionReason> {
+    use crate::rename::validated::RejectionReason as R;
+    [
+        R::TargetInScope,
+        R::TargetVisible,
+        R::ShadowsChild,
+        R::TargetFreeName,
+    ]
+    .into_iter()
+    .find(|r| r.as_str() == code)
 }
 
 /// The sweep's bounded re-ask rounds for the collision-rejected targets —
@@ -1077,7 +1100,7 @@ fn sweep_reask<P: NameProvider>(
         let mut round_responses = Vec::with_capacity(fresh.len());
         let mut round_calls = Vec::with_capacity(fresh.len());
         for g in &fresh {
-            let (prev, failures, prior) = reask_disclosure(&g.targets, &seed_of, stems);
+            let (prev, failures, prior) = reask_disclosure(state, &g.targets, &seed_of, stems);
             // The ask site: the group's targets were seeded by applier
             // rejections — the class when they all agree (the usual case:
             // one collision class), their codes in the detail. Recording
@@ -1100,13 +1123,17 @@ fn sweep_reask<P: NameProvider>(
                 cause: uniform.then_some(seeded[0].0.into()),
                 detail: Some(codes.join(",")),
             };
+            let identifiers: Vec<String> = g.targets.iter().map(|t| t.name.clone()).collect();
+            let refused =
+                crate::naming::waves::processor::refused_answers(&identifiers, &prev, Some(&prior));
             let request = BatchRenameRequest {
                 code: g.code.clone(),
-                identifiers: g.targets.iter().map(|t| t.name.clone()).collect(),
                 used_names: crate::naming::waves::processor::build_retry_used_names(
+                    &refused,
                     &g.used_names,
-                    &prev,
+                    &g.used_names,
                 ),
+                identifiers,
                 is_retry: Some(true),
                 previous_attempt: Some(humanify_model::llm::StrMap(prev.0.clone())),
                 failures: Some(failures),

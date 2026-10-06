@@ -131,6 +131,10 @@ struct IdState {
     /// The all-failed rule exhausted this id's window before its round-2
     /// (2026-10-04): a colliding answer here was never told it collided.
     cut_off: bool,
+    /// The model's OWN answers that collided (a duplicate failure, free or
+    /// not), oldest first — every round's, for the retry's disclosure and
+    /// do-not list (2026-10-06).
+    refused: Vec<String>,
     trail: Option<Vec<RoundAttempt>>,
 }
 
@@ -168,6 +172,10 @@ pub struct LaneReport {
     /// Colliding answers of all-failed windows handed to the barrier
     /// undecorated, for its disclosed re-ask (2026-10-04).
     pub collision_handoffs: usize,
+    /// Answers whose lane round-2 collided AGAIN, handed to the barrier
+    /// undecorated for its disclosed re-ask instead of the tail's suffix
+    /// ladder (2026-10-06, Andrew: the silent `validatePathVal`).
+    pub lane_end_handoffs: usize,
 }
 
 /// What a lane collects for the barrier.
@@ -219,10 +227,13 @@ pub struct LaneCall {
     /// the request's failure lists (the prompt bytes) are unaffected.
     pub rejections: Vec<(String, RejectionReason)>,
     /// The ACCUMULATED rejected suggestions per id (the barrier re-ask's
-    /// disclosure; see [`PriorRejects`]) — None on every lane-driven call
-    /// (a lane round-2 re-asks a rejected RESPONSE and knows one
-    /// suggestion), set only by the barrier's retry seed.
+    /// disclosure; see [`PriorRejects`]) — None on every lane-driven call,
+    /// set only by the barrier's retry seed. A lane round-2 carries its
+    /// own history in `refused` instead (the processor adds the holders).
     pub prior_rejects: Option<PriorRejects>,
+    /// The lane's own colliding answers per asked id, oldest first (ids
+    /// with none are absent) — the lane round-2's disclosure (2026-10-06).
+    pub refused: Vec<(String, Vec<String>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -290,6 +301,10 @@ pub struct Lane {
     /// answer the all-failed rule cut off goes to the barrier's disclosed
     /// re-ask instead of the tail's ladder (2026-10-04).
     handoff: bool,
+    /// old name → the lane's EARLIER refused answers of every id handed to
+    /// the barrier (its last answer travels as the entry's own word): the
+    /// barrier's re-ask discloses them first (2026-10-06).
+    pub earlier: HashMap<String, Vec<String>>,
 }
 
 impl Lane {
@@ -330,12 +345,25 @@ impl Lane {
             answer_keys: HashMap::new(),
             stray_for: HashMap::new(),
             handoff: crate::naming::reask::REASK_LIMIT > 0,
+            earlier: HashMap::new(),
         }
     }
 
     /// The lane has run its whole loop (including the resolution tail).
     pub fn is_finished(&self) -> bool {
         self.finished
+    }
+
+    /// The lane's own colliding answers per id of `batch` (ids with none
+    /// absent), oldest first.
+    fn refused_of(&self, batch: &[String]) -> Vec<(String, Vec<String>)> {
+        batch
+            .iter()
+            .filter_map(|n| {
+                let words = &self.states[n].refused;
+                (!words.is_empty()).then(|| (n.clone(), words.clone()))
+            })
+            .collect()
     }
 
     fn prev_and_failures(
@@ -412,6 +440,7 @@ impl Lane {
                         straggler: false,
                         claimed_before: self.claimed.clone(),
                     });
+                    let refused = self.refused_of(&batch);
                     return Some(LaneCall {
                         batch,
                         round,
@@ -419,6 +448,7 @@ impl Lane {
                         failures,
                         rejections,
                         prior_rejects: None,
+                        refused,
                     });
                 }
                 Stage::Straggler { list, next } => {
@@ -434,6 +464,7 @@ impl Lane {
                         straggler: true,
                         claimed_before: self.claimed.clone(),
                     });
+                    let refused = self.refused_of(&batch);
                     return Some(LaneCall {
                         batch,
                         round: 2,
@@ -441,6 +472,7 @@ impl Lane {
                         failures,
                         rejections,
                         prior_rejects: None,
+                        refused,
                     });
                 }
             }
@@ -734,6 +766,14 @@ impl Lane {
             if let Some(s) = suggestion {
                 state.last_suggestion = Some(s.to_string());
             }
+            // The MODEL's word (before any transform) joins the id's
+            // refused history when it collided.
+            if dup.contains(name.as_str())
+                && let Some(w) = state.last_raw.clone()
+                && !state.refused.contains(&w)
+            {
+                state.refused.push(w);
+            }
             let result = if dup.contains(name.as_str()) {
                 AttemptResult::Duplicate
             } else if inv.contains(name.as_str()) {
@@ -769,21 +809,55 @@ impl Lane {
         (next, exhausted)
     }
 
-    /// The lone-collision gap (finding #74's open item, 2026-10-04): an
-    /// answer the all-failed rule cut off before its round-2 collided and
-    /// was never TOLD so. With a re-ask budget, the tail hands the model's
-    /// answer to the barrier UNDECORATED: the barrier sees the collision
-    /// and gives it the disclosed re-ask every other conflict gets
-    /// (`--rename-retries`, accumulating do-not list, the holder named);
-    /// the barrier's ladder is the last resort once that budget is spent.
-    /// Never for a rejection no name escapes (`rejection` of another
+    /// A colliding last answer goes to the barrier's disclosed re-ask, not
+    /// the tail's suffix ladder. Two shapes: the lone-collision gap
+    /// (finding #74's open item, 2026-10-04 — an answer the all-failed rule
+    /// cut off before its round-2, never TOLD it collided) and, since
+    /// 2026-10-06 (Andrew: the silent `validatePathVal`, ~2,420 names per
+    /// fresh run), an answer whose lane round-2 collided AGAIN. With a
+    /// re-ask budget the tail hands the model's answer to the barrier
+    /// UNDECORATED: the barrier sees the collision and gives it the
+    /// disclosed re-ask every other conflict gets (`--rename-retries`,
+    /// accumulating do-not list led by every answer the model already gave
+    /// — the lane's earlier ones travel in [`Lane::earlier`] — the holder
+    /// named); the barrier's ladder is the last resort once that budget is
+    /// spent. Never for a rejection no name escapes (`rejection` of another
     /// class): nothing to re-ask.
     fn hands_off(&self, name: &str, rejection: Option<RejectionReason>) -> bool {
         let s = &self.states[name];
         self.handoff
-            && s.cut_off
             && s.last_failure == Some(FailureReason::Duplicate)
             && rejection.is_none_or(|r| class_of(r) == ReaskClass::NameTaken)
+    }
+
+    /// The tail's claim of `suggested` for `name` — applied directly, or
+    /// (`handed`) handed to the barrier undecorated.
+    fn land(&mut self, name: &str, suggested: &str, round: u64, handed: bool) {
+        if handed {
+            self.record_handoff(name, suggested);
+        }
+        self.claim(name, suggested);
+        self.report
+            .outcomes
+            .set(name, IdentifierOutcome::renamed(suggested, round, None));
+    }
+
+    /// Record a hand-off: which shape it was, and the lane's EARLIER
+    /// refused answers (all but the handed-off word — the model's own
+    /// last word, else the suggestion — itself) for the barrier's
+    /// disclosure.
+    fn record_handoff(&mut self, name: &str, suggested: &str) {
+        let s = &self.states[name];
+        let word = s.last_raw.as_deref().unwrap_or(suggested);
+        if s.cut_off {
+            self.report.collision_handoffs += 1;
+        } else {
+            self.report.lane_end_handoffs += 1;
+        }
+        let earlier: Vec<String> = s.refused.iter().filter(|w| *w != word).cloned().collect();
+        if !earlier.is_empty() {
+            self.earlier.insert(name.to_string(), earlier);
+        }
     }
 
     /// The loop's tail after the last call: resolve the remaining
@@ -840,11 +914,7 @@ impl Lane {
             let direct = !snap_used(&suggested) && !scope_rejected;
             let handed = !direct && self.hands_off(name, rejection);
             if direct || handed {
-                self.claim(name, &suggested);
-                self.report
-                    .outcomes
-                    .set(name, IdentifierOutcome::renamed(&suggested, round, None));
-                self.report.collision_handoffs += usize::from(handed);
+                self.land(name, &suggested, round, handed);
                 continue;
             }
             // A rejection no name can escape (`exported-name`, a missing

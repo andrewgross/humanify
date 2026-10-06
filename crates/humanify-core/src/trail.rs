@@ -52,6 +52,10 @@ pub enum Tier {
     /// A name the pipeline chooses for the bundler's own runtime plumbing
     /// (`naming::plumbing`): never asked of the model.
     ToolchainPlumbing,
+    /// A name the pipeline chooses for a library import from its specifier
+    /// (`require("path")` -> `pathModule`, `naming::plumbing::
+    /// name_library_imports`, 2026-10-06): never asked of the model.
+    LibraryImport,
 }
 
 impl Tier {
@@ -79,6 +83,7 @@ impl Tier {
             Tier::ReconcileConsumer => "reconcile-consumer",
             Tier::ReconcileLastResort => "reconcile-last-resort",
             Tier::ToolchainPlumbing => "toolchain-plumbing",
+            Tier::LibraryImport => "library-import",
         }
     }
 }

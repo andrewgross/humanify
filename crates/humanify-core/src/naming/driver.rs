@@ -188,6 +188,9 @@ pub struct NamingOutcome {
     /// The names the pipeline chose for the bundler's plumbing (the
     /// lazy-init helper, `naming::plumbing`) — on the trail too.
     pub plumbing: crate::naming::plumbing::PlumbingNames,
+    /// The names the pipeline chose for library imports
+    /// (`naming::plumbing::name_library_imports`) — on the trail too.
+    pub library_imports: crate::naming::plumbing::PlumbingNames,
 }
 
 /// Run the naming stage.
@@ -274,6 +277,7 @@ pub fn run_naming<P: NameProvider>(
         probe_lines,
         stems,
         plumbing,
+        library_imports,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -307,6 +311,7 @@ pub fn run_naming<P: NameProvider>(
         capture,
         probe_lines,
         plumbing,
+        library_imports,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep

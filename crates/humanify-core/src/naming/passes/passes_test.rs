@@ -60,7 +60,7 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
                         assert_eq!(c.request.identifiers, ["Kq_"], "only the rejected id re-asks");
                         assert!(
                             c.user_prompt.contains(
-                                "\"Kq_\" was suggested as \"used\" but that conflicts with an existing name"
+                                "\"Kq_\" was suggested as \"used\" but that name is already used by another variable in the same scope"
                             ),
                             "the re-ask discloses the collision: {}",
                             c.user_prompt
@@ -253,7 +253,7 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
                         // both suggestions, each with its own reason.
                         assert!(
                             c.user_prompt.contains(
-                                "\"Kq_\" was suggested as \"used\" but that conflicts with an existing name"
+                                "\"Kq_\" was suggested as \"used\" but that name is already used by another variable in the same scope"
                             ),
                             "the collision disclosed: {}",
                             c.user_prompt
