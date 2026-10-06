@@ -438,8 +438,10 @@ pub struct EmitStatement {
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct EmitFileRow {
     pub path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub alias: Option<String>,
+    /// module path → the alias THIS file binds it to (runnable trees;
+    /// aliases are per importer, finding #88).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub imports: std::collections::BTreeMap<String, String>,
     pub statements: Vec<EmitStatement>,
 }
 

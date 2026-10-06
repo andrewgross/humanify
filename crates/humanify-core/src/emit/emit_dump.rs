@@ -8,13 +8,13 @@ use humanify_model::js::cmp_utf16;
 pub fn layout_rows(
     layout: &[(String, Vec<usize>)],
     spans: &[(u32, u32)],
-    alias_of: impl Fn(&str) -> Option<String>,
+    imports_of: impl Fn(&str) -> std::collections::BTreeMap<String, String>,
 ) -> EmitLayoutFile {
     let mut files: Vec<EmitFileRow> = layout
         .iter()
         .map(|(path, idxs)| EmitFileRow {
             path: path.clone(),
-            alias: alias_of(path),
+            imports: imports_of(path),
             statements: idxs
                 .iter()
                 .enumerate()

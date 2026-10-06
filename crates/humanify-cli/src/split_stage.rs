@@ -209,17 +209,20 @@ fn split_dump(code: &str, outcome: &SplitOutcome, trail: &PlacementTrail) -> Spl
             _ => None,
         })
         .unwrap_or_default();
-    let aliases: std::collections::HashMap<&str, &str> = outcome
-        .aliases
-        .iter()
-        .map(|(f, a)| (f.as_str(), a.as_str()))
-        .collect();
+    let mut imports: std::collections::HashMap<&str, std::collections::BTreeMap<String, String>> =
+        std::collections::HashMap::new();
+    for (importer, module, alias) in &outcome.aliases {
+        imports
+            .entry(importer.as_str())
+            .or_default()
+            .insert(module.clone(), alias.clone());
+    }
     SplitSections {
         statement_family: outcome.spans.iter().copied().zip(hashes).collect(),
         placement: trail.placement_json(),
         shipped: code.to_string(),
         emit: humanify_core::emit::emit_dump::layout_rows(&outcome.layout, &outcome.spans, |p| {
-            aliases.get(p).map(|a| a.to_string())
+            imports.get(p).cloned().unwrap_or_default()
         }),
     }
 }
@@ -353,11 +356,15 @@ fn split_before_commit(
     }
     let switches = input.switches;
     let vendor_captures = humanify_core::unpack::bun::vendor_captures(input.vendor_record);
+    let prior_tree = input
+        .prior_version
+        .map(humanify_core::place::layout::split_tree_root_of);
     let outcome = stable_split(
         code,
         SplitOptions {
             markers: input.markers,
             prior: prior.as_ref(),
+            prior_tree: prior_tree.as_deref(),
             carry: tiers_carry(prior_carry),
             namer: Some(&mut namer as &mut dyn SplitNamer),
             reviser: Some(&mut reviser as &mut dyn TreeReviser),

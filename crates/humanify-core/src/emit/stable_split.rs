@@ -25,6 +25,7 @@ use crate::rename::validated::scopes::BabelScopes;
 
 use super::align::AlignSwitches;
 use super::cjs::{RunnableInput, emit_runnable_cjs, wrapper_view};
+use super::import_alias::read_prior_import_aliases;
 use super::load_order::{LoadOrderFacts, bundle_load_order_facts};
 use super::review::{review_split, statement_align_name};
 use crate::finish::relink::VendorBridge;
@@ -42,6 +43,9 @@ pub struct SplitOptions<'a, 'n> {
     /// fresh grouping.
     pub markers: MarkerOffer,
     pub prior: Option<&'a StableSplitLedger>,
+    /// The prior TREE's root (`--prior-version`'s tree): each importer's
+    /// require aliases are carried from its own prior file (finding #88).
+    pub prior_tree: Option<&'a std::path::Path>,
     /// The tiers regime's carry (`renameResult.priorCarry`).
     pub carry: Option<PriorCarry>,
     /// The fossil regime's mint namer / the fresh regime's file namer —
@@ -157,8 +161,9 @@ pub struct SplitOutcome {
     /// The emitted layout per file (the dump's `emit.json`): the runnable
     /// tree's when it won, else the review tree's.
     pub layout: Vec<(String, Vec<usize>)>,
-    /// file → alias (runnable only).
-    pub aliases: Vec<(String, String)>,
+    /// (importer, module, alias) for every require the runnable tree
+    /// writes (runnable only).
+    pub aliases: Vec<(String, String, String)>,
     /// Per statement: span in the shipped text.
     pub spans: Vec<(u32, u32)>,
     pub facts: Vec<LoadOrderFacts>,
@@ -397,6 +402,11 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         None
     } else {
         let scopes = BabelScopes::build(ingest.semantic());
+        let prior_aliases = options.prior_tree.map(|root| {
+            read_prior_import_aliases(&review.files, |f| {
+                std::fs::read_to_string(root.join(f)).ok()
+            })
+        });
         Some(emit_runnable_cjs(&RunnableInput {
             code: shipped,
             semantic: ingest.semantic(),
@@ -406,7 +416,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
             order: &assignment,
             emit_hashes: &review.emit_hashes,
             emit_names: &review.emit_names,
-            prior_aliases: options.prior.and_then(|p| p.aliases.as_ref()),
+            prior_aliases: prior_aliases.as_ref(),
             bundle_hashes: &input.hashes,
             bundle_names: &names,
             facts: &facts,
@@ -439,13 +449,6 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     };
     match runnable {
         Some(Ok(tree)) => {
-            let alias_obj = JsObject::from_entries(
-                tree.aliases
-                    .iter()
-                    .map(|(f, a)| (f.clone(), JsValue::str(a.as_str())))
-                    .collect(),
-            );
-            ledger.insert("aliases", JsValue::Object(alias_obj));
             // `recordEmittedLayout` returns early under `--disable
             // emit-align`: the review layout stays, no emitIndexes.
             if !options.align.emit_align_disabled {
@@ -476,27 +479,15 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
         Some(Err(decline)) => {
             // The byte-exact review tree is written — but the persisted
             // ledger keeps what the TS emit had already set on it when it
-            // threw (finding #40): the aliases, and the emitted layout (and
-            // the dump's emit capture) once the assembly had begun.
-            if let Some(aliases) = &decline.aliases {
-                ledger.insert(
-                    "aliases",
-                    JsValue::Object(JsObject::from_entries(
-                        aliases
-                            .iter()
-                            .map(|(f, a)| (f.clone(), JsValue::str(a.as_str())))
-                            .collect(),
-                    )),
-                );
-            }
+            // threw (finding #40): the emitted layout (and the dump's emit
+            // capture) once the assembly had begun.
             outcome.layout = review.layout;
             if let Some(layout) = decline
                 .layout
                 .filter(|_| !options.align.emit_align_disabled)
             {
                 // `captureRunnableEmitLayout` ran: the dump's emit.json is
-                // the runnable layout, each file with its alias.
-                outcome.aliases = decline.aliases.clone().unwrap_or_default();
+                // the runnable layout.
                 ledger.insert("emitHashes", str_list(&layout.emit_hashes));
                 ledger.insert("emitNames", opt_str_list(&layout.emit_names));
                 ledger.insert(

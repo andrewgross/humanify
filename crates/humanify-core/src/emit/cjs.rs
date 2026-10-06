@@ -24,7 +24,7 @@
 
 mod babel;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
 use oxc_ast::ast::{
@@ -33,16 +33,15 @@ use oxc_ast::ast::{
 };
 use oxc_semantic::{AstNodes, NodeId, Semantic};
 use oxc_span::{GetSpan, Span};
-use sha2::{Digest, Sha256};
 
 use humanify_model::js::cmp_utf16;
 
 use crate::babel_view::unparen;
 use crate::place::layout::METADATA_DIR;
 use crate::rename::validated::scopes::{BabelScopes, BindingId, BindingKind, SiteType};
-use crate::rename::validated::target::is_valid_rename_target;
 
 use super::align::{AlignSwitches, align_file_statements, alignment_key};
+use super::import_alias::{ImportAliases, ImportScope, PriorImportAliases, build_import_aliases};
 use super::load_order::LoadOrderFacts;
 use super::paths::compute_relative_import_path;
 
@@ -135,8 +134,9 @@ pub struct RunnableInput<'a, 's> {
     /// `ledger.emitHashes` / `emitNames` — the review split's layout.
     pub emit_hashes: &'s [String],
     pub emit_names: &'s [Option<String>],
-    /// `prior.aliases`.
-    pub prior_aliases: Option<&'s HashMap<String, String>>,
+    /// The prior tree's require aliases, per importer
+    /// ([`super::import_alias::read_prior_import_aliases`]).
+    pub prior_aliases: Option<&'s PriorImportAliases>,
     /// `statementHash` / `statementAlignName` per bundle statement.
     pub bundle_hashes: &'s [String],
     pub bundle_names: &'s [Option<String>],
@@ -159,8 +159,9 @@ pub struct RunnableTree {
     /// Relative path → content, in the TS Map's insertion order (ledger
     /// files, then the bundle runtime, then the entry).
     pub files: Vec<(String, String)>,
-    /// file → alias (`ledger.aliases`), sorted as the TS writes it.
-    pub aliases: Vec<(String, String)>,
+    /// (importer, module, alias) for every require the tree writes,
+    /// sorted by importer then module.
+    pub aliases: Vec<(String, String, String)>,
     /// Per file (first-statement order), the bundle statement indexes in
     /// emitted order (`stmtIdxsByFile`).
     pub layout: Vec<(String, Vec<usize>)>,
@@ -235,8 +236,8 @@ struct Plan<'a, 's> {
     exports: HashMap<usize, HashSet<String>>,
     /// reader file → declaring files it requires.
     requires: HashMap<usize, HashSet<usize>>,
-    /// file id → namespace variable.
-    ns_vars: Vec<String>,
+    /// importer → module → the alias the importer binds it to.
+    aliases: ImportAliases,
     directives: Vec<String>,
     load_time_edges: OrderedSets,
     /// The load-time edges that read a VALUE — any binding but a hoisted
@@ -282,6 +283,20 @@ impl Plan<'_, '_> {
 
     fn file_at(&self, pos: u32) -> Option<(usize, usize)> {
         stmt_index_of(&self.ranges, pos).map(|i| (i, self.stmt_file[i]))
+    }
+
+    /// The alias `reader` binds `decl` to.
+    fn ns(&self, reader: usize, decl: usize) -> Result<&str, String> {
+        self.aliases
+            .get(&reader)
+            .and_then(|m| m.get(&decl))
+            .map(String::as_str)
+            .ok_or_else(|| {
+                format!(
+                    "runnable emit: no alias for {} in {} (internal)",
+                    self.input.files[decl], self.input.files[reader]
+                )
+            })
     }
 
     fn wrapper_scope_bindings(&self) -> &[(String, BindingId)] {
@@ -358,7 +373,12 @@ impl Plan<'_, '_> {
     }
 
     /// `planReads`: true when any read crossed.
-    fn plan_reads(&mut self, name: &str, binding: BindingId, decl_file: usize, ns: &str) -> bool {
+    fn plan_reads(
+        &mut self,
+        name: &str,
+        binding: BindingId,
+        decl_file: usize,
+    ) -> Result<bool, String> {
         let refs = self.input.scopes.binding(binding).refs.clone();
         let mut crosses = false;
         for site in refs {
@@ -383,12 +403,13 @@ impl Plan<'_, '_> {
                 );
                 continue;
             }
-            let edit = self.edit_for_target(site.node, site.span, name, &format!("{ns}.{name}"));
+            let target = format!("{}.{name}", self.ns(file, decl_file)?);
+            let edit = self.edit_for_target(site.node, site.span, name, &target);
             self.add_edit(stmt, edit);
             self.record_cross_site(stmt, name, decl_file, site.node);
             crosses = true;
         }
-        crosses
+        Ok(crosses)
     }
 
     /// `planWriteTarget`: true when it crossed.
@@ -396,7 +417,6 @@ impl Plan<'_, '_> {
         &mut self,
         name: &str,
         decl_file: usize,
-        ns: &str,
         span: Span,
     ) -> Result<bool, String> {
         let Some((stmt, file)) = self.file_at(span.start) else {
@@ -431,7 +451,8 @@ impl Plan<'_, '_> {
                 }
             }
             WriteKind::Write => {
-                let edit = self.edit_for_write_target(id, span, name, &format!("{ns}.{name}"));
+                let target = format!("{}.{name}", self.ns(file, decl_file)?);
+                let edit = self.edit_for_write_target(id, span, name, &target);
                 self.add_edit(stmt, edit);
             }
         }
@@ -446,13 +467,12 @@ impl Plan<'_, '_> {
             return Ok(());
         };
         let decl_file = self.stmt_file[decl_stmt];
-        let ns = self.ns_vars[decl_file].clone();
         let targets = b.violation_targets.clone();
-        let read_crosses = self.plan_reads(name, binding, decl_file, &ns);
+        let read_crosses = self.plan_reads(name, binding, decl_file)?;
         let mut writable = false;
         for spans in targets {
             for span in spans {
-                if self.plan_write_target(name, decl_file, &ns, span)? {
+                if self.plan_write_target(name, decl_file, span)? {
                     writable = true;
                 }
             }
@@ -473,7 +493,11 @@ impl Plan<'_, '_> {
 
     /// `reserveBundleVar`.
     fn reserve_bundle_var(&self) -> String {
-        let taken: HashSet<&str> = self.ns_vars.iter().map(String::as_str).collect();
+        let taken: HashSet<&str> = self
+            .aliases
+            .values()
+            .flat_map(|m| m.values().map(String::as_str))
+            .collect();
         let mut v = "__bundle".to_string();
         let mut n = 2;
         while taken.contains(v.as_str()) || self.get_binding(&v).is_some() {
@@ -788,149 +812,8 @@ fn lazy_require_line(ns: &str, rel: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Aliases: the import scope and the namespace ladder
+// The import scope ([`super::import_alias`] chooses the aliases)
 // ---------------------------------------------------------------------------
-
-/// `camelFromSegments`: `a-b/c-d` → `aBCD`.
-fn camel_from_segments(segments: &[&str]) -> String {
-    let joined = segments.join("-");
-    let mut out = String::new();
-    for (i, w) in joined
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .enumerate()
-    {
-        let mut chars = w.chars();
-        let first = chars.next().expect("non-empty word");
-        if i == 0 {
-            out.push(first.to_ascii_lowercase());
-        } else {
-            out.push(first.to_ascii_uppercase());
-        }
-        out.push_str(chars.as_str());
-    }
-    out
-}
-
-/// `nsCandidates(file)`: the basename's camelCase, widening up the path,
-/// then the sanitized path, then the path-hashed form (never collides).
-fn ns_candidates(file: &str) -> Vec<String> {
-    let stem = file.strip_suffix(".js").unwrap_or(file);
-    let parts: Vec<&str> = stem.split('/').filter(|p| !p.is_empty()).collect();
-    let mut out = Vec::new();
-    for take in 1..=parts.len() {
-        out.push(camel_from_segments(&parts[parts.len() - take..]));
-    }
-    // `file.replace(/[^A-Za-z0-9_$]/g, "_")` — per UTF-16 code unit.
-    let sanitized: String = file
-        .chars()
-        .flat_map(|c| {
-            let keep = c.is_ascii_alphanumeric() || c == '_' || c == '$';
-            let n = if keep { 1 } else { c.len_utf16() };
-            std::iter::repeat_n(if keep { c } else { '_' }, n)
-        })
-        .collect();
-    let hash = Sha256::digest(file.as_bytes());
-    let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
-    out.push(sanitized.clone());
-    out.push(format!("{sanitized}_{}", &hex[..8]));
-    out
-}
-
-/// Where an alias can collide (`ImportScope`): the names each importer
-/// file uses in a binding or reference position.
-struct ImportScope {
-    always_taken: HashSet<String>,
-    names_by_file: HashMap<usize, HashSet<String>>,
-    importers: HashMap<usize, HashSet<usize>>,
-}
-
-impl ImportScope {
-    fn is_shadowed(&self, decl_file: usize, name: &str) -> bool {
-        if self.always_taken.contains(name) {
-            return true;
-        }
-        self.importers.get(&decl_file).is_some_and(|imps| {
-            imps.iter()
-                .any(|i| self.names_by_file.get(i).is_some_and(|s| s.contains(name)))
-        })
-    }
-}
-
-/// `nsNameIsFree`: legal to bind (the renamer's own gate), unclaimed, and
-/// not shadowed in any importing file.
-fn ns_name_is_free(name: &str, claimed: &HashSet<String>, shadowed: bool) -> bool {
-    is_valid_rename_target(name) && !claimed.contains(name) && !shadowed
-}
-
-/// `buildNsVars`: the prior's still-legal alias first, then the ladder,
-/// tier by tier; a name contested at a tier goes to neither file.
-fn build_ns_vars(
-    files: &[String],
-    scope: &ImportScope,
-    prior_aliases: Option<&HashMap<String, String>>,
-) -> Result<Vec<String>, String> {
-    let candidates: Vec<Vec<String>> = files.iter().map(|f| ns_candidates(f)).collect();
-    let mut vars: Vec<Option<String>> = vec![None; files.len()];
-    let mut claimed: HashSet<String> = HashSet::new();
-    let mut pending: Vec<usize> = (0..files.len()).collect();
-    if let Some(prior) = prior_aliases {
-        let mut wanted: HashMap<&str, usize> = HashMap::new();
-        for &f in &pending {
-            if let Some(a) = prior.get(&files[f]) {
-                *wanted.entry(a.as_str()).or_insert(0) += 1;
-            }
-        }
-        let mut next = Vec::new();
-        for &f in &pending {
-            let free = prior.get(&files[f]).filter(|a| {
-                wanted.get(a.as_str()) == Some(&1)
-                    && ns_name_is_free(a, &claimed, scope.is_shadowed(f, a))
-            });
-            match free {
-                Some(a) => {
-                    vars[f] = Some(a.clone());
-                    claimed.insert(a.clone());
-                }
-                None => next.push(f),
-            }
-        }
-        pending = next;
-    }
-    let max_tier = candidates.iter().map(Vec::len).max().unwrap_or(0);
-    let mut tier = 0;
-    while tier < max_tier && !pending.is_empty() {
-        let mut wanted: HashMap<&str, usize> = HashMap::new();
-        for &f in &pending {
-            if let Some(c) = candidates[f].get(tier) {
-                *wanted.entry(c.as_str()).or_insert(0) += 1;
-            }
-        }
-        let mut next = Vec::new();
-        for &f in &pending {
-            match candidates[f].get(tier) {
-                Some(c)
-                    if !c.is_empty()
-                        && wanted.get(c.as_str()) == Some(&1)
-                        && ns_name_is_free(c, &claimed, scope.is_shadowed(f, c)) =>
-                {
-                    vars[f] = Some(c.clone());
-                    claimed.insert(c.clone());
-                }
-                _ => next.push(f),
-            }
-        }
-        pending = next;
-        tier += 1;
-    }
-    if let Some(&f) = pending.first() {
-        return Err(format!(
-            "runnable emit: no free namespace variable for {}",
-            files[f]
-        ));
-    }
-    Ok(vars.into_iter().map(|v| v.expect("assigned")).collect())
-}
 
 /// Babel Identifier-node names per statement file (`identifierNamesByFile`):
 /// every identifier in a binding or reference position, minus property
@@ -1158,17 +1041,18 @@ fn declaration_kind(kind: VariableDeclarationKind) -> &'static str {
 }
 
 impl Plan<'_, '_> {
-    fn ns_of_cross(&self, name: &str) -> Result<&str, String> {
+    fn ns_of_cross(&self, reader: usize, name: &str) -> Result<&str, String> {
         let c = self
             .cross
             .get(name)
             .ok_or_else(|| format!("runnable emit: no cross record for {name}"))?;
-        Ok(&self.ns_vars[c.decl_file])
+        self.ns(reader, c.decl_file)
     }
 
     /// `assignmentFor`: `ns.name = <init>` (None for a bare redeclaration).
     fn assignment_for(
         &self,
+        reader: usize,
         name: &str,
         init: Option<&Expression<'_>>,
         pool: &mut Vec<Edit>,
@@ -1179,7 +1063,10 @@ impl Plan<'_, '_> {
         let s = init.span();
         let taken = take_within(pool, s.start, s.end);
         let text = apply_edits(self.slice(s.start, s.end), s.start, &taken)?;
-        Ok(Some(format!("{}.{name} = {text}", self.ns_of_cross(name)?)))
+        Ok(Some(format!(
+            "{}.{name} = {text}",
+            self.ns_of_cross(reader, name)?
+        )))
     }
 
     fn redecl_name(
@@ -1198,6 +1085,7 @@ impl Plan<'_, '_> {
     /// `declStatementComposite`.
     fn decl_statement_composite(
         &self,
+        reader: usize,
         decl: &VariableDeclaration<'_>,
         redecls: &[(u32, String)],
         pool: &mut Vec<Edit>,
@@ -1205,7 +1093,7 @@ impl Plan<'_, '_> {
         let mut lines = Vec::new();
         for d in &decl.declarations {
             if let Some(name) = Self::redecl_name(redecls, d) {
-                if let Some(assign) = self.assignment_for(&name, d.init.as_ref(), pool)? {
+                if let Some(assign) = self.assignment_for(reader, &name, d.init.as_ref(), pool)? {
                     lines.push(format!("{assign};"));
                 }
             } else {
@@ -1228,6 +1116,7 @@ impl Plan<'_, '_> {
     /// `forInitComposite`.
     fn for_init_composite(
         &self,
+        reader: usize,
         init: &VariableDeclaration<'_>,
         redecls: &[(u32, String)],
         pool: &mut Vec<Edit>,
@@ -1237,7 +1126,7 @@ impl Plan<'_, '_> {
             let Some(name) = Self::redecl_name(redecls, d) else {
                 return Err("runnable emit: for-init mixes a cross-file var redeclaration with local declarators".into());
             };
-            if let Some(assign) = self.assignment_for(&name, d.init.as_ref(), pool)? {
+            if let Some(assign) = self.assignment_for(reader, &name, d.init.as_ref(), pool)? {
                 parts.push(assign);
             }
         }
@@ -1251,6 +1140,7 @@ impl Plan<'_, '_> {
     /// `withRedeclComposites`.
     fn with_redecl_composites(
         &self,
+        reader: usize,
         stmt: &Statement<'_>,
         redecls: &[(u32, String)],
         mut pool: Vec<Edit>,
@@ -1262,14 +1152,14 @@ impl Plan<'_, '_> {
         };
         let composite = match stmt {
             Statement::VariableDeclaration(d) => {
-                self.decl_statement_composite(d, redecls, &mut pool)?
+                self.decl_statement_composite(reader, d, redecls, &mut pool)?
             }
             Statement::ForStatement(f) if matches!(&f.init, Some(ForStatementInit::VariableDeclaration(d)) if all_within(d.span)) =>
             {
                 let Some(ForStatementInit::VariableDeclaration(d)) = &f.init else {
                     unreachable!()
                 };
-                self.for_init_composite(d, redecls, &mut pool)?
+                self.for_init_composite(reader, d, redecls, &mut pool)?
             }
             Statement::ForOfStatement(_) | Statement::ForInStatement(_) => {
                 let left = match stmt {
@@ -1283,7 +1173,7 @@ impl Plan<'_, '_> {
                         Edit {
                             start: d.span.start,
                             end: d.span.end,
-                            text: format!("{}.{name}", self.ns_of_cross(name)?),
+                            text: format!("{}.{name}", self.ns_of_cross(reader, name)?),
                         }
                     }
                     _ => return Err(self.unsupported_redecl(redecls)),
@@ -1321,7 +1211,7 @@ impl Plan<'_, '_> {
         let final_edits = if redecls.is_empty() {
             pool
         } else {
-            self.with_redecl_composites(&self.statements[idx], redecls, pool)?
+            self.with_redecl_composites(self.stmt_file[idx], &self.statements[idx], redecls, pool)?
         };
         apply_edits(self.slice(start, end), start, &final_edits)
     }
@@ -1359,21 +1249,15 @@ impl Plan<'_, '_> {
                 compute_relative_import_path(path, &bc.file_name)
             ));
         }
-        let require_line = |decl: usize| {
-            format!(
-                "const {} = require(\"{}\");",
-                self.ns_vars[decl],
-                compute_relative_import_path(path, &self.input.files[decl])
-            )
-        };
+        let rel = |decl: usize| compute_relative_import_path(path, &self.input.files[decl]);
         let (head_reqs, lazy_reqs) = self.require_lists(file);
-        header.extend(head_reqs.into_iter().map(require_line));
-        header.extend(lazy_reqs.into_iter().map(|decl| {
-            lazy_require_line(
-                &self.ns_vars[decl],
-                &compute_relative_import_path(path, &self.input.files[decl]),
-            )
-        }));
+        for decl in head_reqs {
+            let ns = self.ns(file, decl)?;
+            header.push(format!("const {ns} = require(\"{}\");", rel(decl)));
+        }
+        for decl in lazy_reqs {
+            header.push(lazy_require_line(self.ns(file, decl)?, &rel(decl)));
+        }
         let mut body: Vec<String> = Vec::with_capacity(stmt_idxs.len());
         for &idx in stmt_idxs {
             body.push(self.stmt_text(idx)?);
@@ -1548,7 +1432,7 @@ fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, St
         redecls: vec![Vec::new(); statements.len()],
         exports: HashMap::new(),
         requires: HashMap::new(),
-        ns_vars: Vec::new(),
+        aliases: ImportAliases::new(),
         directives,
         load_time_edges: OrderedSets::default(),
         load_time_value_edges: OrderedSets::default(),
@@ -1558,11 +1442,12 @@ fn new_plan<'a, 's>(input: &'s RunnableInput<'a, 's>) -> Result<Plan<'a, 's>, St
     })
 }
 
-/// `buildImportScope`.
+/// `buildImportScope`: per importer, the modules it reads or writes
+/// across files and the names it uses.
 fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
     let scopes = plan.input.scopes;
     let mut rewritten = HashSet::new();
-    let mut importers: HashMap<usize, HashSet<usize>> = HashMap::new();
+    let mut imports: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
     for (_, bid) in plan.wrapper_scope_bindings() {
         let b = scopes.binding(*bid);
         if b.kind == BindingKind::Param {
@@ -1579,14 +1464,14 @@ fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
                 if site.ty == SiteType::Identifier {
                     rewritten.insert(site.node);
                 }
-                importers.entry(decl_file).or_default().insert(f);
+                imports.entry(f).or_default().insert(decl_file);
             }
         }
         for site in &b.violations {
             if let Some((_, f)) = plan.file_at(site.span.start)
                 && f != decl_file
             {
-                importers.entry(decl_file).or_default().insert(f);
+                imports.entry(f).or_default().insert(decl_file);
             }
         }
     }
@@ -1605,7 +1490,7 @@ fn build_import_scope(plan: &Plan<'_, '_>) -> ImportScope {
             &plan.stmt_file,
             &rewritten,
         ),
-        importers,
+        imports,
     }
 }
 
@@ -1689,18 +1574,35 @@ fn record_emitted_layout(
     (hashes, names, indexes)
 }
 
+/// (importer, module, alias) for every require the tree writes.
+/// (Every required pair has one: the assembly just looked each up.)
+fn written_aliases(plan: &Plan<'_, '_>) -> Vec<(String, String, String)> {
+    let files = plan.input.files;
+    let mut out = Vec::new();
+    for (&reader, by_module) in &plan.aliases {
+        let Some(required) = plan.requires.get(&reader) else {
+            continue;
+        };
+        for (&decl, ns) in by_module {
+            if required.contains(&decl) {
+                out.push((files[reader].clone(), files[decl].clone(), ns.clone()));
+            }
+        }
+    }
+    out.sort_by(|a, b| cmp_utf16(&a.0, &b.0).then_with(|| cmp_utf16(&a.1, &b.1)));
+    out
+}
+
 /// `emitRunnableCjs`: the runnable tree, or the decline reason.
 /// A declined runnable emit (`tryEmitRunnableCjs`' `onDecline`): the
 /// reason, and what the TS had ALREADY written onto the ledger the caller
-/// persists when the throw came (finding #40) — the aliases are assigned
-/// once the plan is built (`ledger.aliases = …` before
-/// `planWrapperContext` / `assertLoadTimeAcyclic`), the emitted layout
-/// once the tree is being assembled (`recordEmittedLayout` before the
-/// per-file assembly).
+/// persists when the throw came (finding #40): the emitted layout once
+/// the tree is being assembled (`recordEmittedLayout` before the per-file
+/// assembly). The ledger no longer records aliases (finding #88: they are
+/// per importer, carried from the prior tree's own require lines).
 #[derive(Debug)]
 pub struct EmitDecline {
     pub reason: String,
-    pub aliases: Option<Vec<(String, String)>>,
     pub layout: Option<Box<EmittedLayout>>,
 }
 
@@ -1718,7 +1620,6 @@ impl From<String> for EmitDecline {
     fn from(reason: String) -> Self {
         EmitDecline {
             reason,
-            aliases: None,
             layout: None,
         }
     }
@@ -1729,15 +1630,7 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     // Runnable-form only: the shipped ledger keeps the original order.
     relocate_namespace_augmentations(&mut plan);
     let scope = build_import_scope(&plan);
-    plan.ns_vars = build_ns_vars(input.files, &scope, input.prior_aliases)?;
-    let mut aliases: Vec<(String, String)> = input
-        .files
-        .iter()
-        .cloned()
-        .zip(plan.ns_vars.iter().cloned())
-        .collect();
-    // `[...nsVars].sort()`: arrays compare as their "file,alias" strings.
-    aliases.sort_by(|a, b| cmp_utf16(&format!("{},{}", a.0, a.1), &format!("{},{}", b.0, b.1)));
+    plan.aliases = build_import_aliases(input.files, &scope, input.prior_aliases)?;
     let bindings: Vec<(String, BindingId)> = plan.wrapper_scope_bindings().to_vec();
     for (name, bid) in &bindings {
         if input.scopes.binding(*bid).kind == BindingKind::Param {
@@ -1745,25 +1638,19 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
         }
         plan.plan_binding(name, *bid)?;
     }
-    // -- `ledger.aliases` is assigned here (buildPlan has returned) --------
-    let with_aliases = |reason: String| EmitDecline {
-        reason,
-        aliases: Some(aliases.clone()),
-        layout: None,
-    };
-    plan.plan_wrapper_context().map_err(with_aliases)?;
+    plan.plan_wrapper_context()?;
     // Vendor bridges (finding #60): the owner files must export their
     // captured bindings whether or not any app file references them.
     for (file, name) in input.forced_exports {
         let Some(f) = input.files.iter().position(|p| p == file) else {
-            return Err(with_aliases(format!(
-                "vendor bridge: no emitted file {file} to export {name} from"
-            )));
+            return Err(
+                format!("vendor bridge: no emitted file {file} to export {name} from").into(),
+            );
         };
         plan.exports.entry(f).or_default().insert(name.clone());
     }
-    plan.assert_load_time_acyclic().map_err(with_aliases)?;
-    plan.settle_load_order().map_err(with_aliases)?;
+    plan.assert_load_time_acyclic()?;
+    plan.settle_load_order()?;
     let by_file = ordered_indexes_by_file(&plan);
     let (emit_hashes, emit_names, emit_indexes) = record_emitted_layout(&plan, &by_file);
     let layout = || EmittedLayout {
@@ -1790,7 +1677,6 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
         // -- the emitted layout is recorded (recordEmittedLayout ran) ------
         let content = plan.assemble_file(f, idxs).map_err(|reason| EmitDecline {
             reason,
-            aliases: Some(aliases.clone()),
             layout: Some(Box::new(layout())),
         })?;
         files.push((path.clone(), content));
@@ -1801,7 +1687,7 @@ pub fn emit_runnable_cjs(input: &RunnableInput<'_, '_>) -> Result<RunnableTree, 
     files.push((entry.clone(), plan.entry_source(&entry)));
     Ok(RunnableTree {
         files,
-        aliases,
+        aliases: written_aliases(&plan),
         layout: by_file
             .into_iter()
             .map(|(f, v)| (input.files[f].clone(), v))
