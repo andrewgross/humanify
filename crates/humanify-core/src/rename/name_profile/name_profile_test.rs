@@ -173,27 +173,70 @@ fn every_minifier_profile_reads_the_shared_renamer_shapes() {
     }
 }
 
-/// The renamer-alphabet profiles (esbuild, terser, swc): a whole 3-4
-/// character renamer name with a digit or `$` is minted (`p5e`, `$me` are
-/// real esbuild output) — the long-name shapes only the Bun corpus
-/// calibrated are not.
+/// Every minifier profile — Bun included since 2026-10-06 (scan B1) —
+/// reads the ONE measured renamer shape: a whole 3-4 character renamer
+/// name with a mint head or a `$` is minted (`p5e`, `$me` are real
+/// esbuild output; `qk_`, `HO$` real Bun output), and a trailing `_` is
+/// judged by the name it decorates (`_k_`, `H2_` are minted, `fsPromises_`
+/// is not). Longer names are the author's or the model's: the shapes only
+/// the Claude Code corpus calibrated (`$` anywhere, any `_` tail, a mint
+/// head at any length) are gone — they flagged RxJS `user$`, Angular
+/// `$scope`, Svelte `$store`, snake_case `to_string`.
 #[test]
-fn the_renamer_profiles_read_three_and_four_character_tokens_only() {
-    for p in [NameProfile::Esbuild, NameProfile::Terser, NameProfile::Swc] {
-        for n in ["p5e", "m5e", "a1b", "ab_", "$me", "Xm$", "q7Ab"] {
+fn every_minifier_profile_reads_three_and_four_character_tokens_only() {
+    for p in MINIFIER_PROFILES {
+        for n in [
+            "p5e", "m5e", "a1b", "ab_", "$me", "Xm$", "q7Ab", "qk_", "HO$", "_k_", "_P_", "H2_",
+            "h2_", "x_", "p5e_", "id_", "db_",
+        ] {
             assert!(is_minifier_token(p, n), "{p:?} {n:?}");
         }
         for n in [
             "fsPromises_",
             "foo$bar",
             "$element",
+            "user$",
+            "clicks$",
+            "$scope",
+            "$store",
+            "$http",
             "do7Function",
             "x1Coordinate",
+            "is2017OrLater",
+            "to_string",
+            "my_var",
+            "p256Key",
+            "it2Command",
+            "It2SetupWizard",
             "ab12c",
+            "obj_",
         ] {
             assert!(!is_minifier_token(p, n), "{p:?} {n:?}");
-            assert!(is_minifier_token(NameProfile::Bun, n), "Bun {n:?}");
+            assert!(is_sweep_answer_acceptable(p, n), "{p:?} {n:?}");
         }
+    }
+}
+
+/// What the Bun corpus's long-shape rules used to catch — the model
+/// HALF-COPYING a minified name into its answer — is the program lookup's
+/// job under every profile: `do7Function` is refused where the program
+/// binds `do7`, and is a plain name where it does not.
+#[test]
+fn a_half_copied_answer_is_caught_by_the_program_lookup_not_by_shape() {
+    for p in MINIFIER_PROFILES {
+        let binds = MinifiedStems::from_names(p, ["do7", "H6t"]);
+        assert_eq!(
+            borrowed_minified_stem("do7Function", &binds),
+            Some("do7"),
+            "{p:?}"
+        );
+        assert_eq!(
+            borrowed_minified_stem("H6tClass", &binds),
+            Some("H6t"),
+            "{p:?}"
+        );
+        let other = MinifiedStems::from_names(p, ["H6t"]);
+        assert_eq!(borrowed_minified_stem("do7Function", &other), None, "{p:?}");
     }
 }
 
@@ -214,9 +257,10 @@ fn the_not_minified_profile_reads_nothing() {
     }
 }
 
-/// The renamer-alphabet tokens are a subset of the Bun ones.
+/// The minifier profiles share one rule today (the measured shapes agree,
+/// module doc): the same verdict on every name.
 #[test]
-fn the_renamer_profile_nests_inside_bun() {
+fn the_minifier_profiles_agree() {
     let names = SHARED_TOKENS.iter().chain(REAL_NAMES).copied().chain([
         "p5e",
         "$me",
@@ -227,10 +271,14 @@ fn the_renamer_profile_nests_inside_bun() {
         "zz",
         "Kq$",
         "h1Title",
+        "user$",
+        "_k_",
     ]);
     for n in names {
-        let r = is_minifier_token(NameProfile::Esbuild, n);
-        assert!(!r || is_minifier_token(NameProfile::Bun, n), "{n:?}");
+        let bun = is_minifier_token(NameProfile::Bun, n);
+        for p in MINIFIER_PROFILES {
+            assert_eq!(is_minifier_token(p, n), bun, "{p:?} {n:?}");
+        }
     }
 }
 
@@ -239,13 +287,11 @@ fn the_renamer_profile_nests_inside_bun() {
 fn the_derived_predicates_follow_the_profile() {
     let e = NameProfile::Esbuild;
     // An LLM answer wearing the conflict ladder's tail, a mint head or a
-    // `$`: junk to the Bun sweep, a plain name to the esbuild one.
+    // `$` at length 5+: a plain name to every sweep, Bun's included.
     for answer in ["fsPromises_", "x1Coordinate", "foo$bar"] {
-        assert!(
-            !is_sweep_answer_acceptable(NameProfile::Bun, answer),
-            "{answer}"
-        );
-        assert!(is_sweep_answer_acceptable(e, answer), "{answer}");
+        for p in MINIFIER_PROFILES {
+            assert!(is_sweep_answer_acceptable(p, answer), "{p:?} {answer}");
+        }
     }
     // `p5e` — an esbuild 3-character mint: below the floor and an echo.
     assert!(is_below_floor_name(e, "p5e"));
@@ -253,11 +299,13 @@ fn the_derived_predicates_follow_the_profile() {
     for p in MINIFIER_PROFILES {
         assert!(is_minified_echo(p, "Qe", "Qe"), "{p:?}");
     }
-    // The half-mint head reads the HEAD's shape outside Bun.
-    assert!(is_half_mint_head(e, "do7Function"));
-    assert!(is_half_mint_head(e, "T7Class"));
-    assert!(!is_half_mint_head(e, "v8Engine"));
-    assert!(!is_half_mint_head(e, "h1Title"));
+    // The half-mint head reads the HEAD's shape, under every profile.
+    for p in MINIFIER_PROFILES {
+        assert!(is_half_mint_head(p, "do7Function"), "{p:?}");
+        assert!(is_half_mint_head(p, "T7Class"), "{p:?}");
+        assert!(!is_half_mint_head(p, "v8Engine"), "{p:?}");
+        assert!(!is_half_mint_head(p, "h1Title"), "{p:?}");
+    }
 }
 
 /// The borrowed-stem check's PROGRAM LOOKUP is always on: under every
@@ -284,9 +332,10 @@ fn the_borrowed_stem_lookup_runs_under_every_profile() {
         );
         assert!(is_borrowable_stem(p, "p5e"), "{p:?}");
     }
-    // The guard outside Bun is the renamer alphabet's 3-4 characters: a
-    // program binding `is2017` (a real name, not a mint) lends no stem.
-    for p in [NameProfile::Esbuild, NameProfile::NotMinified] {
+    // The guard is the renamer alphabet's 3-4 characters under every
+    // profile: a program binding `is2017` (a real name, not a mint) lends
+    // no stem.
+    for p in NAME_PROFILES {
         let stems = MinifiedStems::from_names(p, ["is2017"]);
         assert!(!is_borrowable_stem(p, "is2017"), "{p:?}");
         assert_eq!(

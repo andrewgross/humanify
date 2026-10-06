@@ -8,7 +8,14 @@ use crate::rename::eligibility::is_eligible;
 use crate::rename::floor::{is_below_floor_name, is_decorated_descriptive, is_minifier_token};
 use crate::rename::name_profile::NameProfile;
 
-/// The truth table pins the BUN profile (the TS `isBunToken` it froze).
+/// The truth table pins the BUN profile (the TS `isBunToken` it froze;
+/// its `isBunToken` / `isBelowFloorName` rows re-cut 2026-10-06 when the
+/// Bun profile became the shared measured renamer shape — 14 names whose
+/// only minted signal was a Claude-Code-calibrated long shape: `___`,
+/// `__a$b`, `__webpack_require__`, `_foo_bar_`, `fsPromises_`,
+/// `initializeApp_`, `initializeApp__`, `T7Class`, `do7Function`,
+/// `sm6Factory`, `h06Result`, `j3lResult`, `LZ77Compressor`,
+/// `P2PConnection`).
 const BUN: NameProfile = NameProfile::Bun;
 use crate::rename::validated::target::{
     GLOBAL_BUILTINS, RESERVED_WORDS, is_valid_identifier, is_valid_rename_target,
@@ -113,7 +120,7 @@ fn single_letters_are_minted_but_acceptable_sweep_answers() {
         );
     }
     // A letter with the conflict ladder's tail is a plain mint both sides
-    // of the change (it was `is_bun_token` via the trailing `_` before).
+    // of the change (a trailing `_` is judged by the name it decorates).
     assert!(is_minifier_token(BUN, "x_"));
     assert!(!is_single_letter("x_"));
 
@@ -130,12 +137,20 @@ fn single_letters_are_minted_but_acceptable_sweep_answers() {
             "{name:?} is a real name"
         );
     }
-    for name in ["a1b", "x_", "Kq$", "zz", "q7", "do7Function"] {
+    for name in ["a1b", "x_", "Kq$", "zz", "q7"] {
         assert!(
             !is_sweep_answer_acceptable(BUN, name),
             "{name:?}: the sweep refuses re-minted junk"
         );
     }
+}
+
+/// A half-copied answer is the program lookup's to refuse since
+/// 2026-10-06 (`floor::borrowed_minified_stem`), not a shape's.
+#[test]
+fn a_long_half_minted_answer_passes_the_sweep_shape_filter() {
+    use crate::rename::floor::is_sweep_answer_acceptable;
+    assert!(is_sweep_answer_acceptable(BUN, "do7Function"));
 }
 
 #[test]
@@ -158,14 +173,16 @@ fn wordless_mint_shape_and_half_mint_head() {
     assert!(!is_half_mint_head(BUN, "options"));
 }
 
-/// The minifier name profile split (2026-10-03) must leave Bun runs
-/// byte-identical: the Bun profile reproduces main's predicates EXACTLY
-/// on a frozen battery (test/parity/name-profile-bun-battery.json —
-/// 4,017 names: a sample of 2.1.119's minified bindings, every recorded
-/// 2.1.119 answer the borrowed-stem check refused, and a sample of the
-/// rest of the 991k recorded answers; written by main's floor.rs before
-/// the split). The full corpus (562,438 names, 991,371 answer rows) was
-/// replayed once off-repo with zero differences.
+/// The Bun profile reproduces a frozen battery EXACTLY
+/// (test/parity/name-profile-bun-battery.json — 4,017 names: a sample of
+/// 2.1.119's minified bindings, every recorded 2.1.119 answer the
+/// borrowed-stem check refused, and a sample of the rest of the 991k
+/// recorded answers). First written by main's floor.rs before the
+/// 2026-10-03 profile split (the full corpus replayed with zero
+/// differences then); RE-RECORDED 2026-10-06 when the Bun profile became
+/// the shared measured renamer shape and the program lookup learned
+/// `$`/`_` names (scan B1) — every flip is listed in
+/// docs/rust-port/16-findings-queue.md #93.
 #[test]
 fn the_bun_profile_reproduces_the_frozen_battery() {
     use crate::rename::floor::{

@@ -108,10 +108,10 @@ matches (more names asked fresh), not wrong code.
 
 ## Name shape (the minifier name profiles)
 
-| Value                                                                                                        | Where                                                                                     | Measured on                                     | Depends on | Why it should carry over                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bun profile's extra rules (`$` anywhere, `_` tail, mint head at any length), and Bun as the fallback profile | `rename/floor.rs:155` (`is_bun_token`); `rename/name_profile.rs:130` (`FALLBACK_PROFILE`) | **CC** ("calibrated on the Claude Code corpus") | **app**    | Does not carry over: flags `user$`, `$scope`, `clicks$` as minted on any unsure input. Finding B1 of the naming scan; fixing it changes Claude Code bytes, so it rides an eval. |
-| Word lists `SHORT_WORDS`, `DOMAIN_STEMS`, `TECH_TERMS`                                                       | `rename/floor.rs`                                                                         | CC (false positives and recorded answers)       | code shape | General programming vocabulary, open lists; other apps will need more entries (`ed25519`, `p256`). `it2` (iTerm2, app vocabulary) was removed 2026-10-05.                       |
+| Value                                                                                                                                                                                                                  | Where                                                                                 | Measured on                                                                                                                                | Depends on | Why it should carry over                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The minifier profiles' shared shape (Bun, esbuild, terser, swc): a 1-2 unit non-word or a whole 3-4 unit renamer-alphabet name with a mint head or `$`; a trailing `_` judged by its stem. Bun is the fallback profile | `rename/floor.rs` (`is_renamer_token`); `rename/name_profile.rs` (`FALLBACK_PROFILE`) | minifier output (bun 1.3.14, esbuild 0.27.2, terser 5.51.2 on typescript.js, 2026-10-03; replayed over the 8 Claude Code inputs' bindings) | bundler    | It is what the minifiers' renamers emit, not what one app contains. Until 2026-10-06 the Bun profile added three rules calibrated on Claude Code (`$` anywhere, `_` tail, mint head at any length) that flagged `user$`, `$scope`, `clicks$` on any unsure input; removed (finding #93, scan B1) — copying a minified name is now the program lookup's question. |
+| Word lists `SHORT_WORDS`, `DOMAIN_STEMS`, `TECH_TERMS`                                                                                                                                                                 | `rename/floor.rs`                                                                     | CC (false positives and recorded answers)                                                                                                  | code shape | General programming vocabulary, open lists; other apps will need more entries (`ed25519`, `p256`). `it2` (iTerm2, app vocabulary) was removed 2026-10-06 (finding #93).                                                                                                                                                                                          |
 
 ## Vendor modules (code shape)
 
@@ -127,20 +127,22 @@ matches (more names asked fresh), not wrong code.
 | Measured on             | Rows |
 | ----------------------- | ---: |
 | none / TS with no basis |   24 |
-| Claude Code (± model)   |   11 |
+| Claude Code (± model)   |   10 |
 | model only              |    1 |
+| minifier output         |    1 |
 
 | Depends on   | Rows | Of which tuned on Claude Code |
 | ------------ | ---: | ----------------------------: |
 | model/server |   13 |                             3 |
 | code shape   |   16 |                             5 |
-| bundler      |    3 |                             0 |
-| app          |    4 |                             3 |
+| bundler      |    4 |                             0 |
+| app          |    3 |                             2 |
 
 20 rows have no argument on record for carrying over (marked "Unmeasured" or
 "not on record"), `MAX_ENCLOSING_STMT_LINES` among them by its own comment.
 
-The four app-dependent rows are the ones that break the rule: the Bun name
-profile's Claude Code calibration, the fresh-grouping folder targets, the
-content-anchor string length (safe direction), and the ledger's 5 MB quirk
-(diagnostic only, copied from Babel rather than tuned on Claude Code).
+The three app-dependent rows are the ones that break the rule: the
+fresh-grouping folder targets, the content-anchor string length (safe
+direction), and the ledger's 5 MB quirk (diagnostic only, copied from Babel
+rather than tuned on Claude Code). The fourth, the Bun name profile's Claude
+Code calibration, was removed 2026-10-06 (finding #93).

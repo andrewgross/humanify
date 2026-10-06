@@ -857,6 +857,24 @@ question are handed no profile (finding #81, review R24): the finish's
 relink and its bundle carry (a replay of renames already decided) use
 `RenameState::for_replay`; asking that state for a profile panics.
 
+**Bun profile made generic (2026-10-06, finding #93, scan B1):** the Bun
+profile's three extra rules — `$` anywhere, any trailing `_`, a mint head at
+ANY length — were calibrated on the Claude Code corpus to catch the model's
+half-copied answers (`do7Function`), not on what Bun emits, and as the
+fallback for every unsure input they flagged real names in other apps
+(`user$`, `$scope`, `$store`, `to_string`). They are gone: bun, esbuild,
+terser and swc share ONE measured renamer shape (`floor::is_renamer_token`:
+a 1-2 unit non-word, or a whole 3-4 unit renamer-alphabet name with a mint
+head or `$`; a trailing `_` is judged by the name it decorates, so Bun's
+`_k_` / `H2_` stay minted). Replayed over every binding of the eight Claude
+Code inputs, the new and old Bun verdicts differ on one name, `___` (a
+convention placeholder). "The answer copies a minified name" is now the
+PROGRAM LOOKUP's job alone (`floor::borrowed_minified_stem`), which also
+reads `$`/`_`-bearing minified names (`initJw$` copies `Jw$`). So the
+unsure-input fallback no longer assumes anything about the app, and the
+guarantee "Bun is byte-for-byte today's" is retired by decision (it rides
+the batched cold eval). `it2` left the exempt stems with it.
+
 **Interface this spec needs:** a `NameProfile` value, chosen once from the
 minifier verdict and passed to every caller above, answering at least:
 
@@ -866,10 +884,12 @@ minifier verdict and passed to every caller above, answering at least:
 - the single-letter and convention exceptions, which are policy (Andrew's
   2026-09-30 decisions) and should stay shared, not per-profile.
 
-**Must guarantee:** the Bun profile is byte-for-byte today's behaviour (prove
-with a warm neutrality run on a Claude Code pair); an unsure verdict (P1)
-picks the Bun profile, not a guessed one; a "not minified" verdict picks a
-profile that counts nothing as minted.
+**Must guarantee:** an unsure verdict (P1) picks the Bun profile, not a
+guessed one — and since 2026-10-06 the Bun profile is the generic renamer
+shape, so that fallback is app-neutral; a "not minified" verdict picks a
+profile that counts nothing as minted. (Until 2026-10-06 this also required
+the Bun profile to stay byte-for-byte the old Claude-Code-calibrated rule;
+finding #93 changed that deliberately.)
 
 **What terser/esbuild profiles need that Bun's lacks:** digit-free 3-letter
 names drawn from the minifier's letter-frequency alphabet (I22).
