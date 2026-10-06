@@ -50,8 +50,6 @@ pub struct StableSplitLedger {
     #[serde(default)]
     pub hash_version: Option<u64>,
     #[serde(default)]
-    pub aliases: Option<HashMap<String, String>>,
-    #[serde(default)]
     pub fossil_modules: Option<Vec<FossilLedgerModule>>,
 }
 

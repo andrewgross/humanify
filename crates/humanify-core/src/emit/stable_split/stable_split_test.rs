@@ -3,7 +3,6 @@
 
 use std::collections::HashMap;
 
-use humanify_model::js::JsValue;
 use serde_json::Value;
 
 use super::{InputGate, SplitOptions, stable_split};
@@ -14,11 +13,13 @@ use crate::place::placement_dump::Regime;
 /// Finding #40: a prior ledger whose names place `xa` in a.js and `yb`,
 /// `zb` in b.js makes a load-time reference cycle (a.js reads b.js's `yb`
 /// at load, b.js reads a.js's `xa`) — the runnable emit declines, the
-/// byte-exact review tree is written, and the PERSISTED ledger keeps the
-/// aliases the TS emit had assigned before it threw (the wp53 vector of
-/// the same fixture records the TS's).
+/// byte-exact review tree is written. The persisted ledger used to keep
+/// the aliases the TS emit had assigned before it threw; aliases are per
+/// importer now and carried from the prior tree's require lines (finding
+/// #88), so the ledger records none — and a review tree has no require
+/// lines to carry.
 #[test]
-fn a_declined_emit_persists_the_ts_aliases() {
+fn a_declined_emit_writes_the_review_tree_and_records_no_aliases() {
     let vectors: Vec<Value> =
         serde_json::from_str(include_str!("../../../../../test/parity/wp53-cjs.json"))
             .expect("vectors");
@@ -50,7 +51,6 @@ fn a_declined_emit_persists_the_ts_aliases() {
         emit_names: None,
         emit_indexes: None,
         hash_version: None,
-        aliases: None,
         fossil_modules: None,
     };
     let outcome = stable_split(
@@ -60,6 +60,7 @@ fn a_declined_emit_persists_the_ts_aliases() {
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             markers: MarkerOffer::NotProvided,
             prior: Some(&prior),
+            prior_tree: None,
             carry: None,
             namer: None,
             reviser: None,
@@ -81,26 +82,10 @@ fn a_declined_emit_persists_the_ts_aliases() {
     );
     assert!(outcome.runnable.is_none(), "the review tree is written");
     let ledger = outcome.ledger.as_object().expect("a ledger object");
-    let aliases: Vec<(String, String)> = match ledger.get("aliases") {
-        Some(JsValue::Object(o)) => o
-            .entries()
-            .iter()
-            .map(|(f, a)| (f.clone(), a.as_str().unwrap_or_default().to_string()))
-            .collect(),
-        other => panic!("the declined ledger has no aliases: {other:?}"),
-    };
-    let ts: Vec<(String, String)> = v["declinedLedger"]["aliases"]
-        .as_array()
-        .expect("ts aliases")
-        .iter()
-        .map(|e| {
-            (
-                e[0].as_str().unwrap().to_string(),
-                e[1].as_str().unwrap().to_string(),
-            )
-        })
-        .collect();
-    assert_eq!(aliases, ts);
+    assert!(
+        ledger.get("aliases").is_none(),
+        "the ledger records no aliases"
+    );
     assert!(
         ledger.get("emitIndexes").is_none(),
         "the layout was never recorded"
@@ -138,6 +123,7 @@ fn bridge_options<'a>(
         module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         markers: MarkerOffer::NotProvided,
         prior: None,
+        prior_tree: None,
         carry: None,
         namer: None,
         reviser: None,
@@ -288,6 +274,7 @@ fn gated_options<'a>(original_bundle: Option<&'a str>) -> SplitOptions<'a, 'a> {
         module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
         markers: MarkerOffer::NotProvided,
         prior: None,
+        prior_tree: None,
         carry: None,
         namer: None,
         reviser: None,

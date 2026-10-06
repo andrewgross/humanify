@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use super::{RunnableInput, emit_runnable_cjs, wrapper_view};
 use crate::emit::align::AlignSwitches;
+use crate::emit::import_alias::PriorImportAliases;
 use crate::emit::load_order::bundle_load_order_facts;
 use crate::ingest::Ingest;
 use crate::modules::wrapper::find_wrapper_function;
@@ -32,9 +33,16 @@ fn replay(v: &Value) -> Result<(), String> {
     let files = strings(&v["files"]);
     let emit_hashes = strings(&v["emitHashes"]);
     let bundle_hashes = strings(&v["bundleHashes"]);
-    let prior_aliases: Option<HashMap<String, String>> = v["priorAliases"].as_object().map(|m| {
-        m.iter()
+    // The TS's prior aliases were one per module tree-wide, so every
+    // importer's prior require line bound that alias.
+    let prior_aliases: Option<PriorImportAliases> = v["priorAliases"].as_object().map(|m| {
+        let per_module: HashMap<String, String> = m
+            .iter()
             .map(|(k, a)| (k.clone(), a.as_str().expect("alias").to_string()))
+            .collect();
+        files
+            .iter()
+            .map(|f| (f.clone(), per_module.clone()))
             .collect()
     });
     let allocator = Allocator::default();
@@ -70,20 +78,9 @@ fn replay(v: &Value) -> Result<(), String> {
     match (got, v["declined"].as_str()) {
         (Err(rust), Some(ts)) if rust.reason == ts => {
             // Finding #40: what the decline leaves on the persisted ledger
-            // — the aliases once the plan is built, the emitted layout once
-            // the tree is being assembled.
+            // — the emitted layout once the tree is being assembled. (The
+            // TS's `aliases` are no longer recorded: finding #88.)
             let want = &v["declinedLedger"];
-            let ts_aliases: Option<Vec<(String, String)>> = want["aliases"].as_array().map(|a| {
-                a.iter()
-                    .map(|e| (strings(e)[0].clone(), strings(e)[1].clone()))
-                    .collect()
-            });
-            if rust.aliases != ts_aliases {
-                return Err(format!(
-                    "declined ledger aliases: rust {:?}, ts {ts_aliases:?}",
-                    rust.aliases
-                ));
-            }
             let ts_indexes: Option<Vec<usize>> = want["emitIndexes"].as_array().map(|a| {
                 a.iter()
                     .map(|x| x.as_u64().expect("index") as usize)
@@ -134,11 +131,20 @@ fn replay(v: &Value) -> Result<(), String> {
                     )
                 })
                 .collect();
-            if tree.aliases != ts_aliases {
-                return Err(format!(
-                    "aliases: rust {:?}, ts {ts_aliases:?}",
-                    tree.aliases
-                ));
+            // Per importer now (finding #88): every require the tree
+            // writes must bind the TS's one-per-module alias — true on
+            // every vector, none of which has two importers disagree.
+            let ts_alias: HashMap<&str, &str> = ts_aliases
+                .iter()
+                .map(|(f, a)| (f.as_str(), a.as_str()))
+                .collect();
+            for (importer, module, alias) in &tree.aliases {
+                if ts_alias.get(module.as_str()) != Some(&alias.as_str()) {
+                    return Err(format!(
+                        "{importer} binds {module} to {alias}, ts {:?}",
+                        ts_alias.get(module.as_str())
+                    ));
+                }
             }
             let ts_indexes: Vec<usize> = v["emitIndexes"]
                 .as_array()
@@ -157,10 +163,17 @@ fn replay(v: &Value) -> Result<(), String> {
     }
 }
 
-/// Emit `code` with statement `i` in `order[i]`, write the tree to a temp
-/// dir and run its entry under Node: (exit status, stdout, stderr), plus
-/// the tree.
-fn emit_and_run(code: &str, order: &[&str]) -> (bool, String, String, Vec<(String, String)>) {
+/// Emit `code` with statement `i` in `order[i]` (the ledger files in
+/// first-appearance order); the tree, or the decline reason.
+fn emit_tree(code: &str, order: &[&str]) -> super::RunnableTree {
+    emit_tree_with_prior(code, order, None)
+}
+
+fn emit_tree_with_prior(
+    code: &str,
+    order: &[&str],
+    prior: Option<&PriorImportAliases>,
+) -> super::RunnableTree {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "fixture.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
@@ -182,7 +195,7 @@ fn emit_and_run(code: &str, order: &[&str]) -> (bool, String, String, Vec<(Strin
         }
     }
     let names = vec![None; order.len()];
-    let tree = emit_runnable_cjs(&RunnableInput {
+    emit_runnable_cjs(&RunnableInput {
         layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
         code,
         semantic: ingest.semantic(),
@@ -192,14 +205,21 @@ fn emit_and_run(code: &str, order: &[&str]) -> (bool, String, String, Vec<(Strin
         order: &order,
         emit_hashes: &input.hashes,
         emit_names: &[],
-        prior_aliases: None,
+        prior_aliases: prior,
         bundle_hashes: &input.hashes,
         bundle_names: &names,
         facts: &facts,
         switches: AlignSwitches::default(),
         forced_exports: &[],
     })
-    .unwrap_or_else(|d| panic!("declined: {}", d.reason));
+    .unwrap_or_else(|d| panic!("declined: {}", d.reason))
+}
+
+/// Emit `code` with statement `i` in `order[i]`, write the tree to a temp
+/// dir and run its entry under Node: (exit status, stdout, stderr), plus
+/// the tree.
+fn emit_and_run(code: &str, order: &[&str]) -> (bool, String, String, Vec<(String, String)>) {
+    let tree = emit_tree(code, order);
     let dir = std::env::temp_dir().join(format!(
         "humanify-load-order-{}-{}",
         std::process::id(),
@@ -291,4 +311,119 @@ fn every_ts_vector_replays_byte_for_byte() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+}
+
+/// The require line `importer` writes for `module` in an emitted tree.
+fn require_line_of(files: &[(String, String)], importer: &str, module_rel: &str) -> String {
+    let text = &files
+        .iter()
+        .find(|(p, _)| p == importer)
+        .expect("importer")
+        .1;
+    text.lines()
+        .find(|l| l.contains(&format!("require(\"{module_rel}\")")))
+        .unwrap_or_else(|| panic!("{importer} has no require of {module_rel}:\n{text}"))
+        .to_string()
+}
+
+/// The validatePathVal case (eval review 2026-10-05, 2.1.216): ONE
+/// importer gained a local named like the module's alias, and the alias
+/// widened in all 91 importers. Each importer now chooses its own alias:
+/// only the importer holding the clashing name widens.
+fn validate_path_val_fixture() -> (String, Vec<&'static str>) {
+    shadowing_fixture(
+        "",
+        "var validatePathVal = checkPath(r); return validatePathVal;",
+    )
+}
+
+/// The fixture with `a_local` in a.js's function body and `rule_body` in
+/// parse-tool-rule.js's.
+fn shadowing_fixture(a_local: &str, rule_body: &str) -> (String, Vec<&'static str>) {
+    let mut code = String::from("(function (exports, require, module) {\n");
+    code.push_str("  var checkPath = function (p) { return p.length > 0; };\n");
+    code.push_str(&format!(
+        "  function useA() {{ {a_local} return checkPath(\"a\"); }}\n"
+    ));
+    code.push_str("  var useB = checkPath(\"b\");\n");
+    code.push_str(&format!("  function parseRule(r) {{ {rule_body} }}\n"));
+    let mut order = vec![
+        "src/validatePathVal.js",
+        "src/a.js",
+        "src/b.js",
+        "src/parse-tool-rule.js",
+    ];
+    for i in 0..55 {
+        code.push_str(&format!("  var pad{i:02} = {i};\n"));
+        order.push("pad/fill.js");
+    }
+    code.push_str("});\n");
+    (code, order)
+}
+
+#[test]
+fn a_clash_in_one_importer_widens_only_that_importers_alias() {
+    let (code, order) = validate_path_val_fixture();
+    let tree = emit_tree(&code, &order);
+    assert_eq!(
+        require_line_of(&tree.files, "src/a.js", "./validatePathVal.js"),
+        "const validatePathVal = require(\"./validatePathVal.js\");"
+    );
+    assert_eq!(
+        require_line_of(&tree.files, "src/b.js", "./validatePathVal.js"),
+        "const validatePathVal = require(\"./validatePathVal.js\");"
+    );
+    assert_eq!(
+        require_line_of(
+            &tree.files,
+            "src/parse-tool-rule.js",
+            "./validatePathVal.js"
+        ),
+        "const srcValidatePathVal = require(\"./validatePathVal.js\");"
+    );
+}
+
+/// A warm hop carries each importer's OWN prior alias, read from its own
+/// require line in the prior tree: parse-tool-rule.js keeps its widened
+/// alias after the shadowing local is gone (stable per file), and when
+/// a.js gains the clashing local next, only a.js's alias moves.
+#[test]
+fn each_importer_carries_its_own_prior_alias() {
+    let (code, order) = validate_path_val_fixture();
+    let v1 = emit_tree(&code, &order);
+    let read = |tree: &super::RunnableTree| {
+        let files: Vec<String> = tree.files.iter().map(|(p, _)| p.clone()).collect();
+        crate::emit::import_alias::read_prior_import_aliases(&files, |f| {
+            tree.files
+                .iter()
+                .find(|(p, _)| p == f)
+                .map(|(_, t)| t.clone())
+        })
+    };
+    let (code2, order2) = shadowing_fixture("", "return checkPath(r);");
+    let v2 = emit_tree_with_prior(&code2, &order2, Some(&read(&v1)));
+    let rule = "src/parse-tool-rule.js";
+    let m = "./validatePathVal.js";
+    assert_eq!(
+        require_line_of(&v2.files, rule, m),
+        "const srcValidatePathVal = require(\"./validatePathVal.js\");"
+    );
+    assert_eq!(
+        require_line_of(&v2.files, "src/a.js", m),
+        "const validatePathVal = require(\"./validatePathVal.js\");"
+    );
+    let (code3, order3) = shadowing_fixture("var validatePathVal = 0;", "return checkPath(r);");
+    let v3 = emit_tree_with_prior(&code3, &order3, Some(&read(&v2)));
+    assert_eq!(
+        require_line_of(&v3.files, "src/a.js", m),
+        "const srcValidatePathVal = require(\"./validatePathVal.js\");"
+    );
+    assert_eq!(
+        require_line_of(&v3.files, "src/b.js", m),
+        "const validatePathVal = require(\"./validatePathVal.js\");"
+    );
+    assert_eq!(
+        require_line_of(&v3.files, rule, m),
+        "const srcValidatePathVal = require(\"./validatePathVal.js\");"
+    );
 }

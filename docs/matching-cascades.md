@@ -221,22 +221,26 @@ flowchart TD
     o4 --> oe(["emitted order"])
   end
 
-  subgraph alias["import alias — buildNsVars"]
-    a0{"<b>0. prior alias</b><br/>uncontested among prior claims<br/>AND still legal"} -->|"yes"| ak(["keep it"])
+  subgraph alias["import alias — emit::import_alias, PER IMPORTING FILE"]
+    a0{"<b>0. this file's prior alias</b><br/>(its own require line in the prior tree)<br/>uncontested in this file AND still free"} -->|"yes"| ak(["keep it"])
     a0 -->|"no"| a1["<b>ladder:</b> basename → widen up the<br/>path → sanitized path → path hash"]
-    a1 --> a2{"contested by two files<br/>at this tier?"}
-    a2 -->|"yes"| a3["<b>NEITHER takes it</b><br/>both widen a tier"]
+    a1 --> a2{"wanted by two modules<br/>THIS FILE imports, at this rung?"}
+    a2 -->|"yes"| a3["<b>NEITHER takes it</b><br/>both widen a rung"]
     a3 --> a1
-    a2 -->|"no"| a4{"<b>nsNameIsFree</b><br/>valid ident · not reserved · not a<br/>global · unclaimed · <b>not shadowed in<br/>ANY importing file</b>"}
+    a2 -->|"no"| a4{"<b>free</b><br/>valid ident · not reserved · not a<br/>global · unclaimed in this file ·<br/>not a wrapper param · <b>not a name<br/>THIS FILE uses</b>"}
     a4 -->|"no"| a1
     a4 -->|"yes"| ak
   end
 ```
 
-The bolded clause in `nsNameIsFree` is the mechanism exp051 measured and declined
-to change: aliases are **one per module tree-wide**, so one importer gaining a
-local named `kairosCron` widened the alias in all ~20 importers
-(`kairosCron → logTaskEventKairosCron`, ≤256 git lines on 118→119).
+Until finding #88 (2026-10-06) the alias was **one per module tree-wide**: free
+meant "not shadowed in ANY importing file", and a basename shared with any other
+file anywhere was contested, so one importer gaining a local named `kairosCron`
+widened the alias in all ~20 importers (`kairosCron → logTaskEventKairosCron`;
+exp051 measured ≤256 git lines on 118→119 and declined it; exp057 re-measured
+the usage sites; 2.1.216's `validatePathVal → srcValidatePathVal` hit all 91
+importers). Now a clash in one importer moves only that importer's alias, and the
+same module may be bound under different aliases in different files.
 
 ## E. Vendor
 
