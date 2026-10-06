@@ -41,6 +41,14 @@ use crate::twins::fossil::{MarkerCoverage, marker_coverage};
 /// `bun-mixed` fixture (two of six modules lazy) and `bun-plain` (none).
 pub const MARKER_COVERAGE_THRESHOLD: f64 = 0.99;
 
+/// Do the module markers describe the bundle — every source file one
+/// recorded module? The ONE rule: the split method reads it, and so does
+/// the naming stage's module step (`naming::module_names`), which names
+/// each module once for both its file and its wrapper.
+pub fn markers_describe_bundle(coverage: &MarkerCoverage) -> bool {
+    coverage.modules > 0 && coverage.share() >= MARKER_COVERAGE_THRESHOLD
+}
+
 /// Whether the run's toolchain offers the module markers at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MarkerOffer {
@@ -102,7 +110,7 @@ pub fn choose_split_method(
                 c.modules,
                 percent(share)
             );
-            if share >= MARKER_COVERAGE_THRESHOLD {
+            if markers_describe_bundle(&c) {
                 return SplitChoice {
                     regime: Regime::Fossil,
                     coverage: Some(c),

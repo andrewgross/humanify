@@ -48,9 +48,8 @@ pub struct SplitOptions<'a, 'n> {
     pub prior_tree: Option<&'a std::path::Path>,
     /// The tiers regime's carry (`renameResult.priorCarry`).
     pub carry: Option<PriorCarry>,
-    /// The fossil regime's mint namer / the fresh regime's file namer —
-    /// handed over whatever the method; the chosen method decides whether
-    /// it is asked ([`namers_used`]).
+    /// The fresh regime's file namer — handed over whatever the method;
+    /// the chosen method decides whether it is asked ([`namers_used`]).
     pub namer: Option<&'n mut dyn SplitNamer>,
     /// The fresh regime's holistic top-level reviser (same rule).
     pub reviser: Option<&'n mut dyn TreeReviser>,
@@ -105,13 +104,12 @@ pub enum InputGate<'a> {
 }
 
 /// Which of the split's namers the chosen method asks: the marker method
-/// names fresh module mints only on a warm hop (a prior exists), the
-/// prior's layout names nothing, the fresh grouping names files and
-/// folders and revises the top level.
-pub fn namers_used(regime: Regime, prior_present: bool) -> (bool, bool) {
+/// none (its files take the module names the naming stage gave the
+/// wrappers, docs/design/module-naming.md), the prior's layout none, the
+/// fresh grouping names files and folders and revises the top level.
+pub fn namers_used(regime: Regime) -> (bool, bool) {
     match regime {
-        Regime::Fossil => (prior_present, false),
-        Regime::Tiers => (false, false),
+        Regime::Fossil | Regime::Tiers => (false, false),
         Regime::Cluster => (true, true),
     }
 }
@@ -204,6 +202,12 @@ fn fossil_module_js(m: &FossilLedgerModule) -> JsValue {
     // esbuild's unminified builds carry the module's original source path
     // (exp075) — recorded, never load-bearing.
     o.insert_opt("sourcePath", m.source_path.as_deref().map(JsValue::str));
+    // The next hop's same-file-name match reads it (the file carries the
+    // module's name, docs/design/module-naming.md).
+    o.insert_opt(
+        "mechanicalStem",
+        m.mechanical_stem.as_deref().map(JsValue::str),
+    );
     JsValue::Object(o)
 }
 
@@ -275,7 +279,7 @@ pub fn stable_split(shipped: &str, options: SplitOptions<'_, '_>) -> Result<Spli
     // coverage of the app code, module factories set aside.
     let coverage = bundle_marker_coverage(&input, shipped, options.module_wrappers);
     let method = choose_split_method(options.markers, options.prior.is_some(), Some(coverage));
-    let (use_namer, use_reviser) = namers_used(method.regime, options.prior.is_some());
+    let (use_namer, use_reviser) = namers_used(method.regime);
     let module_ends = module_ends_kept(&method, options.markers, &input.body);
     drop(ph);
     let ph = phase("split:assign");

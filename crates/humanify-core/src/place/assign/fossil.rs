@@ -5,8 +5,15 @@
 //! - each fossil module ([`crate::twins::fossil`]) becomes ONE file;
 //! - a module matched to the prior release ([`super::fossil_match`])
 //!   inherits its prior file path VERBATIM;
-//! - unmatched modules mint a content-derived name (LLM-polished by the
-//!   mint namer on warm hops), never a guess and never a position;
+//! - an unmatched module is named by its MODULE NAME, read back from its
+//!   lazy-init wrapper (`initColorUtils` → `color-utils.js`): the naming
+//!   stage's module step (`naming::module_names`) asked the model what the
+//!   file is for and named the wrapper so, and the wrapper's name is the
+//!   single record of it ([`module_stem_of_wrapper`]). A wrapper that does
+//!   not carry one (a barrel's, a refused answer's) falls back to the
+//!   mechanical [`module_stem`] — never a guess and never a position. The
+//!   same stems name the inferred folders. (The warm-hop mint namer this
+//!   replaced went away with it, 2026-10-06.)
 //! - the eager zone (entry tail, no fossil) goes to `src/index.js`.
 //!
 //! Folder hierarchy is INFERRED from the import DAG ([`infer_fossil_placements`]):
@@ -20,9 +27,8 @@ use humanify_model::js::{cmp_utf16, utf16_len};
 use serde_json::Value;
 
 use super::fossil_match::{FossilSignature, match_fossil_modules};
-use super::namer::{NameKind, SplitNameRequest, SplitNamer};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
-use crate::place::stems::{accept_proposed_name, stem_of};
+use crate::place::stems::{module_stem_of_wrapper, stem_of};
 use crate::place::trail::{PlacementTrail, TrailEntry};
 use crate::twins::fossil::{FossilExtract, FossilModule, declared_names, extract_fossil_modules};
 
@@ -61,7 +67,9 @@ pub struct FossilStats {
     pub modules: usize,
     pub inherited_files: usize,
     pub fresh_named_files: usize,
-    pub llm_named_mints: usize,
+    /// Fresh files named by their module name (read back from the
+    /// wrapper), not the mechanical stem.
+    pub module_named_files: usize,
     pub eager_statements: usize,
     pub match_tiers: Vec<(String, usize)>,
     pub hoisted_singletons: usize,
@@ -502,22 +510,33 @@ fn collapse_small_folders(placements: Vec<FossilPlacement>, min: usize) -> Vec<F
     current
 }
 
+/// A module's file stem: its module name read back from its wrapper
+/// (`initColorUtils` → `color-utils`, [`module_stem_of_wrapper`]) — the
+/// flag says so — else the mechanical [`module_stem`].
+pub fn named_module_stem(module: &FossilModule, body: &[Value]) -> (String, bool) {
+    match module_stem_of_wrapper(&module.init_name) {
+        Some(stem) => (stem, true),
+        None => (module_stem(module, body), false),
+    }
+}
+
 /// `inferFossilPlacements`: the folder hierarchy inferred from the import
-/// DAG, one placement per module.
-pub fn infer_fossil_placements(
+/// DAG, one placement per module, over each module's file stem
+/// ([`named_module_stem`]).
+fn infer_fossil_placements(
     modules: &[FossilModule],
     body: &[Value],
+    stems: &[String],
     min_folder_files: usize,
 ) -> Vec<FossilPlacement> {
-    let stems: Vec<String> = modules.iter().map(|m| module_stem(m, body)).collect();
     let importers = compute_importers(modules);
     let mut placements: Vec<Option<FossilPlacement>> = vec![None; modules.len()];
-    place_barrels(modules, body, &stems, &importers, &mut placements);
-    place_by_dominant_importer(modules, &stems, &mut placements);
-    place_co_importer_groups(&stems, &importers, &mut placements);
+    place_barrels(modules, body, stems, &importers, &mut placements);
+    place_by_dominant_importer(modules, stems, &mut placements);
+    place_co_importer_groups(stems, &importers, &mut placements);
     let mut settled: Vec<FossilPlacement> = placements
         .into_iter()
-        .zip(&stems)
+        .zip(stems)
         .map(|(p, stem)| {
             p.unwrap_or_else(|| FossilPlacement {
                 folder: "src".to_string(),
@@ -595,79 +614,6 @@ fn claim_path(base: &str, used: &mut OrderedSet) -> String {
     }
 }
 
-/// `proposeMintStems`: batch-propose stems for the unmatched modules via
-/// the mint namer, keyed by module index (kebab of the validated camel
-/// proposal). Empty when there is no namer or nothing to mint.
-fn propose_mint_stems(
-    modules: &[FossilModule],
-    file_of_module: &[Option<String>],
-    placements: &[FossilPlacement],
-    used: &OrderedSet,
-    namer: Option<&mut dyn SplitNamer>,
-) -> HashMap<usize, String> {
-    let mut out = HashMap::new();
-    let Some(namer) = namer else {
-        return out;
-    };
-    let mints: Vec<usize> = (0..modules.len())
-        .filter(|&i| file_of_module[i].is_none())
-        .collect();
-    if mints.is_empty() {
-        return out;
-    }
-    // Siblings are the collision-relevant set: stems already claimed in the
-    // mint's target folder, in `used` order, capped at 20.
-    let mut stems_by_folder: Vec<(String, Vec<String>)> = Vec::new();
-    for path in &used.order {
-        let cut = path.rfind('/');
-        let folder = js_parent_slice_at(path, cut);
-        let base = cut.map_or(path.as_str(), |c| &path[c + 1..]);
-        let stem = base.strip_suffix(".js").unwrap_or(base).to_string();
-        match stems_by_folder.iter_mut().find(|(f, _)| *f == folder) {
-            Some((_, list)) => list.push(stem),
-            None => stems_by_folder.push((folder, vec![stem])),
-        }
-    }
-    let siblings_of = |folder: &str| -> Vec<String> {
-        stems_by_folder
-            .iter()
-            .find(|(f, _)| f == folder)
-            .map(|(_, list)| list.iter().take(20).cloned().collect())
-            .unwrap_or_default()
-    };
-    let requests: Vec<SplitNameRequest> = mints
-        .iter()
-        .map(|&i| SplitNameRequest {
-            kind: NameKind::File,
-            mechanical_stem: placements[i]
-                .file
-                .strip_suffix(".js")
-                .unwrap_or(&placements[i].file)
-                .to_string(),
-            siblings: siblings_of(&placements[i].folder),
-            bindings: modules[i].declared.iter().take(12).cloned().collect(),
-            members: None,
-            level: None,
-            evidence: None,
-        })
-        .collect();
-    let proposals = namer.name(&requests);
-    for (k, proposal) in proposals.into_iter().enumerate() {
-        if let Some(camel) = proposal.as_deref().and_then(accept_proposed_name) {
-            out.insert(mints[k], stem_of(&camel));
-        }
-    }
-    out
-}
-
-/// `path.slice(0, path.lastIndexOf("/"))` given the cut.
-fn js_parent_slice_at(path: &str, cut: Option<usize>) -> String {
-    match cut {
-        Some(c) => path[..c].to_string(),
-        None => js_parent_slice(path),
-    }
-}
-
 /// The per-module inputs the matcher reads, fresh side.
 fn fresh_signatures(
     extract: &FossilExtract,
@@ -694,13 +640,21 @@ fn prior_file_stem(file: &str) -> String {
     base.strip_suffix(".js").unwrap_or(base).to_string()
 }
 
+/// The prior side's signatures. The stem the same-file-name tier compares
+/// is the prior module's RECORDED mechanical stem — its file carries the
+/// module's name, which a fresh mechanical stem never equals — else (a
+/// ledger written before the field) its file stem.
 fn prior_signatures(prior_modules: &[FossilLedgerModule]) -> Vec<FossilSignature> {
     prior_modules
         .iter()
         .map(|m| FossilSignature {
             hashes: m.hashes.clone(),
             imports: m.imports.clone(),
-            stem: Some(prior_file_stem(&m.file)),
+            stem: Some(
+                m.mechanical_stem
+                    .clone()
+                    .unwrap_or_else(|| prior_file_stem(&m.file)),
+            ),
             tokens: m.tokens.clone(),
             declared: m.declared.clone(),
         })
@@ -708,18 +662,16 @@ fn prior_signatures(prior_modules: &[FossilLedgerModule]) -> Vec<FossilSignature
 }
 
 /// What [`assign_fossil`] needs beside the body.
-pub struct FossilOptions<'n, 't> {
+pub struct FossilOptions<'t> {
     pub min_folder_files: usize,
-    pub mint_namer: Option<&'n mut dyn SplitNamer>,
     /// The placement trail to record into (`--diagnostics`), if armed.
     pub trail: Option<&'t mut PlacementTrail>,
 }
 
-impl Default for FossilOptions<'_, '_> {
+impl Default for FossilOptions<'_> {
     fn default() -> Self {
         FossilOptions {
             min_folder_files: MIN_FOLDER_FILES,
-            mint_namer: None,
             trail: None,
         }
     }
@@ -747,11 +699,18 @@ definitions) — fix detection or run with --disable fossil-split"
         .filter(|p| p.hashes_current())
         .and_then(|p| p.fossil_modules.as_deref())
         .unwrap_or(&[]);
-    let fresh_stems: Vec<String> = extract
+    // The matcher's stems are MECHANICAL on both sides (the prior's are
+    // recorded in its ledger); the files and folders take module names.
+    let mechanical_stems: Vec<String> = extract
         .modules
         .iter()
         .map(|m| module_stem(m, body))
         .collect();
+    let (file_stems, module_named): (Vec<String>, Vec<bool>) = extract
+        .modules
+        .iter()
+        .map(|m| named_module_stem(m, body))
+        .unzip();
     let fresh_tokens: Vec<Vec<String>> = extract
         .modules
         .iter()
@@ -759,7 +718,7 @@ definitions) — fix detection or run with --disable fossil-split"
         .collect();
     let matched = match_fossil_modules(
         &prior_signatures(prior_modules),
-        &fresh_signatures(&extract, &fresh_stems, &fresh_tokens),
+        &fresh_signatures(&extract, &mechanical_stems, &fresh_tokens),
     );
 
     let mut used = OrderedSet::default();
@@ -770,36 +729,26 @@ definitions) — fix detection or run with --disable fossil-split"
         used.add(&file);
         file_of_module[fresh_idx] = Some(file);
     }
-    let mut placements = infer_fossil_placements(&extract.modules, body, options.min_folder_files);
-    let hoisted = hoist_singleton_folders(&file_of_module, &mut placements, &used);
-    let mint_stems = propose_mint_stems(
+    let mut placements = infer_fossil_placements(
         &extract.modules,
-        &file_of_module,
-        &placements,
-        &used,
-        options.mint_namer,
+        body,
+        &file_stems,
+        options.min_folder_files,
     );
+    let hoisted = hoist_singleton_folders(&file_of_module, &mut placements, &used);
     let mut fresh_named = 0;
-    let mut llm_named_mints = 0;
+    let mut module_named_files = 0;
     for i in 0..extract.modules.len() {
         if file_of_module[i].is_some() {
             continue;
         }
-        let proposed_path = mint_stems
-            .get(&i)
-            .map(|stem| format!("{}/{stem}.js", placements[i].folder));
-        let file = match proposed_path {
-            Some(path) if !used.has(&path) => {
-                llm_named_mints += 1;
-                claim_path(&path, &mut used)
-            }
-            _ => claim_path(
-                &format!("{}/{}", placements[i].folder, placements[i].file),
-                &mut used,
-            ),
-        };
+        let file = claim_path(
+            &format!("{}/{}", placements[i].folder, placements[i].file),
+            &mut used,
+        );
         file_of_module[i] = Some(file);
         fresh_named += 1;
+        module_named_files += usize::from(module_named[i]);
     }
     let final_file: Vec<String> = file_of_module
         .into_iter()
@@ -848,13 +797,14 @@ definitions) — fix detection or run with --disable fossil-split"
                 declared: Some(m.declared.clone()),
                 tokens: Some(tokens),
                 source_path: m.source_path.clone(),
+                mechanical_stem: Some(mechanical_stems[i].clone()),
             })
             .collect(),
         stats: FossilStats {
             modules: extract.modules.len(),
             inherited_files: matched.matches.len(),
             fresh_named_files: fresh_named,
-            llm_named_mints,
+            module_named_files,
             eager_statements: extract.eager_zone.len(),
             match_tiers: matched.tiers,
             hoisted_singletons: hoisted,

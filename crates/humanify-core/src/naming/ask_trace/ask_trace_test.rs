@@ -19,6 +19,7 @@ fn the_reason_wire_names_are_stable_and_distinct() {
         AskReason::Sweep,
         AskReason::Vendor,
         AskReason::Folders,
+        AskReason::Modules,
     ];
     let names: Vec<&str> = all.iter().map(AskReason::as_str).collect();
     assert_eq!(
@@ -32,6 +33,7 @@ fn the_reason_wire_names_are_stable_and_distinct() {
             "sweep",
             "vendor",
             "folders",
+            "modules",
         ]
     );
 }
@@ -182,6 +184,10 @@ fn a_fn_ask_reads_by_phase_prior_and_retry() {
     assert_eq!(
         reason_of(&site(0, false), AskScope::Folders, &req(false)),
         AskReason::Folders
+    );
+    assert_eq!(
+        reason_of(&site(0, false), AskScope::Modules, &req(false)),
+        AskReason::Modules
     );
 }
 

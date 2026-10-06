@@ -34,6 +34,10 @@ fn unwrap_paren(v: &Value) -> &Value {
 pub struct FossilModule {
     /// Wrapper index of the init def — the segment terminator.
     pub init_index: usize,
+    /// The init's (the lazy-init wrapper's) binding name, as the text
+    /// spells it — the module name's record once the naming stage's module
+    /// step named it (`place::stems::module_stem_of_wrapper`).
+    pub init_name: String,
     /// Wrapper indexes of the segment, contiguous, init included.
     pub statements: Vec<usize>,
     /// Rename-blind statement hashes of the segment, SORTED (the
@@ -440,6 +444,7 @@ pub fn extract_fossil_modules(body: &[Value], hashes: &[String]) -> Result<Fossi
         hashes_of.sort();
         modules.push(FossilModule {
             init_index: r.index,
+            init_name: r.name.clone(),
             statements,
             hashes: hashes_of,
             imports: r
@@ -591,7 +596,7 @@ fn is_thunk_definition(call: &Value) -> bool {
 
 /// The export registrar call a lazy module keeps at its top level:
 /// `register(namespace, { name: () => binding, … })`.
-fn is_export_registration(stmt: &Value) -> bool {
+pub(crate) fn is_export_registration(stmt: &Value) -> bool {
     if stmt.get("type").and_then(Value::as_str) != Some("ExpressionStatement") {
         return false;
     }

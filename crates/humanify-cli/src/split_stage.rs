@@ -342,18 +342,14 @@ fn split_before_commit(
     let ph = humanify_core::profiling::phase("split:load-prior-ledger");
     let prior = load_prior_split_ledger(input, renderer)?;
     drop(ph);
-    // Fresh release: LLM-named folders/files; warm fossil hops: LLM-named
-    // fresh module mints; inherited layout is never renamed.
+    // The fresh grouping LLM-names its folders/files; the module markers
+    // name files by the module names the naming stage gave the wrappers
+    // (docs/design/module-naming.md); inherited layout is never renamed.
     let mut namer = ProviderSplitNamer::with_budget(input.provider, input.log, input.namer_budget);
     namer.window = input.prompt_window;
     // The tree reviser keeps its (single) call and records it AFTER the
     // split — it runs last, so its rows land in dispatch order either way.
     let mut reviser = ProviderTreeReviser::retaining(input.provider);
-    if prior.is_none() {
-        renderer.message("Split naming: LLM-naming folders and files");
-    } else {
-        renderer.message("Split naming: LLM-naming fresh module mints");
-    }
     let switches = input.switches;
     let vendor_captures = humanify_core::unpack::bun::vendor_captures(input.vendor_record);
     let prior_tree = input

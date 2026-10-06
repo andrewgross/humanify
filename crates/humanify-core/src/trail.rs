@@ -56,6 +56,10 @@ pub enum Tier {
     /// (`require("path")` -> `pathModule`, `naming::plumbing::
     /// name_library_imports`, 2026-10-06): never asked of the model.
     LibraryImport,
+    /// A lazy-init wrapper named `init<Name>` from its module's name — the
+    /// model's answer to "what is this file for?" (`naming::module_names`,
+    /// docs/design/module-naming.md), the same name its file takes.
+    ModuleNaming,
 }
 
 impl Tier {
@@ -84,6 +88,7 @@ impl Tier {
             Tier::ReconcileLastResort => "reconcile-last-resort",
             Tier::ToolchainPlumbing => "toolchain-plumbing",
             Tier::LibraryImport => "library-import",
+            Tier::ModuleNaming => "module-naming",
         }
     }
 }

@@ -373,3 +373,83 @@ fn one_failed_batch_falls_back_alone() {
     assert!(names[10..20].iter().all(Option::is_none));
     assert!(names[20..].iter().all(Option::is_some));
 }
+
+// ---------------------------------------------------------------------------
+// The module kind (docs/design/module-naming.md): neutral keys, its own
+// system prompt and site, at most MODULE_ENTRIES_PER_CALL per call, the
+// taken names on a retry, and no stem-echo rule.
+// ---------------------------------------------------------------------------
+
+fn module_request(i: usize, taken: &[&str]) -> SplitNameRequest {
+    SplitNameRequest {
+        kind: NameKind::Module,
+        mechanical_stem: format!("first-function-{i}"),
+        siblings: taken.iter().map(|s| s.to_string()).collect(),
+        bindings: Vec::new(),
+        members: None,
+        level: None,
+        evidence: Some(format!(
+            "Declares: function helper{i}(x); var state{i}\nCode:\n```js\nvar MODULE_INIT = __esm(() => {{}});\n```"
+        )),
+    }
+}
+
+#[test]
+fn a_module_batch_has_neutral_keys_its_own_prompt_and_at_most_eight_entries() {
+    let requests: Vec<SplitNameRequest> = (0..10).map(|i| module_request(i, &[])).collect();
+    let provider = EchoProvider {
+        calls: RefCell::new(Vec::new()),
+    };
+    let mut log = split_log();
+    let mut namer = ProviderSplitNamer::new(&provider, &mut log);
+    let names = namer.name(&requests);
+    let calls = provider.calls.borrow();
+    assert_eq!(calls.len(), 2, "10 modules = 8 + 2");
+    assert_eq!(calls[0].request.identifiers.len(), 8);
+    assert_eq!(calls[1].request.identifiers, vec!["m1", "m2"]);
+    assert_eq!(calls[0].system_prompt, super::MODULE_NAMER_SYSTEM_PROMPT);
+    let user = &calls[0].user_prompt;
+    assert!(user.starts_with("Name 8 source files of a decompiled JavaScript program."));
+    assert!(user.contains("### m1\nDeclares: function helper0(x); var state0\n"));
+    assert!(!user.contains("first-function"), "the stem never shows");
+    assert!(user.ends_with("— one specific, distinct name per file."));
+    assert_eq!(names[0].as_deref(), Some("named-m1"));
+    assert_eq!(names[9].as_deref(), Some("named-m2"));
+}
+
+/// Answers `m1` with the first module's mechanical stem.
+struct StemAnswer(RefCell<Vec<LlmCall>>);
+
+impl NameProvider for StemAnswer {
+    fn run_wave(&self, calls: Vec<LlmCall>) -> Vec<Result<BatchRenameResponse, LlmError>> {
+        self.0.borrow_mut().extend(calls.iter().cloned());
+        calls
+            .iter()
+            .map(|_| {
+                Ok(BatchRenameResponse {
+                    renames: Renames::from_entries([(
+                        "m1".to_string(),
+                        Some("first-function-0".to_string()),
+                    )]),
+                    ..BatchRenameResponse::default()
+                })
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn a_module_retry_lists_the_taken_names_and_an_answer_equal_to_the_stem_counts() {
+    let provider = StemAnswer(RefCell::new(Vec::new()));
+    let mut log = split_log();
+    let mut namer = ProviderSplitNamer::new(&provider, &mut log);
+    let names = namer.name(&[module_request(0, &["color-utils"])]);
+    assert_eq!(names, vec![Some("first-function-0".to_string())]);
+    let calls = provider.0.borrow();
+    assert!(
+        calls[0]
+            .user_prompt
+            .contains("Already taken by other files (pick a DIFFERENT name): color-utils")
+    );
+    assert_eq!(calls[0].request.used_names, vec!["color-utils"]);
+}

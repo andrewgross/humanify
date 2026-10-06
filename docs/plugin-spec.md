@@ -922,6 +922,18 @@ fresh grouping now keeps. The choice, coverage and reason go to the run log
 (`Split method: …`) and `--stats-json` (`splitMethod`); `humanify detect
 --split-method <bundle>` prints them for an input.
 
+**Module names (2026-10-06, docs/design/module-naming.md):** when the
+markers describe the bundle (`place::method::markers_describe_bundle`, the
+same rule), the naming stage names each NEW module once, from its contents
+(`naming::module_names`, the file namer's module kind): its lazy-init
+wrapper becomes `init<Name>` and the split reads the file name back from it
+(`place::stems::module_stem_of_wrapper`; folders follow). Nothing in it is
+bundler-specific — it reads the same record — so any plugin that provides
+this record gets it. Barrels (a module declaring nothing) stay with the
+naming waves; a wrapper the prior carried, and a path the prior's layout
+gave, are never renamed. The ledger records each module's mechanical stem
+(`fossilModules[].mechanicalStem`) for the next hop's same-file-name match.
+
 **A plugin must provide:** whether its bundles carry this record, and the
 init shapes (the grammar covers Bun's and esbuild's, raw and formatted).
 

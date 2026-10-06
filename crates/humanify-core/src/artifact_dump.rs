@@ -1079,6 +1079,7 @@ impl AskRowParts {
             AskScope::Sweep => "sweep",
             AskScope::Vendor => "vendor",
             AskScope::Folders => "folders",
+            AskScope::Modules => "modules",
         };
         let variant = match (kind, is_retry) {
             (AskScope::Fn, false) => "batch",
@@ -1089,6 +1090,7 @@ impl AskRowParts {
             (AskScope::Sweep, true) => "batch-retry",
             (AskScope::Vendor, _) => "vendor",
             (AskScope::Folders, _) => "folders",
+            (AskScope::Modules, _) => "modules",
         };
         AskRowParts {
             site,
@@ -1201,10 +1203,10 @@ fn ask_parts_rounded(d: &Dispatch<'_>, round: u64) -> AskRowParts {
             call,
         } => AskRowParts::of(
             site,
-            if *site == "folders" {
-                AskScope::Folders
-            } else {
-                AskScope::Vendor
+            match *site {
+                "folders" => AskScope::Folders,
+                crate::place::assign::namer::MODULE_NAMER_SITE => AskScope::Modules,
+                _ => AskScope::Vendor,
             },
             function_id.to_string(),
             None,

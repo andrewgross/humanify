@@ -109,6 +109,10 @@ pub struct NamingConfig {
     /// CLI sizes it over the rate limiter's `max_concurrent`
     /// [`crate::naming::waves::processor::DEFAULT_PROMPT_WINDOW`]).
     pub prompt_window: usize,
+    /// The module step (`naming::module_names`): Some(the namer's prompt
+    /// budget) when the run's toolchain offers module markers — the step
+    /// itself still runs only when they describe the bundle; None off.
+    pub module_naming: Option<crate::place::assign::namer::SplitNamerBudget>,
 }
 
 impl NamingConfig {
@@ -191,6 +195,8 @@ pub struct NamingOutcome {
     /// The names the pipeline chose for library imports
     /// (`naming::plumbing::name_library_imports`) — on the trail too.
     pub library_imports: crate::naming::plumbing::PlumbingNames,
+    /// What the module step did (`naming::module_names`).
+    pub module_names: crate::naming::module_names::ModuleNamingReport,
 }
 
 /// Run the naming stage.
@@ -219,6 +225,7 @@ pub fn run_naming<P: NameProvider>(
         shingle_probe: config.shingle_probe,
         fast: config.fast,
         prompt_window: config.prompt_window,
+        module_naming: config.module_naming,
     };
     let mut run_era = || match input.prior {
         Some(prior) => match_prior_version(
@@ -278,6 +285,7 @@ pub fn run_naming<P: NameProvider>(
         stems,
         plumbing,
         library_imports,
+        module_names,
         ..
     } = era;
     let mut reports = processor.reports.clone();
@@ -312,6 +320,7 @@ pub fn run_naming<P: NameProvider>(
         probe_lines,
         plumbing,
         library_imports,
+        module_names,
     };
     // `buildLedgerPostStages`: (input text, the pass's ledger) per pass
     // that produced code — reconcile over the generated text, the sweep

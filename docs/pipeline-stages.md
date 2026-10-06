@@ -34,6 +34,18 @@ editing the caller.
 | 11  | Split (one path)         | `emit::stable_split`                                                 | **no** — prior present → inherit layout; no prior → clustered fresh grouping                        |
 | 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                    | **no**                                                                                              |
 
+Stage 9 has a step that decides stage 11's FILE names (2026-10-06,
+docs/design/module-naming.md): when the bundle's module markers describe
+it (the rule the split method reads, `place::method::markers_describe_bundle`),
+the **module step** (`naming::module_names`) marks every new, non-barrel
+module before the first wave — so no wave asks its lazy-init wrapper — and,
+after the waves and the library-prefix pass, before the naming floor and
+sweep, asks the model what each module is FOR (8 per call, the file namer's
+module kind) and names its wrapper `init<Name>`. The split then reads each
+new module's file name back from its wrapper (`initColorUtils` →
+`color-utils.js`) and names inferred folders from the same names; the old
+warm-hop mint namer is gone. Inherited paths are never renamed.
+
 Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
 binary; the TypeScript names used below (`stableSplitFromCode`,
 `PLACEMENT_TIERS`, …) are the historical names of the same stages, kept

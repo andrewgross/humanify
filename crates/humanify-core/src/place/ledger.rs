@@ -29,6 +29,17 @@ pub struct FossilLedgerModule {
     /// before it existed simply reads as None.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_path: Option<String>,
+    /// The module's MECHANICAL stem (`module_stem`: its first function,
+    /// else its first declaration) — what the next hop's same-file-name
+    /// match tier compares, since the file itself carries the module's
+    /// name (docs/design/module-naming.md). A ledger written before it
+    /// existed reads as None, and the tier falls back to the file stem.
+    #[serde(
+        default,
+        rename = "mechanicalStem",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mechanical_stem: Option<String>,
 }
 
 /// `StableSplitLedger`.

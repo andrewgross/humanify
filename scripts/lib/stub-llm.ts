@@ -11,6 +11,7 @@
  * per naming ask (crates/humanify-core/src/naming/prompts.ts, batch and
  * module builders alike), so the policy has everything it needs.
  */
+import { createHash } from "node:crypto";
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -34,11 +35,78 @@ export function askedIdentifiers(requestBody: string): string[] {
   return [];
 }
 
+/** The user prompt of a request (the last message's content). */
+function userPrompt(requestBody: string): string {
+  try {
+    const parsed = JSON.parse(requestBody) as {
+      messages?: Array<{ content?: string }>;
+    };
+    return parsed.messages?.at(-1)?.content ?? "";
+  } catch {
+    return "";
+  }
+}
+
+const MODULE_WORDS = [
+  "amber",
+  "birch",
+  "cedar",
+  "delta",
+  "ember",
+  "fjord",
+  "grove",
+  "harbor",
+  "inlet",
+  "juniper",
+  "kelp",
+  "lagoon",
+  "meadow",
+  "nectar",
+  "orchid",
+  "prairie",
+  "quartz",
+  "ridge",
+  "summit",
+  "tundra",
+  "upland",
+  "valley",
+  "willow",
+  "yarrow",
+  "zephyr",
+  "basin"
+];
+
+/**
+ * A module batch (crates/humanify-core/src/place/assign/namer.rs, the
+ * module kind: `"m1": "<file-name>"` keys) gets one four-word kebab name
+ * per entry, chosen by a hash of the WHOLE prompt and the key — so a
+ * repeat asks the same, and the duplicate retry (whose prompt lists the
+ * taken names) draws a different one. Real collisions stay rare
+ * (26^4 names).
+ */
+function moduleAnswer(prompt: string): Record<string, string> | undefined {
+  const keys = [...prompt.matchAll(/"(m\d+)": "<file-name>"/g)].map(
+    (m) => m[1]
+  );
+  if (keys.length === 0) return undefined;
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const digest = createHash("sha256").update(`${key}\n${prompt}`).digest();
+    out[key] = [0, 1, 2, 3]
+      .map((i) => MODULE_WORDS[digest[i] % MODULE_WORDS.length])
+      .join("-");
+  }
+  return out;
+}
+
 /**
  * The default answer policy (the e2e gate's): every asked identifier maps
- * to `<id>Renamed` — every rename lands, nothing collides.
+ * to `<id>Renamed` — every rename lands, nothing collides; a module batch
+ * gets {@link moduleAnswer}'s names.
  */
 export function stubAnswer(requestBody: string): string {
+  const modules = moduleAnswer(userPrompt(requestBody));
+  if (modules) return JSON.stringify(modules);
   const out: Record<string, string> = {};
   for (const id of askedIdentifiers(requestBody)) {
     if (/^[A-Za-z_$][\w$]*$/.test(id)) out[id] = `${id}Renamed`;
