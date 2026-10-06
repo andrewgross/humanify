@@ -40,9 +40,14 @@ binary; the TypeScript names used below (`stableSplitFromCode`,
 because the experiment records use them — `docs/rust-port/01-current-architecture.md`
 maps each to its Rust module.
 
-Three stages sit _after_ placement and are easy to forget when reasoning about
+Four stages sit _after_ placement and are easy to forget when reasoning about
 output, because they run once the tree looks finished:
 
+- **per-file library-import names** (`finish::library_names`, finding #91) —
+  each split file renames its own `require("<package>")` bindings from the
+  bundle-wide `pathModule54` to `path` (else `pathModule`; never a number).
+  Deterministic, from the file's own text; the ledger and the bundle keep
+  the bundle names, so nothing carries.
 - **post-split reconcile** (`finish::reconcile`) — renames inside split
   files, after every prompt. Deterministic; this is why a draw-pinned A/B is
   licensed to measure it.

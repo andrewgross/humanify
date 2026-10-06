@@ -22,6 +22,7 @@
 
 pub mod carry;
 pub mod driver;
+pub mod library_names;
 pub mod reconcile;
 pub mod relink;
 pub mod scaffold;

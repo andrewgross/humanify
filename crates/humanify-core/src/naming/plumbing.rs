@@ -41,7 +41,10 @@ mod library_imports;
 #[cfg(test)]
 mod plumbing_test;
 
-pub use library_imports::{name_library_imports, require_specifier};
+pub(crate) use library_imports::sole_write;
+pub use library_imports::{
+    conventional_import_name, is_library_specifier, name_library_imports, require_specifier,
+};
 
 /// The lazy-init helper's pipeline-chosen name: Bun's and esbuild's own.
 pub const LAZY_INIT_HELPER_NAME: &str = "__esm";

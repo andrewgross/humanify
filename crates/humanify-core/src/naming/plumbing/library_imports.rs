@@ -77,15 +77,27 @@ pub fn require_specifier<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-/// The pipeline's name for a library specifier, or None for anything that
-/// is not a bare package / built-in specifier: `path` → `pathModule`,
-/// `node:fs/promises` → `fsPromisesModule`, `child_process` →
-/// `childProcessModule`, `@aws-sdk/client-s3` → `awsSdkClientS3Module`.
-pub fn library_module_name(spec: &str) -> Option<String> {
+/// The bare package / built-in part of a specifier (`node:` dropped), or
+/// None for a relative or absolute path, another protocol (`bun:ffi`,
+/// `data:`), or an empty one. The ONE owner of "is this a library?" —
+/// the naming pass, the per-file pass (`finish::library_names`) and the
+/// file-stem skip (`place::assign::fossil::module_stem`) all read it.
+fn bare_specifier(spec: &str) -> Option<&str> {
     let spec = spec.strip_prefix("node:").unwrap_or(spec);
-    if spec.is_empty() || spec.starts_with('.') || spec.starts_with('/') || spec.contains(':') {
-        return None;
-    }
+    let refused =
+        spec.is_empty() || spec.starts_with('.') || spec.starts_with('/') || spec.contains(':');
+    (!refused).then_some(spec)
+}
+
+/// Is `spec` a bare package or Node built-in specifier?
+pub fn is_library_specifier(spec: &str) -> bool {
+    bare_specifier(spec).is_some_and(|s| camel_words(s).is_some())
+}
+
+/// The camelCase join of a specifier's alphanumeric words: `child_process`
+/// → `childProcess`, `fs/promises` → `fsPromises`. None when it has no
+/// word or starts with a digit.
+fn camel_words(spec: &str) -> Option<String> {
     let words: Vec<&str> = spec
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|w| !w.is_empty())
@@ -105,8 +117,36 @@ pub fn library_module_name(spec: &str) -> Option<String> {
         }
         name.extend(chars);
     }
-    name.push_str("Module");
+    Some(name)
+}
+
+/// The pipeline's name for a library specifier, or None for anything that
+/// is not a bare package / built-in specifier: `path` → `pathModule`,
+/// `node:fs/promises` → `fsPromisesModule`, `child_process` →
+/// `childProcessModule`, `@aws-sdk/client-s3` → `awsSdkClientS3Module`.
+/// The NAMING stage's name, unique in the bundle's one scope (numbered
+/// there); the split tree's files get [`conventional_import_name`].
+pub fn library_module_name(spec: &str) -> Option<String> {
+    let name = format!("{}Module", camel_words(bare_specifier(spec)?)?);
     is_valid_rename_target(&name).then_some(name)
+}
+
+/// The name people write for a library import — the package's own
+/// identifier (finding #91, Andrew 2026-10-06: "I do not like the import
+/// numbering"): `path` → `path`, `child_process` → `childProcess`,
+/// `node:fs/promises` → `fsPromises`, `path/posix` → `pathPosix`. A SCOPED
+/// package drops its scope (`@aws-sdk/client-s3` → `clientS3`: the scope
+/// is the publisher, the rest is the package). None for anything that is
+/// not a bare specifier. Not checked for legality: the per-file pass
+/// decides whether the name can stand in a file (`process` is a global,
+/// `module` a CommonJS context name).
+pub fn conventional_import_name(spec: &str) -> Option<String> {
+    let bare = bare_specifier(spec)?;
+    let unscoped = match bare.strip_prefix('@') {
+        Some(scoped) => &scoped[scoped.find('/')? + 1..],
+        None => bare,
+    };
+    camel_words(unscoped)
 }
 
 /// One recognised library import.
@@ -278,6 +318,21 @@ fn sole_require_write(
     if !redeclared.is_empty() {
         return None;
     }
+    let value = sole_write(semantic, symbol)?;
+    let spec = require_specifier(value)?;
+    program_require(semantic, value, semantic.scoping().symbol_scope_id(symbol))
+        .then(|| (value.span().start, spec.to_string()))
+}
+
+/// The value of the binding's ONLY write — its declarator's init, or the
+/// right side of one plain `X = …` — or None when it is written anywhere
+/// else too (a second assignment, a compound one, an update). Shared with
+/// the per-file pass (`finish::library_names`), which reads the split
+/// tree's require shape over it.
+pub(crate) fn sole_write<'s, 'a>(
+    semantic: &'s Semantic<'a>,
+    symbol: SymbolId,
+) -> Option<&'s Expression<'a>> {
     let scoping = semantic.scoping();
     let nodes = semantic.nodes();
     let mut write = None;
@@ -297,10 +352,7 @@ fn sole_require_write(
         let value = plain_assignment_value(semantic, r.node_id())?;
         write = Some(value);
     }
-    let value = write?;
-    let spec = require_specifier(value)?;
-    program_require(semantic, value, scoping.symbol_scope_id(symbol))
-        .then(|| (value.span().start, spec.to_string()))
+    write
 }
 
 /// The right-hand side of the plain `X = …` whose whole target is the
