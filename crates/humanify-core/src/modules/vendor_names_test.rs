@@ -41,6 +41,9 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
         name_origin: Some(source),
         decl_stmt_span: Span::new(0, 10),
         source_path: None,
+        object_method: false,
+        exported_text: None,
+        carried: None,
     }
 }
 
@@ -197,6 +200,31 @@ fn carried_hash_name_stays_flat() {
     let lookups = choose_file_names(&factories);
     assert_eq!(lookups[0].file_name, "lib_aaaabbbb");
     assert_eq!(lookups[1].file_name, "lib_aaaabbbb-2");
+}
+
+/// A content pair's carried file (finding #90) is reserved before any name
+/// is chosen: a module EARLIER in bundle order that wants the same file
+/// is the one that moves aside, and an app text asset goes to its folder.
+#[test]
+fn a_carried_file_is_reserved_before_any_fresh_name() {
+    use crate::modules::vendor_pairing::CarriedIdentity;
+    let mut carried = rec("12345678ffff0000", "js-yaml", NameSource::ContentPair);
+    carried.carried = Some(CarriedIdentity {
+        file_name: Some("vendor/lib_aaaabbbb.js".into()),
+        runtime_identifier: Some("lib_aaaabbbb".into()),
+    });
+    let asset = rec("99998888ffff0000", "environment", NameSource::Asset);
+    let factories = vec![fallback_rec("aaaabbbb00000000"), carried, asset];
+    let lookups = choose_file_names(&factories);
+    assert_eq!(lookups[0].file_name, "lib_aaaabbbb-2");
+    assert_eq!(
+        (lookups[1].dir, lookups[1].file_name.as_str()),
+        ("vendor", "lib_aaaabbbb")
+    );
+    assert_eq!(
+        (lookups[2].dir, lookups[2].file_name.as_str()),
+        ("src/_assets", "environment")
+    );
 }
 
 /// Case-colliding names disambiguate on disk (case-insensitive FS safe).

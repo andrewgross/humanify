@@ -41,8 +41,10 @@ use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
 
 pub mod known_globals;
 pub mod soundness;
+pub mod text_assets;
 pub mod vendor_content;
 pub mod vendor_names;
+pub mod vendor_pairing;
 pub mod wrapper;
 
 /// The identified CJS factory helper (bun-helpers.ts's IdentifiedHelper).
@@ -284,8 +286,15 @@ pub enum NameSource {
     Banner,
     Url,
     CarryOver,
+    /// Carried from the prior module this one was paired with BY CONTENT
+    /// (finding #90, [`vendor_pairing`]) — run state only: the manifest
+    /// label stays the prior's.
+    ContentPair,
     Llm,
     Fallback,
+    /// An app TEXT asset ([`text_assets`]): named from its own text, never
+    /// a package name.
+    Asset,
 }
 
 impl NameSource {
@@ -295,8 +304,10 @@ impl NameSource {
             NameSource::Banner => "banner",
             NameSource::Url => "url",
             NameSource::CarryOver => "carry-over",
+            NameSource::ContentPair => "content-pair",
             NameSource::Llm => "llm",
             NameSource::Fallback => "fallback",
+            NameSource::Asset => "asset",
         }
     }
 
@@ -309,6 +320,7 @@ impl NameSource {
             NameSource::Url,
             NameSource::Llm,
             NameSource::Fallback,
+            NameSource::Asset,
         ]
         .into_iter()
         .find(|s| Some(s.as_str()) == label)
@@ -379,6 +391,16 @@ pub struct FactoryRecord {
     /// depend on it (it is never a name source, never a join key); it is
     /// recorded metadata, a gift when present.
     pub source_path: Option<String>,
+    /// The factory came from esbuild's object-METHOD form (its span carries
+    /// no `function` keyword) — [`FactoryArg::object_method`].
+    pub object_method: bool,
+    /// The module's whole body is `module.exports = <text>` (a string, or a
+    /// template literal with no `${}`): the text. The shape half of the app
+    /// text asset rule ([`text_assets`]); None for anything else.
+    pub exported_text: Option<String>,
+    /// What a content pair carried from the prior release (finding #90) —
+    /// the prior file and identifier the unpack reuses. None otherwise.
+    pub carried: Option<vendor_pairing::CarriedIdentity>,
 }
 
 /// The classification: the helper var + every factory, in source order.
@@ -399,8 +421,12 @@ pub struct FactoryNameCounts {
     pub banner: usize,
     pub url: usize,
     pub carry_over: usize,
+    /// Carried by content (finding #90) — counted after the cascade.
+    pub content_pair: usize,
     pub llm: usize,
     pub fallback: usize,
+    /// App text assets, decided before the cascade.
+    pub asset: usize,
 }
 
 /// The version of the factory `structuralHash` bytes a vendor manifest
@@ -588,7 +614,11 @@ fn prior_name_for(
     if group.len() != *index.group_size.get(hash)? {
         return None;
     }
-    group.get(index.occurrence[idx]).cloned()
+    // An app text asset's name is never a vendor name.
+    group
+        .get(index.occurrence[idx])
+        .filter(|c| c.origin != NameSource::Asset)
+        .cloned()
 }
 
 /// Apply the Phase 3 naming cascade to each classified factory.
@@ -611,6 +641,12 @@ pub fn name_cjs_factories(
     let mut counts = FactoryNameCounts::default();
     let index = index_by_hash(&classification.factories);
     for (idx, factory) in classification.factories.iter_mut().enumerate() {
+        // An app text asset is named from its own text before the cascade
+        // (`text_assets`) — no banner, URL or carried package name applies.
+        if factory.name_source == Some(NameSource::Asset) {
+            counts.asset += 1;
+            continue;
+        }
         if let Some(pkg) = &factory.banner_package {
             let version = factory.banner_version.clone();
             factory.name = Some(match version {
@@ -877,6 +913,7 @@ pub fn classify_bun_modules<'a>(
             };
             let factory_fn = factory_arg.function;
             let source_path = factory_arg.source_path;
+            let object_method = factory_arg.object_method;
             let body_span = factory_fn.span();
             // The banner: statement-level first (even WITHOUT a package —
             // bannerText is recorded either way), the in-body fallback only
@@ -920,6 +957,9 @@ pub fn classify_bun_modules<'a>(
                 name_origin: None,
                 decl_stmt_span: stmt_span,
                 source_path,
+                object_method,
+                exported_text: text_assets::exported_text(factory_fn),
+                carried: None,
             });
         }
     }

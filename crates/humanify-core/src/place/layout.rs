@@ -9,6 +9,14 @@ use std::path::{Path, PathBuf};
 pub const CODE_DIR: &str = "src";
 /// Folder holding vendored libraries (Bun CJS factories), one file each.
 pub const VENDOR_DIR: &str = "vendor";
+/// Folder holding the app's own TEXT assets — bundled modules that are
+/// nothing but a piece of app text (`modules::text_assets`, finding #90).
+/// Inside the app tree, so the app's text is reviewed and scored as app
+/// code; in a folder the split's own names can never produce (every split
+/// folder and file name is kebab-case, `[a-z0-9-]`; this one starts with
+/// `_`); and fixed, not next to the file that reads it, so an asset never
+/// moves because its reader did.
+pub const ASSETS_DIR: &str = "src/_assets";
 /// Folder holding generated metadata and runtime shims.
 pub const METADATA_DIR: &str = ".humanify";
 /// The split ledger's filename within the metadata folder.

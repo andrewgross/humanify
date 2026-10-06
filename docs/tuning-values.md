@@ -113,20 +113,27 @@ matches (more names asked fresh), not wrong code.
 | Bun profile's extra rules (`$` anywhere, `_` tail, mint head at any length), and Bun as the fallback profile | `rename/floor.rs:155` (`is_bun_token`); `rename/name_profile.rs:130` (`FALLBACK_PROFILE`) | **CC** ("calibrated on the Claude Code corpus") | **app**    | Does not carry over: flags `user$`, `$scope`, `clicks$` as minted on any unsure input. Finding B1 of the naming scan; fixing it changes Claude Code bytes, so it rides an eval. |
 | Word lists `SHORT_WORDS`, `DOMAIN_STEMS`, `TECH_TERMS`                                                       | `rename/floor.rs`                                                                         | CC (false positives and recorded answers)       | code shape | General programming vocabulary, open lists; other apps will need more entries (`ed25519`, `p256`). `it2` (iTerm2, app vocabulary) was removed 2026-10-05.                       |
 
+## Vendor modules (code shape)
+
+| Value                                                                                                                                  | Where                                                                                                   | Measured on                                                                                                                          | Depends on | Why it should carry over                                                                                                                                                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Content pair: score >= 0.3, margin >= 0.1 on both sides, 5-token shingles, strings > 40 chars split into words, unseen-literal IDF 8.0 | `modules/vendor_pairing.rs` (`MIN_SCORE`, `MIN_MARGIN`, `SHINGLE`, `LONG_STRING`, `UNSEEN_LITERAL_IDF`) | CC (/work/vendor-mapping-2026-10-06/, finding #90: 0 wrong of 475 checked against the grammar modules' own names, 40/40 hand-judged) | code shape | The margin, not the floor, does the work: a module with a lookalike scores within 0.1 of it and is left to the model. On another app a wrong value pairs fewer modules (more model asks), not wrong ones, unless two different libraries are each other's clear best match. |
+| App text asset name: lead phrase of the first naming line, at most 5 words / 40 chars, filler words dropped, 8 lines searched          | `modules/text_assets.rs` (`MAX_WORDS`, `MAX_CHARS`, `MAX_LINES`, `FILLER_WORDS`)                        | none                                                                                                                                 | code shape | Readability only: a file name, never a decision. A text with no naming line falls back to `lib_<hash8>`.                                                                                                                                                                    |
+
 ## Totals
 
-34 rows (a row may hold several related constants).
+36 rows (a row may hold several related constants).
 
 | Measured on             | Rows |
 | ----------------------- | ---: |
-| none / TS with no basis |   23 |
-| Claude Code (± model)   |   10 |
+| none / TS with no basis |   24 |
+| Claude Code (± model)   |   11 |
 | model only              |    1 |
 
 | Depends on   | Rows | Of which tuned on Claude Code |
 | ------------ | ---: | ----------------------------: |
 | model/server |   13 |                             3 |
-| code shape   |   14 |                             4 |
+| code shape   |   16 |                             5 |
 | bundler      |    3 |                             0 |
 | app          |    4 |                             3 |
 

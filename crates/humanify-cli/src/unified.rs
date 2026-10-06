@@ -755,6 +755,7 @@ fn pipeline_body(
             placement: &placement,
             split: split_sections.as_ref(),
             post_split: &post_split,
+            content_carry: unpacked.content_carry.as_ref(),
         };
         reports.write_diagnostics(renderer)?;
         if let Some(dest) = &opts.stats_json {
@@ -879,6 +880,9 @@ struct RunReports<'a> {
     split: Option<&'a humanify_core::artifact_dump::SplitSections>,
     /// The finishing passes' trail rows and claims.
     post_split: &'a crate::split_stage::PostSplitRecords,
+    /// The vendor content carry (finding #90): every module carried from a
+    /// prior module by content, with its score.
+    content_carry: Option<&'a humanify_core::unpack::bun::ContentCarryReport>,
 }
 
 /// What `--dump-artifacts` reads beyond the naming outcome.
@@ -982,6 +986,17 @@ impl RunReports<'_> {
             if k == "strategyTrails" {
                 with_placement.insert("placementTrails", placement.clone());
             }
+        }
+        if let Some(r) = self.content_carry {
+            let json = serde_json::json!({
+                "candidates": r.candidates,
+                "leftovers": r.leftovers,
+                "carries": r.carries,
+            });
+            with_placement.insert(
+                "vendorContentCarry",
+                JsValue::parse(&json.to_string()).expect("serde_json writes JSON"),
+            );
         }
         std::fs::write(
             dest,

@@ -51,6 +51,8 @@ pub struct Unpacked {
     /// finish in memory, so neither trusts whatever record sits in the
     /// output folder (toolchain review R6).
     pub vendor_record: Option<BunModulesManifest>,
+    /// The vendor content carry (finding #90), for the diagnostics.
+    pub content_carry: Option<bun::ContentCarryReport>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -110,13 +112,17 @@ pub fn unpack_bundle(
             webcrack_shim: Some(&shim),
         },
     )?;
-    let (files, vendor_record) = match outcome {
+    let (files, vendor_record, content_carry) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
             let outcome = *outcome;
-            (outcome.result.files, outcome.manifest)
+            (
+                outcome.result.files,
+                outcome.manifest,
+                outcome.content_carry,
+            )
         }
-        AdapterOutcome::Files(result) => (result.files, None),
+        AdapterOutcome::Files(result) => (result.files, None, None),
     };
     span.end(Some(
         JsObject::new()
@@ -132,6 +138,7 @@ pub fn unpack_bundle(
         files,
         vendor_naming: namer.stats,
         vendor_record,
+        content_carry,
     })
 }
 
@@ -149,6 +156,24 @@ fn report_vendor_unpack(outcome: &bun::BunUnpackOutcome, renderer: &mut dyn Prog
             r.prior_groups_ambiguous
         ));
     }
+    if let Some(r) = &outcome.content_carry
+        && r.candidates > 0
+    {
+        let identity = r
+            .carries
+            .iter()
+            .filter(|c| c.carried == humanify_core::modules::vendor_pairing::Carried::Identity)
+            .count();
+        renderer.message(&format!(
+            "Vendor content carry: {} of {} unmatched modules paired with a prior module ({} \
+             name+file+identifier, {} identifier only; {} prior modules unmatched)",
+            r.carries.len(),
+            r.candidates,
+            identity,
+            r.carries.len() - identity,
+            r.leftovers
+        ));
+    }
     log_name_sources(outcome);
 }
 
@@ -158,13 +183,14 @@ fn log_name_sources(outcome: &bun::BunUnpackOutcome) {
     let Some(c) = &outcome.name_counts else {
         return;
     };
-    let total = c.banner + c.url + c.carry_over + c.llm + c.fallback;
+    let total = c.banner + c.url + c.carry_over + c.content_pair + c.llm + c.fallback + c.asset;
     if total == 0 {
         return;
     }
     verbose().log(&format!(
-        "Vendor name sources ({total} factories): {} carry-over, {} banner, {} url, {} llm, {} fallback",
-        c.carry_over, c.banner, c.url, c.llm, c.fallback
+        "Vendor name sources ({total} factories): {} carry-over, {} content-pair, {} banner, {} url, \
+         {} llm, {} fallback, {} app text asset",
+        c.carry_over, c.content_pair, c.banner, c.url, c.llm, c.fallback, c.asset
     ));
     if outcome.llm_renamed > 0 {
         verbose().log(&format!(

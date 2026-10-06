@@ -302,7 +302,7 @@ are both.
 | P2 Unpack adapter (choose + run)            | 2-3    | **EXISTS** (2026-10-04)       | add an enum value, a `supports` rule, and its arm in the one dispatch site `unpack::run_adapter`                                                                                                                     |
 | P3 Module wrapper grammar (factories)       | 3, 8-9 | **EXISTS** (seam, 2026-10-04) | add a `ModuleWrapperGrammar` value (helper, classification, factory argument, lazy-init helpers); every caller asks the run's (#79); the unpack alone decides (#80)                                                  |
 | P4 Original source-path handover            | 3      | **EXISTS**                    | nothing, or fill `FactoryRecord::source_path` when the bundler keeps paths                                                                                                                                           |
-| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78)                                                                        |
+| P5 Vendor record, vendor names, prior carry | 3, 5   | **EXISTS** (2026-10-04)       | reuse the record format; declare its stamp (`UnpackAdapter::vendor_record_stamp`) — the split and finish read the record THIS run wrote (#78); content carry + app text assets are generic (#90)                     |
 | P6 Library detection                        | 4      | **EXISTS**                    | nothing if it writes the vendor record (`LibraryDetector::VendorRecord` is chosen by that); else add a detector                                                                                                      |
 | P7 Never-rename helper names                | 7-9    | **EXISTS** (2026-10-04)       | add a list to `NeverRename` (`rename/eligibility.rs`); every consumer gets the run's value from the toolchain                                                                                                        |
 | P8 Interop helpers for vendored code        | 3, 12  | **EXISTS** (slot, 2026-10-04) | add an `InteropHelpers` value: its shapes, standard names, helper file and module helper (Bun's is the only one; I17 still open)                                                                                     |
@@ -583,8 +583,11 @@ survive to the next release?
 entry per module with file name, name, where the name came from, structural
 hash, captured reads). Naming is a fixed ladder — license banner → a
 distinctive repository URL → the prior release's name for the same
-structural hash → an LLM guess → `lib_<hash>`. The prior is read by
-`unpack::bun::load_prior_vendor`; an old-era record is re-keyed by content.
+structural hash → the prior module this one is paired with BY CONTENT
+(finding #90) → an LLM guess → `lib_<hash>`. Before the ladder, a module
+that is only app text is set aside as an app asset (below). The prior is
+read by `unpack::bun::load_prior_vendor`; an old-era record is re-keyed by
+content.
 
 **Already generic:** the record format, the naming ladder and the content
 re-key do not depend on the bundler. A new vendor-extracting plugin should
@@ -623,10 +626,41 @@ folder: library detection's vendor-record layer (it runs only right after
 its adapter rewrote the record) and the `--dump-artifacts` partitions
 family.
 
+**The content carry (2026-10-06, finding #90):** the exact-hash carry
+keeps string LENGTHS, so one edited string of a different length made an
+unchanged library new — re-asked, renamed, a new file and a new identifier
+in every app file that used it (Claude Code: 167 modules per eval run, 141
+with a real twin). Between the cascade and the model pass,
+`unpack::bun::carry_by_content` pairs this run's would-be-asked modules
+with the prior modules nothing carried into (`modules::vendor_pairing`:
+5-token shingles over the masked factory text, or rare-weighted shared
+strings and identifiers, whichever is higher; only a 1:1 mutual best at
+score >= 0.3 that beats the runner-up by >= 0.1 on both sides). A pair
+carries the prior's name, its label, its FILE (reserved before any fresh
+name is chosen) and its identifier; no model call. Every carry is in the
+run's diagnostics (`vendorContentCarry`) with its scores, and the `unpack`
+verb writes them with `--carries`. Bundler-generic: it reads the record and
+the factory text, nothing else.
+
+**App text assets (2026-10-06, finding #90):** a bundler wraps every
+required file as a module, so an app's own text files (prompts, scripts
+read as strings, documents) arrive as factories. A factory whose whole
+body is `module.exports = <text>` (its own module parameter; a string, or a
+template with no `${}`) and that only app code requires is an APP asset:
+written to `src/_assets/<name>.js` (`place::layout::ASSETS_DIR`), named
+from its first line (`modules::text_assets::asset_stem`), label `asset` in
+the record, never offered to the banner/URL/carry rules or the package
+namer. A text module a vendored module requires stays vendored. The finish
+re-links it like any record entry, and library detection keeps it out of
+naming, both by the record's file name.
+
 **Tests:** a prior → next-release pair in the e2e fixture (the existing
 bundle fixtures run fresh, then with `--prior-version`);
 `a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files`
-(crates/humanify-cli/tests/pipeline_stages.rs).
+(crates/humanify-cli/tests/pipeline_stages.rs); the `bun-text-assets`
+fixture (`expect.assets`, `expect.stays`) and
+`unpack_test::a_module_whose_string_changed_length_keeps_its_name_file_and_identifier`,
+`unpack_test::an_app_text_module_is_an_app_asset_named_from_its_text`.
 
 ### P6 — Library detection (stage 4) — EXISTS
 

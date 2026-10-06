@@ -141,7 +141,12 @@ interface FixtureConfig {
  *   - `splitMethod` — the fresh run's `--stats-json` `splitMethod.method`
  *     (bundle fixtures);
  *   - `apart` — pairs of marker strings that must sit in DIFFERENT files
- *     of the fresh tree's src/ (each must be found).
+ *     of the fresh tree's src/ (each must be found);
+ *   - `assets` — app text asset files the fresh tree must hold (finding
+ *     #90: a module that is only app text is an app asset, not vendored);
+ *   - `stays` — marker strings whose vendor/ file must keep the SAME path
+ *     from the fresh tree to the prior leg's (finding #90: a vendor module
+ *     whose string changed length is carried by content, file and all).
  */
 interface FixtureExpectations {
   bundler?: string;
@@ -149,6 +154,8 @@ interface FixtureExpectations {
   vendor?: boolean;
   splitMethod?: string;
   apart?: [string, string][];
+  assets?: string[];
+  stays?: string[];
 }
 
 /** What the fresh run did, as the expectations read it. */
@@ -306,6 +313,36 @@ export function apartFailures(
   return out;
 }
 
+/** Each expected app text asset the tree's file list lacks. */
+export function assetFailures(assets: string[], files: string[]): string[] {
+  return assets
+    .filter((a) => !files.includes(a))
+    .map((a) => `unpack: no app text asset ${a}`);
+}
+
+/**
+ * Each `stays` marker whose vendor file moved between the two releases:
+ * `fresh` and `prior` map each tree's vendor files to their text.
+ */
+export function staysFailures(
+  markers: string[],
+  fresh: Map<string, string>,
+  prior: Map<string, string>
+): string[] {
+  const holder = (files: Map<string, string>, marker: string) =>
+    [...files].find(([, text]) => text.includes(marker))?.[0];
+  const out: string[] = [];
+  for (const m of markers) {
+    const [a, b] = [holder(fresh, m), holder(prior, m)];
+    if (a === undefined || b === undefined) {
+      out.push(`unpack: no vendor file holds "${m}" in both releases`);
+    } else if (a !== b) {
+      out.push(`unpack: "${m}" moved from ${a} to ${b} across the release`);
+    }
+  }
+  return out;
+}
+
 /**
  * A check failed. Thrown, not exited on, so the stage can hold a
  * known-gap fixture to its declared failure (`judgeKnownGap`).
@@ -368,12 +405,17 @@ function nextReleasePrior(stderr: string, label: string): string {
  * the run wrote no tree.
  */
 function appTexts(tree: string): Map<string, string> {
-  const src = path.join(tree, "src");
-  if (!fs.existsSync(src)) return new Map();
+  return dirTexts(tree, "src");
+}
+
+/** Every file under `tree/<dir>`, keyed `<dir>/<relative path>`. */
+function dirTexts(tree: string, dir: string): Map<string, string> {
+  const root = path.join(tree, dir);
+  if (!fs.existsSync(root)) return new Map();
   return new Map(
-    treeFiles(src).map((f) => [
-      `src/${f}`,
-      fs.readFileSync(path.join(src, f), "utf8")
+    treeFiles(root).map((f) => [
+      `${dir}/${f}`,
+      fs.readFileSync(path.join(root, f), "utf8")
     ])
   );
 }
@@ -654,7 +696,13 @@ async function checkPair(
     );
   const missed = [
     ...expectationFailures(expect, detection, { vendorFiles, splitMethod }),
-    ...apartFailures(expect?.apart ?? [], appTexts(fresh))
+    ...apartFailures(expect?.apart ?? [], appTexts(fresh)),
+    ...assetFailures(expect?.assets ?? [], [...appTexts(fresh).keys()]),
+    ...staysFailures(
+      expect?.stays ?? [],
+      dirTexts(fresh, "vendor"),
+      dirTexts(path.join(root, "prior-a"), "vendor")
+    )
   ];
   if (missed.length > 0) fail(`${label}: ${missed.join("; ")}`);
 }

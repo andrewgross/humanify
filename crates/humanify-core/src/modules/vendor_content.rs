@@ -185,12 +185,12 @@ fn relinked_factory<'a>(program: &'a oxc_ast::ast::Program<'a>) -> Option<&'a Ex
     })
 }
 
-/// The prior side: one vendor file's content key. A relinked file
-/// (`exports.f = __commonJS(F)`, the runnable tree) has every
-/// `<requireBound>.f` reference turned back into the bare identifier; an
-/// unlinked one (the review tree, or a factory nothing references) IS the
-/// raw body. None when neither shape is found.
-pub fn prior_file_content_key(file_text: &str) -> Option<String> {
+/// The prior side: one vendor file's FACTORY FUNCTION text, in the form the
+/// unpack wrote it. A relinked file (`exports.f = __commonJS(F)`, the
+/// runnable tree) has every `<requireBound>.f` reference turned back into
+/// the bare identifier; an unlinked one (the review tree, or a factory
+/// nothing references) IS the raw body. None when neither shape is found.
+pub fn prior_factory_text(file_text: &str) -> Option<String> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, file_text);
     if !ingest.errors.is_empty() {
@@ -216,9 +216,7 @@ pub fn prior_file_content_key(file_text: &str) -> Option<String> {
             }
         }
         let text = splice(file_text, start, end, edits);
-        return (!text.is_empty())
-            .then(|| vendor_content_key(&text))
-            .flatten();
+        return (!text.is_empty()).then_some(text);
     }
     match ingest.program.body.as_slice() {
         [Statement::ExpressionStatement(es)]
@@ -228,10 +226,16 @@ pub fn prior_file_content_key(file_text: &str) -> Option<String> {
             ) =>
         {
             let span = unparen(&es.expression).span();
-            vendor_content_key(&file_text[span.start as usize..span.end as usize])
+            Some(file_text[span.start as usize..span.end as usize].to_string())
         }
         _ => None,
     }
+}
+
+/// The prior side: one vendor file's content key — [`vendor_content_key`]
+/// over [`prior_factory_text`].
+pub fn prior_file_content_key(file_text: &str) -> Option<String> {
+    vendor_content_key(&prior_factory_text(file_text)?)
 }
 
 /// One stale-era prior manifest entry, as the re-key reads it.

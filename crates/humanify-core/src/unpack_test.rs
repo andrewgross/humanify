@@ -1520,3 +1520,179 @@ fn a_written_app_scope_binding_still_keeps_the_factory_in_the_app() {
     assert!(index.contains("var mod_w=x("), "{index}");
     assert!(index.contains("var mod_r=x("), "{index}");
 }
+
+// ---- finding #90: carry by content, app text assets -------------------------
+
+/// A vendor module whose one string changes LENGTH between releases: its
+/// structural hash changes, so the exact-hash carry misses it.
+fn yaml_bundle(message: &str) -> String {
+    format!(
+        concat!(
+            "var x=(I,A)=>()=>(A||I((A={{exports:{{}}}}).exports,A),A.exports);\n",
+            "var yamlish=x((exports)=>{{ exports.load=function load(s){{if(typeof s!==\"string\")",
+            "throw new TypeError(\"{}\");var out=[];for(var i=0;i<s.length;i++){{out.push(s.charCodeAt(i))}}",
+            "return out.join(\",\")+\"YAMLException: unexpected end of the stream\";}};",
+            " exports.dump=function dump(o){{return JSON.stringify(o,null,2)+\"\\n---\\n\"}};",
+            " exports.safeLoadAll=function safeLoadAll(docs,iterator){{return docs.split(\"---\").map(iterator)}}; }});\n",
+            "var other=x((exports)=>{{ exports.render=function render(t){{return \"<div>\"+t+\"</div>\"}}; }});\n",
+            "var main=yamlish();var o=other();"
+        ),
+        message
+    )
+}
+
+fn hop_with(
+    code: &str,
+    dir: &Path,
+    prior_dir: Option<&Path>,
+    answer: fn(&VendorNameRequest) -> Option<String>,
+) -> Vec<Vec<String>> {
+    let mut namer = FnNamer {
+        answer,
+        asked: Vec::new(),
+    };
+    unpack_bun(
+        code,
+        dir,
+        BunUnpackOptions {
+            namer: Some(&mut namer),
+            prior: prior_dir.and_then(|p| load_prior_vendor(&p.join("humanified.js"))),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    namer.asked
+}
+
+fn entry_with<'a>(entries: &'a [Value], needle: &str, dir: &Path) -> &'a Value {
+    entries
+        .iter()
+        .find(|e| {
+            fs::read_to_string(dir.join(s(e, "fileName"))).is_ok_and(|body| body.contains(needle))
+        })
+        .unwrap_or_else(|| panic!("no vendor file holds {needle}: {entries:?}"))
+}
+
+#[test]
+fn a_module_whose_string_changed_length_keeps_its_name_file_and_identifier() {
+    let first = TempDir::new("pair1");
+    hop_with(
+        &yaml_bundle("expected a YAML document string"),
+        &first.0,
+        None,
+        |r| {
+            Some(if r.evidence.contains("YAMLException") {
+                "js-yaml".into()
+            } else {
+                "html-render".into()
+            })
+        },
+    );
+    let m1 = factories(&read_manifest(&first.0));
+    let before = entry_with(&m1, "YAMLException", &first.0).clone();
+    assert_eq!(s(&before, "fileName"), "vendor/js-yaml.js");
+
+    let second = TempDir::new("pair2");
+    let asked = hop_with(
+        &yaml_bundle("expected a YAML document as a string"),
+        &second.0,
+        Some(&first.0),
+        |_| Some("yaml-parser".into()),
+    );
+    let m2 = factories(&read_manifest(&second.0));
+    let after = entry_with(&m2, "YAMLException", &second.0);
+    assert_ne!(
+        s(after, "structuralHash"),
+        s(&before, "structuralHash"),
+        "the length change moved the hash"
+    );
+    assert!(
+        asked.is_empty(),
+        "the paired module is never re-asked: {asked:?}"
+    );
+    assert_eq!(s(after, "name"), "js-yaml");
+    assert_eq!(
+        s(after, "nameSource"),
+        "llm",
+        "the label is the prior's (#71)"
+    );
+    assert_eq!(s(after, "fileName"), "vendor/js-yaml.js");
+    assert_eq!(
+        s(after, "runtimeIdentifier"),
+        s(&before, "runtimeIdentifier"),
+        "the app code's name for the module is unchanged"
+    );
+    let runtime = fs::read_to_string(second.0.join("runtime.js")).unwrap();
+    assert!(
+        runtime.contains(&format!("{}()", s(&before, "runtimeIdentifier"))),
+        "{runtime}"
+    );
+}
+
+#[test]
+fn an_ambiguous_content_pair_is_left_to_the_model() {
+    // Two prior modules equally like the fresh one: no margin, no carry.
+    let twin = |tag: &str| {
+        format!(
+            "var {tag}=x((exports)=>{{ exports.load=function load(s){{if(typeof s!==\"string\")throw new TypeError(\"bad input\");return s.split(\",\").map(function(v){{return v.trim()+\"YAMLException {tag}\"}})}}; }});\n"
+        )
+    };
+    let head = "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n";
+    let prior_code = format!(
+        "{head}{}{}var a=one();var b=two();",
+        twin("one"),
+        twin("two")
+    );
+    let first = TempDir::new("ambig1");
+    hop_with(&prior_code, &first.0, None, |r| {
+        Some(
+            if r.evidence.contains("one") {
+                "lib-one"
+            } else {
+                "lib-two"
+            }
+            .into(),
+        )
+    });
+    let fresh_code = format!("{head}{}var a=six();", twin("six"));
+    let second = TempDir::new("ambig2");
+    let asked = hop_with(&fresh_code, &second.0, Some(&first.0), |_| {
+        Some("fresh-name".into())
+    });
+    assert_eq!(asked.iter().map(Vec::len).sum::<usize>(), 1, "{asked:?}");
+    let m2 = factories(&read_manifest(&second.0));
+    assert_eq!(s(&m2[0], "name"), "fresh-name");
+}
+
+const TEXT_ASSETS_BUNDLE: &str = concat!(
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var envText=x((exports,module)=>{module.exports=\"## Environment\\n\\nDocs live at https://pypa.io/en/latest for the sandbox.\"});\n",
+    "var libText=x((exports,module)=>{module.exports=`lorem ipsum dolor sit amet, the library's own template`});\n",
+    "var lib=x((exports,module)=>{module.exports=function render(){return libText()}});\n",
+    "var main=envText();var l=lib();"
+);
+
+#[test]
+fn an_app_text_module_is_an_app_asset_named_from_its_text() {
+    let t = TempDir::new("assets");
+    let asked = hop_with(TEXT_ASSETS_BUNDLE, &t.0, None, |_| Some("react".into()));
+    let entries = factories(&read_manifest(&t.0));
+    let env = entry_with(&entries, "## Environment", &t.0);
+    assert_eq!(s(env, "fileName"), "src/_assets/environment.js");
+    assert_eq!(s(env, "name"), "environment");
+    assert_eq!(s(env, "nameSource"), "asset");
+    // Asked of nobody: the namer saw only the two vendor modules.
+    assert_eq!(asked.iter().map(Vec::len).sum::<usize>(), 2, "{asked:?}");
+    // A text module a vendor module requires is that library's own text.
+    let lib_text = entry_with(&entries, "lorem ipsum", &t.0);
+    assert!(
+        s(lib_text, "fileName").starts_with("vendor/"),
+        "{lib_text:?}"
+    );
+    // The app still reaches the asset through its identifier.
+    let runtime = fs::read_to_string(t.0.join("runtime.js")).unwrap();
+    assert!(
+        runtime.contains(&format!("{}()", s(env, "runtimeIdentifier"))),
+        "{runtime}"
+    );
+}
