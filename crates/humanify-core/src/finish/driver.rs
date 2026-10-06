@@ -185,6 +185,8 @@ fn write_file(path: &Path, text: &str) -> Result<(), String> {
 #[derive(Debug, Default)]
 pub struct FinishReport {
     pub messages: Vec<String>,
+    /// The per-file library-import names (finding #91).
+    pub library_names: Option<super::library_names::LibraryNamesReport>,
 }
 
 /// `relinkBunModules(outputDir, manifest, splitFiles, { priorRoot })`.
@@ -338,6 +340,21 @@ pub fn finish_stage(
     report: &mut FinishReport,
 ) -> Result<(bool, Option<ReconcileReport>), String> {
     let relinked = finish_split_output(input, report)?;
+    // Each split file names its own library imports (`path`, not the
+    // bundle-wide `pathModule54`; finding #91) on the FINAL text, before
+    // the reconcile reads it against a prior tree that went through the
+    // same pass.
+    let library_names = {
+        let _ph = crate::profiling::phase("split:finish:library-names");
+        super::library_names::name_library_imports_in_tree(
+            input.output_dir,
+            &input.split_files,
+            input.never_rename,
+            input.name_profile,
+        )?
+    };
+    report.messages.push(library_names.message());
+    report.library_names = Some(library_names);
     let reconciled = reconcile_post_split(
         input.output_dir,
         input.prior_version,

@@ -502,8 +502,11 @@ fn commit_and_finish(
         renderer.message(m);
     }
     let (relinked, reconciled) = finished.map_err(after)?;
+    if let Some(names) = report.library_names.take() {
+        post_split.trail = names.trail;
+    }
     if let Some(r) = reconciled {
-        post_split.trail = r.result.trail;
+        post_split.trail.extend(r.result.trail);
         post_split.claims = r.result.claims;
         if let Some(carry) = &r.carry {
             humanify_core::naming::driver::add_claims(&mut post_split.claims, &carry.claims);

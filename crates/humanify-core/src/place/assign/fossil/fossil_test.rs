@@ -439,3 +439,26 @@ fn a_ts_era_ledgers_fossil_modules_are_refused() {
     assert_ne!(second.assignment[1], "src/legacy/kept-name.js");
     assert_eq!(second.assignment, first.assignment);
 }
+
+/// File names never come from a library import (finding #91): a module
+/// whose first declaration is `pathModule23 = require("path")` is named
+/// after its next declaration, never `path-module23.js`.
+#[test]
+fn a_library_import_never_names_a_module() {
+    let b = body_of(&[
+        ESM,
+        "function setupCore() { return 1; }",
+        "var init_core = __esm(() => { setupCore(); });",
+        "var pathModule23, baseSettingsPath;",
+        "var init_settings = __esm(() => { pathModule23 = require(\"path\"); baseSettingsPath = pathModule23.join(\"a\", \"b\"); });",
+        "var fsModule2;",
+        "var init_fs = __esm(() => { init_settings(); fsModule2 = require(\"node:fs\"); });",
+        "console.log(init_fs);",
+    ]);
+    let out = assign(&b, None);
+    let a = &out.assignment;
+    let base = |f: &str| f[f.rfind('/').map_or(0, |i| i + 1)..].to_string();
+    assert_eq!(base(&a[3]), "base-settings-path.js", "{a:?}");
+    // Every declaration but the init a library import: the init names it.
+    assert_eq!(base(&a[5]), "init-fs.js", "{a:?}");
+}

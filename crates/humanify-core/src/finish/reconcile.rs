@@ -332,6 +332,26 @@ fn collect_substitutions(
     subs
 }
 
+/// `text` with every identifier position of every binding `state`
+/// renamed rewritten to its final name (shorthand-aware), never
+/// re-generated — the ONE text-rewrite owner of a per-file rename pass:
+/// this reconcile and the per-file library-import names
+/// (`finish::library_names`). The caller proves the result is the same
+/// program (`file_signature`).
+pub(crate) fn rewrite_renamed_text(
+    semantic: &oxc_semantic::Semantic<'_>,
+    state: &RenameState,
+    text: &str,
+    lines: &DiffLines<'_>,
+) -> String {
+    let renamed = renamed_occurrences(state, text);
+    let text_lines: Vec<&str> = text.split('\n').collect();
+    let sites = identifier_sites(semantic, state);
+    let subs = collect_substitutions(semantic, &sites, lines, &renamed, &text_lines);
+    let owned: Vec<String> = text_lines.iter().map(|l| l.to_string()).collect();
+    apply_substitutions(&owned, &subs)
+}
+
 /// Names a binding pattern declares (`getBindingIdentifiers` over
 /// `id`/`params`/`left`/`elements`/`properties`/`value`/`argument`).
 fn pattern_names(p: &BindingPattern<'_>, out: &mut HashSet<String>) {
@@ -673,12 +693,7 @@ fn reconcile_one_file(
     if result.renames.is_empty() {
         return finish(FileOutcome::default());
     }
-    let renamed = renamed_occurrences(&state, fresh);
-    let text_lines: Vec<&str> = fresh.split('\n').collect();
-    let sites = identifier_sites(ingest.semantic(), &state);
-    let subs = collect_substitutions(ingest.semantic(), &sites, &lines, &renamed, &text_lines);
-    let owned: Vec<String> = text_lines.iter().map(|l| l.to_string()).collect();
-    let rewritten = apply_substitutions(&owned, &subs);
+    let rewritten = rewrite_renamed_text(ingest.semantic(), &state, fresh, &lines);
     // The saving is only real if the rewritten TEXT is the same program.
     if file_signature(&rewritten).as_deref() != Some(baseline.as_str()) {
         return finish(discarded());

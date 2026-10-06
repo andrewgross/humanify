@@ -127,17 +127,75 @@ pub fn module_stem(module: &FossilModule, body: &[Value]) -> String {
             return stem_of(name);
         }
     }
-    let declared = &module.declared;
-    if declared.len() > 1 {
-        return stem_of(&declared[0]);
-    }
-    if let Some(first) = declared.first() {
+    // A library import never names a file (finding #91): `pathModule23 =
+    // require("path")` says nothing about what the module is for, and its
+    // number is the bundle's, not the file's.
+    let imports = library_import_names(module, body);
+    if let Some(first) = module.declared.iter().find(|n| !imports.contains(*n)) {
         return stem_of(first);
     }
     match module.hashes.first() {
         Some(h) => format!("module-{}", crate::detect::js_text::js_prefix(h, 8)),
         None => "module-empty".to_string(),
     }
+}
+
+/// The names the module's statements bind to a library import — a
+/// declarator or plain `=` assignment whose value is `require("<package>")`
+/// (`naming::plumbing::is_library_specifier`). Any such write counts: a
+/// stem skip only needs "this name came from an import".
+fn library_import_names(module: &FossilModule, body: &[Value]) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for &i in &module.statements {
+        collect_library_imports(&body[i], &mut out);
+    }
+    out
+}
+
+fn collect_library_imports(v: &Value, out: &mut HashSet<String>) {
+    match v {
+        Value::Array(items) => items.iter().for_each(|i| collect_library_imports(i, out)),
+        Value::Object(o) => {
+            let target = match node_type(v) {
+                "VariableDeclarator" => o.get("id").zip(o.get("init")),
+                "AssignmentExpression"
+                    if o.get("operator").and_then(Value::as_str) == Some("=") =>
+                {
+                    o.get("left").zip(o.get("right"))
+                }
+                _ => None,
+            };
+            if let Some((id, value)) = target
+                && node_type(id) == "Identifier"
+                && is_library_require(value)
+                && let Some(name) = id.get("name").and_then(Value::as_str)
+            {
+                out.insert(name.to_string());
+            }
+            o.values().for_each(|c| collect_library_imports(c, out));
+        }
+        _ => {}
+    }
+}
+
+/// `require("<package>")` in the ESTree JSON.
+fn is_library_require(v: &Value) -> bool {
+    let v = unparen(v);
+    let callee_is_require = v
+        .get("callee")
+        .map(unparen)
+        .is_some_and(|c| node_type(c) == "Identifier" && c.get("name") == Some(&"require".into()));
+    let spec = match v
+        .get("arguments")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    {
+        Some([arg]) if node_type(arg) == "Literal" => arg.get("value").and_then(Value::as_str),
+        _ => None,
+    };
+    node_type(v) == "CallExpression"
+        && callee_is_require
+        && spec.is_some_and(crate::naming::plumbing::is_library_specifier)
 }
 
 /// Statements of a Babel block body: the ESTree JSON puts directive
