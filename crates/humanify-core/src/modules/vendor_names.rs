@@ -30,6 +30,7 @@ use serde::Serialize;
 use humanify_model::llm::{BatchRenameRequest, LlmCall, NameProvider};
 
 use crate::artifact_dump::{Dispatch, DispatchLog};
+use crate::place::layout::VENDOR_DIR;
 
 use super::{CarriedName, FactoryRecord, NameSource, hash_fallback_name, is_hash_fallback_name};
 
@@ -135,9 +136,11 @@ pub fn unique_case_insensitive_name(stem: &str, used: &mut HashSet<String>, ext:
 
 /// The resolved file naming for one factory (`NameLookup`).
 pub struct NameLookup {
-    /// Path of the file relative to the output root, WITHOUT the `.js`
-    /// extension (the TS plan.naming.fileName — the caller appends `.js`
-    /// and the `vendor/` prefix).
+    /// The top folder the file goes in: `vendor/`, or the app tree's text
+    /// asset folder ([`super::text_assets::ASSETS_DIR`]).
+    pub dir: &'static str,
+    /// Path of the file relative to `dir`, WITHOUT the `.js` extension
+    /// (the TS plan.naming.fileName — the caller appends `.js` and `dir`).
     pub file_name: String,
     pub name: String,
     /// How THIS run got the name (run state).
@@ -191,6 +194,28 @@ pub struct FileNameChooser {
     /// case-insensitive FS collapses Foo.js and foo.js). The root folder is
     /// keyed "". (`usedByFolder`.)
     used_by_folder: HashMap<String, HashSet<String>>,
+    /// The app text assets' lowercased used stems (their own folder).
+    used_assets: HashSet<String>,
+    /// Paths carried from the prior release by a content pair (finding
+    /// #88), reserved BEFORE any name is chosen, so a fresh name can never
+    /// take one: (folder, stem) per carried file.
+    carried: HashSet<(String, String)>,
+}
+
+/// A carried `vendor/<folder>/<stem>.js` path split into (folder, stem) —
+/// None when it is not a reusable vendor path.
+fn carried_folder_and_stem(file_name: &str) -> Option<(String, String)> {
+    if !super::vendor_pairing::reusable_vendor_path(file_name, VENDOR_DIR) {
+        return None;
+    }
+    let rest = file_name
+        .strip_prefix(VENDOR_DIR)?
+        .strip_prefix('/')?
+        .strip_suffix(".js")?;
+    Some(match rest.rsplit_once('/') {
+        Some((folder, stem)) => (folder.to_string(), stem.to_string()),
+        None => (String::new(), rest.to_string()),
+    })
 }
 
 impl FileNameChooser {
@@ -198,17 +223,49 @@ impl FileNameChooser {
     /// resolve to, one per module (a record reached twice counts twice).
     pub fn new<'r>(records: impl Iterator<Item = &'r FactoryRecord>) -> Self {
         let mut name_counts: HashMap<String, usize> = HashMap::new();
+        let mut used_by_folder: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut carried = HashSet::new();
         for record in records {
             if let (Some(name), Some(source)) = (&record.name, record.name_source)
-                && source != NameSource::Fallback
+                && !matches!(source, NameSource::Fallback | NameSource::Asset)
             {
                 *name_counts.entry(name.clone()).or_insert(0) += 1;
+            }
+            let carried_path = record
+                .carried
+                .as_ref()
+                .and_then(|c| c.file_name.as_deref())
+                .and_then(carried_folder_and_stem);
+            if let Some((folder, stem)) = carried_path {
+                let used = used_by_folder.entry(folder.clone()).or_default();
+                // Two carries can never share a prior file; if they did,
+                // the second is named the ordinary way.
+                if used.insert(stem.to_lowercase()) {
+                    carried.insert((folder, stem));
+                }
             }
         }
         FileNameChooser {
             name_counts,
-            used_by_folder: HashMap::new(),
+            used_by_folder,
+            used_assets: HashSet::new(),
+            carried,
         }
+    }
+
+    /// A content pair's carried file, when it was reserved.
+    fn carried_lookup(&self, record: &FactoryRecord) -> Option<String> {
+        let (folder, stem) =
+            carried_folder_and_stem(record.carried.as_ref()?.file_name.as_deref()?)?;
+        self.carried
+            .contains(&(folder.clone(), stem.clone()))
+            .then(|| {
+                if folder.is_empty() {
+                    stem
+                } else {
+                    format!("{folder}/{stem}")
+                }
+            })
     }
 
     /// `chooseFileName`: the on-disk name (without `vendor/` and `.js`) for
@@ -225,6 +282,21 @@ impl FileNameChooser {
             && let (Some(name), Some(source)) = (&record.name, record.name_source)
             && !name.is_empty()
         {
+            let lookup = |dir, file_name| NameLookup {
+                dir,
+                file_name,
+                name: name.clone(),
+                name_source: source,
+                name_origin: record.name_origin.unwrap_or(source),
+                structural_hash: record.structural_hash.clone(),
+            };
+            if source == NameSource::Asset {
+                let stem = unique_case_insensitive_name(name, &mut self.used_assets, "");
+                return lookup(super::text_assets::ASSETS_DIR, stem);
+            }
+            if let Some(file_name) = self.carried_lookup(record) {
+                return lookup(VENDOR_DIR, file_name);
+            }
             let base = strip_js_extension(name);
             let grouped = !is_hash_fallback_name(name)
                 && self.name_counts.get(name.as_str()).is_some_and(|n| *n >= 2);
@@ -240,20 +312,18 @@ impl FileNameChooser {
             };
             let used = self.used_by_folder.entry(folder.clone()).or_default();
             let unique = unique_case_insensitive_name(&stem, used, "");
-            return NameLookup {
-                file_name: if folder.is_empty() {
+            return lookup(
+                VENDOR_DIR,
+                if folder.is_empty() {
                     unique
                 } else {
                     format!("{folder}/{unique}")
                 },
-                name: name.clone(),
-                name_source: source,
-                name_origin: record.name_origin.unwrap_or(source),
-                structural_hash: record.structural_hash.clone(),
-            };
+            );
         }
         let used = self.used_by_folder.entry(String::new()).or_default();
         NameLookup {
+            dir: VENDOR_DIR,
             file_name: unique_case_insensitive_name(
                 &vendor_stem_for(factory_var, body_text),
                 used,

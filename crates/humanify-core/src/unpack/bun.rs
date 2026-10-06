@@ -27,7 +27,8 @@ use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::modules::vendor_content::{
-    RekeyStats, StaleEraEntry, fresh_content_keys, prior_file_content_key, rekey_prior_by_content,
+    RekeyStats, StaleEraEntry, fresh_content_keys, prior_factory_text, prior_file_content_key,
+    rekey_prior_by_content,
 };
 use crate::modules::vendor_names::{
     BunModulesManifest, FileNameChooser, ManifestCapture, ManifestEntry, NameLookup,
@@ -35,9 +36,13 @@ use crate::modules::vendor_names::{
     load_prior_vendor_names, name_fallback_factories_with_llm, order_by_prior_manifest,
     stable_stem,
 };
+use crate::modules::vendor_pairing::{
+    Carried, ContentCarry, ModuleFeatures, PriorModule, apply_content_pairs, is_content_candidate,
+    leftover_priors, literal_idf, module_features, pair_by_content,
+};
 use crate::modules::{
     BunModuleClassification, CarriedName, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
-    NameSource, name_cjs_factories,
+    NameSource, hash_fallback_name, name_cjs_factories, text_assets,
 };
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
@@ -100,6 +105,12 @@ pub struct PriorVendor {
     /// re-key against the fresh classification. `names` / `factories` are
     /// then None — that era's bytes never join this run's.
     pub stale_era: Option<Vec<StaleEraEntry>>,
+    /// Every prior manifest entry with its file and identifier, for the
+    /// content carry (finding #88) — whose files are read from `root`
+    /// only when this run has a module to pair.
+    pub modules: Vec<PriorModule>,
+    /// The prior tree's root (the directory holding `vendor/`).
+    pub root: Option<PathBuf>,
 }
 
 impl PriorVendor {
@@ -131,6 +142,24 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
     let root = find_prior_tree_root(prior_file)?;
     let text = fs::read_to_string(bun_manifest_path(&root)).ok()?;
     let manifest: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let rows = manifest.get("factories")?.as_array()?;
+    let str_of =
+        |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
+    // The content carry's view, in the SAME row filter as the stale-era
+    // entries below (name and structural hash present), so a stale-era
+    // re-key's hashes line up with it by position.
+    let modules: Vec<PriorModule> = rows
+        .iter()
+        .filter_map(|r| {
+            Some(PriorModule {
+                name: str_of(r, "name")?,
+                structural_hash: str_of(r, "structuralHash")?,
+                file_name: str_of(r, "fileName").unwrap_or_default(),
+                origin: NameSource::of_prior_label(r.get("nameSource").and_then(|x| x.as_str())),
+                runtime_identifier: str_of(r, "runtimeIdentifier"),
+            })
+        })
+        .collect();
     if manifest
         .get("hashVersion")
         .and_then(serde_json::Value::as_u64)
@@ -140,11 +169,10 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
             names: load_prior_vendor_names(&text),
             factories: load_prior_manifest_factories(&text),
             stale_era: None,
+            modules,
+            root: Some(root),
         });
     }
-    let rows = manifest.get("factories")?.as_array()?;
-    let str_of =
-        |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
     let entries: Vec<(StaleEraEntry, Option<String>)> = rows
         .iter()
         .filter_map(|r| {
@@ -182,6 +210,8 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
         names: None,
         factories: None,
         stale_era: Some(keyed),
+        modules,
+        root: Some(root),
     })
 }
 
@@ -251,6 +281,17 @@ pub struct BunUnpackOutcome {
     pub kept_in_app: usize,
     /// Bun runtime-helper references rewritten to the shim's names.
     pub helper_refs: usize,
+    /// The content carry (finding #88), when a prior was given.
+    pub content_carry: Option<ContentCarryReport>,
+}
+
+/// What the content carry did: how many modules it could pair, against
+/// how many prior leftovers, and every carry with its evidence.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ContentCarryReport {
+    pub candidates: usize,
+    pub leftovers: usize,
+    pub carries: Vec<ContentCarry>,
 }
 
 /// One extracted module, in bundle order.
@@ -326,6 +367,7 @@ pub fn unpack_bun(
             bundle_order: Vec::new(),
             kept_in_app: 0,
             helper_refs: 0,
+            content_carry: None,
         })
     };
 
@@ -375,7 +417,14 @@ pub fn unpack_bun(
         });
         captures_by_module = manifest_captures(c, &plan.kept, plan.bridges);
     }
-    if let Some(c) = classification.as_mut() {
+    let planner = classification
+        .as_ref()
+        .map(|_| IdentifierPlanner::build(&ingest));
+    let mut content_carry = None;
+    if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
+        // Decided before any name: an app text asset is never offered to
+        // the banner, URL or carry rules, nor to the package namer.
+        mark_text_assets(c, &ingest, planner);
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
@@ -388,13 +437,35 @@ pub fn unpack_bun(
                 .zip(keys)
                 .collect();
             let rekeyed = rekey_prior_by_content(&fresh, entries);
+            // The content carry compares hashes in THIS run's bytes.
+            if rekeyed.factories.len() == prior.modules.len() {
+                for (m, f) in prior.modules.iter_mut().zip(&rekeyed.factories) {
+                    m.structural_hash = f.structural_hash.clone();
+                }
+            }
             prior.names = Some(rekeyed.names);
             prior.factories = Some(rekeyed.factories);
             rekey = Some(rekeyed.stats);
         }
-        name_counts = Some(name_cjs_factories(c, code, prior.names.as_ref()));
+        let mut counts = name_cjs_factories(c, code, prior.names.as_ref());
+        // Finding #88: what the exact-hash carry missed, paired by content
+        // with what it left in the prior — before the model is asked and
+        // before any file name is chosen.
+        let fresh_text =
+            |f: &FactoryRecord| factory_text(code, f, &helper_edits, require_var.as_deref());
+        content_carry = carry_by_content(&mut c.factories, &prior, fresh_text);
+        if let Some(r) = &content_carry {
+            let whole = r
+                .carries
+                .iter()
+                .filter(|x| x.carried == Carried::Identity)
+                .count();
+            counts.content_pair = whole;
+            counts.fallback -= whole;
+        }
+        name_counts = Some(counts);
         // Post-cascade LLM pass: only hash-named (fallback) factories are
-        // re-named, so banner/URL/carry-over names always win.
+        // re-named, so banner/URL/carry-over/content-pair names always win.
         if let Some(namer) = options.namer.as_deref_mut() {
             llm_renamed = name_fallback_factories_with_llm(&mut c.factories, code, namer);
         }
@@ -416,9 +487,6 @@ pub fn unpack_bun(
     let factories: &[FactoryRecord] = classification
         .as_ref()
         .map_or(&[], |c| c.factories.as_slice());
-    let planner = classification
-        .as_ref()
-        .map(|_| IdentifierPlanner::build(&ingest));
     let plan = plan_modules(&modules, factories, code, planner.as_ref(), &ingest);
     let by_factory_var = naming_lookup(factories);
 
@@ -432,21 +500,24 @@ pub fn unpack_bun(
     // the bundle's own.
     let mut body_edits = plan.ref_edits.clone();
     body_edits.extend(helper_edits.iter().cloned());
+    let mut file_of_record: HashMap<usize, String> = HashMap::new();
     for (module_index, (module, module_plan)) in modules.iter().zip(&plan.plans).enumerate() {
-        let mut body = slice_with_edits(code, &body_edits, module.body_start, module.body_end);
-        // An object-METHOD factory's span carries no `function` keyword —
-        // supply one so the vendored body is a complete expression (the
-        // relink stage re-parses every vendored body).
-        if module.object_method {
-            body = format!("function {body}");
+        let body = vendored_body(
+            code,
+            &body_edits,
+            (module.body_start, module.body_end),
+            module.object_method,
+            require_var.as_deref(),
+        );
+        let record_index = by_factory_var.get(module.name.as_str()).copied();
+        let record = record_index.map(|i| &factories[i]);
+        let rel_path = format!(
+            "{}/{}.js",
+            module_plan.naming.dir, module_plan.naming.file_name
+        );
+        if let Some(i) = record_index {
+            file_of_record.insert(i, rel_path.clone());
         }
-        if let Some(req) = &require_var {
-            body = rewrite_require_calls(&body, req);
-        }
-        let record = by_factory_var
-            .get(module.name.as_str())
-            .map(|&i| &factories[i]);
-        let rel_path = format!("{VENDOR_DIR}/{}.js", module_plan.naming.file_name);
         files.push(UnpackedFile {
             path: write_vendor_file(out_dir, &rel_path, &body)?,
             metadata: None,
@@ -517,7 +588,157 @@ pub fn unpack_bun(
         bundle_order,
         kept_in_app,
         helper_refs: helper_edits.len(),
+        content_carry: content_carry.map(|mut r| {
+            for carry in &mut r.carries {
+                carry.file_name = file_of_record
+                    .get(&carry.record)
+                    .cloned()
+                    .unwrap_or_default();
+            }
+            r
+        }),
     })
+}
+
+/// The text a module's file holds as the unpack writes it, `edits`
+/// applied: an object-METHOD factory's span carries no `function` keyword,
+/// so one is supplied (the relink stage re-parses every vendored body),
+/// and the bundle's require variable becomes `require`.
+fn vendored_body(
+    code: &str,
+    edits: &[TextEdit],
+    (start, end): (usize, usize),
+    object_method: bool,
+    require_var: Option<&str>,
+) -> String {
+    let mut body = slice_with_edits(code, edits, start, end);
+    if object_method {
+        body = format!("function {body}");
+    }
+    match require_var {
+        Some(req) => rewrite_require_calls(&body, req),
+        None => body,
+    }
+}
+
+/// One factory's text for the content carry: its body as the unpack
+/// writes it, minus the cross-factory reference rewrite (not planned yet —
+/// and a minified reference and a `lib_<hash8>` one both lex as the same
+/// masked token).
+fn factory_text(
+    code: &str,
+    f: &FactoryRecord,
+    helper_edits: &[TextEdit],
+    require_var: Option<&str>,
+) -> String {
+    vendored_body(
+        code,
+        helper_edits,
+        (f.body_span.start as usize, f.body_span.end as usize),
+        f.object_method,
+        require_var,
+    )
+}
+
+/// The app text assets (`modules::text_assets`): a factory whose whole body
+/// exports a text, referenced at least once, and only from app code —
+/// never from inside another extracted module. Named from its own text
+/// (the hash fallback when the text names nothing).
+fn mark_text_assets(
+    c: &mut BunModuleClassification,
+    ingest: &Ingest<'_>,
+    planner: &IdentifierPlanner,
+) {
+    let mut bodies: Vec<(usize, usize)> = c
+        .factories
+        .iter()
+        .map(|f| (f.body_span.start as usize, f.body_span.end as usize))
+        .collect();
+    bodies.sort_unstable();
+    let inside_a_module = |at: usize| {
+        let i = bodies.partition_point(|&(start, _)| start <= at);
+        i > 0 && at < bodies[i - 1].1
+    };
+    for f in &mut c.factories {
+        let Some(text) = &f.exported_text else {
+            continue;
+        };
+        let app_only = planner.references(ingest, f).is_some_and(|(spans, _)| {
+            !spans.is_empty() && spans.iter().all(|&(start, _)| !inside_a_module(start))
+        });
+        if !app_only {
+            continue;
+        }
+        let name =
+            text_assets::asset_stem(text).unwrap_or_else(|| hash_fallback_name(&f.structural_hash));
+        f.name = Some(name);
+        f.name_source = Some(NameSource::Asset);
+        f.name_origin = Some(NameSource::Asset);
+    }
+}
+
+/// The content carry (finding #88, `modules::vendor_pairing`): the
+/// modules this run would otherwise ask the model about (and the app text
+/// assets, for their identifier), paired with the prior modules nothing
+/// carried into. Reads the prior tree's files only when there is something
+/// on both sides. None without a prior tree.
+fn carry_by_content(
+    factories: &mut [FactoryRecord],
+    prior: &PriorVendor,
+    fresh_text: impl Fn(&FactoryRecord) -> String + Sync + Send,
+) -> Option<ContentCarryReport> {
+    let root = prior.root.as_ref()?;
+    let candidates: Vec<usize> = (0..factories.len())
+        .filter(|&i| is_content_candidate(&factories[i]))
+        .collect();
+    let leftovers = leftover_priors(&prior.modules, factories);
+    let mut report = ContentCarryReport {
+        candidates: candidates.len(),
+        leftovers: leftovers.len(),
+        carries: Vec::new(),
+    };
+    if candidates.is_empty() || leftovers.is_empty() {
+        return Some(report);
+    }
+    // Every prior module's features: the IDF is over the WHOLE prior tree.
+    let prior_features: Vec<Option<ModuleFeatures>> =
+        crate::par::map_ordered(&prior.modules, |m| {
+            fs::read_to_string(root.join(&m.file_name))
+                .ok()
+                .and_then(|t| prior_factory_text(&t))
+                .map(|t| module_features(&t))
+        });
+    let idf = literal_idf(prior_features.iter().flatten());
+    let by_file: HashMap<&str, usize> = prior
+        .modules
+        .iter()
+        .enumerate()
+        .map(|(i, m)| (m.file_name.as_str(), i))
+        .collect();
+    // A leftover whose file is unreadable cannot be paired.
+    let readable: Vec<(&PriorModule, &ModuleFeatures)> = leftovers
+        .into_iter()
+        .filter_map(|m| {
+            let i = *by_file.get(m.file_name.as_str())?;
+            prior_features[i].as_ref().map(|f| (m, f))
+        })
+        .collect();
+    let leftover_modules: Vec<&PriorModule> = readable.iter().map(|(m, _)| *m).collect();
+    let leftover_features: Vec<ModuleFeatures> =
+        readable.iter().map(|(_, f)| (*f).clone()).collect();
+    let fresh_features: Vec<ModuleFeatures> = {
+        let refs: Vec<&FactoryRecord> = candidates.iter().map(|&i| &factories[i]).collect();
+        crate::par::map_ordered(&refs, |f| module_features(&fresh_text(f)))
+    };
+    let pairs = pair_by_content(&fresh_features, &leftover_features, &idf);
+    report.carries = apply_content_pairs(
+        factories,
+        &candidates,
+        &leftover_modules,
+        &pairs,
+        VENDOR_DIR,
+    );
+    Some(report)
 }
 
 /// The AST classification on the parsed input (`classifyWithAst` minus the
@@ -966,6 +1187,10 @@ fn create_require_alias(source: &str) -> Option<String> {
 // `chooseCaptureFreeIdentifier`)
 // ---------------------------------------------------------------------------
 
+/// Every read of a factory var: each site's byte span, and the nearest
+/// enclosing scope of each site.
+type FactoryReferences = (Vec<(usize, usize)>, Vec<oxc_semantic::ScopeId>);
+
 /// The oxc-derived state the identifier plan needs, built once per input.
 pub struct IdentifierPlanner {
     /// Symbol per (name, declarator span): the binding the TS resolves via
@@ -1026,6 +1251,33 @@ impl IdentifierPlanner {
         used_identifiers: &HashSet<String>,
     ) -> Option<(String, Vec<(usize, usize)>)> {
         let scoping = ingest.semantic().scoping();
+        let (spans, reference_scopes) = self.references(ingest, record)?;
+        // A content pair keeps the prior's identifier (finding #88): the
+        // app code's name for the module does not churn.
+        let base = record
+            .carried
+            .as_ref()
+            .and_then(|c| c.runtime_identifier.clone())
+            .unwrap_or_else(|| stable_stem(record));
+        let identifier = choose_capture_free_identifier(
+            &sanitize_identifier(&base),
+            &reference_scopes,
+            &self.globals,
+            scoping,
+            used_identifiers,
+        )?;
+        Some((identifier, spans))
+    }
+
+    /// Every READ of the factory var — its span and the nearest enclosing
+    /// scope of the site — or None when the binding cannot be rewritten
+    /// safely: unresolvable or shadowed, redeclared, or written.
+    pub fn references(
+        &self,
+        ingest: &Ingest<'_>,
+        record: &FactoryRecord,
+    ) -> Option<FactoryReferences> {
+        let scoping = ingest.semantic().scoping();
         let nodes = ingest.semantic().nodes();
         let symbol = *self.bindings.get(&(
             record.factory_var.clone(),
@@ -1062,14 +1314,7 @@ impl IdentifierPlanner {
                 current = parent;
             }
         }
-        let identifier = choose_capture_free_identifier(
-            &sanitize_identifier(&stable_stem(record)),
-            &reference_scopes,
-            &self.globals,
-            scoping,
-            used_identifiers,
-        )?;
-        Some((identifier, spans))
+        Some((spans, reference_scopes))
     }
 }
 

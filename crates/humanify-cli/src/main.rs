@@ -98,6 +98,10 @@ enum Command {
         /// fileName, runtimeIdentifier}) as JSON here.
         #[arg(long)]
         index: Option<String>,
+        /// Write the content carry (finding #88) as JSON here: candidates,
+        /// prior leftovers, and every carried module with its score.
+        #[arg(long)]
+        carries: Option<String>,
         /// The webcrack shim script (scripts/webcrack-shim.ts), run with
         /// `npx tsx` from its repo root; required for webpack/browserify.
         #[arg(long)]
@@ -224,6 +228,7 @@ fn main() {
             max_tokens,
             llm_log,
             index,
+            carries,
             webcrack_shim,
         }) => {
             let args = UnpackArgs {
@@ -238,6 +243,7 @@ fn main() {
                 },
                 llm_log,
                 index,
+                carries,
                 webcrack_shim,
             };
             if let Err(e) = run_unpack(&input, &out_dir, args) {
@@ -444,6 +450,7 @@ struct UnpackArgs {
     key_params: humanify_model::llm::CacheKeyParams,
     llm_log: Option<String>,
     index: Option<String>,
+    carries: Option<String>,
     webcrack_shim: Option<String>,
 }
 
@@ -524,7 +531,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         .map(|f| f.captures.len())
         .sum();
     println!(
-        "unpack: adapter={} files={} sources={} llm-renamed={}{} kept-in-app={} captures={}",
+        "unpack: adapter={} files={} sources={} llm-renamed={}{}{} kept-in-app={} captures={}",
         adapter.name(),
         outcome.result.files.len(),
         sources
@@ -540,9 +547,31 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
                 r.factories_joined, r.prior_entries, r.groups_joined
             ))
             .unwrap_or_default(),
+        outcome
+            .content_carry
+            .as_ref()
+            .map(|r| format!(
+                " content-carried={}/{} leftovers={}",
+                r.carries.len(),
+                r.candidates,
+                r.leftovers
+            ))
+            .unwrap_or_default(),
         outcome.kept_in_app,
         captures,
     );
+    if let (Some(path), Some(report)) = (&args.carries, &outcome.content_carry) {
+        let json = serde_json::json!({
+            "candidates": report.candidates,
+            "leftovers": report.leftovers,
+            "carries": report.carries,
+        });
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(&json).expect("json") + "\n",
+        )
+        .map_err(|e| format!("write {path}: {e}"))?;
+    }
     if let Some(path) = &args.index {
         let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");
         std::fs::write(

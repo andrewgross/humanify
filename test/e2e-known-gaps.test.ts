@@ -9,11 +9,13 @@ import { describe, it } from "node:test";
 
 import {
   apartFailures,
+  assetFailures,
   expectationFailures,
   judgeKnownGap,
   KNOWN_GAPS,
   type KnownGap,
-  staleKnownGaps
+  staleKnownGaps,
+  staysFailures
 } from "../scripts/e2e.js";
 
 const gap: KnownGap = {
@@ -145,5 +147,39 @@ describe("apartFailures", () => {
 
   it("is empty when every pair sits in separate files", () => {
     assert.deepEqual(apartFailures([["ARCHIVE#", "PALETTE#"]], files), []);
+  });
+});
+
+describe("assetFailures", () => {
+  it("names an expected app text asset the tree lacks", () => {
+    assert.deepEqual(
+      assetFailures(
+        ["src/_assets/a.js", "src/_assets/b.js"],
+        ["src/_assets/a.js", "src/index.js"]
+      ),
+      ["unpack: no app text asset src/_assets/b.js"]
+    );
+  });
+});
+
+describe("staysFailures", () => {
+  const fresh = new Map([["vendor/lib_aaaaaaaa.js", "YAML-MARK"]]);
+
+  it("passes a vendor file that kept its path", () => {
+    const prior = new Map([["vendor/lib_aaaaaaaa.js", "YAML-MARK v2"]]);
+    assert.deepEqual(staysFailures(["YAML-MARK"], fresh, prior), []);
+  });
+
+  it("names a vendor file that moved across the release", () => {
+    const prior = new Map([["vendor/lib_bbbbbbbb.js", "YAML-MARK v2"]]);
+    assert.deepEqual(staysFailures(["YAML-MARK"], fresh, prior), [
+      'unpack: "YAML-MARK" moved from vendor/lib_aaaaaaaa.js to vendor/lib_bbbbbbbb.js across the release'
+    ]);
+  });
+
+  it("names a marker one release lacks", () => {
+    assert.deepEqual(staysFailures(["YAML-MARK"], fresh, new Map()), [
+      'unpack: no vendor file holds "YAML-MARK" in both releases'
+    ]);
   });
 });
