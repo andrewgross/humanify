@@ -510,16 +510,71 @@ fn every_retried_identifier_survives_the_snippet_budget() {
     assert!(out.contains("var zz = make();"));
 }
 
+fn strings(names: &[&str]) -> Vec<String> {
+    names.iter().map(|s| s.to_string()).collect()
+}
+
+/// The retry do-not list's ORDER (Andrew, 2026-10-06: "prioritize the
+/// names that were chosen that already collided at the top … ahead of the
+/// globals"): the model's own refused answers first, then the taken names
+/// that share their stem, then the program's names, then the built-ins.
 #[test]
-fn retry_used_names_lead_with_the_collided_suggestions_capped_at_25() {
-    let mut prev = JsRecord::default();
-    prev.set("a", "taken");
-    prev.set("b", "taken");
-    let windowed: Vec<String> = (0..40).map(|i| format!("n{i}")).collect();
-    let out = build_retry_used_names(&windowed, &prev);
-    assert_eq!(out[0], "taken");
+fn retry_used_names_lead_with_the_refused_answers_then_their_stem_then_program_names() {
+    let refused = strings(&["validatePath", "validateFilePath"]);
+    let in_use = strings(&[
+        "x",
+        "validatePath",
+        "pathModule",
+        "validateFilePathSync",
+        "Object",
+        "validateFilePath2",
+        "validatePathname",
+    ]);
+    let windowed = strings(&["console", "process", "Object", "helperA", "helperB"]);
+    let out = build_retry_used_names(&refused, &in_use, &windowed);
+    assert_eq!(
+        out,
+        strings(&[
+            "validatePath",
+            "validateFilePath",
+            "validateFilePathSync",
+            "validateFilePath2",
+            "helperA",
+            "helperB",
+            "console",
+            "process",
+            "Object",
+        ]),
+        "own answers, then same-stem taken names, then program names, then built-ins"
+    );
+}
+
+/// The repeated-library shape: `pathModule` refused, `pathModule2…31`
+/// taken. The cap (25) is filled with the family the model keeps hitting,
+/// never with built-ins — before, ~1.4 of the 25 were program names.
+#[test]
+fn retry_used_names_show_the_numbered_family_before_any_builtin_capped_at_25() {
+    let refused = strings(&["pathModule"]);
+    let mut in_use = strings(&["process", "require"]);
+    in_use.extend((2..=31).map(|i| format!("pathModule{i}")));
+    let windowed = strings(&["console", "process", "Buffer", "Promise"]);
+    let out = build_retry_used_names(&refused, &in_use, &windowed);
     assert_eq!(out.len(), 25);
-    assert_eq!(out[1], "n0");
+    assert_eq!(out[0], "pathModule");
+    assert_eq!(out[1], "pathModule2");
+    assert_eq!(out[24], "pathModule25");
+}
+
+/// The refused answers are never cut by the cap (they are what the model
+/// must not repeat); a short refused word has no stem family.
+#[test]
+fn retry_used_names_keep_every_refused_answer_past_the_cap() {
+    let refused: Vec<String> = (0..30).map(|i| format!("taken{i}x")).collect();
+    let windowed: Vec<String> = (0..40).map(|i| format!("n{i}")).collect();
+    let out = build_retry_used_names(&refused, strings(&["ab", "abc"]), &windowed);
+    assert_eq!(out, refused);
+    let out = build_retry_used_names(&strings(&["ab"]), strings(&["abc", "ab2"]), &[]);
+    assert_eq!(out, strings(&["ab"]), "a 2-letter answer has no family");
 }
 
 #[test]
@@ -902,12 +957,14 @@ fn run_scripted(
     .expect("the stage runs")
 }
 
-/// The barrier re-asks (the disclosed ones carry `prior_rejects`).
+/// The barrier re-asks: they carry `prior_rejects` (as a lane round-2
+/// with a duplicate does since 2026-10-06) and, unlike a lane request,
+/// no `prompt_body` (`retry_request` clears it).
 fn barrier_reasks(out: &crate::naming::driver::NamingOutcome) -> Vec<&super::DispatchRecord> {
     out.waves
         .dispatches
         .iter()
-        .filter(|d| d.request.prior_rejects.is_some())
+        .filter(|d| d.request.prior_rejects.is_some() && d.request.prompt_body.is_none())
         .collect()
 }
 
@@ -1044,11 +1101,12 @@ fn a_stubborn_echo_exhausts_and_stays_a_sweep_target() {
 
 /// Fix B (2026-10-03): the do-not list discloses the word the MODEL said.
 /// `a`'s lane hears `eventHooks` (taken by the function renamed in an
-/// earlier wave), exhausts, and its resolution tail decorates it to
-/// `eventHooksVal` — which a sibling lane's answer wins at the barrier.
-/// The re-ask must disclose `eventHooks`, the model's own word: before
-/// the fix it showed `eventHooksVal`, so the model re-offered `eventHooks`
-/// and collided again.
+/// earlier wave) twice. Its resolution tail used to decorate it to
+/// `eventHooksVal` (which a sibling lane's answer then won at the
+/// barrier); since 2026-10-06 the tail hands the model's word to the
+/// barrier undecorated. Either way the re-ask must disclose `eventHooks`,
+/// the model's own word — never a decoration of ours: showing
+/// `eventHooksVal` let the model re-offer `eventHooks` and collide again.
 #[test]
 fn the_reask_discloses_the_models_own_word_not_our_decoration() {
     let mut params = String::new();
@@ -1068,7 +1126,7 @@ fn the_reask_discloses_the_models_own_word_not_our_decoration() {
     );
     let out = run_scripted(&fresh, |id, r| match id {
         "e0" => "eventHooks".to_string(),
-        "a" if r.prior_rejects.is_some() => "eventNameKey".to_string(),
+        "a" if barrier_asked(r) => "eventNameKey".to_string(),
         "a" => "eventHooks".to_string(),
         "v05" => "eventHooksVal".to_string(),
         other => plain_name(other),
@@ -1087,9 +1145,9 @@ fn the_reask_discloses_the_models_own_word_not_our_decoration() {
             )
         });
     assert!(
-        reask
-            .user_prompt
-            .contains("- \"a\" was suggested as \"eventHooks\" but that conflicts"),
+        reask.user_prompt.contains(
+            "- \"a\" was suggested as \"eventHooks\" but that name is already used by a function in an enclosing scope"
+        ),
         "the model's own word is disclosed: {}",
         reask.user_prompt
     );
@@ -1384,4 +1442,131 @@ fn a_zero_reask_budget_ladders_a_lone_collision_as_before() {
     let code = out.code.as_deref().expect("shipped");
     assert!(code.contains("function (errorVal)"), "{code}");
     assert!(barrier_reasks(&out).is_empty());
+}
+
+/// The `validatePathVal` chain (2026-10-06 investigation: ~2,420 silent
+/// lane-end ladders per fresh run). `Vp` is named `validatePath` in an
+/// earlier wave; `Rn`'s lane hears `a` → `validatePath` (taken), its lane
+/// retry → `validateFilePath`, which the sibling `b` claimed in round 1.
+const LANE_END_PROGRAM: &str = "function Vp(s) {\n  return s.length > 0;\n}\n\
+     function Rn(b, a) {\n  return Vp(b) && Vp(a);\n}\n\
+     console.log(Rn(\"x\", \"y\"));\n";
+
+/// A barrier re-ask (`retry_request` clears the prompt body a lane
+/// request carries).
+fn barrier_asked(r: &humanify_model::llm::BatchRenameRequest) -> bool {
+    r.prior_rejects.is_some() && r.prompt_body.is_none()
+}
+
+/// How many rejected answers of `id` the request discloses.
+fn disclosed(id: &str, r: &humanify_model::llm::BatchRenameRequest) -> usize {
+    r.prior_rejects
+        .as_ref()
+        .and_then(|p| p.get(id))
+        .map_or(0, <[humanify_model::llm::PriorReject]>::len)
+}
+
+fn lane_end_answer(id: &str, r: &humanify_model::llm::BatchRenameRequest) -> String {
+    match id {
+        "Vp" => "validatePath".to_string(),
+        "s" => "pathText".to_string(),
+        "Rn" => "runChecks".to_string(),
+        "b" => "validateFilePath".to_string(),
+        "a" if r.is_retry != Some(true) => "validatePath".to_string(),
+        "a" if disclosed(id, r) < 2 => "validateFilePath".to_string(),
+        "a" => "checkInputPath".to_string(),
+        other => plain_name(other),
+    }
+}
+
+/// Item 2 (Andrew, 2026-10-06): when the lane's single retry ALSO
+/// collides, the answer goes to the barrier's DISCLOSED re-ask — never a
+/// silent `validateFilePathVal`. The re-ask's do-not list starts with
+/// BOTH refused answers, each line says who holds the name, and the clean
+/// answer lands. On main: no re-ask, `validateFilePathVal`.
+#[test]
+fn a_lane_retry_that_collides_again_is_reasked_with_both_answers_not_laddered() {
+    let out = run_scripted(LANE_END_PROGRAM, lane_end_answer);
+    let code = out.code.as_deref().expect("shipped");
+    assert!(!code.contains("Val"), "never laddered:\n{code}");
+    assert!(
+        code.contains("function runChecks(validateFilePath, checkInputPath)"),
+        "the re-asked clean name lands:\n{code}"
+    );
+    let reasks: Vec<_> = barrier_reasks(&out)
+        .into_iter()
+        .filter(|d| d.request.identifiers == ["a"])
+        .collect();
+    assert_eq!(reasks.len(), 1, "one disclosed re-ask, then the clean name");
+    let prompt = &reasks[0].user_prompt;
+    assert!(
+        prompt.contains(
+            "- \"a\" was suggested as \"validatePath\" but that name is already used by a function in an enclosing scope\n\
+             - \"a\" was suggested as \"validateFilePath\" but that name is already used by another parameter in the same scope\n"
+        ),
+        "both refused answers, oldest first, each with its holder:\n{prompt}"
+    );
+    assert!(
+        prompt.contains("DO NOT suggest these names: validatePath, validateFilePath\n"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(
+            "Names already in use (MUST avoid ALL of these): validatePath, validateFilePath, "
+        ),
+        "the do-not list starts with the refused answers:\n{prompt}"
+    );
+    assert_eq!(out.processor.lane_end_handoffs, 1);
+}
+
+/// With `--rename-retries 0` there is no re-ask to hand to: the lane-end
+/// collision settles on the ladder exactly as before.
+#[test]
+fn a_zero_reask_budget_still_ladders_the_lane_end_collision() {
+    let mut config = plain_config();
+    config.tunables.reask_limit = 0;
+    let out = crate::naming::driver::run_naming(
+        &crate::naming::driver::NamingInput {
+            fresh: LANE_END_PROGRAM,
+            prior: None,
+            library: None,
+        },
+        &config,
+        &ScriptProvider {
+            answer: lane_end_answer,
+        },
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let code = out.code.as_deref().expect("shipped");
+    assert!(code.contains("validateFilePathVal"), "{code}");
+    assert!(barrier_reasks(&out).is_empty());
+}
+
+/// Item 1 on the lane's own retry: the round-2 prompt says WHO holds the
+/// refused name and its do-not list leads with it.
+#[test]
+fn a_lane_retry_names_the_holder_and_leads_its_list_with_the_refused_answer() {
+    let out = run_scripted(LANE_END_PROGRAM, lane_end_answer);
+    let lane_retry = out
+        .waves
+        .dispatches
+        .iter()
+        .find(|d| {
+            d.request.is_retry == Some(true)
+                && d.request.identifiers == ["a"]
+                && d.request.prompt_body.is_some()
+        })
+        .expect("the lane's round-2 for `a`");
+    let prompt = &lane_retry.user_prompt;
+    assert!(
+        prompt.contains(
+            "- \"a\" was suggested as \"validatePath\" but that name is already used by a function in an enclosing scope\n"
+        ),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("Names already in use (MUST avoid ALL of these): validatePath, "),
+        "{prompt}"
+    );
 }

@@ -185,12 +185,13 @@ fn a_lone_colliding_answer_goes_to_the_barrier_undecorated() {
     );
 }
 
-/// The hand-off is for answers the all-failed rule cut off BEFORE their
-/// round-2: an id that already had its lane round-2 and collided again is
-/// settled by the tail's ladder as before.
+/// 2026-10-06 (Andrew, the silent `validatePathVal`): an id whose lane
+/// round-2 collided AGAIN goes to the barrier's disclosed re-ask
+/// undecorated, like the cut-off hand-off — the lane's earlier refused
+/// answer travels with it, and its round-2 carried the history.
 #[test]
-fn a_collision_exhausted_through_round_two_still_ladders_in_the_tail() {
-    let used = |n: &str| n == "taken";
+fn a_collision_exhausted_through_round_two_goes_to_the_barrier_with_its_history() {
+    let used = |n: &str| n == "taken" || n == "takenToo";
     let reject = |_: &str, _: &str| None;
     let e = env(&used, &reject);
     let mut lane = Lane::new(names(&["a", "b"]), true);
@@ -198,6 +199,39 @@ fn a_collision_exhausted_through_round_two_still_ladders_in_the_tail() {
     lane.feed(Ok((renames(&[("a", "alpha"), ("b", "taken")]), None)), &e);
     let retry = lane.next_call().expect("b's round-2");
     assert_eq!(retry.batch, names(&["b"]));
+    assert_eq!(
+        retry.refused,
+        vec![("b".to_string(), names(&["taken"]))],
+        "the round-2 carries the model's refused answer"
+    );
+    lane.feed(Ok((renames(&[("b", "takenToo")]), None)), &e);
+    assert!(lane.next_call().is_none());
+    lane.finish(&e);
+    assert_eq!(
+        lane.effects[1],
+        LaneEffect::Rename {
+            old: "b".into(),
+            new: "takenToo".into()
+        },
+        "undecorated, for the barrier to re-ask"
+    );
+    assert_eq!(lane.earlier.get("b"), Some(&names(&["taken"])));
+    assert_eq!(lane.report.lane_end_handoffs, 1);
+    assert_eq!(lane.report.collision_handoffs, 0);
+    assert!(lane.report.contention.is_empty(), "no ladder in the lane");
+}
+
+/// Without a re-ask budget there is nothing to hand to: the tail's ladder
+/// settles the lane-end collision as before.
+#[test]
+fn a_lane_end_collision_without_a_reask_budget_still_ladders() {
+    let used = |n: &str| n == "taken";
+    let reject = |_: &str, _: &str| None;
+    let e = env(&used, &reject);
+    let mut lane = Lane::new(names(&["a", "b"]), true).tuned(&no_reasks());
+    lane.next_call().unwrap();
+    lane.feed(Ok((renames(&[("a", "alpha"), ("b", "taken")]), None)), &e);
+    lane.next_call().expect("b's round-2");
     lane.feed(Ok((renames(&[("b", "taken")]), None)), &e);
     assert!(lane.next_call().is_none());
     lane.finish(&e);
@@ -208,7 +242,7 @@ fn a_collision_exhausted_through_round_two_still_ladders_in_the_tail() {
             new: "takenVal".into()
         }
     );
-    assert_eq!(lane.report.collision_handoffs, 0);
+    assert_eq!(lane.report.lane_end_handoffs, 0);
 }
 
 /// An unescapable rejection is never handed off: no re-ask can fix it.

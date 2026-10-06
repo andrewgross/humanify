@@ -356,6 +356,10 @@ struct Entry {
     /// disclosure each further re-ask carries), oldest first:
     /// Empty for a lane's first-round entry; nonempty marks a re-ask entry.
     rejects: Vec<Reject>,
+    /// The lane's EARLIER refused answers of an id it handed to the
+    /// barrier (2026-10-06): disclosed first by every re-ask, never
+    /// counted against the re-ask budget (that is `rejects`).
+    earlier: Vec<Reject>,
     /// The model's OWN word behind `new` (a prior-name snap or the lane's
     /// decoration can make them differ) — what a rejection discloses.
     proposed: String,
@@ -452,6 +456,8 @@ struct RetryItem {
     id: String,
     index: usize,
     prev_name: String,
+    /// The lane's earlier refused answers (see `Entry::earlier`).
+    earlier: Vec<Reject>,
     /// The item's FULL reject history — the MODEL's words, each with its
     /// rejection code (its last entry is the word behind `prev_name`): the
     /// retry's prompt discloses all of it.
@@ -1576,8 +1582,17 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         self.guard_note(site, &code, remaining);
         let windowed =
             self.windowed_used_names(f, remaining, &binding_map, &self.sets[*set], taken);
+        let prior_rejects = if is_retry {
+            self.disclosure(call, |id| binding_map.get(id).map(|b| b.scope))
+        } else {
+            None
+        };
         let used_for_prompt = if is_retry {
-            build_retry_used_names(&windowed, &call.prev)
+            build_retry_used_names(
+                &refused_answers(remaining, &call.prev, prior_rejects.as_ref()),
+                self.sets[*set].order(),
+                &windowed,
+            )
         } else {
             windowed
         };
@@ -1590,7 +1605,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 used_names: &used_for_prompt,
                 previous_attempt: &prev,
                 failures: &call.failures,
-                prior_rejects: call.prior_rejects.as_ref(),
+                prior_rejects: prior_rejects.as_ref(),
                 prior_version_code: prior_context.as_deref(),
                 already_renamed: already.as_ref(),
                 name_profile: self.state.name_profile(),
@@ -1605,7 +1620,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             is_retry: Some(is_retry),
             previous_attempt: is_retry.then(|| prev.clone()),
             failures: is_retry.then(|| call.failures.clone()),
-            prior_rejects: is_retry.then(|| call.prior_rejects.clone()).flatten(),
+            prior_rejects,
             system_prompt: None,
             user_prompt: None,
             prompt_body,
@@ -1615,6 +1630,56 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             already_renamed: already,
             prior_name_hints: close.and_then(|c| c.hints.clone()),
         }
+    }
+
+    /// A retry's disclosure of the model's refused answers: a barrier or
+    /// sweep seed's accumulated one as it came; for a lane round-2, the
+    /// lane's OWN history of colliding answers per duplicate id (every
+    /// round, oldest first), each saying WHO holds the name where the
+    /// scopes know (2026-10-06, Andrew: every retry prompt — the #73/#74
+    /// disclosure the barrier already gave). A last answer the scope check
+    /// rejected for another class than a taken name gets no holder.
+    fn disclosure(
+        &self,
+        call: &LaneCall,
+        scope_of: impl Fn(&str) -> Option<BScopeId>,
+    ) -> Option<PriorRejects> {
+        if call.prior_rejects.is_some() {
+            return call.prior_rejects.clone();
+        }
+        let mut prior = PriorRejects::default();
+        for (id, words) in &call.refused {
+            if !call.failures.duplicates.contains(id) || words.is_empty() {
+                continue;
+            }
+            let late = call
+                .rejections
+                .iter()
+                .find(|(r, _)| r == id)
+                .map(|(_, why)| *why);
+            let scope = scope_of(id);
+            let list = words
+                .iter()
+                .enumerate()
+                .map(|(i, word)| {
+                    let why = late.filter(|_| i + 1 == words.len());
+                    let named =
+                        why.is_none_or(|r| reask::class_of(r) == reask::ReaskClass::NameTaken);
+                    let held_by = scope
+                        .filter(|_| named)
+                        .and_then(|s| self.state.name_holder(s, id, word, why))
+                        .map(crate::naming::prompts::holder_phrase);
+                    PriorReject {
+                        name: word.clone(),
+                        invalid: false,
+                        borrowed: None,
+                        held_by,
+                    }
+                })
+                .collect();
+            prior.0.push((id.clone(), list));
+        }
+        (!prior.0.is_empty()).then_some(prior)
     }
 
     /// The prompt guard's measurement of one function ask (`naming::shown`):
@@ -1910,8 +1975,17 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             out
         };
         let is_retry = call.round > 1;
+        let prior_rejects = if is_retry {
+            self.disclosure(call, |_| Some(self.target_scope))
+        } else {
+            None
+        };
         let prompt_names = if is_retry {
-            build_retry_used_names(windowed, &call.prev)
+            build_retry_used_names(
+                &refused_answers(remaining, &call.prev, prior_rejects.as_ref()),
+                self.used.iter(),
+                windowed,
+            )
         } else {
             windowed.clone()
         };
@@ -1953,7 +2027,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             let prefix = build_module_level_retry_prefix(
                 &prev,
                 &call.failures,
-                call.prior_rejects.as_ref(),
+                prior_rejects.as_ref(),
                 self.state.name_profile(),
             );
             user = format!("{prefix}\n{user}");
@@ -1971,7 +2045,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             is_retry: Some(is_retry),
             previous_attempt: is_retry.then_some(prev),
             failures: is_retry.then(|| call.failures.clone()),
-            prior_rejects: is_retry.then(|| call.prior_rejects.clone()).flatten(),
+            prior_rejects,
             system_prompt: Some(MODULE_LEVEL_RENAME_SYSTEM_PROMPT.to_string()),
             user_prompt: Some(user),
             prompt_body: body,
@@ -2063,10 +2137,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             // The model's own last word (Fix B): never our decoration.
             let last = item.rejects.last().map_or(&item.prev_name, |r| &r.word);
             prev.set(&item.id, last);
+            // The lane's earlier refused answers first, then the barrier's
+            // accumulated ones — every answer the model already gave.
             prior.0.push((
                 item.id.clone(),
-                item.rejects
+                item.earlier
                     .iter()
+                    .chain(&item.rejects)
                     .map(|r| disclose_reject(&r.word, r.code, r.held_by.clone(), self.inp.stems))
                     .collect(),
             ));
@@ -2083,6 +2160,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             // (`run_retries` → `AskSite::reask`), not through the lane.
             rejections: Vec::new(),
             prior_rejects: Some(prior),
+            refused: Vec::new(),
         };
         let mut request = match &self.strategies[r.strategy] {
             Strategy::Fn { .. } => self.fn_request(r.strategy, r.seed.ctx, &call),
@@ -2157,6 +2235,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 target: item.target.clone(),
                 live,
                 rejects: item.rejects.clone(),
+                earlier: item.earlier.clone(),
                 proposed,
                 answer_key,
             });
@@ -2206,6 +2285,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 id: entry.old,
                 index: entry.binding_index,
                 prev_name: entry.new,
+                earlier: entry.earlier,
                 rejects,
                 target: entry.target,
                 binding: entry.binding,
@@ -2606,6 +2686,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             self.processor.invalid_suggestion_finishes += lane.invalid_suggestion_finishes;
             self.processor.all_failed_windows += lane.all_failed_windows;
             self.processor.collision_handoffs += lane.collision_handoffs;
+            self.processor.lane_end_handoffs += lane.lane_end_handoffs;
         }
         let report = RenameReport {
             ty,
@@ -2751,6 +2832,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         };
         let mut proposed = lr.lane.proposed;
         let mut answer_keys = lr.lane.answer_keys;
+        let mut earlier = lr.lane.earlier;
         for effect in lr.lane.effects {
             let (old, new, identity) = match effect {
                 LaneEffect::Rename { old, new } => (old, new, false),
@@ -2786,6 +2868,22 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 _ => unreachable!("strategy/ctx kinds agree"),
             };
             let node_index = ctx.node_index;
+            let scope = match &target {
+                ApplyTarget::Fn { binding, .. } => binding.as_ref().map(|b| b.scope),
+                ApplyTarget::Module { mb } => mb.map(|j| self.inp.rows.modules[j].scope),
+            };
+            let earlier: Vec<Reject> = earlier
+                .remove(&old)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|word| Reject {
+                    held_by: scope
+                        .and_then(|s| self.state.name_holder(s, &old, &word, None))
+                        .map(crate::naming::prompts::holder_phrase),
+                    word,
+                    code: None,
+                })
+                .collect();
             let seq = self.next_seq();
             self.entries.push(Entry {
                 node_index,
@@ -2800,6 +2898,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
                 target,
                 live,
                 rejects: Vec::new(),
+                earlier,
                 proposed,
                 answer_key,
             });
@@ -3474,25 +3573,104 @@ pub fn extract_retry_snippet(code: &str, identifiers: &[String]) -> String {
     parts.join("\n")
 }
 
-/// `buildRetryUsedNames`: the previous suggestions, then windowed names up
-/// to 25.
-pub fn build_retry_used_names(windowed: &[String], prev: &JsRecord) -> Vec<String> {
+/// The model's OWN refused answers a retry asks about, oldest first per
+/// identifier and in batch order: every disclosed prior rejection, then
+/// the last answer (`prev`) when the disclosure did not already carry it.
+pub fn refused_answers(
+    batch: &[String],
+    prev: &JsRecord,
+    prior: Option<&PriorRejects>,
+) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |w: &str| {
+        if !w.is_empty() && !out.iter().any(|o| o == w) {
+            out.push(w.to_string());
+        }
+    };
+    for id in batch {
+        for r in prior.and_then(|p| p.get(id)).unwrap_or_default() {
+            push(&r.name);
+        }
+        if let Some(w) = prev.get(id) {
+            push(w);
+        }
+    }
+    out
+}
+
+/// The retry do-not list — the "Names already in use" list of EVERY retry
+/// prompt (a lane round-2, a barrier re-ask, a sweep re-ask) — and the ONE
+/// owner of its order (Andrew, 2026-10-06: "prioritize the names that were
+/// chosen that already collided at the top … ahead of the globals"):
+///
+/// 1. the model's OWN refused answers (`refused`, all rounds), never cut;
+/// 2. the in-use names that share a refused answer's stem
+///    ([`shares_stem`]: `pathModule2…31` when it answered `pathModule`);
+/// 3. the windowed program names;
+/// 4. the windowed built-ins and globals (`is_well_known_name`) last —
+///
+/// to [`RETRY_USED_NAMES_CAP`]. Before, the list was the refused answers
+/// then the windowed list, built-ins FIRST: of 25 names ~1.4 came from
+/// the program (the 2026-10-06 investigation).
+pub fn build_retry_used_names<S: AsRef<str>>(
+    refused: &[String],
+    in_use: impl IntoIterator<Item = S>,
+    windowed: &[String],
+) -> Vec<String> {
+    use crate::rename::votes::proximity::is_well_known_name;
     let mut out: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
-    for (_, v) in &prev.0 {
+    for v in refused {
         if seen.insert(v.clone()) {
             out.push(v.clone());
         }
     }
-    for n in windowed {
-        if out.len() >= RETRY_USED_NAMES_CAP {
-            break;
+    let stems: Vec<&str> = refused.iter().filter_map(|w| answer_stem(w)).collect();
+    let mut take = |out: &mut Vec<String>, n: &str| {
+        if out.len() < RETRY_USED_NAMES_CAP && !seen.contains(n) {
+            seen.insert(n.to_string());
+            out.push(n.to_string());
         }
-        if seen.insert(n.clone()) {
-            out.push(n.clone());
+    };
+    if !stems.is_empty() {
+        for n in in_use {
+            if out.len() >= RETRY_USED_NAMES_CAP {
+                break;
+            }
+            let n = n.as_ref();
+            if stems.iter().any(|s| shares_stem(n, s)) {
+                take(&mut out, n);
+            }
         }
     }
+    for n in windowed.iter().filter(|n| !is_well_known_name(n)) {
+        take(&mut out, n);
+    }
+    for n in windowed.iter().filter(|n| is_well_known_name(n)) {
+        take(&mut out, n);
+    }
     out
+}
+
+/// A refused answer's stem: the word without trailing digits, when three
+/// characters or more remain (a two-letter answer has no family worth
+/// listing).
+fn answer_stem(word: &str) -> Option<&str> {
+    let stem = word.trim_end_matches(|c: char| c.is_ascii_digit());
+    (stem.len() >= 3).then_some(stem)
+}
+
+/// `name` is `stem` itself or `stem` followed by a new word or number —
+/// `pathModule2`, `validatePathVal`, `validateFilePathSync` share
+/// `pathModule` / `validatePath` / `validateFilePath`; `validatePathname`
+/// does not share `validatePath` (a lowercase continuation is one word).
+fn shares_stem(name: &str, stem: &str) -> bool {
+    name.strip_prefix(stem).is_some_and(|rest| {
+        rest.is_empty()
+            || rest.starts_with(|c: char| {
+                c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_' || c == '$'
+            })
+    })
 }
 
 mod gauges;

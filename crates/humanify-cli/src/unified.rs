@@ -805,6 +805,15 @@ fn pipeline_body(
         // The two spans that are bounded or transient (the window above, a
         // round's lanes, the barrier's per-round entries) are not owners;
         // everything here lives until the era drops.
+        // The pipeline-named library imports and the collisions handed to
+        // a disclosed re-ask instead of a suffix ladder (2026-10-06).
+        renderer.message(&format!(
+            "Retry hand-offs: {} lane-end, {} cut-off; library imports named: {} ({} left to the model)",
+            outcome.processor.lane_end_handoffs,
+            outcome.processor.collision_handoffs,
+            outcome.library_imports.named.len(),
+            outcome.library_imports.declined.len(),
+        ));
         let peak = &outcome.waves;
         if peak.peak_live_dispatches > 0 {
             renderer.message(&format!(

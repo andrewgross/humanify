@@ -28,10 +28,8 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use oxc_ast::AstKind;
-use oxc_ast::ast::{Argument, Expression};
 use oxc_semantic::Semantic;
 
-use crate::babel_view::unparen;
 use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
 use crate::rename::eligibility::Eligibility;
 use crate::rename::floor::{is_half_mint_head, is_wordless_mint_shape};
@@ -274,18 +272,10 @@ fn is_require_binding(semantic: &Semantic<'_>, state: &RenameState, binding: Bin
     let AstKind::VariableDeclarator(decl) = semantic.nodes().kind(path) else {
         return false;
     };
-    let Some(init) = decl.init.as_ref() else {
-        return false;
-    };
-    let Expression::CallExpression(call) = unparen(init) else {
-        return false;
-    };
-    let Expression::Identifier(callee) = unparen(&call.callee) else {
-        return false;
-    };
-    callee.name == "require"
-        && call.arguments.len() == 1
-        && matches!(&call.arguments[0], Argument::StringLiteral(_))
+    // The ONE require-call shape owner (`naming::plumbing`).
+    decl.init
+        .as_ref()
+        .is_some_and(|init| crate::naming::plumbing::require_specifier(init).is_some())
 }
 
 impl Ctx<'_, '_> {

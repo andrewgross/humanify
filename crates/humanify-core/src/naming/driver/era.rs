@@ -233,6 +233,9 @@ pub struct NamingEra {
     /// The names the pipeline chose for the bundler's plumbing
     /// (`naming::plumbing`).
     pub plumbing: crate::naming::plumbing::PlumbingNames,
+    /// The names the pipeline chose for library imports
+    /// (`naming::plumbing::name_library_imports`, 2026-10-06).
+    pub library_imports: crate::naming::plumbing::PlumbingNames,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -498,6 +501,15 @@ fn run_era<P: NameProvider>(
         &mut start.rename,
         &mut start.binding_state,
     );
+    // The library imports the pipeline names from their specifiers
+    // (`require("path")` -> `pathModule`), never asked (2026-10-06).
+    let library_imports = crate::naming::plumbing::name_library_imports(
+        semantic,
+        graph,
+        &mut start.rename,
+        &mut start.binding_state,
+        &start.suggested,
+    );
     let ph = crate::profiling::phase("era:occurrences+rows");
     let occ = Occurrences::build(semantic, &start.rename);
     let rows = Rows::build(graph, semantic, start.rename.view());
@@ -594,6 +606,7 @@ fn run_era<P: NameProvider>(
         probe_lines: Vec::new(),
         stems: crate::rename::floor::MinifiedStems::empty(opts.name_profile),
         plumbing,
+        library_imports,
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");

@@ -1183,6 +1183,83 @@ fn the_plumbing_name_overrides_a_model_name_carried_from_the_prior() {
     assert!(!mentions(&code, "once"), "{code}");
 }
 
+/// The repeated library-import shape (2026-10-06: `pathModule → pathUtil →
+/// pathLib` ×31; 46% of the barrier's exhausted re-asks): module bindings
+/// written by exactly one `X = require("<package>")`.
+const LIBRARY_IMPORT_BUNDLE: &str = "var Ap, Bq, Cr, Dz, Ez, Fw;\nfunction In() {\n  Ap = require(\"path\");\n  Bq = require(\"path\");\n  Cr = require(\"node:fs/promises\");\n  Dz = require(\"./local.js\");\n  Ez = require(\"os\");\n  Ez = Ez.platform();\n  Fw = interop(require(\"crypto\"), 1);\n}\nfunction Lf(p) {\n  var Gk = require(\"path\");\n  return Gk.join(p);\n}\nIn();\nconsole.log(Ap.join(\"a\"), Bq.sep, Cr.readFile, Dz, Ez, Fw, Lf(\"b\"));\n";
+
+/// Item 3 (Andrew, 2026-10-06): a module binding whose ONLY write is
+/// `require("<package>")` is named from the specifier by the pipeline —
+/// `path` → `pathModule`, then `pathModule2` in source order — and never
+/// asked. Precision: an app module (`./local.js`), a binding written
+/// twice, a wrapped require and a function-local binding stay the model's.
+#[test]
+fn a_repeated_library_import_is_named_from_its_specifier_not_asked() {
+    let provider = RecordingProvider::default();
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh: LIBRARY_IMPORT_BUNDLE,
+            prior: None,
+            library: None,
+        },
+        &ledger_config(),
+        &provider,
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let prompts = provider.prompts.into_inner().expect("lock");
+    for id in ["Ap", "Bq", "Cr"] {
+        assert!(!asks_for(&prompts, id), "{id} is never asked: {prompts:#?}");
+    }
+    for id in ["Dz", "Ez", "Fw", "Gk"] {
+        assert!(
+            asks_for(&prompts, id),
+            "{id} stays the model's: {prompts:#?}"
+        );
+    }
+    let code = out.code.expect("shipped");
+    assert!(code.contains("pathModule = require(\"path\")"), "{code}");
+    assert!(code.contains("pathModule2 = require(\"path\")"), "{code}");
+    assert!(
+        code.contains("fsPromisesModule = require(\"node:fs/promises\")"),
+        "{code}"
+    );
+    assert_eq!(
+        out.library_imports.named,
+        vec![
+            ("Ap".to_string(), "pathModule".to_string()),
+            ("Bq".to_string(), "pathModule2".to_string()),
+            ("Cr".to_string(), "fsPromisesModule".to_string()),
+        ]
+    );
+}
+
+/// With a prior that carried a name to one import, the carried name stays
+/// (cross-version stability) and the numbering skips it.
+#[test]
+fn a_library_import_carried_from_the_prior_keeps_its_name() {
+    let prior = "var pathLib;\nfunction initPaths() {\n  pathLib = require(\"path\");\n}\ninitPaths();\nconsole.log(pathLib.join(\"a\"));\n";
+    let fresh = "var Ap, Bq;\nfunction In() {\n  Ap = require(\"path\");\n}\nfunction Jn() {\n  Bq = require(\"path\");\n  return Bq.sep;\n}\nIn();\nconsole.log(Ap.join(\"a\"), Jn());\n";
+    let out = super::run_naming(
+        &super::NamingInput {
+            fresh,
+            prior: Some(prior),
+            library: None,
+        },
+        &ledger_config(),
+        &RecordingProvider::default(),
+        &mut retain_log(),
+    )
+    .expect("the stage runs");
+    let code = out.code.expect("shipped");
+    assert!(code.contains("pathLib = require(\"path\")"), "{code}");
+    assert!(code.contains("pathModule = require(\"path\")"), "{code}");
+    assert_eq!(
+        out.library_imports.named,
+        vec![("Bq".to_string(), "pathModule".to_string())]
+    );
+}
+
 /// A usage excerpt shows the line that MENTIONS the asked identifier: the
 /// only use of `x0u` sits deep inside a long registration call, past the
 /// ten lines a positional cut keeps (2.1.197's env-var table: the excerpt

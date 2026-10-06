@@ -37,8 +37,11 @@ use crate::rename::transfer::lifecycle::Lifecycle;
 use crate::rename::validated::{RenameRequest, RenameState, TrailSpec};
 use crate::trail::{Attempt, Outcome, Tier};
 
+mod library_imports;
 #[cfg(test)]
 mod plumbing_test;
+
+pub use library_imports::{name_library_imports, require_specifier};
 
 /// The lazy-init helper's pipeline-chosen name: Bun's and esbuild's own.
 pub const LAZY_INIT_HELPER_NAME: &str = "__esm";
