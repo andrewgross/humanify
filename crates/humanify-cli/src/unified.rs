@@ -617,7 +617,12 @@ fn pipeline_body(
     // WITHOUT either flag nothing per ask survives its dispatch — the
     // accumulated dispatch records were the ~99GB holder of a full-bundle
     // fresh run.
-    let naming_config = naming_config(settings, &toolchain, opts, switches);
+    let mut naming_config = naming_config(settings, &toolchain, opts, switches);
+    // The module step names each recorded module once, for its wrapper and
+    // its file — offered whenever the toolchain offers the module markers
+    // (the step checks they describe the bundle, as the split does).
+    naming_config.module_naming =
+        (markers == MarkerOffer::Offered).then(|| split_namer_budget(settings));
     let mut dispatch_log = match opts.dump_artifacts.as_deref() {
         Some(dir) => humanify_core::artifact_dump::DispatchLog::dump(
             naming_config.params.clone(),
@@ -815,6 +820,24 @@ fn pipeline_body(
             outcome.library_imports.named.len(),
             outcome.library_imports.declined.len(),
         ));
+        // The module step (docs/design/module-naming.md): one name per new
+        // module, for its wrapper and its file.
+        let m = &outcome.module_names;
+        if m.modules > 0 {
+            renderer.message(&format!(
+                "Module names: {} modules, {} asked ({} barrels left to the naming waves, {} carried \
+from the prior), {} calls ({} failed), {} named, {} retried as duplicates, {} left to the sweep",
+                m.modules,
+                m.asked,
+                m.barrels,
+                m.carried,
+                m.calls,
+                m.failed_calls,
+                m.named.len(),
+                m.retried,
+                m.refused.len(),
+            ));
+        }
         let peak = &outcome.waves;
         if peak.peak_live_dispatches > 0 {
             renderer.message(&format!(
@@ -1512,6 +1535,8 @@ fn naming_config(
                     .map_or(d.reask_limit, |n| n as usize),
             }
         },
+        // Set by the caller from the toolchain's marker offer.
+        module_naming: None,
     }
 }
 

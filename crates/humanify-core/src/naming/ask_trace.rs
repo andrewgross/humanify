@@ -43,6 +43,8 @@ pub enum AskReason {
     Vendor,
     /// The split's file namer / tree reviser.
     Folders,
+    /// The module namer's batch ask (`naming::module_names`).
+    Modules,
 }
 
 impl AskReason {
@@ -58,6 +60,7 @@ impl AskReason {
             AskReason::Sweep => "sweep",
             AskReason::Vendor => "vendor",
             AskReason::Folders => "folders",
+            AskReason::Modules => "modules",
         }
     }
 }
@@ -148,6 +151,8 @@ pub enum AskScope {
     Vendor,
     /// The split's file namer / tree reviser (`site: "folders"`).
     Folders,
+    /// The module namer (`site: "modules"`).
+    Modules,
 }
 
 /// The ask-site context a dispatch records that its request cannot express.
@@ -252,6 +257,7 @@ pub fn reason_of(
         AskScope::Sweep => AskReason::Sweep,
         AskScope::Vendor => AskReason::Vendor,
         AskScope::Folders => AskReason::Folders,
+        AskScope::Modules => AskReason::Modules,
     }
 }
 

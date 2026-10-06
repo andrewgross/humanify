@@ -4,7 +4,6 @@
 
 use super::{FossilAssignment, FossilOptions, assign_fossil};
 use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
-use crate::place::assign::namer::{SplitNameRequest, SplitNamer};
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
 use crate::place::trail::PlacementTrail;
 use crate::twins::statement_inventory_with_values;
@@ -312,115 +311,81 @@ fn a_statement_whose_hash_lived_in_another_prior_module_reads_as_a_move() {
     assert_ne!(moved.prior_file.as_deref(), Some(moved.file.as_str()));
 }
 
-/// A namer that records every request and answers with a fixed proposal.
-struct FixedNamer {
-    answer: Option<String>,
-    asked: Vec<SplitNameRequest>,
-}
-
-impl SplitNamer for FixedNamer {
-    fn name(&mut self, requests: &[SplitNameRequest]) -> Vec<Option<String>> {
-        self.asked.extend(requests.iter().cloned());
-        requests.iter().map(|_| self.answer.clone()).collect()
-    }
-}
-
-fn assign_named(b: &Body, prior: &StableSplitLedger, namer: &mut FixedNamer) -> FossilAssignment {
-    assign_fossil(
-        &b.values,
-        &b.spans,
-        &b.hashes,
-        Some(prior),
-        FossilOptions {
-            mint_namer: Some(namer),
-            ..FossilOptions::default()
-        },
-    )
-    .expect("assign")
+/// Two modules whose wrappers carry module names (the naming stage's
+/// module step, docs/design/module-naming.md): the first is helper-first
+/// (`roundToNearest` leads a color module), the second imports it.
+fn module_named_bundle() -> Body {
+    body_of(&[
+        ESM,
+        "function roundToNearest(x) { return Math.round(x); }",
+        "var spinnerGlyphs;",
+        "var initColorUtils = __esm(() => { spinnerGlyphs = roundToNearest(1); });",
+        "function themeRender(y) { return spinnerGlyphs + y; }",
+        "var themeCache;",
+        "var initThemePicker = __esm(() => { initColorUtils(); themeCache = themeRender(2); });",
+        "console.log(initThemePicker);",
+    ])
 }
 
 #[test]
-fn names_an_unmatched_module_from_the_namer_and_never_asks_for_matched_ones() {
-    let b = bundle();
+fn a_module_named_wrapper_names_its_file_and_its_folder() {
+    let b = module_named_bundle();
+    let out = assign(&b, None);
+    assert_eq!(out.assignment[1], "src/theme-picker/color-utils.js");
+    assert_eq!(out.assignment[4], "src/theme-picker/theme-picker.js");
+    assert_eq!(out.stats.module_named_files, 2);
+}
+
+#[test]
+fn the_ledger_records_each_modules_mechanical_stem() {
+    let out = assign(&module_named_bundle(), None);
+    let stems: Vec<Option<&str>> = out
+        .fossil_modules
+        .iter()
+        .map(|m| m.mechanical_stem.as_deref())
+        .collect();
+    assert_eq!(stems, vec![Some("round-to-nearest"), Some("theme-render")]);
+}
+
+#[test]
+fn an_inherited_path_is_never_renamed_by_a_module_name() {
+    let b = module_named_bundle();
     let first = assign(&b, None);
-    let prior = ledger(vec![first.fossil_modules[0].clone()]);
-    let mut namer = FixedNamer {
-        answer: Some("tenguFeatureFlags".into()),
-        asked: Vec::new(),
-    };
-    let out = assign_named(&b, &prior, &mut namer);
-    assert_eq!(out.assignment[1], first.fossil_modules[0].file);
+    let mut kept = first.fossil_modules[1].clone();
+    kept.file = "src/legacy/old-theme.js".into();
+    let out = assign(&b, Some(&ledger(vec![kept])));
+    assert_eq!(out.assignment[4], "src/legacy/old-theme.js");
+    assert_eq!(out.stats.inherited_files, 1);
+    // The unmatched module still takes its module name.
     assert!(
-        out.assignment[4].ends_with("tengu-feature-flags.js"),
+        out.assignment[1].ends_with("/color-utils.js"),
         "{}",
-        out.assignment[4]
+        out.assignment[1]
     );
-    assert_eq!(namer.asked.len(), 1);
-    assert!(namer.asked[0].bindings.contains(&"betaRender".to_string()));
-    assert_eq!(out.stats.llm_named_mints, 1);
 }
 
 #[test]
-fn a_null_proposal_keeps_the_mechanical_stem() {
+fn the_same_stem_match_reads_the_priors_recorded_mechanical_stem() {
+    // The prior's file carries a module name, its ledger the first-function
+    // stem: the same-file-name tier must still pair the module (a file stem
+    // comparison would never agree once files carry module names).
     let b = bundle();
     let first = assign(&b, None);
-    let prior = ledger(vec![first.fossil_modules[0].clone()]);
-    let mut namer = FixedNamer {
-        answer: None,
-        asked: Vec::new(),
-    };
-    let out = assign_named(&b, &prior, &mut namer);
-    assert!(out.assignment[4].ends_with("beta-render.js"));
-    assert_eq!(out.stats.llm_named_mints, 0);
-}
-
-#[test]
-fn a_colliding_proposal_falls_back_to_the_mechanical_stem() {
-    let b = bundle();
-    let first = assign(&b, None);
-    let kept = &first.fossil_modules[0].file;
-    let base = &kept[kept.rfind('/').unwrap() + 1..];
-    // kebab → camel, as the TS test derives it.
-    let mut camel = String::new();
-    let mut up = false;
-    for c in base.trim_end_matches(".js").chars() {
-        if c == '-' {
-            up = true;
-        } else if up {
-            camel.extend(c.to_uppercase());
-            up = false;
-        } else {
-            camel.push(c);
-        }
-    }
-    let prior = ledger(vec![first.fossil_modules[0].clone()]);
-    let mut namer = FixedNamer {
-        answer: Some(camel),
-        asked: Vec::new(),
-    };
-    let out = assign_named(&b, &prior, &mut namer);
+    let mut prior = first.fossil_modules[1].clone();
+    prior.file = "src/rendering/beta-view.js".into();
+    prior.mechanical_stem = Some("beta-render".into());
+    prior.hashes.push("0000extra".into());
+    prior.declared = None;
+    prior.tokens = None;
+    let out = assign(&b, Some(&ledger(vec![prior])));
+    assert_eq!(out.assignment[4], "src/rendering/beta-view.js");
     assert!(
-        out.assignment[4].ends_with("beta-render.js"),
-        "{}",
-        out.assignment[4]
+        out.stats
+            .match_tiers
+            .contains(&("stem-corroborated".to_string(), 1)),
+        "{:?}",
+        out.stats.match_tiers
     );
-    assert!(!out.assignment[4].ends_with("-2.js"));
-}
-
-#[test]
-fn mint_siblings_are_the_mints_own_folder_stems() {
-    let b = bundle();
-    let first = assign(&b, None);
-    let mut kept = first.fossil_modules[0].clone();
-    kept.file = "src/legacy/kept-name.js".into();
-    let mut namer = FixedNamer {
-        answer: None,
-        asked: Vec::new(),
-    };
-    assign_named(&b, &ledger(vec![kept]), &mut namer);
-    assert_eq!(namer.asked.len(), 1);
-    assert!(namer.asked[0].siblings.len() <= 24);
-    assert!(!namer.asked[0].siblings.contains(&"kept-name".to_string()));
 }
 
 #[test]

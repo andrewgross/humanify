@@ -33,6 +33,7 @@ fn request_json(r: &SplitNameRequest) -> Value {
         json!(match r.kind {
             NameKind::File => "file",
             NameKind::Folder => "folder",
+            NameKind::Module => "module",
         }),
     );
     m.insert("mechanicalStem".into(), json!(r.mechanical_stem));
@@ -226,15 +227,12 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
     }
     let mut trail = PlacementTrail::default();
     let assignment = if row["fossil"] == true {
-        let has_mint = row["mintNamer"] == true;
-        let mut namer = replay;
         assign_fossil(
             &input.body,
             &input.spans,
             &input.hashes,
             prior.as_ref(),
             FossilOptions {
-                mint_namer: has_mint.then_some(&mut namer as &mut dyn SplitNamer),
                 trail: Some(&mut trail),
                 ..FossilOptions::default()
             },

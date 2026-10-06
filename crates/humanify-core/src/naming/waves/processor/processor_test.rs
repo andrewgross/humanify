@@ -39,6 +39,7 @@ fn plain_config() -> crate::naming::driver::NamingConfig {
         shingle_probe: false,
         fast: crate::fast::FastTier::Off,
         prompt_window: DEFAULT_PROMPT_WINDOW,
+        module_naming: None,
     }
 }
 

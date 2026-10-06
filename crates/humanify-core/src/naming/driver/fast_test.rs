@@ -109,6 +109,7 @@ fn config_tier(fast: crate::fast::FastTier) -> NamingConfig {
         shingle_probe: false,
         fast,
         prompt_window: DEFAULT_PROMPT_WINDOW,
+        module_naming: None,
     }
 }
 

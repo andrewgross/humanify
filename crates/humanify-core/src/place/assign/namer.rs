@@ -1,6 +1,11 @@
 //! The LLM namer for NEW split files/folders — TS `src/split/split-namer.ts`
 //! (`createSplitNamer`, `createTreeReviser`) plus the request types
-//! `SplitNameRequest` / `FolderSummary` from stable-split.ts.
+//! `SplitNameRequest` / `FolderSummary` from stable-split.ts — and, since
+//! 2026-10-06, for the bundle's recorded MODULES ([`NameKind::Module`],
+//! `docs/design/module-naming.md`): one name per original source file, from
+//! its contents, that becomes both its file name and its lazy-init
+//! wrapper's name (`naming::module_names` asks; the split reads it back).
+//! One owner of "ask the model what a file is called".
 //!
 //! Naming-only by construction: the namer sees per-entry summaries and
 //! returns basenames; it never sees or moves code. A whole sibling scope is
@@ -25,6 +30,12 @@ use crate::modules::vendor_names::unique_case_insensitive_name;
 pub enum NameKind {
     File,
     Folder,
+    /// One recorded module (an original source file), named from the
+    /// evidence its request carries (`naming::module_names`). A batch
+    /// holds one kind: a module batch has its own system prompt, neutral
+    /// keys (`m1`, `m2`, … — never the mechanical stem, which would anchor
+    /// the answer on the first function) and its own dispatch site.
+    Module,
 }
 
 impl NameKind {
@@ -32,6 +43,7 @@ impl NameKind {
         match self {
             NameKind::File => "file",
             NameKind::Folder => "folder",
+            NameKind::Module => "module",
         }
     }
 }
@@ -73,7 +85,7 @@ pub trait TreeReviser {
     fn revise(&mut self, folders: &[FolderSummary]) -> Vec<(String, String)>;
 }
 
-pub const SPLIT_NAMER_SYSTEM_PROMPT: &str = "You name source files and folders in a decompiled JavaScript CLI tool, \
+pub const SPLIT_NAMER_SYSTEM_PROMPT: &str = "You name source files and folders in a decompiled JavaScript program, \
 the way an experienced engineer would organize a real repository.\n\
 Name the CONCEPT — what the code is about — from the evidence (the \
 strings it uses, the APIs it calls, its declarations). Do NOT just echo \
@@ -92,15 +104,67 @@ numeric suffixes (initializer17).\n\
 - Siblings must be DISTINCT; a folder name must not repeat one member.\n\
 Return a single kebab-case basename per entry, no extension, no path.";
 
-const REVISER_SYSTEM_PROMPT: &str = "You are reviewing the top-level folders of a decompiled JavaScript CLI \
+const REVISER_SYSTEM_PROMPT: &str = "You are reviewing the top-level folders of a decompiled JavaScript program's \
 repository, now that every folder's files are named. Make the set read \
 like a human's src/: each folder a short domain noun (1-2 words), all \
 DISTINCT, no near-synonyms, no outliers. Only propose a change when it \
 is a real improvement. Same rules as before: kebab-case nouns, never a \
 verb phrase, conjunction, or Manager/Suite/Engine decoration.";
 
+/// The module kind's system prompt — the 2026-10-05 prototype's
+/// (`/work/module-naming-2026-10-05/ask.py`), measured on 60 real modules.
+pub const MODULE_NAMER_SYSTEM_PROMPT: &str = "You name the source files of a decompiled JavaScript \
+program, the way an experienced engineer would lay out a real repository.\n\
+Each entry is ONE original source file (a module). You see what it declares \
+(names as they are now), what its setup code assigns, which other modules it \
+imports, the libraries it uses, its string literals, and an excerpt of its \
+code. Decide what the file is FOR and name that.\n\
+Rules:\n\
+- One kebab-case name per entry, 1-4 words, no extension, no path. It becomes \
+the file's name AND its initializer's name (init + the name), so it must \
+describe the whole file.\n\
+- Name the file's main responsibility: the thing its other declarations \
+serve. A small helper that happens to come first is not the file's name.\n\
+- A file holding one main function may be named after what that function \
+does (parse-retry-after); otherwise prefer a noun phrase (secret-redaction, \
+oauth-flow, token-bucket).\n\
+- Describe what the file PROVIDES, not what it imports.\n\
+- Avoid generic words (utils, helpers, core, common, misc, index, module, \
+init, setup, app, main) and counter numbers (initializer17).\n\
+- Every entry must get a DISTINCT name.\n\
+Reply with JSON only.";
+
+/// Modules per call: the prototype asked 6 per call; 8 keeps a call near
+/// 22K characters at the population's 90th-percentile entry size
+/// (`docs/design/module-naming.md`, "Sizing").
+pub const MODULE_ENTRIES_PER_CALL: usize = 8;
+
+/// The module namer's dispatch identity (`--dump-asks`, the artifact dump).
+pub const MODULE_NAMER_FUNCTION_ID: &str = "module-namer";
+/// The module namer's dispatch site.
+pub const MODULE_NAMER_SITE: &str = "modules";
+
+/// One module entry: its neutral key, the evidence lines verbatim, and —
+/// on the duplicate retry — the names already taken.
+fn render_module_entry(key: &str, request: &SplitNameRequest) -> Vec<String> {
+    let mut lines = vec![format!("### {key}")];
+    if let Some(evidence) = request.evidence.as_deref().filter(|e| !e.is_empty()) {
+        lines.extend(evidence.lines().map(str::to_string));
+    }
+    if !request.siblings.is_empty() {
+        lines.push(format!(
+            "Already taken by other files (pick a DIFFERENT name): {}",
+            request.siblings.join(", ")
+        ));
+    }
+    lines
+}
+
 /// `renderEntry`: one entry's brief within the batch prompt.
 fn render_entry(key: &str, request: &SplitNameRequest) -> Vec<String> {
+    if request.kind == NameKind::Module {
+        return render_module_entry(key, request);
+    }
     let kind = request.kind.as_str();
     let mut lines = vec![format!("### {key} ({kind})")];
     if let Some(evidence) = request.evidence.as_deref().filter(|e| !e.is_empty()) {
@@ -129,11 +193,43 @@ suffixes such as Suite, Engine, Hub, or Manager."
     lines
 }
 
-/// `buildPrompt`.
-fn build_prompt(requests: &[SplitNameRequest], keys: &[String]) -> String {
+/// Whether a batch is a module batch (a batch holds one kind).
+fn is_module_batch(requests: &[SplitNameRequest]) -> bool {
+    requests.first().is_some_and(|r| r.kind == NameKind::Module)
+}
+
+/// The module batch's prompt (the prototype's shape).
+fn build_module_prompt(requests: &[SplitNameRequest], keys: &[String]) -> String {
     let mut lines = vec![
         format!(
-            "Name {} entries in a decompiled CLI tool repository.",
+            "Name {} source files of a decompiled JavaScript program.",
+            requests.len()
+        ),
+        String::new(),
+    ];
+    for (request, key) in requests.iter().zip(keys) {
+        lines.extend(render_module_entry(key, request));
+        lines.push(String::new());
+    }
+    let reply: Vec<String> = keys
+        .iter()
+        .map(|k| format!("\"{k}\": \"<file-name>\""))
+        .collect();
+    lines.push(format!(
+        "Reply with JSON {{{}}} — one specific, distinct name per file.",
+        reply.join(", ")
+    ));
+    lines.join("\n")
+}
+
+/// `buildPrompt`.
+fn build_prompt(requests: &[SplitNameRequest], keys: &[String]) -> String {
+    if is_module_batch(requests) {
+        return build_module_prompt(requests, keys);
+    }
+    let mut lines = vec![
+        format!(
+            "Name {} entries in a decompiled program's repository.",
             requests.len()
         ),
         String::new(),
@@ -165,24 +261,35 @@ fn dedup_in_order(items: impl IntoIterator<Item = String>) -> Vec<String> {
 /// The provider call a batch makes, plus the per-entry prompt keys
 /// (duplicate stems uniquified case-insensitively, so every brief maps to
 /// exactly one answer).
+/// A module batch's keys are neutral (`m1`, `m2`, …).
 pub fn split_namer_call(requests: &[SplitNameRequest]) -> (LlmCall, Vec<String>) {
-    let mut used = HashSet::new();
-    let keys: Vec<String> = requests
-        .iter()
-        .map(|r| unique_case_insensitive_name(&r.mechanical_stem, &mut used, ""))
-        .collect();
+    let module = is_module_batch(requests);
+    let keys: Vec<String> = if module {
+        (1..=requests.len()).map(|i| format!("m{i}")).collect()
+    } else {
+        let mut used = HashSet::new();
+        requests
+            .iter()
+            .map(|r| unique_case_insensitive_name(&r.mechanical_stem, &mut used, ""))
+            .collect()
+    };
+    let system = if module {
+        MODULE_NAMER_SYSTEM_PROMPT
+    } else {
+        SPLIT_NAMER_SYSTEM_PROMPT
+    };
     let prompt = build_prompt(requests, &keys);
     let request = BatchRenameRequest {
         code: prompt.clone(),
         identifiers: keys.clone(),
         used_names: dedup_in_order(requests.iter().flat_map(|r| r.siblings.clone())),
-        system_prompt: Some(SPLIT_NAMER_SYSTEM_PROMPT.to_string()),
+        system_prompt: Some(system.to_string()),
         user_prompt: Some(prompt.clone()),
         ..BatchRenameRequest::default()
     };
     let call = LlmCall {
         request,
-        system_prompt: SPLIT_NAMER_SYSTEM_PROMPT.to_string(),
+        system_prompt: system.to_string(),
         user_prompt: prompt,
     };
     (call, keys)
@@ -192,7 +299,7 @@ pub fn split_namer_call(requests: &[SplitNameRequest]) -> (LlmCall, Vec<String>)
 fn build_reviser_prompt(folders: &[FolderSummary]) -> String {
     let mut lines = vec![
         format!(
-            "Review these {} top-level folders of a decompiled CLI repo.",
+            "Review these {} top-level folders of a decompiled program's repo.",
             folders.len()
         ),
         String::new(),
@@ -258,7 +365,10 @@ impl SplitNamerBudget {
     /// The budget for a model with `context_tokens` of context, of which
     /// `completion_tokens` (`max_tokens`) are reserved for the answer.
     pub fn for_model(context_tokens: u64, completion_tokens: u64) -> Self {
-        let system_tokens = SPLIT_NAMER_SYSTEM_PROMPT.len().div_ceil(BYTES_PER_TOKEN) as u64;
+        let system_tokens = SPLIT_NAMER_SYSTEM_PROMPT
+            .len()
+            .max(MODULE_NAMER_SYSTEM_PROMPT.len())
+            .div_ceil(BYTES_PER_TOKEN) as u64;
         let prompt_tokens = context_tokens
             .saturating_sub(completion_tokens)
             .saturating_sub(system_tokens);
@@ -296,7 +406,10 @@ const KEY_SUFFIX_SLACK: usize = 8;
 /// One entry's bytes in a batch prompt: its brief (with its blank line)
 /// plus its `"key": "<name>", ` reply fragment.
 fn entry_bytes(request: &SplitNameRequest) -> usize {
-    let key = &request.mechanical_stem;
+    let key = match request.kind {
+        NameKind::Module => "m",
+        _ => request.mechanical_stem.as_str(),
+    };
     let brief: usize = render_entry(key, request).iter().map(|l| l.len() + 1).sum();
     brief + 1 + key.len() + "\"\": \"<name>\", ".len() + 2 * KEY_SUFFIX_SLACK
 }
@@ -312,12 +425,16 @@ pub fn split_namer_batches(
     let mut out = Vec::new();
     let mut start = 0;
     let mut bytes = PROMPT_FRAME_BYTES;
+    let max_entries = if is_module_batch(requests) {
+        budget.max_entries.min(MODULE_ENTRIES_PER_CALL)
+    } else {
+        budget.max_entries
+    };
     for (i, request) in requests.iter().enumerate() {
         let cost = entry_bytes(request);
         let filled = i - start;
         if filled > 0
-            && (filled >= budget.max_entries
-                || bytes.saturating_add(cost) > budget.max_prompt_chars)
+            && (filled >= max_entries || bytes.saturating_add(cost) > budget.max_prompt_chars)
         {
             out.push(start..i);
             start = i;
@@ -373,12 +490,18 @@ impl<'p> ProviderSplitNamer<'p> {
         }
     }
 
-    /// The `folders` site's row, recorded at commit.
-    fn record(&mut self, call: &LlmCall) {
+    /// The call's row, recorded at commit: the `folders` site for files
+    /// and folders, the `modules` site for a module batch.
+    fn record(&mut self, call: &LlmCall, module: bool) {
         self.calls += 1;
+        let (function_id, site) = if module {
+            (MODULE_NAMER_FUNCTION_ID, MODULE_NAMER_SITE)
+        } else {
+            ("split-namer", "folders")
+        };
         self.log.record(&Dispatch::Plain {
-            function_id: "split-namer",
-            site: "folders",
+            function_id,
+            site,
             call,
         });
         if self.log.retains() {
@@ -387,7 +510,11 @@ impl<'p> ProviderSplitNamer<'p> {
     }
 }
 
-/// One batch's answers mapped onto its requests.
+/// One batch's answers mapped onto its requests. A file/folder answer
+/// equal to the mechanical stem is "no answer" (keep the stem); a module
+/// answer has no such echo — its keys are neutral, and an answer that
+/// equals the first function's stem is still the module's name (7 of 60
+/// in the prototype, all correct).
 fn batch_proposals(
     requests: &[SplitNameRequest],
     keys: &[String],
@@ -401,7 +528,11 @@ fn batch_proposals(
             response
                 .renames
                 .get(key)
-                .filter(|p| !p.is_empty() && *p != request.mechanical_stem && p != key)
+                .filter(|p| {
+                    !p.is_empty()
+                        && p != key
+                        && (request.kind == NameKind::Module || *p != request.mechanical_stem)
+                })
                 .map(str::to_string)
         })
         .collect()
@@ -423,10 +554,11 @@ impl SplitNamer for ProviderSplitNamer<'_> {
         // The rendered-prompt window (finding #65): the calls stream
         // through in batches, never all rendered at once.
         let window = self.window.max(1);
+        let module = is_module_batch(requests);
         let mut results = Vec::with_capacity(calls.len());
         for chunk in calls.chunks(window) {
             for call in chunk {
-                self.record(call);
+                self.record(call, module);
             }
             results.extend(self.provider.run_wave(chunk.to_vec()));
         }

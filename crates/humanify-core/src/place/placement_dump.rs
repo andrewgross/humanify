@@ -45,8 +45,8 @@ pub struct PlacementGate<'a> {
     /// stage's `PriorCarry`); wins over `prior_text` / `match_map`.
     pub carry: Option<PriorCarry>,
     pub switches: PlacementSwitches,
-    /// The mint namer (fossil) / file+folder namer (cluster) — a
-    /// replay-only cache client in the gate.
+    /// The cluster regime's file+folder namer (the fossil regime names
+    /// files by their module names, read from the wrappers — no namer).
     pub namer: Option<&'a mut dyn SplitNamer>,
     /// The cluster regime's holistic top-level reviser.
     pub reviser: Option<&'a mut dyn TreeReviser>,
@@ -104,17 +104,16 @@ pub fn assign_regime(
                 prior,
                 FossilOptions {
                     min_folder_files: MIN_FOLDER_FILES,
-                    mint_namer: gate.namer,
                     trail: Some(trail),
                 },
             )?;
             let s = &assigned.stats;
             summary = format!(
-                "{} modules ({} inherited, {} fresh-named, {} llm-named), {} eager",
+                "{} modules ({} inherited, {} fresh-named, {} module-named), {} eager",
                 s.modules,
                 s.inherited_files,
                 s.fresh_named_files,
-                s.llm_named_mints,
+                s.module_named_files,
                 s.eager_statements
             );
             // The next hop's match targets (tokens included) — diffable

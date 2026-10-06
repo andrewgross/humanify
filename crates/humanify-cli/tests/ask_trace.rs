@@ -24,7 +24,7 @@ const INPUT: &str = concat!(
 
 /// The ask-trace reason taxonomy (`naming::ask_trace`), verbatim — the log
 /// may never grow a reason outside it.
-const REASONS: [&str; 8] = [
+const REASONS: [&str; 9] = [
     "fresh",
     "prior-hinted",
     "shadowed",
@@ -33,6 +33,7 @@ const REASONS: [&str; 8] = [
     "sweep",
     "vendor",
     "folders",
+    "modules",
 ];
 
 struct Scratch(PathBuf);

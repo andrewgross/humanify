@@ -1,7 +1,37 @@
 # Naming each module from its contents — design and sizing
 
-STATUS: design + measurement only (2026-10-05). Nothing below is built. The
-prompt was prototyped against the real server; no pipeline code changed.
+STATUS: BUILT 2026-10-06 on branch `feat/module-naming` (findings queue
+#92; Andrew approved 2026-10-06 with the open questions answered as
+assumed: barrels left to the waves, folders follow the new module names,
+"program" instead of "CLI tool" in every file-namer prompt). The real-model
+quality is judged by the scratch eval. Where the build differs from the
+text below (each for the reason given):
+
+- **A refused or still-colliding answer** leaves the wrapper to the naming
+  floor/sweep (step 3 of "Where it runs") and its file to the mechanical
+  stem — not `init` + the mechanical stem ("Duplicates", item 4, which
+  contradicted step 3 and could itself collide).
+- **An answer equal to the first function's stem is accepted** for the
+  module kind. In the built order "no answer" falls back to the sweep, not
+  to the same name, so the file namer's echo rule would throw away a right
+  answer (7 of 60 in the sample).
+- **A barrel** is a module declaring nothing besides its wrapper (the
+  sample's definition, 169 of 4,826).
+- **"Other code reads this whole module as one object named"** comes from
+  the module's own export registrar call (`register(ns, {…})`), not from
+  scanning read sites.
+- **The read-back** is `init` followed by a capital letter, checked by
+  `accept_proposed_name`. A wave-named barrel wrapper of that shape
+  (`initAnalyticsPatterns`) now names its new file without the `init-`
+  prefix; `initializeFoo` / `setupBar` keep today's mechanical stem.
+- **A file-path clash** of two module names in one folder takes `-2`
+  (`claim_path`), as every fresh file does.
+- **The step runs only when the markers describe the bundle** — the split
+  method's own rule (`place::method::markers_describe_bundle`), so a mixed
+  bundle that the fresh grouping splits keeps today's naming.
+
+The rest of this document is the design and its 2026-10-05 measurement,
+unchanged.
 
 Andrew, 2026-10-05: keep the pipeline general, not Claude-Code-specific.
 Instead of naming files and lazy-init wrappers by a fixed rule (the file's

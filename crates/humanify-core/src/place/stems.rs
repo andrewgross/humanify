@@ -321,5 +321,36 @@ pub fn stem_of(name: &str) -> String {
     }
 }
 
+/// The wrapper prefix of a module name (`init` + the name).
+const MODULE_WRAPPER_PREFIX: &str = "init";
+
+/// The lazy-init wrapper name for a module name already accepted by
+/// [`accept_proposed_name`] (camelCase): `colorUtils` → `initColorUtils`
+/// (docs/design/module-naming.md). The one writer of the spelling
+/// [`module_stem_of_wrapper`] reads back.
+pub fn module_wrapper_name(camel: &str) -> String {
+    let mut chars = camel.chars();
+    let mut out = String::from(MODULE_WRAPPER_PREFIX);
+    if let Some(head) = chars.next() {
+        out.push(head.to_ascii_uppercase());
+        out.extend(chars);
+    }
+    out
+}
+
+/// The module name a lazy-init wrapper carries, as a file stem:
+/// `initColorUtils` → `color-utils`. None for any name that is not `init`
+/// followed by a capital (`initializeFoo`, `setupBar`, a minified name), or
+/// whose rest [`accept_proposed_name`] refuses — the split then falls back
+/// to the mechanical stem. The wrapper's name is the single record of the
+/// module's name: the file can never disagree with it.
+pub fn module_stem_of_wrapper(name: &str) -> Option<String> {
+    let rest = name.strip_prefix(MODULE_WRAPPER_PREFIX)?;
+    if !rest.starts_with(|c: char| c.is_ascii_uppercase()) {
+        return None;
+    }
+    accept_proposed_name(&stem_of(rest)).map(|camel| stem_of(&camel))
+}
+
 #[cfg(test)]
 mod stems_test;

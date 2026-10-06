@@ -52,6 +52,29 @@ describe("the stub's answer policies", () => {
     });
   });
 
+  it("names each entry of a module batch from the request bytes alone", () => {
+    const modules =
+      'Name 2 source files of a decompiled JavaScript program.\n\n### m1\nDeclares: var a\n\n### m2\nDeclares: var b\n\nReply with JSON {"m1": "<file-name>", "m2": "<file-name>"} — one specific, distinct name per file.';
+    const first = JSON.parse(stubAnswer(body(modules)));
+    assert.deepEqual(Object.keys(first), ["m1", "m2"]);
+    for (const name of Object.values(first) as string[]) {
+      assert.match(name, /^[a-z]+(-[a-z]+){3}$/);
+    }
+    assert.notEqual(first.m1, first.m2);
+    assert.deepEqual(JSON.parse(stubAnswer(body(modules))), first);
+    const retried = JSON.parse(
+      stubAnswer(
+        body(
+          modules.replace(
+            "var b\n",
+            "var b\nAlready taken by other files (pick a DIFFERENT name): x\n"
+          )
+        )
+      )
+    );
+    assert.notEqual(retried.m2, first.m2);
+  });
+
   it("reads the identifiers line only", () => {
     assert.deepEqual(askedIdentifiers(body(PROMPT)), [
       "Ka",

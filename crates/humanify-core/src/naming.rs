@@ -31,6 +31,9 @@
 //! - [`plumbing`] — the names the pipeline chooses for the bundler's own
 //!   runtime plumbing (the lazy-init helper), never asked of the model
 //!   (2026-10-05).
+//! - [`module_names`] — the module step: one name per recorded module, from
+//!   its contents, for both its lazy-init wrapper and its file
+//!   (2026-10-06, docs/design/module-naming.md).
 
 pub mod answer_keys;
 pub mod ask_trace;
@@ -38,6 +41,7 @@ pub mod code_window;
 pub mod context;
 pub mod driver;
 pub mod js_record;
+pub mod module_names;
 pub mod passes;
 pub mod plumbing;
 pub mod prompts;

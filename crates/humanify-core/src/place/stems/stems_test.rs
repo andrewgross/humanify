@@ -32,3 +32,41 @@ fn every_ts_vector_agrees() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+/// The module name's two spellings (docs/design/module-naming.md): the
+/// wrapper `init<Name>` and the file `<name>.js` are one name, so reading
+/// the wrapper back gives exactly the file stem the answer would.
+#[test]
+fn a_module_name_round_trips_between_its_wrapper_and_its_file() {
+    use super::{module_stem_of_wrapper, module_wrapper_name};
+    for (answer, wrapper, file) in [
+        ("color-utils", "initColorUtils", "color-utils"),
+        (
+            "otlp-log-exporter",
+            "initOtlpLogExporter",
+            "otlp-log-exporter",
+        ),
+        ("sha256-hasher", "initSha256Hasher", "sha256-hasher"),
+        (
+            "tmux_setup_dialog",
+            "initTmuxSetupDialog",
+            "tmux-setup-dialog",
+        ),
+    ] {
+        let camel = accept_proposed_name(answer).expect("accepted");
+        assert_eq!(module_wrapper_name(&camel), wrapper);
+        assert_eq!(module_stem_of_wrapper(wrapper).as_deref(), Some(file));
+    }
+    // Not a module name: a wave's own `initialize…` / `setup…` answer, a
+    // minified name, a bare `init`, or a rest the name check refuses.
+    for name in [
+        "initializeHttpErrorHandling",
+        "setupApp",
+        "Ab",
+        "init",
+        "initUtils",
+        "initFoo17",
+    ] {
+        assert_eq!(module_stem_of_wrapper(name), None, "{name}");
+    }
+}

@@ -85,6 +85,27 @@ pub struct EraOptions<'o> {
     pub fast: crate::fast::FastTier,
     /// The rendered-prompt window (finding #65; `NamingConfig::prompt_window`).
     pub prompt_window: usize,
+    /// `NamingConfig::module_naming`.
+    pub module_naming: Option<crate::place::assign::namer::SplitNamerBudget>,
+}
+
+/// The module step's input over a side's ESTree JSON: the wrapper body's
+/// top-level statements, else the program body.
+fn module_source_of<'j>(
+    json: &'j Value,
+    wrapper_body: Option<oxc_span::Span>,
+    text: &'j str,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+) -> Option<crate::naming::module_names::ModuleSource<'j>> {
+    let body = match wrapper_body {
+        Some(span) => crate::twins::block_body_by_span(json, span),
+        None => json.get("body").and_then(Value::as_array),
+    }?;
+    Some(crate::naming::module_names::ModuleSource {
+        body,
+        text,
+        grammar,
+    })
 }
 
 /// The artifact dump's naming-era capture (`--dump-artifacts`) — what the
@@ -236,6 +257,8 @@ pub struct NamingEra {
     /// The names the pipeline chose for library imports
     /// (`naming::plumbing::name_library_imports`, 2026-10-06).
     pub library_imports: crate::naming::plumbing::PlumbingNames,
+    /// The module step (`naming::module_names`).
+    pub module_names: crate::naming::module_names::ModuleNamingReport,
 }
 
 /// The match's carry before the names settle: the matcher's texts and
@@ -349,11 +372,18 @@ pub fn prior_era<P: NameProvider>(
     let ph = crate::profiling::phase("era:naming-graph");
     let naming = Naming::build(semantic, graph);
     drop(ph);
+    let modules = module_source_of(
+        stage.fresh.json,
+        stage.fresh.wrapper.map(|w| w.body_span),
+        semantic.source_text(),
+        opts.module_wrappers,
+    );
     let mut era = run_era(
         &naming,
         start,
         freeze.library,
         Some((prior, pending)),
+        modules.as_ref(),
         opts,
         provider,
         log,
@@ -471,17 +501,35 @@ pub fn fresh_era<P: NameProvider>(
     };
     let capture = opts.capture.then(|| capture_graph(graph, &start.rename));
     let naming = Naming::build(semantic, graph);
-    let mut era = run_era(&naming, start, freeze.library, None, opts, provider, log);
+    let modules = module_source_of(
+        &json,
+        found.as_ref().map(|w| w.body_span),
+        fresh,
+        opts.module_wrappers,
+    );
+    let mut era = run_era(
+        &naming,
+        start,
+        freeze.library,
+        None,
+        modules.as_ref(),
+        opts,
+        provider,
+        log,
+    );
     era.capture = capture;
     Ok(era)
 }
 
-/// The shared body: waves, library prefix, floor, generate.
+/// The shared body: waves, library prefix, the module step, floor,
+/// generate.
+#[allow(clippy::too_many_arguments)]
 fn run_era<P: NameProvider>(
     naming: &Naming<'_, '_>,
     mut start: WaveStart,
     library: Vec<(usize, String)>,
     prior: Option<(PriorStats, PendingCarry)>,
+    modules: Option<&crate::naming::module_names::ModuleSource<'_>>,
     opts: &EraOptions<'_>,
     provider: &P,
     log: &mut DispatchLog,
@@ -512,6 +560,19 @@ fn run_era<P: NameProvider>(
     );
     let ph = crate::profiling::phase("era:occurrences+rows");
     let occ = Occurrences::build(semantic, &start.rename);
+    // The module step's plan, before the first wave: the wrappers it will
+    // name are settled so no wave asks them (`naming::module_names`).
+    let module_plan = match (opts.module_naming, modules) {
+        (Some(_), Some(source)) => crate::naming::module_names::plan_module_naming(
+            source,
+            graph,
+            &start.rename,
+            &occ,
+            &start.lazy_init_helpers,
+            &mut start.binding_state,
+        ),
+        _ => crate::naming::module_names::ModulePlan::default(),
+    };
     let rows = Rows::build(graph, semantic, start.rename.view());
     let single_epoch = start.single_epoch;
     let stems = crate::rename::floor::MinifiedStems::of_program(opts.name_profile, semantic);
@@ -586,6 +647,28 @@ fn run_era<P: NameProvider>(
     let eval_tainted = collect_eval_with_taint(semantic).tainted_functions;
     let library =
         run_library_prefix_pass(&mut state, &rows, graph, &library, &eligible, &eval_tainted);
+    drop(ph);
+    // The module step: after the waves and the library prefix (every other
+    // name in a module is final), before the floor and the sweep (which
+    // ask whatever it leaves unnamed).
+    let ph = crate::profiling::phase("era:module-names");
+    let module_names = match (opts.module_naming, modules) {
+        (Some(budget), Some(source)) => crate::naming::module_names::run_module_naming(
+            &module_plan,
+            &crate::naming::module_names::ModuleStepInputs {
+                view: &naming.view,
+                occ: &occ,
+                source,
+                stems: &stems,
+                budget,
+                window: opts.prompt_window,
+            },
+            &mut state,
+            provider,
+            log,
+        ),
+        _ => Default::default(),
+    };
     let mut era = NamingEra {
         generated: None,
         trail: StrategyTrail::default(),
@@ -607,6 +690,7 @@ fn run_era<P: NameProvider>(
         stems: crate::rename::floor::MinifiedStems::empty(opts.name_profile),
         plumbing,
         library_imports,
+        module_names,
     };
     drop(ph);
     let ph = crate::profiling::phase("era:naming-floor");
