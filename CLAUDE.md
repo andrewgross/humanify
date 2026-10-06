@@ -244,7 +244,16 @@ UNKNOWN, not passing.
   byte-identical. They set the committed `noise-bands.json` and the self-hop
   range. novel 4,188 / realLn 416,377 (byte-equal across all three and to
   every prior reference); treeLn 147,218–147,234; noiseLn 47,593–48,969;
-  vendorLn ~1,500. Every movement vs the shipped binary on scratch bases
+  vendorLn ~1,500 / vendorReal ~3,370 as first scored. **The vendor scorer
+  changed 2026-10-06** (relocation pairing: a vendor file that changed a
+  little AND drew a new path is charged its own diff, not a whole-file
+  remove + add). Re-scored from the same trees: vendorReal 1,302–1,334,
+  vendorLn 3,524–3,579 (vendorChurnLines unchanged), and `noise-bands.json`
+  re-derived (vendorReal ±32, vendorLn ±55; every other band byte-equal).
+  **Vendor columns before and after 2026-10-06 are not comparable** — re-derive
+  an older label's vendor blocks first (034 README, "Vendor"). The result
+  cards themselves are gitignored, so a local copy of these refs still holds
+  the OLD vendor split until re-derived. Every movement vs the shipped binary on scratch bases
   (`control-843826be-scratch`) was reviewed against the outputs:
   `/work/post-cutover-notes.md` (2026-10-03) and `/work/eval-review-2026-10-03-ref/`.
 - `main-2026-09-18` — the last SEEDED-base reference, scored at

@@ -91,6 +91,57 @@ diff in **git lines** (`composeDiff`, shared with exp037's `diff-composition`):
   busy 215→216 controls). Cards scored before 2026-09-29 carry no field; the
   summary prints a NOTE for them instead of presenting a zero.
 
+### Vendor (`vendor`, git lines) — and the 2026-10-06 relocation pairing
+
+`vendor/` is its own surface (exp046 `vendor-churn.ts`): `churnLines`, split
+into `noise` (the **vendorLn** column — name rerolls, moved files, the
+manifest) and `real` (the **vendorReal** column — dependency change that must
+not move).
+
+**Vendor numbers before and after 2026-10-06 are NOT comparable.** Until then
+a vendor file that changed a little AND drew a new path was charged as a
+whole-file removal plus a whole-file addition, all `real`: the
+eslint-plugin-security text module (151 lines, a real 6-line edit) read 6
+lines when both versions drew the same path and ~300 when they did not —
+about 2,000 lines of path draw booked as real dependency change per run. The
+scorer now pairs such files by content before charging them
+(`046-vendor-noise/relocation-pairing.ts`: mutual best, score >= 0.5, margin
+
+> = 0.2, files changed at a surviving path compete; 394 pairs on six labels, 0
+> wrong in the audited sample). A paired file is charged its own diff as
+> `real`; the rest of the old charge is the path draw, booked in `noise` and
+> reported as `vendor.relocated` (files, lines, and every pair). `churnLines`
+> is unchanged by construction — only the split moves.
+
+Re-scored from the same trees (scorer only; every old card reproduced
+exactly first, and the new scorer with pairing off reproduces them too):
+
+| label                      | vendorReal old -> new | vendorLn old -> new |
+| -------------------------- | --------------------- | ------------------- |
+| ref-scratch-0f338ffa-r1    | 3,356 -> 1,302        | 1,470 -> 3,524      |
+| ref-scratch-0f338ffa-r2    | 3,376 -> 1,334        | 1,537 -> 3,579      |
+| ref-scratch-0f338ffa-r3    | 3,368 -> 1,332        | 1,505 -> 3,541      |
+| candidate-f616f33b-scratch | 3,040 -> 1,312        | 1,470 -> 3,198      |
+| candidate-5d4b2d9a-scratch | 3,384 -> 1,338        | 1,599 -> 3,645      |
+| candidate-c5ac0e98-scratch | 3,392 -> 1,354        | 1,558 -> 3,596      |
+
+The committed `noise-bands.json` was re-derived from the re-scored refs:
+vendorReal ±20 -> ±32, vendorLn ±67 -> ±55, every other band byte-equal. The
+vendorReal band got WIDER among the three refs because the old one was
+lucky: all three refs moved the same three files at 2.1.216 (the
+eslint-plugin-security text and two colour scripts, each to a different new
+name), so the old scorer charged all three the same ~1,530 phantom lines and
+the band never saw the draw. f616f33b kept one of those paths and read −316
+vendorReal against them — 16x the old band, a "real dependency change" that
+was a path draw. Across all six
+labels the vendorReal spread falls from 352 to 52. The residual ±32 sits at
+2.1.198 among one-line highlight.js grammars, and does not shrink with a
+lower pairing threshold (0.3, or none), so it is not a threshold effect.
+
+**A label scored before this change has cards with the OLD vendor split.**
+Re-derive its `vendor` blocks from its trees before comparing vendor columns
+(the trees under `/tmp/eval-work/<label>/` are enough; nothing re-runs).
+
 ### RAW vs CLEAN — the contract (2026-10-02)
 
 Andrew: "I lean towards not changing the actual code itself when possible, so
