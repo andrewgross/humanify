@@ -20,21 +20,30 @@
 //! differ (terser `ee te ne`, esbuild/bun frequency-shuffled `lR O8`), the
 //! SHAPES do not. Bun's renamer is a port of esbuild's.
 //!
-//! - [`NameProfile::Bun`] — today's rules exactly (the pre-2026-10-03
-//!   `is_bun_token`), calibrated on the Claude Code corpus: beyond the
-//!   renamer alphabet it reads `$` anywhere and a trailing `_` as minted,
-//!   and a mint head (`^[A-Za-z]{1,2}[0-9_]`) at ANY length — so the
-//!   model's half-borrowed answers (`do7Function`, `x1Coordinate`) count.
-//!   The eval corpus is all Bun, and its output is byte-identical.
-//! - [`NameProfile::Esbuild`], [`NameProfile::Terser`],
-//!   [`NameProfile::Swc`] — the renamer-alphabet rules: a 1-2 character
-//!   non-word, or a WHOLE name of 3-4 characters in the renamer alphabet
-//!   that carries a mint head or a `$` (`p5e`, `u0`, `$me`, `ab_`).
-//!   Digitless three-character names (`eee`, `Xme`, `JKH`) cannot be told
-//!   from words and stay out (precision first). swc's mangler is terser's
-//!   base-54 scheme. The three share one rule set today because the
-//!   measured shapes agree; they are separate entries so a measured
-//!   difference has somewhere to land.
+//! - [`NameProfile::Bun`], [`NameProfile::Esbuild`],
+//!   [`NameProfile::Terser`], [`NameProfile::Swc`] — the renamer-alphabet
+//!   rules: a 1-2 character non-word, or a WHOLE name of 3-4 characters in
+//!   the renamer alphabet that carries a mint head or a `$` (`p5e`, `u0`,
+//!   `$me`, `ab_`, Bun's `qk_`, `HO$`); otherwise a trailing `_` is judged
+//!   by the name it decorates (Bun's `_k_`, `H2_`). Digitless
+//!   three-character names (`eee`, `Xme`, `JKH`) cannot be told from words
+//!   and stay out (precision first). swc's mangler is terser's base-54
+//!   scheme. The four share one rule set because the measured shapes
+//!   agree; they are separate entries so a measured difference has
+//!   somewhere to land. Replayed over every binding of the eight Claude
+//!   Code inputs, the shared rule and Bun's old one disagree on ONE name,
+//!   `___` (a convention placeholder the sweep never asks about).
+//!
+//!   UNTIL 2026-10-06 the Bun profile added three rules calibrated on the
+//!   Claude Code corpus (scan B1): `$` anywhere, any trailing `_`, and a
+//!   mint head (`^[A-Za-z]{1,2}[0-9_]`) at ANY length — so the model's
+//!   half-copied answers (`do7Function`) counted as minted. Bun's renamer
+//!   emits none of those long shapes, and as the fallback for every unsure
+//!   input they misfired on real names in other apps (RxJS `user$`,
+//!   Angular `$scope`, Svelte `$store`, snake_case `to_string`). What they
+//!   were for — the answer copies a minified name — is the program
+//!   lookup's job (`floor::borrowed_minified_stem`, which reads THIS
+//!   program's minified bindings, `$`/`_`-bearing ones included).
 //! - [`NameProfile::NotMinified`] — a declared-unminified input
 //!   (`--minifier none`): no name is minifier-made (docs/plugin-spec.md
 //!   P10: "a not-minified verdict picks a profile that counts nothing as
@@ -42,7 +51,8 @@
 //!
 //! WHICH SIGNALS ARE TRUSTED (docs/plugin-spec.md P10, 2026-10-03): only
 //! a confident verdict switches away from Bun, and an unsure one stays on
-//! Bun — today's behaviour — until minifier detection is fixed. Trusted:
+//! Bun until minifier detection is fixed — since 2026-10-06 that fallback
+//! is the generic renamer rule, not a Claude-Code-tuned one. Trusted:
 //! the `--minifier` and `--bundler` flags, and a DEFINITIVE bundler
 //! detection (bun's and esbuild's runtime markers). NOT trusted, so never
 //! read here: every minifier detection signal. Measured 2026-10-03 —
@@ -53,17 +63,18 @@
 //! the "bun minifier" signal counts `$Ab`-shaped names, which `$scope` /
 //! `$http` code and esbuild/terser output trip as well.
 //!
-//! The profiles nest: NotMinified reads nothing, every renamer-alphabet
-//! token is a Bun token.
+//! The profiles nest: NotMinified reads nothing, the four minifier
+//! profiles read the same tokens.
 //!
 //! Profile-INDEPENDENT (the always-on generic checks, Andrew's "fine to
 //! run always"): the convention placeholders (`_`, `$` —
 //! `floor::is_convention_carveout`), single letters as an acceptable
-//! answer, the reconcile's wordless-shape metric, and the borrowed-stem
-//! check's PROGRAM LOOKUP (a word of the answer that is literally one of
-//! this program's binding names). That lookup's shape filter is a
-//! precision guard, not the evidence; it follows the profile, with the
-//! renamer-alphabet guard under NotMinified too (`floor::is_borrowable_stem`).
+//! answer, CONSTANT_CASE, the reconcile's wordless-shape metric, and the
+//! borrowed-stem check's PROGRAM LOOKUP (a piece of the answer that is
+//! literally one of this program's minified binding names). That lookup's
+//! shape filter is a precision guard, not the evidence; it is the
+//! renamer-alphabet guard under every profile, NotMinified included
+//! (`floor::is_borrowable_stem`).
 
 use humanify_model::detection::{BundlerDetectionResult, BundlerType, DetectionTier, MinifierType};
 
@@ -124,9 +135,11 @@ impl NameProfile {
     }
 }
 
-/// The profile when nothing confident is known: Bun, today's behaviour
-/// (docs/plugin-spec.md P10 — an unsure verdict must not silently move
-/// any output until minifier detection can be trusted).
+/// The profile when nothing confident is known: Bun (docs/plugin-spec.md
+/// P10 — an unsure verdict must not silently move any output until
+/// minifier detection can be trusted). Since 2026-10-06 the Bun profile
+/// IS the generic renamer rule, so the fallback assumes nothing about the
+/// app.
 pub const FALLBACK_PROFILE: NameProfile = NameProfile::Bun;
 
 /// `select_name_profile`: the ONE place this run's name profile is

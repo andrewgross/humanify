@@ -195,3 +195,61 @@ fn an_echoed_multi_letter_minified_name_is_refused() {
     }
     assert!(!is_minified_echo(BUN, "yl", "jobItem"), "only an echo");
 }
+
+/// 2026-10-06 (scan B1): the Bun profile's `$`-anywhere and `_`-tail
+/// shape rules were what refused an answer copying a `$`/`_`-bearing
+/// minified name (`initJw$`, `assignUw_`, `n$_Result` — recorded answers
+/// in the latest eval logs). Those rules are gone; the PROGRAM LOOKUP
+/// catches the copy instead: a `$`/`_`-bearing piece of the answer that is
+/// one of this program's minified names, with a digit or a capital so it
+/// cannot be a word (`$el`, `is_`), spelled EXACTLY so (case-folded, the
+/// replay refused `$jQuery` for the program's `$J`).
+#[test]
+fn a_borrowed_dollar_or_underscore_name_is_refused_by_the_lookup() {
+    let s = MinifiedStems::from_names(
+        BUN,
+        [
+            "Jw$", "Uw_", "N$_", "$Iq", "A$", "L$", "S$", "$6", "$el", "is_", "to_", "E$", "$sc",
+            "$J",
+        ],
+    );
+    for (answer, stem) in [
+        ("initJw$", "Jw$"),
+        ("assignUw_", "Uw_"),
+        ("setupUw_", "Uw_"),
+        ("N$_Result", "N$_"),
+        ("initModule_$Iq", "$Iq"),
+        ("useA$", "A$"),
+        ("resolveWithL$", "L$"),
+        ("getS$", "S$"),
+        ("init$6", "$6"),
+    ] {
+        assert_eq!(borrowed_minified_stem(answer, &s), Some(stem), "{answer}");
+    }
+    for answer in [
+        "user$",
+        "clicks$",
+        "userClicks$",
+        "worktreeState$",
+        "$scope",
+        "$element",
+        "$elRef",
+        "is_valid",
+        "to_string",
+        "fsPromises_",
+        "case_",
+        "value$",
+        "$jQuery",
+        // Re-cased copies stay legal (precision first; listed as misses).
+        "n$_Result",
+        "init$iqModule",
+    ] {
+        assert_eq!(borrowed_minified_stem(answer, &s), None, "{answer}");
+    }
+    for name in ["Jw$", "Uw_", "$Iq", "A$", "$6", "n$_9"] {
+        assert!(is_borrowable_stem(BUN, name), "{name}");
+    }
+    for name in ["$el", "is_", "$", "_", "__", "$$", "w$i", "user$"] {
+        assert!(!is_borrowable_stem(BUN, name), "{name}");
+    }
+}
