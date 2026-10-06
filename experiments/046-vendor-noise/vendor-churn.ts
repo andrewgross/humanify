@@ -45,6 +45,18 @@
  * Grouping by content signature separates a library that genuinely arrived
  * from one that merely moved — the same trap as the leaderboard's name-keyed
  * `reloc` column (rule 7).
+ *
+ * ## ...and a file that moved AND changed a little is paired (2026-10-06)
+ *
+ * Exact-signature grouping cannot see a library that changed slightly and
+ * drew a new path; it was charged as a whole-file removal plus a whole-file
+ * addition, all REAL (eslint-plugin-security: 6 real lines read as 303).
+ * Before charging either, `relocation-pairing.ts` pairs a truly-removed file
+ * with a truly-added one by content similarity (mutual best, threshold and
+ * margin; the rule and its precision audit are there). A paired file is
+ * charged its own diff as real change, and the remainder of the old charge
+ * (`relocated`, the path draw) is noise — so `vendorTotalLines` is unchanged
+ * and only its real/noise split moves. Every pair is listed.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -57,6 +69,12 @@ import {
   clearBabelTraverseCache
 } from "../lib/js/babel.js";
 import { serializePathTokens } from "../lib/js/structural-tokens.js";
+import { changedLines as changedTextLines } from "../lib/diff.js";
+import {
+  contentShingles,
+  pairRelocated,
+  type PairingOptions
+} from "./relocation-pairing.js";
 import type { NodePath } from "@babel/traverse";
 
 /** Sidecar metadata file inside vendor/, scored separately from library code. */
@@ -85,6 +103,13 @@ export interface VendorChurn {
     trulyAdded: Bucket;
     /** Content present on the prior side only. */
     trulyRemoved: Bucket;
+    /**
+     * A file that lost its path AND changed a little, paired to its
+     * predecessor by content (`pairRelocated`). Its real diff is charged to
+     * `realChange` (or `freeReroll`); the lines here are the PATH DRAW — what
+     * the old whole-file removal + addition charged, less that real diff.
+     */
+    relocated: Bucket;
     unparsed: Bucket;
     changedLinesTotal: number;
   };
@@ -99,11 +124,26 @@ export interface VendorChurn {
   /** Genuine dependency movement. Must NOT be driven down. */
   realDependencyChangeLines: number;
   realChangeFiles: string[];
+  /** Every relocation pair, so a move is visible rather than absorbed. */
+  relocated: RelocatedPair[];
   examples: {
     realChangeTop: Array<{ file: string; lines: number }>;
     movedPath: string[];
     trulyAdded: string[];
   };
+}
+
+export interface RelocatedPair {
+  prior: string;
+  fresh: string;
+  /** Shingle Jaccard of the two files' content tokens. */
+  score: number;
+  /** Best competing score either file had (the margin is score - this). */
+  runnerUp: number;
+  /** The pair's own diff, charged as real change (0 if pure reroll). */
+  realLines: number;
+  /** The path draw, booked as noise. */
+  drawLines: number;
 }
 
 const mk = (): Bucket => ({ files: 0, lines: 0 });
@@ -226,18 +266,13 @@ function listJsFiles(root: string): string[] {
  * baseline, so results reconcile with 36,201 instead of approximating it. A
  * position-blind multiset count was tried first and ran systematically low
  * (8,841 → 6,924 on 215→216) because a line that merely MOVES cancels against
- * its own copy on the other side.
+ * its own copy on the other side. Counted by the owner, `lib/diff.ts`.
  */
 function changedLines(fileA: string, fileB: string): number {
-  const r = spawnSync("diff", [fileA, fileB], {
-    encoding: "utf-8",
-    maxBuffer: 1 << 30
-  });
-  let n = 0;
-  for (const line of (r.stdout ?? "").split("\n")) {
-    if (line.startsWith("<") || line.startsWith(">")) n++;
-  }
-  return n;
+  return changedTextLines(
+    fs.readFileSync(fileA, "utf-8"),
+    fs.readFileSync(fileB, "utf-8")
+  );
 }
 
 const lineCount = (file: string): number =>
@@ -274,7 +309,9 @@ function decomposeManifest(
 
 export function decomposeVendorChurn(
   priorDir: string,
-  freshDir: string
+  freshDir: string,
+  /** Pairing thresholds — the defaults are the scorer; override to audit. */
+  pairing?: PairingOptions
 ): VendorChurn {
   const priorRel = listJsFiles(priorDir);
   const freshRel = listJsFiles(freshDir);
@@ -312,11 +349,15 @@ export function decomposeVendorChurn(
   const realChange = mk();
   const trulyAdded = mk();
   const trulyRemoved = mk();
+  const relocated = mk();
   const unparsed = mk();
 
   const realChangeFiles: Array<{ file: string; lines: number }> = [];
   const movedExamples: string[] = [];
   const addedExamples: string[] = [];
+  const addedRel: string[] = [];
+  /** Same path, real change: never paired, but they compete (see pairing). */
+  const changedInPlace: string[] = [];
 
   const priorSet = new Set(priorRel);
   for (const rel of freshRel) {
@@ -356,6 +397,7 @@ export function decomposeVendorChurn(
       }
       bump(realChange, lines);
       realChangeFiles.push({ file: rel, lines });
+      changedInPlace.push(rel);
       continue;
     }
 
@@ -365,16 +407,68 @@ export function decomposeVendorChurn(
         movedExamples.push(`${rel} <- ${priorBySig.get(fsig)?.[0]}`);
       }
     } else {
-      bump(trulyAdded, lineCount(fp));
-      if (addedExamples.length < 8) addedExamples.push(rel);
+      addedRel.push(rel);
     }
   }
 
   const freshSet = new Set(freshRel);
+  const removedRel: string[] = [];
   for (const rel of priorRel) {
     if (freshSet.has(rel)) continue;
     const psig = sigOf.get(`prior|${rel}`);
     if (psig !== undefined && freshBySig.has(psig)) continue; // counted as moved
+    removedRel.push(rel);
+  }
+
+  // A file that lost its path and a file that gained one may be the same
+  // library, changed a little: pair them by content before charging either
+  // as a whole-file removal or addition (relocation-pairing.ts).
+  const shinglesOf = (side: "prior" | "fresh", rels: string[]) => {
+    const m = new Map<string, Set<string>>();
+    for (const rel of rels) {
+      const info = infoOf.get(`${side}|${rel}`);
+      if (info) m.set(rel, contentShingles(info.toks));
+    }
+    return m;
+  };
+  const relocatedPairs: RelocatedPair[] = [];
+  const pairedPrior = new Set<string>();
+  const pairedFresh = new Set<string>();
+  for (const pair of pairRelocated(
+    shinglesOf("prior", removedRel),
+    shinglesOf("fresh", addedRel),
+    pairing,
+    {
+      prior: shinglesOf("prior", changedInPlace),
+      fresh: shinglesOf("fresh", changedInPlace)
+    }
+  )) {
+    const pp = path.join(priorDir, pair.prior);
+    const fp = path.join(freshDir, pair.fresh);
+    const lines = changedLines(pp, fp);
+    const a = infoOf.get(`prior|${pair.prior}`);
+    const b = infoOf.get(`fresh|${pair.fresh}`);
+    if (a && b && divergenceClass(a, b) === "free-minified-reroll") {
+      bump(freeReroll, lines);
+    } else {
+      bump(realChange, lines);
+      realChangeFiles.push({ file: pair.fresh, lines });
+    }
+    // What the old charge was (whole prior removed + whole fresh added),
+    // less the real diff charged above: the path draw, and only that.
+    const draw = lineCount(pp) + lineCount(fp) - lines;
+    bump(relocated, draw);
+    relocatedPairs.push({ ...pair, realLines: lines, drawLines: draw });
+    pairedPrior.add(pair.prior);
+    pairedFresh.add(pair.fresh);
+  }
+  for (const rel of addedRel) {
+    if (pairedFresh.has(rel)) continue;
+    bump(trulyAdded, lineCount(path.join(freshDir, rel)));
+    if (addedExamples.length < 8) addedExamples.push(rel);
+  }
+  for (const rel of removedRel) {
+    if (pairedPrior.has(rel)) continue;
     bump(trulyRemoved, lineCount(path.join(priorDir, rel)));
   }
 
@@ -397,6 +491,7 @@ export function decomposeVendorChurn(
       realChange,
       trulyAdded,
       trulyRemoved,
+      relocated,
       unparsed,
       changedLinesTotal: bodyChanged
     },
@@ -405,15 +500,18 @@ export function decomposeVendorChurn(
       bodyChanged +
       manifest.changedLines +
       trulyAdded.lines +
-      trulyRemoved.lines,
+      trulyRemoved.lines +
+      relocated.lines,
     noiseLines:
       nameOnly.lines +
       freeReroll.lines +
       movedPath.lines +
+      relocated.lines +
       manifest.changedLines,
     realDependencyChangeLines:
       realChange.lines + trulyAdded.lines + trulyRemoved.lines,
     realChangeFiles: realChangeFiles.map((e) => e.file),
+    relocated: relocatedPairs,
     examples: {
       realChangeTop: realChangeFiles
         .sort((x, y) => y.lines - x.lines)

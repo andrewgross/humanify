@@ -130,3 +130,151 @@ describe("decomposeVendorChurn", () => {
     assert.ok(r.realDependencyChangeLines > 0);
   });
 });
+
+/**
+ * Relocation pairing (2026-10-06). A vendor file whose content changed AND
+ * whose humanify-chosen path changed used to be charged as a whole-file
+ * removal plus a whole-file addition: the eslint-plugin-security case, a
+ * 151-line text module with a real 6-line edit, read 6 lines when both
+ * versions drew the same path and 303 when they did not. The fixtures below
+ * are that shape (a `module.exports = <text>` factory), plus the two ways a
+ * pairing could go wrong: pairing unrelated files, and picking one of two
+ * equally good candidates.
+ */
+const TEXT_LINES = 148;
+
+/** A bun-factory text module of `TEXT_LINES` prose lines (151 file lines). */
+function textModule(topic: string, edits: Record<number, string> = {}) {
+  const body: string[] = [];
+  for (let i = 0; i < TEXT_LINES; i++) {
+    body.push(
+      edits[i] ??
+        `Rule ${i} about ${topic}: keep the ${topic} policy number ${i * 7} strict and audited.`
+    );
+  }
+  return [
+    'const { __commonJS } = require("../.humanify/__bun-runtime.js");',
+    "exports.f = __commonJS(function(a,b){b.exports=`",
+    ...body,
+    "`});",
+    ""
+  ].join("\n");
+}
+
+function pairFixture(files: {
+  prior: Record<string, string>;
+  fresh: Record<string, string>;
+}): { prior: string; fresh: string } {
+  const dir = fs.mkdtempSync(path.join(root, "pair-"));
+  const p = path.join(dir, "prior");
+  const f = path.join(dir, "fresh");
+  for (const [rel, body] of Object.entries(files.prior)) write(p, rel, body);
+  for (const [rel, body] of Object.entries(files.fresh)) write(f, rel, body);
+  return { prior: p, fresh: f };
+}
+
+/** Three changed lines: a modified line counts twice, so 6 diff lines. */
+const EDIT = {
+  10: "Rule 10 was rewritten for the new release.",
+  70: "Rule 70 was rewritten for the new release.",
+  130: "Rule 130 was rewritten for the new release."
+};
+
+describe("decomposeVendorChurn: relocated files", () => {
+  it("charges a moved file with a 6-line edit 6 real lines, not 303", () => {
+    const { prior: p, fresh: f } = pairFixture({
+      prior: { "eslint-plugin-security.js": textModule("security") },
+      fresh: { "dynamic-anchor.js": textModule("security", EDIT) }
+    });
+    const r = decomposeVendorChurn(p, f);
+    assert.equal(r.realDependencyChangeLines, 6);
+    assert.equal(r.bodies.trulyAdded.files, 0);
+    assert.equal(r.bodies.trulyRemoved.files, 0);
+    assert.equal(r.bodies.relocated.files, 1);
+    // The move stays visible: the rest of what the old charge was (the whole
+    // prior file removed + the whole fresh file added, 152 + 152 by the
+    // scorer's line count) less the 6 real lines is the path draw, booked as
+    // noise — so the vendor TOTAL is unchanged and only its split moves.
+    assert.equal(r.bodies.relocated.lines, 152 + 152 - 6);
+    assert.equal(r.vendorTotalLines, 304);
+    assert.equal(r.noiseLines, 298);
+    assert.deepEqual(
+      r.relocated.map((x) => [x.prior, x.fresh, x.realLines]),
+      [["eslint-plugin-security.js", "dynamic-anchor.js", 6]]
+    );
+  });
+
+  it("does not pair unrelated files", () => {
+    const { prior: p, fresh: f } = pairFixture({
+      prior: { "gone.js": textModule("security") },
+      fresh: { "added.js": textModule("telemetry") }
+    });
+    const r = decomposeVendorChurn(p, f);
+    assert.equal(r.bodies.relocated.files, 0);
+    assert.equal(r.bodies.trulyAdded.files, 1);
+    assert.equal(r.bodies.trulyRemoved.files, 1);
+    assert.deepEqual(r.relocated, []);
+  });
+
+  it("refuses to pick between two equally good candidates", () => {
+    // Both prior files are one edit away from the fresh one, at different
+    // places: no margin, so neither is a credible predecessor.
+    const { prior: p, fresh: f } = pairFixture({
+      prior: {
+        "a.js": textModule("security", { 20: "An older rule 20." }),
+        "b.js": textModule("security", { 120: "An older rule 120." })
+      },
+      fresh: { "c.js": textModule("security") }
+    });
+    const r = decomposeVendorChurn(p, f);
+    assert.equal(r.bodies.relocated.files, 0);
+    assert.equal(r.bodies.trulyAdded.files, 1);
+    assert.equal(r.bodies.trulyRemoved.files, 2);
+  });
+
+  it("does not pair across a path SWAP (the f616f33b Fortran/IRPF90 case)", () => {
+    // Two related grammars. IRPF90 moved to a new path and Fortran took its
+    // old one; the removed Fortran file looks enough like IRPF90 to pair if
+    // the file that really is IRPF90's predecessor (still at its path, so
+    // never a candidate) were not allowed to compete.
+    const lines = (from: number, word: string) =>
+      Object.fromEntries(
+        Array.from({ length: 25 }, (_, i) => [
+          from + i,
+          `${word} keyword ${i} is reserved in ${word} sources only.`
+        ])
+      );
+    const fortran = { ...lines(0, "Fortran") };
+    const irpf90 = { ...lines(100, "IRPF90") };
+    const { prior: p, fresh: f } = pairFixture({
+      prior: {
+        "cyp.js": textModule("grammar", fortran),
+        "fortran.js": textModule("grammar", irpf90)
+      },
+      fresh: {
+        "fortran.js": textModule("grammar", { ...fortran, 60: "New." }),
+        "prism-fortran.js": textModule("grammar", { ...irpf90, 60: "New." })
+      }
+    });
+    const r = decomposeVendorChurn(p, f);
+    assert.equal(r.bodies.relocated.files, 0);
+    assert.equal(r.bodies.trulyAdded.files, 1);
+    assert.equal(r.bodies.trulyRemoved.files, 1);
+  });
+
+  it("pairs only files that lost their path, never one still at its own", () => {
+    // `keep.js` exists on both sides (a same-path change); the fresh-only
+    // file must not steal it as a predecessor.
+    const { prior: p, fresh: f } = pairFixture({
+      prior: { "keep.js": textModule("security") },
+      fresh: {
+        "keep.js": textModule("security", EDIT),
+        "copy.js": textModule("security", { 5: "A copy." })
+      }
+    });
+    const r = decomposeVendorChurn(p, f);
+    assert.equal(r.bodies.relocated.files, 0);
+    assert.equal(r.bodies.realChange.files, 1);
+    assert.equal(r.bodies.trulyAdded.files, 1);
+  });
+});

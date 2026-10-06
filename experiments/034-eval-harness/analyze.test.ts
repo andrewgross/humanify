@@ -7,8 +7,10 @@
  */
 import assert from "node:assert";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, it } from "node:test";
-import { determinism } from "./analyze.js";
+import { determinism, vendorChurn } from "./analyze.js";
 
 /** A recorded scorecard from the exp050 cold runs (old format: no reask). */
 const RECORDED = "results/exp050-cold/2.1.216.stats.json";
@@ -39,5 +41,45 @@ describe("analyze determinism over --stats-json", () => {
       sweepReaskDropped: 2
     };
     assert.deepStrictEqual(determinism(stats), before);
+  });
+});
+
+/**
+ * The vendor card carries the relocation pairs (2026-10-06): a file that
+ * changed a little AND drew a new path is charged its own diff as real, and
+ * the move is listed rather than absorbed.
+ */
+describe("analyze vendor card", () => {
+  it("lists a relocated file and charges only its own diff as real", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "analyze-vendor-"));
+    try {
+      const text = (edit: string) =>
+        [
+          'const { __commonJS } = require("../.humanify/__bun-runtime.js");',
+          "exports.f = __commonJS(function(a,b){b.exports=`",
+          ...Array.from({ length: 60 }, (_, i) =>
+            i === 30 ? edit : `Line ${i} of a bundled prompt, kept verbatim.`
+          ),
+          "`});",
+          ""
+        ].join("\n");
+      fs.mkdirSync(path.join(root, "prior"));
+      fs.mkdirSync(path.join(root, "fresh"));
+      fs.writeFileSync(path.join(root, "prior/old-name.js"), text("Old."));
+      fs.writeFileSync(path.join(root, "fresh/new-name.js"), text("New."));
+      const card = vendorChurn(
+        path.join(root, "prior"),
+        path.join(root, "fresh")
+      );
+      assert.strictEqual(card.real, 2);
+      assert.strictEqual(card.relocated.files, 1);
+      assert.deepStrictEqual(
+        card.relocated.pairs.map((p) => [p.prior, p.fresh, p.realLines]),
+        [["old-name.js", "new-name.js", 2]]
+      );
+      assert.strictEqual(card.churnLines, card.noise + card.real);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

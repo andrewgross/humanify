@@ -302,15 +302,33 @@ export function layoutChurn(priorSrc: string, freshSrc: string) {
  * only until exp046, and folding vendor into the existing numbers would break
  * every committed reference. `noise` is what a body-reuse or manifest lever
  * can drive to zero; `real` is genuine dependency movement that must not move.
+ *
+ * `relocated` (2026-10-06): files that changed a little AND drew a new path,
+ * paired to their predecessor by content. Before it, each was charged to
+ * `real` as a whole-file removal + addition; now only its own diff is real
+ * and the rest (`relocated.lines`, the path draw) is inside `noise`. Cards
+ * scored before it are not comparable on `noise`/`real` (`churnLines` is
+ * unchanged by construction). The pairs are listed so a move stays visible.
  */
-function vendorChurn(priorVendor: string, freshVendor: string) {
+export function vendorChurn(priorVendor: string, freshVendor: string) {
   const v = decomposeVendorChurn(priorVendor, freshVendor);
   return {
     churnLines: v.vendorTotalLines,
     noise: v.noiseLines,
     real: v.realDependencyChangeLines,
     manifest: v.manifest.changedLines,
-    bodiesNameOnly: v.bodies.nameOnly.lines + v.bodies.freeReroll.lines
+    bodiesNameOnly: v.bodies.nameOnly.lines + v.bodies.freeReroll.lines,
+    relocated: {
+      files: v.bodies.relocated.files,
+      lines: v.bodies.relocated.lines,
+      pairs: v.relocated.map((r) => ({
+        prior: r.prior,
+        fresh: r.fresh,
+        score: Number(r.score.toFixed(3)),
+        realLines: r.realLines,
+        drawLines: r.drawLines
+      }))
+    }
   };
 }
 
