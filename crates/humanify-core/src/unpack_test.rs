@@ -454,10 +454,13 @@ fn uses_the_banner_package_as_the_file_name() {
     unpack(bundle, &t.0);
     let entries = factories(&read_manifest(&t.0));
     assert_eq!(entries.len(), 1);
-    assert_eq!(s(&entries[0], "nameSource"), "banner");
-    assert_eq!(s(&entries[0], "bannerPackage"), "axios");
-    assert_eq!(s(&entries[0], "bannerVersion"), "1.2.3");
-    assert_eq!(s(&entries[0], "fileName"), "vendor/axios@1.2.3.js");
+    assert_eq!(s(&entries[0], "nameSource"), "declared");
+    let identity = &entries[0]["identity"];
+    assert_eq!(s(identity, "source"), "banner");
+    assert_eq!(s(identity, "package"), "axios");
+    assert_eq!(s(identity, "version"), "1.2.3");
+    // The version is recorded, not filed: a bump must not move the file.
+    assert_eq!(s(&entries[0], "fileName"), "vendor/axios.js");
 }
 
 #[test]
@@ -495,7 +498,7 @@ fn llm_names_fallback_factories_via_the_namer() {
     assert_eq!(namer.asked.len(), 1, "one batch for the fallback factories");
     assert_eq!(namer.asked[0].len(), 2, "banner-named factory excluded");
     let by_source = |src: &str| entries.iter().find(|f| s(f, "nameSource") == src).unwrap();
-    assert_eq!(s(by_source("banner"), "fileName"), "vendor/axios@1.2.3.js");
+    assert_eq!(s(by_source("declared"), "fileName"), "vendor/axios.js");
     assert_eq!(s(by_source("llm"), "fileName"), "vendor/js-yaml.js");
     assert_eq!(s(by_source("llm"), "name"), "js-yaml");
     assert!(is_lib_hash_js(s(by_source("fallback"), "fileName")));
@@ -514,7 +517,7 @@ fn strips_a_trailing_js_from_banner_names() {
     let t = TempDir::new("hljs");
     unpack(bundle, &t.0);
     let entries = factories(&read_manifest(&t.0));
-    assert_eq!(s(&entries[0], "nameSource"), "banner");
+    assert_eq!(s(&entries[0], "nameSource"), "declared");
     assert_eq!(s(&entries[0], "fileName"), "vendor/highlight.js");
 }
 
@@ -538,21 +541,16 @@ fn groups_a_packages_modules_into_a_folder() {
     for e in &entries {
         let f = s(e, "fileName");
         let stem = f
-            .strip_prefix("vendor/axios@1.0.0/lib_")
+            .strip_prefix("vendor/axios/lib_")
             .and_then(|r| r.strip_suffix(".js"))
-            .unwrap_or_else(|| panic!("expected vendor/axios@1.0.0/lib_<hash>.js, got {f}"));
+            .unwrap_or_else(|| panic!("expected vendor/axios/lib_<hash>.js, got {f}"));
         assert_eq!(stem.len(), 8);
         names.push(f.to_string());
     }
     names.sort();
     names.dedup();
     assert_eq!(names.len(), 3, "distinct files in the folder");
-    assert_eq!(
-        fs::read_dir(t.0.join("vendor/axios@1.0.0"))
-            .unwrap()
-            .count(),
-        3
-    );
+    assert_eq!(fs::read_dir(t.0.join("vendor/axios")).unwrap().count(), 3);
 }
 
 #[test]
@@ -572,10 +570,7 @@ fn keeps_a_single_module_package_flat() {
         .map(|f| s(f, "fileName").to_string())
         .collect();
     names.sort();
-    assert_eq!(
-        names,
-        vec!["vendor/axios@2.0.0.js", "vendor/lodash@4.0.0.js"]
-    );
+    assert_eq!(names, vec!["vendor/axios.js", "vendor/lodash.js"]);
 }
 
 #[test]
@@ -615,7 +610,7 @@ fn disambiguates_names_differing_only_in_case() {
         .iter()
         .map(|f| s(f, "fileName").to_string())
         .collect();
-    assert_eq!(names, vec!["vendor/Ab@1.0.0.js", "vendor/aB@1.0.0-2.js"]);
+    assert_eq!(names, vec!["vendor/Ab.js", "vendor/aB-2.js"]);
 }
 
 // ---- the esbuild adapter (exp075 — real esbuild 0.27.2 wrapper shapes) ------
@@ -1695,4 +1690,244 @@ fn an_app_text_module_is_an_app_asset_named_from_its_text() {
         runtime.contains(&format!("{}()", s(env, "runtimeIdentifier"))),
         "{runtime}"
     );
+}
+
+// ---- declared library identity (finding #95) ------------------------------
+
+/// A bundle holding one highlight.js language definition (built the way
+/// the real grammar modules are: a function returning the definition) and
+/// one unrelated module.
+fn grammar_bundle(name: &str, aliases: &str, keywords: &[&str], contains: &str) -> String {
+    let keywords = keywords
+        .iter()
+        .map(|k| format!("\"{k}\""))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        concat!(
+            "var x=(I,A)=>()=>(A||I((A={{exports:{{}}}}).exports,A),A.exports);\n",
+            "var gram=x((e,t)=>{{function n(r){{let o=/([*]|[a-zA-Z_$][a-zA-Z0-9_$]*)/;",
+            "return{{name:\"{name}\",aliases:[{aliases}],keywords:{{keyword:[{keywords}],literal:[\"true\",\"false\",\"null\"]}},",
+            "contains:[r.APOS_STRING_MODE,r.QUOTE_STRING_MODE,r.C_LINE_COMMENT_MODE,{contains}]}}}}t.exports=n}});\n",
+            "var other=x((exports)=>{{ exports.render=function render(t){{return \"<div>\"+t+\"</div>\"}}; }});\n",
+            "var main=gram();var o=other();"
+        ),
+        name = name,
+        aliases = aliases,
+        keywords = keywords,
+        contains = contains,
+    )
+}
+
+fn hop_outcome(
+    code: &str,
+    dir: &Path,
+    prior_dir: Option<&Path>,
+    answer: fn(&VendorNameRequest) -> Option<String>,
+) -> (crate::unpack::bun::BunUnpackOutcome, Vec<Vec<String>>) {
+    let mut namer = FnNamer {
+        answer,
+        asked: Vec::new(),
+    };
+    let outcome = unpack_bun(
+        code,
+        dir,
+        BunUnpackOptions {
+            namer: Some(&mut namer),
+            prior: prior_dir.and_then(|p| load_prior_vendor(&p.join("humanified.js"))),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    (outcome, namer.asked)
+}
+
+/// The census's ActionScript case (2.1.197 → 2.1.198, highlight.js 10.x →
+/// 11.x): the grammar's body changed too much for the content pairing, so
+/// on main it was re-asked, got a new file and a new identifier in every
+/// app file using it. Both releases DECLARE "ActionScript": the pair is
+/// made by that, before the model.
+#[test]
+fn a_rewritten_grammar_keeps_its_file_and_identifier_by_its_declared_name() {
+    let first = TempDir::new("decl1");
+    let prior = grammar_bundle(
+        "ActionScript",
+        "\"as\"",
+        &[
+            "as", "break", "case", "catch", "class", "const", "continue", "default", "delete",
+            "do", "dynamic", "each", "else", "extends", "final", "finally", "for", "function",
+        ],
+        "{className:\"class\",beginKeywords:\"package\",end:/\\{/,contains:[r.TITLE_MODE]}",
+    );
+    let (_, _) = hop_outcome(&prior, &first.0, None, |_| Some("javascript".into()));
+    let m1 = factories(&read_manifest(&first.0));
+    let before = entry_with(&m1, "ActionScript", &first.0).clone();
+    assert_eq!(s(&before, "nameSource"), "declared");
+    assert_eq!(s(&before, "fileName"), "vendor/highlight/actionscript.js");
+    assert_eq!(s(&before["identity"], "source"), "highlight-js-grammar");
+    assert_eq!(s(&before["identity"], "member"), "ActionScript");
+
+    // The 11.x rewrite: the keyword list split into keywords and built-ins,
+    // and the modes rewritten — only the declaration and a few modes kept.
+    let fresh = grammar_bundle(
+        "ActionScript",
+        "\"as\"",
+        &[
+            "as",
+            "implements",
+            "import",
+            "in",
+            "include",
+            "instanceof",
+            "interface",
+            "internal",
+            "is",
+            "namespace",
+            "native",
+            "new",
+            "override",
+            "package",
+            "private",
+            "protected",
+            "public",
+            "return",
+        ],
+        "{match:[/\\bpackage/,/\\s+/,/[a-zA-Z_$][a-zA-Z0-9_$]*/],scope:{1:\"keyword\",3:\"title.class\"}},{className:\"rest_arg\",begin:/[.]{3}/,end:o,relevance:10},{beginKeywords:\"import include\",end:/;/,keywords:{keyword:\"import include\"}}",
+    );
+    let second = TempDir::new("decl2");
+    let (outcome, asked) = hop_outcome(&fresh, &second.0, Some(&first.0), |_| None);
+    let m2 = factories(&read_manifest(&second.0));
+    let after = entry_with(&m2, "ActionScript", &second.0);
+    assert_ne!(s(after, "structuralHash"), s(&before, "structuralHash"));
+    assert_eq!(
+        s(after, "runtimeIdentifier"),
+        s(&before, "runtimeIdentifier"),
+        "the app code's name for the module is unchanged"
+    );
+    assert!(
+        outcome
+            .content_carry
+            .as_ref()
+            .is_some_and(|c| c.carries.is_empty()),
+        "too changed for the content pairing"
+    );
+    let declared = outcome.declared_carry.expect("a prior was given");
+    assert_eq!(declared.len(), 1, "{declared:?}");
+    assert_eq!(declared[0].key, "highlight.js/actionscript");
+    assert_eq!(s(after, "fileName"), s(&before, "fileName"));
+    assert_eq!(
+        s(after, "runtimeIdentifier"),
+        s(&before, "runtimeIdentifier"),
+        "the app code's name for the module is unchanged"
+    );
+    assert!(
+        asked
+            .iter()
+            .flatten()
+            .all(|k| !k.contains(&s(after, "structuralHash")[..8])),
+        "never re-asked: {asked:?}"
+    );
+}
+
+/// A module that declares who it is is named from that before the model is
+/// asked: an inlined package.json is its package's `package.json`, a
+/// language definition its language (short declared names allowed).
+#[test]
+fn a_declared_identity_names_a_module_before_the_model() {
+    let bundle = concat!(
+        "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+        "var pj=x((e,t)=>{t.exports={name:\"gaxios\",version:\"7.1.4\",description:\"A simple HTTP client.\",main:\"build/src/index.js\"}});\n",
+        "var go=x((e,t)=>{function n(r){return{name:\"Go\",aliases:[\"golang\"],keywords:{keyword:[\"break\",\"func\"]},illegal:\"</\"}}t.exports=n});\n",
+        "var unk=x((exports)=>{ exports.load=function load(s){return s+\"YAMLException\";}; });\n",
+        "var a=pj();var b=go();var c=unk();"
+    );
+    let t = TempDir::new("declnames");
+    let (_, asked) = hop_outcome(bundle, &t.0, None, |_| Some("js-yaml".into()));
+    assert_eq!(
+        asked.iter().map(Vec::len).sum::<usize>(),
+        1,
+        "only the undeclared module is asked: {asked:?}"
+    );
+    let entries = factories(&read_manifest(&t.0));
+    let pj = entry_with(&entries, "gaxios", &t.0);
+    assert_eq!(s(pj, "fileName"), "vendor/gaxios/package.json.js");
+    assert_eq!(s(pj, "name"), "gaxios");
+    assert_eq!(s(pj, "nameSource"), "declared");
+    assert_eq!(s(&pj["identity"], "source"), "package-json");
+    assert_eq!(s(&pj["identity"], "version"), "7.1.4");
+    let go = entry_with(&entries, "golang", &t.0);
+    assert_eq!(s(go, "fileName"), "vendor/highlight/go.js");
+    let unk = entry_with(&entries, "YAMLException", &t.0);
+    assert_eq!(s(unk, "fileName"), "vendor/js-yaml.js");
+}
+
+/// Two changed modules declaring the same name (and aliases) are not
+/// paired by it: the content pairing decides, as before.
+#[test]
+fn a_shared_declared_name_is_left_to_the_content_pairing() {
+    let two = |tail: &str| {
+        format!(
+            concat!(
+                "var x=(I,A)=>()=>(A||I((A={{exports:{{}}}}).exports,A),A.exports);\n",
+                "var h1=x((e,t)=>{{function n(r){{return{{name:\"Handlebars\",aliases:[\"hbs\"],keywords:{{keyword:[\"if\",\"each\",\"with\",\"unless\",\"lookup\",\"log\"]}},contains:[r.COMMENT(/\\{{\\{{!--/,/--\\}}\\}}/),{{begin:/\\{{\\{{\\{{/,end:/\\}}\\}}\\}}/,subLanguage:\"xml\",className:\"{tail}\"}}]}}}}t.exports=n}});\n",
+                "var h2=x((e,t)=>{{function n(r){{let a={{className:\"template-variable\",begin:/\\{{\\{{/,end:/\\}}\\}}/,relevance:7}};return{{name:\"Handlebars\",aliases:[\"hbs\"],keywords:{{keyword:\"as\"}},contains:[a,{{className:\"string\",begin:\"{tail}\"}}]}}}}t.exports=n}});\n",
+                "var a=h1();var b=h2();"
+            ),
+            tail = tail
+        )
+    };
+    let first = TempDir::new("shared1");
+    hop_outcome(&two("abc"), &first.0, None, |_| None);
+    let m1 = factories(&read_manifest(&first.0));
+    let second = TempDir::new("shared2");
+    let (outcome, _) = hop_outcome(&two("abcdef"), &second.0, Some(&first.0), |_| None);
+    assert!(outcome.declared_carry.unwrap_or_default().is_empty());
+    let content = outcome.content_carry.expect("a prior was given");
+    assert_eq!(content.carries.len(), 2, "{:?}", content.carries);
+    let m2 = factories(&read_manifest(&second.0));
+    for needle in ["template-variable", "unless"] {
+        let after = entry_with(&m2, needle, &second.0);
+        let before = entry_with(&m1, needle, &first.0);
+        assert_eq!(s(after, "fileName"), s(before, "fileName"));
+    }
+}
+
+/// A declared name that changed spelling between releases (highlight.js's
+/// "Microtik" → "MikroTik") never vetoes the content pair.
+#[test]
+fn a_changed_declared_name_never_vetoes_a_content_pair() {
+    let first = TempDir::new("veto1");
+    let kw = [
+        "foreach", "do", "while", "for", "if", "from", "to", "step", "else", "on-error",
+    ];
+    hop_outcome(
+        &grammar_bundle(
+            "Microtik RouterOS script",
+            "\"mikrotik\"",
+            &kw,
+            "r.HASH_COMMENT_MODE",
+        ),
+        &first.0,
+        None,
+        |_| None,
+    );
+    let m1 = factories(&read_manifest(&first.0));
+    let before = entry_with(&m1, "RouterOS", &first.0).clone();
+    let second = TempDir::new("veto2");
+    let (outcome, _) = hop_outcome(
+        &grammar_bundle(
+            "MikroTik RouterOS script!",
+            "\"mikrotik\"",
+            &kw,
+            "r.HASH_COMMENT_MODE",
+        ),
+        &second.0,
+        Some(&first.0),
+        |_| None,
+    );
+    assert!(outcome.declared_carry.unwrap_or_default().is_empty());
+    assert_eq!(outcome.content_carry.unwrap().carries.len(), 1);
+    let m2 = factories(&read_manifest(&second.0));
+    let after = entry_with(&m2, "RouterOS", &second.0);
+    assert_eq!(s(after, "fileName"), s(&before, "fileName"));
 }

@@ -216,9 +216,11 @@ fn hash_fallback_name_and_test() {
     assert!(!crate::modules::is_hash_fallback_name("react"));
 }
 
-/// Probe `banner[...]` + `nameCounts`: banner wins, then fallback.
+/// The cascade's own rungs are the carry-over and the fallback: a module
+/// with a banner is recorded with it and left to the declared-identity step
+/// (finding #95, `identity`), which runs after the pairings.
 #[test]
-fn naming_cascade_banner_then_fallback() {
+fn naming_cascade_leaves_a_bannered_module_to_the_declared_step() {
     // A statement-level banner applies to ALL of the statement's
     // declarators (the TS bannerForStatement is shared) — the banner and
     // fallback mix needs separate STATEMENTS.
@@ -238,18 +240,12 @@ fn naming_cascade_banner_then_fallback() {
     )
     .expect("helper present");
     assert_eq!(classification.factories.len(), 2);
-    let counts = name_cjs_factories(&mut classification, leaked, None);
-    assert_eq!(counts.banner, 1);
-    assert_eq!(counts.fallback, 1);
-    assert_eq!(counts.url, 0);
     assert_eq!(
-        classification.factories[0].name.as_deref(),
-        Some("@azure/msal-common@15.13.1")
+        classification.factories[0].banner_package.as_deref(),
+        Some("@azure/msal-common")
     );
-    assert!(matches!(
-        classification.factories[0].name_source,
-        Some(crate::modules::NameSource::Banner)
-    ));
+    let counts = name_cjs_factories(&mut classification, None);
+    assert_eq!(counts.fallback, 2);
     // The fallback name comes from the STRUCTURAL hash (8 chars).
     let expected = format!("lib_{}", &classification.factories[1].structural_hash[..8]);
     assert_eq!(
@@ -302,7 +298,7 @@ fn naming_cascade_carry_over_requires_intact_group() {
             crate::modules::CarriedName::new("lib_prior1", Some("fallback")),
         ],
     );
-    let counts = name_cjs_factories(&mut classification, leaked, Some(&prior));
+    let counts = name_cjs_factories(&mut classification, Some(&prior));
     assert_eq!(counts.carry_over, 2);
     assert_eq!(
         classification.factories[0].name.as_deref(),
@@ -329,33 +325,9 @@ fn naming_cascade_carry_over_requires_intact_group() {
             Some("fallback"),
         )],
     );
-    let counts = name_cjs_factories(&mut classification, leaked, Some(&prior));
+    let counts = name_cjs_factories(&mut classification, Some(&prior));
     assert_eq!(counts.carry_over, 0);
     assert_eq!(counts.fallback, 2);
-}
-
-/// URL naming: one distinctive github repo, or one pkg domain.
-#[test]
-fn url_naming_distinctive_repo() {
-    assert_eq!(
-        crate::modules::extract_distinctive_repo_name("x=github.com/left-pad/left-pad;y"),
-        Some("left-pad".to_string())
-    );
-    // Two different repos → abstain.
-    assert_eq!(
-        crate::modules::extract_distinctive_repo_name("a=github.com/o/r1;b=github.com/o2/r2"),
-        None
-    );
-    // One pkg domain.
-    assert_eq!(
-        crate::modules::extract_distinctive_repo_name("see pkg.dev docs"),
-        Some("pkg".to_string())
-    );
-    // None at all.
-    assert_eq!(
-        crate::modules::extract_distinctive_repo_name("no refs here"),
-        None
-    );
 }
 
 // ── wrapper detection ────────────────────────────────────────────────

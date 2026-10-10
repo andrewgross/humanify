@@ -44,6 +44,8 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
         object_method: false,
         exported_text: None,
         carried: None,
+        identity: None,
+        hints: Vec::new(),
     }
 }
 
@@ -158,8 +160,8 @@ fn fallback_names_stay_flat() {
 #[test]
 fn banner_names_become_file_names() {
     let factories = vec![
-        rec("aaaabbbb00000000", "axios@1.2.3", NameSource::Banner),
-        rec("ccccdddd00000000", "highlight.js", NameSource::Banner),
+        rec("aaaabbbb00000000", "axios@1.2.3", NameSource::Declared),
+        rec("ccccdddd00000000", "highlight.js", NameSource::Declared),
     ];
     let lookups = choose_file_names(&factories);
     assert_eq!(lookups[0].file_name, "axios@1.2.3");
@@ -172,9 +174,9 @@ fn banner_names_become_file_names() {
 #[test]
 fn grouped_package_uses_a_folder_with_stable_stems() {
     let factories = vec![
-        rec("aaaabbbb00000000", "axios@1.0.0", NameSource::Banner),
-        rec("ccccdddd00000000", "axios@1.0.0", NameSource::Banner),
-        rec("eeeeffff00000000", "axios@1.0.0", NameSource::Banner),
+        rec("aaaabbbb00000000", "axios@1.0.0", NameSource::Declared),
+        rec("ccccdddd00000000", "axios@1.0.0", NameSource::Declared),
+        rec("eeeeffff00000000", "axios@1.0.0", NameSource::Declared),
     ];
     let lookups = choose_file_names(&factories);
     let names: Vec<&str> = lookups.iter().map(|l| l.file_name.as_str()).collect();
@@ -231,8 +233,8 @@ fn a_carried_file_is_reserved_before_any_fresh_name() {
 #[test]
 fn case_collision_suffixes_the_second() {
     let factories = vec![
-        rec("aaaabbbb00000000", "Ab@1.0.0", NameSource::Banner),
-        rec("ccccdddd00000000", "aB@1.0.0", NameSource::Banner),
+        rec("aaaabbbb00000000", "Ab@1.0.0", NameSource::Declared),
+        rec("ccccdddd00000000", "aB@1.0.0", NameSource::Declared),
     ];
     let lookups = choose_file_names(&factories);
     assert_eq!(lookups[0].file_name, "Ab@1.0.0");
@@ -243,8 +245,8 @@ fn case_collision_suffixes_the_second() {
 #[test]
 fn scoped_name_becomes_a_nested_folder() {
     let factories = vec![
-        rec("aaaabbbb00000000", "@scope/pkg", NameSource::Url),
-        rec("ccccdddd00000000", "@scope/pkg", NameSource::Url),
+        rec("aaaabbbb00000000", "@scope/pkg", NameSource::Declared),
+        rec("ccccdddd00000000", "@scope/pkg", NameSource::Declared),
     ];
     let lookups = choose_file_names(&factories);
     assert_eq!(lookups[0].file_name, "@scope/pkg/lib_aaaabbbb");
@@ -264,9 +266,8 @@ fn entry(name: &str, hash: &str, ordinal: Option<usize>) -> ManifestEntry {
         structural_hash: hash.to_string(),
         runtime_identifier: None,
         hash_ordinal: ordinal,
-        banner_package: None,
-        banner_version: None,
         source_path: None,
+        identity: None,
         captures: Vec::new(),
     }
 }
@@ -425,7 +426,7 @@ fn evidence_collects_exports_urls_strings() {
         "var x = \"ab\";",
     ]
     .join("\n");
-    let evidence = build_vendor_evidence(&body, 700);
+    let evidence = build_vendor_evidence(&body, &[], 700);
     assert!(evidence.contains("exports: parse, stringify"), "{evidence}");
     assert!(
         evidence.contains("urls: https://github.com/nodeca/js-yaml"),
@@ -444,10 +445,33 @@ fn evidence_collects_exports_urls_strings() {
 #[test]
 fn evidence_cap_truncates() {
     let body = "exports.parse = function () {};exports.stringify = q;".repeat(50);
-    let evidence = build_vendor_evidence(&body, 40);
+    let evidence = build_vendor_evidence(&body, &[], 40);
     assert_eq!(evidence.encode_utf16().count(), 40);
     assert!(
         evidence.starts_with("exports: parse, stringify"),
+        "{evidence}"
+    );
+}
+
+/// Finding #95: the string scan read code BETWEEN two strings (a closing
+/// quote paired with the next opening one), so the ActionScript grammar's
+/// prompt never held "ActionScript"; the export scan looked for a literal
+/// `exports.` that minification renames.
+#[test]
+fn evidence_reads_real_strings_and_the_renamed_exports() {
+    let grammar = r#"(e,t)=>{function n(r){let o=/([*]|[a-zA-Z_$][a-zA-Z0-9_$]*)/,s={className:"rest_arg",begin:/[.]{3}/,end:o,relevance:10};return{name:"ActionScript",aliases:["as"],keywords:{keyword:["as","break","case"]}}}t.exports=n}"#;
+    let evidence = build_vendor_evidence(grammar, &[], 700);
+    assert!(evidence.contains("\"ActionScript\""), "{evidence}");
+    assert!(evidence.contains("\"rest_arg\""), "{evidence}");
+    assert!(
+        !evidence.contains("className"),
+        "no code between two strings: {evidence}"
+    );
+    let ts = r#"(P,M)=>{Object.defineProperty(P,"__esModule",{value:!0});P.getSSOTokenFromFile=P.tokenIntercept=void 0}"#;
+    let evidence = build_vendor_evidence(ts, &["version 1.9.0".to_string()], 700);
+    assert!(
+        evidence
+            .starts_with("declared: version 1.9.0\nexports: getSSOTokenFromFile, tokenIntercept"),
         "{evidence}"
     );
 }
@@ -456,7 +480,7 @@ fn evidence_cap_truncates() {
 #[test]
 fn evidence_exports_require_the_assignment() {
     let body = "exports.readonly;\nexports.write=1;";
-    let evidence = build_vendor_evidence(body, 700);
+    let evidence = build_vendor_evidence(body, &[], 700);
     assert!(evidence.contains("exports: write"), "{evidence}");
     assert!(!evidence.contains("readonly"), "{evidence}");
 }
@@ -556,7 +580,7 @@ impl VendorNamer for RecordingNamer {
 #[test]
 fn llm_pass_only_touches_fallback_records() {
     let mut factories = vec![
-        rec("aaaabbbb00000000", "axios@1.0.0", NameSource::Banner),
+        rec("aaaabbbb00000000", "axios@1.0.0", NameSource::Declared),
         fallback_rec("ccccdddd00000000"),
         fallback_rec("eeeeffff00000000"),
     ];
@@ -574,7 +598,7 @@ fn llm_pass_only_touches_fallback_records() {
     );
     assert_eq!(namer.batches[0], vec!["lib_ccccdddd", "lib_eeeeffff"]);
     assert_eq!(factories[0].name.as_deref(), Some("axios@1.0.0"));
-    assert_eq!(factories[0].name_source, Some(NameSource::Banner));
+    assert_eq!(factories[0].name_source, Some(NameSource::Declared));
     assert_eq!(factories[1].name.as_deref(), Some("js-yaml"));
     assert_eq!(factories[1].name_source, Some(NameSource::Llm));
 }
@@ -898,7 +922,7 @@ var main=shimOne();"#;
         ],
     );
     let mut classification = classify();
-    crate::modules::name_cjs_factories(&mut classification, source, Some(&prior));
+    crate::modules::name_cjs_factories(&mut classification, Some(&prior));
     let shared: Vec<&FactoryRecord> = classification
         .factories
         .iter()
@@ -919,21 +943,29 @@ var main=shimOne();"#;
 // WPB.2 red-first additions (2026-09-24)
 // ---------------------------------------------------------------------------
 
-/// The TS stamps the ordinal with `{ ...e, hashOrdinal: n }`, so the key
-/// lands AFTER every key the entry literal already had — bannerPackage and
-/// bannerVersion included (a present-but-undefined key keeps its slot).
-/// `JSON.stringify` writes keys in that order.
+/// The identity record is written before `hashOrdinal`, which stays the
+/// entry's last scalar key (finding #95).
 #[test]
-fn hash_ordinal_serializes_after_the_banner_fields() {
-    let mut e = entry("axios@1.0.0", "dup", Some(1));
-    e.banner_package = Some("axios".to_string());
-    e.banner_version = Some("1.0.0".to_string());
+fn hash_ordinal_serializes_after_the_identity() {
+    let mut e = entry("axios", "dup", Some(1));
+    e.identity = Some(crate::modules::identity::DeclaredIdentity {
+        source: "banner".into(),
+        package: Some("axios".into()),
+        version: Some("1.0.0".into()),
+        member: None,
+        aliases: Vec::new(),
+        evidence: "axios v1.0.0".into(),
+    });
     let json = serde_json::to_string(&e).unwrap();
     let ordinal_at = json.find("\"hashOrdinal\"").unwrap();
-    let version_at = json.find("\"bannerVersion\"").unwrap();
+    let identity_at = json.find("\"identity\"").unwrap();
     assert!(
-        version_at < ordinal_at,
-        "hashOrdinal must follow bannerVersion: {json}"
+        identity_at < ordinal_at,
+        "hashOrdinal must follow the identity: {json}"
+    );
+    assert!(
+        json.contains("\"identity\":{\"source\":\"banner\",\"package\":\"axios\",\"version\":\"1.0.0\",\"evidence\":\"axios v1.0.0\"}"),
+        "{json}"
     );
 }
 

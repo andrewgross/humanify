@@ -171,6 +171,7 @@ pub fn match_dump(args: &MatchVerbArgs<'_>) -> Result<Value, String> {
             ..humanify_core::unpack::AdapterRun::new(
                 toolchain.interop.piece,
                 toolchain.module_wrappers.piece,
+                toolchain.module_identity.piece,
             )
         },
     )?

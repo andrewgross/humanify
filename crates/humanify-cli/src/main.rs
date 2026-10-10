@@ -99,7 +99,8 @@ enum Command {
         #[arg(long)]
         index: Option<String>,
         /// Write the content carry (finding #90) as JSON here: candidates,
-        /// prior leftovers, and every carried module with its score.
+        /// prior leftovers, every carried module with its score, and the
+        /// declared-identity carries (finding #95) with their keys.
         #[arg(long)]
         carries: Option<String>,
         /// The webcrack shim script (scripts/webcrack-shim.ts), run with
@@ -359,7 +360,11 @@ fn run_libdetect(
                 dir,
                 AdapterRun {
                     webcrack_shim: shim.as_ref(),
-                    ..AdapterRun::new(toolchain.interop.piece, toolchain.module_wrappers.piece)
+                    ..AdapterRun::new(
+                        toolchain.interop.piece,
+                        toolchain.module_wrappers.piece,
+                        toolchain.module_identity.piece,
+                    )
                 },
             )?
             .into_result()
@@ -497,6 +502,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         AdapterRun {
             interop: toolchain.interop.piece,
             module_wrappers: toolchain.module_wrappers.piece,
+            module_identity: toolchain.module_identity.piece,
             namer: recording.as_mut().map(|n| n as &mut dyn VendorNamer),
             prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,
@@ -531,7 +537,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         .map(|f| f.captures.len())
         .sum();
     println!(
-        "unpack: adapter={} files={} sources={} llm-renamed={}{}{} kept-in-app={} captures={}",
+        "unpack: adapter={} files={} sources={} llm-renamed={}{}{}{} kept-in-app={} captures={}",
         adapter.name(),
         outcome.result.files.len(),
         sources
@@ -546,6 +552,11 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
                 " rekeyed-by-content={}/{} groups={}",
                 r.factories_joined, r.prior_entries, r.groups_joined
             ))
+            .unwrap_or_default(),
+        outcome
+            .declared_carry
+            .as_ref()
+            .map(|c| format!(" declared-carried={}", c.len()))
             .unwrap_or_default(),
         outcome
             .content_carry
@@ -565,6 +576,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             "candidates": report.candidates,
             "leftovers": report.leftovers,
             "carries": report.carries,
+            "declaredCarries": outcome.declared_carry.as_deref().unwrap_or_default(),
         });
         std::fs::write(
             path,

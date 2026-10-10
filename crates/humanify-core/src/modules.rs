@@ -38,7 +38,9 @@ use sha2::{Digest, Sha256};
 
 use crate::babel_view::unparen;
 use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use identity::readers::{BannerInfo, parse_banner};
 
+pub mod identity;
 pub mod known_globals;
 pub mod soundness;
 pub mod text_assets;
@@ -283,9 +285,16 @@ fn name_assign_tail(bytes: &[u8], mut j: usize) -> Option<String> {
 /// name_fallback_factories_with_llm`) over fallback records only.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NameSource {
-    Banner,
-    Url,
+    /// Named from the module's DECLARED identity (finding #95,
+    /// [`identity`]): what its bundler kept or its package wrote — the
+    /// record's `identity` says which reader and on what evidence.
+    Declared,
     CarryOver,
+    /// Carried from the prior module whose declared identity is the same
+    /// and unique on both sides (finding #95,
+    /// [`identity::pair_by_declared_identity`]) — run state only: the
+    /// manifest label stays the prior's.
+    DeclaredPair,
     /// Carried from the prior module this one was paired with BY CONTENT
     /// (finding #90, [`vendor_pairing`]) — run state only: the manifest
     /// label stays the prior's.
@@ -298,12 +307,12 @@ pub enum NameSource {
 }
 
 impl NameSource {
-    /// The TS manifest's `nameSource` string — the written field, byte-exact.
+    /// The manifest's `nameSource` string — the written field.
     pub fn as_str(self) -> &'static str {
         match self {
-            NameSource::Banner => "banner",
-            NameSource::Url => "url",
+            NameSource::Declared => "declared",
             NameSource::CarryOver => "carry-over",
+            NameSource::DeclaredPair => "declared-pair",
             NameSource::ContentPair => "content-pair",
             NameSource::Llm => "llm",
             NameSource::Fallback => "fallback",
@@ -316,8 +325,7 @@ impl NameSource {
     /// carried, from where is not recorded.
     pub fn of_prior_label(label: Option<&str>) -> NameSource {
         [
-            NameSource::Banner,
-            NameSource::Url,
+            NameSource::Declared,
             NameSource::Llm,
             NameSource::Fallback,
             NameSource::Asset,
@@ -387,9 +395,10 @@ pub struct FactoryRecord {
     pub decl_stmt_span: Span,
     /// The module's ORIGINAL source path, when the bundler kept it —
     /// esbuild's unminified form uses it as the factory object's key
-    /// (exp075). Absent for bun and for ANY minified build, so nothing may
-    /// depend on it (it is never a name source, never a join key); it is
-    /// recorded metadata, a gift when present.
+    /// (exp075). Absent for bun and for ANY minified build. Since finding
+    /// #95 it is one input of the declared identity (the esbuild
+    /// `ModuleIdentitySource` hands it to the readers); nothing else reads
+    /// it.
     pub source_path: Option<String>,
     /// The factory came from esbuild's object-METHOD form (its span carries
     /// no `function` keyword) — [`FactoryArg::object_method`].
@@ -401,6 +410,13 @@ pub struct FactoryRecord {
     /// What a content pair carried from the prior release (finding #90) —
     /// the prior file and identifier the unpack reuses. None otherwise.
     pub carried: Option<vendor_pairing::CarriedIdentity>,
+    /// What the module declares about itself (finding #95,
+    /// [`identity::declare`]) — set by the unpack before any name is
+    /// chosen; None for an app text asset or when no reader named it.
+    pub identity: Option<identity::DeclaredIdentity>,
+    /// Declared facts too weak to name the module (a version constant, a
+    /// repository URL) — shown to the model, never a name.
+    pub hints: Vec<String>,
 }
 
 /// The classification: the helper var + every factory, in source order.
@@ -418,9 +434,12 @@ pub struct BunModuleClassification {
 /// Counts of factories named by each source (FactoryNameCounts).
 #[derive(Default)]
 pub struct FactoryNameCounts {
-    pub banner: usize,
-    pub url: usize,
+    /// Named from a declared identity (finding #95) — counted after the
+    /// pairings.
+    pub declared: usize,
     pub carry_over: usize,
+    /// Carried by an equal, unique declared identity (finding #95).
+    pub declared_pair: usize,
     /// Carried by content (finding #90) — counted after the cascade.
     pub content_pair: usize,
     pub llm: usize,
@@ -623,11 +642,14 @@ fn prior_name_for(
 
 /// Apply the Phase 3 naming cascade to each classified factory.
 ///
-/// Priority order (first hit wins): banner-derived, distinctive URL
-/// (github.com/<org>/<repo> or *.dev/.org domains), cross-bundle carry-over
-/// via `prior_names`, then the structural-hash fallback. The LLM pass runs
-/// POST-cascade in the unpack adapter over fallback-named records only —
-/// deterministic sources always win and this cascade stays sync/pure.
+/// The first two rungs: the cross-bundle carry-over via `prior_names` (an
+/// exact structural-hash match), then the structural-hash fallback. The
+/// rest of the ladder runs in the unpack adapter over the fallbacks, in
+/// order: the declared-identity pair, the content pair, the declared
+/// identity's own name (finding #95, [`identity`]), the LLM pass —
+/// deterministic sources always win and this step stays sync/pure. A
+/// carried name wins over a declared one, so a module's name and file are
+/// stable once given.
 ///
 /// The fallback and carry-over keys are deliberately the STRUCTURAL hash,
 /// not the raw content hash: Bun re-rolls minified identifiers between
@@ -635,35 +657,15 @@ fn prior_name_for(
 /// libraries and defeat stable filenames.
 pub fn name_cjs_factories(
     classification: &mut BunModuleClassification,
-    source: &str,
     prior_names: Option<&HashMap<String, Vec<CarriedName>>>,
 ) -> FactoryNameCounts {
     let mut counts = FactoryNameCounts::default();
     let index = index_by_hash(&classification.factories);
     for (idx, factory) in classification.factories.iter_mut().enumerate() {
         // An app text asset is named from its own text before the cascade
-        // (`text_assets`) — no banner, URL or carried package name applies.
+        // (`text_assets`) — no declared or carried package name applies.
         if factory.name_source == Some(NameSource::Asset) {
             counts.asset += 1;
-            continue;
-        }
-        if let Some(pkg) = &factory.banner_package {
-            let version = factory.banner_version.clone();
-            factory.name = Some(match version {
-                Some(v) => format!("{pkg}@{v}"),
-                None => pkg.clone(),
-            });
-            factory.name_source = Some(NameSource::Banner);
-            factory.name_origin = Some(NameSource::Banner);
-            counts.banner += 1;
-            continue;
-        }
-        let body_source = &source[factory.span.start as usize..factory.span.end as usize];
-        if let Some(url_name) = extract_distinctive_repo_name(body_source) {
-            factory.name = Some(url_name);
-            factory.name_source = Some(NameSource::Url);
-            factory.name_origin = Some(NameSource::Url);
-            counts.url += 1;
             continue;
         }
         if let Some(carried) = prior_name_for(idx, &factory.structural_hash, prior_names, &index) {
@@ -679,131 +681,6 @@ pub fn name_cjs_factories(
         counts.fallback += 1;
     }
     counts
-}
-
-/// Look for a single distinctive package/repo reference in `body_source`.
-///
-/// A "distinctive" reference is one that appears with exactly one unique
-/// org/repo pair (or one unique pkg subdomain). If the body cites multiple
-/// different repos, we abstain — the signal is no longer reliable.
-///
-/// Emulates, case-insensitively:
-///   `github\.com\/([a-z0-9][a-z0-9._-]*)\/([a-z0-9][a-z0-9._-]*)`
-///   `\b([a-z0-9][a-z0-9-]*)\.(?:dev|io|org)\b`
-pub fn extract_distinctive_repo_name(body_source: &str) -> Option<String> {
-    let bytes = body_source.as_bytes();
-    // ── github.com/<org>/<repo> ──────────────────────────────────────────
-    let mut repos: Vec<String> = Vec::new(); // unique org/repo pairs
-    let mut i = 0usize;
-    while i < bytes.len() {
-        let Some(hit) = find_ci(bytes, i, b"github.com/") else {
-            break;
-        };
-        let mut p = hit + b"github.com/".len();
-        let Some((org, np)) = capture_run(bytes, p) else {
-            i = hit + 1;
-            continue;
-        };
-        p = np;
-        if p >= bytes.len() || bytes[p] != b'/' {
-            i = hit + 1;
-            continue;
-        }
-        p += 1;
-        let Some((repo, np)) = capture_run(bytes, p) else {
-            i = hit + 1;
-            continue;
-        };
-        let pair = format!("{org}/{repo}");
-        if !repos.contains(&pair) {
-            repos.push(pair);
-            if repos.len() > 1 {
-                break;
-            }
-        }
-        i = np;
-    }
-    if repos.len() == 1 {
-        let only = &repos[0];
-        let slash = only.find('/').expect("org/repo has a slash");
-        return Some(only[slash + 1..].to_string());
-    }
-    if !repos.is_empty() {
-        return None; // two or more distinct repos — abstain
-    }
-
-    // ── *.dev / *.io / *.org subdomains ─────────────────────────────────
-    let mut pkgs: Vec<String> = Vec::new();
-    for tld in [&b".dev"[..], &b".io"[..], &b".org"[..]] {
-        let mut i = 0usize;
-        while let Some(hit) = find_ci(bytes, i, tld) {
-            // Walk back over [a-z0-9-] (case-insensitive; `_` is NOT in
-            // the class) — the capture.
-            let mut start = hit;
-            while start > 0
-                && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'-')
-            {
-                start -= 1;
-            }
-            // `\b` before: the char before the run must be a non-word char
-            // (or the string start). `\w` = alnum + `_`.
-            let boundary_before = start == 0
-                || !(bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_');
-            // `[a-z0-9]` head — a leading `-` fails the first-char class
-            // even though the walk-back included it.
-            let first_ok = start < hit && bytes[start].is_ascii_alphanumeric();
-            // `\b` after: the char after the TLD must be a non-word char
-            // (or the end).
-            let after = hit + tld.len();
-            let boundary_after = after == bytes.len()
-                || !(bytes[after].is_ascii_alphanumeric() || bytes[after] == b'_');
-            if boundary_before && first_ok && boundary_after {
-                let name = String::from_utf8_lossy(&bytes[start..hit]).into_owned();
-                if !pkgs.contains(&name) {
-                    pkgs.push(name);
-                    if pkgs.len() > 1 {
-                        return None;
-                    }
-                }
-            }
-            i = hit + 1;
-        }
-    }
-    if pkgs.len() == 1 {
-        return Some(pkgs.into_iter().next().expect("one unique pkg"));
-    }
-    None
-}
-
-/// Case-insensitive substring search (ASCII only).
-fn find_ci(bytes: &[u8], from: usize, pat: &[u8]) -> Option<usize> {
-    let mut i = from;
-    while i + pat.len() <= bytes.len() {
-        if bytes[i..i + pat.len()]
-            .iter()
-            .zip(pat)
-            .all(|(a, b)| a.eq_ignore_ascii_case(b))
-        {
-            return Some(i);
-        }
-        i += 1;
-    }
-    None
-}
-
-/// Maximal run of the github capture class `[a-z0-9._-]` (case-insensitive)
-/// starting at `at`.
-fn capture_run(bytes: &[u8], at: usize) -> Option<(String, usize)> {
-    let mut j = at;
-    while j < bytes.len()
-        && (bytes[j].is_ascii_alphanumeric() || matches!(bytes[j], b'.' | b'_' | b'-'))
-    {
-        j += 1;
-    }
-    if j == at {
-        return None;
-    }
-    Some((String::from_utf8_lossy(&bytes[at..j]).into_owned(), j))
 }
 
 /// Classify the factories of a parsed bundle — either bundler's form
@@ -960,6 +837,8 @@ pub fn classify_bun_modules<'a>(
                 object_method,
                 exported_text: text_assets::exported_text(factory_fn),
                 carried: None,
+                identity: None,
+                hints: Vec::new(),
             });
         }
     }
@@ -986,15 +865,6 @@ fn line_of(offset: u32, line_starts: &[u32]) -> u32 {
         Ok(i) => i as u32 + 1,
         Err(i) => i as u32,
     }
-}
-
-/// The statement's VariableDeclaration (when the statement IS one).
-
-#[derive(Clone)]
-pub struct BannerInfo {
-    pub text: String,
-    pub pkg: Option<String>,
-    pub version: Option<String>,
 }
 
 /// The statement-level banner (the TS collectBanner): the LAST bang-block
@@ -1069,102 +939,6 @@ fn bang_block_value(source: &str, span: Span) -> Option<String> {
         return None;
     }
     Some(value.to_string())
-}
-
-/// The TS parseBanner, exactly:
-///   text = raw.replace(/^!/, '').trim()
-///   match /^([@\w][@\w./_-]*)(?:\s+v?(\d[\w.+-]*))?(?:\s|$)/i
-///   pkg  = match[1] minus trailing [.,_-]+
-///   reject: empty after strip, a license-header false positive, and
-///           one-word headers with no version and no shape.
-pub fn parse_banner(raw: &str) -> BannerInfo {
-    const FALSE_POSITIVES: [&str; 12] = [
-        "copyright",
-        "license",
-        "licence",
-        "mit",
-        "bsd",
-        "isc",
-        "apache",
-        "the",
-        "this",
-        "use",
-        "see",
-        "based",
-    ];
-    let text = raw.strip_prefix('!').unwrap_or(raw).trim();
-    let no_match = BannerInfo {
-        text: text.to_string(),
-        pkg: None,
-        version: None,
-    };
-    let Some(first) = text.chars().next() else {
-        return no_match;
-    };
-    // `[@\w]` — the pkg's first char.
-    if !(first == '@' || first.is_ascii_alphanumeric() || first == '_') {
-        return no_match;
-    }
-    // `[@\w./_-]*` — the maximal run. Greedy with no useful backtrack: every
-    // shorter run ends on a class char, which is neither `\s` nor `$`.
-    let bytes = text.as_bytes();
-    let mut pkg_end = first.len_utf8();
-    while pkg_end < bytes.len()
-        && (bytes[pkg_end].is_ascii_alphanumeric()
-            || matches!(bytes[pkg_end], b'@' | b'.' | b'/' | b'_' | b'-'))
-    {
-        pkg_end += 1;
-    }
-    let raw_pkg = &text[..pkg_end];
-    // The version attempt: `\s+v?(\d[\w.+-]*)` then `(?:\s|$)`. On ANY
-    // failure of the version group the regex falls back to skipping it —
-    // the match then requires `(?:\s|$)` directly after the pkg.
-    let rest = &text[pkg_end..];
-    if !rest.is_empty() && !is_js_ws(rest.as_bytes()[0]) {
-        return no_match; // neither `\s` nor `$` — the whole regex fails
-    }
-    let mut version: Option<String> = None;
-    let after_ws = rest.trim_start_matches(|c: char| {
-        // JS `\s` (the ASCII subset a banner text carries — the TS trims
-        // Unicode spaces too; non-ASCII whitespace in a banner is a
-        // documented deviation the gate judges).
-        matches!(c, ' ' | '\t' | '\n' | '\u{0b}' | '\u{0c}' | '\r')
-    });
-    let body = after_ws.strip_prefix('v').unwrap_or(after_ws);
-    if body.as_bytes().first().is_some_and(|b| b.is_ascii_digit()) {
-        let mut run = 1usize;
-        while run < body.len()
-            && (body.as_bytes()[run].is_ascii_alphanumeric()
-                || matches!(body.as_bytes()[run], b'.' | b'+' | b'-'))
-        {
-            run += 1;
-        }
-        let after_run = &body[run..];
-        if after_run.is_empty() || is_js_ws(after_run.as_bytes()[0]) {
-            // match[2] EXCLUDES the `v` prefix.
-            version = Some(body[..run].to_string());
-        }
-    }
-    // pkg = raw_pkg minus trailing [.,_-]+
-    let pkg = raw_pkg.trim_end_matches(['.', ',', '_', '-']);
-    if pkg.is_empty() {
-        return no_match;
-    }
-    if FALSE_POSITIVES.contains(&pkg.to_ascii_lowercase().as_str()) {
-        return no_match;
-    }
-    // Require a scope/path, a hyphen, an interior dot, or an explicit
-    // version — one-word headers like "Sharp" are not package banners.
-    let has_shape =
-        pkg.contains('/') || pkg.contains('-') || pkg.contains('.') || pkg.starts_with('@');
-    if !has_shape && version.is_none() {
-        return no_match;
-    }
-    BannerInfo {
-        text: text.to_string(),
-        pkg: Some(pkg.to_string()),
-        version,
-    }
 }
 
 /// modules.json's rows in the `--dump-artifacts` catalog: the Bun

@@ -169,6 +169,7 @@ fn record(adapter: &'static str) -> BunModulesManifest {
         adapter,
         hash_version: 3,
         runtime_file: Some("runtime.js".into()),
+        legal_comments: Vec::new(),
         factories: vec![ManifestEntry {
             file_name: "vendor/lib_aaaaaaaa.js".into(),
             name: "lib_aaaaaaaa".into(),
@@ -176,9 +177,8 @@ fn record(adapter: &'static str) -> BunModulesManifest {
             run_source: NameSource::Fallback,
             structural_hash: "aaaaaaaaaaaaaaaa".into(),
             runtime_identifier: Some("lib_aaaaaaaa".into()),
-            banner_package: None,
-            banner_version: None,
             source_path: None,
+            identity: None,
             hash_ordinal: None,
             captures: Vec::new(),
         }],

@@ -6,8 +6,10 @@
 //! order.ts` (annotateHashOrdinals + orderByPriorManifest), `src/unpack/
 //! vendor-namer.ts` (the LLM fallback pass).
 //!
-//! The DETERMINISTIC cascade itself (banner → url → carry-over → fallback)
-//! already lives in the parent (`super::name_cjs_factories`); this module
+//! The DETERMINISTIC ladder (carry-over → declared pair → content pair →
+//! declared identity → fallback) lives in the parent
+//! (`super::name_cjs_factories`, `super::identity`, `super::vendor_pairing`,
+//! sequenced by the unpack adapter); this module
 //! starts where it ends: the record carries `name`/`name_source` and this
 //! file derives the on-disk file name, assembles the manifest, and runs the
 //! post-cascade LLM pass over the hash-named leftovers.
@@ -297,6 +299,17 @@ impl FileNameChooser {
             if let Some(file_name) = self.carried_lookup(record) {
                 return lookup(VENDOR_DIR, file_name);
             }
+            // A module named as its declared package that declares a member
+            // of it is filed as that member (`highlight.js/actionscript`,
+            // `meta-cjs/lib/index`) — however it got the name, so a
+            // hash-carried name keeps the same file (finding #95).
+            if let Some((folder, stem)) =
+                record.identity.as_ref().and_then(|id| id.member_file(name))
+            {
+                let used = self.used_by_folder.entry(folder.clone()).or_default();
+                let unique = unique_case_insensitive_name(&stem, used, "");
+                return lookup(VENDOR_DIR, format!("{folder}/{unique}"));
+            }
             let base = strip_js_extension(name);
             let grouped = !is_hash_fallback_name(name)
                 && self.name_counts.get(name.as_str()).is_some_and(|n| *n >= 2);
@@ -372,19 +385,17 @@ pub struct ManifestEntry {
     /// binding, a WRITE to the factory var, or no capture-free identifier).
     #[serde(rename = "runtimeIdentifier", skip_serializing_if = "Option::is_none")]
     pub runtime_identifier: Option<String>,
-    /// Banner package, if a bang-block comment identified the library.
-    #[serde(rename = "bannerPackage", skip_serializing_if = "Option::is_none")]
-    pub banner_package: Option<String>,
-    /// Banner version, if present.
-    #[serde(rename = "bannerVersion", skip_serializing_if = "Option::is_none")]
-    pub banner_version: Option<String>,
     /// The module's original source path, when the bundler kept it —
     /// esbuild's unminified form uses it as the factory object's key
-    /// (exp075). Absent for bun and for any minified build, so NOTHING may
-    /// depend on it: it is recorded metadata, never a name source and
-    /// never a join key.
+    /// (exp075). Absent for bun and for any minified build. Read through
+    /// the declared identity only (finding #95).
     #[serde(rename = "sourcePath", skip_serializing_if = "Option::is_none")]
     pub source_path: Option<String>,
+    /// What the module declares about itself (finding #95): package,
+    /// version, member, the reader that read it and its evidence. The next
+    /// release's declared pairing reads it back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<super::identity::DeclaredIdentity>,
     /// This entry's position within its structuralHash group, in BUNDLE
     /// order — the tie-break `priorNameFor` indexes with. Absent for a
     /// singleton group (the ordinal is always 0 there) and from every
@@ -431,6 +442,12 @@ pub struct BunModulesManifest {
     /// Filename for the leftover runtime code, if any.
     #[serde(rename = "runtimeFile", skip_serializing_if = "Option::is_none")]
     pub runtime_file: Option<String>,
+    /// The bundle-level legal comments the bundler kept, by the
+    /// `package/file` they are keyed with (esbuild's end-of-file block,
+    /// finding #95) — a minified build's are not attributable to a module,
+    /// so they are recorded here. Absent when none.
+    #[serde(rename = "legalComments", skip_serializing_if = "Vec::is_empty")]
+    pub legal_comments: Vec<String>,
     /// One entry per extracted CJS factory file.
     pub factories: Vec<ManifestEntry>,
 }
@@ -710,28 +727,36 @@ fn is_js_ws(b: u8) -> bool {
     matches!(b, b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r')
 }
 
-/// JS `\w` minus digits is checked inline; this is the identifier-char test
-/// shared by the evidence emulations ([A-Za-z0-9_$]).
-fn is_ident_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_' || b == b'$'
-}
-
-/// Compact per-factory evidence block for the naming prompt
-/// (`buildVendorEvidence`), byte-exact — it IS the prompt the cache keys.
+/// Compact per-factory evidence block for the naming prompt — it IS the
+/// prompt the cache keys. Over the factory FUNCTION's text:
 ///
-/// Emulated regexes over the factory body:
-///   URLs     /https?:\/\/[^\s"'`)]+/g          — first 3 unique
-///   exports  /\bexports\.([A-Za-z_$][\w$]*)\s*=/g — first 10 unique
-///   strings  /["']([^'"\\\n]{4,60})["']/g      — first 10 unique, then
-///                                                 filtered to /[a-z]/i
-/// Lines: exports, urls, strings, `size: N bytes` (N = UTF-16 length — the
-/// TS `.length`); the whole block truncated to `cap_chars` UTF-16 units.
-pub fn build_vendor_evidence(body: &str, cap_chars: usize) -> String {
+/// - `declared:` the module's declared hints (a version constant, a
+///   repository — [`super::identity::readers::HINT_READERS`]), first: what
+///   the module says about itself;
+/// - `exports:` its real export names, first 10
+///   ([`super::identity::readers::export_names`] — the renamed exports
+///   parameter's assignments; finding #95: the old literal `exports.` scan
+///   found 2% of minified modules);
+/// - `urls:` /https?:\/\/[^\s"'`)]+/g, first 3 unique;
+/// - `strings:` the module's string literals of 4–60 characters with a
+///   letter, first 10 unique — read from the TOKEN stream, so a closing
+///   quote is never paired with the next opening one (finding #95: the old
+///   scan sent code fragments, and the ActionScript grammar's prompt never
+///   held "ActionScript");
+/// - `size: N bytes` (N = UTF-16 length).
+///
+/// The whole block truncated to `cap_chars` UTF-16 units.
+pub fn build_vendor_evidence(body: &str, hints: &[String], cap_chars: usize) -> String {
+    let tokens = super::vendor_pairing::lex_raw(body);
     let urls = evidence_urls(body);
-    let exports_props = evidence_exports(body);
-    let strings = evidence_strings(body);
+    let mut exports_props = super::identity::readers::export_names(&tokens);
+    exports_props.truncate(10);
+    let strings = evidence_strings(&tokens);
 
     let mut lines: Vec<String> = Vec::new();
+    if !hints.is_empty() {
+        lines.push(format!("declared: {}", hints.join("; ")));
+    }
     if !exports_props.is_empty() {
         lines.push(format!("exports: {}", exports_props.join(", ")));
     }
@@ -794,100 +819,31 @@ fn evidence_urls(body: &str) -> Vec<String> {
     urls
 }
 
-/// /\bexports\.([A-Za-z_$][\w$]*)\s*=/g — first 10 unique property names.
-fn evidence_exports(body: &str) -> Vec<String> {
-    let bytes = body.as_bytes();
-    let mut exports_props: Vec<String> = Vec::new();
-    let mut i = 0usize;
-    while i + 8 <= bytes.len() {
-        // The literal `exports.` — the `\b` before is checked below.
-        if !bytes[i..].starts_with(b"exports.") {
-            i += 1;
-            continue;
-        }
-        // \b: the char before "exports" must be a non-word char.
-        let boundary = i == 0 || !is_ident_char(bytes[i - 1]);
-        let mut p = i + 8;
-        // ([A-Za-z_$][\w$]*) — at least one identifier char.
-        let name_start = p;
-        if p < bytes.len()
-            && (bytes[p].is_ascii_alphabetic() || bytes[p] == b'_' || bytes[p] == b'$')
-        {
-            p += 1;
-            while p < bytes.len() && is_ident_char(bytes[p]) {
-                p += 1;
-            }
-        }
-        if boundary && p > name_start {
-            // \s* then `=` — the match needs a `=` after zero-or-more
-            // whitespace immediately following the capture.
-            let mut q = p;
-            while q < bytes.len() && is_js_ws(bytes[q]) {
-                q += 1;
-            }
-            if q < bytes.len() && bytes[q] == b'=' {
-                let prop = body[name_start..p].to_string();
-                if !exports_props.contains(&prop) {
-                    exports_props.push(prop);
-                    if exports_props.len() > 10 {
-                        break;
-                    }
-                }
-                // matchAll resumes AFTER the matched `=`.
-                i = q + 1;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    exports_props.truncate(10);
-    exports_props
-}
-
-/// /["']([^"'\\\n]{4,60})["']/g — greedy {4,60} with backtracking: the
-/// LONGEST L in [4, min(run, 60)] whose char at start+L is a quote. First
-/// 10 unique that pass /[a-z]/i.
-fn evidence_strings(body: &str) -> Vec<String> {
-    let bytes = body.as_bytes();
+/// The module's string literals (quoted, or templates without `${}`) of
+/// 4–60 characters holding a letter — first 10 unique, from the token
+/// stream.
+fn evidence_strings(tokens: &[String]) -> Vec<String> {
     let mut strings: Vec<String> = Vec::new();
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if !matches!(bytes[i], b'"' | b'\'') {
-            i += 1;
+    for t in tokens {
+        let Some(q) = t.chars().next().filter(|c| matches!(c, '"' | '\'' | '`')) else {
+            continue;
+        };
+        if t.len() < 2 || !t.ends_with(q) || (q == '`' && t.contains("${")) {
             continue;
         }
-        let mut run = 0usize;
-        while i + 1 + run < bytes.len()
-            && run < 60
-            && !matches!(bytes[i + 1 + run], b'"' | b'\'' | b'\\' | b'\n')
+        let inner = &t[1..t.len() - 1];
+        let chars = inner.chars().count();
+        if (4..=60).contains(&chars)
+            && !inner.contains('\n')
+            && inner.bytes().any(|b| b.is_ascii_alphabetic())
+            && !strings.iter().any(|s| s == inner)
         {
-            run += 1;
-        }
-        let mut matched: Option<usize> = None;
-        let mut l = run.min(60);
-        while l >= 4 {
-            let close = i + 1 + l;
-            if close < bytes.len() && matches!(bytes[close], b'"' | b'\'') {
-                matched = Some(l);
+            strings.push(inner.to_string());
+            if strings.len() == 10 {
                 break;
             }
-            l -= 1;
-        }
-        if let Some(l) = matched {
-            let s = body[i + 1..i + 1 + l].to_string();
-            // /[a-z]/i filter, unique (first occurrence wins).
-            if s.bytes().any(|b| b.is_ascii_alphabetic()) && !strings.contains(&s) {
-                strings.push(s);
-                if strings.len() > 10 {
-                    break;
-                }
-            }
-            i = i + 1 + l + 1;
-        } else {
-            i += 1;
         }
     }
-    strings.truncate(10);
     strings
 }
 
@@ -1035,7 +991,8 @@ pub fn name_fallback_factories_with_llm_sized(
                 VendorNameRequest {
                     key: record.name.clone().unwrap_or_default(),
                     evidence: build_vendor_evidence(
-                        &source[record.span.start as usize..record.span.end as usize],
+                        &source[record.body_span.start as usize..record.body_span.end as usize],
+                        &record.hints,
                         700,
                     ),
                 }

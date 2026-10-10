@@ -106,6 +106,7 @@ pub fn unpack_bundle(
         AdapterRun {
             interop: toolchain.interop.piece,
             module_wrappers: toolchain.module_wrappers.piece,
+            module_identity: toolchain.module_identity.piece,
             namer: Some(&mut namer as &mut dyn VendorNamer),
             prior: prior_vendor,
             manifest_prior_order_disabled,
@@ -156,6 +157,15 @@ fn report_vendor_unpack(outcome: &bun::BunUnpackOutcome, renderer: &mut dyn Prog
             r.prior_groups_ambiguous
         ));
     }
+    if let Some(carries) = &outcome.declared_carry
+        && !carries.is_empty()
+    {
+        renderer.message(&format!(
+            "Vendor declared-identity carry: {} modules paired with the prior module declaring \
+             the same identity",
+            carries.len()
+        ));
+    }
     if let Some(r) = &outcome.content_carry
         && r.candidates > 0
     {
@@ -183,14 +193,21 @@ fn log_name_sources(outcome: &bun::BunUnpackOutcome) {
     let Some(c) = &outcome.name_counts else {
         return;
     };
-    let total = c.banner + c.url + c.carry_over + c.content_pair + c.llm + c.fallback + c.asset;
+    let total =
+        c.declared + c.carry_over + c.declared_pair + c.content_pair + c.llm + c.fallback + c.asset;
     if total == 0 {
         return;
     }
     verbose().log(&format!(
-        "Vendor name sources ({total} factories): {} carry-over, {} content-pair, {} banner, {} url, \
-         {} llm, {} fallback, {} app text asset",
-        c.carry_over, c.content_pair, c.banner, c.url, c.llm, c.fallback, c.asset
+        "Vendor name sources ({total} factories): {} carry-over, {} declared-pair, {} content-pair, \
+         {} declared, {} llm, {} fallback, {} app text asset",
+        c.carry_over,
+        c.declared_pair,
+        c.content_pair,
+        c.declared,
+        c.llm,
+        c.fallback,
+        c.asset
     ));
     if outcome.llm_renamed > 0 {
         verbose().log(&format!(
