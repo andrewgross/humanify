@@ -19,20 +19,20 @@ on the app, the bundler or the model — are in
 Ordered as they execute. "Pluggable" means a strategy can be selected without
 editing the caller.
 
-| #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)  | pluggable?                                                                                          |
-| --- | ------------------------ | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1   | Detect bundler/minifier  | `detect` → `toolchain::resolve_toolchain` (every plugin piece, once) | **yes** — `--bundler` / `--minifier` override detection                                             |
-| 2   | Select unpack adapter    | `unpack::choose_adapter` (called by the toolchain)                   | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), `supports()`, passthrough last       |
-| 3   | Unpack the bundle        | `unpack::run_adapter` (the ONE dispatch site; webcrack via its shim) | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_bun`)      |
-| 4   | Detect libraries         | `libdetect`                                                          | **yes** — registry of 3, `supports()`, default last                                                 |
-| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over)                | injected namer, one implementation — a seam, not a registry                                         |
-| 6   | Format                   | `format` (`core::format`, the native formatter)                      | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json) |
-| 7   | Build the function graph | `graph`                                                              | **no**                                                                                              |
-| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                       | **no** — the cascade is hard-coded order, see below                                                 |
-| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                      | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes          |
-| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                   | **partly** — a real registry, but not selectable from outside                                       |
-| 11  | Split (one path)         | `emit::stable_split`                                                 | **no** — prior present → inherit layout; no prior → clustered fresh grouping                        |
-| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                    | **no**                                                                                              |
+| #   | stage                    | entry point (`humanify_core::…`, driven by `humanify_cli::unified`)      | pluggable?                                                                                                                                                  |
+| --- | ------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Detect bundler/minifier  | `detect` → `toolchain::resolve_toolchain` (every plugin piece, once)     | **yes** — `--bundler` / `--minifier` override detection                                                                                                     |
+| 2   | Select unpack adapter    | `unpack::choose_adapter` (called by the toolchain)                       | **yes** — registry of 4 (webcrack, bun, esbuild, passthrough), `supports()`, passthrough last                                                               |
+| 3   | Unpack the bundle        | `unpack::run_adapter` (the ONE dispatch site; webcrack via its shim)     | via stage 2 — bun and esbuild share the one vendor-extraction flow (`unpack::bun::unpack_bun`)                                                              |
+| 4   | Detect libraries         | `libdetect`                                                              | **yes** — registry of 3, `supports()`, default last                                                                                                         |
+| 5   | Name vendor files        | `modules` (vendor manifest + namer, prior carry-over, declared identity) | **partly** — the bundler's identity piece (P17) is chosen by the toolchain; the package readers are a registry (`identity::readers`); the namer is injected |
+| 6   | Format                   | `format` (`core::format`, the native formatter)                          | **no** — deliberately; output shape is a fixed point (frozen spec: test/parity/format-goldens.json)                                                         |
+| 7   | Build the function graph | `graph`                                                                  | **no**                                                                                                                                                      |
+| 8   | Match against the prior  | `matching` + `twins` (the fingerprint cascade)                           | **no** — the cascade is hard-coded order, see below                                                                                                         |
+| 9   | Name identifiers         | `naming` (LLM waves + prior transfer, `rename`)                          | **partly** — the name profile registry (bun/esbuild/terser/swc/none); levers toggle passes                                                                  |
+| 10  | Place statements         | `place::tiers` (`PLACEMENT_TIERS`)                                       | **partly** — a real registry, but not selectable from outside                                                                                               |
+| 11  | Split (one path)         | `emit::stable_split`                                                     | **no** — prior present → inherit layout; no prior → clustered fresh grouping                                                                                |
+| 12  | Emit + finish on disk    | `emit::cjs`, `finish` (scaffold, relink, ledgers)                        | **no**                                                                                                                                                      |
 
 Stage 9 has a step that decides stage 11's FILE names (2026-10-06,
 docs/design/module-naming.md): when the bundle's module markers describe
@@ -45,6 +45,17 @@ module kind) and names its wrapper `init<Name>`. The split then reads each
 new module's file name back from its wrapper (`initColorUtils` →
 `color-utils.js`) and names inferred folders from the same names; the old
 warm-hop mint namer is gone. Inherited paths are never renamed.
+
+Stage 5's ladder (2026-10-10, finding #95), per vendored module: the prior
+release's name for the same structural hash → the prior module whose
+DECLARED identity is equal and unique on both sides → the prior module
+paired by content (#90) → the module's own declared identity → the model
+→ `lib_<hash>`. The declared identity is read once, on the raw bundle,
+before any name: the toolchain's `ModuleIdentitySource` (P17) hands over
+what the bundler kept (Bun: `/*!` comments, inlined absolute paths;
+esbuild: wrapper keys, the end-of-file legal block), and the package
+readers (`modules::identity::readers`) read it and the module's text. The
+record's `identity` field carries the reader and its evidence.
 
 Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
 binary; the TypeScript names used below (`stableSplitFromCode`,

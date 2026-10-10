@@ -290,9 +290,11 @@ given).
 
 ## Part 2 — the spec: what a plugin must provide
 
-Sixteen pieces, in pipeline order. "A plugin" is usually a bundler plugin
-(P1-P9, P11, P12, P14) or a minifier plugin (P1, P10, P7); Bun and esbuild
-are both.
+Seventeen pieces, in pipeline order. "A plugin" is usually a bundler plugin
+(P1-P9, P11, P12, P14, P17) or a minifier plugin (P1, P10, P7); Bun and
+esbuild are both. A PACKAGE reader (what a module of package X says about
+itself) is not a bundler piece: it is an entry in P17's reader registry,
+bundler-independent.
 
 ### Summary
 
@@ -314,6 +316,7 @@ are both.
 | P14 Per-bundler tuning                      | 9      | **EXISTS** (2026-10-04)       | add a `BundlerTuning` value; the dead lane table is deleted (I23, I24)                                                                                                                                               |
 | P15 Formatting                              | 6      | not a plugin piece            | nothing — the formatter undoes generic idioms and is a frozen spec                                                                                                                                                   |
 | P16 Fixtures and tests                      | gate   | **PARTIAL**                   | see the test list in each piece and the checklist                                                                                                                                                                    |
+| P17 Declared module identity                | 3, 5   | **EXISTS** (2026-10-10, #95)  | add a `ModuleIdentitySource` value: what the bundler keeps per module (legal comments, paths it writes) and per bundle; package knowledge goes in the reader registry instead                                        |
 
 Rules every piece must keep (they come from the repo's history, not from
 taste):
@@ -565,9 +568,12 @@ name reused for an unrelated function).
 **Question:** did the bundler keep each module's original file path?
 
 **Interface:** `FactoryRecord::source_path` → the vendor record's
-`sourcePath` and the ledger's `fossilModules[].sourcePath`. **Recorded only**
-— no name, join or placement may depend on it (it is absent from every
-minified build).
+`sourcePath` and the ledger's `fossilModules[].sourcePath`. Since finding
+#95 (2026-10-10) it is ALSO handed to the readers by the esbuild P17 piece:
+a `node_modules/<pkg>/<file>` key declares the module's package and file
+(`identity.source = "source-path"`), which names it and keys its
+cross-version pair. Placement and the exact-hash carry still never read it
+(it is absent from every minified build).
 
 **Bun:** never present. **esbuild:** the object key of each unminified
 factory and lazy init. **Fallback:** absent. **Tests:** the
@@ -581,10 +587,13 @@ survive to the next release?
 **Interface today:** the vendor record `vendor/_bun-modules.json`
 (`BunModulesManifest`: `adapter` stamp, `hashVersion`, `runtimeFile`, one
 entry per module with file name, name, where the name came from, structural
-hash, captured reads). Naming is a fixed ladder — license banner → a
-distinctive repository URL → the prior release's name for the same
-structural hash → the prior module this one is paired with BY CONTENT
-(finding #90) → an LLM guess → `lib_<hash>`. Before the ladder, a module
+hash, the declared identity (P17), captured reads). Naming is a fixed
+ladder — the prior release's name for the same structural hash → the prior
+module declaring the same identity, equal and unique on both sides (finding
+#95) → the prior module this one is paired with BY CONTENT (finding #90) →
+the module's own declared identity (P17) → an LLM guess → `lib_<hash>`.
+(Before #95 a license banner and a "distinctive URL" came first; both are
+P17 readers now, and the URL only a hint shown to the model.) Before the ladder, a module
 that is only app text is set aside as an app asset (below). The prior is
 read by `unpack::bun::load_prior_vendor`; an old-era record is re-keyed by
 content.
@@ -1064,6 +1073,64 @@ skipped, I25), and four real Bun CJS builds: `bun-bundle`, and `bun-plain`
 / `bun-mixed` / `bun-lazy` (no / some / all modules lazily loaded — which
 split method a bundle gets, #87). The eval scores Claude Code only (H2), so
 there is no cross-version quality measurement for any other bundler.
+
+### P17 — Declared module identity (stages 3, 5) — EXISTS (2026-10-10, finding #95)
+
+**Question:** what does a vendored module SAY it is — from what its bundler
+kept, and what its package wrote?
+
+**Two kinds of piece.** What the bundler kept is bundler-specific: the
+toolchain's `ModuleIdentitySource` (`toolchain.rs`; implementations in
+`modules::identity::provenance`), chosen once from the bundler verdict
+(flag, definitive detection, else Bun's), recorded as `moduleIdentity`.
+Interface: `bundle_facts(code)` (read once) and `module_provenance(code,
+record, facts)` → `ModuleProvenance { kept_comments, paths }`.
+
+- **Bun:** the `/*!` comment kept in place (captured by the P3
+  classification on the RAW bundle, `FactoryRecord::banner_text` — the
+  formatter drops comments); the absolute paths Bun inlines where a module
+  asks for its own location (`__dirname`/`__filename` = "…",
+  `<require>.resolve("…")`, an inlined `import.meta.url`).
+- **esbuild:** the wrapper key (P4, unminified builds) as the module's own
+  file, plus the end-of-file `/*! Bundled license information: … */` block,
+  keyed by `package/file` — attributed to a module through its key; a
+  minified build's block is recorded bundle-level (the record's
+  `legalComments`).
+
+What a package says about itself is bundler-independent: the reader
+registry `modules::identity::readers::IDENTITY_READERS`, in trust order —
+`source-path` (a `node_modules/<pkg>` path the bundler wrote), `package-json`
+(an inlined package.json: name + semver + one more package.json key; the
+module IS `package.json` when it is the whole export), `banner` (`pkg vX`
+legal comment; a copyright banner names no package), `highlight-js-grammar`
+(a language definition's `name`, last assignment wins, aliases kept),
+`scoped-error-prefix` (`@scope/pkg: …` / `@scope/pkg - …` as a message
+passed to a call). Each is shape-gated and abstains on two different
+answers. Hints too weak to name (`HINT_READERS`: a version constant, one
+`github.com/<owner>/<repo>`) are shown to the model, never a name — the old
+URL rule named ~20 of 27 modules wrongly (finding #95).
+
+**Uses:** the identity record (`{source, package, version, member,
+aliases, evidence}`) is written to the vendor record; a module nothing
+carried is NAMED from it before the model is asked (a member files as
+`<package>/<member>`: `highlight/actionscript.js`,
+`gaxios/package.json.js`); the next release PAIRS by it
+(`identity::pair_by_declared_identity`: equal and unique key, then key +
+aliases; only adds pairs, never vetoes). The model's evidence leads with the
+hints and reads real strings and the real export list.
+
+**A new bundler plugin:** add a `ModuleIdentitySource` value describing
+what that bundler keeps (webpack: module ids, `/*! ./node_modules/pkg/x.js
+*/` path comments in dev builds). **A new package reader:** add an entry to
+`IDENTITY_READERS` with tests built from the real package's shape and its
+false positives (`readers_test.rs`). Not done yet: the same readers over the
+lazy ES modules in `src/` (library regions — the research's Step B).
+
+**Tests:** `identity_test.rs` (both bundler pieces, the cascade, pairing,
+file stems), `readers_test.rs` (every reader with the census's false
+positives), `toolchain_test::the_module_identity_source_follows_the_bundler`,
+`unpack_test::a_rewritten_grammar_keeps_its_file_and_identifier_by_its_declared_name`
+and its three neighbours.
 
 ## Part 3 — adding a plugin: checklist
 

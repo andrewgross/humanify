@@ -26,6 +26,7 @@ use oxc_syntax::reference::ReferenceFlags;
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
+use crate::modules::identity::{declare, name_from_declared_identity};
 use crate::modules::vendor_content::{
     RekeyStats, StaleEraEntry, fresh_content_keys, prior_factory_text, prior_file_content_key,
     rekey_prior_by_content,
@@ -37,8 +38,9 @@ use crate::modules::vendor_names::{
     stable_stem,
 };
 use crate::modules::vendor_pairing::{
-    Carried, ContentCarry, ModuleFeatures, PriorModule, apply_content_pairs, is_content_candidate,
-    leftover_priors, literal_idf, module_features, pair_by_content,
+    Carried, ContentCarry, DeclaredCarry, ModuleFeatures, PriorModule, apply_content_pairs,
+    carry_by_declared_identity, is_content_candidate, leftover_priors, literal_idf,
+    module_features, pair_by_content,
 };
 use crate::modules::{
     BunModuleClassification, CarriedName, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
@@ -157,6 +159,9 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
                 file_name: str_of(r, "fileName").unwrap_or_default(),
                 origin: NameSource::of_prior_label(r.get("nameSource").and_then(|x| x.as_str())),
                 runtime_identifier: str_of(r, "runtimeIdentifier"),
+                identity: r
+                    .get("identity")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok()),
             })
         })
         .collect();
@@ -242,6 +247,9 @@ pub struct BunUnpackOptions<'n> {
     /// bindings are interop helpers, and the names a vendored body's
     /// references to them are rewritten to.
     pub interop: crate::toolchain::InteropHelpers,
+    /// The run's module identity source (the toolchain's P17 piece): what
+    /// the bundler kept about each module, for the declared identity.
+    pub module_identity: crate::toolchain::ModuleIdentitySource,
 }
 
 impl Default for BunUnpackOptions<'_> {
@@ -256,6 +264,7 @@ impl Default for BunUnpackOptions<'_> {
             layout: crate::toolchain::BundleLayout::SingleWrapperFunction,
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             interop: crate::toolchain::InteropHelpers::Bun,
+            module_identity: crate::toolchain::ModuleIdentitySource::Bun,
         }
     }
 }
@@ -283,6 +292,9 @@ pub struct BunUnpackOutcome {
     pub helper_refs: usize,
     /// The content carry (finding #90), when a prior was given.
     pub content_carry: Option<ContentCarryReport>,
+    /// The declared-identity carry (finding #95), when a prior was given:
+    /// one entry per pair, with the key both sides declared.
+    pub declared_carry: Option<Vec<DeclaredCarry>>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -368,6 +380,7 @@ pub fn unpack_bun(
             kept_in_app: 0,
             helper_refs: 0,
             content_carry: None,
+            declared_carry: None,
         })
     };
 
@@ -421,10 +434,18 @@ pub fn unpack_bun(
         .as_ref()
         .map(|_| IdentifierPlanner::build(&ingest));
     let mut content_carry = None;
+    let mut declared_carry = None;
+    // What the bundler kept about the whole bundle (P17), read once.
+    let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
         // Decided before any name: an app text asset is never offered to
-        // the banner, URL or carry rules, nor to the package namer.
+        // the declared-identity readers, the carry rules, nor the package
+        // namer.
         mark_text_assets(c, &ingest, planner);
+        // Every module's declared identity (finding #95), read on the RAW
+        // bundle (the formatter drops the comments a bundler kept) before
+        // any name is chosen.
+        declare_identities(c, code, options.module_identity, &bundle_facts);
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
@@ -447,13 +468,31 @@ pub fn unpack_bun(
             prior.factories = Some(rekeyed.factories);
             rekey = Some(rekeyed.stats);
         }
-        let mut counts = name_cjs_factories(c, code, prior.names.as_ref());
-        // Finding #90: what the exact-hash carry missed, paired by content
-        // with what it left in the prior — before the model is asked and
-        // before any file name is chosen.
+        let mut counts = name_cjs_factories(c, prior.names.as_ref());
+        // Finding #95: what the exact-hash carry missed, paired by an
+        // equal, unique declared identity with what it left in the prior.
+        let carries = prior.root.as_ref().map(|_| {
+            let leftovers = leftover_priors(&prior.modules, &c.factories);
+            carry_by_declared_identity(&mut c.factories, &leftovers, VENDOR_DIR)
+        });
+        let taken: HashSet<&str> = carries
+            .iter()
+            .flatten()
+            .map(|x| x.prior_file.as_str())
+            .collect();
+        let whole = carries
+            .iter()
+            .flatten()
+            .filter(|x| x.carried == Carried::Identity)
+            .count();
+        counts.declared_pair = whole;
+        counts.fallback -= whole;
+        // Finding #90: what both missed, paired by content with what they
+        // left in the prior — before the model is asked and before any
+        // file name is chosen.
         let fresh_text =
             |f: &FactoryRecord| factory_text(code, f, &helper_edits, require_var.as_deref());
-        content_carry = carry_by_content(&mut c.factories, &prior, fresh_text);
+        content_carry = carry_by_content(&mut c.factories, &prior, &taken, fresh_text);
         if let Some(r) = &content_carry {
             let whole = r
                 .carries
@@ -463,9 +502,15 @@ pub fn unpack_bun(
             counts.content_pair = whole;
             counts.fallback -= whole;
         }
+        declared_carry = carries;
+        // A module nothing carried is named from what it declares before
+        // the model is asked.
+        let declared = name_from_declared_identity(&mut c.factories);
+        counts.declared = declared;
+        counts.fallback -= declared;
         name_counts = Some(counts);
         // Post-cascade LLM pass: only hash-named (fallback) factories are
-        // re-named, so banner/URL/carry-over/content-pair names always win.
+        // re-named, so carried and declared names always win.
         if let Some(namer) = options.namer.as_deref_mut() {
             llm_renamed = name_fallback_factories_with_llm(&mut c.factories, code, namer);
         }
@@ -534,11 +579,10 @@ pub fn unpack_bun(
             run_source: module_plan.naming.name_source,
             structural_hash: module_plan.naming.structural_hash.clone(),
             runtime_identifier: module_plan.identifier.clone(),
-            banner_package: record.and_then(|r| r.banner_package.clone()),
-            banner_version: record.and_then(|r| r.banner_version.clone()),
             // The module's original source path, when the bundler kept it
-            // (esbuild's unminified form) — recorded, never load-bearing.
+            // (esbuild's unminified form).
             source_path: record.and_then(|r| r.source_path.clone()),
+            identity: record.and_then(|r| r.identity.clone()),
             hash_ordinal: None,
             captures: captures_by_module
                 .get(module_index)
@@ -570,6 +614,15 @@ pub fn unpack_bun(
             .ok_or("this adapter writes no vendor record")?,
         hash_version: FACTORY_HASH_VERSION,
         runtime_file,
+        legal_comments: {
+            let mut paths: Vec<String> = Vec::new();
+            for c in &bundle_facts.legal_comments {
+                if !paths.contains(&c.path) {
+                    paths.push(c.path.clone());
+                }
+            }
+            paths
+        },
         factories: if options.manifest_prior_order_disabled {
             entries
         } else {
@@ -597,7 +650,42 @@ pub fn unpack_bun(
             }
             r
         }),
+        declared_carry: declared_carry.map(|mut carries| {
+            for carry in &mut carries {
+                carry.file_name = file_of_record
+                    .get(&carry.record)
+                    .cloned()
+                    .unwrap_or_default();
+            }
+            carries
+        }),
     })
+}
+
+/// Every non-asset module's declared identity and hints (finding #95): the
+/// run's bundler piece hands over what it kept about the module, the
+/// package readers read it and the module's text.
+fn declare_identities(
+    c: &mut BunModuleClassification,
+    code: &str,
+    source: crate::toolchain::ModuleIdentitySource,
+    bundle: &crate::modules::identity::BundleFacts,
+) {
+    let declared = crate::par::map_ordered(&c.factories, |f| {
+        (f.name_source != Some(NameSource::Asset)).then(|| {
+            let provenance = source.module_provenance(code, f, bundle);
+            declare(
+                &code[f.body_span.start as usize..f.body_span.end as usize],
+                &provenance,
+            )
+        })
+    });
+    for (f, d) in c.factories.iter_mut().zip(declared) {
+        if let Some(d) = d {
+            f.identity = d.identity;
+            f.hints = d.hints;
+        }
+    }
 }
 
 /// The text a module's file holds as the unpack writes it, `edits`
@@ -680,18 +768,21 @@ fn mark_text_assets(
 /// The content carry (finding #90, `modules::vendor_pairing`): the
 /// modules this run would otherwise ask the model about (and the app text
 /// assets, for their identifier), paired with the prior modules nothing
-/// carried into. Reads the prior tree's files only when there is something
-/// on both sides. None without a prior tree.
+/// carried into (`taken`: the prior files a declared pair already took).
+/// Reads the prior tree's files only when there is something on both
+/// sides. None without a prior tree.
 fn carry_by_content(
     factories: &mut [FactoryRecord],
     prior: &PriorVendor,
+    taken: &HashSet<&str>,
     fresh_text: impl Fn(&FactoryRecord) -> String + Sync + Send,
 ) -> Option<ContentCarryReport> {
     let root = prior.root.as_ref()?;
     let candidates: Vec<usize> = (0..factories.len())
-        .filter(|&i| is_content_candidate(&factories[i]))
+        .filter(|&i| is_content_candidate(&factories[i]) && factories[i].carried.is_none())
         .collect();
-    let leftovers = leftover_priors(&prior.modules, factories);
+    let mut leftovers = leftover_priors(&prior.modules, factories);
+    leftovers.retain(|m| !taken.contains(m.file_name.as_str()));
     let mut report = ContentCarryReport {
         candidates: candidates.len(),
         leftovers: leftovers.len(),

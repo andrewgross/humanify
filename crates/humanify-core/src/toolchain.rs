@@ -26,7 +26,9 @@
 //! - P10 the name profile — `rename::name_profile::NameProfile`;
 //! - P11 the module-layout record ("fossils") — the adapter's
 //!   `provides_module_fossils`;
-//! - P14 per-bundler tuning — [`BundlerTuning`].
+//! - P14 per-bundler tuning — [`BundlerTuning`];
+//! - P17 what the bundler kept about each module's identity —
+//!   [`ModuleIdentitySource`] (finding #95).
 //!
 //! And four SLOTS whose only implementation today is the Bun/esbuild
 //! behaviour, moved behind a named value without being redesigned (a
@@ -436,6 +438,62 @@ impl AppFile {
     }
 }
 
+/// P17 — what the bundler KEPT about each vendored module that says which
+/// library it is (finding #95): its legal comments, the paths it wrote,
+/// bundle-level legal blocks. One implementation per bundler
+/// (`modules::identity::provenance`); the package readers that interpret
+/// what it hands over are bundler-independent (`modules::identity::
+/// readers`) and never see which bundler this is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ModuleIdentitySource {
+    /// `/*!` comments kept in place; absolute paths inlined for
+    /// `__dirname`, `__filename`, `require.resolve`, `import.meta.url`.
+    Bun,
+    /// The source path as each wrapper's key (unminified builds); legal
+    /// comments in one end-of-file block keyed by `package/file`.
+    Esbuild,
+}
+
+impl ModuleIdentitySource {
+    pub fn name(self) -> &'static str {
+        match self {
+            ModuleIdentitySource::Bun => "bun",
+            ModuleIdentitySource::Esbuild => "esbuild",
+        }
+    }
+
+    /// What the bundler kept about the whole bundle (read once per run).
+    pub fn bundle_facts(self, code: &str) -> crate::modules::identity::BundleFacts {
+        match self {
+            ModuleIdentitySource::Bun => crate::modules::identity::BundleFacts::default(),
+            ModuleIdentitySource::Esbuild => {
+                crate::modules::identity::provenance::esbuild_bundle_facts(code)
+            }
+        }
+    }
+
+    /// What the bundler kept about one classified module (`code` is the
+    /// RAW bundle the classification ran on — comments still in it).
+    pub fn module_provenance(
+        self,
+        code: &str,
+        record: &crate::modules::FactoryRecord,
+        bundle: &crate::modules::identity::BundleFacts,
+    ) -> crate::modules::identity::ModuleProvenance {
+        use crate::modules::identity::provenance;
+        let kept = record.banner_text.as_deref();
+        match self {
+            ModuleIdentitySource::Bun => provenance::bun_module_provenance(
+                &code[record.body_span.start as usize..record.body_span.end as usize],
+                kept,
+            ),
+            ModuleIdentitySource::Esbuild => {
+                provenance::esbuild_module_provenance(kept, record.source_path.as_deref(), bundle)
+            }
+        }
+    }
+}
+
 /// P14 — per-bundler tuning knobs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BundlerTuning {
@@ -480,6 +538,7 @@ pub struct Toolchain {
     pub interop: Chosen<InteropHelpers>,
     pub layout: Chosen<BundleLayout>,
     pub app_file: Chosen<AppFile>,
+    pub module_identity: Chosen<ModuleIdentitySource>,
 }
 
 /// One row of the recorded toolchain: the piece, what was chosen, why.
@@ -513,6 +572,7 @@ pub fn resolve_toolchain(
         &mut toolchain.never_rename.reason,
         &mut toolchain.name_profile.reason,
         &mut toolchain.tuning.reason,
+        &mut toolchain.module_identity.reason,
     ] {
         *reason = settled(*reason);
     }
@@ -600,7 +660,24 @@ fn resolve_pieces(
             reason: Reason::Fallback,
         }
     };
+    // What the bundler kept about each module: the bundler's own reader; an
+    // unsure input gets Bun's (the fallback rule every piece follows).
+    let module_identity = match bundler {
+        BundlerType::Esbuild => Chosen {
+            piece: ModuleIdentitySource::Esbuild,
+            reason: bundler_reason,
+        },
+        BundlerType::Bun => Chosen {
+            piece: ModuleIdentitySource::Bun,
+            reason: bundler_reason,
+        },
+        _ => Chosen {
+            piece: ModuleIdentitySource::Bun,
+            reason: Reason::Fallback,
+        },
+    };
     Toolchain {
+        module_identity,
         bundler,
         bundler_tier: if bundler_flag.is_some() {
             DetectionTier::Definitive
@@ -643,6 +720,11 @@ impl Toolchain {
                 "vendorRecord",
                 adapter.vendor_record_stamp().unwrap_or("none"),
                 self.unpack.reason,
+            ),
+            row(
+                "moduleIdentity",
+                self.module_identity.piece.name(),
+                self.module_identity.reason,
             ),
             row(
                 "libraryDetector",

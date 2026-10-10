@@ -194,6 +194,10 @@ pub struct AdapterRun<'n> {
     /// The run's module wrapper grammar (the toolchain's P3 piece;
     /// vendor-record adapters find and extract the bundled modules with it).
     pub module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+    /// The run's module identity source (the toolchain's P17 piece;
+    /// vendor-record adapters read what the bundler kept about each module
+    /// with it).
+    pub module_identity: crate::toolchain::ModuleIdentitySource,
     /// The LLM vendor namer (vendor-record adapters; None skips the pass).
     pub namer: Option<&'n mut dyn crate::modules::vendor_names::VendorNamer>,
     /// The prior release's vendor record (`bun::load_prior_vendor`).
@@ -212,10 +216,12 @@ impl<'n> AdapterRun<'n> {
     pub fn new(
         interop: crate::toolchain::InteropHelpers,
         module_wrappers: crate::toolchain::ModuleWrapperGrammar,
+        module_identity: crate::toolchain::ModuleIdentitySource,
     ) -> AdapterRun<'n> {
         AdapterRun {
             interop,
             module_wrappers,
+            module_identity,
             namer: None,
             prior: None,
             manifest_prior_order_disabled: false,
@@ -267,6 +273,7 @@ pub fn run_adapter(
                     layout,
                     module_wrappers: run.module_wrappers,
                     interop: run.interop,
+                    module_identity: run.module_identity,
                 },
             )?)))
         }

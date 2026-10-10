@@ -5,7 +5,8 @@ use humanify_model::detection::{BundlerType, DetectionTier, MinifierType};
 
 use super::{
     AppFile, BundleLayout, BundlerTuning, COMMONJS_CONTEXT, Chosen, InteropHelpers,
-    ModuleWrapperGrammar, Reason, is_commonjs_context_name, resolve_toolchain,
+    ModuleIdentitySource, ModuleWrapperGrammar, Reason, is_commonjs_context_name,
+    resolve_toolchain,
 };
 use crate::detect::detect_bundle;
 use crate::libdetect::LibraryDetector;
@@ -54,6 +55,45 @@ fn an_esbuild_bundle_gets_the_esbuild_pieces_by_detection() {
     // esbuild's runtime helper names join the never-rename lists.
     assert_eq!(t.never_rename.piece.name(), "esbuild");
     assert_eq!(t.unpack.piece.vendor_record_stamp(), Some("esbuild"));
+}
+
+/// P17 (finding #95): what the bundler kept about each module is read by
+/// that bundler's own piece; an unsure input gets Bun's, and a flag
+/// decides first.
+#[test]
+fn the_module_identity_source_follows_the_bundler() {
+    let bun = resolve_toolchain(&detect_bundle(BUN_HEAD), None, None);
+    assert_eq!(
+        bun.module_identity,
+        Chosen {
+            piece: ModuleIdentitySource::Bun,
+            reason: Reason::Detected
+        }
+    );
+    let esbuild = resolve_toolchain(&detect_bundle(ESBUILD), None, None);
+    assert_eq!(
+        esbuild.module_identity,
+        Chosen {
+            piece: ModuleIdentitySource::Esbuild,
+            reason: Reason::Detected
+        }
+    );
+    let plain = resolve_toolchain(&detect_bundle(PLAIN), None, None);
+    assert_eq!(
+        plain.module_identity,
+        Chosen {
+            piece: ModuleIdentitySource::Bun,
+            reason: Reason::Fallback
+        }
+    );
+    let flagged = resolve_toolchain(&detect_bundle(BUN_HEAD), Some(BundlerType::Esbuild), None);
+    assert_eq!(
+        flagged.module_identity,
+        Chosen {
+            piece: ModuleIdentitySource::Esbuild,
+            reason: Reason::Flag
+        }
+    );
 }
 
 #[test]
@@ -296,6 +336,7 @@ fn the_record_lists_every_piece() {
         ("unpackAdapter", "bun", "detected"),
         ("moduleWrappers", "bun+esbuild", "only-implementation"),
         ("vendorRecord", "bun", "detected"),
+        ("moduleIdentity", "bun", "detected"),
         ("libraryDetector", "vendor-record", "detected"),
         ("neverRename", "universal", "detected"),
         ("interopHelpers", "bun", "only-implementation"),

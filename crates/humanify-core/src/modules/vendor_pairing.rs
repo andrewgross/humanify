@@ -301,6 +301,17 @@ fn punctuator_end(s: &[char], i: usize) -> Option<usize> {
 
 /// The token stream of `text`, minified-looking identifiers masked to `I`.
 pub fn lex(text: &str) -> Vec<String> {
+    lex_with(text, true)
+}
+
+/// The token stream of `text` with every identifier as written — the
+/// declared-identity readers' view ([`super::identity`]): a string token
+/// keeps its quotes, so a reader sees where a string starts and ends.
+pub fn lex_raw(text: &str) -> Vec<String> {
+    lex_with(text, false)
+}
+
+fn lex_with(text: &str, mask: bool) -> Vec<String> {
     let s: Vec<char> = text.chars().collect();
     let n = s.len();
     let mut out: Vec<String> = Vec::new();
@@ -342,11 +353,13 @@ pub fn lex(text: &str) -> Vec<String> {
                 j += 1;
             }
             let tok = text_of(&s, i, j);
-            out.push(if !KEYWORDS.contains(&tok.as_str()) && is_minified(&tok) {
-                "I".to_string()
-            } else {
-                tok.clone()
-            });
+            out.push(
+                if mask && !KEYWORDS.contains(&tok.as_str()) && is_minified(&tok) {
+                    "I".to_string()
+                } else {
+                    tok.clone()
+                },
+            );
             prev = Some(tok);
             i = j;
             continue;
@@ -656,6 +669,10 @@ pub struct PriorModule {
     /// re-keyed hash, or one that can never match ([`super::vendor_content`]).
     pub structural_hash: String,
     pub runtime_identifier: Option<String>,
+    /// The prior record's declared identity (finding #95) — what the
+    /// declared pairing keys on. None for a module that declared nothing,
+    /// or a record written before identities were recorded.
+    pub identity: Option<super::identity::DeclaredIdentity>,
 }
 
 /// What a content pair carries onto the fresh record.
@@ -760,33 +777,105 @@ pub fn apply_content_pairs(
             let record = candidates[pair.fresh];
             let prior = leftovers[pair.prior];
             let factory = &mut factories[record];
-            let whole = factory.name_source == Some(NameSource::Fallback)
-                && prior.origin != NameSource::Asset
-                && reusable_vendor_path(&prior.file_name, vendor_dir);
-            if whole {
-                factory.name = Some(prior.name.clone());
-                factory.name_source = Some(NameSource::ContentPair);
-                factory.name_origin = Some(prior.origin);
-            }
-            factory.carried = Some(CarriedIdentity {
-                file_name: whole.then(|| prior.file_name.clone()),
-                runtime_identifier: prior.runtime_identifier.clone(),
-            });
+            let carried = carry_from_prior(factory, prior, NameSource::ContentPair, vendor_dir);
             ContentCarry {
                 record,
                 structural_hash: factory.structural_hash.clone(),
                 prior_file: prior.file_name.clone(),
                 prior_name: prior.name.clone(),
-                carried: if whole {
-                    Carried::Identity
-                } else {
-                    Carried::Identifier
-                },
+                carried,
                 score: pair.score,
                 shingle: pair.shingle,
                 literal: pair.literal,
                 fresh_margin: pair.fresh_margin,
                 prior_margin: pair.prior_margin,
+                file_name: String::new(),
+            }
+        })
+        .collect()
+}
+
+/// THE carry of one pair (content or declared): a fallback vendor module
+/// takes the prior's name, its label, its file and its identifier, under
+/// run source `via` (never re-asked); an app text asset, or a pair whose
+/// prior was an asset, takes the identifier only.
+pub fn carry_from_prior(
+    factory: &mut FactoryRecord,
+    prior: &PriorModule,
+    via: NameSource,
+    vendor_dir: &str,
+) -> Carried {
+    let whole = factory.name_source == Some(NameSource::Fallback)
+        && prior.origin != NameSource::Asset
+        && reusable_vendor_path(&prior.file_name, vendor_dir);
+    if whole {
+        factory.name = Some(prior.name.clone());
+        factory.name_source = Some(via);
+        factory.name_origin = Some(prior.origin);
+    }
+    factory.carried = Some(CarriedIdentity {
+        file_name: whole.then(|| prior.file_name.clone()),
+        runtime_identifier: prior.runtime_identifier.clone(),
+    });
+    if whole {
+        Carried::Identity
+    } else {
+        Carried::Identifier
+    }
+}
+
+/// One declared pair's carry, for the run's diagnostics.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeclaredCarry {
+    #[serde(skip)]
+    pub record: usize,
+    pub structural_hash: String,
+    pub prior_file: String,
+    pub prior_name: String,
+    /// The declared key both sides share (`package/member`, case-folded).
+    pub key: String,
+    pub carried: Carried,
+    /// Filled once the file names are chosen.
+    pub file_name: String,
+}
+
+/// The declared-identity pairing (finding #95), run after the exact-hash
+/// carry and before the content pairing: every fallback module with a
+/// declared identity against every prior module nothing carried into, paired
+/// when the key is equal and unique on both sides
+/// ([`super::identity::pair_by_declared_identity`]). Returns the carries.
+pub fn carry_by_declared_identity(
+    factories: &mut [FactoryRecord],
+    leftovers: &[&PriorModule],
+    vendor_dir: &str,
+) -> Vec<DeclaredCarry> {
+    let candidates: Vec<usize> = (0..factories.len())
+        .filter(|&i| {
+            factories[i].name_source == Some(NameSource::Fallback)
+                && factories[i].identity.is_some()
+        })
+        .collect();
+    let fresh: Vec<_> = candidates
+        .iter()
+        .map(|&i| factories[i].identity.as_ref())
+        .collect();
+    let prior: Vec<_> = leftovers.iter().map(|p| p.identity.as_ref()).collect();
+    let pairs = super::identity::pair_by_declared_identity(&fresh, &prior);
+    pairs
+        .into_iter()
+        .map(|pair| {
+            let record = candidates[pair.fresh];
+            let prior = leftovers[pair.prior];
+            let factory = &mut factories[record];
+            let carried = carry_from_prior(factory, prior, NameSource::DeclaredPair, vendor_dir);
+            DeclaredCarry {
+                record,
+                structural_hash: factory.structural_hash.clone(),
+                prior_file: prior.file_name.clone(),
+                prior_name: prior.name.clone(),
+                key: pair.key,
+                carried,
                 file_name: String::new(),
             }
         })
