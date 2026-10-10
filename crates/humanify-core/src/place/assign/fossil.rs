@@ -152,7 +152,7 @@ pub fn module_stem(module: &FossilModule, body: &[Value]) -> String {
 /// declarator or plain `=` assignment whose value is `require("<package>")`
 /// (`naming::plumbing::is_library_specifier`). Any such write counts: a
 /// stem skip only needs "this name came from an import".
-fn library_import_names(module: &FossilModule, body: &[Value]) -> HashSet<String> {
+pub(crate) fn library_import_names(module: &FossilModule, body: &[Value]) -> HashSet<String> {
     let mut out = HashSet::new();
     for &i in &module.statements {
         collect_library_imports(&body[i], &mut out);
