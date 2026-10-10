@@ -30,6 +30,48 @@ text below (each for the reason given):
   method's own rule (`place::method::markers_describe_bundle`), so a mixed
   bundle that the fresh grouping splits keeps today's naming.
 
+**Changed 2026-10-10** (branch `fix/barrels-and-module-fallback`,
+findings queue #94; Andrew approved 2026-10-10) after the run-2 eval
+review (`/work/eval-review-2026-10-06-run2/`) found the two regressions
+this build left:
+
+- **Barrels are named by the module step, no longer by the waves.** Left
+  to the waves they drew filler (`setup-modules-once-var.js`,
+  `bootstrap-module-val.js`, `module-gamma.js`: 139 of 171 barrel names at
+  2.1.216 were filler only), and an inherited path keeps it forever. A
+  barrel is named after the modules it loads, which carry purpose names by
+  then (`naming::module_names::barrels`): the longest phrase a strict
+  majority of their names share (`theme-modal`, `theme-picker`,
+  `theme-store` → `theme`; one word ending every name is a kind and goes
+  plural: `confirm-prompt`, `input-prompt`, `select-prompt` → `prompts`);
+  if that is taken, `<phrase>-index`, then `<phrase>-exports` (a barrel
+  over one module: `error-classes-index`). A barrel whose loaded modules
+  share no phrase is asked of the model, its entry listing the loaded
+  modules' names ("It is an index file: …") and those names as taken. The
+  rule names 82–91 of 151–171 barrels per fresh tree; on a 30-barrel
+  probe the model echoed a loaded module's name on 10 of 30 without the
+  taken list (3 of 30 with it) and otherwise appended `-loader`, so the
+  rule goes first. 40 rule names read against the barrels' code: 29
+  good, 11 right but loose (`stream` for the event-stream pieces,
+  `sso-list` for two SSO paginators), 0 wrong; 27 of the 40 replaced a
+  filler-only name.
+- **No module is left minified.** "A refused or still-colliding answer
+  leaves the wrapper to the naming floor/sweep" (below) left 4–5 wrappers
+  per tree minified (`SN`, `pYl`, `bCi`, `DDi`, `_1`: the sweep's offers
+  `initModule`/`initializeModule`/`moduleInitializer` were all taken).
+  Now, after the duplicate retry, every module still unnamed gets one
+  DISCLOSED retry (why each answer was refused, and the taken names in the
+  #89 owner's order: its own refused answers, the taken module names that
+  share their stem, its neighbours' names), then a deterministic name:
+  `init<FirstDeclared>` (its first function, else its first declared name,
+  that makes a usable name), else `init<FirstDeclared>Module`, else the
+  suffix ladder; a barrel `init<FirstLoaded>Index` / `…Exports`. Every
+  outcome is on the trail (tier `module-naming`, reasons `barrel-rule`,
+  `disclosed-retry`, `fallback`). Only a module with no usable word is
+  left to the floor/sweep.
+- **A module name made of filler words only** (`module-loader`,
+  `setup-modules`) is refused (`place::stems::is_filler_module_name`).
+
 The rest of this document is the design and its 2026-10-05 measurement,
 unchanged.
 

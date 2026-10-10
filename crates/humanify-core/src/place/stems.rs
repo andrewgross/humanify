@@ -275,6 +275,95 @@ const GENERIC_NAMES: [&str; 17] = [
     "functions",
 ];
 
+/// Words that say nothing about what a MODULE is for — the structure of
+/// loading code, a decoration, a counter's stand-in (2026-10-10, finding
+/// #94: the waves named barrels `setup-modules-once-var`,
+/// `bootstrap-module-val`, `module-gamma`). A module name made of these
+/// alone is filler ([`is_filler_module_name`]).
+const FILLER_MODULE_WORDS: &[&str] = &[
+    "module",
+    "modules",
+    "init",
+    "initialize",
+    "initializer",
+    "initialization",
+    "setup",
+    "bootstrap",
+    "loader",
+    "load",
+    "loading",
+    "wrapper",
+    "index",
+    "entry",
+    "core",
+    "app",
+    "application",
+    "main",
+    "utils",
+    "util",
+    "utility",
+    "helpers",
+    "helper",
+    "misc",
+    "common",
+    "shared",
+    "lib",
+    "libs",
+    "all",
+    "once",
+    "root",
+    "lazy",
+    "val",
+    "var",
+    "ref",
+    "item",
+    "data",
+    "result",
+    "value",
+    "run",
+    "start",
+    "startup",
+    "dependencies",
+    "deps",
+    "imports",
+    "exports",
+    "code",
+    "src",
+    "functions",
+    "stuff",
+    "alpha",
+    "beta",
+    "gamma",
+    "delta",
+    "epsilon",
+    "zeta",
+    "eta",
+    "theta",
+    "iota",
+    "kappa",
+    "lambda",
+];
+
+/// Is this kebab word filler for a module name: a [`FILLER_MODULE_WORDS`]
+/// word with or without a counter (`modules5`), a single letter, or a
+/// number?
+pub fn is_filler_module_word(word: &str) -> bool {
+    let bare = word.trim_end_matches(|c: char| c.is_ascii_digit());
+    bare.len() <= 1 || FILLER_MODULE_WORDS.contains(&bare)
+}
+
+/// A module name (kebab) made only of filler words — `module-loader`,
+/// `setup-modules`, `bootstrap`, `init-module-val`: it names no purpose,
+/// so the module step refuses it (finding #94). A name with one real word
+/// (`theme-index`, `wizard-setup`) is not filler.
+pub fn is_filler_module_name(kebab: &str) -> bool {
+    kebab
+        .to_ascii_lowercase()
+        .split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .all(is_filler_module_word)
+}
+
 /// `/^[A-Za-z_$][A-Za-z0-9_$-]{1,39}$/`
 fn is_identifier_ish(name: &str) -> bool {
     let mut chars = name.chars();

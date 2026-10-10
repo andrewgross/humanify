@@ -25,6 +25,7 @@ use serde_json::Value;
 
 use crate::naming::waves::generate::{Replacement, TextView};
 use crate::naming::waves::render::Occurrences;
+use crate::place::stems::{accept_proposed_name, module_stem_of_wrapper, stem_of};
 use crate::rename::validated::RenameState;
 use crate::rename::validated::scopes::BindingId;
 use crate::twins::fossil::{FossilModule, is_export_registration};
@@ -35,6 +36,8 @@ pub const MAX_DECLARED: usize = 14;
 pub const MAX_ASSIGNS: usize = 10;
 /// Imported modules shown.
 pub const MAX_IMPORTS: usize = 8;
+/// Loaded module names shown for a barrel (finding #94).
+pub const MAX_LOADED_NAMES: usize = 12;
 /// Names shown per imported module.
 const NAMES_PER_IMPORT: usize = 3;
 /// Libraries shown.
@@ -194,6 +197,76 @@ impl<'a, 's> EvidenceSource<'a, 's> {
             .filter(|id| id.get("name").and_then(Value::as_str) != Some(&module.init_name))
             .filter_map(|id| self.current(id))
             .collect()
+    }
+
+    /// The module's declared names under the current names, in the
+    /// mechanical stem's order (`place::assign::fossil::module_stem`): its
+    /// functions and classes first, then the other declared names that are
+    /// not library imports — the deterministic fallback's words, the first
+    /// usable one wins (finding #94).
+    pub fn declared_in_stem_order(&self, m: usize) -> Vec<String> {
+        let module = &self.modules[m];
+        let imports = crate::place::assign::fossil::library_import_names(module, self.body);
+        let (mut hoisted, mut rest) = (Vec::new(), Vec::new());
+        for i in self.statements(m, true) {
+            let stmt = &self.body[i];
+            let is_hoisted = matches!(node_type(stmt), "FunctionDeclaration" | "ClassDeclaration");
+            for id in Self::declared_idents(stmt) {
+                let Some(raw) = id.get("name").and_then(Value::as_str) else {
+                    continue;
+                };
+                if raw == module.init_name || imports.contains(raw) {
+                    continue;
+                }
+                if let Some(name) = self.current(id) {
+                    if is_hoisted {
+                        hoisted.push(name);
+                    } else {
+                        rest.push(name);
+                    }
+                }
+            }
+        }
+        hoisted.extend(rest);
+        hoisted
+    }
+
+    /// A module's name as a file stem, under the current names: the module
+    /// name its wrapper carries (`initColorUtils` → `color-utils`), else
+    /// the stem of its first declared name when that is a usable name.
+    pub fn module_name(&self, m: usize) -> Option<String> {
+        let wrapper = self.wrappers[m].map(|b| self.state.name_of(b))?;
+        if let Some(stem) = module_stem_of_wrapper(wrapper) {
+            return Some(stem);
+        }
+        let first = self.declared_in_stem_order(m).into_iter().next()?;
+        accept_proposed_name(&stem_of(&first)).map(|camel| stem_of(&camel))
+    }
+
+    /// The modules `m` loads, each once, in load order.
+    pub fn loaded(&self, m: usize) -> Vec<usize> {
+        let mut seen = HashSet::new();
+        self.modules[m]
+            .imports
+            .iter()
+            .copied()
+            .filter(|&j| j != m && seen.insert(j))
+            .collect()
+    }
+
+    /// The names of the modules a barrel loads, in load order.
+    pub fn loaded_names(&self, m: usize) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for name in self
+            .loaded(m)
+            .into_iter()
+            .filter_map(|j| self.module_name(j))
+        {
+            if !out.contains(&name) {
+                out.push(name);
+            }
+        }
+        out
     }
 
     /// The edits that print `span` under the current names, with the
@@ -533,12 +606,21 @@ impl<'a, 's> EvidenceSource<'a, 's> {
                 "Other code reads this whole module as one object named: {ns}"
             ));
         }
-        let mut seen = HashSet::new();
-        let imports: Vec<String> = module
-            .imports
-            .iter()
-            .filter(|&&j| j != m && seen.insert(j))
-            .map(|&j| {
+        if module.declared.iter().all(|d| *d == module.init_name) {
+            let loaded = self.loaded_names(m);
+            if !loaded.is_empty() {
+                lines.push(capped_list(
+                    "It is an index file: its setup code only loads other modules, named: ",
+                    &loaded,
+                    MAX_LOADED_NAMES,
+                    ", ",
+                ));
+            }
+        }
+        let imports: Vec<String> = self
+            .loaded(m)
+            .into_iter()
+            .map(|j| {
                 let names: Vec<String> = self
                     .own_declared(j)
                     .into_iter()

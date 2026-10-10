@@ -825,17 +825,23 @@ fn pipeline_body(
         let m = &outcome.module_names;
         if m.modules > 0 {
             renderer.message(&format!(
-                "Module names: {} modules, {} asked ({} barrels left to the naming waves, {} carried \
-from the prior), {} calls ({} failed), {} named, {} retried as duplicates, {} left to the sweep",
+                "Module names: {} modules, {} asked + {} barrels ({} by rule, {} asked), {} carried from the \
+prior, {} calls ({} failed), {} named, {} retried as duplicates, {} disclosed retries ({} named), \
+{} by fallback, {} left to the sweep",
                 m.modules,
                 m.asked,
                 m.barrels,
+                m.barrel_rule.len(),
+                m.barrels_asked,
                 m.carried,
                 m.calls,
                 m.failed_calls,
                 m.named.len(),
                 m.retried,
-                m.refused.len(),
+                m.disclosed,
+                m.named_on_disclosure.len(),
+                m.fallback.len(),
+                m.left.len(),
             ));
         }
         let peak = &outcome.waves;

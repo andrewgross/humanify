@@ -27,9 +27,11 @@ var e1;\n\
 var Jq = W(() => {\n  Hq();\n  e1 = d1(2);\n});\n";
 
 /// Answers a module batch per entry by `answer(entry)`; mints a fresh
-/// `renamedX` name for every identifier of any other ask.
+/// `renamedX` name for every identifier of any other ask, except the
+/// identifiers in `decline` (no answer — a sweep whose offers all fail).
 struct ModuleProvider {
     answer: fn(&str) -> Option<&'static str>,
+    decline: &'static [&'static str],
     prompts: Mutex<Vec<String>>,
     module_prompts: Mutex<Vec<String>>,
     minted: Mutex<usize>,
@@ -39,6 +41,7 @@ impl ModuleProvider {
     fn new(answer: fn(&str) -> Option<&'static str>) -> Self {
         ModuleProvider {
             answer,
+            decline: &[],
             prompts: Mutex::new(Vec::new()),
             module_prompts: Mutex::new(Vec::new()),
             minted: Mutex::new(0),
@@ -65,12 +68,10 @@ impl ModuleProvider {
                 .lock()
                 .expect("lock")
                 .push(call.user_prompt.clone());
-            return Renames::from_entries(
-                call.request
-                    .identifiers
-                    .iter()
-                    .map(|i| (i.clone(), Some(self.mint()))),
-            );
+            return Renames::from_entries(call.request.identifiers.iter().map(|i| {
+                let answer = (!self.decline.contains(&i.as_str())).then(|| self.mint());
+                (i.clone(), answer)
+            }));
         }
         self.module_prompts
             .lock()
@@ -214,15 +215,98 @@ fn a_helper_first_module_is_named_for_its_purpose_and_its_wrapper_follows() {
     );
 }
 
+/// Four modules a theme feature might hold, and two barrels: one loads
+/// the three theme modules, one loads a theme module and a clock.
+const BARREL_BUNDLE: &str = "var W = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\n\
+function a1(x) {\n  return x + \"modal-open\";\n}\n\
+var v1;\n\
+var Ga = W(() => {\n  v1 = a1(1);\n});\n\
+function b1(x) {\n  return x + \"picker-open\";\n}\n\
+var v2;\n\
+var Gb = W(() => {\n  v2 = b1(2);\n});\n\
+function c1(x) {\n  return x + \"store-open\";\n}\n\
+var v3;\n\
+var Gc = W(() => {\n  v3 = c1(3);\n});\n\
+function d1(x) {\n  return x + \"clock-tick\";\n}\n\
+var v4;\n\
+var Gd = W(() => {\n  v4 = d1(4);\n});\n\
+var Hb = W(() => {\n  Ga();\n  Gb();\n  Gc();\n});\n\
+var Hc = W(() => {\n  Ga();\n  Gd();\n});\n";
+
+fn theme_parts(entry: &str) -> Option<&'static str> {
+    if entry.contains("It is an index file") {
+        Some("dashboard-widgets")
+    } else if entry.contains("\"modal-open\"") {
+        Some("theme-modal")
+    } else if entry.contains("\"picker-open\"") {
+        Some("theme-picker")
+    } else if entry.contains("\"store-open\"") {
+        Some("theme-store")
+    } else if entry.contains("\"clock-tick\"") {
+        Some("clock-face")
+    } else {
+        None
+    }
+}
+
 #[test]
-fn a_barrel_is_left_to_the_waves() {
+fn a_barrel_is_named_from_the_words_its_loaded_modules_share() {
+    let provider = ModuleProvider::new(theme_parts);
+    let out = run(BARREL_BUNDLE, None, &provider);
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var initTheme = __esm("), "{code}");
+    assert!(
+        !asked_by_waves(&provider, "Hb"),
+        "a barrel's wrapper is the module step's"
+    );
+    let prompts = provider.module_prompts.lock().expect("lock");
+    assert!(
+        prompts
+            .iter()
+            .all(|p| !p.contains("theme-modal, theme-picker, theme-store")),
+        "the rule named it; the model was not asked: {prompts:?}"
+    );
+    assert_eq!(out.module_names.barrels, 2);
+    assert_eq!(
+        out.module_names.barrel_rule,
+        vec![("Hb".to_string(), "initTheme".to_string())]
+    );
+}
+
+#[test]
+fn a_barrel_whose_modules_share_no_word_is_asked_with_their_names() {
+    let provider = ModuleProvider::new(theme_parts);
+    let out = run(BARREL_BUNDLE, None, &provider);
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var initDashboardWidgets = __esm("), "{code}");
+    assert!(!asked_by_waves(&provider, "Hc"));
+    let prompts = provider.module_prompts.lock().expect("lock");
+    let barrel = prompts
+        .iter()
+        .find(|p| p.contains("It is an index file"))
+        .expect("the barrel was asked");
+    assert!(
+        barrel.contains(
+            "It is an index file: its setup code only loads other modules, named: theme-modal, clock-face"
+        ),
+        "{barrel}"
+    );
+    assert!(
+        barrel.contains(
+            "Already taken by other files (pick a DIFFERENT name): theme-modal, clock-face"
+        ),
+        "{barrel}"
+    );
+    assert_eq!(out.module_names.barrels_asked, 1);
+}
+
+#[test]
+fn a_single_module_barrel_is_its_modules_index() {
     let provider = ModuleProvider::new(by_purpose);
     let out = run(BUNDLE, None, &provider);
-    assert!(
-        asked_by_waves(&provider, "Hq"),
-        "the barrel's wrapper is asked as today"
-    );
-    assert_eq!(out.module_names.barrels, 1);
+    let code = out.code.expect("shipped");
+    assert!(code.contains("var initColorUtilsIndex = __esm("), "{code}");
+    assert!(!asked_by_waves(&provider, "Hq"));
     let modules = provider.module_prompts.lock().expect("lock");
     assert_eq!(
         modules[0].matches("### m").count(),
@@ -257,14 +341,36 @@ fn a_duplicate_name_gets_one_retry_with_the_taken_name_listed() {
 }
 
 #[test]
-fn a_name_still_taken_after_the_retry_is_left_to_the_sweep() {
-    let provider = ModuleProvider::new(|_| Some("color-utils"));
+fn a_module_whose_answers_all_collide_gets_its_first_function_name_never_a_minified_one() {
+    // Every module answer is `color-utils`, and the sweep declines the
+    // wrapper (its offers all fail): on main `Jq` stays minified.
+    let mut provider = ModuleProvider::new(|_| Some("color-utils"));
+    provider.decline = &["Jq"];
     let out = run(BUNDLE, None, &provider);
     assert_eq!(out.module_names.retried, 1);
+    assert_eq!(out.module_names.disclosed, 1);
     assert_eq!(out.module_names.named.len(), 1);
-    assert_eq!(out.module_names.refused.len(), 1);
     let code = out.code.expect("shipped");
-    assert!(!code.contains("Jq"), "the sweep named it: {code}");
+    assert!(!code.contains("Jq"), "never left minified: {code}");
+    let (old, new) = out.module_names.fallback[0].clone();
+    assert_eq!(old, "Jq");
+    assert!(
+        new.starts_with("initRenamed"),
+        "init + the first function's name (`d1`, renamed by the waves): {new}"
+    );
+    assert!(code.contains(&format!("var {new} = __esm(")), "{code}");
+    let modules = provider.module_prompts.lock().expect("lock");
+    let disclosed = modules.last().expect("the disclosed retry");
+    assert!(
+        disclosed.contains(
+            "Your earlier answers for this file were refused: \"color-utils\" (another file already has that name)."
+        ),
+        "{disclosed}"
+    );
+    assert!(
+        disclosed.contains("Already taken by other files (pick a DIFFERENT name): color-utils"),
+        "{disclosed}"
+    );
 }
 
 #[test]
@@ -274,7 +380,7 @@ fn a_wrapper_the_prior_carried_is_never_asked_again() {
     let provider = ModuleProvider::new(|_| Some("other-name"));
     let out = run(BUNDLE, Some(&prior), &provider);
     assert_eq!(out.module_names.asked, 0);
-    assert_eq!(out.module_names.carried, 2);
+    assert_eq!(out.module_names.carried, 3, "the barrel's too");
     assert!(provider.module_prompts.lock().expect("lock").is_empty());
     let code = out.code.expect("shipped");
     assert!(code.contains("var initColorUtils = __esm("), "{code}");
