@@ -191,3 +191,41 @@ fn the_rekey_refuses_anything_inexact() {
     ];
     assert!(rekey_prior_by_content(&spread, &prior).names.is_empty());
 }
+
+// ---- a whole bundle's module keys (the library index's module fingerprint)
+
+/// The same two CommonJS modules, minified twice with different spellings.
+const BUNDLE_A: &str = r#"var m=(e,r)=>()=>(r||e((r={exports:{}}).exports,r),r.exports);var B=m((ge,q)=>{q.exports=function(e){return e+"abc"}});var C=m((x,y)=>{var t=B();y.exports=function(n){return t(n)*1024}});module.exports=C();"#;
+const BUNDLE_B: &str = r#"var k=(a,b)=>()=>(b||a((b={exports:{}}).exports,b),b.exports);var Z=k((Q,W)=>{W.exports=function(n){return n+"abc"}});var Y=k((P,O)=>{var s=Z();O.exports=function(v){return s(v)*1024}});module.exports=Y();"#;
+
+fn bundle_keys(code: &str) -> Vec<super::BundleModuleKey> {
+    super::bundle_content_keys(
+        code,
+        crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+}
+
+#[test]
+fn every_bundled_module_gets_the_pipelines_content_key_in_bundle_order() {
+    let a = bundle_keys(BUNDLE_A);
+    assert_eq!(a.len(), 2);
+    let first = &BUNDLE_A[a[0].body_span.start as usize..a[0].body_span.end as usize];
+    assert_eq!(first, r#"(ge,q)=>{q.exports=function(e){return e+"abc"}}"#);
+    // The key IS the vendor content key of that factory's text.
+    assert_eq!(a[0].key, key(first));
+    assert!(a.iter().all(|m| m.key.is_some()));
+    assert_ne!(a[0].key, a[1].key);
+}
+
+#[test]
+fn a_bundled_module_keys_the_same_whatever_the_minifier_named_things() {
+    let a: Vec<Option<String>> = bundle_keys(BUNDLE_A).into_iter().map(|m| m.key).collect();
+    let b: Vec<Option<String>> = bundle_keys(BUNDLE_B).into_iter().map(|m| m.key).collect();
+    assert_eq!(a, b);
+}
+
+#[test]
+fn a_bundle_without_modules_has_no_module_keys() {
+    assert!(bundle_keys("function f(){return 1}module.exports=f;").is_empty());
+}

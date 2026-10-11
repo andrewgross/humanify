@@ -504,6 +504,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "humanify-index"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "humanify-core",
+ "humanify-model",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "humanify-llm"
 version = "0.0.0"
 dependencies = [

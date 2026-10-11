@@ -14,6 +14,7 @@ pub mod graph;
 pub mod hash;
 pub mod ingest;
 pub mod libdetect;
+pub mod libindex;
 pub mod matching;
 pub mod modules;
 pub mod naming;
