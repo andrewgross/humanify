@@ -1,0 +1,1773 @@
+{
+  "graph": {
+    "nodes": 79911,
+    "edges": 222172,
+    "srcUnits": 73414,
+    "srcBytes": 15280719
+  },
+  "libTotalEstKB": 2221,
+  "appTotalEstKB": 13036,
+  "runs": {
+    "none": {
+      "seedUnits": 0,
+      "seedBytes": 0,
+      "seedScore": {
+        "libRecall": 0.0,
+        "libRightFamily": 0.0,
+        "appClaimedEstKB": 0.0,
+        "appClaimedSampleUnits": [],
+        "helperClaimedSampleUnits": [],
+        "trapsClaimed": [],
+        "srcBytesClaimed": 0
+      },
+      "candidatesBefore": {
+        "4000": {
+          "libKB": 1024,
+          "libRecallOfRemaining": 0.461,
+          "libRecallOfAll": 0.461,
+          "appKB": 2898,
+          "forkKB": 280,
+          "libShareOfCandidates": 0.261,
+          "srcCandidateKB": 3176,
+          "traps": 22
+        },
+        "64000": {
+          "libKB": 1823,
+          "libRecallOfRemaining": 0.821,
+          "libRecallOfAll": 0.821,
+          "appKB": 5499,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.249,
+          "srcCandidateKB": 7000,
+          "traps": 26
+        },
+        "256000": {
+          "libKB": 2157,
+          "libRecallOfRemaining": 0.971,
+          "libRecallOfAll": 0.971,
+          "appKB": 6989,
+          "forkKB": 299,
+          "libShareOfCandidates": 0.236,
+          "srcCandidateKB": 8664,
+          "traps": 30
+        },
+        "1000000": {
+          "libKB": 2221,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 1.0,
+          "appKB": 8154,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.214,
+          "srcCandidateKB": 9810,
+          "traps": 32
+        }
+      },
+      "codeCandidates": {
+        "4000": {
+          "libKB": 830,
+          "appKB": 2152,
+          "libShare": 0.278,
+          "srcKB": 2487
+        },
+        "64000": {
+          "libKB": 1613,
+          "appKB": 3271,
+          "libShare": 0.33,
+          "srcKB": 4848
+        },
+        "256000": {
+          "libKB": 1889,
+          "appKB": 4334,
+          "libShare": 0.303,
+          "srcKB": 6139
+        }
+      }
+    },
+    "declared": {
+      "seedUnits": 293,
+      "seedBytes": 214394,
+      "seedScore": {
+        "libRecall": 0.093,
+        "libRightFamily": 0.093,
+        "appClaimedEstKB": 0.0,
+        "appClaimedSampleUnits": [],
+        "helperClaimedSampleUnits": [],
+        "trapsClaimed": [],
+        "srcBytesClaimed": 214394
+      },
+      "candidatesBefore": {
+        "4000": {
+          "libKB": 975,
+          "libRecallOfRemaining": 0.484,
+          "libRecallOfAll": 0.439,
+          "appKB": 2898,
+          "forkKB": 280,
+          "libShareOfCandidates": 0.252,
+          "srcCandidateKB": 3177,
+          "traps": 22
+        },
+        "64000": {
+          "libKB": 1808,
+          "libRecallOfRemaining": 0.897,
+          "libRecallOfAll": 0.814,
+          "appKB": 5499,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.247,
+          "srcCandidateKB": 6915,
+          "traps": 26
+        },
+        "256000": {
+          "libKB": 2015,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.907,
+          "appKB": 6989,
+          "forkKB": 299,
+          "libShareOfCandidates": 0.224,
+          "srcCandidateKB": 8495,
+          "traps": 30
+        },
+        "1000000": {
+          "libKB": 2015,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.907,
+          "appKB": 8154,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.198,
+          "srcCandidateKB": 9597,
+          "traps": 32
+        }
+      },
+      "down": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 127,
+            "bytes": 21927,
+            "srcBytes": 21442,
+            "byRule": {
+              "down": 115,
+              "glue": 12
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 47,
+            "bytes": 8432,
+            "srcBytes": 8432,
+            "byRule": {
+              "down": 47
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 5,
+            "bytes": 1345,
+            "srcBytes": 1345,
+            "byRule": {
+              "down": 5
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 1,
+            "bytes": 112,
+            "srcBytes": 112,
+            "byRule": {
+              "down": 1
+            }
+          }
+        ],
+        "grownSrcBytes": 31331,
+        "after": {
+          "libRecall": 0.093,
+          "libRightFamily": 0.093,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 245725
+        },
+        "grownOnly": {
+          "libRecall": 0.0,
+          "libRightFamily": 0.0,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 31331
+        }
+      },
+      "down+module": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 404,
+            "bytes": 26243,
+            "srcBytes": 25758,
+            "byRule": {
+              "down": 115,
+              "module": 277,
+              "glue": 12
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 66,
+            "bytes": 8615,
+            "srcBytes": 8615,
+            "byRule": {
+              "down": 38,
+              "module": 28
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 17,
+            "bytes": 1417,
+            "srcBytes": 1417,
+            "byRule": {
+              "down": 5,
+              "module": 12
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 5,
+            "bytes": 172,
+            "srcBytes": 172,
+            "byRule": {
+              "down": 1,
+              "module": 4
+            }
+          }
+        ],
+        "grownSrcBytes": 35962,
+        "after": {
+          "libRecall": 0.0939,
+          "libRightFamily": 0.0939,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 250356
+        },
+        "grownOnly": {
+          "libRecall": 0.0009,
+          "libRightFamily": 0.0009,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 35962
+        }
+      },
+      "candidatesAfter": {
+        "4000": {
+          "libKB": 973,
+          "libRecallOfRemaining": 0.483,
+          "libRecallOfAll": 0.438,
+          "appKB": 2898,
+          "forkKB": 280,
+          "libShareOfCandidates": 0.251,
+          "srcCandidateKB": 3146,
+          "traps": 22
+        },
+        "64000": {
+          "libKB": 1806,
+          "libRecallOfRemaining": 0.897,
+          "libRecallOfAll": 0.813,
+          "appKB": 5499,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.247,
+          "srcCandidateKB": 6879,
+          "traps": 26
+        },
+        "256000": {
+          "libKB": 2013,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.906,
+          "appKB": 6989,
+          "forkKB": 299,
+          "libShareOfCandidates": 0.224,
+          "srcCandidateKB": 8459,
+          "traps": 30
+        },
+        "1000000": {
+          "libKB": 2013,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.906,
+          "appKB": 8154,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.198,
+          "srcCandidateKB": 9561,
+          "traps": 32
+        }
+      },
+      "upCandidates": {
+        "libKB": 192,
+        "appKB": 0,
+        "srcKB": 117,
+        "traps": []
+      },
+      "module-unguarded": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1680,
+            "bytes": 75479,
+            "srcBytes": 74994,
+            "byRule": {
+              "module-unguarded": 1668,
+              "glue": 12
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 240,
+            "bytes": 7209,
+            "srcBytes": 0,
+            "byRule": {
+              "glue": 240
+            }
+          }
+        ],
+        "grownSrcBytes": 74994,
+        "after": {
+          "libRecall": 0.133,
+          "libRightFamily": 0.133,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 289388
+        },
+        "grownOnly": {
+          "libRecall": 0.0401,
+          "libRightFamily": 0.0401,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 74994
+        }
+      }
+    },
+    "stepB-A": {
+      "seedUnits": 4062,
+      "seedBytes": 811149,
+      "seedScore": {
+        "libRecall": 0.4307,
+        "libRightFamily": 0.3854,
+        "appClaimedEstKB": 0.0,
+        "appClaimedSampleUnits": [],
+        "helperClaimedSampleUnits": [25111],
+        "trapsClaimed": [
+          ["ink-fork", 41803, "ink", "seed"],
+          ["compiler-helper", 25110, "zod", "seed"],
+          ["compiler-helper", 25111, "zod", "seed"]
+        ],
+        "srcBytesClaimed": 811149
+      },
+      "candidatesBefore": {
+        "4000": {
+          "libKB": 744,
+          "libRecallOfRemaining": 0.588,
+          "libRecallOfAll": 0.335,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.202,
+          "srcCandidateKB": 3024,
+          "traps": 21
+        },
+        "64000": {
+          "libKB": 1056,
+          "libRecallOfRemaining": 0.835,
+          "libRecallOfAll": 0.475,
+          "appKB": 5958,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.151,
+          "srcCandidateKB": 6854,
+          "traps": 27
+        },
+        "256000": {
+          "libKB": 1265,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.569,
+          "appKB": 7984,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.137,
+          "srcCandidateKB": 8730,
+          "traps": 29
+        },
+        "1000000": {
+          "libKB": 1265,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.569,
+          "appKB": 8187,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.134,
+          "srcCandidateKB": 9001,
+          "traps": 29
+        }
+      },
+      "down": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 796,
+            "bytes": 23218,
+            "srcBytes": 10739,
+            "byRule": {
+              "down": 279,
+              "glue": 517
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 18,
+            "bytes": 4467,
+            "srcBytes": 4467,
+            "byRule": {
+              "down": 18
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 11,
+            "bytes": 313,
+            "srcBytes": 313,
+            "byRule": {
+              "down": 11
+            }
+          }
+        ],
+        "grownSrcBytes": 15519,
+        "after": {
+          "libRecall": 0.4361,
+          "libRightFamily": 0.3908,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["compiler-helper", 25110, "zod", "seed"],
+            ["compiler-helper", 25111, "zod", "seed"]
+          ],
+          "srcBytesClaimed": 826668
+        },
+        "grownOnly": {
+          "libRecall": 0.0054,
+          "libRightFamily": 0.0054,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 15519
+        }
+      },
+      "down+module": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1146,
+            "bytes": 44808,
+            "srcBytes": 32329,
+            "byRule": {
+              "down": 279,
+              "module": 350,
+              "glue": 517
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 35,
+            "bytes": 4361,
+            "srcBytes": 4361,
+            "byRule": {
+              "down": 11,
+              "module": 24
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 5,
+            "bytes": 19,
+            "srcBytes": 19,
+            "byRule": {
+              "module": 5
+            }
+          }
+        ],
+        "grownSrcBytes": 36709,
+        "after": {
+          "libRecall": 0.4421,
+          "libRightFamily": 0.3967,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["ink-fork", 41773, "ink", "module"],
+            ["compiler-helper", 25110, "zod", "seed"],
+            ["compiler-helper", 25111, "zod", "seed"]
+          ],
+          "srcBytesClaimed": 847858
+        },
+        "grownOnly": {
+          "libRecall": 0.0113,
+          "libRightFamily": 0.0113,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [["ink-fork", 41773, "ink", "module"]],
+          "srcBytesClaimed": 36709
+        }
+      },
+      "candidatesAfter": {
+        "4000": {
+          "libKB": 719,
+          "libRecallOfRemaining": 0.58,
+          "libRecallOfAll": 0.324,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.197,
+          "srcCandidateKB": 2996,
+          "traps": 20
+        },
+        "64000": {
+          "libKB": 1031,
+          "libRecallOfRemaining": 0.832,
+          "libRecallOfAll": 0.464,
+          "appKB": 5983,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.147,
+          "srcCandidateKB": 6820,
+          "traps": 26
+        },
+        "256000": {
+          "libKB": 1239,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.558,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.134,
+          "srcCandidateKB": 8710,
+          "traps": 28
+        },
+        "1000000": {
+          "libKB": 1239,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.558,
+          "appKB": 8187,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.131,
+          "srcCandidateKB": 8964,
+          "traps": 28
+        }
+      },
+      "upCandidates": {
+        "libKB": 214,
+        "appKB": 232,
+        "srcKB": 483,
+        "traps": []
+      },
+      "module-unguarded": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1850,
+            "bytes": 138022,
+            "srcBytes": 125543,
+            "byRule": {
+              "module-unguarded": 1333,
+              "glue": 517
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 65,
+            "bytes": 1287,
+            "srcBytes": 0,
+            "byRule": {
+              "glue": 65
+            }
+          }
+        ],
+        "grownSrcBytes": 125543,
+        "after": {
+          "libRecall": 0.4462,
+          "libRightFamily": 0.4005,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["ink-fork", 41773, "ink", "module-unguarded"],
+            ["compiler-helper", 25110, "zod", "seed"],
+            ["compiler-helper", 25111, "zod", "seed"]
+          ],
+          "srcBytesClaimed": 936692
+        },
+        "grownOnly": {
+          "libRecall": 0.0155,
+          "libRightFamily": 0.015,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [["ink-fork", 41773, "ink", "module-unguarded"]],
+          "srcBytesClaimed": 125543
+        }
+      }
+    },
+    "stepB-C": {
+      "seedUnits": 10127,
+      "seedBytes": 1851420,
+      "seedScore": {
+        "libRecall": 0.8147,
+        "libRightFamily": 0.8143,
+        "appClaimedEstKB": 0.0,
+        "appClaimedSampleUnits": [],
+        "helperClaimedSampleUnits": [25111],
+        "trapsClaimed": [
+          ["ink-fork", 41803, "ink", "seed"],
+          ["compiler-helper", 25110, "@anthropic-ai/google-cloud-sdk", "seed"],
+          ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+        ],
+        "srcBytesClaimed": 1851420
+      },
+      "candidatesBefore": {
+        "4000": {
+          "libKB": 307,
+          "libRecallOfRemaining": 0.747,
+          "libRecallOfAll": 0.138,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.095,
+          "srcCandidateKB": 2660,
+          "traps": 21
+        },
+        "64000": {
+          "libKB": 412,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.185,
+          "appKB": 5963,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.065,
+          "srcCandidateKB": 6077,
+          "traps": 27
+        },
+        "256000": {
+          "libKB": 412,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.185,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.049,
+          "srcCandidateKB": 7731,
+          "traps": 29
+        },
+        "1000000": {
+          "libKB": 412,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.185,
+          "appKB": 10241,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.039,
+          "srcCandidateKB": 10448,
+          "traps": 32
+        }
+      },
+      "down": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1415,
+            "bytes": 48835,
+            "srcBytes": 28581,
+            "byRule": {
+              "down": 463,
+              "glue": 952
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 34,
+            "bytes": 7556,
+            "srcBytes": 7556,
+            "byRule": {
+              "down": 34
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 12,
+            "bytes": 2767,
+            "srcBytes": 2767,
+            "byRule": {
+              "down": 12
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 3,
+            "bytes": 2205,
+            "srcBytes": 2205,
+            "byRule": {
+              "down": 3
+            }
+          },
+          {
+            "round": 5,
+            "nodes": 13,
+            "bytes": 1602,
+            "srcBytes": 1602,
+            "byRule": {
+              "down": 13
+            }
+          },
+          {
+            "round": 6,
+            "nodes": 11,
+            "bytes": 3977,
+            "srcBytes": 3977,
+            "byRule": {
+              "down": 11
+            }
+          },
+          {
+            "round": 7,
+            "nodes": 9,
+            "bytes": 3492,
+            "srcBytes": 3492,
+            "byRule": {
+              "down": 9
+            }
+          },
+          {
+            "round": 8,
+            "nodes": 2,
+            "bytes": 27,
+            "srcBytes": 27,
+            "byRule": {
+              "down": 2
+            }
+          }
+        ],
+        "grownSrcBytes": 50207,
+        "after": {
+          "libRecall": 0.8879,
+          "libRightFamily": 0.8874,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1901627
+        },
+        "grownOnly": {
+          "libRecall": 0.0731,
+          "libRightFamily": 0.0731,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 50207
+        }
+      },
+      "down+module": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1786,
+            "bytes": 64796,
+            "srcBytes": 44542,
+            "byRule": {
+              "down": 463,
+              "module": 371,
+              "glue": 952
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 115,
+            "bytes": 8475,
+            "srcBytes": 8475,
+            "byRule": {
+              "down": 21,
+              "module": 94
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 30,
+            "bytes": 2487,
+            "srcBytes": 2487,
+            "byRule": {
+              "down": 9,
+              "module": 21
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 16,
+            "bytes": 2244,
+            "srcBytes": 2244,
+            "byRule": {
+              "down": 3,
+              "module": 13
+            }
+          },
+          {
+            "round": 5,
+            "nodes": 16,
+            "bytes": 1953,
+            "srcBytes": 1953,
+            "byRule": {
+              "down": 12,
+              "module": 4
+            }
+          },
+          {
+            "round": 6,
+            "nodes": 8,
+            "bytes": 3522,
+            "srcBytes": 3522,
+            "byRule": {
+              "down": 8
+            }
+          },
+          {
+            "round": 7,
+            "nodes": 7,
+            "bytes": 3339,
+            "srcBytes": 3339,
+            "byRule": {
+              "down": 6,
+              "module": 1
+            }
+          },
+          {
+            "round": 8,
+            "nodes": 4,
+            "bytes": 38,
+            "srcBytes": 38,
+            "byRule": {
+              "down": 2,
+              "module": 2
+            }
+          }
+        ],
+        "grownSrcBytes": 66600,
+        "after": {
+          "libRecall": 0.8938,
+          "libRightFamily": 0.8934,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["ink-fork", 41773, "ink", "module"],
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1918020
+        },
+        "grownOnly": {
+          "libRecall": 0.0791,
+          "libRightFamily": 0.0791,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [["ink-fork", 41773, "ink", "module"]],
+          "srcBytesClaimed": 66600
+        }
+      },
+      "candidatesAfter": {
+        "4000": {
+          "libKB": 175,
+          "libRecallOfRemaining": 0.742,
+          "libRecallOfAll": 0.079,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.056,
+          "srcCandidateKB": 2613,
+          "traps": 20
+        },
+        "64000": {
+          "libKB": 236,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.106,
+          "appKB": 5988,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.038,
+          "srcCandidateKB": 6013,
+          "traps": 26
+        },
+        "256000": {
+          "libKB": 236,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.106,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.029,
+          "srcCandidateKB": 7666,
+          "traps": 28
+        },
+        "1000000": {
+          "libKB": 236,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.106,
+          "appKB": 10241,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.023,
+          "srcCandidateKB": 10383,
+          "traps": 31
+        }
+      },
+      "upCandidates": {
+        "libKB": 146,
+        "appKB": 232,
+        "srcKB": 436,
+        "traps": []
+      },
+      "module-unguarded": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 2565,
+            "bytes": 163622,
+            "srcBytes": 143368,
+            "byRule": {
+              "module-unguarded": 1613,
+              "glue": 952
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 121,
+            "bytes": 2401,
+            "srcBytes": 0,
+            "byRule": {
+              "glue": 121
+            }
+          }
+        ],
+        "grownSrcBytes": 143368,
+        "after": {
+          "libRecall": 0.8766,
+          "libRightFamily": 0.8762,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["ink-fork", 41773, "ink", "module-unguarded"],
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1994788
+        },
+        "grownOnly": {
+          "libRecall": 0.0619,
+          "libRightFamily": 0.0619,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [["ink-fork", 41773, "ink", "module-unguarded"]],
+          "srcBytesClaimed": 143368
+        }
+      }
+    },
+    "declared+stepB-C": {
+      "seedUnits": 10309,
+      "seedBytes": 1908489,
+      "seedScore": {
+        "libRecall": 0.8569,
+        "libRightFamily": 0.8565,
+        "appClaimedEstKB": 0.0,
+        "appClaimedSampleUnits": [],
+        "helperClaimedSampleUnits": [25111],
+        "trapsClaimed": [
+          ["ink-fork", 41803, "ink", "seed"],
+          ["compiler-helper", 25110, "@anthropic-ai/google-cloud-sdk", "seed"],
+          ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+        ],
+        "srcBytesClaimed": 1908489
+      },
+      "candidatesBefore": {
+        "4000": {
+          "libKB": 250,
+          "libRecallOfRemaining": 0.786,
+          "libRecallOfAll": 0.112,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.078,
+          "srcCandidateKB": 2617,
+          "traps": 21
+        },
+        "64000": {
+          "libKB": 318,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.143,
+          "appKB": 5963,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.051,
+          "srcCandidateKB": 6020,
+          "traps": 27
+        },
+        "256000": {
+          "libKB": 318,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.143,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.038,
+          "srcCandidateKB": 7674,
+          "traps": 29
+        },
+        "1000000": {
+          "libKB": 318,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.143,
+          "appKB": 10241,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.03,
+          "srcCandidateKB": 10397,
+          "traps": 32
+        }
+      },
+      "down": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1423,
+            "bytes": 49352,
+            "srcBytes": 28801,
+            "byRule": {
+              "down": 462,
+              "glue": 961
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 38,
+            "bytes": 7588,
+            "srcBytes": 7588,
+            "byRule": {
+              "down": 38
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 8,
+            "bytes": 1507,
+            "srcBytes": 1507,
+            "byRule": {
+              "down": 8
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 3,
+            "bytes": 2205,
+            "srcBytes": 2205,
+            "byRule": {
+              "down": 3
+            }
+          },
+          {
+            "round": 5,
+            "nodes": 13,
+            "bytes": 1602,
+            "srcBytes": 1602,
+            "byRule": {
+              "down": 13
+            }
+          },
+          {
+            "round": 6,
+            "nodes": 11,
+            "bytes": 3977,
+            "srcBytes": 3977,
+            "byRule": {
+              "down": 11
+            }
+          },
+          {
+            "round": 7,
+            "nodes": 9,
+            "bytes": 3492,
+            "srcBytes": 3492,
+            "byRule": {
+              "down": 9
+            }
+          },
+          {
+            "round": 8,
+            "nodes": 2,
+            "bytes": 27,
+            "srcBytes": 27,
+            "byRule": {
+              "down": 2
+            }
+          }
+        ],
+        "grownSrcBytes": 49199,
+        "after": {
+          "libRecall": 0.9301,
+          "libRightFamily": 0.9296,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1957688
+        },
+        "grownOnly": {
+          "libRecall": 0.0731,
+          "libRightFamily": 0.0731,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 49199
+        }
+      },
+      "down+module": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1956,
+            "bytes": 65977,
+            "srcBytes": 45426,
+            "byRule": {
+              "down": 462,
+              "module": 533,
+              "glue": 961
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 119,
+            "bytes": 8507,
+            "srcBytes": 8507,
+            "byRule": {
+              "down": 25,
+              "module": 94
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 26,
+            "bytes": 1227,
+            "srcBytes": 1227,
+            "byRule": {
+              "down": 5,
+              "module": 21
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 12,
+            "bytes": 2232,
+            "srcBytes": 2232,
+            "byRule": {
+              "down": 3,
+              "module": 9
+            }
+          },
+          {
+            "round": 5,
+            "nodes": 16,
+            "bytes": 1953,
+            "srcBytes": 1953,
+            "byRule": {
+              "down": 12,
+              "module": 4
+            }
+          },
+          {
+            "round": 6,
+            "nodes": 8,
+            "bytes": 3522,
+            "srcBytes": 3522,
+            "byRule": {
+              "down": 8
+            }
+          },
+          {
+            "round": 7,
+            "nodes": 7,
+            "bytes": 3339,
+            "srcBytes": 3339,
+            "byRule": {
+              "down": 6,
+              "module": 1
+            }
+          },
+          {
+            "round": 8,
+            "nodes": 4,
+            "bytes": 38,
+            "srcBytes": 38,
+            "byRule": {
+              "down": 2,
+              "module": 2
+            }
+          }
+        ],
+        "grownSrcBytes": 66244,
+        "after": {
+          "libRecall": 0.9365,
+          "libRightFamily": 0.936,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["ink-fork", 41773, "ink", "module"],
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1974733
+        },
+        "grownOnly": {
+          "libRecall": 0.0796,
+          "libRightFamily": 0.0796,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [["ink-fork", 41773, "ink", "module"]],
+          "srcBytesClaimed": 66244
+        }
+      },
+      "candidatesAfter": {
+        "4000": {
+          "libKB": 96,
+          "libRecallOfRemaining": 0.681,
+          "libRecallOfAll": 0.043,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.032,
+          "srcCandidateKB": 2564,
+          "traps": 20
+        },
+        "64000": {
+          "libKB": 141,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.063,
+          "appKB": 5988,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.023,
+          "srcCandidateKB": 5956,
+          "traps": 26
+        },
+        "256000": {
+          "libKB": 141,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.063,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.017,
+          "srcCandidateKB": 7610,
+          "traps": 28
+        },
+        "1000000": {
+          "libKB": 141,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.063,
+          "appKB": 10241,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.014,
+          "srcCandidateKB": 10331,
+          "traps": 31
+        }
+      },
+      "upCandidates": {
+        "libKB": 113,
+        "appKB": 232,
+        "srcKB": 414,
+        "traps": []
+      },
+      "module-unguarded": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 3539,
+            "bytes": 175148,
+            "srcBytes": 154597,
+            "byRule": {
+              "module-unguarded": 2578,
+              "glue": 961
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 275,
+            "bytes": 5303,
+            "srcBytes": 0,
+            "byRule": {
+              "glue": 275
+            }
+          }
+        ],
+        "grownSrcBytes": 154597,
+        "after": {
+          "libRecall": 0.924,
+          "libRightFamily": 0.9236,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            ["ink-fork", 41803, "ink", "seed"],
+            ["ink-fork", 41773, "ink", "module-unguarded"],
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 2063086
+        },
+        "grownOnly": {
+          "libRecall": 0.0671,
+          "libRightFamily": 0.0671,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [["ink-fork", 41773, "ink", "module-unguarded"]],
+          "srcBytesClaimed": 154597
+        }
+      }
+    },
+    "declared+stepB-C/isolation": {
+      "seedUnits": 10154,
+      "seedBytes": 1892977,
+      "seedScore": {
+        "libRecall": 0.8565,
+        "libRightFamily": 0.8565,
+        "appClaimedEstKB": 0.0,
+        "appClaimedSampleUnits": [],
+        "helperClaimedSampleUnits": [25111],
+        "trapsClaimed": [
+          ["compiler-helper", 25110, "@anthropic-ai/google-cloud-sdk", "seed"],
+          ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+        ],
+        "srcBytesClaimed": 1892977
+      },
+      "candidatesBefore": {
+        "4000": {
+          "libKB": 247,
+          "libRecallOfRemaining": 0.775,
+          "libRecallOfAll": 0.111,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.078,
+          "srcCandidateKB": 2628,
+          "traps": 22
+        },
+        "64000": {
+          "libKB": 319,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.144,
+          "appKB": 5961,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.051,
+          "srcCandidateKB": 6029,
+          "traps": 28
+        },
+        "256000": {
+          "libKB": 319,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.144,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.038,
+          "srcCandidateKB": 7671,
+          "traps": 30
+        },
+        "1000000": {
+          "libKB": 319,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.144,
+          "appKB": 10241,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.03,
+          "srcCandidateKB": 10408,
+          "traps": 33
+        }
+      },
+      "down": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1434,
+            "bytes": 50817,
+            "srcBytes": 30266,
+            "byRule": {
+              "down": 473,
+              "glue": 961
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 38,
+            "bytes": 7588,
+            "srcBytes": 7588,
+            "byRule": {
+              "down": 38
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 8,
+            "bytes": 1507,
+            "srcBytes": 1507,
+            "byRule": {
+              "down": 8
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 3,
+            "bytes": 2205,
+            "srcBytes": 2205,
+            "byRule": {
+              "down": 3
+            }
+          },
+          {
+            "round": 5,
+            "nodes": 13,
+            "bytes": 1602,
+            "srcBytes": 1602,
+            "byRule": {
+              "down": 13
+            }
+          },
+          {
+            "round": 6,
+            "nodes": 11,
+            "bytes": 3977,
+            "srcBytes": 3977,
+            "byRule": {
+              "down": 11
+            }
+          },
+          {
+            "round": 7,
+            "nodes": 9,
+            "bytes": 3492,
+            "srcBytes": 3492,
+            "byRule": {
+              "down": 9
+            }
+          },
+          {
+            "round": 8,
+            "nodes": 2,
+            "bytes": 27,
+            "srcBytes": 27,
+            "byRule": {
+              "down": 2
+            }
+          }
+        ],
+        "grownSrcBytes": 50664,
+        "after": {
+          "libRecall": 0.9301,
+          "libRightFamily": 0.9301,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1943641
+        },
+        "grownOnly": {
+          "libRecall": 0.0736,
+          "libRightFamily": 0.0736,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 50664
+        }
+      },
+      "down+module": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 1924,
+            "bytes": 63519,
+            "srcBytes": 42968,
+            "byRule": {
+              "down": 473,
+              "module": 490,
+              "glue": 961
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 119,
+            "bytes": 8507,
+            "srcBytes": 8507,
+            "byRule": {
+              "down": 25,
+              "module": 94
+            }
+          },
+          {
+            "round": 3,
+            "nodes": 26,
+            "bytes": 1227,
+            "srcBytes": 1227,
+            "byRule": {
+              "down": 5,
+              "module": 21
+            }
+          },
+          {
+            "round": 4,
+            "nodes": 12,
+            "bytes": 2232,
+            "srcBytes": 2232,
+            "byRule": {
+              "down": 3,
+              "module": 9
+            }
+          },
+          {
+            "round": 5,
+            "nodes": 16,
+            "bytes": 1953,
+            "srcBytes": 1953,
+            "byRule": {
+              "down": 12,
+              "module": 4
+            }
+          },
+          {
+            "round": 6,
+            "nodes": 8,
+            "bytes": 3522,
+            "srcBytes": 3522,
+            "byRule": {
+              "down": 8
+            }
+          },
+          {
+            "round": 7,
+            "nodes": 7,
+            "bytes": 3339,
+            "srcBytes": 3339,
+            "byRule": {
+              "down": 6,
+              "module": 1
+            }
+          },
+          {
+            "round": 8,
+            "nodes": 4,
+            "bytes": 38,
+            "srcBytes": 38,
+            "byRule": {
+              "down": 2,
+              "module": 2
+            }
+          }
+        ],
+        "grownSrcBytes": 63786,
+        "after": {
+          "libRecall": 0.9365,
+          "libRightFamily": 0.9365,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 1956763
+        },
+        "grownOnly": {
+          "libRecall": 0.08,
+          "libRightFamily": 0.08,
+          "appClaimedEstKB": 0.0,
+          "appClaimedSampleUnits": [],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 63786
+        }
+      },
+      "candidatesAfter": {
+        "4000": {
+          "libKB": 92,
+          "libRecallOfRemaining": 0.654,
+          "libRecallOfAll": 0.042,
+          "appKB": 2935,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.03,
+          "srcCandidateKB": 2576,
+          "traps": 22
+        },
+        "64000": {
+          "libKB": 141,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.063,
+          "appKB": 5988,
+          "forkKB": 282,
+          "libShareOfCandidates": 0.023,
+          "srcCandidateKB": 5968,
+          "traps": 28
+        },
+        "256000": {
+          "libKB": 141,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.063,
+          "appKB": 7986,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.017,
+          "srcCandidateKB": 7612,
+          "traps": 30
+        },
+        "1000000": {
+          "libKB": 141,
+          "libRecallOfRemaining": 1.0,
+          "libRecallOfAll": 0.063,
+          "appKB": 10241,
+          "forkKB": 528,
+          "libShareOfCandidates": 0.014,
+          "srcCandidateKB": 10345,
+          "traps": 33
+        }
+      },
+      "upCandidates": {
+        "libKB": 113,
+        "appKB": 232,
+        "srcKB": 399,
+        "traps": []
+      },
+      "module-unguarded": {
+        "rounds": [
+          {
+            "round": 1,
+            "nodes": 3393,
+            "bytes": 147195,
+            "srcBytes": 126644,
+            "byRule": {
+              "module-unguarded": 2432,
+              "glue": 961
+            }
+          },
+          {
+            "round": 2,
+            "nodes": 256,
+            "bytes": 4965,
+            "srcBytes": 0,
+            "byRule": {
+              "glue": 256
+            }
+          }
+        ],
+        "grownSrcBytes": 126644,
+        "after": {
+          "libRecall": 0.924,
+          "libRightFamily": 0.924,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [25111],
+          "trapsClaimed": [
+            [
+              "compiler-helper",
+              25110,
+              "@anthropic-ai/google-cloud-sdk",
+              "seed"
+            ],
+            ["compiler-helper", 25111, "@anthropic-ai/google-cloud-sdk", "seed"]
+          ],
+          "srcBytesClaimed": 2019621
+        },
+        "grownOnly": {
+          "libRecall": 0.0676,
+          "libRightFamily": 0.0676,
+          "appClaimedEstKB": 8.5,
+          "appClaimedSampleUnits": [7942],
+          "helperClaimedSampleUnits": [],
+          "trapsClaimed": [],
+          "srcBytesClaimed": 126644
+        }
+      },
+      "downClass": {
+        "0": {
+          "srcBytes": 235530,
+          "sampleLabels": {
+            "library": 16,
+            "app": 6
+          },
+          "libEstKB": 78,
+          "appEstKB": 119,
+          "traps": []
+        },
+        "30": {
+          "srcBytes": 116990,
+          "sampleLabels": {
+            "library": 9
+          },
+          "libEstKB": 60,
+          "appEstKB": 0,
+          "traps": []
+        }
+      },
+      "vetoDropped": {
+        "units": 155,
+        "bytes": 15512
+      }
+    }
+  }
+}
