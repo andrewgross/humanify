@@ -55,7 +55,10 @@ before any name: the toolchain's `ModuleIdentitySource` (P17) hands over
 what the bundler kept (Bun: `/*!` comments, inlined absolute paths;
 esbuild: wrapper keys, the end-of-file legal block), and the package
 readers (`modules::identity::readers`) read it and the module's text. The
-record's `identity` field carries the reader and its evidence.
+record's `identity` field carries the reader and its evidence. The same
+readers also run over the APP's top-level statements, report-only
+(`identity::scan_app_declarations` → `--diagnostics` `appDeclaredLibraries`):
+library code hoisted out of every module is listed, never named or moved.
 
 Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
 binary; the TypeScript names used below (`stableSplitFromCode`,

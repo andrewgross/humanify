@@ -1100,15 +1100,45 @@ record, facts)` → `ModuleProvenance { kept_comments, paths }`.
 What a package says about itself is bundler-independent: the reader
 registry `modules::identity::readers::IDENTITY_READERS`, in trust order —
 `source-path` (a `node_modules/<pkg>` path the bundler wrote), `package-json`
-(an inlined package.json: name + semver + one more package.json key; the
-module IS `package.json` when it is the whole export), `banner` (`pkg vX`
-legal comment; a copyright banner names no package), `highlight-js-grammar`
-(a language definition's `name`, last assignment wins, aliases kept),
-`scoped-error-prefix` (`@scope/pkg: …` / `@scope/pkg - …` as a message
-passed to a call). Each is shape-gated and abstains on two different
-answers. Hints too weak to name (`HINT_READERS`: a version constant, one
-`github.com/<owner>/<repo>`) are shown to the model, never a name — the old
-URL rule named ~20 of 27 modules wrongly (finding #95).
+(an inlined package.json: its own `name` (npm name) + `version` (semver) in
+ANY key order + one more package.json key; the module IS `package.json`
+when it is the whole export — sharp's puts `description` between them),
+`banner` (`pkg vX` legal comment; a copyright banner names no package),
+`highlight-js-grammar` (STRICT shape: `{name, …}` with `keywords` or
+`contains`, or only language-definition keys beyond `aliases` — plaintext's
+`{name, aliases, disableAutodetect}`; the loose `{name, aliases}` is also
+Claude Code's slash-command table; a later `.name=` or
+`Object.assign(x, {name, aliases})` renames it — Arduino, TypeScript; aliases
+kept), `scoped-error-prefix` (`@scope/pkg: …` / `@scope/pkg - …` as a
+message passed to a call; an UNSCOPED `pkg: …` is never read — 13 of 210
+name their package). Each is shape-gated and abstains on two different
+answers. The VERSION constant (`readers::version_constant`: `X.VERSION="…"`,
+`rB.VERSION=Nvt` with `var Nvt="1.15.2"`, an export getter
+`{VERSION:()=>Nvt}`, `e.version=Oo`; never an object's `version:` field)
+names NOTHING: `declare` adds it to the identity another reader named, and
+it is a hint otherwise. Hints too weak to name (`HINT_READERS`: the version
+constant, one `github.com/<owner>/<repo>`, an AWS SDK v3 client from its
+commands' `.n("BedrockClient","ListTagsForResourceCommand")` — the client
+names the SERVICE, not the package: `STSClient` ships in both
+`@aws-sdk/client-sts` and `@aws-sdk/nested-clients`) are shown to the
+model, never a name — the old URL rule named ~20 of 27 modules wrongly
+(finding #95). Not readers, measured (exp095 Part A): `Symbol.for` (React
+Compiler emits `react.memo_cache_sentinel` into app code), github URLs,
+User-Agent strings, `process.env` names, `x-` headers, debug namespaces
+(Claude Code's `bun:ffi`, `user:design:read`).
+
+**App code (report-only).** Library code a bundler hoisted out of every
+module (Bun's lazy ES modules: the AWS SDK clients and their inlined
+package.jsons in Claude Code's `src/`) has no boundary to name or move, so
+`identity::scan_app_declarations` runs the readers flagged `app_report`
+(`package-json`, `scoped-error-prefix`), the version constant and the AWS
+client pairs over every top-level statement no extracted module lives in,
+and the run writes the rows to `--diagnostics` as `appDeclaredLibraries`
+(`{start, end, reader, package?, version?, member?, client?, commands?,
+evidence}`, byte offsets into the input bundle). Nothing is named, moved or
+renamed by them. Off for app code: `highlight-js-grammar` (Claude Code
+defines its OWN Cedar grammar in the package's shape), and the readers that
+need the bundler's per-module facts (`source-path`, `banner`).
 
 **Uses:** the identity record (`{source, package, version, member,
 aliases, evidence}`) is written to the vendor record; a module nothing
@@ -1123,8 +1153,10 @@ hints and reads real strings and the real export list.
 what that bundler keeps (webpack: module ids, `/*! ./node_modules/pkg/x.js
 */` path comments in dev builds). **A new package reader:** add an entry to
 `IDENTITY_READERS` with tests built from the real package's shape and its
-false positives (`readers_test.rs`). Not done yet: the same readers over the
-lazy ES modules in `src/` (library regions — the research's Step B).
+false positives (`readers_test.rs`), its precision measured on owner-known
+npm source and on every Claude Code layout unit, and its `app_report` flag
+set only when it fires on no app code. Not done yet: NAMING or moving the
+library regions in `src/` (the research's Step B) — they are only reported.
 
 **Tests:** `identity_test.rs` (both bundler pieces, the cascade, pairing,
 file stems), `readers_test.rs` (every reader with the census's false

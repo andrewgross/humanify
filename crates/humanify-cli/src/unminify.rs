@@ -53,6 +53,9 @@ pub struct Unpacked {
     pub vendor_record: Option<BunModulesManifest>,
     /// The vendor content carry (finding #90), for the diagnostics.
     pub content_carry: Option<bun::ContentCarryReport>,
+    /// Library declarations read in app code (finding #95) — report-only,
+    /// for the diagnostics.
+    pub app_declarations: Vec<humanify_core::modules::identity::AppDeclaration>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -113,7 +116,7 @@ pub fn unpack_bundle(
             webcrack_shim: Some(&shim),
         },
     )?;
-    let (files, vendor_record, content_carry) = match outcome {
+    let (files, vendor_record, content_carry, app_declarations) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
             let outcome = *outcome;
@@ -121,9 +124,10 @@ pub fn unpack_bundle(
                 outcome.result.files,
                 outcome.manifest,
                 outcome.content_carry,
+                outcome.app_declarations,
             )
         }
-        AdapterOutcome::Files(result) => (result.files, None, None),
+        AdapterOutcome::Files(result) => (result.files, None, None, Vec::new()),
     };
     span.end(Some(
         JsObject::new()
@@ -140,6 +144,7 @@ pub fn unpack_bundle(
         vendor_naming: namer.stats,
         vendor_record,
         content_carry,
+        app_declarations,
     })
 }
 
