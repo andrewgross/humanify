@@ -1,0 +1,21 @@
+[package]
+name = "fphash"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+humanify-core = { path = "../../../../crates/humanify-core" }
+serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+rayon = "=1.12.0"
+sha2 = "=0.10.9"
+oxc_allocator = "=0.150.0"
+oxc_ast = { version = "=0.150.0", features = ["serialize"] }
+oxc_estree = "=0.150.0"
+oxc_span = "=0.150.0"
+oxc_semantic = "=0.150.0"
+
+[profile.release]
+codegen-units = 16
