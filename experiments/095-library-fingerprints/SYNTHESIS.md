@@ -335,3 +335,12 @@ Retractions and updates to the sections above live here (rule 9).
 - **Negatives (`negatives/README.md`).** 620-statement random sample of CC 2.1.216 `src/` (seed 95), blind re-label 124/124 agree: **library ≈ 14.5% of src bytes (CI 11.2–18.1%)**, plus 3.5% app forks of libraries (ink, yoga port, commander-style help). Step B with exact-version, target-bun builds: 81.5% recall, 0 false claims on sampled app bytes; outside the sample it claimed 383 B of CC's ink fork as `ink` — forks are the open precision risk for Step B.
 - **Coverage gap.** Download rank misses the packages big apps are made of: ink 4,570, client-bedrock-runtime 4,064, @azure/identity 3,348, growthbook 10,253, @anthropic-ai/bedrock-sdk 12,305. Next: pick packages by bundled-app dependency closure weighted by bytes, and measure version density (every release of ~100 packages) with `humanify-index`.
 - **Index builder (`crates/humanify-index`, e74928a2, finding #97; `docs/design/library-index.md`).** Separate binary; fingerprints via humanify-core; `--as-of` (publish time ≤ date, deps installed with `npm --before`); shards per package version; versions as ranges; index id = manifest sha256.
+- **Library discovery (`discovery/`, `docs/design/library-discovery.md`; lab, CC 2.1.216).**
+  - **Closure alone is not evidence.** Every statement's downward closure is closed and one-directional. At a 64 KB
+    cap, closed regions hold 82% of library bytes but also 5.5 MB of app code (25% library vs 14.5% base).
+  - **Leaf-inward fixpoint.** Seeded with the declared readers plus Step B index C, and using private-code / glue /
+    closure-guarded module fill, it adds 64 KB over 8 rounds with 0 sampled app bytes: estimated recall 85.7% →
+    93.7%, about +3% in exact bytes.
+  - **Isolation veto.** Dropping an index claim that has no same-family graph neighbour removes every ink-fork claim
+    and costs ≈0 recall.
+  - **Content floor on closure starts.** It is required: one 11-byte mis-claim otherwise drags in a whole app module.

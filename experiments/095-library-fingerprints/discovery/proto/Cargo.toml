@@ -1,0 +1,30 @@
+# Throwaway lab tool (exp095 library discovery): statement-level reference
+# graph of a raw bundle. Detached from the repo workspace on purpose — not
+# part of the pipeline or the gate.
+[package]
+name = "exp095-refgraph"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+oxc_allocator = "=0.150.0"
+oxc_ast = "=0.150.0"
+oxc_parser = "=0.150.0"
+oxc_semantic = "=0.150.0"
+oxc_span = "=0.150.0"
+oxc_syntax = "=0.150.0"
+serde_json = "=1.0.142"
+# The `declared` binary runs the pipeline's OWN app-code readers
+# (humanify_core::modules::identity::scan_app_declarations) over the units.
+humanify-core = { path = "../../../../crates/humanify-core" }
+
+[[bin]]
+name = "exp095-refgraph"
+path = "src/main.rs"
+
+[[bin]]
+name = "exp095-declared"
+path = "src/declared.rs"
