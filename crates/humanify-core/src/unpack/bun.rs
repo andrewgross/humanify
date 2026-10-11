@@ -865,8 +865,9 @@ fn carry_by_content(
 /// The AST classification on the parsed input (`classifyWithAst` minus the
 /// naming, which the caller sequences around the hook), inside the
 /// container the run's bundle `layout` finds, under the run's module
-/// wrapper `grammar`.
-fn classify(
+/// wrapper `grammar`. Also the library index's module walk
+/// (`modules::vendor_content::bundle_content_keys`).
+pub(crate) fn classify(
     code: &str,
     ingest: &Ingest<'_>,
     layout: crate::toolchain::BundleLayout,

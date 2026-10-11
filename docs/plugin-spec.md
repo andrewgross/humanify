@@ -1164,6 +1164,20 @@ positives), `toolchain_test::the_module_identity_source_follows_the_bundler`,
 `unpack_test::a_rewritten_grammar_keeps_its_file_and_identifier_by_its_declared_name`
 and its three neighbours.
 
+### P18 — Library index slice (stage 5) — PLANNED (exp095, finding #97)
+
+**Question:** which part of the library fingerprint index is a bundle's
+module looked up in? Structural fingerprints depend on the bundler (Bun vs
+esbuild agree on ~60% of module hashes), so the index keeps one module
+table per slice; literals are shared. The slice is
+`libindex::IndexSlice` (`for_bundler`, `bundler`) — the only slice↔bundler
+mapping. The offline builder (`crates/humanify-index`) builds each slice
+with its recipe and resolves the toolchain with the slice's bundler as the
+flag, so the module walk is the run's own. Not yet a `Toolchain` field:
+it becomes one when the pipeline reads the index
+(docs/design/library-index.md §6, §8). **A new bundler plugin:** add a
+slice and a recipe; a bundler without one gets literal lookups only.
+
 ## Part 3 — adding a plugin: checklist
 
 For a new **bundler** (say, rollup or webpack 5) today:

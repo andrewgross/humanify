@@ -1,0 +1,21 @@
+{
+  "about": "Library-index stop-lists (exp095 scale lane, results/stop-effect.json; docs/design/library-index.md section 7). helperPackages and helperPackagePrefixes are dropped from the index at merge time: their code is inlined into everything and names no library. lookupFilePatterns are applied by the LOOKUP, not the build.",
+  "helperPackages": [
+    "@babel/helpers",
+    "@oxc-project/runtime",
+    "@swc/helpers",
+    "regenerator-runtime",
+    "tslib"
+  ],
+  "helperPackagePrefixes": ["@babel/runtime"],
+  "lookupFilePatterns": {
+    "stainless": {
+      "when": "the package's source carries X-Stainless-Lang (a Stainless-generated SDK)",
+      "file": "(^|/)(internal|core|_shims|_vendor)/|(^|/)(uploads|streaming|error|resource|core|api-promise|pagination)\\.(m?js|cjs)$"
+    },
+    "shim": {
+      "when": "the package ships both polyfill.js and shim.js (the es-shims template)",
+      "file": "(^|/)(implementation|polyfill|shim|auto)\\.js$"
+    }
+  }
+}

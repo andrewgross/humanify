@@ -135,6 +135,52 @@ pub fn fresh_content_keys(
     })
 }
 
+/// One classified module of a bundle and its content key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BundleModuleKey {
+    /// The factory function's span in the bundle.
+    pub body_span: Span,
+    pub key: Option<String>,
+}
+
+/// Every module of a bundle, in bundle order, with its content key — the
+/// library index's whole-module fingerprint (docs/design/library-index.md).
+/// The pipeline's own steps, in the unpack's order: the run's module
+/// wrapper `grammar` finds the factories inside the container the bundle
+/// `layout` finds, and each factory is keyed by [`fresh_content_keys`]
+/// against the container's statement-level names. The offline index
+/// builder calls this on the bundles it builds, so an index key is, by
+/// construction, the key a run computes for the same module. Empty when
+/// the text has no module helper or does not parse.
+pub fn bundle_content_keys(
+    code: &str,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+    layout: crate::toolchain::BundleLayout,
+) -> Vec<BundleModuleKey> {
+    if grammar.identify_factory_helper(code).is_none() {
+        return Vec::new();
+    }
+    let require_var = crate::unpack::bun::identify_bun_require(code);
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, code);
+    if !ingest.errors.is_empty() {
+        return Vec::new();
+    }
+    let Some(c) = crate::unpack::bun::classify(code, &ingest, layout, grammar) else {
+        return Vec::new();
+    };
+    let declared = statement_level_names(&ingest, &c.container);
+    let keys = fresh_content_keys(code, &c.factories, require_var.as_deref(), &declared);
+    c.factories
+        .iter()
+        .zip(keys)
+        .map(|(f, key)| BundleModuleKey {
+            body_span: f.body_span,
+            key,
+        })
+        .collect()
+}
+
 /// A byte splice list applied to `text[start..end)` (offsets absolute).
 fn splice(text: &str, start: usize, end: usize, mut edits: Vec<(usize, usize, String)>) -> String {
     edits.sort_by_key(|e| e.0);
