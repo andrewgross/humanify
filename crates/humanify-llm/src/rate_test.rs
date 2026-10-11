@@ -502,3 +502,37 @@ async fn backoff_doubles_per_attempt() {
     assert_eq!(start.elapsed(), Duration::from_millis(700));
     assert_eq!(flaky.attempts(), 4);
 }
+
+/// The retry budget MULTIPLIES (concurrency audit 2026-10, R1 — a
+/// characterization, not a fix): the SDK layer's `sdk_max_retries` (2) run
+/// INSIDE each of the limiter's `1 + retry_attempts` (4) attempts, so one
+/// call against a persistently failing server sends 3 × 4 = 12 requests —
+/// and every one of up to `max_concurrent` calls does the same, holding
+/// its slot through the backoff sleeps. At the 300 s per-attempt default
+/// a hung server holds a call for ~12 × 300 s before it fails.
+#[test]
+fn one_call_against_a_failing_server_sends_twelve_requests() {
+    let failing: Handler = Arc::new(|_, _| {
+        let mut r = StubResponse::status(503, r#"{"error":{"message":"overloaded"}}"#);
+        // Keep the SDK's own backoff to 1 ms so the test is fast.
+        r.headers
+            .push(("retry-after-ms".to_string(), "1".to_string()));
+        r
+    });
+    let server = StubServer::start(Duration::ZERO, failing);
+    let llm = LlmConfig::new(&server.base_url, "test-key", "test-model");
+    assert_eq!(llm.sdk_max_retries, 2, "the SDK default");
+    let defaults = RateLimitConfig::default();
+    assert_eq!(defaults.retry_attempts, 3, "the limiter default");
+    let limited = RateLimited::new(
+        OpenAiClient::new(llm, None),
+        RateLimitConfig {
+            retry_delay_ms: 1,
+            ..defaults
+        },
+        None,
+    );
+    let err = one(&limited, &make_request(&["a"])).unwrap_err();
+    assert_eq!(err.status, Some(503));
+    assert_eq!(server.requests(), 12);
+}

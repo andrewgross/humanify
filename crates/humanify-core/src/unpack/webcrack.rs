@@ -57,15 +57,22 @@ pub fn unpack_webcrack(
     let mut child = command
         .spawn()
         .map_err(|e| format!("webcrack shim: cannot start {}: {e}", shim.program))?;
-    child
-        .stdin
-        .take()
-        .ok_or("webcrack shim: no stdin")?
-        .write_all(code.as_bytes())
-        .map_err(|e| format!("webcrack shim: write stdin: {e}"))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("webcrack shim: {e}"))?;
+    let mut stdin = child.stdin.take().ok_or("webcrack shim: no stdin")?;
+    // Feed stdin on its own thread WHILE stdout/stderr drain here: a shim
+    // that writes a pipe buffer's worth before it has read all of its
+    // input would otherwise block on its write while this thread blocks on
+    // ours (audit 2026-10, W1). Dropping `stdin` at the end of the feeder
+    // closes it, so the shim sees EOF.
+    let (written, output) = std::thread::scope(|scope| {
+        let feeder = scope.spawn(move || stdin.write_all(code.as_bytes()));
+        let output = child.wait_with_output();
+        let written = feeder
+            .join()
+            .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+        (written, output)
+    });
+    let output = output.map_err(|e| format!("webcrack shim: {e}"))?;
+    written.map_err(|e| format!("webcrack shim: write stdin: {e}"))?;
     if !output.status.success() {
         return Err(format!(
             "webcrack shim exited {}: {}",
@@ -97,3 +104,6 @@ pub fn parse_shim_output(stdout: &str) -> Result<UnpackResult, String> {
             .collect(),
     })
 }
+
+#[cfg(test)]
+mod webcrack_test;

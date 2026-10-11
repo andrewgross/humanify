@@ -1316,6 +1316,16 @@ impl NamingRun<'_> {
         if let Some(warning) = outcome.broken_prior_warning() {
             renderer.message(&warning);
         }
+        // A failed call is a hole in the output (the run is fail-soft and
+        // still exits 0), so it is never only a `-v` line (concurrency
+        // audit 2026-10, R2). Print-only — no decision reads it.
+        if outcome.errors > 0 {
+            renderer.message(&format!(
+                "WARNING: {} LLM call(s) failed after every retry (provider errors) — \
+their names are missing from this output; re-run when the endpoint is healthy",
+                outcome.errors
+            ));
+        }
         if outcome.misses > 0 || outcome.errors > 0 {
             verbose().log(&format!(
                 "Naming: {} cache miss(es), {} provider error(s)",
