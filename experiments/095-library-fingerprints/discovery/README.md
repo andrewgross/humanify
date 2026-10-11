@@ -145,7 +145,19 @@ column is the bytes still claimed as `ink`.
 
 ### 4. Neutrality
 
-Pending (filled in after the warm runs).
+Both WARM, on 2.1.215 → 2.1.216, against `exp095-library-fingerprints` (608e9ee5), candidate b7c29eb5:
+
+| run                                                                                                                      | differing files | differing lines | cache writes: candidate / baseline | exit codes |
+| ------------------------------------------------------------------------------------------------------------------------ | --------------- | --------------- | ---------------------------------- | ---------- |
+| as specified (`neutrality.sh exp095-library-fingerprints 2.1.215:2.1.216 --cache /work/neutrality-cache`): discovery off | 0               | 0               | 2,309 / **0**                      | 0 / 0      |
+| candidate leg with `--diagnostics` (`--candidate-cmd`): discovery ON                                                     | 0               | 0               | 0 / **0**                          | 0 / 0      |
+
+- The first run does not exercise discovery: `neutrality.sh` passes no `--diagnostics`, so discovery is off in both
+  legs. The second run turns it on in the candidate leg.
+- Its `libraryDiscovery` section matches the lab binary's declared-only numbers for 2.1.216 exactly: 79,911 units,
+  282 seeds, 742 claims, 39.3 KB grown, 272 KB library class, 586 queued.
+- The diagnostics file is 144 MB with the section included. The candidate queue and the library class are listed row
+  by row.
 
 ## Files
 
