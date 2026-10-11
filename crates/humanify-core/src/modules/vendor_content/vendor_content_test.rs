@@ -2,6 +2,8 @@
 //! the prior tree's vendor file (relinked or not), whatever the release-
 //! specific spellings; the re-key carries only exact group matches.
 
+use std::collections::HashSet;
+
 use super::{
     NameSource, StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content,
     vendor_content_key,
@@ -12,9 +14,14 @@ use super::{
 const FRESH: &str =
     "(exports,module)=>{ var p=REQ(\"node:path\"); module.exports=qA(p.sep)+kC+hZ(process); }";
 
+/// A content key with no program-declared names.
+fn key(text: &str) -> Option<String> {
+    vendor_content_key(text, &HashSet::new())
+}
+
 fn fresh_key() -> String {
     let body = crate::unpack::bun::rewrite_require_calls(FRESH, "REQ");
-    vendor_content_key(&body).expect("parses")
+    key(&body).expect("parses")
 }
 
 #[test]
@@ -41,20 +48,40 @@ fn content_and_known_globals_are_in_the_key() {
         "(exports,module)=>{ var p=REQ(\"node:path\"); module.exports=qA(p.sep)+kC+hZ(Buffer); }",
         "REQ",
     );
-    assert_ne!(vendor_content_key(&other_global), Some(fresh_key()));
+    assert_ne!(key(&other_global), Some(fresh_key()));
     // So is a literal's class and the tree shape.
     assert_ne!(
-        vendor_content_key("(e,m)=>{ m.exports=qA(1); }"),
-        vendor_content_key("(e,m)=>{ m.exports=qA(\"1\"); }")
+        key("(e,m)=>{ m.exports=qA(1); }"),
+        key("(e,m)=>{ m.exports=qA(\"1\"); }")
     );
     // Two references to ONE outside binding are not two outside bindings.
     assert_ne!(
-        vendor_content_key("(e,m)=>{ m.exports=qA(qA); }"),
-        vendor_content_key("(e,m)=>{ m.exports=qA(kC); }")
+        key("(e,m)=>{ m.exports=qA(qA); }"),
+        key("(e,m)=>{ m.exports=qA(kC); }")
     );
     // An unparseable text keys to nothing.
-    assert_eq!(vendor_content_key("(a,b)=>{"), None);
+    assert_eq!(key("(a,b)=>{"), None);
     assert_eq!(prior_file_content_key("var x = 1;"), None);
+}
+
+#[test]
+fn a_program_declared_name_that_spells_a_known_global_is_a_slot() {
+    // 2.1.85: Bun spelled the protobufjs factory `gc` (also Node's
+    // `--expose-gc` hook), and its dependents read it as `gc()`. The prior
+    // vendor file reads the same factory as `lib_f3ea04ef.f()`.
+    let fresh = "(FIO,ru7)=>{ru7.exports=LJ;var KsH=gc();function LJ(H){this.lo=H}}";
+    let prior = concat!(
+        "const lib_f3ea04ef = require(\"./protobufjs-minimal/lib_f3ea04ef.js\");\n",
+        "const { __commonJS } = require(\"../.humanify/__bun-runtime.js\");\n",
+        "exports.f = __commonJS((E,M)=>{M.exports=LJ;var K=lib_f3ea04ef.f();function LJ(H){this.lo=H}});\n",
+    );
+    let bundle_declared: HashSet<String> = ["gc".to_string()].into();
+    assert_eq!(
+        vendor_content_key(fresh, &bundle_declared),
+        prior_file_content_key(prior)
+    );
+    // Undeclared, `gc` IS the host's global: content, verbatim.
+    assert_ne!(key(fresh), prior_file_content_key(prior));
 }
 
 fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> StaleEraEntry {

@@ -450,7 +450,8 @@ pub fn unpack_bun(
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
             // (modules::vendor_content).
-            let keys = fresh_content_keys(code, &c.factories, require_var.as_deref());
+            let declared = scope::statement_level_names(&ingest, &c.container);
+            let keys = fresh_content_keys(code, &c.factories, require_var.as_deref(), &declared);
             let fresh: Vec<(String, Option<String>)> = c
                 .factories
                 .iter()

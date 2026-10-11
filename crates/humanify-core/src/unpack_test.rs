@@ -1157,6 +1157,42 @@ fn a_ts_era_prior_carries_its_names_by_content() {
     assert_eq!(read_manifest(&fresh.0)["hashVersion"], 4);
 }
 
+/// The next release, where Bun's minifier happened to spell the shared
+/// factory `gc` — a name that is ALSO a known global (Node's `--expose-gc`
+/// hook). The real case: 2.1.85's protobufjs factory is `var gc=B(...)`
+/// and nine factories read it as `gc()`.
+const SHIMS_REROLLED_TO_A_GLOBAL_SPELLING: &str = concat!(
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var gc=x((exports,module)=>{ module.exports=function one(a){return a+1}; });\n",
+    "var zB=x((exports,module)=>{ module.exports=gc(); });\n",
+    "var kC=x((exports,module)=>{ module.exports=gc(); });\n",
+    "var main=zB();"
+);
+
+#[test]
+fn a_bundle_declared_name_that_spells_a_global_still_keys_by_position() {
+    // `gc` is declared by the bundle, so the factories' `gc()` is a
+    // reference to the rest of the bundle — a slot, exactly like the prior
+    // vendor file's `lib_<hash8>.f()` — not the host's `gc`.
+    let (_prior, prior_file) = ts_era_prior("tsera-gc", |h| format!("{:0>16}", h.len()));
+    let fresh = TempDir::new("tsera-gc-fresh");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED_TO_A_GLOBAL_SPELLING,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: load_prior_vendor(&prior_file),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        names_in_bundle_order(&fresh.0, &outcome),
+        vec!["dep-one", "shim-a", "shim-b"]
+    );
+    let rekey = outcome.rekey.expect("re-keyed");
+    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
+}
+
 #[test]
 fn a_ts_era_prior_never_joins_by_hash_bytes() {
     // The TS bytes happen to EQUAL the Rust's, but the vendor files are
