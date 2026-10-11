@@ -761,6 +761,7 @@ fn pipeline_body(
             split: split_sections.as_ref(),
             post_split: &post_split,
             content_carry: unpacked.content_carry.as_ref(),
+            app_declarations: &unpacked.app_declarations,
         };
         reports.write_diagnostics(renderer)?;
         if let Some(dest) = &opts.stats_json {
@@ -912,6 +913,9 @@ struct RunReports<'a> {
     /// The vendor content carry (finding #90): every module carried from a
     /// prior module by content, with its score.
     content_carry: Option<&'a humanify_core::unpack::bun::ContentCarryReport>,
+    /// Library declarations read in APP code (finding #95): report-only —
+    /// byte ranges of the input bundle and what each declares.
+    app_declarations: &'a [humanify_core::modules::identity::AppDeclaration],
 }
 
 /// What `--dump-artifacts` reads beyond the naming outcome.
@@ -1025,6 +1029,13 @@ impl RunReports<'_> {
             with_placement.insert(
                 "vendorContentCarry",
                 JsValue::parse(&json.to_string()).expect("serde_json writes JSON"),
+            );
+        }
+        if !self.app_declarations.is_empty() {
+            let json = serde_json::to_string(self.app_declarations).expect("serializable");
+            with_placement.insert(
+                "appDeclaredLibraries",
+                JsValue::parse(&json).expect("serde_json writes JSON"),
             );
         }
         std::fs::write(

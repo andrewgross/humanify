@@ -9,7 +9,8 @@
 //! ([`IDENTITY_READERS`]): a path the bundler wrote, an inlined
 //! `package.json`, a `pkg vX` banner, a highlight.js language definition,
 //! a scoped package quoting itself in a message. Facts too weak to NAME a
-//! module are hints ([`HINT_READERS`]): shown to the model, never a name —
+//! module are hints ([`HINT_READERS`]: a version constant, a repository
+//! URL, an AWS SDK client's commands): shown to the model, never a name —
 //! a repository URL names the repository, not the package (finding #95:
 //! the old URL rule named 27 modules in 2.1.216, ~20 of them wrongly:
 //! `json-schema` from json-schema.org, `w3`, `canny`, `DepType` from a
@@ -44,6 +45,11 @@ pub struct IdentityReader {
     /// The record's `identity.source`.
     pub name: &'static str,
     pub read: fn(&ModuleView<'_>) -> Option<Claim>,
+    /// Also run on APP code, report-only ([`super::scan_app_declarations`]).
+    /// Off for a reader that needs the bundler's per-module facts (a path,
+    /// a kept banner) and for highlight.js — Claude Code defines its OWN
+    /// grammar (Cedar) in app code, in the package's shape.
+    pub app_report: bool,
 }
 
 /// Every identity reader, in trust order (the first claim wins).
@@ -51,27 +57,33 @@ pub const IDENTITY_READERS: &[IdentityReader] = &[
     IdentityReader {
         name: "source-path",
         read: read_source_path,
+        app_report: false,
     },
     IdentityReader {
         name: "package-json",
         read: read_package_json,
+        app_report: true,
     },
     IdentityReader {
         name: "banner",
         read: read_banner,
+        app_report: false,
     },
     IdentityReader {
         name: "highlight-js-grammar",
         read: read_highlight_js_grammar,
+        app_report: false,
     },
     IdentityReader {
         name: "scoped-error-prefix",
         read: read_scoped_error_prefix,
+        app_report: true,
     },
 ];
 
 /// The hint readers: evidence for the model, never a name.
-pub const HINT_READERS: &[fn(&ModuleView<'_>) -> Option<String>] = &[hint_version, hint_repository];
+pub const HINT_READERS: &[fn(&ModuleView<'_>) -> Option<String>] =
+    &[hint_version, hint_repository, hint_aws_sdk_client];
 
 const EVIDENCE_CHARS: usize = 80;
 
@@ -341,39 +353,80 @@ const PACKAGE_JSON_KEYS: [&str; 22] = [
     "contributors",
 ];
 
-/// An inlined `package.json` (a bundler inlines `require("./package.json")`
-/// whole): `{name:"<npm name>",version:"<semver>", …}` with at least one
-/// more key only a package.json has. When the object IS the module's export
-/// the module is that package's `package.json` (the member).
-pub fn read_package_json(view: &ModuleView<'_>) -> Option<Claim> {
-    let t = view.tokens;
-    let mut found: Vec<(String, String, usize, usize)> = Vec::new();
-    for i in 0..t.len() {
-        if t[i] != "{" || !is_key(at(t, i + 1), "name") || at(t, i + 2) != ":" {
-            continue;
-        }
-        let (Some(name), Some(version)) = (quoted(at(t, i + 3)), quoted(at(t, i + 7))) else {
-            continue;
-        };
-        let shaped = at(t, i + 4) == ","
-            && is_key(at(t, i + 5), "version")
-            && at(t, i + 6) == ":"
-            && is_npm_name(name)
-            && is_semver(version);
-        if !shaped {
-            continue;
-        }
-        let Some(close) = matching_close(t, i) else {
-            continue;
-        };
-        let more = top_level_keys(t, i, close)
-            .iter()
-            .any(|&k| PACKAGE_JSON_KEYS.contains(&key_text(&t[k])));
-        if more && found.iter().all(|(n, ..)| n != name) {
-            found.push((name.to_string(), version.to_string(), i, close));
+/// The value token of the top-level key `key` of the object `open` …
+/// `close`, when it is a string literal standing alone (`key:"…"` followed
+/// by `,` or the closing brace).
+fn string_key_value(t: &[String], keys: &[usize], close: usize, key: &str) -> Option<usize> {
+    let k = *keys.iter().find(|&&k| key_text(&t[k]) == key)?;
+    (quoted(at(t, k + 2)).is_some() && (k + 3 == close || at(t, k + 3) == ",")).then_some(k + 2)
+}
+
+/// The object literal enclosing the key at `key`: its `{`.
+fn enclosing_open(t: &[String], key: usize) -> Option<usize> {
+    let mut depth = 0usize;
+    for j in (0..key).rev() {
+        match t[j].as_str() {
+            "}" | "]" | ")" => depth += 1,
+            "{" | "[" | "(" => {
+                if depth == 0 {
+                    return (t[j] == "{").then_some(j);
+                }
+                depth -= 1;
+            }
+            _ => {}
         }
     }
-    let [(name, version, open, close)] = found.as_slice() else {
+    None
+}
+
+/// An inlined `package.json` (a bundler inlines `require("./package.json")`
+/// whole): an object whose own `name` is an npm name and own `version` a
+/// semver, in ANY key order (sharp writes `description` between them), with
+/// at least one more key only a package.json has. When the object IS the
+/// module's export the module is that package's `package.json` (the member).
+pub fn read_package_json(view: &ModuleView<'_>) -> Option<Claim> {
+    let t = view.tokens;
+    let mut found: Vec<(String, String, usize, usize, String)> = Vec::new();
+    for i in 1..t.len() {
+        let is_name_key = is_key(&t[i], "name")
+            && at(t, i + 1) == ":"
+            && matches!(t[i - 1].as_str(), "{" | ",")
+            && quoted(at(t, i + 2)).is_some_and(is_npm_name);
+        if !is_name_key {
+            continue;
+        }
+        let Some(open) = enclosing_open(t, i) else {
+            continue;
+        };
+        let Some(close) = matching_close(t, open) else {
+            continue;
+        };
+        let keys = top_level_keys(t, open, close);
+        let (Some(name_at), Some(version_at)) = (
+            string_key_value(t, &keys, close, "name"),
+            string_key_value(t, &keys, close, "version"),
+        ) else {
+            continue;
+        };
+        let (Some(name), Some(version)) = (quoted(&t[name_at]), quoted(&t[version_at])) else {
+            continue;
+        };
+        let more = keys
+            .iter()
+            .any(|&k| PACKAGE_JSON_KEYS.contains(&key_text(&t[k])));
+        if !(name_at == i + 2 && is_semver(version) && more) || found.iter().any(|f| f.0 == name) {
+            continue;
+        }
+        let evidence = format!(
+            "{{{}:{},{}:{}",
+            t[name_at - 2],
+            t[name_at],
+            t[version_at - 2],
+            t[version_at]
+        );
+        found.push((name.to_string(), version.to_string(), open, close, evidence));
+    }
+    let [(name, version, open, close, evidence)] = found.as_slice() else {
         return None;
     };
     let whole_export = *open >= 3
@@ -388,7 +441,7 @@ pub fn read_package_json(view: &ModuleView<'_>) -> Option<Claim> {
         version: Some(version.clone()),
         member: whole_export.then(|| "package.json".to_string()),
         aliases: Vec::new(),
-        evidence: clip(&t[*open..(*open + 8).min(t.len())].concat(), EVIDENCE_CHARS),
+        evidence: clip(evidence, EVIDENCE_CHARS),
     })
 }
 
@@ -528,22 +581,52 @@ const GRAMMAR_KEYS: [&str; 9] = [
 enum GrammarEvent {
     /// A language definition object: its name and aliases.
     Definition(String, Vec<String>),
-    /// `x.name = "…"` (a language extending another, e.g. Arduino).
+    /// `x.name = "…"` or `Object.assign(x, {name: "…"})` (a language
+    /// extending another, e.g. Arduino, TypeScript).
     NameAssigned(String),
-    /// `x.aliases = […]`.
+    /// `x.aliases = […]` (or the `aliases` of that `Object.assign`).
     AliasesAssigned(Vec<String>),
 }
 
-/// The aliases of the definition object `{` at `open`.
-fn definition_aliases(t: &[String], open: usize) -> Vec<String> {
-    let Some(close) = matching_close(t, open) else {
-        return Vec::new();
-    };
+/// The STRICT grammar shape (exp095 Part A: `{name, keywords|contains}`
+/// matched nothing but highlight.js in 347 packages; the loose
+/// `{name, aliases}` is also Claude Code's slash-command table): the object
+/// `{` at `open` has its own `keywords` or `contains` — or EVERY key of it
+/// is a language-definition key and one of them is not `aliases`
+/// (highlight.js's `plaintext.js`: `{name, aliases, disableAutodetect}`).
+/// Its aliases, when it is one.
+fn grammar_definition(t: &[String], open: usize) -> Option<Vec<String>> {
+    let close = matching_close(t, open)?;
+    let keys: Vec<&str> = top_level_keys(t, open, close)
+        .into_iter()
+        .map(|k| key_text(&t[k]))
+        .collect();
+    let has_body = keys.iter().any(|k| matches!(*k, "keywords" | "contains"));
+    let all_grammar = keys
+        .iter()
+        .all(|k| *k == "name" || *k == "supersetOf" || GRAMMAR_KEYS.contains(k))
+        && keys.iter().any(|k| !matches!(*k, "name" | "aliases"));
+    (has_body || all_grammar).then(|| object_aliases(t, open, close))
+}
+
+/// The `aliases` string array of the object `open` … `close`.
+fn object_aliases(t: &[String], open: usize, close: usize) -> Vec<String> {
     top_level_keys(t, open, close)
         .into_iter()
         .find(|&k| key_text(&t[k]) == "aliases")
         .map(|k| string_array(t, k + 2))
         .unwrap_or_default()
+}
+
+/// `Object.assign(<x>, {` — the object at `open` is merged into another.
+fn is_object_assign_source(t: &[String], open: usize) -> bool {
+    open >= 6
+        && t[open - 1] == ","
+        && is_identifier(&t[open - 2])
+        && t[open - 3] == "("
+        && t[open - 4] == "assign"
+        && t[open - 5] == "."
+        && t[open - 6] == "Object"
 }
 
 fn grammar_events(t: &[String]) -> Vec<GrammarEvent> {
@@ -556,11 +639,20 @@ fn grammar_events(t: &[String]) -> Vec<GrammarEvent> {
             && GRAMMAR_KEYS.contains(&key_text(at(t, i + 5)))
             && at(t, i + 6) == ":"
             && let Some(name) = quoted(at(t, i + 3)).filter(|n| (1..=60).contains(&n.len()))
+            && let Some(aliases) = grammar_definition(t, i)
         {
-            events.push(GrammarEvent::Definition(
-                unescape(name),
-                definition_aliases(t, i),
-            ));
+            events.push(GrammarEvent::Definition(unescape(name), aliases));
+        } else if t[i] == "{"
+            && is_key(at(t, i + 1), "name")
+            && at(t, i + 2) == ":"
+            && is_object_assign_source(t, i)
+            && let Some(name) = quoted(at(t, i + 3)).filter(|n| (1..=60).contains(&n.len()))
+            && let Some(close) = matching_close(t, i)
+        {
+            // TypeScript: `Object.assign(r,{name:"TypeScript",aliases:[…]})`
+            // renames the JavaScript grammar it extends.
+            events.push(GrammarEvent::NameAssigned(unescape(name)));
+            events.push(GrammarEvent::AliasesAssigned(object_aliases(t, i, close)));
         } else if t[i] == "." && at(t, i + 2) == "=" {
             match at(t, i + 1) {
                 "name" => {
@@ -578,7 +670,8 @@ fn grammar_events(t: &[String]) -> Vec<GrammarEvent> {
 }
 
 /// A highlight.js language definition (`{name:"ActionScript",aliases:[…],
-/// keywords:…}`): the package's own description of the module. The LAST
+/// keywords:…}`, strict: `keywords` or `contains` present): the package's
+/// own description of the module. The LAST
 /// definition or `.name=` assignment wins — Arduino inlines the C++
 /// grammar and renames it; TypeScript assigns its object over
 /// JavaScript's. A `.name=` with no definition object is not a grammar.
@@ -653,25 +746,10 @@ pub fn read_scoped_error_prefix(view: &ModuleView<'_>) -> Option<Claim> {
 // Hints
 // ---------------------------------------------------------------------------
 
-/// A version constant (`VERSION = "1.9.0"`, `version: "1.9.0"`) — one
-/// value only.
+/// A version constant, as a hint: shown to the model ([`version_constant`]).
 pub fn hint_version(view: &ModuleView<'_>) -> Option<String> {
-    let t = view.tokens;
-    let mut found: Vec<&str> = Vec::new();
-    for i in 0..t.len() {
-        if matches!(key_text(&t[i]), "VERSION" | "version")
-            && matches!(at(t, i + 1), "=" | ":")
-            && let Some(v) = quoted(at(t, i + 2))
-            && is_semver(v.strip_prefix('v').unwrap_or(v))
-            && !found.contains(&v)
-        {
-            found.push(v);
-        }
-    }
-    let [v] = found.as_slice() else {
-        return None;
-    };
-    Some(format!("version {v}"))
+    let version = version_constant(view)?.version?;
+    Some(format!("version {version}"))
 }
 
 /// One `github.com/<owner>/<repo>` (a `.git` suffix dropped) — the
@@ -710,6 +788,183 @@ pub fn hint_repository(view: &ModuleView<'_>) -> Option<String> {
         return None;
     };
     Some(format!("repository github.com/{pair}"))
+}
+
+// ---------------------------------------------------------------------------
+// The version constant: a version, never a name
+// ---------------------------------------------------------------------------
+
+/// The names a package gives its version constant (exp095 Part A census:
+/// 56 of 56 such assignments in owner-known npm source equal the true
+/// version). `version` counts only as a property ASSIGNMENT (`e.version=`):
+/// as an object field it is any record's version.
+const VERSION_NAMES: [&str; 6] = [
+    "VERSION",
+    "PACKAGE_VERSION",
+    "SDK_VERSION",
+    "LIB_VERSION",
+    "libVersion",
+    "sdkVersion",
+];
+
+fn ends_expression(t: &str) -> bool {
+    matches!(t, "" | "," | ";" | "}" | ")")
+}
+
+/// A semver string literal at `i` standing alone: its value, `v` dropped.
+fn semver_literal(t: &[String], i: usize) -> Option<&str> {
+    let v = quoted(at(t, i))?;
+    let v = v.strip_prefix('v').unwrap_or(v);
+    (is_semver(v) && ends_expression(at(t, i + 1))).then_some(v)
+}
+
+/// The one semver literal the identifier `name` is assigned in the module
+/// (`var Nvt="1.15.2"`), if exactly one.
+fn bound_semver<'t>(t: &'t [String], name: &str) -> Option<&'t str> {
+    let mut found: Vec<&str> = Vec::new();
+    for j in 0..t.len() {
+        if t[j] == name
+            && (j == 0 || t[j - 1] != ".")
+            && at(t, j + 1) == "="
+            && let Some(v) = semver_literal(t, j + 2)
+            && !found.contains(&v)
+        {
+            found.push(v);
+        }
+    }
+    let [v] = found.as_slice() else {
+        return None;
+    };
+    Some(v)
+}
+
+/// The value at `i` (a literal, or an identifier bound to one) when it
+/// is a semver.
+fn semver_value(t: &[String], i: usize) -> Option<&str> {
+    semver_literal(t, i).or_else(|| {
+        let name = at(t, i);
+        (is_identifier(name) && ends_expression(at(t, i + 1)))
+            .then(|| bound_semver(t, name))
+            .flatten()
+    })
+}
+
+/// A package's version constant: `X.VERSION="1.9.0"`, `var VERSION="…"`,
+/// `rB.VERSION=Nvt` with `var Nvt="1.15.2"`, an ES module's export getter
+/// `{VERSION:()=>Nvt}`, `e.version=Oo`. A VERSION only — it never names a
+/// package; [`super::declare`] adds it to the identity another reader
+/// names, and it is a hint otherwise. Two different values: abstain.
+pub fn version_constant(view: &ModuleView<'_>) -> Option<Claim> {
+    let t = view.tokens;
+    let mut found: Vec<(&str, String)> = Vec::new();
+    for i in 0..t.len() {
+        let name = t[i].as_str();
+        let after_dot = i > 0 && t[i - 1] == ".";
+        let named = VERSION_NAMES.contains(&name) || (name == "version" && after_dot);
+        if !named {
+            continue;
+        }
+        let value = if at(t, i + 1) == "=" {
+            semver_value(t, i + 2).map(|v| (v, format!("{name}={}", at(t, i + 2))))
+        } else if VERSION_NAMES.contains(&name)
+            && !after_dot
+            && at(t, i + 1) == ":"
+            && matches!(t[i - 1].as_str(), "{" | ",")
+            && at(t, i + 2) == "("
+            && at(t, i + 3) == ")"
+            && at(t, i + 4) == "=>"
+        {
+            semver_value(t, i + 5).map(|v| (v, format!("{name}:()=>{}", at(t, i + 5))))
+        } else {
+            None
+        };
+        if let Some((v, evidence)) = value
+            && found.iter().all(|(x, _)| *x != v)
+        {
+            found.push((v, evidence));
+        }
+    }
+    let [(version, evidence)] = found.as_slice() else {
+        return None;
+    };
+    Some(Claim {
+        version: Some((*version).to_string()),
+        evidence: clip(evidence, EVIDENCE_CHARS),
+        ..Claim::default()
+    })
+}
+
+// ---------------------------------------------------------------------------
+// AWS SDK v3 client/command pairs: the SERVICE, never the package
+// ---------------------------------------------------------------------------
+
+/// The AWS SDK v3 client one module's commands belong to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AwsSdkClient {
+    pub client: String,
+    pub commands: Vec<String>,
+}
+
+fn is_pascal_with_suffix(s: &str, suffix: &str) -> bool {
+    s.len() > suffix.len()
+        && s.ends_with(suffix)
+        && s.starts_with(|c: char| c.is_ascii_uppercase())
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+/// A smithy command's `.n("BedrockClient","ListTagsForResourceCommand")`:
+/// the client it belongs to. The client names the SERVICE, not the
+/// package — `STSClient` ships in both `@aws-sdk/client-sts` and
+/// `@aws-sdk/nested-clients` — so this is a hint and a report, never an
+/// identity. Two clients: abstain.
+pub fn aws_sdk_client(view: &ModuleView<'_>) -> Option<AwsSdkClient> {
+    let t = view.tokens;
+    let mut clients: Vec<AwsSdkClient> = Vec::new();
+    for i in 1..t.len() {
+        if t[i - 1] != "(" || at(t, i + 1) != "," || at(t, i + 3) != ")" {
+            continue;
+        }
+        let (Some(client), Some(command)) = (quoted(&t[i]), quoted(at(t, i + 2))) else {
+            continue;
+        };
+        if !is_pascal_with_suffix(client, "Client") || !is_pascal_with_suffix(command, "Command") {
+            continue;
+        }
+        let entry = match clients.iter_mut().find(|c| c.client == client) {
+            Some(e) => e,
+            None => {
+                clients.push(AwsSdkClient {
+                    client: client.to_string(),
+                    commands: Vec::new(),
+                });
+                clients.last_mut().expect("just pushed")
+            }
+        };
+        if !entry.commands.iter().any(|c| c == command) {
+            entry.commands.push(command.to_string());
+        }
+    }
+    let [client] = <[AwsSdkClient; 1]>::try_from(clients).ok()?;
+    Some(client)
+}
+
+/// [`aws_sdk_client`] as a hint for the model.
+pub fn hint_aws_sdk_client(view: &ModuleView<'_>) -> Option<String> {
+    let c = aws_sdk_client(view)?;
+    let n = c.commands.len();
+    let shown = c
+        .commands
+        .iter()
+        .take(3)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = if n > 3 { ", …" } else { "" };
+    let noun = if n == 1 { "command" } else { "commands" };
+    Some(format!(
+        "AWS SDK v3 client {} ({n} {noun}: {shown}{more})",
+        c.client
+    ))
 }
 
 // ---------------------------------------------------------------------------

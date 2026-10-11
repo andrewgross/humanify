@@ -295,6 +295,9 @@ pub struct BunUnpackOutcome {
     /// The declared-identity carry (finding #95), when a prior was given:
     /// one entry per pair, with the key both sides declared.
     pub declared_carry: Option<Vec<DeclaredCarry>>,
+    /// Library declarations read in APP code (finding #95, exp095) —
+    /// report-only, for the diagnostics: nothing is named or moved by them.
+    pub app_declarations: Vec<crate::modules::identity::AppDeclaration>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -381,6 +384,7 @@ pub fn unpack_bun(
             helper_refs: 0,
             content_carry: None,
             declared_carry: None,
+            app_declarations: Vec::new(),
         })
     };
 
@@ -435,6 +439,7 @@ pub fn unpack_bun(
         .map(|_| IdentifierPlanner::build(&ingest));
     let mut content_carry = None;
     let mut declared_carry = None;
+    let mut app_declarations = Vec::new();
     // What the bundler kept about the whole bundle (P17), read once.
     let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
@@ -446,6 +451,8 @@ pub fn unpack_bun(
         // bundle (the formatter drops the comments a bundler kept) before
         // any name is chosen.
         declare_identities(c, code, options.module_identity, &bundle_facts);
+        app_declarations =
+            crate::modules::identity::scan_app_declarations(code, &app_statements(c));
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
@@ -659,7 +666,29 @@ pub fn unpack_bun(
             }
             carries
         }),
+        app_declarations,
     })
+}
+
+/// The container statements no extracted module lives in: the app's own
+/// top-level code (and any library code hoisted into it).
+fn app_statements(c: &BunModuleClassification) -> Vec<oxc_span::Span> {
+    let mut modules: Vec<(u32, u32)> = c
+        .factories
+        .iter()
+        .map(|f| (f.span.start, f.span.end))
+        .collect();
+    modules.sort_unstable();
+    c.container
+        .iter()
+        .filter(|s| {
+            // The first module ending after the statement starts overlaps
+            // it when it also starts before the statement ends.
+            let i = modules.partition_point(|m| m.1 <= s.start);
+            modules.get(i).is_none_or(|m| m.0 >= s.end)
+        })
+        .copied()
+        .collect()
 }
 
 /// Every non-asset module's declared identity and hints (finding #95): the

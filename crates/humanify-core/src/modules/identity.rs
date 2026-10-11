@@ -22,7 +22,9 @@
 //!
 //! The FIRST reader in [`readers::IDENTITY_READERS`] that names a package
 //! or a member wins; a later reader agreeing on the package may only add
-//! the version. The result, with its reader and evidence, is the module's
+//! the version (as may the module's version constant — `VERSION="1.9.0"`
+//! — which never names anything itself). The result, with its reader and
+//! evidence, is the module's
 //! [`DeclaredIdentity`], written into the vendor record. Facts too weak to
 //! name a module (a repository URL, a bare version constant) are HINTS: the
 //! model is shown them, nothing is named by them.
@@ -237,7 +239,9 @@ fn slug(name: &str) -> String {
 
 /// Run every reader over one module: the first identity reader to name a
 /// package or member wins; a later one naming the SAME package may add the
-/// version. Hints are every hint reader's answer.
+/// version, and failing that the module's version constant
+/// ([`readers::version_constant`]) does. Hints are every hint reader's
+/// answer.
 pub fn declare(body: &str, provenance: &ModuleProvenance) -> Declared {
     let tokens = super::vendor_pairing::lex_raw(body);
     let view = readers::ModuleView {
@@ -271,11 +275,92 @@ pub fn declare(body: &str, provenance: &ModuleProvenance) -> Declared {
             }
         }
     }
+    // A version constant names nothing; it completes a named identity.
+    if let Some(id) = identity.as_mut().filter(|id| id.version.is_none()) {
+        id.version = readers::version_constant(&view).and_then(|c| c.version);
+    }
     let hints = readers::HINT_READERS
         .iter()
         .filter_map(|hint| hint(&view))
         .collect();
     Declared { identity, hints }
+}
+
+/// One library declaration found in APP code — report-only.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppDeclaration {
+    pub start: u32,
+    pub end: u32,
+    pub reader: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub member: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub commands: Vec<String>,
+    pub evidence: String,
+}
+
+/// The library declarations in APP code (finding #95, exp095): library
+/// code a bundler hoisted out of any module (Bun's lazy ES modules — the
+/// AWS SDK clients, their inlined `package.json`s) has no boundary to name
+/// or move, so what it declares is REPORTED, per top-level statement, and
+/// nothing is named, moved or renamed by it. Runs the readers marked
+/// `app_report`, the version constant and the AWS client pairs; byte
+/// offsets index `code`.
+pub fn scan_app_declarations(code: &str, statements: &[oxc_span::Span]) -> Vec<AppDeclaration> {
+    let per_statement = crate::par::map_ordered(statements, |span| {
+        let body = &code[span.start as usize..span.end as usize];
+        let tokens = super::vendor_pairing::lex_raw(body);
+        let provenance = ModuleProvenance::default();
+        let view = readers::ModuleView {
+            body,
+            tokens: &tokens,
+            provenance: &provenance,
+        };
+        let row = |reader: &str, evidence: String| AppDeclaration {
+            start: span.start,
+            end: span.end,
+            reader: reader.to_string(),
+            package: None,
+            version: None,
+            member: None,
+            client: None,
+            commands: Vec::new(),
+            evidence,
+        };
+        let mut rows = Vec::new();
+        for reader in readers::IDENTITY_READERS.iter().filter(|r| r.app_report) {
+            if let Some(c) = (reader.read)(&view) {
+                rows.push(AppDeclaration {
+                    package: c.package,
+                    version: c.version,
+                    member: c.member,
+                    ..row(reader.name, c.evidence)
+                });
+            }
+        }
+        if let Some(c) = readers::version_constant(&view) {
+            rows.push(AppDeclaration {
+                version: c.version,
+                ..row("version-constant", c.evidence)
+            });
+        }
+        if let Some(c) = readers::aws_sdk_client(&view) {
+            rows.push(AppDeclaration {
+                client: Some(c.client.clone()),
+                commands: c.commands,
+                ..row("aws-sdk-client", format!(".n(\"{}\", …)", c.client))
+            });
+        }
+        rows
+    });
+    per_statement.into_iter().flatten().collect()
 }
 
 /// One declared pair: indices into the fresh and prior lists, and the key
