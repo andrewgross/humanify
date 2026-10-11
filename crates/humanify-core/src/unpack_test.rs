@@ -1967,3 +1967,62 @@ fn a_changed_declared_name_never_vetoes_a_content_pair() {
     let after = entry_with(&m2, "RouterOS", &second.0);
     assert_eq!(s(after, "fileName"), s(&before, "fileName"));
 }
+
+/// Every file under `dir`, relative path → bytes.
+fn tree(dir: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                out.insert(
+                    p.strip_prefix(dir).unwrap().to_path_buf(),
+                    fs::read(&p).unwrap(),
+                );
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn library_discovery_reports_and_changes_no_written_byte() {
+    let bundle = format!(
+        "{BUN_BUNDLE}\nvar pkg={{name:\"left-pad\",version:\"1.3.0\",main:\"index.js\",license:\"MIT\",pad:()=>priv()}};\nvar priv=()=>1;\nvar app=()=>pkg.pad();\n"
+    );
+    let (off, on) = (TempDir::new("disc-off"), TempDir::new("disc-on"));
+    let without = unpack_bun(&bundle, &off.0, BunUnpackOptions::default()).unwrap();
+    let with = unpack_bun(
+        &bundle,
+        &on.0,
+        BunUnpackOptions {
+            library_discovery: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(without.library_discovery.is_none(), "off unless asked for");
+    assert_eq!(tree(&off.0), tree(&on.0), "report-only: the same tree");
+    let report = with.library_discovery.expect("asked for");
+    let claimed: Vec<(&str, crate::libdetect::discovery::Rule)> = report
+        .claims
+        .iter()
+        .map(|c| (&bundle[c.start as usize..c.start as usize + 8], c.rule))
+        .collect();
+    use crate::libdetect::discovery::Rule;
+    assert_eq!(
+        claimed,
+        vec![("var pkg=", Rule::Seed), ("var priv", Rule::Down)]
+    );
+    assert!(report.claims.iter().all(|c| c.package == "left-pad"));
+    assert_eq!(report.graph.factories, 2);
+    assert!(
+        report
+            .queue
+            .iter()
+            .any(|q| bundle[q.start as usize..].starts_with("var app"))
+    );
+}

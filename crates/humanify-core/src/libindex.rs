@@ -20,9 +20,13 @@
 
 use humanify_model::detection::BundlerType;
 
+pub mod families;
 pub mod format;
 pub mod literals;
 
+#[cfg(test)]
+#[path = "libindex/families_test.rs"]
+mod families_test;
 #[cfg(test)]
 #[path = "libindex/format_test.rs"]
 mod format_test;

@@ -1,11 +1,29 @@
 # Library discovery: finding library code in `src/` from bundler facts, declarations and the reference graph
 
-STATUS: DESIGN + LAB PROTOTYPE, 2026-10-11, branch `exp095-library-discovery`
-(exp095). Nothing in a humanify run does any of this yet. It stays on a
-branch until something in naming actually reads it. The numbers come from
-one bundle (Claude Code 2.1.216), one random sample (620 statements) and 37
-non-library traps. Prototype and re-run commands:
-`experiments/095-library-fingerprints/discovery/`.
+STATUS: PHASE 1 (REPORT-ONLY) IN CORE, 2026-10-11, branch
+`exp095-discovery-core` (exp095; not merged). The graph (§4) is
+`humanify_core::graph::references`, discovery (§5, §7) is
+`humanify_core::libdetect::discovery`, and a run with `--diagnostics` writes
+it as `libraryDiscovery`. Nothing is named, moved or renamed by it. No index
+is looked up in a run yet: the in-run seeds are the declared readers and
+kept banners, and the candidate queue is emitted for a lab lookup.
+
+- **The core reproduces the lab prototype** on Claude Code 2.1.216 with the
+  same seeds (declared + Step B index C, the prototype's veto): 12,255 of
+  12,256 claimed units shared, 93.65% estimated library recall on both, 0
+  sampled app units, the fixpoint +64.2 KB over 8 rounds (prototype +63.8
+  KB), 155 seeds vetoed (prototype 155), library class 116 KB (117 KB). Every
+  difference is explained in `experiments/095-library-fingerprints/discovery/README.md`.
+- **One change from §7 guard 4, measured:** the isolation veto now judges a
+  seed's support on the fixpoint WITHOUT the MODULE rule. On 2.1.86 the
+  prototype's rule kept the ink fork: MODULE filled 4.5 KB of Claude Code's
+  own keypress parser around the fork's two kept tables, and that fill then
+  counted as the tables' support. The new rule drops all of it, and costs
+  ~2.5 KB of real library claims per release.
+- The design and lab numbers below are unchanged; they come from one bundle
+  (Claude Code 2.1.216), one random sample (620 statements) and 37
+  non-library traps. Prototype, core lab binary and re-run commands:
+  `experiments/095-library-fingerprints/discovery/`.
 
 **Why.** About 14.5% of Claude Code's `src/` bytes are library code that the
 bundler hoisted out of any module boundary (`negatives/README.md`: 2.2 MB,
@@ -419,7 +437,10 @@ The guards, in order:
    ≥ 3 content tokens for statement hits.
 3. **Stop-lists and families** on every index claim.
 4. **The isolation veto, repeated to a fixpoint.** An index claim must end
-   connected to code of its own family. Declarations are exempt.
+   connected to code of its own family. Declarations are exempt. The
+   support is counted after the fixpoint's DOWN and GLUE rules, not
+   MODULE's fills (core, 2026-10-11): a fill grown from the seed itself is
+   not independent evidence (Claude Code 2.1.86's ink fork).
 5. **No upward growth without evidence.** A caller of a library is app code
    until its own evidence says otherwise. UP regions are only a queue.
 6. **The closure guard on fills.** A fill never crosses a unit whose
@@ -504,7 +525,7 @@ cases before (negatives lane).
 
 ## 10. Next steps
 
-1. **The graph builder in core (`graph::references`), with red/green tests**
+1. **DONE (2026-10-11, branch `exp095-discovery-core`).** The graph builder in core (`graph::references`), with red/green tests
    on synthetic bundles for each edge kind in §4: namespace fill,
    definitional vs run-time mutation, writers as definers, wrapper → body.
    Then the report-only pass with its diagnostics block, on a toolchain
@@ -514,10 +535,17 @@ cases before (negatives lane).
      package (Step B's "neighbour support", now along graph edges instead
      of byte positions) recovers the 7% residue without app claims.
    - That is the one place the fixpoint could grow upward.
-3. **Widen the fork evidence.** Hand-label CC's commander-style help, the
+3. **Widen the fork evidence.** (Partly done 2026-10-11: on 2.1.198 and
+   2.1.86 the veto, with MODULE fills excluded from support, removes every
+   ink-fork claim; the index made no claim on the help formatter or the
+   yoga port in any of the three releases, so the veto was not tested
+   there. Discovery README, "Results".) Hand-label CC's commander-style help, the
    yoga port and other forks in more releases. Check that isolation holds
    on 2.1.198 and 2.1.86 (one fork is one data point).
-4. **Repeat on a second release, and on an esbuild bundle.** esbuild marks
+4. **Repeat on a second release, and on an esbuild bundle.** (Partly
+   done 2026-10-11: 2.1.198 and 2.1.86 with Step B claims; wrangler 3.114.0,
+   an unminified esbuild bundle scored exactly against its source map, with
+   declared seeds only. Discovery README, "Results".) esbuild marks
    every lazy module, so MODULE should fill more there.
 5. **The audit-set scorer columns** (`reclassifiedBytes`,
    `reclassifiedAppBytes`) in the 034 harness, before phase 2.

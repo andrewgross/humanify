@@ -507,6 +507,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,
             webcrack_shim: shim.as_ref(),
+            library_discovery: false,
         },
     )? {
         AdapterOutcome::VendorRecord(outcome) => outcome,

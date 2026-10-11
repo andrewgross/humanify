@@ -646,6 +646,8 @@ fn pipeline_body(
         &mut dispatch_log,
         prior_path,
         switches.switch_on(Switch::ManifestPriorOrder),
+        // Report-only: discovery's rows go to the diagnostics, nowhere else.
+        opts.diagnostics.is_some(),
         profiler,
         renderer,
     )?;
@@ -762,6 +764,7 @@ fn pipeline_body(
             post_split: &post_split,
             content_carry: unpacked.content_carry.as_ref(),
             app_declarations: &unpacked.app_declarations,
+            library_discovery: unpacked.library_discovery.as_ref(),
         };
         reports.write_diagnostics(renderer)?;
         if let Some(dest) = &opts.stats_json {
@@ -916,6 +919,10 @@ struct RunReports<'a> {
     /// Library declarations read in APP code (finding #95): report-only —
     /// byte ranges of the input bundle and what each declares.
     app_declarations: &'a [humanify_core::modules::identity::AppDeclaration],
+    /// Library discovery (exp095): report-only — claimed statements by
+    /// rule, round and evidence, the vetoed seeds, library class, the
+    /// candidate queue.
+    library_discovery: Option<&'a humanify_core::libdetect::discovery::DiscoveryReport>,
 }
 
 /// What `--dump-artifacts` reads beyond the naming outcome.
@@ -1035,6 +1042,13 @@ impl RunReports<'_> {
             let json = serde_json::to_string(self.app_declarations).expect("serializable");
             with_placement.insert(
                 "appDeclaredLibraries",
+                JsValue::parse(&json).expect("serde_json writes JSON"),
+            );
+        }
+        if let Some(report) = self.library_discovery {
+            let json = serde_json::to_string(report).expect("serializable");
+            with_placement.insert(
+                "libraryDiscovery",
                 JsValue::parse(&json).expect("serde_json writes JSON"),
             );
         }

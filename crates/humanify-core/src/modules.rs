@@ -683,6 +683,34 @@ pub fn name_cjs_factories(
     counts
 }
 
+/// The container's statements: the wrapper body's (when the body is a
+/// block — the TS bodyPath.isBlockStatement() gate) or the program's. A
+/// wrapper body that is not found (or not a block) has none. ONE owner:
+/// the factory classification and the statement reference graph
+/// (`graph::references`) read the same list.
+pub fn container_statements<'a>(
+    program: &'a oxc_ast::ast::Program<'a>,
+    semantic: &oxc_semantic::Semantic<'a>,
+    wrapper_body: Option<Span>,
+) -> &'a [oxc_ast::ast::Statement<'a>] {
+    let Some(body) = wrapper_body else {
+        return program.body.as_slice();
+    };
+    semantic
+        .nodes()
+        .iter()
+        .find(|n| n.span() == body && function_body_kind(&n.kind()))
+        .and_then(|n| match n.kind() {
+            // oxc stores a function's body as FunctionBody (Babel: the
+            // body IS a BlockStatement) — the wrapper container is the
+            // function body's statement list.
+            AstKind::FunctionBody(b) => Some(b.statements.as_slice()),
+            AstKind::BlockStatement(b) => Some(b.body.as_slice()),
+            _ => None,
+        })
+        .unwrap_or(&[])
+}
+
 /// Classify the factories of a parsed bundle — either bundler's form
 /// (bun's direct function, esbuild's single-key object; the helper
 /// identification is [`identify_cjs_factory`], bun's marker first).
@@ -698,28 +726,11 @@ pub fn classify_bun_modules<'a>(
 ) -> Option<BunModuleClassification> {
     let helper = identify_cjs_factory(source)?;
 
-    // The container's statements: the wrapper body's (when the body is a
-    // block — the TS bodyPath.isBlockStatement() gate) or the program's.
     let nodes = semantic.nodes();
-    let container_stmts: Vec<Span> = match wrapper_body {
-        Some(body) => nodes
-            .iter()
-            .find(|n| n.span() == body && function_body_kind(&n.kind()))
-            .and_then(|n| match n.kind() {
-                // oxc stores a function's body as FunctionBody (Babel: the
-                // body IS a BlockStatement) — the wrapper container is the
-                // function body's statement list.
-                AstKind::FunctionBody(b) => {
-                    Some(b.statements.iter().map(|s| s.span()).collect::<Vec<_>>())
-                }
-                AstKind::BlockStatement(b) => {
-                    Some(b.body.iter().map(|s| s.span()).collect::<Vec<_>>())
-                }
-                _ => None,
-            })
-            .unwrap_or_default(),
-        None => program.body.iter().map(|s| s.span()).collect(),
-    };
+    let container_stmts: Vec<Span> = container_statements(program, semantic, wrapper_body)
+        .iter()
+        .map(|s| s.span())
+        .collect();
 
     let comments = semantic.comments();
     let mut line_starts: Vec<u32> = vec![0];
@@ -932,7 +943,7 @@ fn find_banner_inside_body(
 
 /// A block comment's value (between the delimiters) when it is a
 /// bang-block: `isBangBlock` = CommentBlock whose value starts with `!`.
-fn bang_block_value(source: &str, span: Span) -> Option<String> {
+pub(crate) fn bang_block_value(source: &str, span: Span) -> Option<String> {
     let raw = &source[span.start as usize..span.end as usize];
     let value = raw.strip_prefix("/*")?.strip_suffix("*/")?;
     if !value.starts_with('!') {

@@ -195,6 +195,38 @@ impl ModuleWrapperGrammar {
             }
         }
     }
+
+    /// [`Self::lazy_init_helpers`] over a container's typed statements
+    /// (the raw bundle's, where no ESTree JSON of the program exists):
+    /// every top-level declarator short enough to be a helper is handed to
+    /// the same shape check as a one-declarator `var`.
+    pub fn lazy_init_helpers_in(
+        self,
+        statements: &[oxc_ast::ast::Statement<'_>],
+    ) -> HashSet<String> {
+        use oxc_estree::{CompactSerializer, ESTree};
+        /// Longer than any helper's text: Bun's is 37 bytes minified,
+        /// esbuild's ~150 unminified.
+        const HELPER_TEXT_MAX: u32 = 512;
+        let body: Vec<serde_json::Value> = statements
+            .iter()
+            .filter_map(|s| match s {
+                oxc_ast::ast::Statement::VariableDeclaration(d) => Some(d),
+                _ => None,
+            })
+            .flat_map(|d| d.declarations.iter())
+            .filter(|d| d.span.size() <= HELPER_TEXT_MAX)
+            .map(|d| {
+                let mut ser = CompactSerializer::new(false, false);
+                d.serialize(&mut ser);
+                serde_json::json!({
+                    "type": "VariableDeclaration",
+                    "declarations": [crate::ingest::parse_estree_json(&ser.into_string())],
+                })
+            })
+            .collect();
+        self.lazy_init_helpers(&body)
+    }
 }
 
 /// P8 — how a vendored module's references to the bundle's interop helpers
@@ -269,6 +301,41 @@ impl InteropHelpers {
     ) -> Option<&'static str> {
         match self {
             InteropHelpers::Bun => crate::unpack::bun::scope::bun_helper_shape(code, init),
+        }
+    }
+
+    /// The helpers that FILL a namespace object among a container's
+    /// statements — a call defines its first argument (library discovery,
+    /// docs/design/library-discovery.md §4): the export registrar
+    /// (`__export`, by shape — the load order's owner,
+    /// `emit::load_order::identify_export_registrar`) and the re-export
+    /// copier (`__reExport`, by shape).
+    pub fn namespace_fillers(
+        self,
+        code: &str,
+        statements: &[oxc_ast::ast::Statement<'_>],
+    ) -> HashSet<String> {
+        match self {
+            InteropHelpers::Bun => {
+                let mut out: HashSet<String> =
+                    crate::emit::load_order::identify_export_registrar(statements)
+                        .into_iter()
+                        .collect();
+                for s in statements {
+                    let oxc_ast::ast::Statement::VariableDeclaration(d) = s else {
+                        continue;
+                    };
+                    for d in &d.declarations {
+                        if let (oxc_ast::ast::BindingPattern::BindingIdentifier(id), Some(init)) =
+                            (&d.id, &d.init)
+                            && crate::unpack::bun::scope::reexport_shape(code, init)
+                        {
+                            out.insert(id.name.to_string());
+                        }
+                    }
+                }
+                out
+            }
         }
     }
 }

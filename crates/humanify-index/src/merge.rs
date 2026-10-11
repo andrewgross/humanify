@@ -21,7 +21,7 @@ use crate::shard::{Shard, hex_sha256};
 /// The stop-lists shipped with every index.
 pub const STOPLISTS_JSON: &str = include_str!("../data/stoplists.json");
 /// The package families shipped with every index.
-pub const FAMILIES_JSON: &str = include_str!("../data/families.json");
+pub const FAMILIES_JSON: &str = humanify_core::libindex::families::FAMILIES_JSON;
 
 /// Everything a merge reads (all of it already decided by the plan).
 #[derive(Default)]

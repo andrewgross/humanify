@@ -58,7 +58,13 @@ readers (`modules::identity::readers`) read it and the module's text. The
 record's `identity` field carries the reader and its evidence. The same
 readers also run over the APP's top-level statements, report-only
 (`identity::scan_app_declarations` → `--diagnostics` `appDeclaredLibraries`):
-library code hoisted out of every module is listed, never named or moved.
+library code hoisted out of every module is listed, never named or moved. With
+`--diagnostics`, library discovery (`libdetect::discovery`, exp095,
+docs/design/library-discovery.md) goes further on the same raw bundle:
+the statement reference graph (`graph::references`), declared and banner
+seeds, the leaf-inward fixpoint, the isolation veto, the library class and
+a candidate queue for the index, written as `libraryDiscovery` — also
+report-only: nothing is named, moved or renamed by it.
 
 Since the cutover (docs/rust-port/19-cutover.md) the pipeline is the Rust
 binary; the TypeScript names used below (`stableSplitFromCode`,

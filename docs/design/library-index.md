@@ -266,7 +266,9 @@ A structural fingerprint depends on the bundler (Bun vs esbuild agree on
 | Shingles / MinHash                              | deferred                                     | Raw shingles are the size problem (246 MB at top-2,000); MinHash was not measured.                                                                                                                                                                                                                                                          |
 
 **Stop-lists and package families are data files** shipped with the index
-(`crates/humanify-index/data/stoplists.json`, `families.json`, copied into
+(`crates/humanify-index/data/stoplists.json`, and `families.json`, which since
+library discovery lives in `crates/humanify-core/src/libindex/` because the
+lookup reads it too; both copied into
 every index and hashed in its manifest): the helper packages (tslib,
 `@babel/runtime*`, `@babel/helpers`, `@swc/helpers`, regenerator-runtime,
 `@oxc-project/runtime`) are dropped from the index at merge time; the

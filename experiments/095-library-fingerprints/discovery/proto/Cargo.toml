@@ -28,3 +28,7 @@ path = "src/main.rs"
 [[bin]]
 name = "exp095-declared"
 path = "src/declared.rs"
+
+[[bin]]
+name = "exp095-core-discover"
+path = "src/core_discover.rs"

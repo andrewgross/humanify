@@ -250,6 +250,9 @@ pub struct BunUnpackOptions<'n> {
     /// The run's module identity source (the toolchain's P17 piece): what
     /// the bundler kept about each module, for the declared identity.
     pub module_identity: crate::toolchain::ModuleIdentitySource,
+    /// Run library discovery over the app code, report-only
+    /// (`libdetect::discovery`; the CLI asks for it with `--diagnostics`).
+    pub library_discovery: bool,
 }
 
 impl Default for BunUnpackOptions<'_> {
@@ -265,6 +268,7 @@ impl Default for BunUnpackOptions<'_> {
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             interop: crate::toolchain::InteropHelpers::Bun,
             module_identity: crate::toolchain::ModuleIdentitySource::Bun,
+            library_discovery: false,
         }
     }
 }
@@ -298,6 +302,9 @@ pub struct BunUnpackOutcome {
     /// Library declarations read in APP code (finding #95, exp095) —
     /// report-only, for the diagnostics: nothing is named or moved by them.
     pub app_declarations: Vec<crate::modules::identity::AppDeclaration>,
+    /// Library discovery over the app code (exp095), when asked for —
+    /// report-only: nothing is named, moved or renamed by it.
+    pub library_discovery: Option<crate::libdetect::discovery::DiscoveryReport>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -385,6 +392,7 @@ pub fn unpack_bun(
             content_carry: None,
             declared_carry: None,
             app_declarations: Vec::new(),
+            library_discovery: None,
         })
     };
 
@@ -416,6 +424,12 @@ pub fn unpack_bun(
     // Per RETAINED factory (extraction order): the manifest's capture
     // records for its body's app-scope reads (finding #60).
     let mut captures_by_module: Vec<Vec<ManifestCapture>> = Vec::new();
+    // Every classified module, before the scope plan keeps any in the app:
+    // library discovery treats each as one external unit (the lab's model).
+    let classified_modules: Vec<oxc_span::Span> = classification
+        .as_ref()
+        .map(|c| c.factories.iter().map(|f| f.span).collect())
+        .unwrap_or_default();
     if let Some(c) = classification.as_mut() {
         let plan = scope::plan_bundle_scope_refs(
             code,
@@ -440,6 +454,7 @@ pub fn unpack_bun(
     let mut content_carry = None;
     let mut declared_carry = None;
     let mut app_declarations = Vec::new();
+    let mut library_discovery = None;
     // What the bundler kept about the whole bundle (P17), read once.
     let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
@@ -453,6 +468,7 @@ pub fn unpack_bun(
         declare_identities(c, code, options.module_identity, &bundle_facts);
         app_declarations =
             crate::modules::identity::scan_app_declarations(code, &app_statements(c));
+        library_discovery = discovery_report(code, &ingest, &options, grammar, &classified_modules);
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
@@ -668,6 +684,38 @@ pub fn unpack_bun(
             carries
         }),
         app_declarations,
+        library_discovery,
+    })
+}
+
+/// Library discovery over the app code (exp095), report-only, when the run
+/// asked for it: every classified module (`classified`, before the scope
+/// plan kept any in the app) is one external unit.
+fn discovery_report(
+    code: &str,
+    ingest: &Ingest<'_>,
+    options: &BunUnpackOptions<'_>,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+    classified: &[oxc_span::Span],
+) -> Option<crate::libdetect::discovery::DiscoveryReport> {
+    use crate::libdetect::discovery::{
+        BundlePieces, DiscoveryOptions, DiscoveryReport, discover_in_bundle,
+    };
+    options.library_discovery.then(|| {
+        let pieces = BundlePieces {
+            layout: options.layout,
+            grammar,
+            interop: options.interop,
+        };
+        let (graph, found) = discover_in_bundle(
+            code,
+            ingest,
+            pieces,
+            classified,
+            &[],
+            DiscoveryOptions::default(),
+        );
+        DiscoveryReport::new(&graph, &found)
     })
 }
 

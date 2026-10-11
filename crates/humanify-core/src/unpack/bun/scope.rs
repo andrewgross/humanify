@@ -377,3 +377,35 @@ pub(crate) fn bun_helper_shape(code: &str, init: &Expression<'_>) -> Option<&'st
     }
     None
 }
+
+/// The re-export copier (`__reExport`) by SHAPE: a small, synchronous
+/// three-parameter arrow that copies a module's exports except `"default"`
+/// onto its first argument (and its third). Bun's spells the loop out
+/// (`if(!has.call(e,o)&&o!=="default")defProp(e,o,{get:…,enumerable:!0})`);
+/// esbuild's is `(copy(e,t,"default"),r&&copy(r,t,"default"))`.
+/// `__toESM` also has three parameters and a `"default"`, and is told apart
+/// by its `__esModule` check.
+pub(crate) fn reexport_shape(code: &str, init: &Expression<'_>) -> bool {
+    /// Bun's is ~400 bytes minified, esbuild's ~150 unminified.
+    const HELPER_TEXT_MAX: usize = 1024;
+    let Expression::ArrowFunctionExpression(arrow) = init else {
+        return false;
+    };
+    let text = &code[arrow.span.start as usize..arrow.span.end as usize];
+    if arrow.r#async
+        || arrow.params.items.len() != 3
+        || arrow.params.rest.is_some()
+        || text.len() > HELPER_TEXT_MAX
+        || text.contains("__esModule")
+    {
+        return false;
+    }
+    if !matches!(arrow.body, oxc_ast::ast::ArrowFunctionBody::FunctionBody(_)) {
+        // esbuild: both calls hand "default" as the exception.
+        return text.matches("\"default\"").count() == 2;
+    }
+    let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    compact.contains("!==\"default\"")
+        && compact.contains("{get:")
+        && compact.contains("enumerable")
+}
