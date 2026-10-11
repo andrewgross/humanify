@@ -22,8 +22,10 @@
 //! hash the same form through [`vendor_content_key`]: the factory function
 //! alone, under the canonical MatchKey serializer (strings blurred, numbers
 //! exact — both sides under THIS run's policy, so the key is
-//! era-independent), with every free identifier that is not a known global
-//! made a SLOT. Those are the references to the rest of the bundle — other
+//! era-independent), with every free identifier that is not a REAL global
+//! made a SLOT — a known global the factory's own program does not declare
+//! (a minifier may spell a bundle-level name `gc`). Those are the
+//! references to the rest of the bundle — other
 //! factories (the fresh body's minified factory vars, the prior file's
 //! `lib_<hash8>` identifiers) and bundle-level helpers the unpack leaves
 //! free — whose spellings are release-specific either way. The key is
@@ -41,7 +43,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
 use oxc_ast::ast::{BindingPattern, Expression, Statement};
-use oxc_span::GetSpan;
+use oxc_span::{GetSpan, Span};
 
 use super::known_globals::is_known_global;
 use super::vendor_names::PriorManifestEntry;
@@ -50,10 +52,17 @@ use crate::babel_view::unparen;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::unpack::bun::rewrite_require_calls;
+use crate::unpack::bun::scope::statement_level_names;
 
 /// One keying pass: `(F)` with `declared` declared around it. The hash,
-/// and the free identifiers that are not known globals (sorted).
-fn keyed(factory: &str, declared: &[String]) -> Option<(String, Vec<String>)> {
+/// and the free identifiers that are references to the rest of the program
+/// (sorted): every one that is not a known global, and every one the
+/// program declares itself (`program_declared`) whatever it spells.
+fn keyed(
+    factory: &str,
+    declared: &[String],
+    program_declared: &HashSet<String>,
+) -> Option<(String, Vec<String>)> {
     let mut src = String::with_capacity(factory.len() + 16 + declared.len() * 8);
     if !declared.is_empty() {
         src.push_str("var ");
@@ -77,7 +86,7 @@ fn keyed(factory: &str, declared: &[String]) -> Option<(String, Vec<String>)> {
         .root_unresolved_references()
         .keys()
         .map(|s| s.to_string())
-        .filter(|s| !is_known_global(s))
+        .filter(|s| !is_known_global(s) || program_declared.contains(s))
         .collect();
     free.sort_unstable();
     let tables = SymbolTables::build(ingest.semantic());
@@ -88,30 +97,40 @@ fn keyed(factory: &str, declared: &[String]) -> Option<(String, Vec<String>)> {
 }
 
 /// The content key of one factory FUNCTION's text: its blurred canonical
-/// hash with every free identifier that is not a known global declared
-/// around it (so a reference to the rest of the bundle keys by position,
-/// not by its release-specific spelling) and every known global verbatim.
+/// hash with every free identifier that references the rest of the program
+/// declared around it (so it keys by position, not by its release-specific
+/// spelling) and every real global verbatim.
+///
+/// A free name is a real global only if the PROGRAM the factory came from
+/// does not declare it (`program_declared`, its statement-level names): a
+/// minifier spells bundle-level names freely, and one that happens to
+/// spell a known global (2.1.85's protobufjs factory is `var gc=...`, read
+/// as `gc()` by nine others) is still a reference to the bundle — keyed
+/// verbatim, it split those nine from their prior files' `lib_<hash8>`.
 /// None when the text does not parse as one function.
-pub fn vendor_content_key(factory: &str) -> Option<String> {
-    let (hash, free) = keyed(factory, &[])?;
+pub fn vendor_content_key(factory: &str, program_declared: &HashSet<String>) -> Option<String> {
+    let (hash, free) = keyed(factory, &[], program_declared)?;
     if free.is_empty() {
         return Some(hash);
     }
-    keyed(factory, &free).map(|(hash, _)| hash)
+    keyed(factory, &free, program_declared).map(|(hash, _)| hash)
 }
 
 /// The fresh side: every classified factory's content key, in record
 /// order — its raw body with the unpack's `REQ(` → `require(` rewrite.
+/// `bundle_declared` is the bundle's statement-level names
+/// (`unpack::bun::scope::statement_level_names` over the container).
 pub fn fresh_content_keys(
     code: &str,
     factories: &[FactoryRecord],
     require_var: Option<&str>,
+    bundle_declared: &HashSet<String>,
 ) -> Vec<Option<String>> {
     crate::par::map_ordered(factories, |f| {
         let raw = &code[f.body_span.start as usize..f.body_span.end as usize];
         match require_var {
-            Some(req) => vendor_content_key(&rewrite_require_calls(raw, req)),
-            None => vendor_content_key(raw),
+            Some(req) => vendor_content_key(&rewrite_require_calls(raw, req), bundle_declared),
+            None => vendor_content_key(raw, bundle_declared),
         }
     })
 }
@@ -191,11 +210,20 @@ fn relinked_factory<'a>(program: &'a oxc_ast::ast::Program<'a>) -> Option<&'a Ex
 /// the bare identifier; an unlinked one (the review tree, or a factory
 /// nothing references) IS the raw body. None when neither shape is found.
 pub fn prior_factory_text(file_text: &str) -> Option<String> {
+    prior_factory(file_text).map(|(text, _)| text)
+}
+
+/// [`prior_factory_text`], with the vendor FILE's own statement-level
+/// names (the program the factory now lives in: a relinked file declares
+/// its `lib_<hash8>` require bindings).
+fn prior_factory(file_text: &str) -> Option<(String, HashSet<String>)> {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, file_text);
     if !ingest.errors.is_empty() {
         return None;
     }
+    let statements: Vec<Span> = ingest.program.body.iter().map(GetSpan::span).collect();
+    let declared = statement_level_names(&ingest, &statements);
     if let Some(f) = relinked_factory(ingest.program) {
         let bound = require_bound_names(ingest.program);
         let span = f.span();
@@ -216,7 +244,7 @@ pub fn prior_factory_text(file_text: &str) -> Option<String> {
             }
         }
         let text = splice(file_text, start, end, edits);
-        return (!text.is_empty()).then_some(text);
+        return (!text.is_empty()).then_some((text, declared));
     }
     match ingest.program.body.as_slice() {
         [Statement::ExpressionStatement(es)]
@@ -226,16 +254,21 @@ pub fn prior_factory_text(file_text: &str) -> Option<String> {
             ) =>
         {
             let span = unparen(&es.expression).span();
-            Some(file_text[span.start as usize..span.end as usize].to_string())
+            Some((
+                file_text[span.start as usize..span.end as usize].to_string(),
+                declared,
+            ))
         }
         _ => None,
     }
 }
 
 /// The prior side: one vendor file's content key — [`vendor_content_key`]
-/// over [`prior_factory_text`].
+/// over [`prior_factory_text`], the file's own declarations as the
+/// program's.
 pub fn prior_file_content_key(file_text: &str) -> Option<String> {
-    vendor_content_key(&prior_factory_text(file_text)?)
+    let (text, declared) = prior_factory(file_text)?;
+    vendor_content_key(&text, &declared)
 }
 
 /// One stale-era prior manifest entry, as the re-key reads it.

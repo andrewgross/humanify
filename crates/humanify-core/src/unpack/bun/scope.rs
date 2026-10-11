@@ -317,29 +317,43 @@ fn container_statement_span(
     symbol: SymbolId,
     container: &[Span],
 ) -> Option<Span> {
-    let scoping = ingest.semantic().scoping();
+    declaring_statement(ingest, symbol).filter(|span| container.iter().any(|c| c == span))
+}
+
+/// The statement that declares `symbol` DIRECTLY — a declarator's
+/// `var`/`let`/`const` statement, or a function or class node (only a
+/// statement-form one is ever a container statement) — None for anything
+/// else (a parameter, a catch binding, an import).
+fn declaring_statement(ingest: &Ingest<'_>, symbol: SymbolId) -> Option<Span> {
     let nodes = ingest.semantic().nodes();
-    let decl = scoping.symbol_declaration(symbol);
-    let in_container = |span: Span| {
-        container
-            .iter()
-            .any(|c| c.start == span.start && c.end == span.end)
-            .then_some(span)
-    };
+    let decl = ingest.semantic().scoping().symbol_declaration(symbol);
     match nodes.kind(decl) {
         AstKind::VariableDeclarator(_) => {
             let parent = nodes.parent_node(decl);
-            match parent.kind() {
-                AstKind::VariableDeclaration(_) => in_container(parent.span()),
-                _ => None,
-            }
+            matches!(parent.kind(), AstKind::VariableDeclaration(_)).then(|| parent.span())
         }
-        // A function or class statement's one name (the span-in-container
-        // check keeps an expression form out — its node is not a
-        // statement).
-        AstKind::Function(_) | AstKind::Class(_) => in_container(nodes.get_node(decl).span()),
+        AstKind::Function(_) | AstKind::Class(_) => Some(nodes.get_node(decl).span()),
         _ => None,
     }
+}
+
+/// Every name the program declares at STATEMENT level: the bindings one of
+/// `container`'s statements declares directly (the same test as a bridged
+/// read's [`container_statement_span`]). A wrapper's parameters are not in
+/// it — they are the host's CommonJS context, bound in every vendor file
+/// too. Bundler-neutral: a program declaring a name is a fact of its scope
+/// tree, whatever emitted it.
+pub(crate) fn statement_level_names(ingest: &Ingest<'_>, container: &[Span]) -> HashSet<String> {
+    let statements: HashSet<(u32, u32)> = container.iter().map(|c| (c.start, c.end)).collect();
+    let scoping = ingest.semantic().scoping();
+    scoping
+        .symbol_ids()
+        .filter(|&symbol| {
+            declaring_statement(ingest, symbol)
+                .is_some_and(|s| statements.contains(&(s.start, s.end)))
+        })
+        .map(|symbol| scoping.symbol_name(symbol).to_string())
+        .collect()
 }
 
 /// Bun's `__toESM` / `__toCommonJS`, by shape: an arrow of three / one
