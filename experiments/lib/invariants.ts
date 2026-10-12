@@ -171,7 +171,7 @@ export function providerErrorRefusal(
     );
   }
   lines.push(
-    "   No card was written. Check the endpoint (scripts/llm-endpoint.sh), then re-run the pair:",
+    "   No card was written. Check the endpoint (experiments/lib/llm-endpoint.sh), then re-run the pair:",
     `     npm run eval -- score ${label}${pe.pair ? ` --pairs ${pe.pair}` : ""}`
   );
   return lines;
