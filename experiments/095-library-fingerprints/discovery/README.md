@@ -288,8 +288,19 @@ Both WARM, on 2.1.215 → 2.1.216, against `exp095-library-fingerprints` (608e9e
   legs. The second run turns it on in the candidate leg.
 - Its `libraryDiscovery` section matches the lab binary's declared-only numbers for 2.1.216 exactly: 79,911 units,
   282 seeds, 742 claims, 39.3 KB grown, 272 KB library class, 586 queued.
-- The diagnostics file is 144 MB with the section included. The candidate queue and the library class are listed row
-  by row.
+- Correction (2026-10-12): the 144 MB diagnostics file is the pre-existing strategy trails (82 MB serialised), not
+  this section. With every unit listed the section was 415 KB; the default (totals and one row per package) is 16 KB.
+
+**2026-10-12, the index lookup** (candidate 9b60b662, same baseline, both WARM):
+
+| run                                                                                                                 | differing files | differing lines | cache writes: candidate / baseline | exit codes |
+| ------------------------------------------------------------------------------------------------------------------- | --------------- | --------------- | ---------------------------------- | ---------- |
+| as specified: discovery off                                                                                         | 0               | 0               | 0 / **0**                          | 0 / 0      |
+| candidate leg with `--diagnostics --library-index <index C>` (`--candidate-cmd`): discovery and the index lookup ON | 0               | 0               | 0 / **0**                          | 0 / 0      |
+
+- The second run's section records index C's id. Its seeds match the lab binary's agreement run exactly: 766 index
+  seeds, 7 from the targeted queue lookup, 1,121 KB seeded, 246 KB grown. It has 68 package rows and no per-unit
+  listing.
 
 ## Files
 
