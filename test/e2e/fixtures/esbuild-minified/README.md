@@ -1,39 +1,30 @@
-# esbuild-minified — esbuild's production shape (KNOWN GAP: spec I2)
+# esbuild-minified — esbuild's production shape (spec I2, fixed)
 
 A real esbuild 0.27.2 build of `../node-app` with
 `--bundle --minify --format=iife --platform=node`: one line, every name
 shortened — including esbuild's own runtime helpers. `__commonJS` becomes
 `var n=(t,e)=>()=>(e||t((e={exports:{}}).exports,e),e.exports)`.
 
-## What it records today (main @ 8883d0b5)
+## What it records
 
 ```
 humanify detect --toolchain build/v1.0.0/build/index.js
-bundler=unknown (tier unknown), minifier=terser (tier unknown),
-unpack adapter=passthrough, name profile=bun (fallback), module fossils=none
+bundler=esbuild (definitive), unpack adapter=esbuild
 ```
 
-esbuild's detector looks for its helper NAMES (`__commonJS`, `__toESM`,
-`__toCommonJS`, `var __export`, `__require`), which `--minify` removes; there
-is no banner, so nothing else fires. The minifier verdict is `terser` from
-the `!0/!1` coercions (spec I4: it is esbuild's minifier).
+esbuild's detector used to read only its helper NAMES (`__commonJS`,
+`__toESM`, …), which `--minify` removes, so this build detected as unknown
+and the passthrough adapter extracted nothing — a declared KNOWN GAP in
+`scripts/e2e.ts` until 2026-10-12. Since finding #96 the module helper is
+read by its SHAPE (`modules::helper_shape`). Its plain form here is one Bun
+writes too (a `shared-shape` Bun signal); esbuild's own `__export`
+registrar beside it (`{get:e[r],enumerable:!0}` — Bun's adds
+`configurable`) makes it an esbuild `shape` signal, which outranks it.
 
-The pipeline still RUNS: fresh, prior and `--sequential` (twice each) all
-exit 0, are byte-deterministic, and the split tree (9 files, one folder)
-boots with the input's exact stdout. But the passthrough adapter extracts
-nothing, so all 25 dependencies stay in the app half — no `vendor/`, no
-vendor naming skip, no module-layout fossils (fresh grouping).
-
-`--bundler esbuild` on the same builds: 26 extracted files in `vendor/`
-and both legs boot identically — the extraction already handles the
-minified factory shape. The fix is detection alone.
-
-## The known-gap entry
-
-`scripts/e2e.ts` `KNOWN_GAPS` holds this fixture to its `expect` block
-(`bundler: esbuild`, `unpackAdapter: esbuild`, `vendor: true`) failing with
-`detection: bundler is unknown, expected esbuild`. When I2 is fixed the
-fixture PASSES and the stage fails, telling the fix to delete the entry.
+The e2e holds the fixture to its `expect` block: bundler and adapter
+esbuild, 26 files in `vendor/`, the fresh grouping, fresh + prior +
+`--sequential` (twice each) deterministic, and the split tree booting with
+the input's exact stdout.
 
 ## The build (PINNED: esbuild 0.27.2)
 

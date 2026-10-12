@@ -1,0 +1,22 @@
+{
+  "package": "esbuild-minified-esm",
+  "repo": "",
+  "sourceStrategy": {
+    "type": "local"
+  },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "expect": {
+    "bundler": "esbuild",
+    "unpackAdapter": "esbuild",
+    "vendor": true,
+    "splitMethod": "not-split"
+  },
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A real esbuild 0.28.2 `--bundle --minify --format=esm --platform=node` build of the shared node-app source (test/e2e/fixtures/node-app). esbuild 0.28 `--minify` as an ES module: the guarded helpers at the TOP LEVEL, a real top-level `import`. The vendor extraction works; the split does not read this layout (plugin-spec I25, the P9 bundle layout), so the run exits 0 with a WARNING and writes the named output unsplit. v1.1.0 perturbs the last dep (adds tripled), the late module's output and the lazy stamp."
+    }
+  ]
+}

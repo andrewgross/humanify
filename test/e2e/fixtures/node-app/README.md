@@ -1,16 +1,19 @@
 # node-app — the shared source of the non-Bun-CJS fixtures
 
-One small Node app, two versions, built four ways by `build.sh`:
+One small Node app, two versions, built seven ways by `build.sh`:
 
-| fixture            | bundler        | command                                           | what it records today                    |
-| ------------------ | -------------- | ------------------------------------------------- | ---------------------------------------- |
-| `esbuild-minified` | esbuild 0.27.2 | `--bundle --minify --format=iife --platform=node` | KNOWN GAP: detected as unknown (spec I2) |
-| `esbuild-cjs`      | esbuild 0.27.2 | `--bundle --format=cjs --platform=node`           | split skipped, named unsplit (spec I25)  |
-| `esbuild-esm`      | esbuild 0.27.2 | `--bundle --format=esm --platform=node`           | split skipped, named unsplit (spec I25)  |
-| `bun-esm-minified` | Bun 1.3.14     | `build --target=bun --format=esm --minify`        | split skipped, named unsplit (spec I25)  |
+| fixture                      | bundler        | command                                                       | what it records today                                    |
+| ---------------------------- | -------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| `esbuild-minified`           | esbuild 0.27.2 | `--bundle --minify --format=iife --platform=node`             | detected by the helper shape (spec I2, fixed 2026-10-12) |
+| `esbuild-cjs`                | esbuild 0.27.2 | `--bundle --format=cjs --platform=node`                       | split skipped, named unsplit (spec I25)                  |
+| `esbuild-esm`                | esbuild 0.27.2 | `--bundle --format=esm --platform=node`                       | split skipped, named unsplit (spec I25)                  |
+| `bun-esm-minified`           | Bun 1.3.14     | `build --target=bun --format=esm --minify`                    | split skipped, named unsplit (spec I25)                  |
+| `esbuild-minified-0.28`      | esbuild 0.28.2 | `--bundle --minify --format=iife --platform=node`             | the `try`-guarded helpers, detected by shape             |
+| `esbuild-minify-identifiers` | esbuild 0.28.2 | `--bundle --minify-identifiers --format=iife --platform=node` | renamed helpers with the spaced marker                   |
+| `esbuild-minified-esm`       | esbuild 0.28.2 | `--bundle --minify --format=esm --platform=node`              | vendor extracted; split skipped (spec I25)               |
 
 Every eval pair is Claude Code, which is one shape: Bun, CommonJS wrapper,
-minified. These four are the shapes the pipeline had never been run on.
+minified. These are the shapes the pipeline had never been run on.
 Until finding #87 (2026-10-05) the three top-level builds failed `--split`
 after naming; a layout the split does not read now finishes unsplit with a
 WARNING (exit 0).
@@ -38,7 +41,7 @@ bash test/e2e/fixtures/node-app/build.sh
 Builds each version from a scratch copy (`npm install` pins `ms` exactly),
 from inside the version's directory — both bundlers bake source paths
 relative to the working directory into the output. esbuild comes from
-`npx esbuild@0.27.2`; the script refuses any Bun but 1.3.14. It also writes
+`npx esbuild@0.27.2` and `npx esbuild@0.28.2`; the script refuses any Bun but 1.3.14. It also writes
 each build's `package.json` (`"type": "commonjs"` for the iife and cjs builds,
 `"module"` for the ESM ones): the repo root is `"type": "module"`, so
 without it Node would load those builds as ESM, where esbuild's
@@ -46,7 +49,7 @@ without it Node would load those builds as ESM, where esbuild's
 identical sha256s (2026-10-04); the fixtures' READMEs record them.
 
 This directory has no `fixture.config.json`, so the e2e stage does not run
-it; it is the four fixtures' source. `source/` and every fixture's
+it; it is the seven fixtures' source. `source/` and every fixture's
 `build/` sit under `.gitignore`'s `test/e2e/fixtures/*/source/` and
 `*/build/` patterns and are FORCE-ADDED, like `bun-bundle`'s: prettier,
 biome and knip (which would otherwise report the app's `ms` import as an

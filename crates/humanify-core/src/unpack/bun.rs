@@ -326,8 +326,9 @@ pub struct ExtractedModule {
     /// function).
     pub body_start: usize,
     pub body_end: usize,
-    /// The whole declaration's range (spliced out of the runtime), past
-    /// one trailing `;`.
+    /// The range spliced out of the runtime: the whole declaration past one
+    /// trailing `;` when the factory is its only declarator, else the
+    /// declarator and one comma (`declarator_removal`).
     pub decl_start: usize,
     pub decl_end: usize,
     /// esbuild's object-METHOD form: the function's span carries no
@@ -995,12 +996,9 @@ pub fn slice_with_edits(
 /// any minified build) or as esbuild's single-key object whose method IS
 /// the factory — [`crate::modules::factory_arg_function`], the one
 /// unwrapping owner; the callee is not re-checked). The body range is the
-/// FUNCTION's span, either form. The declaration range covers the `var`
-/// keyword — the parent VariableDeclaration — plus one trailing `;`.
-/// One declarator's extraction shape: (body range, parent declaration
-/// range, object-method form).
-type FactoryShape = ((usize, usize), (usize, usize), bool);
-
+/// FUNCTION's span, either form. The removal range is
+/// [`declarator_removal`]'s: the whole declaration when the factory is its
+/// only declarator (every Bun bundle), else the declarator alone.
 fn extract_factory_bodies_from_ast(
     classification: &BunModuleClassification,
     code: &str,
@@ -1008,45 +1006,47 @@ fn extract_factory_bodies_from_ast(
     grammar: crate::toolchain::ModuleWrapperGrammar,
 ) -> Vec<ExtractedModule> {
     let nodes = ingest.semantic().nodes();
-    // Declarator span → its extraction shape.
+    let extracted: HashSet<(u32, u32)> = classification
+        .factories
+        .iter()
+        .map(|f| (f.span.start, f.span.end))
+        .collect();
+    // Declarator span → (body range, removal range, object-method form).
     let mut shapes: HashMap<(u32, u32), FactoryShape> = HashMap::new();
     for node in nodes.iter() {
-        let AstKind::VariableDeclarator(decl) = node.kind() else {
+        let AstKind::VariableDeclaration(declaration) = node.kind() else {
             continue;
         };
-        let Some(oxc_ast::ast::Expression::CallExpression(call)) = decl.init.as_ref() else {
-            continue;
-        };
-        let Some(arg0) = call.arguments.first().and_then(|a| a.as_expression()) else {
-            continue;
-        };
-        let Some(factory_arg) = grammar.factory_function(arg0) else {
-            continue;
-        };
-        let parent = nodes.parent_node(node.id());
-        let AstKind::VariableDeclaration(declaration) = parent.kind() else {
-            continue;
-        };
-        let body = factory_arg.function.span();
-        let d = declaration.span();
-        shapes.insert(
-            (decl.span.start, decl.span.end),
-            (
-                (body.start as usize, body.end as usize),
-                (d.start as usize, d.end as usize),
-                factory_arg.object_method,
-            ),
-        );
+        for (i, decl) in declaration.declarations.iter().enumerate() {
+            if !extracted.contains(&(decl.span.start, decl.span.end)) {
+                continue;
+            }
+            let Some(oxc_ast::ast::Expression::CallExpression(call)) = decl.init.as_ref() else {
+                continue;
+            };
+            let Some(arg0) = call.arguments.first().and_then(|a| a.as_expression()) else {
+                continue;
+            };
+            let Some(factory_arg) = grammar.factory_function(arg0) else {
+                continue;
+            };
+            let body = factory_arg.function.span();
+            shapes.insert(
+                (decl.span.start, decl.span.end),
+                (
+                    (body.start as usize, body.end as usize),
+                    declarator_removal(code, declaration, i, &extracted),
+                    factory_arg.object_method,
+                ),
+            );
+        }
     }
     classification
         .factories
         .iter()
         .filter_map(|f| {
-            let &((body_start, body_end), (decl_start, mut decl_end), object_method) =
+            let &((body_start, body_end), (decl_start, decl_end), object_method) =
                 shapes.get(&(f.span.start, f.span.end))?;
-            if code.as_bytes().get(decl_end) == Some(&b';') {
-                decl_end += 1;
-            }
             Some(ExtractedModule {
                 name: f.factory_var.clone(),
                 body_start,
@@ -1057,6 +1057,50 @@ fn extract_factory_bodies_from_ast(
             })
         })
         .collect()
+}
+
+/// One declarator's extraction shape: (body range, removal range,
+/// object-method form).
+type FactoryShape = ((usize, usize), (usize, usize), bool);
+
+/// What extracting declarator `i` of `declaration` splices out of the
+/// runtime. `extracted` holds every extracted factory's declarator span.
+///
+/// - Every declarator extracted (Bun's one factory per statement): the
+///   whole declaration, past one trailing `;`.
+/// - Otherwise only the declarator and ONE comma: the comma after it while
+///   a kept declarator follows somewhere, else the comma before it. The
+///   ranges of one declaration never overlap — those before the last kept
+///   declarator end where the next declarator starts, those after it start
+///   where the previous one ends — so every edit applies, and the kept
+///   declarators keep their own text and edits (a minifier that joins the
+///   whole bundle into one `var` — wrangler re-minified by esbuild — puts
+///   helpers, app bindings and factories in one statement).
+fn declarator_removal(
+    code: &str,
+    declaration: &oxc_ast::ast::VariableDeclaration<'_>,
+    i: usize,
+    extracted: &HashSet<(u32, u32)>,
+) -> (usize, usize) {
+    let decls = &declaration.declarations;
+    let is_extracted =
+        |d: &oxc_ast::ast::VariableDeclarator<'_>| extracted.contains(&(d.span.start, d.span.end));
+    let Some(last_kept) = decls.iter().rposition(|d| !is_extracted(d)) else {
+        let d = declaration.span();
+        let mut end = d.end as usize;
+        if code.as_bytes().get(end) == Some(&b';') {
+            end += 1;
+        }
+        return (d.start as usize, end);
+    };
+    if i < last_kept {
+        (
+            decls[i].span.start as usize,
+            decls[i + 1].span.start as usize,
+        )
+    } else {
+        (decls[i - 1].span.end as usize, decls[i].span.end as usize)
+    }
 }
 
 /// A non-unicode `[$\w]` byte.

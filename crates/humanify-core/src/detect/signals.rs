@@ -12,6 +12,8 @@ use humanify_model::detection::{
     BundlerType, DetectionSignal, DetectionTier, MinifierType, SignalStrength,
 };
 
+use crate::modules::helper_shape::{find_module_helper, has_esbuild_export_registrar};
+
 use super::js_text::{
     contains_word, eat, eat_quote, is_line_terminator, is_word_boundary, js_prefix, skip_js_space,
 };
@@ -140,9 +142,17 @@ fn has_var_export(code: &str) -> bool {
 
 /// `/\b__commonJS\b/`, `/\b__toESM\b/`, `/\b__toCommonJS\b/`,
 /// `/\bvar\s+__export\b/`, `/\b__require\b/` — esbuild's runtime helper
-/// names, which Bun's runtime writes too: shared helper names.
+/// names, which Bun's runtime writes too: shared helper names. Then the
+/// module helper's SHAPE, which survives `--minify` (spec I2): a form only
+/// esbuild writes ([`esbuild_only`] — the `try` guard,
+/// the indirect call), or any form beside esbuild's own `__export`
+/// registrar ([`has_esbuild_export_registrar`]) — each a [`Shape`]
+/// signal.
+///
+/// [`Shape`]: SignalStrength::Shape
+/// [`esbuild_only`]: crate::modules::helper_shape::ModuleHelperShape::esbuild_only
 pub fn detect_esbuild(code: &str) -> Vec<DetectionSignal> {
-    match_patterns(
+    let mut signals = match_patterns(
         code,
         "esbuild-bundler",
         BundlerType::Esbuild,
@@ -154,7 +164,25 @@ pub fn detect_esbuild(code: &str) -> Vec<DetectionSignal> {
             (has_var_export, "__export (esbuild definition)"),
             (|c| contains_word(c, "__require"), "__require"),
         ],
-    )
+    );
+    if let Some(helper) = find_module_helper(code) {
+        let pattern = if helper.esbuild_only() {
+            Some("module helper shape (esbuild's guarded or indirect form)")
+        } else if has_esbuild_export_registrar(code) {
+            Some("module helper shape + esbuild's __export registrar")
+        } else {
+            None
+        };
+        if let Some(pattern) = pattern {
+            signals.push(bundler_signal(
+                "esbuild-bundler",
+                pattern,
+                BundlerType::Esbuild,
+                SignalStrength::Shape,
+            ));
+        }
+    }
+    signals
 }
 
 // ---- parcel.ts ----------------------------------------------------------------
@@ -227,7 +255,11 @@ fn has_create_require_import(code: &str) -> bool {
 
 /// TS `detectBunBundler`: the `// @bun` banner (the strongest signal
 /// there is); else the `{exports:{}}` factory + the `createRequire` import
-/// together (a shape).
+/// together (a shape); else the module helper in the plain form both
+/// bundlers write ([`find_module_helper`], spec I2) — a [`SharedShape`]:
+/// an input nothing more specific names gets Bun's pieces.
+///
+/// [`SharedShape`]: SignalStrength::SharedShape
 pub fn detect_bun_bundler(code: &str) -> Vec<DetectionSignal> {
     if has_bun_banner(code) {
         return vec![bundler_signal(
@@ -243,6 +275,14 @@ pub fn detect_bun_bundler(code: &str) -> Vec<DetectionSignal> {
             "{exports:{}} + createRequire import",
             BundlerType::Bun,
             SignalStrength::Shape,
+        )];
+    }
+    if find_module_helper(code).is_some_and(|h| !h.esbuild_only()) {
+        return vec![bundler_signal(
+            "bun-bundler",
+            "module helper shape (the plain form Bun and esbuild share)",
+            BundlerType::Bun,
+            SignalStrength::SharedShape,
         )];
     }
     Vec::new()

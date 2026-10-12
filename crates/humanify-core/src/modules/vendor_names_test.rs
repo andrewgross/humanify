@@ -39,7 +39,6 @@ fn rec(structural_hash: &str, name: &str, source: NameSource) -> FactoryRecord {
         name: Some(name.to_string()),
         name_source: Some(source),
         name_origin: Some(source),
-        decl_stmt_span: Span::new(0, 10),
         source_path: None,
         object_method: false,
         exported_text: None,

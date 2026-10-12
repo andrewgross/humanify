@@ -1931,3 +1931,41 @@ fn a_changed_declared_name_never_vetoes_a_content_pair() {
     let after = entry_with(&m2, "RouterOS", &second.0);
     assert_eq!(s(after, "fileName"), s(&before, "fileName"));
 }
+
+// ---- joined declarations (a re-minified esbuild bundle) ----------------------
+
+/// wrangler's cli.js re-minified by esbuild 0.28.2 (experiments/095
+/// discovery, Results §5) joins EVERY top-level `var` into one statement:
+/// the helpers, an app binding (`m`), a lazy init (`_`) and the factories
+/// share declarations. Each factory is extracted by its DECLARATOR; the
+/// statement and every other declarator stay in the runtime.
+const JOINED_BUNDLE: &str = concat!(
+    "var fp=Object.defineProperty,UD=Object.getOwnPropertyNames,",
+    "q=(e,t)=>function(){return e&&(t=(0,e[UD(e)[0]])(e=0)),t},",
+    "ee=(e,t)=>function(){return t||(0,e[UD(e)[0]])((t={exports:{}}).exports,t),t.exports},",
+    "m,_=q({\"init.js\"(){m=7}}),",
+    "A=ee({\"node_modules/a/index.js\"(e,t){_(),t.exports={a:m}}}),",
+    "B=ee({\"node_modules/b/index.js\"(e,t){t.exports={b:A().a}}}),",
+    "k=1,",
+    "C=ee({\"node_modules/c/index.js\"(e,t){t.exports={c:k}}});",
+    "console.log(B().b,C().c);"
+);
+
+#[test]
+fn a_joined_declaration_extracts_each_factory_by_its_declarator() {
+    let t = TempDir::new("joined");
+    let outcome = unpack_bun(JOINED_BUNDLE, &t.0, BunUnpackOptions::default()).unwrap();
+    assert_eq!(outcome.kept_in_app, 0, "no factory stays in the app");
+    let entries = factories(&read_manifest(&t.0));
+    assert_eq!(entries.len(), 3, "A, B and C are vendored");
+    let runtime = fs::read_to_string(t.0.join("runtime.js")).unwrap();
+    // The helpers, the app binding, the init and `k` stay declared …
+    for kept in ["fp=Object.defineProperty", "ee=(e,t)=>", "m,_=q(", "k=1"] {
+        assert!(runtime.contains(kept), "{kept} lost: {runtime}");
+    }
+    // … no factory body does, and the runtime still parses.
+    assert!(!runtime.contains("node_modules/"), "{runtime}");
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, &runtime, "runtime.js");
+    assert!(ingest.errors.is_empty(), "{runtime}");
+}

@@ -111,8 +111,8 @@ pub struct Chosen<T> {
 /// P3 — where the bundled third-party modules are and what each module's
 /// body is. ONE grammar today, shared by the Bun and esbuild adapters
 /// (esbuild's flow IS Bun's — `unpack::run_adapter` hands both to
-/// `unpack::bun::unpack_bun`): Bun's `{exports:{}}` factory marker, then
-/// esbuild's declared `__commonJS` (`modules::identify_cjs_factory`); the
+/// `unpack::bun::unpack_bun`): the module helper by its shape, in every
+/// form either bundler writes (`modules::identify_cjs_factory`); the
 /// factory argument in either form (`modules::factory_arg_function`); the
 /// classification of every `var X = HELPER(factory)` in the container
 /// (`modules::classify_bun_modules`). Every pipeline caller asks the run's
