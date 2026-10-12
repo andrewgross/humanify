@@ -42,6 +42,8 @@ fn provider(server: &StubServer, edit: impl FnOnce(&mut LlmConfig)) -> OpenAiCli
     OpenAiClient::new(config, None)
 }
 
+// concurrency: test harness: a private runtime drives this test's futures
+#[allow(clippy::disallowed_methods)]
 fn run<F: std::future::Future>(f: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()

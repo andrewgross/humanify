@@ -152,7 +152,7 @@ outside the WP each send the package back.
 
 ## 8. Rules that bind every work package
 
-- `npm run check` (11 stages) is the only gate; run it bare, read it, then
+- `npm run check` (13 stages since 2026-10-12) is the only gate; run it bare, read it, then
   commit, then push. Never pipe it, never chain a push after it.
 - Red first: a gate or test that was never seen failing proves nothing
   (CLAUDE.md, `docs/measurement-pitfalls.md`).

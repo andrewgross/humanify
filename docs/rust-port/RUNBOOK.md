@@ -100,15 +100,15 @@ ln -s /Users/andrewgross/Development/humanify/node_modules <worktree>/node_modul
 
 ## 3. Gate commands
 
-| command                                                                  | what                                                                                                                                      | time      |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `npm run check`                                                          | THE gate, 11 stages: typecheck, lint, rust:fmt, rust:clippy, knip, knip:prod, census:clones (advisory), unit, rust:unit, fingerprint, e2e | ~35 s now |
-| `npm run check -- --only rust:fmt,rust:clippy,rust:unit`                 | PARTIAL, labelled so; for iteration only                                                                                                  | seconds   |
-| `cargo clippy --workspace --all-targets -- -D warnings`                  | what `rust:clippy` runs                                                                                                                   |           |
-| `cargo test --workspace`                                                 | what `rust:unit` runs                                                                                                                     |           |
-| `cargo run -p humanify-parity -- <verb> ...`                             | the differ (from WP0.3)                                                                                                                   |           |
-| `npm run eval -- neutrality <ref> [pair] --cache /work/neutrality-cache` | byte-identity, WARM only; read the baseline leg's cache-write count BEFORE the verdict line                                               | ~25 min   |
-| `npm run eval -- score <label>`                                          | cold 4-pair eval; not a parity-era instrument (used at 5b)                                                                                | ~1 h      |
+| command                                                                  | what                                                                                                                                                                             | time      |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `npm run check`                                                          | THE gate, 13 stages: typecheck, lint, rust:fmt, rust:clippy, knip, knip:prod, census:clones (advisory), census:concurrency, unit, rust:unit, rust:build, rust:format-golden, e2e | ~35 s now |
+| `npm run check -- --only rust:fmt,rust:clippy,rust:unit`                 | PARTIAL, labelled so; for iteration only                                                                                                                                         | seconds   |
+| `cargo clippy --workspace --all-targets -- -D warnings`                  | what `rust:clippy` runs                                                                                                                                                          |           |
+| `cargo test --workspace`                                                 | what `rust:unit` runs                                                                                                                                                            |           |
+| `cargo run -p humanify-parity -- <verb> ...`                             | the differ (from WP0.3)                                                                                                                                                          |           |
+| `npm run eval -- neutrality <ref> [pair] --cache /work/neutrality-cache` | byte-identity, WARM only; read the baseline leg's cache-write count BEFORE the verdict line                                                                                      | ~25 min   |
+| `npm run eval -- score <label>`                                          | cold 4-pair eval; not a parity-era instrument (used at 5b)                                                                                                                       | ~1 h      |
 
 Cargo's binaries in the gate resolve through PATH; the container's
 `~/.profile` and `~/.bashrc` export `~/.cargo/bin`. A shell that lacks it

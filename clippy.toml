@@ -4,4 +4,17 @@ cognitive-complexity-threshold = 15
 disallowed-methods = [
   { path = "std::env::var", reason = "env is read once in humanify-cli::env; core receives switches as config (WP1.1)" },
   { path = "std::env::var_os", reason = "env is read once in humanify-cli::env; core receives switches as config (WP1.1)" },
+  # Concurrency (docs/concurrency.md). Each allowed site carries
+  # `#[allow(clippy::disallowed_methods)]` AND a `// concurrency: <reason>`
+  # comment; the concurrency census (scripts/concurrency-census.ts) fails
+  # an allow without one.
+  { path = "std::thread::sleep", reason = "blocking sleep: on the runtime thread it stalls every in-flight call (audit R6). Async code uses tokio::time::sleep; a deadline uses a timeout, not a poll (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::runtime::Builder::new_current_thread", reason = "ONE runtime, owned by the LLM provider (humanify-llm provider.rs). Never a second runtime, never a nested block_on (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::runtime::Builder::new_multi_thread", reason = "ONE current_thread runtime, owned by the LLM provider (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::runtime::Runtime::new", reason = "ONE current_thread runtime, owned by the LLM provider (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::spawn", reason = "no detached tasks: every future is driven to completion by run_wave/run_pipelined so nothing outlives the wave or escapes its deadline (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::task::spawn_blocking", reason = "CPU or blocking work belongs on the main thread or the par seam, not on tokio's blocking pool (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "tokio::task::block_in_place", reason = "the runtime is current_thread; block_in_place panics there (docs/concurrency.md#async-io)", allow-invalid = true },
+  { path = "reqwest::Client::new", reason = "an HTTP client needs a deadline covering the WHOLE exchange (send + body); confirm the caller sets one (audit W2, docs/concurrency.md#deadlines)", allow-invalid = true },
+  { path = "std::process::Child::wait_with_output", reason = "with a piped stdin this deadlocks unless stdin is written concurrently (audit W1, docs/concurrency.md#subprocesses)", allow-invalid = true },
 ]

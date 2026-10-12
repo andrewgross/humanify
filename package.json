@@ -17,6 +17,7 @@
     "prepare": "husky",
     "eval": "tsx scripts/eval.ts",
     "census:clones": "tsx scripts/clone-census.ts",
+    "census:concurrency": "tsx scripts/concurrency-census.ts",
     "ask-trace": "tsx scripts/ask-trace.ts",
     "diff-asks": "tsx scripts/diff-asks.ts",
     "match-truth": "tsx experiments/lib/match-truth/run.ts"
@@ -48,7 +49,11 @@
   "lint-staged": {
     "*.{ts,js,json,md}": "prettier --write",
     "*.{ts,js}": "biome check --write --no-errors-on-unmatched",
-    "*.rs": "scripts/rustfmt-staged.sh"
+    "*.rs": [
+      "scripts/rustfmt-staged.sh",
+      "tsx scripts/concurrency-census.ts --files"
+    ],
+    "scripts/concurrency-allowlist.json": "tsx scripts/concurrency-census.ts"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

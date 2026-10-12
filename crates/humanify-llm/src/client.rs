@@ -60,6 +60,8 @@ pub fn completions_url(base: &str) -> String {
 }
 
 impl OpenAiClient {
+    // concurrency: one pooled client; every attempt runs under ONE timeout_at deadline covering connect, send and body (audit W2, O12)
+    #[allow(clippy::disallowed_methods)]
     pub fn new(config: LlmConfig, log: Option<LogSink>) -> Self {
         OpenAiClient {
             http: reqwest::Client::new(),

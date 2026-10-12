@@ -8,16 +8,19 @@
 npm run check
 ```
 
-It runs all twelve stages — typecheck, lint (prettier + biome), rust:fmt,
-rust:clippy, knip, knip:prod, clone census, unit, rust:unit, rust:build,
-rust:format-golden, e2e — and prints a summary saying which ran. (The
-thirteenth, rust:parity — the dump differ's selftest — was retired
-2026-09-28 with the rest of the TS-parity scaffolding: the differ compared
-TS-side artifact dumps and, post-cutover, had no living caller.)
+It runs all thirteen stages — typecheck, lint (prettier + biome), rust:fmt,
+rust:clippy, knip, knip:prod, clone census, concurrency census, unit,
+rust:unit, rust:build, rust:format-golden, e2e — and prints a summary saying
+which ran. (An earlier thirteenth, rust:parity — the dump differ's selftest —
+was retired 2026-09-28 with the rest of the TS-parity scaffolding: the differ
+compared TS-side artifact dumps and, post-cutover, had no living caller. The
+concurrency census joined 2026-10-12.)
 The `census:clones` stage is ADVISORY: unreviewed potential-duplication prints
 `REVIEW` (never FAIL) — an automated mini code-review for Claude/agents to act
-on by unifying the code or allowlisting with a justification. All other
-stages are pass/fail. `check:all` and `test` are aliases of it. Nothing is
+on by unifying the code or allowlisting with a justification. The
+`census:concurrency` stage is pass/fail: an unlisted concurrency site in the
+pipeline's Rust FAILS until it is confirmed (see Code style, "Concurrency").
+All other stages are pass/fail. `check:all` and `test` are aliases of it. Nothing is
 outside it.
 
 **The pipeline is the Rust binary** (`crates/`, built as
@@ -69,6 +72,7 @@ npm run test:unit          # EVERY *.test.ts: test/, experiments/
 npm run knip               # dead code / unused exports (knip.json)
 npm run knip:prod          # production-only dead code audit
 npm run census:clones      # cross-file twin functions vs allowlist (--loose = review sweep)
+npm run census:concurrency # concurrency sites in crates/ vs scripts/concurrency-allowlist.json
 cargo test --workspace     # rust:unit
 cargo build --release --locked -p humanify-cli   # rust:build
 scripts/format-golden.sh   # rust:format-golden (needs rust:build)
@@ -379,6 +383,19 @@ Never skip the red step. If the test passes before implementation, the test is n
 - Actively unify duplicated code. When two systems do similar things, extract shared functionality rather than duplicating with minor variations. Before writing new helpers, check if an existing one can be reused or generalized.
 - **[`docs/responsibility.md`](./docs/responsibility.md) says who owns which question** — name legality, applying a rename, counting changed lines, walking a tree, reading a ledger, reading a kill switch. Check it before writing a helper, and add a row when you create an owner. The dangerous duplication is not two functions that look alike; it is two that answer the same question DIFFERENTLY with nothing declaring the difference (a guard that read fields one producer never sets was dead for 11,094 accepts and reported as perfect precision).
 - **[`docs/pipeline-stages.md`](./docs/pipeline-stages.md) lists the twelve stages that actually run** (Rust modules since the cutover), in order, and which two have a real strategy registry (unpack, library detection). Read it before assuming a plug point exists: the working mental model was four stages, and the eight unwritten ones are where the noise has come from — `vendor/` went unscored for thirteen experiments at 2.4x the measured `src/` noise. Splitting has ONE path (`stableSplitFromCode`; prior → inherit layout, no prior → fresh grouping): the standalone `split` command, its adapter registry, and the legacy clustering splitter that backed them were deleted 2026-08-11/12 after an execution census measured them at zero runs.
+- **Concurrency: [`docs/concurrency.md`](./docs/concurrency.md) is the approach** —
+  ten sanctioned patterns (CPU work through `crate::par` only, the ONE tokio
+  runtime the LLM provider owns, a deadline over every whole wait, drained
+  pipes, short locks, completion order never reaching output, one retry
+  layer). Clippy bans what it can (`await_holding_*`, and
+  `disallowed_methods` for blocking sleeps, extra runtimes, detached tasks,
+  bare HTTP clients, `wait_with_output`); each allowed exception carries a
+  `// concurrency: <reason>` comment. Every other concurrency construct in
+  non-test `crates/` code must be on `scripts/concurrency-allowlist.json`
+  with its pattern and reason — the `census:concurrency` stage and the
+  pre-commit hook FAIL an unlisted one. That failure is a question, not a
+  verdict: confirm the site really is one of the patterns (add the entry)
+  or switch to the sanctioned primitive.
 - Clippy enforces the complexity ceiling in the Rust pipeline; Biome enforces cognitive complexity <= 15 in the harness TS. Extract helpers to keep functions focused.
 - Rust unit tests sit beside their module as `<module>_test.rs` (or a crate's `tests/`); harness TS tests are colocated `*.test.ts`.
 - The e2e fixtures live in `test/e2e/fixtures/` (committed builds); `scripts/e2e.ts` runs the binary on them.

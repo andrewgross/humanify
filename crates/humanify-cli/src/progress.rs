@@ -377,6 +377,8 @@ impl TtyRenderer {
 
     /// With the TS `setInterval(redraw, 250)`: a thread that redraws until
     /// `finish()`.
+    // concurrency: the TTY redraw thread's 250 ms tick: an observer thread, never the runtime thread; it exits when the renderer drops (audit O19)
+    #[allow(clippy::disallowed_methods)]
     pub fn start(sink: Sink, clock: Clock, columns: usize) -> Self {
         let r = TtyRenderer::new(sink, clock, columns);
         let weak = Arc::downgrade(&r.state);

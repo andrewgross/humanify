@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use crate::metrics::{MetricsTracker, PipelineStage, format_duration, format_tokens};
 
+// concurrency: test: real wall time for the throttle under test
+#[allow(clippy::disallowed_methods)]
 fn sleep_ms(ms: u64) {
     std::thread::sleep(Duration::from_millis(ms));
 }
