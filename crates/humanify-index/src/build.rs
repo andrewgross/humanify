@@ -27,13 +27,18 @@ use crate::recipe::{
 };
 use crate::registry;
 use crate::shard::{
-    Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule, read_current, write_shard,
+    Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule, ShardNotes, ShardUnit, read_current,
+    write_shard,
 };
 use crate::sourcemap::{SourceMap, owner_cached};
 
 /// A module span must take at least this share of its mapping segments
 /// from one source file to be attributed (the lab's "pure" spans).
 const PURITY: f64 = 0.9;
+
+/// Units smaller than this are not indexed (the lab's unit votes counted
+/// units of >= 20 nodes; the lookup's own floor is higher).
+pub const UNIT_ROW_MIN_NODES: u32 = 20;
 
 pub struct BuildConfig {
     /// `name` or `name@version` (a pin), one per entry.
@@ -163,7 +168,7 @@ fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardI
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
             recipe: RECIPE_VERSION.to_string(),
-            fingerprint: f.module.clone(),
+            fingerprint: format!("{}+{}", f.module, f.units),
         });
     }
     out
@@ -381,7 +386,7 @@ fn install(work: &Path, task: &Task) -> Result<PathBuf, String> {
 
 /// The literal shard: every source file of every installed package,
 /// owned by its nearest package.json.
-fn literal_shard(dir: &Path, inputs: &ShardInputs) -> Shard {
+pub fn literal_shard(dir: &Path, inputs: &ShardInputs) -> Shard {
     let mut shard = Shard::new(inputs);
     let mut files = Vec::new();
     walk_files(&dir.join("node_modules"), &mut files);
@@ -495,7 +500,121 @@ fn fingerprint_bundle(slice: IndexSlice, out: &Path, shard: &mut Shard) -> Resul
             key: key.clone(),
         });
     }
+    let (units, notes) = unit_rows(slice, &code, &map, out);
+    shard.units.extend(units);
+    shard.notes.unit_mixed_spans += notes.mixed_spans;
     Ok(())
+}
+
+/// Unit rows of one bundle (statement-level library fingerprints): every
+/// statement unit attributed through the sourcemap like a module, its
+/// functions inheriting its owner; units under [`UNIT_ROW_MIN_NODES`]
+/// nodes are not indexed. `module_bytes` is the bundled size of the owner
+/// file in this build (the statement units it owns).
+pub fn unit_rows(
+    slice: IndexSlice,
+    code: &str,
+    map: &SourceMap,
+    out: &Path,
+) -> (Vec<ShardUnit>, ShardNotes) {
+    let mut notes = ShardNotes::default();
+    let toolchain = humanify_core::toolchain::resolve_toolchain(
+        &humanify_core::detect::detect_bundle(code),
+        Some(slice.bundler()),
+        None,
+    );
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = humanify_core::ingest::Ingest::parse_unambiguous(&allocator, code);
+    if !ingest.errors.is_empty() {
+        notes.unkeyed += 1;
+        return (Vec::new(), notes);
+    }
+    let units = humanify_core::libindex::units::bundle_unit_prints(
+        code,
+        &ingest,
+        toolchain.layout.piece,
+        toolchain.module_wrappers.piece,
+        toolchain.interop.piece,
+    );
+    let spans: Vec<(u32, u32)> = units
+        .iter()
+        .map(|(u, _)| (u.span.start, u.span.end))
+        .collect();
+    let mut cache = HashMap::new();
+    let mut owned = Vec::new();
+    for ((unit, prints), tally) in units.iter().zip(map.tally(code, &spans)) {
+        match unit_owner(map, out, &tally, &mut cache) {
+            UnitOwner::Owned(owner) => owned.push((owner, u64::from(unit.bytes), prints)),
+            UnitOwner::Mixed => notes.mixed_spans += 1,
+            UnitOwner::Unowned => notes.unowned += 1,
+        }
+    }
+    let mut module_bytes: HashMap<(String, String), u64> = HashMap::new();
+    for (o, bytes, _) in &owned {
+        *module_bytes
+            .entry((o.package.clone(), o.file.clone()))
+            .or_default() += bytes;
+    }
+    let mut rows = Vec::new();
+    for (o, _, prints) in &owned {
+        let size = module_bytes[&(o.package.clone(), o.file.clone())];
+        for p in std::iter::once(&prints.whole).chain(&prints.functions) {
+            if p.nodes >= UNIT_ROW_MIN_NODES {
+                rows.push(ShardUnit {
+                    owner: o.package.clone(),
+                    version: o.version.clone(),
+                    file: o.file.clone(),
+                    hash: p.hash.clone(),
+                    nodes: p.nodes,
+                    content: p.content,
+                    module_bytes: size,
+                });
+            }
+        }
+    }
+    (rows, notes)
+}
+
+enum UnitOwner {
+    Owned(crate::sourcemap::Owner),
+    Mixed,
+    Unowned,
+}
+
+/// A statement unit's owner: the PACKAGE holding at least [`PURITY`] of
+/// its segments (a unit may span several files of one package — a
+/// package's own pre-bundled file mapped back to its sources), named by
+/// that package's majority file. Segments outside `node_modules` count
+/// against it.
+fn unit_owner(
+    map: &SourceMap,
+    out: &Path,
+    tally: &[(u32, usize)],
+    cache: &mut HashMap<PathBuf, Option<(String, String)>>,
+) -> UnitOwner {
+    let total: usize = tally.iter().map(|t| t.1).sum();
+    type Seen = (usize, usize, Option<crate::sourcemap::Owner>);
+    let mut by_package: BTreeMap<String, Seen> = BTreeMap::new();
+    for &(src, n) in tally {
+        let Some(owner) = owner_cached(out, &map.sources[src as usize], cache) else {
+            continue;
+        };
+        let entry = by_package
+            .entry(owner.package.clone())
+            .or_insert((0, 0, None));
+        entry.0 += n;
+        if n > entry.1 {
+            entry.1 = n;
+            entry.2 = Some(owner);
+        }
+    }
+    let Some((_, (n, _, owner))) = by_package.into_iter().max_by_key(|(_, (n, _, _))| *n) else {
+        return UnitOwner::Unowned;
+    };
+    match owner {
+        Some(owner) if n as f64 >= PURITY * total as f64 => UnitOwner::Owned(owner),
+        _ => UnitOwner::Mixed,
+    }
 }
 
 /// The module shard of one slice: both entries built and fingerprinted.

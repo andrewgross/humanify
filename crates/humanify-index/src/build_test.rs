@@ -89,3 +89,93 @@ fn a_shard_already_in_the_store_is_reused() {
     assert!(second.tasks[0].missing.is_empty());
     assert_eq!(second.tasks[1].missing.len(), 1);
 }
+
+#[test]
+fn unit_rows_are_attributed_through_the_sourcemap() {
+    use crate::build::unit_rows;
+    use crate::sourcemap::SourceMap;
+    use humanify_core::libindex::IndexSlice;
+    let root = std::env::temp_dir().join(format!("humanify-index-units-{}", std::process::id()));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    write("node_modules/dep/lib.js", "");
+    // line 0: the library's statement; line 1: the app entry's.
+    let lib = "var parse=function(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase()})};";
+    let app = "var main=function(){return parse(process.argv[2]).join(\"|\").length+1};";
+    let code = format!("{lib}\n{app}\n");
+    let col = |n: usize| (0..n as u32).step_by(4);
+    let map = SourceMap {
+        sources: vec![
+            "../node_modules/dep/lib.js".into(),
+            "../entries/req.cjs".into(),
+        ],
+        segments: col(lib.len())
+            .map(|c| (0, c, 0))
+            .chain(col(app.len()).map(|c| (1, c, 1)))
+            .collect(),
+    };
+    let (rows, notes) = unit_rows(IndexSlice::Bun, &code, &map, &root.join("out"));
+    assert_eq!(notes.unowned, 1, "the app entry's statement");
+    assert!(!rows.is_empty());
+    assert!(
+        rows.iter()
+            .all(|r| r.owner == "dep" && r.version == "1.2.3" && r.file == "lib.js")
+    );
+    assert!(rows.iter().all(|r| r.module_bytes == lib.len() as u64));
+    assert_eq!(
+        rows.len(),
+        2,
+        "the statement and its outer function; the inner one is under the floor: {rows:?}"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_unit_spanning_several_files_of_one_package_is_that_packages() {
+    use crate::build::unit_rows;
+    use crate::sourcemap::SourceMap;
+    use humanify_core::libindex::IndexSlice;
+    let root = std::env::temp_dir().join(format!("humanify-index-units2-{}", std::process::id()));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    // A class whose methods came from two of the package's files (its own
+    // pre-bundled lib, mapped back to its sources).
+    let lib = "var T=class{list(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase()})}table(t){return t.split(\"|\").map(function(e){return e.trim().toUpperCase()})}};";
+    let half = lib.len() as u32 / 2;
+    let map = SourceMap {
+        sources: vec![
+            "../node_modules/dep/src/Tokenizer.ts".into(),
+            "../node_modules/dep/src/rules.ts".into(),
+        ],
+        segments: (0..lib.len() as u32)
+            .step_by(4)
+            .map(|c| (0, c, u32::from(c >= half)))
+            .collect(),
+    };
+    let (rows, notes) = unit_rows(
+        IndexSlice::Bun,
+        &format!("{lib}\n"),
+        &map,
+        &root.join("out"),
+    );
+    assert_eq!(notes.mixed_spans, 0);
+    assert!(
+        !rows.is_empty() && rows.iter().all(|r| r.owner == "dep"),
+        "{rows:?}"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}

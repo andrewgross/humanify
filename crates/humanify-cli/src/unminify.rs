@@ -75,7 +75,7 @@ pub fn unpack_bundle(
     log: &mut humanify_core::artifact_dump::DispatchLog,
     prior_version: Option<&Path>,
     manifest_prior_order_disabled: bool,
-    library_discovery: bool,
+    library_discovery: Option<humanify_core::libdetect::discovery::DiscoveryRequest<'_>>,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Unpacked, String> {

@@ -9,7 +9,7 @@ use std::time::Instant;
 use humanify_core::hash::serialize::SymbolTables;
 use humanify_core::ingest::Ingest;
 use humanify_core::libdetect::discovery::{
-    BundlePieces, DiscoveryOptions, DiscoveryReport, VetoSupport, discover_in_bundle,
+    BundlePieces, DiscoveryOptions, DiscoveryReport, IndexLookup, VetoSupport, discover_in_bundle,
 };
 use humanify_core::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
 
@@ -63,6 +63,85 @@ fn main() {
         )
         .map(|c| c.factories.iter().map(|f| f.span).collect())
         .unwrap_or_default();
+    // INDEX=<dir>: look statement units up in a library index. AGREEMENT=0
+    // (structural alone), SPEC=0 (no specificity), TARGETED=0 (no queue
+    // round), SUPPORT=<n>.
+    let flag = |k: &str| std::env::var(k).ok();
+    let index = flag("INDEX").map(|dir| {
+        let t = Instant::now();
+        let ix = humanify_core::libindex::lookup::LibraryIndex::load(
+            std::path::Path::new(&dir),
+            humanify_core::libindex::IndexSlice::from_name(&flag("SLICE").unwrap_or("bun".into()))
+                .expect("slice"),
+        )
+        .expect("index");
+        eprintln!("index loaded in {:.1}s", t.elapsed().as_secs_f64());
+        ix
+    });
+    let mut rules = humanify_core::libindex::lookup::LookupRules::default();
+    if flag("AGREEMENT").as_deref() == Some("0") {
+        rules.agreement = false;
+    }
+    if flag("SPEC").as_deref() == Some("0") {
+        rules.specificity = None;
+    }
+    if let Some(n) = flag("MIN_NODES") {
+        rules.min_nodes = n.parse().expect("min nodes");
+    }
+    if let Some(n) = flag("SUPPORT") {
+        rules.support = n.parse().expect("support");
+    }
+    let lookup = index.as_ref().map(|index| IndexLookup {
+        index,
+        rules,
+        targeted: (flag("TARGETED").as_deref() != Some("0")).then_some(
+            humanify_core::libindex::lookup::LookupRules {
+                min_nodes: rules.min_nodes.min(20),
+                support: 0,
+                ..rules
+            },
+        ),
+    });
+    if let (Some(at), Some(ix)) = (flag("DEBUG_AT"), index.as_ref()) {
+        let at: u32 = at.parse().expect("offset");
+        let statements = humanify_core::modules::container_statements(
+            ingest.program,
+            ingest.semantic(),
+            wrapper.as_ref().map(|w| w.body_span),
+        );
+        let facts = humanify_core::graph::references::BundlerFacts::recognise(
+            &code,
+            statements,
+            grammar,
+            InteropHelpers::Bun,
+        );
+        let units = humanify_core::graph::references::container_units(
+            statements, &factories, &facts, false,
+        );
+        let tables = SymbolTables::build(ingest.semantic());
+        let prints = humanify_core::libindex::units::unit_prints(&units, &tables);
+        for (u, p) in units.units.iter().zip(&prints) {
+            if u.span.start != at {
+                continue;
+            }
+            let p = p.as_ref().expect("statement");
+            for (i, f) in std::iter::once(&p.whole).chain(&p.functions).enumerate() {
+                let head: String = code[f.span.start as usize..f.span.end as usize]
+                    .chars()
+                    .take(50)
+                    .collect();
+                let occ = ix.occurrences(&f.hash);
+                eprintln!(
+                    "{} {} nodes {} content {} hits {:?} {head:?}",
+                    if i == 0 { "WHOLE" } else { "  fn" },
+                    f.hash,
+                    f.nodes,
+                    f.content,
+                    &occ[..occ.len().min(3)]
+                );
+            }
+        }
+    }
     let t1 = Instant::now();
     let (graph, found) = discover_in_bundle(
         &code,
@@ -74,6 +153,7 @@ fn main() {
         },
         &factories,
         &claims,
+        lookup,
         DiscoveryOptions {
             // VETO_SUPPORT=all-rules: the prototype's veto (reproduction).
             veto_support: match std::env::var("VETO_SUPPORT").as_deref() {
@@ -98,7 +178,7 @@ fn main() {
             .collect();
         std::fs::write(path, rows).expect("units dump");
     }
-    let report = DiscoveryReport::new(&graph, &found);
+    let report = DiscoveryReport::new(&graph, &found, true);
     std::fs::write(&args[2], serde_json::to_string(&report).unwrap()).expect("write");
     eprintln!(
         "parse {:.1}s, discover {:.1}s; units {} edges {} runtime {} factories {} lazy {}; index claims in {}; claims {} vetoed {} class {} queue {}",

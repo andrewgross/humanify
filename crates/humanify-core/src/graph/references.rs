@@ -92,7 +92,10 @@ impl BundlerFacts {
             let (BindingPattern::BindingIdentifier(id), Some(init)) = (&d.id, &d.init) else {
                 continue;
             };
-            if interop.recognise(code, init).is_some() || is_compiler_sentinel(init) {
+            if interop.recognise(code, init).is_some()
+                || interop.runtime_shape(code, init).is_some()
+                || is_compiler_sentinel(init)
+            {
                 runtime.insert(id.name.to_string());
             }
         }
@@ -139,6 +142,9 @@ pub enum UnitKind {
     LazyModule,
     /// One statement of a lazy module's init body.
     LazyBody { module: u32 },
+    /// One statement of a bundled module's factory body — the index side
+    /// only ([`container_units`] with `factory_bodies`).
+    FactoryBody { module: u32 },
     /// A bundled CommonJS module: one unit, external.
     Factory,
 }
@@ -198,70 +204,157 @@ impl ReferenceGraph {
     }
 }
 
-/// The units of a container, and which unit declares each top-level name.
-struct UnitBuilder<'f> {
-    facts: &'f BundlerFacts,
-    factories: HashSet<(u32, u32)>,
-    units: Vec<Unit>,
+/// The AST node a unit stands for: a statement, one declarator of a split
+/// `var`, or a container (a lazy wrapper or a bundled module — its own
+/// statements are their own units, or it is external).
+#[derive(Clone, Copy, Debug)]
+pub enum UnitNode<'a> {
+    Statement(&'a Statement<'a>),
+    Declarator(&'a VariableDeclarator<'a>),
+    Container,
+}
+
+/// The units of a container, their nodes (parallel to `units`), and which
+/// unit declares each top-level name.
+pub struct ContainerUnits<'a> {
+    pub units: Vec<Unit>,
+    pub nodes: Vec<UnitNode<'a>>,
     declared: HashMap<String, u32>,
 }
 
-impl UnitBuilder<'_> {
-    fn push(&mut self, span: Span, kind: UnitKind) -> u32 {
-        self.units.push(Unit {
+/// The units of a container's statements (module doc): the ONE unit model,
+/// shared by the reference graph and the library index's unit fingerprints
+/// (`libindex::units`). `factory_bodies`: also give each statement of a
+/// bundled module's factory body its own unit (`UnitKind::FactoryBody`) —
+/// the index side, where library code sits inside modules; the graph keeps
+/// a module as one external unit.
+pub fn container_units<'a>(
+    statements: &'a [Statement<'a>],
+    factories: &[Span],
+    facts: &BundlerFacts,
+    factory_bodies: bool,
+) -> ContainerUnits<'a> {
+    let mut builder = UnitBuilder {
+        facts,
+        factories: factories.iter().map(|s| (s.start, s.end)).collect(),
+        factory_bodies,
+        out: ContainerUnits {
+            units: Vec::new(),
+            nodes: Vec::new(),
+            declared: HashMap::new(),
+        },
+    };
+    for stmt in statements {
+        builder.statement(stmt);
+    }
+    builder.out
+}
+
+struct UnitBuilder<'f, 'a> {
+    facts: &'f BundlerFacts,
+    factories: HashSet<(u32, u32)>,
+    factory_bodies: bool,
+    out: ContainerUnits<'a>,
+}
+
+impl<'a> UnitBuilder<'_, 'a> {
+    fn push(&mut self, span: Span, kind: UnitKind, node: UnitNode<'a>) -> u32 {
+        self.out.units.push(Unit {
             span,
             kind,
             bytes: span.size(),
             runtime: false,
         });
-        self.units.len() as u32 - 1
+        self.out.nodes.push(node);
+        self.out.units.len() as u32 - 1
     }
 
-    fn statement<'a>(&mut self, stmt: &'a Statement<'a>) {
+    fn declare(&mut self, name: &str, u: u32) {
+        self.out.declared.insert(name.to_string(), u);
+    }
+
+    fn statement(&mut self, stmt: &'a Statement<'a>) {
         match stmt {
             Statement::VariableDeclaration(decl) => {
                 let split = decl.declarations.len() > 1;
                 for d in &decl.declarations {
-                    let span = if split { d.span } else { decl.span };
-                    let u = self.declarator(d, span);
+                    let (span, node) = if split {
+                        (d.span, UnitNode::Declarator(d))
+                    } else {
+                        (decl.span, UnitNode::Statement(stmt))
+                    };
+                    let u = self.declarator(d, span, node);
                     if let BindingPattern::BindingIdentifier(id) = &d.id {
-                        self.declared.insert(id.name.to_string(), u);
+                        self.declare(&id.name, u);
                     }
                 }
             }
             Statement::FunctionDeclaration(f) => {
-                let u = self.push(f.span, UnitKind::Statement);
+                let u = self.push(f.span, UnitKind::Statement, UnitNode::Statement(stmt));
                 if let Some(id) = &f.id {
-                    self.declared.insert(id.name.to_string(), u);
+                    self.declare(&id.name, u);
                 }
             }
             Statement::ClassDeclaration(c) => {
-                let u = self.push(c.span, UnitKind::Statement);
+                let u = self.push(c.span, UnitKind::Statement, UnitNode::Statement(stmt));
                 if let Some(id) = &c.id {
-                    self.declared.insert(id.name.to_string(), u);
+                    self.declare(&id.name, u);
                 }
             }
             s => {
-                self.push(s.span(), UnitKind::Statement);
+                self.push(s.span(), UnitKind::Statement, UnitNode::Statement(stmt));
             }
         }
     }
 
-    fn declarator<'a>(&mut self, d: &'a VariableDeclarator<'a>, span: Span) -> u32 {
-        if self.factories.contains(&(d.span.start, d.span.end)) {
-            return self.push(span, UnitKind::Factory);
-        }
-        let Some(body) = lazy_init_body(d, self.facts) else {
-            return self.push(span, UnitKind::Statement);
+    /// A container unit, then one unit per statement of its body.
+    fn container(&mut self, span: Span, kind: UnitKind, body: &'a [Statement<'a>]) -> u32 {
+        let module = self.push(span, kind, UnitNode::Container);
+        let body_kind = match kind {
+            UnitKind::Factory => UnitKind::FactoryBody { module },
+            _ => UnitKind::LazyBody { module },
         };
-        let module = self.push(span, UnitKind::LazyModule);
         let mut owned = span.size();
         for s in body {
-            self.push(s.span(), UnitKind::LazyBody { module });
+            self.push(s.span(), body_kind, UnitNode::Statement(s));
             owned -= s.span().size();
         }
-        self.units[module as usize].bytes = owned;
+        self.out.units[module as usize].bytes = owned;
         module
+    }
+
+    fn declarator(&mut self, d: &'a VariableDeclarator<'a>, span: Span, node: UnitNode<'a>) -> u32 {
+        if self.factories.contains(&(d.span.start, d.span.end)) {
+            return match factory_body(d, self.facts).filter(|_| self.factory_bodies) {
+                Some(body) => self.container(span, UnitKind::Factory, body),
+                None => self.push(span, UnitKind::Factory, UnitNode::Container),
+            };
+        }
+        match lazy_init_body(d, self.facts) {
+            Some(body) => self.container(span, UnitKind::LazyModule, body),
+            None => self.push(span, UnitKind::Statement, node),
+        }
+    }
+}
+
+/// A bundled module's factory body: the single argument of its
+/// `HELPER(…)` call, in one of the grammar's factory forms.
+fn factory_body<'a>(
+    d: &'a VariableDeclarator<'a>,
+    facts: &BundlerFacts,
+) -> Option<&'a [Statement<'a>]> {
+    let Expression::CallExpression(call) = unparen(d.init.as_ref()?) else {
+        return None;
+    };
+    let arg = call.arguments.first()?.as_expression()?;
+    function_block(facts.grammar.factory_function(arg)?.function)
+}
+
+fn function_block<'a>(function: &'a Expression<'a>) -> Option<&'a [Statement<'a>]> {
+    match function {
+        Expression::ArrowFunctionExpression(a) => arrow_block(a),
+        Expression::FunctionExpression(f) => Some(f.body.as_ref()?.statements.as_slice()),
+        _ => None,
     }
 }
 
@@ -281,15 +374,12 @@ fn lazy_init_body<'a>(
     if !facts.lazy_init.contains(callee.name.as_str()) || call.arguments.len() != 1 {
         return None;
     }
-    let function = facts
-        .grammar
-        .factory_function(call.arguments[0].as_expression()?)?
-        .function;
-    match function {
-        Expression::ArrowFunctionExpression(a) => arrow_block(a),
-        Expression::FunctionExpression(f) => Some(f.body.as_ref()?.statements.as_slice()),
-        _ => None,
-    }
+    function_block(
+        facts
+            .grammar
+            .factory_function(call.arguments[0].as_expression()?)?
+            .function,
+    )
 }
 
 fn arrow_block<'a>(a: &'a ArrowFunctionExpression<'a>) -> Option<&'a [Statement<'a>]> {
@@ -465,20 +555,15 @@ pub fn build_reference_graph<'a>(
     factories: &[Span],
     facts: &BundlerFacts,
 ) -> ReferenceGraph {
-    let mut builder = UnitBuilder {
-        facts,
-        factories: factories.iter().map(|s| (s.start, s.end)).collect(),
-        units: Vec::new(),
-        declared: HashMap::new(),
-    };
-    for stmt in statements {
-        builder.statement(stmt);
-    }
-    let UnitBuilder {
+    let ContainerUnits {
         units, declared, ..
-    } = builder;
-    let (inner, top): (Vec<u32>, Vec<u32>) = (0..units.len() as u32)
-        .partition(|&u| matches!(units[u as usize].kind, UnitKind::LazyBody { .. }));
+    } = container_units(statements, factories, facts, false);
+    let (inner, top): (Vec<u32>, Vec<u32>) = (0..units.len() as u32).partition(|&u| {
+        matches!(
+            units[u as usize].kind,
+            UnitKind::LazyBody { .. } | UnitKind::FactoryBody { .. }
+        )
+    });
     let mut graph = ReferenceGraph {
         units,
         top,

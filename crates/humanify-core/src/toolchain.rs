@@ -304,12 +304,26 @@ impl InteropHelpers {
         }
     }
 
+    /// The bundler's other runtime helpers, by shape (library discovery's
+    /// externals): esbuild's `__name`, `__publicField`, `__require`. Not
+    /// [`Self::recognise`]'s helpers — nothing is rewritten to these.
+    pub fn runtime_shape(
+        self,
+        code: &str,
+        init: &oxc_ast::ast::Expression<'_>,
+    ) -> Option<&'static str> {
+        match self {
+            InteropHelpers::Bun => crate::unpack::bun::scope::esbuild_runtime_shape(code, init),
+        }
+    }
+
     /// The helpers that FILL a namespace object among a container's
     /// statements — a call defines its first argument (library discovery,
     /// docs/design/library-discovery.md §4): the export registrar
     /// (`__export`, by shape — the load order's owner,
     /// `emit::load_order::identify_export_registrar`) and the re-export
-    /// copier (`__reExport`, by shape).
+    /// copier (`__reExport`, by shape) and esbuild's `__name` (it sets its
+    /// first argument's `name`).
     pub fn namespace_fillers(
         self,
         code: &str,
@@ -328,7 +342,9 @@ impl InteropHelpers {
                     for d in &d.declarations {
                         if let (oxc_ast::ast::BindingPattern::BindingIdentifier(id), Some(init)) =
                             (&d.id, &d.init)
-                            && crate::unpack::bun::scope::reexport_shape(code, init)
+                            && (crate::unpack::bun::scope::reexport_shape(code, init)
+                                || crate::unpack::bun::scope::esbuild_runtime_shape(code, init)
+                                    == Some(crate::unpack::bun::scope::NAME_SETTER))
                         {
                             out.insert(id.name.to_string());
                         }

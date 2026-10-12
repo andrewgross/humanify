@@ -1,20 +1,39 @@
 # exp095 lane "library discovery": graph-closure candidates + leaf-inward fixpoint (lab, then core)
 
-## STATUS (2026-10-11)
+## STATUS (2026-10-12)
 
 - **Phase 1 is in core, report-only**, on branch `exp095-discovery-core` (not merged):
   - the statement reference graph is `humanify_core::graph::references`;
   - discovery is `humanify_core::libdetect::discovery`;
-  - a run with `--diagnostics` writes it as `libraryDiscovery`.
+  - a run with `--diagnostics` writes it as `libraryDiscovery`: totals and one row per package by default, every unit
+    with `--library-discovery-units`.
     Nothing is named, moved or renamed by it. Design: `docs/design/library-discovery.md` (§6 has the lab numbers).
-- **No index lookup runs inside a pipeline run yet.** In-run seeds are the declared readers and kept `/*!` banners.
-  The candidate queue is emitted, not looked up. The lab below feeds the negatives lane's Step B claims in as index
-  seeds.
+- **In-run index lookup (2026-10-12).** `--library-index <dir>` looks every statement unit up in the index
+  (`libindex::lookup`) and runs a targeted lookup of the candidate queue. The index gained a statement-unit table
+  (`units.<slice>.jsonl`), built by the builder's own code (`humanify_index::build::unit_rows`). No shipping index
+  exists yet; the lab built three from the bundles and installs it already had (Results §5).
+- **esbuild's path comments are not read** (Andrew, 2026-10-12): minified bundles get the index and the graph only.
 - Scored against the negatives lane's `labels.jsonl` (620 random `src/` statements) and `traps.jsonl` on Claude Code
-  2.1.216. 2.1.198 and 2.1.86 have no labels: their vetoes were read by hand.
+  2.1.216. 2.1.198 and 2.1.86 have no labels: their vetoes and index claims were read by hand.
 
 ## Totals first
 
+- **In-run index lookup, Claude Code 2.1.216** (estimated library recall after the fixpoint; app claimed):
+
+  | index                                                         | structural rule                  | agreement rule (default) | lab Step B S1 + prototype fixpoint, same builds |
+  | ------------------------------------------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------- |
+  | C (the builds Step B used, Claude Code's exact versions)      | **81.0%**, 0 app                 | 54.5%, 0 app             | 85.8%, 0 app                                    |
+  | R2000 (scale lane, top-2,000 npm, not Claude Code's versions) | **28.2%**, 0 app, 0 wrong family | 15.0%, 0 app             | lab "stepb" design: 27.1% (raw sample bytes)    |
+
+  - The remaining gap to the lab on index C is understood: 1.4 points are the stricter default veto, most of the rest
+    is one 10 KB class (marked's tokenizer: 15 of its 29 large methods are not in any indexed marked build).
+  - The targeted lookup of the queue adds 1.4 points on either index, with 0 app.
+  - No fork-family claim (ink, yoga, commander) on any of the three releases with either index.
+
+- **Minified esbuild** (wrangler minified by esbuild with a source map; esbuild slice of R2000): every claim is library
+  code. Structural: 510 KB claimed, 26.6% of its library bytes. Agreement: 286 KB, 14.9%. The limits are measured
+  (Results §5): CommonJS modules a minified esbuild unpack does not recognise, packages the index lacks, and hoisted
+  ESM code whose statements are shaped differently from the index's.
 - **The core reproduces the prototype.** Same seeds on 2.1.216 (declared + Step B index C + the prototype's veto):
   - 12,255 of the core's 12,256 claimed units are claimed by the prototype too;
   - estimated library recall 93.65% on both, 0 sampled app units claimed, the same two tslib traps;
@@ -133,15 +152,128 @@ column is the bytes still claimed as `ink`.
     app.
 - **What doesn't.**
   - **Recall without an index is low (4.8%).** Only the AWS SDK declares itself in its own text.
-  - **unminified esbuild keeps a path comment for every module, and nothing reads it yet.** It writes
+  - **unminified esbuild keeps a path comment for every module.** It writes
     `// ../../node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>/<file>` before each module's code (1,957 in wrangler).
-    That is a declaration for every hoisted library module. Reading it would be a new `ModuleIdentitySource` (P17)
-    fact for app code. Minified builds drop it.
-  - **esbuild's other helpers are not recognised as runtime.** These are `__name`, `__publicField` and
-    `__require`. Library code calls `__name`, so a library unit whose closure reaches it fails MODULE's closure guard.
+    **Decision (Andrew, 2026-10-12): not read.** The comments vanish under `--minify-whitespace`, so on every fully
+    minified bundle. Minified bundles get the index and the graph only (design §3a).
+  - ~~esbuild's other helpers are not recognised as runtime~~ — fixed 2026-10-12: `__name`, `__publicField` and
+    `__require` are runtime by shape (`InteropHelpers::runtime_shape`), and `__name` defines its first argument.
   - **Nothing to test the veto on.** No index claims exist for these bundles.
   - **pnpm**: its own code is CommonJS too, so it all goes to `vendor/`, and the 30 KB of top-level statements hold
     nothing to find.
+
+### 5. In-run index lookup (2026-10-12)
+
+**The pieces.**
+
+- `libindex::units`: a statement unit's fingerprint. The MatchKey hash of the whole statement and of every function
+  inside it, with private names blinded, plus a node count and a content-token count. The index and the run compute
+  it with the same function over the same unit model.
+- The index gets `units.<slice>.jsonl`. The builder attributes each statement unit through the sourcemap, owned by
+  the package holding at least 90% of its segments (not the file: one package's pre-bundled file maps back to many).
+- `libindex::lookup`:
+  - **structural**: the lab's Step B S1. A whole statement (30+ nodes, 3+ content tokens) or its largest
+    non-overlapping functions (30+ nodes) must cover half its nodes. A hash held by more than 3 packages names none. A
+    claim under 100 nodes needs a same-package claim within 10 statements.
+  - **specificity**: an index module may be at most 4× the query's module + 4 KB.
+  - **agreement**: the literal rule (IDF-weighted containment, 90% cover, score ≥ 20, margin 10) must name the same
+    family.
+- **Targeted queue lookup**: after the first fixpoint, each queued region's units are looked up again with a 20-node
+  floor and no support rule. A claim is accepted only for a family the region already calls, and the fixpoint reruns.
+
+**Lab indexes** (`proto/src/lab_index.rs`, scratch only, never committed):
+
+| index         | from                                                                                                            | unit rows | literal rows | built in |
+| ------------- | --------------------------------------------------------------------------------------------------------------- | --------- | ------------ | -------- |
+| C             | the 3,238 builds of Step B's index C (lab builds of every bundler + both exact-version mini-labs), 196 installs | 50,084    | 19,546       | 1.5 min  |
+| R2000 bun     | scale lane `ix/builds/bun-1.4.0` (12,334 builds), 6,191 installs                                                | 497,363   | 116,997      | 21 min   |
+| R2000 esbuild | scale lane `ix/builds/esbuild-0.28.2` (12,284 builds)                                                           | 484,482   | 116,997      | 25 min   |
+
+**Claude Code 2.1.216, index C.** The lab side is Step B rerun at S1 (no positional growth) on the same builds, then
+the prototype's fixpoint.
+
+|                                     | index seeds before the veto | after the fixpoint | sample bytes | app (sample, est.) | traps                     |
+| ----------------------------------- | --------------------------- | ------------------ | ------------ | ------------------ | ------------------------- |
+| lab Step B S1 + prototype fixpoint  | 76.8% (S1 alone)            | 85.8%              | —            | 0                  | tslib ×2                  |
+| core, structural                    | 67.6%                       | **81.0%**          | 86.0%        | 0                  | tslib ×2                  |
+| core, structural, prototype veto    | —                           | 81.9%              | —            | 0                  | tslib ×2                  |
+| core, structural, no targeted round | —                           | 79.6%              | —            | 0                  | tslib ×2                  |
+| core, agreement (default)           | 48.7%                       | 54.5%              | —            | 0                  | tslib ×2 (by DOWN/MODULE) |
+
+- **Where the core's seed number comes from.** Before two fixes, core's structural seeds reached 60.9%:
+
+  - **private names**: lru-cache's methods use private fields that the minifier renames per build. The unit hash
+    now blinds private names, and private names no longer count as content tokens.
+  - **content tokens on functions**: core required 3 for function hits; the lab requires them on whole statements
+    only. Minified library logic often has none.
+
+  Both were measured, then fixed test-first.
+
+- **Not the cause: normalisation.** The lab's own S1 at `h1` (no normalisation) claims 6,198 units against 6,236 at
+  `h3` (the L3 normaliser).
+- **What the seed gap is.**
+  - Two misses are claimed by a kept banner instead, which outranks an index claim.
+  - The rest of the seed gap is marked's tokenizer class (10 KB, a heavily weighted stratum): 15 of its 29 large
+    methods are in no indexed marked build, so node-weighted coverage stays under half.
+  - The lab's token-weighted coverage still clears half, by token counts that core does not use.
+- **The agreement rule halves recall and found no app code the structural rule claimed.** Statement literal sets are
+  small: the literal rule needs ≥ 20 bits and 90% cover, and identifier-like literals are capped at 2 bits. Under
+  agreement the isolation veto also removes 160 KB of seeds per release (structural: 43 KB), because the surviving
+  seeds are sparser.
+
+**Claude Code 2.1.216, index R2000 (Bun).** Most of Claude Code's versions are not in it.
+
+| rule       | seeds before the veto (sample bytes) | after the fixpoint (sample bytes / est.) | app | wrong family                                            |
+| ---------- | ------------------------------------ | ---------------------------------------- | --- | ------------------------------------------------------- |
+| structural | 17.7%                                | 27.1% / 28.2%                            | 0   | 0 (one `lodash` claim on `lodash-es` code: same family) |
+| agreement  | 7.1%                                 | 16.4% / 15.0%                            | 0   | 0                                                       |
+
+The scale lane's best statement-level configuration ("stepb design") read 27.1% of sampled library bytes on the same
+labels, with 0 app claims.
+
+**2.1.198 and 2.1.86** (no labels).
+
+| release | index             | index seeds kept   | grown  | vetoed       | fork-family claims |
+| ------- | ----------------- | ------------------ | ------ | ------------ | ------------------ |
+| 2.1.198 | C, structural     | 1,864 (+206 queue) | 165 KB | 167, 43.8 KB | 0                  |
+| 2.1.86  | C, structural     | 1,189 (+186 queue) | 149 KB | 204, 53.5 KB | 0                  |
+| 2.1.198 | R2000, structural | 692 (+132)         | 106 KB | 156, 49.6 KB | 0                  |
+| 2.1.86  | R2000, structural | 466 (+107)         | 127 KB | 142, 46.0 KB | 0                  |
+
+- **Read by hand.**
+  - Core's claims that overlap no lab Step B claim (884 units / 121 KB on 2.1.86, 1,046 / 130 KB on 2.1.198) are
+    inlined `package.json` declarations and their glue, plus AWS, Azure and readdirp library code.
+  - A random 12 plus the 8 largest R2000 index claims on 2.1.86 are library code, with one questionable name: a
+    100-byte base64 check named `@vercel/cli-config`, one of the scale lane's pre-bundling "sponge" packages.
+
+**Minified esbuild** (step 4). wrangler 3.114.0's `cli.js` was wrapped in a function (so every name is local) and
+minified by esbuild 0.28.2 with `--minify --sourcemap`. One direct `eval` was made indirect, or esbuild would have kept
+every enclosing name. Truth composes the two maps (minified → `cli.js` → sources). Index: R2000, esbuild slice.
+
+| part of wrangler's library code       | bytes    | claimed, structural                                                 | claimed, agreement |
+| ------------------------------------- | -------- | ------------------------------------------------------------------- | ------------------ |
+| CommonJS modules, package indexed     | 1,060 KB | 40.2%                                                               | 22.4%              |
+| CommonJS modules, package not indexed | 109 KB   | 0%                                                                  | 0%                 |
+| hoisted ESM code, package indexed     | 433 KB   | 9.2%                                                                | 6.7%               |
+| hoisted ESM code, package not indexed | 313 KB   | 14.0% (declared + graph)                                            | 6.3%               |
+| **all library (1.92 MB)**             |          | **26.6%**                                                           | **14.9%**          |
+| app code claimed                      |          | 0 B (45 B of esbuild's own `import_meta_url` shim in library class) | 0 B                |
+
+- **What the index covers.**
+  - Library modules of indexed packages.
+  - Claude-Code-like hoisted code when the bundler wraps it the same way in the index's builds (index C above).
+- **What it can't, in minified esbuild.**
+  1. **The unpack does not recognise minified esbuild's `__commonJS`.** `(e,t)=>function(){return t||(0,e[…][0])((t={exports:{}}).exports,t),t.exports}`
+     matches neither Bun's marker nor the declared name. So all 368 modules stay in the app as single statements
+     (1.17 MB). Their functions still match 40% of their bytes, but the whole-module key, which would name them, is
+     never asked. A pipeline gap upstream of discovery.
+  2. **Packages the index lacks** (Sentry, several AWS clients, `@iarna/toml`, `@clack/core`: 422 KB).
+  3. **Hoisted ESM statements are shaped differently.** Inside an esbuild lazy module, `var x = e` becomes a hoisted
+     `var x;` plus `x = e` in the init body. A statement-level hash then differs from an index build that hoisted the
+     same code eagerly; functions still match. Indexed packages' hoisted code: 9.2% claimed. The likely lever, not
+     measured: hash an init-body assignment as the declaration it replaced.
+- **The same index on the UNMINIFIED wrangler** claims 4.9% (declarations alone gave 4.8%). An index of minified
+  builds does not match unminified code, because MatchKey does not undo minify-syntax rewrites.
 
 ### 4. Neutrality
 
@@ -179,7 +311,14 @@ Both WARM, on 2.1.215 → 2.1.216, against `exp095-library-fingerprints` (608e9e
 - `core_compare.py`: the core's report against `discover.py`, unit by unit, scored the same way (Results §1).
 - `other/scan_units.mjs`: the lab's unit model for a release without realworld labels (2.1.86).
 - `other/stepb_other.py`: Step B, index C, on another release's units.
-- `other/score_sourcemap.py`: scores a report exactly against an esbuild bundle's source map (Results §3).
+- `other/score_sourcemap.py`: scores a report exactly against an esbuild bundle's source map (Results §3), composing a
+  second map when the bundle was re-minified (Results §5).
+- `proto/src/lab_index.rs` (`exp095-lab-index`): a library index with statement units, built by the builder's own
+  `unit_rows` / `literal_shard` / `merge` from bundles and installs already on disk.
+- `index_score.py`: scores reports made with `INDEX=` against the labels (seeds before and after the veto, after the
+  fixpoint, sample-byte recall).
+- `exp095-core-discover` also takes `INDEX=<dir>` (with `SLICE`, `AGREEMENT=0`, `SPEC=0`, `TARGETED=0`, `SUPPORT`,
+  `MIN_NODES`) and `DEBUG_AT=<offset>` (one unit's prints and what the index holds for each).
 
 ## Re-run
 
@@ -206,6 +345,11 @@ $T/target/release/exp095-core-discover <bundle-2.1.86> $T/core-2.1.86.json $T/cc
 W=<package>/wrangler-dist/cli.js
 DUMP_UNITS=$T/w.tsv $T/target/release/exp095-core-discover $W $T/core-w.json
 python3 -I other/score_sourcemap.py $W $W.map $T/w.tsv $T/core-w.json
+# in-run index lookup (Results §5): build a lab index, then look Claude Code up in it
+find <builds> -name out.js.map | sed 's|/out.js.map||' > $T/builds.txt; ls -d <installs>/* > $T/pkgs.txt
+$T/target/release/exp095-lab-index $T/ix bun $T/builds.txt $T/pkgs.txt
+INDEX=$T/ix AGREEMENT=0 $T/target/release/exp095-core-discover $B $T/ix-struct.json
+python3 index_score.py $T/edges.tsv $T/ix-struct.json
 ```
 
 The prototype's helper names are passed by hand. The core recognises them by shape from the toolchain's pieces

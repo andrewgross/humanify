@@ -378,6 +378,46 @@ pub(crate) fn bun_helper_shape(code: &str, init: &Expression<'_>) -> Option<&'st
     None
 }
 
+/// The bundler's OTHER runtime helpers by SHAPE — the ones no vendored body
+/// is rewritten to, but which app and library code alike call, so library
+/// discovery treats them as runtime (`graph::references::BundlerFacts`):
+/// esbuild's `__name` (`(t,v)=>defProp(t,"name",{value:v,configurable:!0})`,
+/// written for `--keep-names`), `__publicField`
+/// (`(o,k,v)=>defNormal(o,typeof k!="symbol"?k+"":k,v)`) and `__require`
+/// (a call whose text keeps `Dynamic require of`, minified or not).
+pub(crate) fn esbuild_runtime_shape(code: &str, init: &Expression<'_>) -> Option<&'static str> {
+    /// esbuild's are under 400 bytes, minified or not.
+    const HELPER_TEXT_MAX: usize = 1024;
+    let span = init.span();
+    let text = &code[span.start as usize..span.end as usize];
+    if text.len() > HELPER_TEXT_MAX {
+        return None;
+    }
+    match init {
+        Expression::ArrowFunctionExpression(arrow)
+            if !arrow.r#async
+                && arrow.params.rest.is_none()
+                && !matches!(arrow.body, oxc_ast::ast::ArrowFunctionBody::FunctionBody(_)) =>
+        {
+            match arrow.params.items.len() {
+                2 if text.contains("\"name\"") && text.contains("configurable") => {
+                    Some(NAME_SETTER)
+                }
+                3 if text.contains("typeof") && text.contains("\"symbol\"") => {
+                    Some("__publicField")
+                }
+                _ => None,
+            }
+        }
+        Expression::CallExpression(_) if text.contains("Dynamic require of") => Some("__require"),
+        _ => None,
+    }
+}
+
+/// esbuild's `__name`: it also DEFINES its first argument (a
+/// namespace-filling helper in library discovery's graph).
+pub(crate) const NAME_SETTER: &str = "__name";
+
 /// The re-export copier (`__reExport`) by SHAPE: a small, synchronous
 /// three-parameter arrow that copies a module's exports except `"default"`
 /// onto its first argument (and its third). Bun's spells the loop out

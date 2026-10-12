@@ -208,7 +208,7 @@ pub struct AdapterRun<'n> {
     pub webcrack_shim: Option<&'n webcrack::WebcrackShim>,
     /// Run library discovery, report-only (`--diagnostics`; vendor-record
     /// adapters; docs/design/library-discovery.md).
-    pub library_discovery: bool,
+    pub library_discovery: Option<crate::libdetect::discovery::DiscoveryRequest<'n>>,
 }
 
 impl<'n> AdapterRun<'n> {
@@ -229,7 +229,7 @@ impl<'n> AdapterRun<'n> {
             prior: None,
             manifest_prior_order_disabled: false,
             webcrack_shim: None,
-            library_discovery: false,
+            library_discovery: None,
         }
     }
 }

@@ -50,6 +50,12 @@ Options:
   --no-skip-libraries            Process library code with the LLM
   --log-file <path>              Write debug logs to file (implies -vv)
   --diagnostics <path>           Write detailed rename diagnostics to JSON file
+  --library-index <dir>          Library fingerprint index for --diagnostics'
+                                 libraryDiscovery (report-only: names, moves and
+                                 renames nothing)
+  --library-discovery-units      List every claimed, vetoed, library-class and
+                                 queued unit in --diagnostics' libraryDiscovery
+                                 (default: totals and packages)
   --stats-json <path>            Write the deterministic match/rename breakdown
                                  as compact JSON (coverage + transfer stats +
                                  prior-match counts) for the eval harness

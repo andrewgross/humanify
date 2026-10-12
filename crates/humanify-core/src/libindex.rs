@@ -23,6 +23,8 @@ use humanify_model::detection::BundlerType;
 pub mod families;
 pub mod format;
 pub mod literals;
+pub mod lookup;
+pub mod units;
 
 #[cfg(test)]
 #[path = "libindex/families_test.rs"]
@@ -33,6 +35,12 @@ mod format_test;
 #[cfg(test)]
 #[path = "libindex/literals_test.rs"]
 mod literals_test;
+#[cfg(test)]
+#[path = "libindex/lookup_test.rs"]
+mod lookup_test;
+#[cfg(test)]
+#[path = "libindex/units_test.rs"]
+mod units_test;
 
 /// The bundler family a structural fingerprint was built with. Literals are
 /// bundler-independent and shared by every slice.

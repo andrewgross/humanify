@@ -121,9 +121,9 @@ impl SourceMap {
         })
     }
 
-    /// For each byte span of `code`: the source owning at least `purity`
-    /// of the segments inside it, else None.
-    pub fn attribute(&self, code: &str, spans: &[(u32, u32)], purity: f64) -> Vec<Option<u32>> {
+    /// For each byte span of `code`: how many mapping segments inside it
+    /// name each source (source index, count), by source index.
+    pub fn tally(&self, code: &str, spans: &[(u32, u32)]) -> Vec<Vec<(u32, usize)>> {
         let positions: Vec<(u32, u32)> = self.segments.iter().map(|&(l, c, _)| (l, c)).collect();
         let mut at: Vec<(usize, u32)> = utf16_to_byte_offsets(code, &positions)
             .into_iter()
@@ -140,7 +140,18 @@ impl SourceMap {
                 for &(_, src) in &at[lo..hi] {
                     *tally.entry(src).or_default() += 1;
                 }
-                let total = hi - lo;
+                tally.into_iter().collect()
+            })
+            .collect()
+    }
+
+    /// For each byte span of `code`: the source owning at least `purity`
+    /// of the segments inside it, else None.
+    pub fn attribute(&self, code: &str, spans: &[(u32, u32)], purity: f64) -> Vec<Option<u32>> {
+        self.tally(code, spans)
+            .into_iter()
+            .map(|tally| {
+                let total: usize = tally.iter().map(|t| t.1).sum();
                 let (src, n) = tally
                     .into_iter()
                     .max_by_key(|&(src, n)| (n, std::cmp::Reverse(src)))?;

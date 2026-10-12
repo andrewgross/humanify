@@ -160,3 +160,57 @@ fn a_new_version_is_a_new_index_id() {
     assert!(manifest["shards"].get("bun/ms@2.1.4").is_some());
     assert!(manifest["data"].get("stoplists.json").is_some());
 }
+
+#[test]
+fn unit_rows_merge_per_slice_with_the_smallest_module() {
+    use super::shard::ShardUnit;
+    let unit = |v: &str, hash: &str, module_bytes: u64| ShardUnit {
+        owner: "ms".into(),
+        version: v.into(),
+        file: "index.js".into(),
+        hash: hash.into(),
+        nodes: 40,
+        content: 5,
+        module_bytes,
+    };
+    let mut a = module_shard("1.0.0", &[]);
+    a.units = vec![unit("1.0.0", "h1", 900), unit("1.0.0", "h2", 900)];
+    let mut b = module_shard("2.0.0", &[]);
+    b.units = vec![unit("2.0.0", "h1", 700)];
+    let mut t = module_shard("2.1.0", &[]);
+    t.units = vec![ShardUnit {
+        owner: "tslib".into(),
+        ..unit("2.1.0", "hT", 10)
+    }];
+    let files = merge(&input(vec![a, b, t])).files;
+    let rows: Vec<humanify_core::libindex::format::UnitRow> =
+        std::str::from_utf8(&files["units.bun.jsonl"])
+            .unwrap()
+            .lines()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect();
+    type View<'r> = (&'r str, &'r str, u64, Vec<(String, String)>);
+    let view: Vec<View<'_>> = rows
+        .iter()
+        .map(|r| {
+            (
+                r.hash.as_str(),
+                r.owner.as_str(),
+                r.module_bytes,
+                r.versions.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        view,
+        vec![
+            ("h1", "ms", 700, vec![("1.0.0".into(), "2.0.0".into())]),
+            ("h2", "ms", 900, vec![("1.0.0".into(), "1.0.0".into())]),
+        ],
+        "tslib is a helper: dropped"
+    );
+    assert_eq!(
+        (rows[0].nodes, rows[0].content, rows[0].file.as_str()),
+        (40, 5, "index.js")
+    );
+}

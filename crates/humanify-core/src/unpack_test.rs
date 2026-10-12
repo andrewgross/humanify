@@ -1999,7 +1999,10 @@ fn library_discovery_reports_and_changes_no_written_byte() {
         &bundle,
         &on.0,
         BunUnpackOptions {
-            library_discovery: true,
+            library_discovery: Some(crate::libdetect::discovery::DiscoveryRequest {
+                list_units: true,
+                index: None,
+            }),
             ..Default::default()
         },
     )

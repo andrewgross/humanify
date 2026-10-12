@@ -141,6 +141,22 @@ pub struct ModuleRow {
     pub versions: Vec<(String, String)>,
 }
 
+/// One row of `units.<slice>.jsonl`: a statement or function unit's hash
+/// held by one owner file (a hash held by two owners is two rows). The
+/// smallest bundled module the unit was seen in is kept for the lookup's
+/// specificity rule.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnitRow {
+    pub hash: String,
+    pub owner: String,
+    pub file: String,
+    pub nodes: u32,
+    pub content: u32,
+    pub module_bytes: u64,
+    pub versions: Vec<(String, String)>,
+}
+
 /// One row of `literals.jsonl`: one source file's literal set, per owner,
 /// with the versions in which that file had exactly this set.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,6 +174,9 @@ pub struct LiteralRow {
 pub struct FingerprintVersions {
     pub module: String,
     pub literals: String,
+    /// Statement-level units (absent in an index built before them).
+    #[serde(default)]
+    pub units: String,
 }
 
 /// This build's stamp.
@@ -168,6 +187,7 @@ pub fn fingerprint_versions() -> FingerprintVersions {
             crate::modules::FACTORY_HASH_VERSION
         ),
         literals: format!("literals/{}", super::literals::LITERALS_VERSION),
+        units: format!("units/{}", super::units::UNITS_VERSION),
     }
 }
 

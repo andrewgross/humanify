@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use humanify_core::libindex::format::{
     INDEX_FORMAT, LiteralRow, Manifest, ModuleRow, PackageRecord, RefusedRecord, RegistrySnapshot,
-    SliceRecord, fingerprint_versions, sort_versions, version_ranges,
+    SliceRecord, UnitRow, fingerprint_versions, sort_versions, version_ranges,
 };
 use serde::Serialize;
 
@@ -86,6 +86,11 @@ fn owner_versions(shards: &[&Shard]) -> BTreeMap<String, Vec<String>> {
                 .or_default()
                 .insert(l.version.clone());
         }
+        for u in &s.units {
+            seen.entry(u.owner.clone())
+                .or_default()
+                .insert(u.version.clone());
+        }
     }
     seen.into_iter()
         .map(|(owner, vs)| {
@@ -116,6 +121,37 @@ fn module_table(shards: &[&Shard], indexed: &BTreeMap<String, Vec<String>>) -> V
             key,
             owner,
         })
+        .collect()
+}
+
+/// `units.<slice>.jsonl`: one row per (hash, owner, file), with the
+/// smallest bundled module the unit was seen in.
+fn unit_table(shards: &[&Shard], indexed: &BTreeMap<String, Vec<String>>) -> Vec<UnitRow> {
+    // (hash, owner, file) → (nodes, content, smallest module, versions)
+    type Seen = (u32, u32, u64, Vec<String>);
+    let mut groups: BTreeMap<(String, String, String), Seen> = BTreeMap::new();
+    for s in shards {
+        for u in &s.units {
+            let g = groups
+                .entry((u.hash.clone(), u.owner.clone(), u.file.clone()))
+                .or_insert((u.nodes, u.content, u.module_bytes, Vec::new()));
+            g.2 = g.2.min(u.module_bytes);
+            g.3.push(u.version.clone());
+        }
+    }
+    groups
+        .into_iter()
+        .map(
+            |((hash, owner, file), (nodes, content, module_bytes, versions))| UnitRow {
+                versions: version_ranges(&indexed[&owner], &versions),
+                hash,
+                owner,
+                file,
+                nodes,
+                content,
+                module_bytes,
+            },
+        )
         .collect()
 }
 
@@ -150,6 +186,7 @@ pub fn merge(input: &MergeInput) -> IndexFiles {
     for s in &mut shards {
         s.modules.retain(|m| !is_helper(&m.owner, &stop));
         s.literals.retain(|l| !is_helper(&l.owner, &stop));
+        s.units.retain(|u| !is_helper(&u.owner, &stop));
     }
     let all: Vec<&Shard> = shards.iter().collect();
     let indexed = owner_versions(&all);
@@ -169,6 +206,10 @@ pub fn merge(input: &MergeInput) -> IndexFiles {
                 format!("modules.{kind}.jsonl"),
                 jsonl(&module_table(&of_kind, &indexed)),
             );
+            let units = unit_table(&of_kind, &indexed);
+            if !units.is_empty() {
+                files.insert(format!("units.{kind}.jsonl"), jsonl(&units));
+            }
         }
     }
     let data: BTreeMap<String, &str> = [

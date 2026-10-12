@@ -29,6 +29,8 @@ use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use humanify_core::libdetect::discovery::DiscoveryRequest;
+use humanify_core::libindex::lookup::LibraryIndex;
 use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
@@ -67,6 +69,11 @@ pub struct CommandOptions {
     pub split: bool,
     pub log_file: Option<String>,
     pub diagnostics: Option<String>,
+    /// `--library-index <dir>`: the library fingerprint index discovery
+    /// looks statement units up in (report-only, with `--diagnostics`).
+    pub library_index: Option<String>,
+    /// `--library-discovery-units`: list every unit in `libraryDiscovery`.
+    pub library_discovery_units: bool,
     pub bundler: Option<String>,
     pub minifier: Option<String>,
     pub batch_size: Option<String>,
@@ -144,6 +151,8 @@ impl CommandOptions {
             split: v.bool("split").unwrap_or(false),
             log_file: s("logFile"),
             diagnostics: s("diagnostics"),
+            library_index: s("libraryIndex"),
+            library_discovery_units: v.bool("libraryDiscoveryUnits").unwrap_or(false),
             bundler: s("bundler"),
             minifier: s("minifier"),
             batch_size: s("batchSize"),
@@ -637,6 +646,7 @@ fn pipeline_body(
             }
         }
     };
+    let library_index = load_library_index(opts, &toolchain, renderer);
     let ph = phase("unpack+vendor");
     let mut unpacked = unpack_bundle(
         &bundled_code,
@@ -647,7 +657,10 @@ fn pipeline_body(
         prior_path,
         switches.switch_on(Switch::ManifestPriorOrder),
         // Report-only: discovery's rows go to the diagnostics, nowhere else.
-        opts.diagnostics.is_some(),
+        opts.diagnostics.is_some().then_some(DiscoveryRequest {
+            list_units: opts.library_discovery_units,
+            index: library_index.as_ref(),
+        }),
         profiler,
         renderer,
     )?;
@@ -935,6 +948,32 @@ struct DumpContext<'a> {
     regions: &'a [humanify_core::libdetect::CommentRegion],
     layout: humanify_core::toolchain::BundleLayout,
     module_wrappers: humanify_core::toolchain::ModuleWrapperGrammar,
+}
+
+/// `--library-index`, read for library discovery when `--diagnostics` asks
+/// for it. Report-only: an index that cannot be read is said so, and
+/// discovery runs without it.
+fn load_library_index(
+    opts: &CommandOptions,
+    toolchain: &Toolchain,
+    renderer: &mut dyn ProgressRenderer,
+) -> Option<LibraryIndex> {
+    let dir = opts
+        .library_index
+        .as_deref()
+        .filter(|_| opts.diagnostics.is_some())?;
+    let read = humanify_core::libindex::IndexSlice::for_bundler(toolchain.bundler)
+        .ok_or_else(|| "the index has no slice for this bundler".to_string())
+        .and_then(|slice| LibraryIndex::load(Path::new(dir), slice));
+    match read {
+        Ok(index) => Some(index),
+        Err(e) => {
+            renderer.message(&format!(
+                "Library index not read ({e}): library discovery runs without it"
+            ));
+            None
+        }
+    }
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved

@@ -154,6 +154,18 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
+            "--library-index <dir>",
+            "Library fingerprint index for --diagnostics' libraryDiscovery \
+             (report-only: names, moves and renames nothing)",
+            None,
+        )
+        .option(
+            "--library-discovery-units",
+            "List every claimed, vetoed, library-class and queued unit in \
+             --diagnostics' libraryDiscovery (default: totals and packages)",
+            None,
+        )
+        .option(
             "--stats-json <path>",
             "Write the deterministic match/rename breakdown as compact JSON \
              (coverage + transfer stats + prior-match counts) for the eval harness",

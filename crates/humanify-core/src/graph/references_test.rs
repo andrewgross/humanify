@@ -338,3 +338,31 @@ fn esbuild_runtime_helpers_are_recognised_by_shape() {
         EdgeKind::Write
     ));
 }
+
+/// esbuild 0.28.2 `--minify --keep-names`: `__defNormalProp` (p), `__name`
+/// (n), `__require` (u), `__publicField` (s), then app code.
+const ESBUILD_MINIFIED: &str = r#"var c=Object.defineProperty;var p=(r,e,t)=>e in r?c(r,e,{enumerable:!0,configurable:!0,writable:!0,value:t}):r[e]=t;var n=(r,e)=>c(r,"name",{value:e,configurable:!0}),u=(r=>typeof require<"u"?require:typeof Proxy<"u"?new Proxy(r,{get:(e,t)=>(typeof require<"u"?require:e)[t]}):r)(function(r){if(typeof require<"u")return require.apply(this,arguments);throw Error('Dynamic require of "'+r+'" is not supported')});var s=(r,e,t)=>p(r,typeof e!="symbol"?e+"":e,t);var a=class a{constructor(){s(this,"x",1)}bar(){return u(process.argv[2])}};n(a,"Foo"),s(a,"y",2);var i=a;function b(){return()=>1}n(b,"named");var k=(r,e)=>r.name===e;"#;
+
+#[test]
+fn esbuild_name_require_and_public_field_helpers_are_runtime_by_shape() {
+    let f = facts_of(ESBUILD_MINIFIED);
+    assert_eq!(sorted(&f.runtime), vec!["n", "s", "u"]);
+    assert_eq!(
+        sorted(&f.namespace_fillers),
+        vec!["n"],
+        "__name defines its first argument"
+    );
+    let g = graph_of(ESBUILD_MINIFIED, &[], &f);
+    let runtime: Vec<&str> = g
+        .units
+        .iter()
+        .filter(|u| u.runtime)
+        .map(|u| &ESBUILD_MINIFIED[u.span.start as usize..u.span.end as usize])
+        .map(|t| t.split('=').next().unwrap_or(t).trim_start_matches("var "))
+        .collect();
+    assert_eq!(runtime, vec!["c", "p", "n", "u", "s"]);
+    // The name setter defines the function it names.
+    let named = unit(&g, ESBUILD_MINIFIED, "function b");
+    let setter = unit(&g, ESBUILD_MINIFIED, "n(b");
+    assert!(has(&g, setter, named, EdgeKind::Write));
+}

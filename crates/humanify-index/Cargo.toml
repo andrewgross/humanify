@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 humanify-core = { path = "../humanify-core" }
 humanify-model = { path = "../humanify-model" }
+oxc_allocator.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

@@ -2,7 +2,9 @@
 original source its bytes map to (a `node_modules/<pkg>` path = library <pkg>, anything else = first-party app code),
 then the core report scored exactly: claims, library class and queue, by bytes.
 
-usage: python3 -I score_sourcemap.py <bundle.js> <bundle.js.map> <units.tsv> <core-report.json>"""
+usage: python3 -I score_sourcemap.py <bundle.js> <bundle.js.map> <units.tsv> <core-report.json> [<inner.map> <line-offset>]
+The optional inner map composes a second hop: the bundle was minified from a file whose own map is <inner.map>, offset
+by <line-offset> lines (a wrapper line added before minifying)."""
 import bisect
 import collections
 import json
@@ -31,6 +33,38 @@ def package_of(source):
     return '/'.join(rest[:2]) if rest[0].startswith('@') else rest[0]
 
 
+def decode_lines(smap):
+    """Per generated line: sorted (column, source index, original line, original column)."""
+    out = []
+    src = oline = ocol = 0
+    for group in smap['mappings'].split(';'):
+        col = 0
+        row = []
+        for seg in filter(None, group.split(',')):
+            v = vlq(seg)
+            col += v[0]
+            if len(v) >= 4:
+                src += v[1]
+                oline += v[2]
+                ocol += v[3]
+                row.append((col, src, oline, ocol))
+        out.append(row)
+    return out
+
+
+def compose(outer, inner, offset):
+    """outer's mappings with each original position looked up in `inner` (one hop back): a new map dict."""
+    lines = decode_lines(inner)
+    def at(line, col):
+        line -= offset
+        if line < 0 or line >= len(lines) or not lines[line]:
+            return None
+        row = lines[line]
+        k = bisect.bisect_right(row, (col, 1 << 62)) - 1
+        return row[max(k, 0)][1]
+    return {'sources': inner['sources'], 'resolved': [[(c, at(ol, oc)) for c, _, ol, oc in row] for row in decode_lines(outer)]}
+
+
 def segments(text, smap):
     """(byte offset, source index) for every mapping segment, in order."""
     line_starts = [0]
@@ -38,6 +72,13 @@ def segments(text, smap):
     for ln in lines[:-1]:
         line_starts.append(line_starts[-1] + len(ln.encode()) + 1)
     out = []
+    if 'resolved' in smap:
+        for li, row in enumerate(smap['resolved']):
+            line = lines[li] if li < len(lines) else ''
+            for col, src in row:
+                if src is not None:
+                    out.append((line_starts[li] + len(line[:col].encode()), src))
+        return out
     src = 0
     for li, group in enumerate(smap['mappings'].split(';')):
         col = 0
@@ -54,6 +95,8 @@ def segments(text, smap):
 def main():
     text = open(sys.argv[1], encoding='utf8').read()
     smap = json.load(open(sys.argv[2]))
+    if len(sys.argv) > 6:
+        smap = compose(smap, json.load(open(sys.argv[5])), int(sys.argv[6]))
     sources = smap['sources']
     segs = segments(text, smap)
     offs = [s[0] for s in segs]

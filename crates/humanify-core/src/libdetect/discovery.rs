@@ -54,6 +54,27 @@ pub enum Evidence {
     /// An index claim (structural/literal agreement) — not exempt from the
     /// isolation veto.
     Index,
+    /// An index claim from a targeted lookup of a queued region: a lower
+    /// floor, accepted only for a package family the region already calls.
+    /// Vetoable like any index claim.
+    QueueIndex,
+}
+
+impl Evidence {
+    /// The kind's recorded spelling.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Evidence::Declared { .. } => "declared",
+            Evidence::Banner => "banner",
+            Evidence::Index => "index",
+            Evidence::QueueIndex => "queue-index",
+        }
+    }
+
+    /// An index claim of either kind (vetoable; never a declaration).
+    pub fn is_index(&self) -> bool {
+        matches!(self, Evidence::Index | Evidence::QueueIndex)
+    }
 }
 
 /// "Unit `unit` is package `package`", before any graph rule.
@@ -136,6 +157,8 @@ pub struct RoundStats {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueueEntry {
     pub unit: u32,
+    /// The region's units (the head first).
+    pub region: Vec<u32>,
     pub region_units: u32,
     pub region_bytes: u64,
     pub uses: Vec<String>,
@@ -190,7 +213,7 @@ fn module_groups(graph: &ReferenceGraph) -> Groups {
                 groups.of[u as usize] = Some(g);
                 groups.statements.push(std::mem::take(&mut pending));
             }
-            UnitKind::LazyBody { module } => {
+            UnitKind::LazyBody { module } | UnitKind::FactoryBody { module } => {
                 let g = groups.of[module as usize];
                 groups.of[u as usize] = g;
                 if let Some(g) = g {
@@ -201,6 +224,25 @@ fn module_groups(graph: &ReferenceGraph) -> Groups {
         }
     }
     groups
+}
+
+/// Per unit, the bytes of the module it sits in (its group's statements
+/// and container), else its own: the query side of the index's
+/// specificity rule.
+fn module_bytes(graph: &ReferenceGraph) -> Vec<u64> {
+    let groups = module_groups(graph);
+    let mut size = vec![0u64; groups.statements.len()];
+    for (u, g) in groups.of.iter().enumerate() {
+        if let Some(g) = g {
+            size[*g as usize] += u64::from(graph.units[u].bytes);
+        }
+    }
+    groups
+        .of
+        .iter()
+        .enumerate()
+        .map(|(u, g)| g.map_or(u64::from(graph.units[u].bytes), |g| size[g as usize]))
+        .collect()
 }
 
 /// The claim state of one fixpoint run; packages interned.
@@ -376,7 +418,7 @@ fn isolated(st: &State<'_>, seeds: &[Seed], families: &PackageFamilies) -> BTree
             .clone()
     };
     let mut out = BTreeSet::new();
-    for seed in seeds.iter().filter(|s| s.evidence == Evidence::Index) {
+    for seed in seeds.iter().filter(|s| s.evidence.is_index()) {
         let Some(p) = st.package_of(seed.unit) else {
             continue;
         };
@@ -404,7 +446,7 @@ fn settle_seeds(graph: &ReferenceGraph, seeds: &[Seed]) -> Vec<Seed> {
             continue;
         }
         match by_unit.get(&seed.unit) {
-            Some(had) if had.evidence != Evidence::Index || seed.evidence == Evidence::Index => {}
+            Some(had) if !had.evidence.is_index() || seed.evidence.is_index() => {}
             _ => {
                 by_unit.insert(seed.unit, seed);
             }
@@ -452,10 +494,11 @@ fn candidate_queue(st: &State<'_>, cap: u32) -> Vec<QueueEntry> {
         if uses.is_empty() {
             continue;
         }
-        if let Some((units, bytes)) = bounded_closure(st, v, u64::from(cap)) {
+        if let Some((region, bytes)) = bounded_closure(st, v, u64::from(cap)) {
             queue.push(QueueEntry {
                 unit: v,
-                region_units: units,
+                region_units: region.len() as u32,
+                region,
                 region_bytes: bytes,
                 uses: uses.into_iter().map(String::from).collect(),
             });
@@ -465,8 +508,9 @@ fn candidate_queue(st: &State<'_>, cap: u32) -> Vec<QueueEntry> {
 }
 
 /// |D(v)| over unidentified units, None past `cap` bytes.
-fn bounded_closure(st: &State<'_>, v: u32, cap: u64) -> Option<(u32, u64)> {
+fn bounded_closure(st: &State<'_>, v: u32, cap: u64) -> Option<(Vec<u32>, u64)> {
     let mut seen = BTreeSet::from([v]);
+    let mut order = vec![v];
     let mut stack = vec![v];
     let mut bytes = 0u64;
     while let Some(x) = stack.pop() {
@@ -476,11 +520,12 @@ fn bounded_closure(st: &State<'_>, v: u32, cap: u64) -> Option<(u32, u64)> {
         }
         for &w in &st.graph.out[x as usize] {
             if !st.ext(w) && seen.insert(w) {
+                order.push(w);
                 stack.push(w);
             }
         }
     }
-    Some((seen.len() as u32, bytes))
+    Some((order, bytes))
 }
 
 /// The seeds a run finds without an index: what the package readers
@@ -550,7 +595,7 @@ fn banner_unit(graph: &ReferenceGraph, comment: oxc_span::Span) -> Option<u32> {
             (graph.units.get(body as usize)?.kind == UnitKind::LazyBody { module: next })
                 .then_some(body)
         }
-        UnitKind::Factory => None,
+        UnitKind::Factory | UnitKind::FactoryBody { .. } => None,
     }
 }
 
@@ -634,18 +679,57 @@ pub struct BundlePieces {
     pub interop: crate::toolchain::InteropHelpers,
 }
 
+/// What a run asks discovery for (`--diagnostics` turns it on): the
+/// per-unit listings, and an index to look statement units up in.
+#[derive(Clone, Copy, Default)]
+pub struct DiscoveryRequest<'x> {
+    pub list_units: bool,
+    pub index: Option<&'x crate::libindex::lookup::LibraryIndex>,
+}
+
+impl<'x> DiscoveryRequest<'x> {
+    /// The index lookup a run makes: the default rules for every statement,
+    /// and a targeted round on queued regions (a 20-node floor, no
+    /// neighbour support: the region's own calls are the context).
+    pub fn lookup(&self) -> Option<IndexLookup<'x>> {
+        let rules = crate::libindex::lookup::LookupRules::default();
+        Some(IndexLookup {
+            index: self.index?,
+            rules,
+            targeted: Some(crate::libindex::lookup::LookupRules {
+                min_nodes: 20,
+                support: 0,
+                ..rules
+            }),
+        })
+    }
+}
+
+/// An index to look the bundle's statement units up in, and the rules:
+/// `rules` for every statement (index seeds), `targeted` for the units of
+/// each queued region after the first fixpoint (None: no targeted round).
+#[derive(Clone, Copy)]
+pub struct IndexLookup<'x> {
+    pub index: &'x crate::libindex::lookup::LibraryIndex,
+    pub rules: crate::libindex::lookup::LookupRules,
+    pub targeted: Option<crate::libindex::lookup::LookupRules>,
+}
+
 /// Library discovery over a RAW bundle (comments still in it): the
 /// reference graph over the layout's container (bundler facts from the
 /// run's pieces; `factories` = the declarator spans of the classified
 /// CommonJS modules), the evidence seeds plus `index_claims` (a unit's
-/// span start → package; an index claim on no unit is ignored), then
-/// [`discover`].
+/// span start → package, from outside the run — the lab's) plus the
+/// index's own claims when `lookup` is given, then [`discover`]; then,
+/// with a targeted rule, a lookup of every queued region and a second
+/// [`discover`] with what it claimed.
 pub fn discover_in_bundle(
     code: &str,
     ingest: &crate::ingest::Ingest<'_>,
     pieces: BundlePieces,
     factories: &[oxc_span::Span],
     index_claims: &[(u32, String)],
+    lookup: Option<IndexLookup<'_>>,
     options: DiscoveryOptions,
 ) -> (ReferenceGraph, Discovery) {
     let semantic = ingest.semantic();
@@ -664,6 +748,7 @@ pub fn discover_in_bundle(
     let graph = crate::graph::references::build_reference_graph(
         code, semantic, statements, factories, &facts,
     );
+    let families = PackageFamilies::shipped();
     let mut seeds: Vec<Seed> = index_claims
         .iter()
         .filter_map(|(start, package)| {
@@ -675,8 +760,92 @@ pub fn discover_in_bundle(
         })
         .collect();
     seeds.extend(evidence_seeds(code, semantic, &graph));
-    let found = discover(&graph, &seeds, &PackageFamilies::shipped(), options);
+    let Some(lookup) = lookup else {
+        let found = discover(&graph, &seeds, &families, options);
+        return (graph, found);
+    };
+    let units = crate::graph::references::container_units(statements, factories, &facts, false);
+    let tables = crate::hash::serialize::SymbolTables::build(semantic);
+    let prints = crate::libindex::units::unit_prints(&units, &tables);
+    let looker = Looker {
+        code,
+        graph: &graph,
+        prints: &prints,
+        module_bytes: module_bytes(&graph),
+        family: &|p: &str| families.family(p),
+    };
+    let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
+    seeds.extend(looker.claims(lookup.index, &everything, lookup.rules, Evidence::Index));
+    let found = discover(&graph, &seeds, &families, options);
+    let Some(targeted) = lookup.targeted else {
+        return (graph, found);
+    };
+    let mut more = Vec::new();
+    for q in &found.queue {
+        let used: BTreeSet<String> = q.uses.iter().map(|p| families.family(p)).collect();
+        let region: Vec<u32> = q
+            .region
+            .iter()
+            .copied()
+            .filter(|u| !found.claims.contains_key(u))
+            .collect();
+        more.extend(
+            looker
+                .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
+                .into_iter()
+                .filter(|s| used.contains(&families.family(&s.package))),
+        );
+    }
+    if more.is_empty() {
+        return (graph, found);
+    }
+    seeds.extend(more);
+    let found = discover(&graph, &seeds, &families, options);
     (graph, found)
+}
+
+/// The index lookup's view of the bundle: each statement unit's prints,
+/// module size and text.
+struct Looker<'l> {
+    code: &'l str,
+    graph: &'l ReferenceGraph,
+    prints: &'l [Option<crate::libindex::units::StatementPrints>],
+    module_bytes: Vec<u64>,
+    family: &'l dyn Fn(&str) -> String,
+}
+
+impl Looker<'_> {
+    /// Seeds for the statement units among `units` the index claims.
+    fn claims(
+        &self,
+        index: &crate::libindex::lookup::LibraryIndex,
+        units: &[u32],
+        rules: crate::libindex::lookup::LookupRules,
+        evidence: Evidence,
+    ) -> Vec<Seed> {
+        use crate::libindex::lookup::{UnitQuery, claim_units};
+        let queries: Vec<UnitQuery<'_>> = units
+            .iter()
+            .filter(|&&u| is_statement(self.graph, u) && !self.graph.units[u as usize].runtime)
+            .filter_map(|&u| {
+                let span = self.graph.units[u as usize].span;
+                Some(UnitQuery {
+                    unit: u,
+                    prints: self.prints.get(u as usize)?.as_ref()?,
+                    module_bytes: self.module_bytes[u as usize],
+                    text: &self.code[span.start as usize..span.end as usize],
+                })
+            })
+            .collect();
+        claim_units(index, &queries, rules, self.family)
+            .into_iter()
+            .map(|c| Seed {
+                unit: c.unit,
+                package: c.package,
+                evidence: evidence.clone(),
+            })
+            .collect()
+    }
 }
 
 /// One claimed statement in the report.
@@ -725,12 +894,37 @@ pub struct GraphStats {
     pub lazy_modules: u32,
 }
 
-/// `--diagnostics` `libraryDiscovery`: everything discovery found, every
-/// row with its rule, round and evidence. Report-only: nothing is named,
+/// One package's totals in the report (statement bytes).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageRow {
+    pub package: String,
+    pub seed_units: u32,
+    pub seed_bytes: u64,
+    /// Claimed by the graph rules (DOWN, MODULE, GLUE).
+    pub grown_units: u32,
+    pub grown_bytes: u64,
+    /// Index seeds the isolation veto dropped.
+    pub vetoed_units: u32,
+    pub vetoed_bytes: u64,
+    /// Library class reached from this package's claims.
+    pub class_units: u32,
+    pub class_bytes: u64,
+    /// Queued regions that reference this package.
+    pub queue_units: u32,
+    pub queue_bytes: u64,
+}
+
+/// `--diagnostics` `libraryDiscovery`: totals and one row per package by
+/// default; every claimed, vetoed, library-class and queued unit only when
+/// asked for (`--library-discovery-units`). Report-only: nothing is named,
 /// moved or renamed by it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscoveryReport {
+    /// The library index's id (sha256 of its manifest), when one was read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_id: Option<String>,
     pub graph: GraphStats,
     /// Seeds KEPT (one per unit, after the isolation veto), by evidence kind.
     pub seeds: BTreeMap<String, u32>,
@@ -738,94 +932,153 @@ pub struct DiscoveryReport {
     /// Statement bytes claimed: by seeds, and grown by the rules.
     pub seed_statement_bytes: u64,
     pub grown_statement_bytes: u64,
+    pub vetoed_statement_bytes: u64,
     pub library_class_statement_bytes: u64,
     pub queue_statement_bytes: u64,
+    pub packages: Vec<PackageRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub claims: Vec<ClaimRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub vetoed: Vec<SpanRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub library_class: Vec<SpanRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub queue: Vec<QueueRow>,
 }
 
 impl DiscoveryReport {
-    pub fn new(graph: &ReferenceGraph, found: &Discovery) -> DiscoveryReport {
-        let span = |u: u32| graph.units[u as usize].span;
-        let statement_bytes = |u: u32| {
-            if is_statement(graph, u) {
-                u64::from(graph.units[u as usize].bytes)
-            } else {
-                0
-            }
-        };
-        let mut report = DiscoveryReport {
-            graph: GraphStats {
-                units: graph.units.len() as u32,
-                edges: graph.edges.len() as u32,
-                ..GraphStats::default()
-            },
+    /// The report; `units` adds the per-unit listings.
+    pub fn new(graph: &ReferenceGraph, found: &Discovery, units: bool) -> DiscoveryReport {
+        let mut r = DiscoveryReport {
+            graph: graph_stats(graph),
             rounds: found.rounds.clone(),
             ..DiscoveryReport::default()
         };
-        for (u, unit) in graph.units.iter().enumerate() {
-            match unit.kind {
-                UnitKind::Factory => report.graph.factories += 1,
-                UnitKind::LazyModule => report.graph.lazy_modules += 1,
-                _ => {
-                    report.graph.statements += 1;
-                    report.graph.statement_bytes += statement_bytes(u as u32);
-                }
-            }
-            report.graph.runtime_units += u32::from(unit.runtime);
-        }
+        let mut packages: BTreeMap<String, PackageRow> = BTreeMap::new();
         for (&u, c) in &found.claims {
+            let b = statement_bytes(graph, u);
             if let Some(e) = &c.evidence {
-                let kind = match e {
-                    Evidence::Declared { .. } => "declared",
-                    Evidence::Banner => "banner",
-                    Evidence::Index => "index",
-                };
-                *report.seeds.entry(kind.to_string()).or_default() += 1;
+                *r.seeds.entry(e.kind().to_string()).or_default() += 1;
             }
+            let p = package_row(&mut packages, &c.package);
             if c.rule == Rule::Seed {
-                report.seed_statement_bytes += statement_bytes(u);
+                r.seed_statement_bytes += b;
+                p.seed_units += 1;
+                p.seed_bytes += b;
             } else {
-                report.grown_statement_bytes += statement_bytes(u);
+                r.grown_statement_bytes += b;
+                p.grown_units += 1;
+                p.grown_bytes += b;
             }
-            report.claims.push(ClaimRow {
+        }
+        for s in &found.vetoed {
+            let b = statement_bytes(graph, s.unit);
+            r.vetoed_statement_bytes += b;
+            let p = package_row(&mut packages, &s.package);
+            p.vetoed_units += 1;
+            p.vetoed_bytes += b;
+        }
+        for (&u, package) in &found.library_class {
+            let b = statement_bytes(graph, u);
+            r.library_class_statement_bytes += b;
+            let p = package_row(&mut packages, package);
+            p.class_units += 1;
+            p.class_bytes += b;
+        }
+        for q in &found.queue {
+            let b = statement_bytes(graph, q.unit);
+            r.queue_statement_bytes += b;
+            for used in &q.uses {
+                let p = package_row(&mut packages, used);
+                p.queue_units += 1;
+                p.queue_bytes += b;
+            }
+        }
+        r.packages = packages.into_values().collect();
+        if units {
+            r.list_units(graph, found);
+        }
+        r
+    }
+
+    fn list_units(&mut self, graph: &ReferenceGraph, found: &Discovery) {
+        let span = |u: u32| graph.units[u as usize].span;
+        self.claims = found
+            .claims
+            .iter()
+            .map(|(&u, c)| ClaimRow {
                 start: span(u).start,
                 end: span(u).end,
                 package: c.package.clone(),
                 rule: c.rule,
                 round: c.round,
                 evidence: c.evidence.clone(),
-            });
-        }
-        report.vetoed = found
-            .vetoed
-            .iter()
-            .map(|s| SpanRow {
-                start: span(s.unit).start,
-                end: span(s.unit).end,
-                package: s.package.clone(),
             })
             .collect();
-        for (&u, package) in &found.library_class {
-            report.library_class_statement_bytes += statement_bytes(u);
-            report.library_class.push(SpanRow {
-                start: span(u).start,
-                end: span(u).end,
-                package: package.clone(),
-            });
-        }
-        for q in &found.queue {
-            report.queue_statement_bytes += statement_bytes(q.unit);
-            report.queue.push(QueueRow {
+        let span_row = |u: u32, package: &str| SpanRow {
+            start: span(u).start,
+            end: span(u).end,
+            package: package.to_string(),
+        };
+        self.vetoed = found
+            .vetoed
+            .iter()
+            .map(|s| span_row(s.unit, &s.package))
+            .collect();
+        self.library_class = found
+            .library_class
+            .iter()
+            .map(|(&u, p)| span_row(u, p))
+            .collect();
+        self.queue = found
+            .queue
+            .iter()
+            .map(|q| QueueRow {
                 start: span(q.unit).start,
                 end: span(q.unit).end,
                 region_units: q.region_units,
                 region_bytes: q.region_bytes,
                 uses: q.uses.clone(),
-            });
-        }
-        report
+            })
+            .collect();
     }
+}
+
+fn package_row<'m>(
+    rows: &'m mut BTreeMap<String, PackageRow>,
+    package: &str,
+) -> &'m mut PackageRow {
+    rows.entry(package.to_string())
+        .or_insert_with(|| PackageRow {
+            package: package.to_string(),
+            ..PackageRow::default()
+        })
+}
+
+fn statement_bytes(graph: &ReferenceGraph, u: u32) -> u64 {
+    if is_statement(graph, u) {
+        u64::from(graph.units[u as usize].bytes)
+    } else {
+        0
+    }
+}
+
+fn graph_stats(graph: &ReferenceGraph) -> GraphStats {
+    let mut stats = GraphStats {
+        units: graph.units.len() as u32,
+        edges: graph.edges.len() as u32,
+        ..GraphStats::default()
+    };
+    for (u, unit) in graph.units.iter().enumerate() {
+        match unit.kind {
+            UnitKind::Factory => stats.factories += 1,
+            UnitKind::LazyModule => stats.lazy_modules += 1,
+            _ => {
+                stats.statements += 1;
+                stats.statement_bytes += statement_bytes(graph, u as u32);
+            }
+        }
+        stats.runtime_units += u32::from(unit.runtime);
+    }
+    stats
 }

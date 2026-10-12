@@ -510,6 +510,7 @@ dependencies = [
  "clap",
  "humanify-core",
  "humanify-model",
+ "oxc_allocator",
  "serde",
  "serde_json",
  "sha2",

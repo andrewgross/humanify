@@ -252,7 +252,7 @@ pub struct BunUnpackOptions<'n> {
     pub module_identity: crate::toolchain::ModuleIdentitySource,
     /// Run library discovery over the app code, report-only
     /// (`libdetect::discovery`; the CLI asks for it with `--diagnostics`).
-    pub library_discovery: bool,
+    pub library_discovery: Option<crate::libdetect::discovery::DiscoveryRequest<'n>>,
 }
 
 impl Default for BunUnpackOptions<'_> {
@@ -268,7 +268,7 @@ impl Default for BunUnpackOptions<'_> {
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             interop: crate::toolchain::InteropHelpers::Bun,
             module_identity: crate::toolchain::ModuleIdentitySource::Bun,
-            library_discovery: false,
+            library_discovery: None,
         }
     }
 }
@@ -701,22 +701,24 @@ fn discovery_report(
     use crate::libdetect::discovery::{
         BundlePieces, DiscoveryOptions, DiscoveryReport, discover_in_bundle,
     };
-    options.library_discovery.then(|| {
-        let pieces = BundlePieces {
-            layout: options.layout,
-            grammar,
-            interop: options.interop,
-        };
-        let (graph, found) = discover_in_bundle(
-            code,
-            ingest,
-            pieces,
-            classified,
-            &[],
-            DiscoveryOptions::default(),
-        );
-        DiscoveryReport::new(&graph, &found)
-    })
+    let request = options.library_discovery?;
+    let pieces = BundlePieces {
+        layout: options.layout,
+        grammar,
+        interop: options.interop,
+    };
+    let (graph, found) = discover_in_bundle(
+        code,
+        ingest,
+        pieces,
+        classified,
+        &[],
+        request.lookup(),
+        DiscoveryOptions::default(),
+    );
+    let mut report = DiscoveryReport::new(&graph, &found, request.list_units);
+    report.index_id = request.index.map(|ix| ix.id.clone());
+    Some(report)
 }
 
 /// The container statements no extracted module lives in: the app's own

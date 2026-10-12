@@ -1,12 +1,13 @@
 # Library discovery: finding library code in `src/` from bundler facts, declarations and the reference graph
 
-STATUS: PHASE 1 (REPORT-ONLY) IN CORE, 2026-10-11, branch
+STATUS: PHASE 1 (REPORT-ONLY) IN CORE, 2026-10-11 (index lookup 2026-10-12), branch
 `exp095-discovery-core` (exp095; not merged). The graph (§4) is
 `humanify_core::graph::references`, discovery (§5, §7) is
 `humanify_core::libdetect::discovery`, and a run with `--diagnostics` writes
-it as `libraryDiscovery`. Nothing is named, moved or renamed by it. No index
-is looked up in a run yet: the in-run seeds are the declared readers and
-kept banners, and the candidate queue is emitted for a lab lookup.
+it as `libraryDiscovery`. Nothing is named, moved or renamed by it. The
+in-run seeds are the declared readers, kept banners and, with
+`--library-index`, the index's statement-unit claims; no shipping index
+with statement units exists yet (the lab built three).
 
 - **The core reproduces the lab prototype** on Claude Code 2.1.216 with the
   same seeds (declared + Step B index C, the prototype's veto): 12,255 of
@@ -20,6 +21,14 @@ kept banners, and the candidate queue is emitted for a lab lookup.
   own keypress parser around the fork's two kept tables, and that fill then
   counted as the tables' support. The new rule drops all of it, and costs
   ~2.5 KB of real library claims per release.
+- **In-run index lookup (2026-10-12).** `--library-index <dir>` looks every
+  statement unit up (`libindex::lookup`: the lab's Step B S1, specificity,
+  literal agreement by default) and runs a targeted lookup of the queue.
+  The index gained a statement-unit table built by the builder's own code.
+  On 2.1.216 with Step B's index C: 81.0% estimated library recall after
+  the fixpoint with the structural rule (lab S1 + fixpoint: 85.8%), 54.5%
+  with agreement; 0 app either way. Details and every gap explained:
+  discovery README, Results §5.
 - The design and lab numbers below are unchanged; they come from one bundle
   (Claude Code 2.1.216), one random sample (620 statements) and 37
   non-library traps. Prototype, core lab binary and re-run commands:
@@ -145,6 +154,13 @@ down as a value. No stage compares bundler names (pipeline-stages.md).
 | Runtime helpers           | Recognised by shape (`__commonJS`, `__esm`, `__toESM`, `__toCommonJS`, `__export`, `__reExport`, React Compiler sentinels). **Externals, and vetoed as candidates**: Step B labelled 35–79% of runtime bytes as library code.                                          | same helpers, without Bun's setter or WeakMap caches | P7 sibling: the never-rename lists; P12 load-order shapes |
 | Namespace-filling helpers | `__export` (`rt`) and `__reExport` (`Oi`). They define their first argument (§4).                                                                                                                                                                                      | same                                                 | `emit::load_order::identify_export_registrar` (by shape)  |
 | Kept identity             | `/*!` banners in place; inlined `__dirname` and paths                                                                                                                                                                                                                  | wrapper keys (unminified), end-of-file licence block | `ModuleIdentitySource` (P17)                              |
+
+**Not used: esbuild's per-module path comments** (Andrew, 2026-10-12).
+Unminified esbuild output writes `// node_modules/<pkg>/<file>` before
+each module's code, which would name every hoisted library module. They
+vanish under `--minify-whitespace`, so on every fully minified bundle, and
+the pipeline will not rely on them: no reader is built for them. **For
+minified bundles the design is the index plus the graph only.**
 
 What this source yields:
 

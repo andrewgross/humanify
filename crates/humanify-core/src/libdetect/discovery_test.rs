@@ -219,8 +219,7 @@ fn seeds_come_from_declarations_and_kept_banners() {
         .map(|s| {
             let kind = match &s.evidence {
                 Evidence::Declared { reader } => reader.clone(),
-                Evidence::Banner => "banner".into(),
-                Evidence::Index => "index".into(),
+                e => e.kind().to_string(),
             };
             (
                 text(s.unit).split(' ').nth(1).unwrap_or(""),
@@ -265,4 +264,122 @@ fn a_forks_kept_tables_cannot_support_themselves_through_a_module_fill() {
     );
     assert_eq!(r.found.vetoed.len(), 2);
     assert!(r.found.claims.is_empty(), "{:?}", r.found.claims);
+}
+
+#[test]
+fn the_report_lists_packages_by_default_and_units_only_when_asked() {
+    use crate::libdetect::discovery::DiscoveryReport;
+    let r = run(
+        "var lib = () => priv();\nvar priv = () => \"padding padding padding padding\";\nvar app = () => lib();\nvar other = () => 1;\nvar app2 = () => other();\n",
+        &[
+            ("var lib", "P", declared()),
+            ("var other", "Q", Evidence::Index),
+        ],
+    );
+    let short = DiscoveryReport::new(&r.graph, &r.found, false);
+    assert!(short.claims.is_empty() && short.queue.is_empty() && short.library_class.is_empty());
+    let rows: Vec<(&str, u32, u32, u32)> = short
+        .packages
+        .iter()
+        .map(|p| {
+            (
+                p.package.as_str(),
+                p.seed_units,
+                p.grown_units,
+                p.vetoed_units,
+            )
+        })
+        .collect();
+    assert_eq!(rows, vec![("P", 1, 1, 0), ("Q", 0, 0, 1)]);
+    let p = &short.packages[0];
+    assert_eq!(p.queue_units, 1, "app calls P: one queued region uses P");
+    let json = serde_json::to_value(&short).unwrap();
+    assert!(
+        json.get("claims").is_none(),
+        "no per-unit listing by default"
+    );
+    let long = DiscoveryReport::new(&r.graph, &r.found, true);
+    assert_eq!(long.claims.len(), 2);
+    assert_eq!(long.packages, short.packages);
+}
+
+#[test]
+fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
+    use crate::libdetect::discovery::{BundlePieces, IndexLookup, discover_in_bundle};
+    use crate::libindex::format::UnitRow;
+    use crate::libindex::lookup::{LibraryIndex, LookupRules};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = "var helper = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar lib = function (t) { return t.split(\",\").map(helper).filter(Boolean).join(\"|\").concat(t.length); };\nvar small = (x) => lib(x).toUpperCase().trim().split(\"|\").concat([x]).join(\"+\");\nvar app = () => small(\"a,b\") + other();\nvar other = () => 1;\n";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::SingleWrapperFunction,
+        grammar: ModuleWrapperGrammar::BunAndEsbuild,
+        interop: InteropHelpers::Bun,
+    };
+    // The index: this very code's units, owned by zod.
+    let prints = crate::libindex::units::bundle_unit_prints(
+        code,
+        &ingest,
+        pieces.layout,
+        pieces.grammar,
+        pieces.interop,
+    );
+    let nodes: Vec<u32> = prints.iter().map(|(_, p)| p.whole.nodes).collect();
+    assert!(
+        nodes[0] >= 30 && nodes[1] >= 30 && (20..30).contains(&nodes[2]),
+        "{nodes:?}"
+    );
+    let rows = prints[..3]
+        .iter()
+        .map(|(_, p)| UnitRow {
+            hash: p.whole.hash.clone(),
+            owner: "zod".into(),
+            file: "index.js".into(),
+            nodes: p.whole.nodes,
+            content: p.whole.content,
+            module_bytes: 500,
+            versions: vec![("3.0.0".into(), "3.0.0".into())],
+        })
+        .collect();
+    let index = LibraryIndex::from_rows(rows, vec![]);
+    let rules = LookupRules {
+        agreement: false,
+        support: 0,
+        ..LookupRules::default()
+    };
+    let (graph, found) = discover_in_bundle(
+        code,
+        &ingest,
+        pieces,
+        &[],
+        &[],
+        Some(IndexLookup {
+            index: &index,
+            rules,
+            targeted: Some(LookupRules {
+                min_nodes: 20,
+                ..rules
+            }),
+        }),
+        DiscoveryOptions::default(),
+    );
+    let claim = |head: &str| {
+        let u = (0..graph.units.len() as u32)
+            .find(|&u| code[graph.units[u as usize].span.start as usize..].starts_with(head))
+            .unwrap();
+        found
+            .claims
+            .get(&u)
+            .map(|c| (c.package.clone(), c.evidence.as_ref().map(|e| e.kind())))
+    };
+    assert_eq!(claim("var helper"), Some(("zod".into(), Some("index"))));
+    assert_eq!(claim("var lib"), Some(("zod".into(), Some("index"))));
+    assert_eq!(
+        claim("var small"),
+        Some(("zod".into(), Some("queue-index"))),
+        "under the main floor; found by the targeted lookup of a region calling zod"
+    );
+    assert_eq!(claim("var app"), None);
 }

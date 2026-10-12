@@ -100,6 +100,22 @@ pub struct ShardModule {
     pub key: String,
 }
 
+/// One statement or function unit of a bundled module (statement-level
+/// library fingerprints, `humanify_core::libindex::units`).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShardUnit {
+    pub owner: String,
+    pub version: String,
+    pub file: String,
+    pub hash: String,
+    pub nodes: u32,
+    pub content: u32,
+    /// The bundled size of the file the unit came from, in this build —
+    /// the lookup's specificity rule compares it with the query's module.
+    pub module_bytes: u64,
+}
+
 /// One source file's literal set.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ShardLiteral {
@@ -125,6 +141,9 @@ pub struct ShardNotes {
     pub unread_files: usize,
     /// Pre-bundled ("sponge") source files dropped.
     pub sponge_files: usize,
+    /// Statement units whose span mixed sources (no owner).
+    #[serde(default)]
+    pub unit_mixed_spans: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,6 +157,8 @@ pub struct Shard {
     pub recipe: String,
     pub fingerprint: String,
     pub modules: Vec<ShardModule>,
+    #[serde(default)]
+    pub units: Vec<ShardUnit>,
     pub literals: Vec<ShardLiteral>,
     pub notes: ShardNotes,
 }
@@ -155,6 +176,7 @@ impl Shard {
             recipe: inputs.recipe.clone(),
             fingerprint: inputs.fingerprint.clone(),
             modules: Vec::new(),
+            units: Vec::new(),
             literals: Vec::new(),
             notes: ShardNotes::default(),
         }
