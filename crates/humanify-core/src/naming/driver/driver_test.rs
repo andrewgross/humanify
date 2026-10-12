@@ -1287,3 +1287,30 @@ fn a_usage_excerpt_includes_the_line_naming_the_identifier() {
         "{ask}"
     );
 }
+
+/// Audit R3: the prior-diff reconcile used to drop its error — a failed
+/// (or, now, timed-out) `diff` skipped the whole pass in silence. The
+/// error comes back from the pass, and the outcome turns it into a
+/// WARNING the CLI prints.
+#[test]
+fn a_reconcile_that_could_not_run_keeps_its_error_for_a_warning() {
+    let eligible = crate::rename::eligibility::Eligibility::new(
+        crate::rename::eligibility::NeverRename::UNIVERSAL,
+    );
+    let (_trail, done) = super::reconcile_pass(
+        "var = ;",
+        "var a = 1;\n",
+        &eligible,
+        crate::rename::name_profile::NameProfile::Bun,
+        crate::trail::StrategyTrail::enabled(),
+        None,
+    );
+    let error = done.err().expect("the pass reports why it did not run");
+    assert!(error.contains("does not parse"), "{error}");
+    let warning = super::reconcile_skipped_warning(&error);
+    assert!(
+        warning.starts_with("WARNING: the prior-diff reconcile did not run ("),
+        "{warning}"
+    );
+    assert!(warning.contains("does not parse"), "{warning}");
+}

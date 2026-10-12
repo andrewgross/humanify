@@ -428,3 +428,58 @@ fn a_rename_chain_carries_the_binding_the_tree_renamed() {
         Some(format!("(function () {{\n{}\n}})();\n", indent(prior)).as_str())
     );
 }
+
+/// Audit R3: a `diff` that fails (cannot start under EAGAIN/ENOMEM, exits
+/// 2, or runs past its deadline) used to be counted as a parse discard —
+/// a silent hole in the reconcile. It is counted on its own, its first
+/// error kept, and the run prints a WARNING naming it.
+#[test]
+fn a_failed_diff_is_counted_apart_from_discards_and_warned() {
+    let mut ledger = JsValue::parse("{\"files\":[\"a.js\",\"b.js\"],\"order\":[]}").unwrap();
+    let fresh = |_: &str| Some("var a = 1;\n".to_string());
+    let prior = |_: &str| Some("var b = 1;\n".to_string());
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
+    let differ = |p: &str, n: &str| {
+        let _ = (p, n);
+        Err("diff timed out after 600s (killed)".to_string())
+    };
+    let result = super::post_split_reconcile_with(
+        PostSplitInput {
+            name_profile: crate::rename::name_profile::NameProfile::Bun,
+            ledger: &mut ledger,
+            read_fresh: &fresh,
+            read_prior: &prior,
+            eligible: &eligible,
+            disabled: false,
+        },
+        &differ,
+    );
+    assert_eq!(result.stats.considered, 2);
+    assert_eq!(result.stats.diff_failed, 2);
+    assert_eq!(
+        result.stats.discarded, 0,
+        "a failed diff is not a parse discard"
+    );
+    let warning = super::diff_failure_warning(&result).expect("a WARNING");
+    assert!(warning.starts_with("WARNING:"), "{warning}");
+    assert!(warning.contains("2 file(s)"), "{warning}");
+    assert!(warning.contains("diff timed out after 600s"), "{warning}");
+    assert!(warning.contains("a.js"), "names the first file: {warning}");
+}
+
+#[test]
+fn a_clean_reconcile_has_no_diff_warning() {
+    let mut ledger = JsValue::parse("{\"files\":[\"a.js\"],\"order\":[]}").unwrap();
+    let read = |_: &str| Some("var a = 1;\n".to_string());
+    let eligible = Eligibility::new(crate::rename::eligibility::NeverRename::UNIVERSAL);
+    let result = post_split_reconcile(PostSplitInput {
+        name_profile: crate::rename::name_profile::NameProfile::Bun,
+        ledger: &mut ledger,
+        read_fresh: &read,
+        read_prior: &read,
+        eligible: &eligible,
+        disabled: false,
+    });
+    assert_eq!(result.stats.diff_failed, 0);
+    assert_eq!(super::diff_failure_warning(&result), None);
+}

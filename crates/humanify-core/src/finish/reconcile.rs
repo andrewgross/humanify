@@ -72,6 +72,11 @@ pub struct PostSplitStats {
     pub changed: usize,
     pub corpus_gated: usize,
     pub discarded: usize,
+    /// Files whose `diff` failed (could not start, exited 2, or ran past
+    /// its deadline) — apart from `discarded`, which is the parse and
+    /// signature discards (audit R3: this used to be counted there,
+    /// silently).
+    pub diff_failed: usize,
     pub incoherent: usize,
 }
 
@@ -91,6 +96,21 @@ pub struct PostSplitResult {
     /// The validated renames' claim counters (the run-wide
     /// `renameClaimStats`).
     pub claims: crate::rename::validated::RenameClaimStats,
+    /// The first failed `diff` (file, error), in ledger order — what
+    /// [`diff_failure_warning`] names.
+    pub first_diff_failure: Option<(String, String)>,
+}
+
+/// The loud line for failed `diff`s (audit R3): those files kept their
+/// fresh names, so the tree differs from a run where `diff` worked.
+/// Print-only — no decision reads it.
+pub fn diff_failure_warning(result: &PostSplitResult) -> Option<String> {
+    let (file, error) = result.first_diff_failure.as_ref()?;
+    Some(format!(
+        "WARNING: post-split reconcile: diff failed on {} file(s), which kept their fresh \
+names (first: {file}: {error}) — this tree differs from a run where diff worked; re-run it",
+        result.stats.diff_failed
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -591,6 +611,8 @@ struct FileOutcome {
     renames: Vec<PostSplitRename>,
     corpus_gated: bool,
     discarded: bool,
+    /// The `diff` subprocess failed (never a parse discard).
+    diff_failed: Option<String>,
 }
 
 fn discarded() -> FileOutcome {
@@ -622,6 +644,17 @@ impl FileWork {
             claims: crate::rename::validated::RenameClaimStats::default(),
         }
     }
+
+    /// The `diff` itself failed: counted and warned on its own (audit R3).
+    fn diff_failed(error: String) -> FileWork {
+        FileWork {
+            outcome: FileOutcome {
+                diff_failed: Some(error),
+                ..FileOutcome::default()
+            },
+            ..FileWork::default()
+        }
+    }
 }
 
 /// `reconcileOneFile`. Infallible: any failure is a discard of this
@@ -636,9 +669,11 @@ fn reconcile_one_file(
     eligible: &Eligibility,
     profile: NameProfile,
     ledger_statements: usize,
+    differ: &Differ,
 ) -> FileWork {
-    let Ok(diff_text) = compute_normal_diff(prior, fresh) else {
-        return FileWork::failed();
+    let diff_text = match differ(prior, fresh) {
+        Ok(text) => text,
+        Err(error) => return FileWork::diff_failed(error),
     };
     if diff_text.is_empty() {
         return FileWork::default();
@@ -740,6 +775,7 @@ fn reconcile_one_file(
         renames,
         corpus_gated: false,
         discarded: false,
+        diff_failed: None,
     })
 }
 
@@ -767,6 +803,14 @@ pub struct PostSplitInput<'i> {
 /// list, the renames) is re-joined serially below in that same order,
 /// the exact order the TS iterated.
 pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
+    post_split_reconcile_with(input, &compute_normal_diff)
+}
+
+/// How a file pair is diffed: the system `diff` in production
+/// ([`compute_normal_diff`]); a test hands in a failing one.
+type Differ = dyn Fn(&str, &str) -> Result<String, String> + Sync;
+
+fn post_split_reconcile_with(input: PostSplitInput<'_>, differ: &Differ) -> PostSplitResult {
     let mut result = PostSplitResult::default();
     if input.disabled {
         return result;
@@ -799,6 +843,7 @@ pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
             eligible,
             name_profile,
             statements,
+            differ,
         ))
     });
     for (file, work) in files.iter().zip(works) {
@@ -811,6 +856,12 @@ pub fn post_split_reconcile(input: PostSplitInput<'_>) -> PostSplitResult {
         }
         if work.outcome.discarded {
             result.stats.discarded += 1;
+        }
+        if let Some(error) = work.outcome.diff_failed {
+            result.stats.diff_failed += 1;
+            result
+                .first_diff_failure
+                .get_or_insert_with(|| (file.clone(), error));
         }
         if let Some(trail) = work.trail {
             result.trail.push(trail);

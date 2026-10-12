@@ -24,9 +24,20 @@ pub struct DiffHunk {
     pub new_lines: Vec<String>,
 }
 
+/// The `diff` deadline: 10 minutes. Measured 2026-10-12: the largest diff
+/// the pipeline runs — the pre-split reconcile over the whole Claude Code
+/// bundle, 793k vs 805k lines (2.1.215 -> 2.1.216) — takes 4.5 s; two
+/// unrelated 800k-line files 0.85 s; the post-split per-file diffs are a
+/// fraction of that. 10 minutes is >100x the worst measurement, room for
+/// up to one `diff` per core on a loaded shared box (audit R3). Reaching it
+/// is a failure the caller reports, never a silent discard.
+pub const DIFF_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
 /// `computeNormalDiff(prior, new)`: `diff prior new` (normal format) over
-/// CRLF-normalized copies. Err on a real `diff` failure (exit ≥ 2, spawn
-/// failure) — the step treats that as "skip", never fatal.
+/// CRLF-normalized copies, under [`DIFF_DEADLINE`]. Err on a real `diff`
+/// failure (exit >= 2, spawn failure, the deadline) — each caller reports
+/// it: the pre-split step as a WARNING, the post-split pass as a counted,
+/// warned `diff_failed` (audit R3).
 pub fn compute_normal_diff(prior_text: &str, new_text: &str) -> Result<String, String> {
     let dir = tempdir()?;
     let prior_path = dir.join("prior.js");
@@ -36,10 +47,9 @@ pub fn compute_normal_diff(prior_text: &str, new_text: &str) -> Result<String, S
             .map_err(|e| format!("write prior: {e}"))?;
         std::fs::write(&new_path, new_text.replace("\r\n", "\n"))
             .map_err(|e| format!("write new: {e}"))?;
-        let out = std::process::Command::new("diff")
-            .arg(&prior_path)
-            .arg(&new_path)
-            .output()
+        let mut command = std::process::Command::new("diff");
+        command.arg(&prior_path).arg(&new_path);
+        let out = crate::subprocess::run(&mut command, None, DIFF_DEADLINE)
             .map_err(|e| format!("diff failed (status null): {e}"))?;
         match out.status.code() {
             Some(0 | 1) => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),

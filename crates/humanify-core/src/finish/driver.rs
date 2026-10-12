@@ -435,6 +435,9 @@ pub fn reconcile_post_split(
             disabled: switches.post_split_reconcile_disabled,
         })
     };
+    if let Some(warning) = super::reconcile::diff_failure_warning(&result) {
+        report.messages.push(warning);
+    }
     if result.changed.is_empty() {
         report.messages.push(format!(
             "Post-split reconcile: no changes (considered {} file(s))",
