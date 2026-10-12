@@ -260,6 +260,8 @@ fn scramble_scenario() -> (HashMap<String, String>, HashMap<String, String>, Str
 /// each run scrambles the workers' completion order differently. `run <
 /// 0` is the undelayed baseline. Returns the result and the patched
 /// ledger's exact bytes.
+// concurrency: test: per-file sleeps scramble completion order on the rayon pool to prove the result is order-independent
+#[allow(clippy::disallowed_methods)]
 fn scramble_run(
     fresh: &HashMap<String, String>,
     prior: &HashMap<String, String>,

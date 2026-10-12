@@ -1,0 +1,437 @@
+{
+  "$comment": "Every concurrency site in the pipeline's non-test Rust, with the documented pattern it follows (docs/concurrency.md, \"The patterns\") and why. Checked by scripts/concurrency-census.ts (gate stage census:concurrency, and pre-commit on staged .rs). Key = file + scope (enclosing fn or item) + construct; no line numbers. `exception` marks a known deviation from the doc's rules and names the open finding. Seeded 2026-10-12 from the audit (docs/audits/rust-concurrency-2026-10.md).",
+  "entries": [
+    {
+      "file": "crates/humanify-cli/src/llm_sim.rs",
+      "scope": "struct LatencySim",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "--simulate-llm-latency report: one std Mutex taken briefly to append to / take the simulated report; never held across a call into the inner provider. Observation only (module doc)"
+    },
+    {
+      "file": "crates/humanify-cli/src/llm_sim.rs",
+      "scope": "LatencySim::new",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "--simulate-llm-latency report: one std Mutex taken briefly to append to / take the simulated report; never held across a call into the inner provider. Observation only (module doc)"
+    },
+    {
+      "file": "crates/humanify-cli/src/log.rs",
+      "scope": "struct VerboseLogger",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "process-wide verbose/debug log redirect (audit O20): every caller runs on the main/runtime thread so the locks are uncontended; held across one write BY DESIGN so whole lines never interleave"
+    },
+    {
+      "file": "crates/humanify-cli/src/log.rs",
+      "scope": "verbose",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "process-wide verbose/debug log redirect (audit O20): every caller runs on the main/runtime thread so the locks are uncontended; held across one write BY DESIGN so whole lines never interleave"
+    },
+    {
+      "file": "crates/humanify-cli/src/log.rs",
+      "scope": "static DEBUG_OUTPUT",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "process-wide verbose/debug log redirect (audit O20): every caller runs on the main/runtime thread so the locks are uncontended; held across one write BY DESIGN so whole lines never interleave"
+    },
+    {
+      "file": "crates/humanify-cli/src/progress.rs",
+      "scope": "struct TtyRenderer",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "TTY progress state shared with the redraw thread (audit O19). Held across a terminal write; TTY only, the gate and the eval use the scripted renderer"
+    },
+    {
+      "file": "crates/humanify-cli/src/progress.rs",
+      "scope": "TtyRenderer::new",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "TTY progress state shared with the redraw thread (audit O19). Held across a terminal write; TTY only, the gate and the eval use the scripted renderer"
+    },
+    {
+      "file": "crates/humanify-cli/src/progress.rs",
+      "scope": "TtyRenderer::start",
+      "construct": "thread-spawn",
+      "pattern": "observer",
+      "reason": "the TTY redraw thread (audit O19): holds a Weak, exits when the renderer drops or finishes; never touches output"
+    },
+    {
+      "file": "crates/humanify-cli/src/progress.rs",
+      "scope": "TtyRenderer::start",
+      "construct": "sleep",
+      "pattern": "observer",
+      "reason": "the redraw thread's 250 ms tick; it runs on its own OS thread, never on the runtime thread"
+    },
+    {
+      "file": "crates/humanify-cli/src/unified.rs",
+      "scope": "type SharedFile",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--log-file: one file shared by the debug and verbose writers; locked per line so lines never interleave. Diagnostics only"
+    },
+    {
+      "file": "crates/humanify-cli/src/unified.rs",
+      "scope": "open_log_file",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--log-file: one file shared by the debug and verbose writers; locked per line so lines never interleave. Diagnostics only"
+    },
+    {
+      "file": "crates/humanify-cli/src/unified.rs",
+      "scope": "git_short_sha",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "`git rev-parse --short HEAD` for the run manifest: Command::output drains both pipes (stdin null), and any failure reads \"unknown\"; a decided, print-only fallback",
+      "exception": "no deadline: a hung git would hang the run (same class as audit W1 follow-up)"
+    },
+    {
+      "file": "crates/humanify-core/src/naming/reconcile/hunks.rs",
+      "scope": "compute_normal_diff",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "`diff` for the normal-diff hunks (audit R3): Command::output drains both pipes; one per reconcile file on the par seam, results rejoined in ledger order",
+      "exception": "audit R3: a spawn/diff failure silently discards that file's reconcile (counted only in stats.discarded); up to nproc concurrent children; no deadline"
+    },
+    {
+      "file": "crates/humanify-core/src/naming/reconcile/hunks.rs",
+      "scope": "tempdir",
+      "construct": "atomic",
+      "pattern": "stats-counter",
+      "reason": "temp-dir sequence (audit O17): unique names only; create_dir refuses a clash and the loop retries"
+    },
+    {
+      "file": "crates/humanify-core/src/naming/reconcile/hunks.rs",
+      "scope": "tempdir",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "temp-dir sequence (audit O17): only uniqueness is needed, which fetch_add gives under any ordering"
+    },
+    {
+      "file": "crates/humanify-core/src/par.rs",
+      "scope": "map_ordered",
+      "construct": "rayon-par",
+      "pattern": "par-seam",
+      "reason": "THE seam (audit O13): indexed collect writes each result into its input slot, so order is by construction"
+    },
+    {
+      "file": "crates/humanify-core/src/par.rs",
+      "scope": "produce_then_map",
+      "construct": "rayon-par",
+      "pattern": "par-seam",
+      "reason": "THE seam (audit O13): batches mapped in parallel, collected in input order"
+    },
+    {
+      "file": "crates/humanify-core/src/par.rs",
+      "scope": "join",
+      "construct": "rayon-join",
+      "pattern": "par-seam",
+      "reason": "THE seam (audit O13): two pure closures, results returned positionally"
+    },
+    {
+      "file": "crates/humanify-core/src/par.rs",
+      "scope": "beside",
+      "construct": "thread-scope",
+      "pattern": "par-seam",
+      "reason": "THE seam (audit O14): one scoped thread runs pure work beside the AST-holding main thread; scope joins on every path and re-raises a panic"
+    },
+    {
+      "file": "crates/humanify-core/src/prior.rs",
+      "scope": "static PRIOR_PARSES",
+      "construct": "atomic",
+      "pattern": "stats-counter",
+      "reason": "prior-parse counter: observation only, no decision reads it (audit \"also checked\")"
+    },
+    {
+      "file": "crates/humanify-core/src/prior.rs",
+      "scope": "prior_parse_count",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "prior-parse counter: a count read by tests and diagnostics; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-core/src/prior.rs",
+      "scope": "reset_prior_parse_count",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "prior-parse counter: a count read by tests and diagnostics; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-core/src/prior.rs",
+      "scope": "parse_prior",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "prior-parse counter: a count read by tests and diagnostics; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "struct Sampler",
+      "construct": "channel",
+      "pattern": "observer",
+      "reason": "the profiler sampler's stop signal (audit O18): sampler stopped through the channel and joined; never started in production"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "struct Profiler",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "lock",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "Profiler::new",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "Profiler::start_concurrency_sampling",
+      "construct": "channel",
+      "pattern": "observer",
+      "reason": "the profiler sampler's stop signal (audit O18): sampler stopped through the channel and joined; never started in production"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "Profiler::start_concurrency_sampling",
+      "construct": "thread-spawn",
+      "pattern": "observer",
+      "reason": "the profiler's concurrency sampler thread (audit O18): no production caller; stopped and joined on drop"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "Profiler::start_concurrency_sampling",
+      "construct": "timeout",
+      "pattern": "observer",
+      "reason": "the sampler's tick is recv_timeout on its stop channel, so stopping it is immediate"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "static GLOBAL",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+    },
+    {
+      "file": "crates/humanify-core/src/profiling.rs",
+      "scope": "push_snapshot",
+      "construct": "lock",
+      "pattern": "observer",
+      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+    },
+    {
+      "file": "crates/humanify-core/src/unpack/webcrack.rs",
+      "scope": "unpack_webcrack",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "the webcrack shim (audit W1, fixed): non-zero exit or unparseable output is an error",
+      "exception": "audit W1 follow-up: no wall-clock deadline yet; a webcrack that loops forever hangs the run"
+    },
+    {
+      "file": "crates/humanify-core/src/unpack/webcrack.rs",
+      "scope": "unpack_webcrack",
+      "construct": "piped-stdio",
+      "pattern": "subprocess",
+      "reason": "stdin/stdout/stderr piped; a scoped feeder thread writes stdin while wait_with_output drains the other two (audit W1 fix)"
+    },
+    {
+      "file": "crates/humanify-core/src/unpack/webcrack.rs",
+      "scope": "unpack_webcrack",
+      "construct": "thread-scope",
+      "pattern": "subprocess",
+      "reason": "the stdin feeder thread (audit W1 fix): scoped, joined, a panic re-raised; dropping ChildStdin closes it"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "type KeyGate",
+      "construct": "async-lock",
+      "pattern": "single-flight",
+      "reason": "per-key async gate (audit O6, finding #57): an async lock held across the inner call's .await, as prescribed. Lock order: key gate (outer) -> semaphore slot (inner), always"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "struct AnswerMemo",
+      "construct": "lock",
+      "pattern": "single-flight",
+      "reason": "in-flight gates + answers maps (audit O8): std Mutex for a map get/insert, never held across .await or IO, never nested"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "struct AnswerMemo",
+      "construct": "atomic",
+      "pattern": "stats-counter",
+      "reason": "memo hit/miss/write/ask/share counters (audit O8): reported in stats, never read by a decision"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "AnswerMemo::build",
+      "construct": "lock",
+      "pattern": "single-flight",
+      "reason": "in-flight gates + answers maps (audit O8): std Mutex for a map get/insert, never held across .await or IO, never nested"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "AnswerMemo::build",
+      "construct": "atomic",
+      "pattern": "stats-counter",
+      "reason": "memo hit/miss/write/ask/share counters (audit O8): reported in stats, never read by a decision"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "AnswerMemo::stats",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "memo counters: commutative counts read after the run for stats; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "AnswerMemo::memo_stats",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "memo counters: commutative counts read after the run for stats; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "AnswerMemo::write_through",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "memo counters: commutative counts read after the run for stats; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-llm/src/cache.rs",
+      "scope": "AnswerMemo::serve",
+      "construct": "atomic-relaxed",
+      "pattern": "stats-counter",
+      "reason": "memo counters: commutative counts read after the run for stats; no ordering with other memory is needed"
+    },
+    {
+      "file": "crates/humanify-llm/src/client.rs",
+      "scope": "struct OpenAiClient",
+      "construct": "http-client",
+      "pattern": "deadline",
+      "reason": "one pooled reqwest client (audit O12); every attempt runs under ONE timeout_at deadline covering connect, send and body (audit W2 fix)"
+    },
+    {
+      "file": "crates/humanify-llm/src/client.rs",
+      "scope": "OpenAiClient::new",
+      "construct": "http-client",
+      "pattern": "deadline",
+      "reason": "one pooled reqwest client (audit O12); every attempt runs under ONE timeout_at deadline covering connect, send and body (audit W2 fix)"
+    },
+    {
+      "file": "crates/humanify-llm/src/client.rs",
+      "scope": "OpenAiClient::attempt",
+      "construct": "timeout",
+      "pattern": "deadline",
+      "reason": "one deadline per attempt bounds send AND body read together (audit W2 fix); a body timeout is a Timeout and retries like a header timeout"
+    },
+    {
+      "file": "crates/humanify-llm/src/client.rs",
+      "scope": "OpenAiClient::post_with_sdk_retries",
+      "construct": "sleep",
+      "pattern": "retry-envelope",
+      "reason": "SDK-layer retry backoff (0.5 s, 1 s, up to 25% jitter) on the runtime via tokio::time::sleep",
+      "exception": "audit R1: the second retry layer \u2014 the limiter's retries wrap these, 12 requests per failing call; one retry layer is the target, the decision is open"
+    },
+    {
+      "file": "crates/humanify-llm/src/metrics.rs",
+      "scope": "struct MetricsTracker",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "metrics state: std Mutex taken for one field update and released before the throttled callback; never held across .await"
+    },
+    {
+      "file": "crates/humanify-llm/src/metrics.rs",
+      "scope": "MetricsTracker::new",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "metrics state: std Mutex taken for one field update and released before the throttled callback; never held across .await"
+    },
+    {
+      "file": "crates/humanify-llm/src/provider.rs",
+      "scope": "runtime",
+      "construct": "runtime-builder",
+      "pattern": "llm-runtime",
+      "reason": "THE runtime (audit O1): one current_thread runtime per LlmClient, built once per run"
+    },
+    {
+      "file": "crates/humanify-llm/src/provider.rs",
+      "scope": "LlmClient::run_wave",
+      "construct": "block-on",
+      "pattern": "llm-runtime",
+      "reason": "the only block_on: called from the main thread, never nested (on_done never calls the provider), never from rayon (dyn NameProvider is not Sync) \u2014 audit O2/O3"
+    },
+    {
+      "file": "crates/humanify-llm/src/provider.rs",
+      "scope": "LlmClient::run_wave",
+      "construct": "async-fanout",
+      "pattern": "llm-runtime",
+      "reason": "join_all over one chunk (audit O2): results positional; callers chunk at the prompt window so live futures are bounded"
+    },
+    {
+      "file": "crates/humanify-llm/src/provider.rs",
+      "scope": "LlmClient::run_pipelined",
+      "construct": "block-on",
+      "pattern": "llm-runtime",
+      "reason": "the only block_on: called from the main thread, never nested (on_done never calls the provider), never from rayon (dyn NameProvider is not Sync) \u2014 audit O2/O3"
+    },
+    {
+      "file": "crates/humanify-llm/src/provider.rs",
+      "scope": "LlmClient::run_pipelined",
+      "construct": "async-fanout",
+      "pattern": "llm-runtime",
+      "reason": "FuturesUnordered, the one completion-ordered loop (audit O3/O7): bounded by the window; everything recorded is re-sorted to canonical order before it is kept"
+    },
+    {
+      "file": "crates/humanify-llm/src/rate.rs",
+      "scope": "struct RateLimited",
+      "construct": "semaphore",
+      "pattern": "rate-limiter",
+      "reason": "the max_concurrent cap (audit O4): tokio Semaphore, FIFO-fair, permit released on drop"
+    },
+    {
+      "file": "crates/humanify-llm/src/rate.rs",
+      "scope": "struct RateLimited",
+      "construct": "lock",
+      "pattern": "rate-limiter",
+      "reason": "rpm window deque (audit O5): std Mutex held for a deque scan in a block that ends BEFORE sleep().await"
+    },
+    {
+      "file": "crates/humanify-llm/src/rate.rs",
+      "scope": "RateLimited::new",
+      "construct": "semaphore",
+      "pattern": "rate-limiter",
+      "reason": "the max_concurrent cap (audit O4): tokio Semaphore, FIFO-fair, permit released on drop"
+    },
+    {
+      "file": "crates/humanify-llm/src/rate.rs",
+      "scope": "RateLimited::new",
+      "construct": "lock",
+      "pattern": "rate-limiter",
+      "reason": "rpm window deque (audit O5): std Mutex held for a deque scan in a block that ends BEFORE sleep().await"
+    },
+    {
+      "file": "crates/humanify-llm/src/rate.rs",
+      "scope": "RateLimited::take_window_place",
+      "construct": "sleep",
+      "pattern": "rate-limiter",
+      "reason": "waits for the rpm window to free (tokio::time::sleep, outside the lock); requests_per_minute is 0 in production"
+    },
+    {
+      "file": "crates/humanify-llm/src/rate.rs",
+      "scope": "RateLimited::with_retry",
+      "construct": "sleep",
+      "pattern": "retry-envelope",
+      "reason": "limiter-layer retry backoff 1/2/4 s, holding the slot by design (rate.rs header)",
+      "exception": "audit R1: un-jittered, and a second retry layer around the SDK's; one jittered layer with a total-time cap is the target, the decision is open"
+    }
+  ]
+}

@@ -73,6 +73,8 @@ pub struct StubServer {
 impl StubServer {
     /// Start a server answering every request with `handler(index, body)`
     /// after `delay`.
+    // concurrency: test-only stub server: its own runtime and per-connection tasks on its own thread, apart from the code under test
+    #[allow(clippy::disallowed_methods)]
     pub fn start(delay: Duration, handler: Handler) -> StubServer {
         let stats = Arc::new(StubStats::default());
         let (tx, rx) = std::sync::mpsc::channel();

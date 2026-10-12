@@ -39,6 +39,8 @@ struct ShimOutput {
 /// `WebcrackAdapter.unpack`: run the shim, return its files in the order it
 /// listed them. A non-zero exit or unparseable output is an error — the
 /// TS adapter throws the same way when webcrack does.
+// concurrency: wait_with_output drains stdout/stderr while a scoped feeder thread writes stdin, so the pipes cannot deadlock (audit W1). Known exception: no wall-clock deadline yet (W1 follow-up)
+#[allow(clippy::disallowed_methods)]
 pub fn unpack_webcrack(
     code: &str,
     out_dir: &Path,

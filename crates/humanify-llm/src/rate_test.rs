@@ -102,6 +102,8 @@ impl AsyncProvider for &Flaky {
     }
 }
 
+// concurrency: test harness: a private runtime drives this test's futures
+#[allow(clippy::disallowed_methods)]
 fn wave<P: AsyncProvider>(
     limited: &RateLimited<P>,
     n: usize,
@@ -118,6 +120,8 @@ fn wave<P: AsyncProvider>(
         ))
 }
 
+// concurrency: test harness: a private runtime drives this test's futures
+#[allow(clippy::disallowed_methods)]
 fn one<P: AsyncProvider>(
     limited: &RateLimited<P>,
     call: &LlmCall,
@@ -282,6 +286,8 @@ fn a_dropped_connection_is_retried() {
 
 /// A per-attempt timeout ("Request timed out.") is retried and recovers.
 #[test]
+// concurrency: test: the stub handler sleeps to block the stub past the 100 ms timeout on purpose
+#[allow(clippy::disallowed_methods)]
 fn a_timed_out_request_is_retried() {
     let slow: Handler = Arc::new(|index, _| {
         if index == 0 {
@@ -375,6 +381,8 @@ fn tracks_in_flight_calls_during_execution() {
 /// requestsPerMinute (no TS test): with a limit of 2, the third request
 /// started AFTER the first two waits until the oldest leaves the 60 s window.
 #[tokio::test(start_paused = true)]
+// concurrency: test harness: #[tokio::test] builds this test's own runtime (paused clock)
+#[allow(clippy::disallowed_methods)]
 async fn requests_per_minute_waits_for_the_window() {
     let flaky = Flaky::new("", 1);
     let limited = RateLimited::new(
@@ -413,6 +421,8 @@ async fn requests_per_minute_waits_for_the_window() {
 /// window. Limit 2, four concurrent calls: two start at once, the other two
 /// wait for the first stamps to age out of the 60 s window.
 #[tokio::test(start_paused = true)]
+// concurrency: test harness: #[tokio::test] builds this test's own runtime (paused clock)
+#[allow(clippy::disallowed_methods)]
 async fn requests_per_minute_binds_a_concurrent_burst() {
     let flaky = Flaky::new("", 1);
     let limited = RateLimited::new(
@@ -449,6 +459,8 @@ async fn requests_per_minute_binds_a_concurrent_burst() {
 /// own runtime, released together by a barrier) against a limit of 3 —
 /// exactly 3 pass the window; the rest are still waiting when cut off.
 #[test]
+// concurrency: test harness: one private runtime per caller thread, so the callers are truly parallel
+#[allow(clippy::disallowed_methods)]
 fn requests_per_minute_binds_parallel_callers() {
     let limited = Arc::new(RateLimited::new(
         Arc::new(Sleeper::default()),
@@ -491,6 +503,8 @@ fn requests_per_minute_binds_parallel_callers() {
 
 /// Exponential backoff: retryDelayMs * 2^attempt (100, 200, 400 ms).
 #[tokio::test(start_paused = true)]
+// concurrency: test harness: #[tokio::test] builds this test's own runtime (paused clock)
+#[allow(clippy::disallowed_methods)]
 async fn backoff_doubles_per_attempt() {
     let flaky = Flaky::new("503 Service Unavailable", 4);
     let limited = RateLimited::new(&flaky, config(50, 3, 100), None);

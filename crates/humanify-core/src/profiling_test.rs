@@ -132,6 +132,8 @@ fn disabled_profiler_is_callable_and_records_nothing() {
 }
 
 #[test]
+// concurrency: test: the sampler thread runs on wall time; the poll is bounded by a 10 s deadline
+#[allow(clippy::disallowed_methods)]
 fn concurrency_sampling_records_until_stopped() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};

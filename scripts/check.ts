@@ -93,6 +93,11 @@ const STAGES: readonly Stage[] = [
     advisory: true
   },
   {
+    name: "census:concurrency",
+    why: "every concurrency site in the pipeline's non-test Rust (threads, rayon, tokio, locks, channels, atomics, subprocesses, sleeps, timeouts) is on scripts/concurrency-allowlist.json with a documented pattern and a reason (docs/concurrency.md); an unlisted or stale site fails — confirm a new one by adding its entry, or use the sanctioned primitive",
+    run: "npm run census:concurrency"
+  },
+  {
     name: "unit",
     why: "EVERY *.test.ts in the repo — test/ and experiments/ (the harness's own tests; the KPI scorer's owners among them)",
     run: "npm run test:unit"

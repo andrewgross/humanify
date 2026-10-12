@@ -76,6 +76,8 @@ pub struct LlmClient<P> {
     provider: P,
 }
 
+// concurrency: THE runtime — the one current_thread runtime, owned by the provider (audit O1)
+#[allow(clippy::disallowed_methods)]
 fn runtime() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()

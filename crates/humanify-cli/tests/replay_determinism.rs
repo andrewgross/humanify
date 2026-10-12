@@ -59,6 +59,8 @@ fn answer(user: &str, n: usize) -> String {
     Value::Object(entries).to_string()
 }
 
+// concurrency: test: the stub delays answers by varying wall time so they complete out of order (the determinism under test)
+#[allow(clippy::disallowed_methods)]
 fn serve(stream: std::net::TcpStream, counter: &AtomicUsize, seen: &Mutex<Vec<String>>) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut len = 0usize;
