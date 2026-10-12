@@ -74,25 +74,36 @@ pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32)>, String> {
 }
 
 /// (line, UTF-16 column) positions → byte offsets into `text` (None past a
-/// line's end or past the last line).
+/// line's end or past the last line). Linear: positions are visited in
+/// (line, column) order and each line is walked once — a minified bundle
+/// is one line with a segment every few characters.
 pub fn utf16_to_byte_offsets(text: &str, positions: &[(u32, u32)]) -> Vec<Option<usize>> {
     let mut starts = vec![0usize];
     starts.extend(text.match_indices('\n').map(|(i, _)| i + 1));
-    positions
-        .iter()
-        .map(|&(line, col)| {
-            let start = *starts.get(line as usize)?;
-            let end = starts.get(line as usize + 1).map_or(text.len(), |e| e - 1);
-            let mut units = 0u32;
-            for (i, c) in text[start..end].char_indices() {
-                if units == col {
-                    return Some(start + i);
-                }
-                units += c.len_utf16() as u32;
-            }
-            (units == col).then_some(end)
-        })
-        .collect()
+    let mut order: Vec<usize> = (0..positions.len()).collect();
+    order.sort_unstable_by_key(|&i| positions[i]);
+    let mut out = vec![None; positions.len()];
+    // cursor: (line, byte offset, UTF-16 units from the line start)
+    let mut cur: Option<(u32, usize, u32)> = None;
+    for i in order {
+        let (line, col) = positions[i];
+        let Some(&start) = starts.get(line as usize) else {
+            continue;
+        };
+        let end = starts.get(line as usize + 1).map_or(text.len(), |e| e - 1);
+        let (mut at, mut units) = match cur {
+            Some((l, at, u)) if l == line => (at, u),
+            _ => (start, 0),
+        };
+        while units < col && at < end {
+            let c = text[at..].chars().next().expect("char boundary");
+            units += c.len_utf16() as u32;
+            at += c.len_utf8();
+        }
+        cur = Some((line, at, units));
+        out[i] = (units == col).then_some(at);
+    }
+    out
 }
 
 impl SourceMap {

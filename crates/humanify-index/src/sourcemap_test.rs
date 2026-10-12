@@ -25,6 +25,31 @@ fn utf16_columns_become_byte_offsets() {
 }
 
 #[test]
+fn byte_offsets_are_linear_in_a_minified_one_line_bundle() {
+    // A minified bundle is ONE line with a mapping segment every few
+    // characters. Scanning from the line start for every segment is
+    // quadratic: a 24 MB app bundle never finished (exp095 selection lab).
+    let line: String = "aé".repeat(200_000); // 400k UTF-16 units, 600k bytes
+    let text = format!("{line}\nxy");
+    // out of order, every 4th unit, plus a past-the-end column and line 1
+    let mut positions: Vec<(u32, u32)> = (0..100_000u32).rev().map(|i| (0, i * 4)).collect();
+    positions.push((0, 400_001));
+    positions.push((1, 1));
+    let started = std::time::Instant::now();
+    let got = utf16_to_byte_offsets(&text, &positions);
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(2),
+        "took {:?}",
+        started.elapsed()
+    );
+    // unit 4k is byte 6k ("aé" = 2 units, 3 bytes)
+    assert_eq!(got[0], Some((99_999 * 4 / 2) * 3));
+    assert_eq!(got[99_999], Some(0));
+    assert_eq!(got[100_000], None);
+    assert_eq!(got[100_001], Some(line.len() + 2));
+}
+
+#[test]
 fn a_span_belongs_to_the_source_owning_nearly_all_of_its_segments() {
     let map = SourceMap {
         sources: vec!["a.js".into(), "b.js".into()],

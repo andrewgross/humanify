@@ -344,3 +344,27 @@ Retractions and updates to the sections above live here (rule 9).
   - **Isolation veto.** Dropping an index claim that has no same-family graph neighbour removes every ink-fork claim
     and costs ≈0 recall.
   - **Content floor on closure starts.** It is required: one 11-byte mis-claim otherwise drags in a whole app module.
+
+---
+
+## 7. Which packages and which versions to index (2026-10-12; `selection/`, `density/`)
+
+- **Packages: rank by what bundled apps contain, priced at the index's real cost.** A corpus of 338 bundled apps
+  (166 Electron, 170 npm CLIs, 2 agent CLIs; 1,577 MB of library code, 67 held out). At an equal real index size the
+  app-closure greedy recognises 20.7% vs ~17.5% (98 MB) and 22.8% vs ~20.4% (148 MB) of held-out apps' library
+  bytes, against download rank, wrong names 0.03–0.06% (all copies or sourcemap errors by hand). Pricing packages by
+  their bundled code instead gives no gain: ~97% of an index is literal rows from every source file installed, so an
+  owner's index cost is 0.9–11.7× its bundled code. Neither ranking reaches Claude Code's rare packages (Bedrock
+  runtime, growthbook, bedrock-sdk: 0 of 338 apps; ink: 3) — those come from the bundle's own readers (pins).
+- **Versions: the exact version carries about a third of recall.** Every release of 101 packages (11,303 versions,
+  Bun and esbuild): all releases 86.4% (download-weighted); without the bundle's version, nearest patch 54.8%, same
+  minor 57.5%, release before 43.8%, other majors 11.9%. Single pre-built files break on any change. Claude Code's
+  packages are kinder (nearest patch keeps 85% of all-releases recall).
+- **Recommended density: every release of the last 12 months + the latest patch of every older minor** — 83.0%
+  (vs 86.7% for all releases; 54.8% for today's as-of policy), 96.5% of the all-releases recall on Claude Code, at
+  60% of all-releases' literal bytes. Identical rows across releases collapse 16× (literal) / 9.6× (module).
+- **Builder fixes and findings.** `utf16_to_byte_offsets` was quadratic on one-line minified bundles (fixed with a
+  red/green test). Bun 1.4.0 sourcemaps credit whole modules to the wrong file in large bundles (5.5% of held-out
+  keyed library bytes; the builder labels rows the same way — add a one-file-one-module check). Only ~30% of the
+  literal table is files a bundle contains (restrict the shard: ~2–3× smaller). Subpath-only packages
+  (@modelcontextprotocol/sdk, @aws-sdk/nested-clients) produce no modules: the recipe needs `exports` entries.
