@@ -109,8 +109,13 @@ type-level fix — the eval is the wrong instrument, and
 `experiments/lib/neutrality.sh` is the right one:**
 
 ```bash
-experiments/lib/neutrality.sh <baseline-ref> [from:to]   # ~25min/pair, both legs
+npm run eval -- neutrality <baseline-ref> [from:to] --cache /work/neutrality-cache   # ~25min/pair, both legs
 ```
+
+(`run.sh` and `neutrality.sh` parse no flags since config sweep step 7: the
+`eval` dispatcher validates them once and hands each script ONE run config
+file, `<workdir>/<label>.run-config.json` / `<workdir>/neutrality-run-config.json`.
+Launch them through `npm run eval`.)
 
 It runs the candidate and the baseline over one pair with a shared warm cache
 and proves BYTE IDENTITY: 0 differing files, 0 differing lines, zero cache
@@ -221,7 +226,7 @@ permits. The summary judges both, and says "not judged" when a leg ran on a
 cache or on another version.
 
 ```bash
-experiments/034-eval-harness/run.sh <label>   # score current tree on 4 pairs (~1hr)
+npm run eval -- score <label>   # score current tree on 4 pairs (~1hr)
 npx tsx experiments/034-eval-harness/leaderboard.ts ref-scratch-0f338ffa-r1 <label>
 #   ^ the current reference (scratch bases, the default). Comparing against a
 #     SEEDED-base label (everything before 2026-10-03) needs --seeded-base on
@@ -272,7 +277,9 @@ UNKNOWN, not passing.
   four trees with `claude_code_version_too_old` — since 2026-09-18 the API
   refuses the account-default model to any CLI older than 2.1.251, which is
   every version walked here. The gate now pins `BOOT_GATE_MODEL`
-  (`experiments/lib/boot-gate.sh`; haiku-4-5 at the time, re-pinned to
+  (a setting of `experiments/lib/boot-gate.sh`, recorded in each label's
+  `pipeline.json` and `*-boot.json` — no longer an env override since config
+  sweep step 7; haiku-4-5 at the time, re-pinned to
   `claude-opus-4-1` on 2026-09-28 when the API began refusing haiku-4-5,
   sonnet-4-5 and sonnet-5 on the walked CLIs — `ae80cf71`) and all four
   trees pass both halves with it; each `*-boot.json` carries a `rerecorded`

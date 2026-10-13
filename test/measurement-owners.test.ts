@@ -227,8 +227,13 @@ describe("measurement owners", () => {
     const src = read("scripts/eval.ts");
     assert.match(src, /"--bin": "value"/);
     const runSh = read("experiments/034-eval-harness/run.sh");
-    for (const flag of ["--bin", "--force-mixed"]) {
-      assert.ok(runSh.includes(`    ${flag})`), `run.sh must parse ${flag}`);
+    // eval.ts parses the flags; run.sh reads their values from the run
+    // config file it is handed (config sweep step 7).
+    for (const key of [".bin", ".forceMixed"]) {
+      assert.ok(
+        new RegExp(`run_config(_flag)? \\${key}\\b`).test(runSh),
+        `run.sh must read ${key} from its run config`
+      );
     }
     // The warm self-hop always runs now, and the TS-matcher preflight is
     // retired: neither keeps a flag.
@@ -282,14 +287,15 @@ describe("measurement owners", () => {
     // header claimed no ambient reads). A ${VAR:-} whose VAR is initialized
     // by the script's own flag parser is fine — this scans for reads of
     // names the script never assigns.
+    // boot-gate.sh joined in config sweep step 7 (2026-10-13): its last
+    // ambient read, BOOT_GATE_MODEL, is now a setting the script owns and
+    // the eval records (pipeline.json, every boot verdict), not an env read.
     const scripts = [
       "experiments/034-eval-harness/run.sh",
       "experiments/lib/neutrality.sh",
+      "experiments/lib/boot-gate.sh",
       "experiments/096-library-matching-score/run.sh"
     ];
-    // boot-gate.sh is excluded: its one ambient read, BOOT_GATE_MODEL, is
-    // accepted as-is (owner decision, 2026-08-12; BOOT_GATE_SOFT was deleted
-    // in the config sweep, 2026-10-13).
     const offenders: string[] = [];
     for (const f of scripts) {
       // Comments can legitimately mention the ${VAR:-} form as prose.
@@ -311,5 +317,56 @@ describe("measurement owners", () => {
       [],
       `ambient env default reads (make them flags):\n  ${offenders.join("\n  ")}`
     );
+  });
+
+  it("run.sh and neutrality.sh read ONE run config file and never re-parse argv", () => {
+    // Config sweep step 7 (2026-10-13): `npm run eval` validates every flag
+    // once and writes the run config JSON; the shell drivers take only that
+    // file's path. A second flag parser here is the double parse the sweep
+    // deleted (16 score flags were parsed in eval.ts AND again in run.sh) —
+    // two parsers drift, and the one people do not run is the one that
+    // silently accepts a typo.
+    for (const f of [
+      "experiments/034-eval-harness/run.sh",
+      "experiments/lib/neutrality.sh"
+    ]) {
+      const code = read(f)
+        .split("\n")
+        .filter((l) => !/^\s*#/.test(l))
+        .join("\n");
+      for (const [what, re] of [
+        ["a flag loop", /while \[\[ \$# -gt 0 \]\]/],
+        ["a case on $1", /case "\$1" in/],
+        ["a flag case arm", /^\s*--[a-z][a-z-]*\)/m],
+        ["shift", /\bshift\b/]
+      ] as const) {
+        assert.doesNotMatch(code, re, `${f} re-parses argv (${what})`);
+      }
+      assert.match(
+        code,
+        /RUN_CONFIG="\$\{1:-\}"/,
+        `${f} must take its run config path as its one argument`
+      );
+      assert.match(
+        code,
+        /jq [^\n]*"\$RUN_CONFIG"/,
+        `${f} must read its settings from the run config`
+      );
+    }
+  });
+
+  it("neutrality.sh refuses flags and positionals: eval.ts is the one parser", () => {
+    for (const argv of [
+      ["main", "2.1.85:2.1.86"],
+      ["--cache", "/work/neutrality-cache"]
+    ]) {
+      const r = spawnSync(
+        "bash",
+        [path.join(REPO, "experiments/lib/neutrality.sh"), ...argv],
+        { encoding: "utf8", cwd: REPO }
+      );
+      assert.strictEqual(r.status, 2, `${argv}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, /run config/);
+    }
   });
 });

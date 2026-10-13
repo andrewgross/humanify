@@ -3,56 +3,27 @@
 # Eval harness driver — score the CURRENT pipeline on the configured version
 # pairs and store the result under a MODEL label so runs stack up side by side.
 #
-#   experiments/034-eval-harness/run.sh <model-label> [flags]
+#   npm run eval -- score <model-label> [flags]
+#   (which runs: experiments/034-eval-harness/run.sh <run-config.json>)
 #
-# Flags (parsed upfront; unknown flags are fatal — no ambient env reads):
-#   --workdir <dir>        work root (default /tmp/eval-work)
-#   BASE MODE — how each pair's base (v-1) is produced; one per run, recorded
-#   in pipeline.json and every run manifest (inputs.baseMode):
-#     (default)            SCRATCH base: rebuild v-1 with the current pipeline
-#                          and NO prior, so both sides of the pair are pure
-#                          current-pipeline output. A full cold run per base.
-#   --seeded-base          SEEDED base: rebuild v-1 with the ARCHIVE tree as
-#                          --prior-version, so the base inherits the archive's
-#                          (July-era TS) names by exact match. The protocol
-#                          of every reference scored before 2026-10-03
-#                          (main-2026-09-18, rust-relaxed-default-843826be,
-#                          control-843826be-8gpu, candidate-8af0574f-8gpu) —
-#                          comparable only to other seeded runs.
-#   --archive-prior        no rebuild: score against the ARCHIVE v-1 tree
-#                          itself (reads ~3.7x worse and says so per pair).
-#                          Exclusive with --seeded-base.
-#   --pairs <a,b>          restrict to named pairs ("215->216" or full form)
-#   --endpoint <url>       LLM endpoint (default: llm.endpoint in the git-ignored
-#                          .humanify.local.json at the repo root; a worktree
-#                          also reads the main checkout's — lib/llm-endpoint.sh)
-#   --llm-cache <dir>      opt IN to a response cache — iteration only,
-#                          never valid for a gate run
-#   --no-layout            skip the split-tree churn analysis
-#   --no-vendor-score      skip the vendor churn analysis
-#   --inputs-base <dir>    override pairs.json inputsBase
-#   --priors-base <dir>    override pairs.json priorsBase
-#   --bin <path>           the Rust binary to score (default: this repo's
-#                          target/release/humanify). It runs at ALL THREE
-#                          launch sites (rebase, scored leg, self-hop). The
-#                          harness BUILDS it first (`cargo build --release
-#                          --locked` in the cargo workspace owning <path>) and
-#                          REFUSES a binary whose build commit is not this
-#                          label's commit (experiments/lib/pipeline-bin.ts).
-#                          There is no other pipeline: the TS program was
-#                          deleted at the cutover (docs/rust-port/19-cutover.md).
-#   --force-mixed          accept a --bin built from another/unknown commit or
-#                          a dirty tree (recorded, and warned on per pair)
-#   --pipeline-set <section.key=value>
-#                          one pipeline setting for EVERY launch (rebase,
-#                          scored leg, both self-hop legs), written into each
-#                          launch's --config TOML after the harness's own
-#                          keys; repeatable, order kept (e.g. --pipeline-set
-#                          naming.schedule=sequential). A key the harness
-#                          itself sets is refused. Recorded in pipeline.json
-#                          and (as the file) in every run config. Without it
-#                          the launches are byte-identical to the golden
-#                          (run-launch.test.ts).
+# ONE RUN CONFIG (config sweep step 7, 2026-10-13). run.sh parses NO flags:
+# `npm run eval -- score` (scripts/eval.ts) validates every flag once,
+# resolves every default, and writes one run config JSON
+# (<workdir>/<label>.run-config.json); this script takes only its path and
+# reads every setting from it. Its sha256 is recorded in the label's
+# pipeline.json. The flags themselves — what each means, the base modes
+# (scratch default / --seeded-base / --archive-prior), --pairs, --endpoint,
+# --llm-cache, --no-layout, --no-vendor-score, --no-boot-prompt,
+# --no-self-hop, --inputs-base, --priors-base, --workdir, --bin,
+# --force-mixed, --pipeline-set — are documented where they are parsed:
+# SCORE_FLAGS and ScoreRunConfig in scripts/eval.ts.
+#
+# --bin (config field `bin`) runs at ALL THREE launch sites (rebase, scored
+# leg, self-hop). The harness BUILDS it first (`cargo build --release
+# --locked` in the cargo workspace owning it) and REFUSES a binary whose
+# build commit is not this label's commit (experiments/lib/pipeline-bin.ts)
+# unless forceMixed. There is no other pipeline: the TS program was deleted
+# at the cutover (docs/rust-port/19-cutover.md).
 #
 # HOW A LAUNCH IS CONFIGURED (config sweep step 5, 2026-10-13): the binary
 # takes only its operational flags (input, -o, --prior-version, --endpoint,
@@ -77,74 +48,47 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 CFG="$HERE/pairs.json"
 
-MODEL=""
-WORK="/tmp/eval-work"
-ARCHIVE_PRIOR=0
-SEEDED_BASE=0
-PAIRS_FILTER=""
-ENDPOINT_OVERRIDE=""
-LLM_CACHE_DIR=""
-RUN_LAYOUT=1
-RUN_VENDOR=1
-RUN_BOOT_PROMPT=1
-RUN_SELF_HOP=1
-INPUTS_OVERRIDE=""
-PRIORS_OVERRIDE=""
-BIN="$REPO/target/release/humanify"
-FORCE_MIXED=0
+RUN_CONFIG="${1:-}"
+if [[ $# -ne 1 || "$RUN_CONFIG" == --* || ! -f "$RUN_CONFIG" ]]; then
+  echo "usage: run.sh <run-config.json> — the run config \`npm run eval -- score <label> [flags]\` writes; run.sh parses no flags (config sweep step 7)" >&2
+  exit 2
+fi
+command -v jq >/dev/null || { echo "jq required"; exit 1; }
+[[ "$(jq -r .kind "$RUN_CONFIG")" == "eval-score" ]] || {
+  echo "run.sh: $RUN_CONFIG is not an eval-score run config" >&2; exit 2; }
+# run_config <jq filter>: one field of the run config ("" for null).
+run_config() { jq -r "$1 // empty" "$RUN_CONFIG"; }
+# run_config_flag <jq filter>: a boolean field as 1/0.
+run_config_flag() { jq -r "if $1 then 1 else 0 end" "$RUN_CONFIG"; }
+MODEL=$(run_config .label)
+WORK=$(run_config .workdir)
+BASE_MODE=$(run_config .baseMode)
+PAIRS_FILTER=$(run_config .pairs)
+ENDPOINT_OVERRIDE=$(run_config .endpoint)
+LLM_CACHE_DIR=$(run_config .llmCache)
+RUN_LAYOUT=$(run_config_flag .layout)
+RUN_VENDOR=$(run_config_flag .vendorScore)
+RUN_BOOT_PROMPT=$(run_config_flag .bootPrompt)
+RUN_SELF_HOP=$(run_config_flag .selfHop)
+INPUTS=$(run_config .inputsBase)
+PRIORS=$(run_config .priorsBase)
+BIN=$(run_config .bin)
+FORCE_MIXED=$(run_config_flag .forceMixed)
 PIPELINE_SETS=()
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --workdir)        WORK="$2"; shift ;;
-    --archive-prior)  ARCHIVE_PRIOR=1 ;;
-    --seeded-base)    SEEDED_BASE=1 ;;
-    --pairs)          PAIRS_FILTER="$2"; shift ;;
-    --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
-    --llm-cache)      LLM_CACHE_DIR="$2"; shift ;;
-    --no-layout)      RUN_LAYOUT=0 ;;
-    --no-vendor-score) RUN_VENDOR=0 ;;
-    # Retired by the config sweep (2026-10-13), refused with eval.ts's words.
-    --no-vendor)      echo "run.sh: --no-vendor is retired: renamed: use --no-vendor-score" >&2; exit 2 ;;
-    --heap-mb)        echo "run.sh: --heap-mb is retired: removed: it was inert (the pipeline is a Rust binary, not a Node process)" >&2; exit 2 ;;
-    --no-boot-prompt) RUN_BOOT_PROMPT=0 ;;
-    --no-self-hop)    RUN_SELF_HOP=0 ;;
-    --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
-    --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
-    --bin)            BIN="$2"; shift ;;
-    --force-mixed)    FORCE_MIXED=1 ;;
-    --pipeline-arg)   echo "run.sh: --pipeline-arg is retired: the pipeline's settings are --config keys now (config sweep step 5) — use --pipeline-set <section.key=value>" >&2; exit 2 ;;
-    --pipeline-set)   [[ $# -ge 2 && "$2" != --* ]] || { echo "run.sh: --pipeline-set needs a section.key=value" >&2; exit 2; }
-                      PIPELINE_SETS+=("$2"); shift ;;
-    --*)            echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
-    *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
-                      MODEL="$1" ;;
-  esac
-  shift
-done
-[[ -n "$MODEL" ]] || { echo "usage: run.sh <model-label> [flags]" >&2; exit 2; }
-# Every launch's --config file: the harness's own settings, then the
-# --pipeline-set ones. pipeline-config.ts refuses a key set twice, so a
-# --pipeline-set that collides with a harness key is refused HERE, before
-# anything launches, by checking against every key the harness may set.
-HARNESS_KEYS=(llm.reasoning_effort llm.concurrency split.enabled llm.cache_dir
-  diagnostics.log_file diagnostics.stats_json diagnostics.diagnostics_file)
-if [[ ${#PIPELINE_SETS[@]} -gt 0 ]]; then
-  npx tsx "$REPO/experiments/lib/pipeline-config.ts" --check \
-    $(printf '%s=x ' "${HARNESS_KEYS[@]}") "${PIPELINE_SETS[@]}" || exit 2
+while IFS= read -r entry; do
+  PIPELINE_SETS+=("$entry")
+done < <(jq -r '.pipelineSettings[]' "$RUN_CONFIG")
+# The run config's sha256, for pipeline.json (sha256sum on Linux, shasum on macOS).
+if command -v sha256sum >/dev/null; then
+  RUN_CONFIG_SHA=$(sha256sum "$RUN_CONFIG" | cut -d' ' -f1)
+else
+  RUN_CONFIG_SHA=$(shasum -a 256 "$RUN_CONFIG" | cut -d' ' -f1)
 fi
 # The LLM server's address is local, untracked configuration (the repo is
 # public): --endpoint, else .humanify.local.json. Resolved before anything is
 # built, so a missing address costs nothing.
 source "$REPO/experiments/lib/llm-endpoint.sh"
 ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
-# The base mode (header): scratch | seeded | archive. One per run.
-if [[ "$SEEDED_BASE" == "1" && "$ARCHIVE_PRIOR" == "1" ]]; then
-  echo "run.sh: --seeded-base and --archive-prior are exclusive (one base mode per run)" >&2
-  exit 2
-fi
-BASE_MODE="scratch"
-[[ "$SEEDED_BASE" == "1" ]] && BASE_MODE="seeded"
-[[ "$ARCHIVE_PRIOR" == "1" ]] && BASE_MODE="archive"
 # The Node heap of the two ANALYSIS steps (analyze.ts, trail-report.ts) — the
 # only Node processes here. The pipeline is a Rust binary and gets no
 # NODE_OPTIONS (the inert --heap-mb flag that set one was deleted, config
@@ -193,20 +137,20 @@ esac
 
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
+# The label's record: the binary, the extra settings, the base mode, the run
+# config this run read (path + sha256), and the boot gate's pinned model.
 jq -cn --argjson bin "$BIN_JSON" --argjson extra "$PIPELINE_SETS_JSON" \
-  --arg baseMode "$BASE_MODE" \
+  --arg baseMode "$BASE_MODE" --arg cfgPath "$RUN_CONFIG" \
+  --arg cfgSha "$RUN_CONFIG_SHA" --arg bootModel "$BOOT_GATE_MODEL" \
   '{pipeline:({kind:"rust-bin", bin:$bin}
     + (if $extra == null then {} else {pipelineSettings:$extra} end)),
-    baseMode:$baseMode}' > "$RESULTS/pipeline.json"
-
-command -v jq >/dev/null || { echo "jq required"; exit 1; }
+    baseMode:$baseMode, runConfig:{path:$cfgPath, sha256:$cfgSha},
+    bootGateModel:$bootModel}' > "$RESULTS/pipeline.json"
 
 # pairs.json carries the laptop's absolute paths, and the bahadur devcontainer
 # deliberately mirrors them, so the fixture roots resolve unchanged in both
-# places. --inputs-base / --priors-base cover anywhere that does NOT mirror
-# them. (The endpoint is resolved above, from local configuration.)
-INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
-PRIORS="${PRIORS_OVERRIDE:-$(jq -r .priorsBase "$CFG")}"
+# places; eval.ts resolved inputsBase / priorsBase (its --inputs-base /
+# --priors-base, else pairs.json) into the run config.
 
 # LLM response cache: OFF by default, because it MASKS the model's inherent
 # variance. A gate run has to reproduce what a real user sees -- every prompt
@@ -235,12 +179,12 @@ EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 
 # pipeline_config <out.toml> <section.key=value>...: write one launch's file.
+# The harness's own keys are listed in scripts/eval.ts (SCORE_HARNESS_KEYS),
+# which refuses a --pipeline-set naming one before anything builds.
 pipeline_config() {
-  local out="$1"
-  shift
-  npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$out" \
+  npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$1" \
     "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" "split.enabled=true" \
-    "$@" ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"}
+    "${@:2}" ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"}
 }
 CACHE_SETS=()
 [[ -n "$LLM_CACHE_DIR" ]] && CACHE_SETS=("llm.cache_dir=$LLM_CACHE_DIR")
@@ -473,8 +417,9 @@ for i in $(seq 0 $((npairs - 1))); do
     BOOT_VERSION=$(boot_version "$OUT")
     BOOT_PROMPT="skipped"
     if [[ "$RUN_BOOT_PROMPT" == "1" ]]; then
-      # --model: see BOOT_GATE_MODEL in lib/boot-gate.sh (the API rejects the
-      # default model on every version this project walks since 2026-09-18).
+      # --model: BOOT_GATE_MODEL, pinned in lib/boot-gate.sh (the API rejects
+      # the default model on every version this project walks since
+      # 2026-09-18); recorded in the verdict below and in pipeline.json.
       BOOT_PROMPT=$(boot_prompt "$OUT")
     fi
     BOOT_OK=false
@@ -483,8 +428,8 @@ for i in $(seq 0 $((npairs - 1))); do
         BOOT_OK=true
       fi
     fi
-    printf '{"boot":{"version":"%s","prompt":"%s","ok":%s}}\n' \
-      "$BOOT_VERSION" "$BOOT_PROMPT" "$BOOT_OK" > "$RESULTS/$TO-boot.json"
+    printf '{"boot":{"version":"%s","prompt":"%s","model":"%s","ok":%s}}\n' \
+      "$BOOT_VERSION" "$BOOT_PROMPT" "$BOOT_GATE_MODEL" "$BOOT_OK" > "$RESULTS/$TO-boot.json"
     if [[ "$BOOT_OK" == "true" ]]; then
       echo "BOOT GATE: OK ($BOOT_VERSION)"
     else

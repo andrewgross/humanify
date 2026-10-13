@@ -1,9 +1,10 @@
 # Config consolidation: one parse point, one typed config, one file
 
 Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-4
-landed on main (`df6ace2a`); **steps 5 (the `--config` file) and 6 (the
-one library decision) are done** on branch `cleanup/config-sweep-5-6` — §5
-records what changed. Steps 7-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
+landed on main (`df6ace2a`); steps 5 (the `--config` file) and 6 (the
+one library decision) merged (`e6a81298`); **steps 7 (one harness run
+config) and 8 (thresholds into the config) are done** on branch
+`cleanup/config-sweep-7-8` — §5 records what changed. Asked for by Andrew: "we will need several sweeps of our code and evals
 to clean up old flags and make sure config is parsed in ONE place and used
 downstream." Rule applied throughout: no backwards compatibility — an old
 spelling is deleted, not aliased.
@@ -340,11 +341,11 @@ Steps marked **N** can move pipeline bytes and also need WARM neutrality
 marked **G** touch how the harness launches the binary and update
 `run-launch*.golden.txt` deliberately, with the diff reviewed in the PR.
 
-1. **Delete the dead** (G). Match `--sequential`; eval `--heap-mb` and
+1. **DONE 2026-10-13 (`12e60339`). Delete the dead** (G). Match `--sequential`; eval `--heap-mb` and
    `NODE_OPTIONS`; the `libdetect` verb (or keep with a caller);
    `gate.sh`/`selfhop.sh` unless registered in `scripts/eval.ts`;
    `BOOT_GATE_SOFT`. Fix CLAUDE.md's boot-gate model line.
-2. **Renames** (G). `unpack --index` → `--bundle-order`; eval `--no-vendor` →
+2. **DONE 2026-10-13 (`12e60339`; `CLONE_CENSUS_ROOT` in step 7). Renames** (G). `unpack --index` → `--bundle-order`; eval `--no-vendor` →
    `--no-vendor-score`; `detect --profile` → `--perf-trace`; `CLONE_CENSUS_ROOT` → `--root`.
 3. **DONE 2026-10-13 (§2.1). clap for the pipeline** (N). Delete the `env-reads` command and
    `env_reads.rs` with it. Replace `commander.rs` + `surface.rs`
@@ -484,13 +485,43 @@ vs "http://b/v1" (cfg.toml)`), agreeing ones are recorded as
    per-bundler index (`units.<bun|esbuild>.jsonl`), since exp097's recipe
    slices are not on main; its loader replaces the lookup, not the rule.
 
-7. **Harness: one run config** (G). `eval.ts` validates once and writes the
+7. **DONE 2026-10-13. Harness: one run config** (G). `eval.ts` validates once and writes the
    run config JSON plus the binary's `config.toml` per launch; `run.sh` and
    `neutrality.sh` read them instead of re-parsing argv; launches pass only
    the six operational flags; pipeline.json records the config sha and the
-   library block; with library matching on, `run.sh` runs `humanify index
-verify --recipe` per pair and stops the label on a missing slice (test,
-   red first).
+   library block. TODO (deferred, waits for exp097's rework of the verb):
+   with library matching on, `run.sh` runs `humanify index verify --recipe`
+   per pair and stops the label on a missing slice (test, red first).
+
+   What landed: `scripts/eval.ts` is the one parser of the harness's
+   flags. `eval score` resolves every default (workdir, binary path,
+   inputs/priors bases from `pairs.json`, base mode, the four skip
+   switches, `--pipeline-set` entries — a key the harness writes itself is
+   now refused there, before anything builds) into one run config,
+   `<workdir>/<label>.run-config.json`; `eval neutrality` does the same into
+   `<workdir>/neutrality-run-config.json` (baseline, pair, workdir, cache,
+   priors, inputs base, endpoint; a malformed pair is refused). `run.sh`
+   and `neutrality.sh` take only that path and read it with `jq`; given
+   anything else they exit 2 naming the run config. The label's
+   `pipeline.json` gains `runConfig: {path, sha256}` and `bootGateModel`.
+   The per-launch TOML is unchanged (`pipeline-config.ts`, called by run.sh
+   per launch, because each launch's file names that launch's own paths).
+   Guard: `test/measurement-owners.test.ts` fails a flag loop, a `case
+"$1"`, a `--flag)` case arm or `shift` in either script, and requires the
+   run config read. Launch goldens: **unchanged, byte for byte** — every
+   launch line, `--config` file and per-pair run config is what step 6
+   recorded; `run-launch.test.ts` now drives the harness through `eval.ts`
+   as a user does. Also from §2.5: `gate.sh`, `selfhop.sh` and
+   `BOOT_GATE_SOFT` were already deleted in step 1 (`12e60339`);
+   `BOOT_GATE_MODEL` is now a setting of `boot-gate.sh` (no env override;
+   re-pin it in a commit), recorded in `pipeline.json` and each
+   `<v>-boot.json`, and boot-gate.sh joined the no-ambient-read guard;
+   `CLONE_CENSUS_ROOT` became `clone-census --root <dir>` (unknown
+   arguments now exit 2). Deleted: `neutrality.sh --candidate-cmd` /
+   `--baseline-cmd` (the TS-to-Rust per-leg commands of RUNBOOK §7; no
+   living caller and never reachable through `eval neutrality`).
+   Neutrality is now launched as `npm run eval -- neutrality …`.
+
 8. **Thresholds into the config, by area** (N each). Library lookup and
    discovery first (they arrive with matching-architecture step 4), then
    any naming/LLM constants a user needs; update tuning-values.md rows to

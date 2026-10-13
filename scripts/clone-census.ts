@@ -15,8 +15,8 @@
  * How it matches: every non-test `.ts` under the scan roots (default: the
  * living TypeScript — scripts/, experiments/lib/, the 034 eval harness and
  * test/, fixture and data dirs excluded; the pipeline itself is Rust since
- * the cutover; override with `CLONE_CENSUS_ROOT` so tests can aim it at a
- * fixture tree) is
+ * the cutover; `--root <dir>` scans one directory instead, so tests can aim
+ * it at a fixture tree) is
  * parsed (@babel/parser, typescript plugin) and each module-level-ish
  * function — function declarations, arrow/function consts, class methods;
  * anything whose nearest enclosing function is the module itself — is
@@ -83,10 +83,8 @@ const DEFAULT_ROOTS = [
   "experiments/034-eval-harness",
   "test"
 ];
-const ROOTS_REL = process.env.CLONE_CENSUS_ROOT
-  ? [process.env.CLONE_CENSUS_ROOT]
-  : DEFAULT_ROOTS;
-const ROOT_REL = ROOTS_REL.join(", ");
+/** The scan roots: DEFAULT_ROOTS, or the one `--root` names (set in main). */
+let scanRoots = DEFAULT_ROOTS;
 /** Directories never scanned: data, not code under review. */
 const SKIP_DIRS = new Set(["node_modules", "fixtures", "results", "parity"]);
 const STRICT_MIN_MASKED_LEN = 300;
@@ -444,7 +442,7 @@ function runStrict(members: Member[], fileCount: number): void {
 
   console.log(`\n${"═".repeat(72)}`);
   console.log(
-    `SUMMARY: ${fileCount} files under ${ROOT_REL}, ${eligible.length} ` +
+    `SUMMARY: ${fileCount} files under ${scanRoots.join(", ")}, ${eligible.length} ` +
       `functions >= ${STRICT_MIN_MASKED_LEN} masked chars | ` +
       `${fresh.length} NEW cross-file group(s), ${allowed.length} ` +
       `allowlisted, ${sameFile.length} same-file group(s)`
@@ -490,18 +488,47 @@ function runLoose(members: Member[], fileCount: number): void {
 
   console.log(`\n${"═".repeat(72)}`);
   console.log(
-    `SUMMARY (loose): ${fileCount} files under ${ROOT_REL} | ` +
+    `SUMMARY (loose): ${fileCount} files under ${scanRoots.join(", ")} | ` +
       `${belowStrict.length} exact group(s) below the strict cutoff, ` +
       `${shapeTwins.length} same-shape group(s) with differing literals`
   );
   console.log("Review instrument — always exit 0; the gate is strict mode.");
 }
 
+/**
+ * The flags: `--loose`, `--root <dir>`, `--help`. Anything else is refused
+ * (exit 2) — no ambient env reads (the root was CLONE_CENSUS_ROOT until
+ * config sweep step 7, 2026-10-13).
+ */
+function parseArgs(
+  argv: string[]
+): { loose: boolean; help: boolean; root: string | null } | string {
+  const out = { loose: false, help: false, root: null as string | null };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--loose") out.loose = true;
+    else if (a === "--help") out.help = true;
+    else if (a === "--root") {
+      const v = argv[++i];
+      if (v === undefined || v.startsWith("--"))
+        return "--root needs a directory";
+      out.root = v;
+    } else
+      return `unknown argument ${a} — valid: --loose, --root <dir>, --help`;
+  }
+  return out;
+}
+
 function main(): void {
-  if (process.argv.includes("--help")) {
+  const args = parseArgs(process.argv.slice(2));
+  if (typeof args === "string") {
+    console.error(`clone-census: ${args}`);
+    process.exit(2);
+  }
+  if (args.help) {
     console.log(
       "clone-census: serialize every module-level function under the scan " +
-        "roots (CLONE_CENSUS_ROOT, default the living TS) with the name-masked " +
+        "roots (--root <dir>, default the living TS) with the name-masked " +
         "serializer and report byte-identical twins.\n" +
         "Default (strict, THE GATE): cross-file groups >= 300 masked chars " +
         "must be allowlisted or exit 1.\n" +
@@ -510,10 +537,11 @@ function main(): void {
     );
     return;
   }
-  const loose = process.argv.includes("--loose");
-  const files = ROOTS_REL.flatMap((r) =>
-    listTsFiles(path.resolve(REPO, r))
-  ).map((f) => path.relative(REPO, f));
+  const loose = args.loose;
+  if (args.root !== null) scanRoots = [args.root];
+  const files = scanRoots
+    .flatMap((r) => listTsFiles(path.resolve(REPO, r)))
+    .map((f) => path.relative(REPO, f));
   const members: Member[] = [];
   for (const rel of files) collectFile(rel, members, loose);
   if (loose) runLoose(members, files.length);

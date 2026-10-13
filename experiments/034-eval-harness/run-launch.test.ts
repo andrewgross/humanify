@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { spawnSync } from "node:child_process";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -46,11 +47,20 @@ import { describe, it } from "node:test";
  * config carries it as `configToml`). The moved flags' VALUES are
  * unchanged — launch_parity_test.rs proves every golden launch resolves to
  * the effective settings of the launch it replaced.
+ *
+ * Config sweep step 7 (2026-10-13): run.sh parses no flags. `npm run eval
+ * -- score` (scripts/eval.ts) validates every flag once and writes ONE run
+ * config file; run.sh takes only its path. So the harness is driven here
+ * through eval.ts, exactly as a user drives it. The goldens did NOT change:
+ * every launch line, config file and run config is byte-identical. The
+ * label's pipeline.json gains the run config's sha256 and the boot gate's
+ * pinned model (neither is in a golden).
  */
 
 const HERE = import.meta.dirname;
 const REPO = path.resolve(HERE, "../..");
 const RUN_SH = path.join(HERE, "run.sh");
+const EVAL_TS = path.join(REPO, "scripts/eval.ts");
 const GOLDEN = path.join(HERE, "run-launch.golden.txt");
 const SEEDED_GOLDEN = path.join(HERE, "run-launch.seeded-base.golden.txt");
 const PAIRS: Array<[string, string]> = JSON.parse(
@@ -118,6 +128,8 @@ interface Harness {
   /** Launch lines + run configs, with every run-specific path replaced. */
   launches: string;
   results: string;
+  /** The run config file eval.ts wrote (raw bytes as text), or "". */
+  runConfig: string;
 }
 
 function realNpx(): string {
@@ -199,9 +211,11 @@ function runHarness(
   const results = path.join(HERE, "results", label);
   try {
     const r = spawnSync(
-      "bash",
+      realNpx(),
       [
-        RUN_SH,
+        "tsx",
+        EVAL_TS,
+        "score",
         label,
         "--workdir",
         path.join(root, "work"),
@@ -240,9 +254,11 @@ function runHarness(
           .map((f) => `${f}: ${fs.readFileSync(path.join(results, f), "utf8")}`)
           .join("")
       : "";
+    const cfgFile = path.join(root, "work", `${label}.run-config.json`);
     return {
       root,
       label,
+      runConfig: fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, "utf8") : "",
       status: r.status ?? -1,
       stdout: normalise(`${r.stdout}${r.stderr}`, root, label),
       launches: fs.existsSync(path.join(root, "calls.log"))
@@ -579,6 +595,35 @@ describe("run.sh pipeline launches", () => {
     ]);
     assert.strictEqual(h.status, 0, h.stdout);
     assert.strictEqual(selfHopOf(h).version, "2.1.86");
+  });
+
+  it("pipeline.json records the run config's sha256 and the boot gate's model", () => {
+    const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
+    assert.strictEqual(h.status, 0, h.stdout);
+    assert.ok(h.runConfig, "eval.ts must write the run config");
+    const sha = crypto.createHash("sha256").update(h.runConfig).digest("hex");
+    const m = /pipeline\.json: (.*)\n/.exec(h.results);
+    assert.ok(m, h.results);
+    const pipeline = JSON.parse(m[1]);
+    assert.strictEqual(pipeline.runConfig.sha256, sha);
+    assert.strictEqual(
+      pipeline.runConfig.path,
+      "<TMP>/work/<LABEL>.run-config.json"
+    );
+    // The boot gate's pinned model is a recorded setting, not an env read.
+    assert.strictEqual(pipeline.bootGateModel, "claude-opus-4-1");
+  });
+
+  it("run.sh refuses flags: eval.ts is the one parser", () => {
+    for (const argv of [
+      ["some-label"],
+      ["some-label", "--bin", "x"],
+      ["--pairs", "85->86"]
+    ]) {
+      const r = spawnSync("bash", [RUN_SH, ...argv], { encoding: "utf8" });
+      assert.strictEqual(r.status, 2, `${argv}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, /run config/);
+    }
   });
 });
 

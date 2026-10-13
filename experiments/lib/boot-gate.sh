@@ -45,7 +45,13 @@ export PATH="$HOME/.bun/bin:$PATH"
 # REFUSED by the API on the walked CLIs; opus-4-1 is the only model that still
 # answers (probed 2026-09-28 on the 2.1.85 tree, all perf/default labels
 # re-recorded with it).
-export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-opus-4-1}"
+#
+# A SETTING OF THIS SCRIPT, not an ambient read (config sweep step 7,
+# 2026-10-13): it used to be `${BOOT_GATE_MODEL:-…}`, so a value left in a
+# shell silently changed every boot verdict. Re-pin it HERE, in a commit;
+# the callers record it (the eval's pipeline.json and each <v>-boot.json,
+# walk.sh's manifest and boot records).
+BOOT_GATE_MODEL="claude-opus-4-1"
 
 # The ONE environment a walked CLI boots under (run.sh and walk.sh both go
 # through boot_version / boot_prompt below — there used to be three
