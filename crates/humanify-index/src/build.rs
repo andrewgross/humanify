@@ -40,6 +40,11 @@ const ENTRIES: [(&str, &str); 2] = [("req", "entries/req.cjs"), ("dyn", "entries
 /// from one source file to be attributed (the lab's "pure" spans).
 const PURITY: f64 = 0.9;
 
+/// What a module shard's unit rows are, beyond the fingerprint: 2 = rows
+/// of pre-bundled ("sponge") files are dropped ([`sponge_evidence`], exp097
+/// step 3). In every module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/2";
+
 /// Units smaller than this are not indexed (the lab's unit votes counted
 /// units of >= 20 nodes; the lookup's own floor is higher).
 pub const UNIT_ROW_MIN_NODES: u32 = 20;
@@ -190,7 +195,7 @@ fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardI
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
             recipe: format!("{RECIPE_VERSION} {}", s.recipe),
-            fingerprint: format!("{}+{}", f.module, f.units),
+            fingerprint: format!("{}+{}+{UNIT_ROWS_VERSION}", f.module, f.units),
         });
     }
     out
@@ -688,10 +693,24 @@ pub fn unit_rows(
         .map(|(u, _)| (u.span.start, u.span.end))
         .collect();
     let mut cache = HashMap::new();
+    let mut sponges: HashMap<u32, Option<&'static str>> = HashMap::new();
+    let mut sponge_files: BTreeSet<u32> = BTreeSet::new();
     let mut owned = Vec::new();
     for ((unit, prints), tally) in units.iter().zip(map.tally(code, &spans)) {
         match unit_owner(map, out, &tally, &mut cache) {
-            UnitOwner::Owned(owner) => owned.push((owner, u64::from(unit.bytes), prints)),
+            UnitOwner::Owned(owner, src) => {
+                let evidence = *sponges.entry(src).or_insert_with(|| {
+                    sponge_evidence(&owner, &lexical(&out.join(&map.sources[src as usize])))
+                });
+                if let Some(kind) = evidence {
+                    if sponge_files.insert(src) {
+                        *notes.sponge_unit_files.entry(kind.to_string()).or_default() += 1;
+                    }
+                    notes.sponge_unit_rows += 1;
+                    continue;
+                }
+                owned.push((owner, u64::from(unit.bytes), prints));
+            }
             UnitOwner::Mixed => notes.mixed_spans += 1,
             UnitOwner::Unowned => notes.unowned += 1,
         }
@@ -722,8 +741,53 @@ pub fn unit_rows(
     (rows, notes)
 }
 
+/// Why a package's source file is a pre-bundled copy of OTHER packages
+/// ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the file
+/// itself; None for the package's own code. In order: a pre-bundled file
+/// name ([`is_sponge_file`], the literal table's rule), a vendored directory,
+/// a bundler module marker naming another package's `node_modules` path
+/// (esbuild / Bun `// node_modules/x/…`, rolldown `//#region
+/// ../node_modules/x/…`, webpack `/***/ "./node_modules/x/…"`).
+pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&'static str> {
+    if is_sponge_file(&owner.file) {
+        return Some("file-name");
+    }
+    let vendored = ["vendor", "vendored", "third_party", "third-party"];
+    let mut parts = owner.file.split('/').collect::<Vec<_>>();
+    let name = parts.pop().unwrap_or_default();
+    if parts.iter().any(|p| vendored.contains(p)) || name.starts_with("third-party.") {
+        return Some("vendored-path");
+    }
+    if std::fs::metadata(path).map_or(true, |m| m.len() > MAX_SOURCE_BYTES) {
+        return None;
+    }
+    let text = std::fs::read_to_string(path).ok()?;
+    text.lines()
+        .map(str::trim_start)
+        .filter(|l| l.starts_with("//") || l.starts_with("/*"))
+        .filter_map(|l| marker_package(l))
+        .any(|p| p != owner.package)
+        .then_some("bundler-marker")
+}
+
+/// The package a comment line's LAST `node_modules/` path names.
+fn marker_package(line: &str) -> Option<&str> {
+    let at = line.rfind("node_modules/")? + "node_modules/".len();
+    let rest = &line[at..];
+    let end = |s: &str| s.find(|c: char| c == '/' || c == '"' || c == '\'' || c.is_whitespace());
+    let first = end(rest).map_or(rest, |i| &rest[..i]);
+    if first.starts_with('@') {
+        let after = &rest[first.len()..];
+        let second = after.strip_prefix('/')?;
+        let n = end(second).unwrap_or(second.len());
+        Some(&rest[..first.len() + 1 + n])
+    } else {
+        (!first.is_empty()).then_some(first)
+    }
+}
+
 enum UnitOwner {
-    Owned(crate::sourcemap::Owner),
+    Owned(crate::sourcemap::Owner, u32),
     Mixed,
     Unowned,
 }
@@ -740,7 +804,7 @@ fn unit_owner(
     cache: &mut HashMap<PathBuf, Option<(String, String)>>,
 ) -> UnitOwner {
     let total: usize = tally.iter().map(|t| t.1).sum();
-    type Seen = (usize, usize, Option<crate::sourcemap::Owner>);
+    type Seen = (usize, usize, Option<(crate::sourcemap::Owner, u32)>);
     let mut by_package: BTreeMap<String, Seen> = BTreeMap::new();
     for &(src, n) in tally {
         let Some(owner) = owner_cached(out, &map.sources[src as usize], cache) else {
@@ -752,14 +816,14 @@ fn unit_owner(
         entry.0 += n;
         if n > entry.1 {
             entry.1 = n;
-            entry.2 = Some(owner);
+            entry.2 = Some((owner, src));
         }
     }
     let Some((_, (n, _, owner))) = by_package.into_iter().max_by_key(|(_, (n, _, _))| *n) else {
         return UnitOwner::Unowned;
     };
     match owner {
-        Some(owner) if n as f64 >= PURITY * total as f64 => UnitOwner::Owned(owner),
+        Some((owner, src)) if n as f64 >= PURITY * total as f64 => UnitOwner::Owned(owner, src),
         _ => UnitOwner::Mixed,
     }
 }

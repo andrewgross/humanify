@@ -161,6 +161,13 @@ pub struct ShardNotes {
     /// Source files no build of this version contains (literals skipped).
     #[serde(default)]
     pub unbundled_files: usize,
+    /// Pre-bundled ("sponge") source files whose unit rows were dropped,
+    /// by evidence (`bundler-marker`, `vendored-path`, `file-name`; exp097).
+    #[serde(default)]
+    pub sponge_unit_files: std::collections::BTreeMap<String, usize>,
+    /// Unit rows dropped for [`ShardNotes::sponge_unit_files`].
+    #[serde(default)]
+    pub sponge_unit_rows: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

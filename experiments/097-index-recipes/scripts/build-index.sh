@@ -19,7 +19,7 @@ start=$(date +%s)
 "$IX" build --packages "$LIST" --pinned "$PINS" "${common[@]}" --offline --dry-run > "$DATA/logs/plan-$NAME.txt" 2>&1 \
   || { tail -3 "$DATA/logs/plan-$NAME.txt"; exit 1; }
 echo "plan: $(grep -c '^  build shard' "$DATA/logs/plan-$NAME.txt") shards to build, $(grep -c '^  reuse shard' "$DATA/logs/plan-$NAME.txt") reused"
-rm -f "$DATA/parts/$NAME-"*
+rm -rf "$DATA/parts/$NAME-"*
 split -n r/4 -d "$LIST" "$DATA/parts/$NAME-"
 split -n r/4 -d "$PINS" "$DATA/parts/$NAME-pins-"
 pids=()

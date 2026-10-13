@@ -371,3 +371,106 @@ fn a_work_directory_reached_through_a_symlink_keeps_its_bundled_literals() {
     std::fs::remove_file(&link).ok();
     std::fs::remove_dir_all(&real).ok();
 }
+
+#[test]
+fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
+    // exp097 step 3: a published file that pre-bundles OTHER packages
+    // ("sponge": prettier's index.mjs) would name their code as its own.
+    // Evidence, each read off the file: a bundler module marker naming
+    // another package's node_modules path, a vendored directory, or a
+    // pre-bundled file name. The package's own files keep their rows.
+    use crate::build::unit_rows;
+    use crate::sourcemap::SourceMap;
+    let root = std::env::temp_dir().join(format!("humanify-index-sponge-{}", std::process::id()));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/sp/package.json",
+        r#"{"name":"sp","version":"3.0.0"}"#,
+    );
+    write(
+        "node_modules/sp/index.mjs",
+        "// node_modules/other-pkg/lib/parse.js\nvar parse = 1;\n",
+    );
+    write(
+        "node_modules/sp/own.js",
+        "// src/own.ts\nexport const own = 1;\n",
+    );
+    write("node_modules/sp/vendor/copy.js", "var copy = 1;\n");
+    write("node_modules/sp/dist/sp.min.js", "var m = 1;\n");
+    let stmt = |n: &str| {
+        format!(
+            "var {n}=function(t){{return t.split(\",\").map(function(e){{return e.trim().toLowerCase()}})}};"
+        )
+    };
+    let lines = [stmt("a"), stmt("b"), stmt("c"), stmt("d")];
+    let code = lines.join("\n") + "\n";
+    let col = |n: usize| (0..n as u32).step_by(4);
+    let map = SourceMap {
+        sources: vec![
+            "../node_modules/sp/index.mjs".into(),
+            "../node_modules/sp/own.js".into(),
+            "../node_modules/sp/vendor/copy.js".into(),
+            "../node_modules/sp/dist/sp.min.js".into(),
+        ],
+        segments: lines
+            .iter()
+            .enumerate()
+            .flat_map(|(i, l)| col(l.len()).map(move |c| (i as u32, c, i as u32)))
+            .collect(),
+    };
+    let (rows, notes) = unit_rows(bun_node(), &code, &map, &root.join("out"));
+    let files: std::collections::BTreeSet<&str> = rows.iter().map(|r| r.file.as_str()).collect();
+    assert_eq!(files, ["own.js"].into_iter().collect(), "{rows:?}");
+    assert_eq!(
+        notes.sponge_unit_files,
+        [
+            ("bundler-marker".to_string(), 1),
+            ("file-name".to_string(), 1),
+            ("vendored-path".to_string(), 1)
+        ]
+        .into_iter()
+        .collect(),
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_module_marker_names_its_package_in_every_bundlers_spelling() {
+    use crate::build::sponge_evidence;
+    use crate::sourcemap::Owner;
+    let dir = std::env::temp_dir().join(format!("humanify-index-markers-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let owner = Owner {
+        package: "@scope/own".into(),
+        version: "1.0.0".into(),
+        file: "dist/index.mjs".into(),
+    };
+    let check = |text: &str| {
+        let p = dir.join("f.js");
+        std::fs::write(&p, text).unwrap();
+        sponge_evidence(&owner, &p)
+    };
+    assert_eq!(
+        check("//#region ../../node_modules/.pnpm/a@1/node_modules/@x/y/dist/i.js\n"),
+        Some("bundler-marker")
+    );
+    assert_eq!(
+        check("/***/ \"./node_modules/lodash/lodash.js\":\n"),
+        Some("bundler-marker")
+    );
+    assert_eq!(
+        check("// node_modules/@scope/own/src/a.js\n// src/b.ts\n"),
+        None,
+        "its own path"
+    );
+    assert_eq!(
+        check("var s = \"node_modules/x/y\";\n"),
+        None,
+        "not a comment"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
