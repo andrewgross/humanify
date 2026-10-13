@@ -207,6 +207,16 @@ trait ReferenceStore {
 - **Index store:** on disk, loaded once (3.6 s with literals, 0.9 s without,
   measured on index v2). Labels = package, versions, file. It never stores
   INTO edges: the index cannot know who calls the library in any given app.
+- **An index is a set of recipe slices** (Andrew, 2026-10-13). The packing
+  tool's recipe — bundler, target, format, minify — changes WHAT gets
+  bundled (Bun `--target bun` picks `dist-es` where `--target node` picks
+  `dist-cjs`), so every slice is keyed by its recipe. The run picks the
+  slice from the toolchain it resolved ONCE by detection (the
+  detection-built-pipeline rule: resolve plugin pieces once and pass them
+  down; the minifier verdict is untrusted, unsure means Bun). The store is
+  handed that one slice; nothing below re-detects. A detected recipe with no
+  slice in the index is a loud WARNING plus a diagnostics entry, never a
+  silent miss (config doc §3).
 
 ### 3.5 Decision layer
 
@@ -221,6 +231,10 @@ now from one place.
 - **library profile:** size floor, specificity, support, literal agreement,
   family check, isolation veto, containment (§4), then discovery's fixpoint as
   propagation.
+
+A profile's thresholds are not a separate file: they are the `[library]`
+section of humanify's ONE config file (`--config <file>`, built-in defaults
+compiled in; see [config-consolidation.md](./config-consolidation.md)).
 
 ## 4. Graph evidence has a scope
 
@@ -314,8 +328,12 @@ writes**. A cold run is invalid (CLAUDE.md).
    the prior store and its rule list unchanged (rung order, `MatchMap` order
    kept). The exp095 library code comes to main here as the second profile,
    **OFF by default, report-only** (config doc). Write the §4 scope fixture
-   first. Neutrality with library matching off proves the move; a second
-   warm neutrality with `--library-matching report` proves report-only
+   first. The one library setting (`library.mode`, config doc §2) replaces
+   `--skip-libraries`; with the default `off`, files and functions the
+   path/banner detector marks as library are treated exactly as the
+   default `--skip-libraries` treats them today. Neutrality with the default
+   proves the move; a second warm neutrality with `library.mode = "report"`
+   proves report-only
    changes no output byte (index-v2 already did this on its branch: 0/0, both
    legs +0).
 5. **Behaviour changes, on experiment branches with evals:** INSIDE-only
