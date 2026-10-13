@@ -73,6 +73,46 @@ pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32)>, String> {
     Ok(out)
 }
 
+/// Segments (line, column, source) → `mappings` (test fixtures; original
+/// line and column are always 0).
+#[cfg(test)]
+pub fn encode_mappings(segments: &[(u32, u32, u32)]) -> String {
+    fn vlq(v: i64, out: &mut String) {
+        let mut x = if v < 0 { ((-v) << 1) | 1 } else { v << 1 };
+        const B64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        loop {
+            let mut d = x & 31;
+            x >>= 5;
+            if x > 0 {
+                d |= 32;
+            }
+            out.push(B64[d as usize] as char);
+            if x == 0 {
+                break;
+            }
+        }
+    }
+    let mut out = String::new();
+    let (mut line, mut col, mut src) = (0u32, 0i64, 0i64);
+    for (i, &(l, c, s)) in segments.iter().enumerate() {
+        while line < l {
+            out.push(';');
+            line += 1;
+            col = 0;
+        }
+        if i > 0 && !out.ends_with(';') {
+            out.push(',');
+        }
+        vlq(i64::from(c) - col, &mut out);
+        vlq(i64::from(s) - src, &mut out);
+        vlq(0, &mut out);
+        vlq(0, &mut out);
+        col = i64::from(c);
+        src = i64::from(s);
+    }
+    out
+}
+
 /// (line, UTF-16 column) positions → byte offsets into `text` (None past a
 /// line's end or past the last line). Linear: positions are visited in
 /// (line, column) order and each line is walked once — a minified bundle
@@ -132,6 +172,12 @@ impl SourceMap {
         })
     }
 
+    /// The sources at least one mapping segment points into (a source the
+    /// bundler lists but maps no code to is not in the bundle).
+    pub fn mapped_sources(&self) -> std::collections::BTreeSet<u32> {
+        self.segments.iter().map(|&(_, _, s)| s).collect()
+    }
+
     /// For each byte span of `code`: how many mapping segments inside it
     /// name each source (source index, count), by source index.
     pub fn tally(&self, code: &str, spans: &[(u32, u32)]) -> Vec<Vec<(u32, usize)>> {
@@ -182,7 +228,7 @@ pub struct Owner {
 }
 
 /// `a/b/../c` → `a/c`, lexically (no filesystem access).
-fn lexical(path: &Path) -> PathBuf {
+pub fn lexical(path: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in path.components() {
         match c {

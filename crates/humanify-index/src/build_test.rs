@@ -30,6 +30,8 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         slices: Vec::new(),
         jobs: 1,
         offline: true,
+        policy: Default::default(),
+        pinned: Vec::new(),
     }
 }
 
@@ -178,4 +180,203 @@ fn a_unit_spanning_several_files_of_one_package_is_that_packages() {
         "{rows:?}"
     );
     std::fs::remove_dir_all(&root).ok();
+}
+
+/// A fake install: `node_modules/dep` with three files, and one Bun build
+/// whose map names two of them — `used.js` with mapping segments,
+/// `listed.js` listed in `sources` with none.
+fn fake_install(tag: &str) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("humanify-index-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    write(
+        "node_modules/dep/used.js",
+        "module.exports = function () { return \"used-literal-one\" + \"used-literal-two\"; };\n",
+    );
+    write(
+        "node_modules/dep/listed.js",
+        "module.exports = \"listed-but-unmapped-literal\";\n",
+    );
+    write(
+        "node_modules/dep/cli.js",
+        "console.log(\"a cli script no bundle contains\");\n",
+    );
+    // "AAAA": line 0 col 0 → source 0 (used.js); listed.js has no segment.
+    write(
+        "build/bun/req/out.js.map",
+        r#"{"version":3,"sources":["../../../node_modules/dep/used.js","../../../node_modules/dep/listed.js"],"mappings":"AAAA"}"#,
+    );
+    write("build/bun/req/out.js", "x\n");
+    root
+}
+
+#[test]
+fn the_literal_shard_holds_only_files_a_build_contains() {
+    use crate::build::literal_shard;
+    use crate::shard::{ShardInputs, ShardKind};
+    use humanify_core::libindex::IndexSlice;
+    let root = fake_install("lits-bundled");
+    let inputs = ShardInputs {
+        kind: ShardKind::Literals,
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: None,
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    };
+    let shard = literal_shard(&root, &inputs, &[IndexSlice::Bun]);
+    let files: Vec<&str> = shard.literals.iter().map(|l| l.file.as_str()).collect();
+    assert_eq!(
+        files,
+        ["used.js"],
+        "only the file the build maps code to (package.json, the unmapped source and the CLI script are not bundled)"
+    );
+    assert_eq!(shard.notes.unbundled_files, 3);
+    // No slices, no builds to restrict by: every file (the lab's whole-tree
+    // table).
+    let all = literal_shard(&root, &inputs, &[]);
+    assert_eq!(all.literals.len(), 4, "{:?}", all.literals);
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_source_file_credited_to_two_modules_labels_neither() {
+    // Bun 1.4.0's maps can credit a whole module to the wrong file in a
+    // large bundle (exp095 selection lab: 5.5% of held-out keyed bytes).
+    // A source file maps to ONE module per bundle, so a file the map
+    // credits to two modules is wrong for at least one; neither is
+    // labelled.
+    use crate::build::fingerprint_bundle;
+    use crate::shard::{Shard, ShardInputs, ShardKind};
+    use humanify_core::libindex::IndexSlice;
+    let root = std::env::temp_dir().join(format!("humanify-index-multi-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    let bodies = [
+        r#"(ge,q)=>{q.exports=function(e,t){var n=e.split(",");for(var r=0;r<n.length;r++){t.push(n[r].trim()+"abc")}return t}}"#,
+        r#"(x,y)=>{y.exports=function(e,t){var n=e.split("|");for(var r=0;r<n.length;r++){t.push(n[r].toLowerCase()*1024)}return t}}"#,
+        r#"(u,w)=>{w.exports=function(e,t){var n=e.split(";");for(var r=0;r<n.length;r++){t.push(n[r].toUpperCase()+"parts")}return t}}"#,
+    ];
+    let code = format!(
+        "var m=(e,r)=>()=>(r||e((r={{exports:{{}}}}).exports,r),r.exports);var A=m({});var B=m({});var C=m({});module.exports=[A(),B(),C()];\n",
+        bodies[0], bodies[1], bodies[2]
+    );
+    // modules A and B both credited to a.js (one of them wrongly); C to b.js
+    let mut segments = Vec::new();
+    for (body, src) in bodies.iter().zip([0u32, 0, 1]) {
+        let start = code.find(body).expect("body") as u32;
+        segments.extend(
+            (start..start + body.len() as u32)
+                .step_by(2)
+                .map(|c| (0, c, src)),
+        );
+    }
+    let map = serde_json::json!({
+        "version": 3,
+        "sources": ["../node_modules/dep/a.js", "../node_modules/dep/b.js"],
+        "mappings": crate::sourcemap::encode_mappings(&segments),
+    });
+    write("out/out.js", &code);
+    write("out/out.js.map", &map.to_string());
+    let inputs = ShardInputs {
+        kind: ShardKind::Modules(IndexSlice::Bun),
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: Some("bun@test".into()),
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    };
+    let mut shard = Shard::new(&inputs);
+    fingerprint_bundle(IndexSlice::Bun, &root.join("out"), &mut shard).expect("fingerprint");
+    let files: Vec<&str> = shard.modules.iter().map(|m| m.file.as_str()).collect();
+    assert_eq!(files, ["b.js"], "{:?}", shard.notes);
+    assert_eq!(shard.notes.multi_module_files, 1);
+    assert_eq!(shard.notes.multi_module_dropped, 2);
+    assert!(
+        shard.notes.multi_module_units_dropped > 0 && shard.units.iter().all(|u| u.file == "b.js"),
+        "a.js's units are not labelled either: {:?} {:?}",
+        shard.notes,
+        shard.units
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_pinned_only_package_is_indexed_at_its_pins_alone() {
+    // `--pinned <file>`: the bundle's own readers name exact versions; the
+    // version policy adds nothing for them.
+    let mut cfg = config("pinned-only", "2020-12-01T23:59:59.999Z");
+    cfg.packages = Vec::new();
+    cfg.pinned = vec!["ms@1.0.0".into(), "ms@0.7.1".into()];
+    let p = plan(&cfg).expect("plan");
+    let tasks: Vec<(String, String)> = p
+        .tasks
+        .iter()
+        .map(|t| (t.version.clone(), t.role.clone()))
+        .collect();
+    assert_eq!(
+        tasks,
+        [
+            ("1.0.0".to_string(), "pinned".to_string()),
+            ("0.7.1".to_string(), "pinned".to_string())
+        ]
+    );
+}
+
+#[test]
+fn a_work_directory_reached_through_a_symlink_keeps_its_bundled_literals() {
+    // Bun writes map sources relative to the REAL directory it built in;
+    // the walk sees the path it was given. Both are canonicalised.
+    use crate::build::literal_shard;
+    use crate::shard::{ShardInputs, ShardKind};
+    use humanify_core::libindex::IndexSlice;
+    let real = fake_install("lits-real");
+    let link = real.with_file_name(format!(
+        "{}-link",
+        real.file_name().expect("name").to_string_lossy()
+    ));
+    let _ = std::fs::remove_file(&link);
+    std::os::unix::fs::symlink(&real, &link).expect("symlink");
+    // the map now names the source through the real directory's name
+    let name = real
+        .file_name()
+        .expect("name")
+        .to_string_lossy()
+        .into_owned();
+    std::fs::write(
+        real.join("build/bun/req/out.js.map"),
+        format!(
+            r#"{{"version":3,"sources":["../../../../{name}/node_modules/dep/used.js"],"mappings":"AAAA"}}"#
+        ),
+    )
+    .expect("map");
+    let inputs = ShardInputs {
+        kind: ShardKind::Literals,
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: None,
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    };
+    let shard = literal_shard(&link, &inputs, &[IndexSlice::Bun]);
+    let files: Vec<&str> = shard.literals.iter().map(|l| l.file.as_str()).collect();
+    assert_eq!(files, ["used.js"]);
+    std::fs::remove_file(&link).ok();
+    std::fs::remove_dir_all(&real).ok();
 }

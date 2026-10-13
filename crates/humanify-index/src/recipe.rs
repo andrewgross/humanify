@@ -11,7 +11,7 @@ use std::process::Command;
 use humanify_core::libindex::IndexSlice;
 
 /// The build recipe's version (in every shard key).
-pub const RECIPE_VERSION: &str = "recipe/1";
+pub const RECIPE_VERSION: &str = "recipe/4";
 
 /// Source files larger than this are not read (the lab's 4 MB cap).
 pub const MAX_SOURCE_BYTES: u64 = 4_000_000;
@@ -132,6 +132,101 @@ impl Recipe {
         }
         Ok(())
     }
+}
+
+/// The most subpath entries one package gets (a wildcard export can name
+/// every file of a package).
+pub const MAX_ENTRY_SPECIFIERS: usize = 256;
+
+/// What the app entries require of package `name`: the package itself and
+/// every subpath of its `exports` map a Node app can load (conditions
+/// node / import / require / default), wildcards expanded over `files`
+/// (the package's files, relative to its root).
+pub fn entry_specifiers(name: &str, manifest: &serde_json::Value, files: &[String]) -> Vec<String> {
+    let Some(exports) = manifest.get("exports") else {
+        return vec![name.to_string()];
+    };
+    let dot = String::from(".");
+    let subpaths: Vec<(&String, &serde_json::Value)> = match exports.as_object() {
+        Some(map) if map.keys().any(|k| k.starts_with('.')) => {
+            map.iter().filter(|(k, _)| k.starts_with('.')).collect()
+        }
+        // a string, an array or a conditions object: the "." export
+        _ => vec![(&dot, exports)],
+    };
+    let shipped = |t: &str| files.iter().any(|f| f == t.trim_start_matches("./"));
+    let mut out = Vec::new();
+    for (key, target) in subpaths {
+        let targets = node_targets(target);
+        if key.ends_with(".json") || key.ends_with('/') || targets.is_empty() {
+            continue;
+        }
+        if key.contains('*') {
+            out.extend(
+                expand_wildcard(key, targets[0], files)
+                    .into_iter()
+                    .map(|sub| format!("{name}{}", &sub[1..])),
+            );
+        } else if targets.iter().all(|t| shipped(t)) {
+            // a file the package does not ship would be retried as an
+            // external, and an external package name takes every subpath
+            // with it
+            out.push(if key == "." {
+                name.to_string()
+            } else {
+                format!("{name}{}", &key[1..])
+            });
+        }
+    }
+    out.sort();
+    out.dedup();
+    out.truncate(MAX_ENTRY_SPECIFIERS);
+    if out.is_empty() {
+        // nothing a Node app can load: the bare name, which fails to
+        // resolve and is recorded as the build's error
+        out.push(name.to_string());
+    }
+    out
+}
+
+/// The files an export can resolve to for a Node app (conditions node /
+/// require / import / default, nested objects and fallback arrays
+/// followed, in that preference); empty if only other conditions
+/// (`browser`, `types`, …) or `null` reach a file. Type declarations are
+/// not files an app loads.
+fn node_targets(v: &serde_json::Value) -> Vec<&str> {
+    match v {
+        serde_json::Value::String(s) if !s.contains(".d.") => vec![s.as_str()],
+        serde_json::Value::Array(a) => a.iter().flat_map(node_targets).take(1).collect(),
+        serde_json::Value::Object(m) => ["node", "require", "import", "default"]
+            .iter()
+            .filter_map(|c| m.get(*c))
+            .flat_map(node_targets)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A wildcard export (`"./*": "./dist/cjs/*"`) → the subpaths its target
+/// pattern matches among `files` (JavaScript only).
+fn expand_wildcard(key: &str, target: &str, files: &[String]) -> Vec<String> {
+    let target = target.trim_start_matches("./");
+    let (Some((t_pre, t_suf)), Some((k_pre, k_suf))) =
+        (target.split_once('*'), key.split_once('*'))
+    else {
+        return Vec::new();
+    };
+    files
+        .iter()
+        .filter(|f| {
+            let n = f.rsplit('/').next().unwrap_or(f);
+            [".js", ".cjs", ".mjs"].iter().any(|e| n.ends_with(e)) && !n.contains(".d.")
+        })
+        .filter_map(|f| {
+            let rest = f.strip_prefix(t_pre)?.strip_suffix(t_suf)?;
+            (!rest.is_empty()).then(|| format!("{k_pre}{rest}{k_suf}"))
+        })
+        .collect()
 }
 
 /// The specifiers a failed build could not resolve (retried as external).

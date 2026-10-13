@@ -144,6 +144,20 @@ pub struct ShardNotes {
     /// Statement units whose span mixed sources (no owner).
     #[serde(default)]
     pub unit_mixed_spans: usize,
+    /// Source files the sourcemap credits to two or more modules of one
+    /// bundle (Bun 1.4.0 misattributes whole modules in large bundles):
+    /// none of those modules or their units is labelled.
+    #[serde(default)]
+    pub multi_module_files: usize,
+    /// Module rows dropped for [`ShardNotes::multi_module_files`].
+    #[serde(default)]
+    pub multi_module_dropped: usize,
+    /// Unit rows dropped for [`ShardNotes::multi_module_files`].
+    #[serde(default)]
+    pub multi_module_units_dropped: usize,
+    /// Source files no build of this version contains (literals skipped).
+    #[serde(default)]
+    pub unbundled_files: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

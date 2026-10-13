@@ -45,3 +45,78 @@ fn each_slice_names_its_bundlers_npm_package() {
     assert_eq!(bundler_package(IndexSlice::Bun), "bun");
     assert_eq!(bundler_package(IndexSlice::Esbuild), "esbuild");
 }
+
+#[test]
+fn the_entries_reach_every_subpath_export_a_node_app_can_load() {
+    use super::recipe::entry_specifiers;
+    // @aws-sdk/nested-clients: no "." export, only subpaths (plus types and
+    // the package.json).
+    let nested = serde_json::json!({
+        "main": "./dist-cjs/index.js",
+        "exports": {
+            "./package.json": "./package.json",
+            "./sts": {"types": "./dist-types/sts.d.ts", "node": "./dist-cjs/sts.js", "import": "./dist-es/sts.js"},
+            "./sso": {"require": "./dist-cjs/sso.js"},
+            "./browser-only": {"browser": "./dist-es/b.js", "types": "./b.d.ts"},
+            "./gone": null,
+        }
+    });
+    let nested_files = files_of(&[
+        "dist-cjs/sts.js",
+        "dist-es/sts.js",
+        "dist-cjs/sso.js",
+        "dist-es/b.js",
+    ]);
+    assert_eq!(
+        entry_specifiers("@aws-sdk/nested-clients", &nested, &nested_files),
+        ["@aws-sdk/nested-clients/sso", "@aws-sdk/nested-clients/sts"],
+        "an exports map without \".\" has no main entry; browser- and types-only subpaths are not Node's"
+    );
+    // @modelcontextprotocol/sdk 1.9.0: one wildcard.
+    let mcp = serde_json::json!({
+        "exports": {"./*": {"import": "./dist/esm/*", "require": "./dist/cjs/*"}}
+    });
+    let files: Vec<String> = [
+        "dist/cjs/client/index.js",
+        "dist/cjs/client/index.d.ts",
+        "dist/cjs/types.js",
+        "dist/esm/types.js",
+        "package.json",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    assert_eq!(
+        entry_specifiers("@modelcontextprotocol/sdk", &mcp, &files),
+        [
+            "@modelcontextprotocol/sdk/client/index.js",
+            "@modelcontextprotocol/sdk/types.js"
+        ]
+    );
+    // A main export AND subpaths: both.
+    let both = serde_json::json!({
+        "exports": {".": {"require": "./index.js"}, "./extra": "./extra.js"}
+    });
+    assert_eq!(
+        entry_specifiers("p", &both, &files_of(&["index.js", "extra.js"])),
+        ["p", "p/extra"]
+    );
+    // An export whose file the package does not ship (@modelcontextprotocol/
+    // sdk 1.32's "." → dist/cjs/index.js) is not entered: the bundler would
+    // retry it as an external, and an external package name takes every
+    // subpath with it.
+    assert_eq!(
+        entry_specifiers("p", &both, &files_of(&["extra.js"])),
+        ["p/extra"]
+    );
+    // No exports map: the package itself.
+    let plain = serde_json::json!({"main": "lib/index.js"});
+    assert_eq!(entry_specifiers("p", &plain, &[]), ["p"]);
+    // A conditions object at the top is the "." export.
+    let top = serde_json::json!({"exports": {"node": "./n.js", "default": "./d.js"}});
+    assert_eq!(entry_specifiers("p", &top, &[]), ["p"]);
+}
+
+fn files_of(names: &[&str]) -> Vec<String> {
+    names.iter().map(|s| s.to_string()).collect()
+}

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use humanify_core::libindex::IndexSlice;
-use humanify_index::asof::parse_as_of;
+use humanify_index::asof::{VersionPolicy, parse_as_of};
 use humanify_index::build::{BuildConfig, run};
 use humanify_index::recipe::Recipe;
 
@@ -29,6 +29,10 @@ enum Command {
         /// (a pinned version, refused if published after --as-of).
         #[arg(long)]
         packages: PathBuf,
+        /// A file of `name@version` specs indexed at exactly those versions
+        /// (no policy picks): the versions a bundle's own readers declare.
+        #[arg(long)]
+        pinned: Option<PathBuf>,
         /// Index only versions published on or before this time
         /// (`YYYY-MM-DD` = the end of that UTC day, or a UTC timestamp).
         #[arg(long)]
@@ -57,6 +61,11 @@ enum Command {
         /// Parallel package builds (at most 4).
         #[arg(long, default_value_t = 2)]
         jobs: usize,
+        /// Which versions to index: `as-of` (latest, previous patch, the
+        /// two previous majors) or `year-all+minor` (every release of the
+        /// last 12 months + the latest patch of every older minor).
+        #[arg(long, default_value = "as-of")]
+        policy: String,
         /// Never fetch: every packument must already be in --registry.
         #[arg(long)]
         offline: bool,
@@ -70,6 +79,7 @@ enum Command {
 fn main() {
     let Command::Build {
         packages,
+        pinned,
         as_of,
         registry,
         store,
@@ -79,6 +89,7 @@ fn main() {
         bun,
         esbuild,
         jobs,
+        policy,
         offline,
         dry_run,
     } = Cli::parse().command;
@@ -98,16 +109,28 @@ fn main() {
         if out.is_none() && !dry_run {
             return Err("--out is required unless --dry-run".into());
         }
+        // the bundlers run inside each install: every path must be absolute
+        let abs = |p: PathBuf| std::path::absolute(&p).map_err(|e| format!("{}: {e}", p.display()));
         let cfg = BuildConfig {
             packages: specs.lines().map(str::to_string).collect(),
             as_of,
-            registry,
-            store,
-            work,
-            out,
+            registry: abs(registry)?,
+            store: abs(store)?,
+            work: abs(work)?,
+            out: out.map(abs).transpose()?,
             slices: recipes,
             jobs,
             offline,
+            pinned: match &pinned {
+                Some(p) => std::fs::read_to_string(p)
+                    .map_err(|e| format!("{}: {e}", p.display()))?
+                    .lines()
+                    .map(str::to_string)
+                    .collect(),
+                None => Vec::new(),
+            },
+            policy: VersionPolicy::from_name(&policy)
+                .ok_or(format!("unknown --policy {policy} (as-of, year-all+minor)"))?,
         };
         run(&cfg, dry_run)
     })();

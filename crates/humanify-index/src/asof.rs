@@ -136,8 +136,67 @@ fn policy(stable: &[(Semver, &str)]) -> Vec<(&'static str, String)> {
     out
 }
 
-/// The versions of `p` to index as of `as_of` (normalised), plus `pins`.
-pub fn select_versions(p: &Packument, as_of: &str, pins: &[String]) -> PackagePlan {
+/// Which versions of a package an index holds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VersionPolicy {
+    /// `latest`, `patch`, `major-1`, `major-2` (the scale lab's policy).
+    #[default]
+    AsOf,
+    /// Every release of the 12 months before the as-of date (`recent`),
+    /// plus the latest patch of every older minor (`minor`) — exp095
+    /// density lab: 83.0% of every-release recall for 43% of the releases.
+    YearAllMinor,
+    /// Nothing but the pins (`--pinned`: the bundle's readers named them).
+    PinsOnly,
+}
+
+impl VersionPolicy {
+    pub fn from_name(name: &str) -> Option<VersionPolicy> {
+        match name {
+            "as-of" => Some(VersionPolicy::AsOf),
+            "year-all+minor" => Some(VersionPolicy::YearAllMinor),
+            _ => None,
+        }
+    }
+}
+
+/// `year-all+minor` over stable versions with their publish times:
+/// (role, version), highest first.
+fn year_all_minor(
+    stable: &[(Semver, &str)],
+    as_of: &str,
+    published: &dyn Fn(&str) -> Option<String>,
+) -> Vec<(&'static str, String)> {
+    // twelve months before a normalised time: the same instant a year earlier
+    let since = match as_of.get(..4).and_then(|y| y.parse::<u32>().ok()) {
+        Some(y) => format!("{:04}{}", y - 1, &as_of[4..]),
+        None => return Vec::new(),
+    };
+    let mut sorted: Vec<&(Semver, &str)> = stable.iter().collect();
+    sorted.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut minors_seen: BTreeSet<(u64, u64)> = BTreeSet::new();
+    let mut out = Vec::new();
+    for (s, v) in sorted {
+        let newest_of_minor = minors_seen.insert((s.major, s.minor));
+        let recent =
+            published(v).is_some_and(|t| t.as_str() > since.as_str() && t.as_str() <= as_of);
+        if recent {
+            out.push(("recent", (*v).to_string()));
+        } else if newest_of_minor {
+            out.push(("minor", (*v).to_string()));
+        }
+    }
+    out
+}
+
+/// The versions of `p` to index as of `as_of` (normalised) under
+/// `policy`, plus `pins`.
+pub fn select_versions(
+    p: &Packument,
+    as_of: &str,
+    pins: &[String],
+    kind: VersionPolicy,
+) -> PackagePlan {
     let installable: BTreeSet<&str> = p.versions.iter().map(String::as_str).collect();
     let published = |v: &str| p.time.get(v).and_then(|t| normalize_time(t));
     // Every stable, installable version with a publish time — today.
@@ -154,8 +213,13 @@ pub fn select_versions(p: &Packument, as_of: &str, pins: &[String]) -> PackagePl
         .filter(|(_, v)| published(v).is_some_and(|t| t.as_str() <= as_of))
         .cloned()
         .collect();
+    let pick = |versions: &[(Semver, &str)]| match kind {
+        VersionPolicy::AsOf => policy(versions),
+        VersionPolicy::YearAllMinor => year_all_minor(versions, as_of, &published),
+        VersionPolicy::PinsOnly => Vec::new(),
+    };
     let mut plan = PackagePlan::default();
-    for (role, v) in policy(&admitted) {
+    for (role, v) in pick(&admitted) {
         plan.selected.push(Selected {
             published: published(&v).unwrap_or_default(),
             version: v,
@@ -171,7 +235,7 @@ pub fn select_versions(p: &Packument, as_of: &str, pins: &[String]) -> PackagePl
         }
     };
     // What today's policy would pick that the date refuses.
-    for (_, v) in policy(&stable_today) {
+    for (_, v) in pick(&stable_today) {
         if !plan.selected.iter().any(|s| s.version == v) {
             refuse(&mut plan, &v, "published-after-as-of");
         }

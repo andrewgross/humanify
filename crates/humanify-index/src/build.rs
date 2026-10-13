@@ -8,7 +8,7 @@
 //! literal sets from `libindex::literals`. This file only moves files
 //! around, runs npm and the bundlers, and reads sourcemaps.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
@@ -19,18 +19,21 @@ use humanify_core::libindex::format::{
 use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literals};
 use humanify_core::libindex::{IndexSlice, format::compare_versions};
 
-use crate::asof::{normalize_time, select_versions};
+use crate::asof::{VersionPolicy, normalize_time, select_versions};
 use crate::merge::{MergeInput, merge};
 use crate::recipe::{
-    MAX_SOURCE_BYTES, RECIPE_VERSION, Recipe, bundler_package, is_source_file, is_sponge_file,
-    unresolved_specifiers,
+    MAX_SOURCE_BYTES, RECIPE_VERSION, Recipe, bundler_package, entry_specifiers, is_source_file,
+    is_sponge_file, unresolved_specifiers,
 };
 use crate::registry;
 use crate::shard::{
     Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule, ShardNotes, ShardUnit, read_current,
     write_shard,
 };
-use crate::sourcemap::{SourceMap, owner_cached};
+use crate::sourcemap::{SourceMap, lexical, owner_cached};
+
+/// The two app entries every slice builds: (tag, entry file).
+const ENTRIES: [(&str, &str); 2] = [("req", "entries/req.cjs"), ("dyn", "entries/dyn.mjs")];
 
 /// A module span must take at least this share of its mapping segments
 /// from one source file to be attributed (the lab's "pure" spans).
@@ -52,6 +55,11 @@ pub struct BuildConfig {
     pub slices: Vec<Recipe>,
     pub jobs: usize,
     pub offline: bool,
+    /// Which versions of each package to index.
+    pub policy: VersionPolicy,
+    /// `name@version` specs indexed at exactly these versions (no policy
+    /// picks).
+    pub pinned: Vec<String>,
 }
 
 /// One `package@version` to index.
@@ -127,7 +135,7 @@ fn slice_records(
             Some((p, sha)) => {
                 snapshot.packuments.insert(package.to_string(), sha.clone());
                 note_fetch(snapshot, p.fetched_at.as_deref());
-                let newest = select_versions(p, &cfg.as_of, &[])
+                let newest = select_versions(p, &cfg.as_of, &[], VersionPolicy::AsOf)
                     .selected
                     .first()
                     .map(|s| s.version.clone());
@@ -150,11 +158,17 @@ fn slice_records(
 /// The shard inputs of one `package@version`: literals, then each slice.
 fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardInputs> {
     let f = fingerprint_versions();
+    // The literal rows are the files these builds contain, so the
+    // bundlers that decide them are part of the shard's key.
+    let builds: Vec<String> = slices
+        .iter()
+        .map(|s| format!("{}@{}", s.bundler, s.version))
+        .collect();
     let mut out = vec![ShardInputs {
         kind: ShardKind::Literals,
         package: name.to_string(),
         version: version.to_string(),
-        bundler: None,
+        bundler: (!builds.is_empty()).then(|| builds.join("+")),
         recipe: RECIPE_VERSION.to_string(),
         fingerprint: f.literals.clone(),
     }];
@@ -180,11 +194,23 @@ pub fn plan(cfg: &BuildConfig) -> Result<Plan, String> {
     let slices = slice_records(cfg, &mut snapshot)?;
     let mut tasks = Vec::new();
     let mut refused = Vec::new();
-    for (name, pins) in group_specs(&cfg.packages) {
+    // `--pinned` specs join a listed package's pins, or are indexed at
+    // their pins alone
+    let mut groups: Vec<(String, Vec<String>, VersionPolicy)> = group_specs(&cfg.packages)
+        .into_iter()
+        .map(|(name, pins)| (name, pins, cfg.policy))
+        .collect();
+    for (name, pins) in group_specs(&cfg.pinned) {
+        match groups.iter_mut().find(|g| g.0 == name) {
+            Some(g) => g.1.extend(pins),
+            None => groups.push((name, pins, VersionPolicy::PinsOnly)),
+        }
+    }
+    for (name, pins, policy) in groups {
         let (packument, sha) = registry::load(&cfg.registry, &name, cfg.offline)?;
         snapshot.packuments.insert(name.clone(), sha);
         note_fetch(&mut snapshot, packument.fetched_at.as_deref());
-        let chosen = select_versions(&packument, &cfg.as_of, &pins);
+        let chosen = select_versions(&packument, &cfg.as_of, &pins, policy);
         refused.extend(chosen.refused.into_iter().map(|r| RefusedRecord {
             name: name.clone(),
             version: r.version,
@@ -315,9 +341,40 @@ fn strip_source_map_comments(node_modules: &Path) {
     }
 }
 
-/// The two app entries: a `require()` and an `import()` of the package.
+/// The package's files (relative to its root, sorted; its own nested
+/// `node_modules` excluded) — what a wildcard export can name.
+fn package_files(root: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    walk_files(root, &mut files);
+    files
+        .iter()
+        .filter_map(|f| f.strip_prefix(root).ok())
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .filter(|r| !r.split('/').any(|c| c == "node_modules"))
+        .collect()
+}
+
+/// Write `text` to `path` as a NEW file (unlinked first: a work directory
+/// may be a hardlinked copy of another).
+fn write_fresh(path: &Path, text: &str) -> Result<(), String> {
+    let _ = std::fs::remove_file(path);
+    std::fs::write(path, text).map_err(|e| e.to_string())
+}
+
+/// The two app entries: a `require()` and an `import()` of the package
+/// and of every subpath its `exports` map gives a Node app
+/// ([`entry_specifiers`]).
 fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
-    let spec = serde_json::to_string(name).map_err(|e| e.to_string())?;
+    let root = dir.join("node_modules").join(name);
+    let manifest: serde_json::Value = std::fs::read_to_string(root.join("package.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    let specs = entry_specifiers(name, &manifest, &package_files(&root));
+    let quoted: Vec<String> = specs
+        .iter()
+        .map(|s| serde_json::to_string(s).map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
     let app = |tag: &str| {
         format!(
             "function labAppMain_{tag}(x){{ if (!x) throw new Error(\"lab-app {tag}: no input given\"); return Object.keys(x).length + \":{tag}\"; }}\n"
@@ -325,22 +382,32 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
     };
     let entries = dir.join("entries");
     std::fs::create_dir_all(&entries).map_err(|e| e.to_string())?;
-    std::fs::write(
-        entries.join("req.cjs"),
-        format!(
-            "{}const m0 = require({spec});\nmodule.exports = {{ run: labAppMain_req, m0 }};\n",
-            app("req")
+    let requires: String = quoted
+        .iter()
+        .enumerate()
+        .map(|(i, q)| format!("const m{i} = require({q});\n"))
+        .collect();
+    let names: Vec<String> = (0..quoted.len()).map(|i| format!("m{i}")).collect();
+    write_fresh(
+        &entries.join("req.cjs"),
+        &format!(
+            "{}{requires}module.exports = {{ run: labAppMain_req, {} }};\n",
+            app("req"),
+            names.join(", ")
+        ),
+    )?;
+    let loaders: Vec<String> = quoted
+        .iter()
+        .map(|q| format!("() => import({q})"))
+        .collect();
+    write_fresh(
+        &entries.join("dyn.mjs"),
+        &format!(
+            "{}export const loaders = [{}];\nexport {{ labAppMain_dyn }};\n",
+            app("dyn"),
+            loaders.join(", ")
         ),
     )
-    .map_err(|e| e.to_string())?;
-    std::fs::write(
-        entries.join("dyn.mjs"),
-        format!(
-            "{}export const loaders = [() => import({spec})];\nexport {{ labAppMain_dyn }};\n",
-            app("dyn")
-        ),
-    )
-    .map_err(|e| e.to_string())
 }
 
 /// Install `task` (once) in its work directory: dependencies as of its
@@ -379,23 +446,59 @@ fn install(work: &Path, task: &Task) -> Result<PathBuf, String> {
         .map_err(|e2| format!("npm install {}@{}: {e} / {e2}", task.name, task.version))?;
     }
     strip_source_map_comments(&dir.join("node_modules"));
-    write_entries(&dir, &task.name)?;
     std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
     Ok(dir)
 }
 
-/// The literal shard: every source file of every installed package,
-/// owned by its nearest package.json.
-pub fn literal_shard(dir: &Path, inputs: &ShardInputs) -> Shard {
+/// `path` with symlinks resolved (a bundler writes map sources relative to
+/// the REAL directory it built in), lexically when it cannot be resolved.
+fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| lexical(path))
+}
+
+/// The files `slices`' builds of this install contain: every source a
+/// build's sourcemap maps code to (lexical paths under `dir`).
+fn bundled_files(dir: &Path, slices: &[IndexSlice]) -> BTreeSet<PathBuf> {
+    let mut out = BTreeSet::new();
+    for slice in slices {
+        for (tag, _) in ENTRIES {
+            let build = dir.join("build").join(slice.name()).join(tag);
+            let Ok(text) = std::fs::read_to_string(build.join("out.js.map")) else {
+                continue;
+            };
+            let Ok(map) = SourceMap::parse(&text) else {
+                continue;
+            };
+            for s in map.mapped_sources() {
+                out.insert(canonical(&build.join(&map.sources[s as usize])));
+            }
+        }
+    }
+    out
+}
+
+/// The literal shard: every source file of the installed packages that a
+/// build of `slices` contains (exp095 selection lab: ~70% of a whole-tree
+/// literal table is files no bundle pulls in — other entry points, CLI
+/// scripts, data, shipped tests), owned by its nearest package.json. With
+/// no slices there is nothing to restrict by: every file.
+pub fn literal_shard(dir: &Path, inputs: &ShardInputs, slices: &[IndexSlice]) -> Shard {
     let mut shard = Shard::new(inputs);
     let mut files = Vec::new();
     walk_files(&dir.join("node_modules"), &mut files);
+    let bundled = bundled_files(dir, slices);
     let mut owners: HashMap<PathBuf, Option<(String, String)>> = HashMap::new();
     let out_dir = dir.join("out");
     for f in files {
         let Ok(rel) = f.strip_prefix(dir) else {
             continue;
         };
+        if !slices.is_empty() && !bundled.contains(&canonical(&f)) {
+            if is_source_file(&f.to_string_lossy()) {
+                shard.notes.unbundled_files += 1;
+            }
+            continue;
+        }
         let rel = format!("../{}", rel.to_string_lossy());
         let Some(owner) = owner_cached(&out_dir, &rel, &mut owners) else {
             continue;
@@ -460,7 +563,11 @@ fn build_entry(recipe: &Recipe, dir: &Path, entry: &str, out: &Path) -> Result<(
 
 /// One bundle's module rows: the pipeline's module walk and content key,
 /// attributed through the sourcemap.
-fn fingerprint_bundle(slice: IndexSlice, out: &Path, shard: &mut Shard) -> Result<(), String> {
+pub(crate) fn fingerprint_bundle(
+    slice: IndexSlice,
+    out: &Path,
+    shard: &mut Shard,
+) -> Result<(), String> {
     let code = std::fs::read_to_string(out.join("out.js")).map_err(|e| e.to_string())?;
     let map_text = std::fs::read_to_string(out.join("out.js.map")).map_err(|e| e.to_string())?;
     let map = SourceMap::parse(&map_text)?;
@@ -479,12 +586,32 @@ fn fingerprint_bundle(slice: IndexSlice, out: &Path, shard: &mut Shard) -> Resul
         .map(|m| (m.body_span.start, m.body_span.end))
         .collect();
     let sources = map.attribute(&code, &spans, PURITY);
+    let mut credited: BTreeMap<u32, usize> = BTreeMap::new();
+    for src in sources.iter().flatten() {
+        *credited.entry(*src).or_default() += 1;
+    }
     let mut owners = HashMap::new();
+    // A source file maps to ONE module of a bundle: a file credited to two
+    // or more is wrong for at least one of them, so none is labelled.
+    let mut misattributed: BTreeSet<(String, String)> = BTreeSet::new();
+    for (&src, &n) in &credited {
+        if n < 2 {
+            continue;
+        }
+        shard.notes.multi_module_files += 1;
+        shard.notes.multi_module_dropped += n;
+        if let Some(o) = owner_cached(out, &map.sources[src as usize], &mut owners) {
+            misattributed.insert((o.package, o.file));
+        }
+    }
     for (m, src) in modules.iter().zip(sources) {
         let Some(src) = src else {
             shard.notes.mixed_spans += 1;
             continue;
         };
+        if credited[&src] >= 2 {
+            continue;
+        }
         let Some(owner) = owner_cached(out, &map.sources[src as usize], &mut owners) else {
             shard.notes.unowned += 1;
             continue;
@@ -501,7 +628,13 @@ fn fingerprint_bundle(slice: IndexSlice, out: &Path, shard: &mut Shard) -> Resul
         });
     }
     let (units, notes) = unit_rows(slice, &code, &map, out);
-    shard.units.extend(units);
+    let (made, kept_before) = (units.len(), shard.units.len());
+    shard.units.extend(
+        units
+            .into_iter()
+            .filter(|u| !misattributed.contains(&(u.owner.clone(), u.file.clone()))),
+    );
+    shard.notes.multi_module_units_dropped += made - (shard.units.len() - kept_before);
     shard.notes.unit_mixed_spans += notes.mixed_spans;
     Ok(())
 }
@@ -617,12 +750,30 @@ fn unit_owner(
     }
 }
 
+/// The stamp a finished build leaves: the recipe and the entry it was
+/// built from.
+const BUILD_STAMP: &str = ".recipe";
+
+/// Build `entry` into `out` unless a build of the same entry under the
+/// current recipe is already there (the literal shard reads the same
+/// builds).
+fn ensure_build(recipe: &Recipe, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(dir.join(entry)).map_err(|e| format!("{entry}: {e}"))?;
+    let want = format!("{RECIPE_VERSION}\n{text}");
+    let stamp = out.join(BUILD_STAMP);
+    if std::fs::read_to_string(&stamp).is_ok_and(|s| s == want) {
+        return Ok(());
+    }
+    build_entry(recipe, dir, entry, out)?;
+    std::fs::write(&stamp, want).map_err(|e| e.to_string())
+}
+
 /// The module shard of one slice: both entries built and fingerprinted.
 fn module_shard(dir: &Path, recipe: &Recipe, inputs: &ShardInputs) -> Shard {
     let mut shard = Shard::new(inputs);
-    for (tag, entry) in [("req", "entries/req.cjs"), ("dyn", "entries/dyn.mjs")] {
+    for (tag, entry) in ENTRIES {
         let out = dir.join("build").join(recipe.slice.name()).join(tag);
-        let result = build_entry(recipe, dir, entry, &out)
+        let result = ensure_build(recipe, dir, entry, &out)
             .and_then(|()| fingerprint_bundle(recipe.slice, &out, &mut shard));
         let status = match result {
             Ok(()) => "ok".to_string(),
@@ -633,12 +784,30 @@ fn module_shard(dir: &Path, recipe: &Recipe, inputs: &ShardInputs) -> Shard {
     shard
 }
 
-/// Build every missing shard of `task`.
+/// Build every missing shard of `task`: the module shards first, since the
+/// literal shard reads their builds (any build not yet made is made).
 fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
     let dir = install(&cfg.work, task)?;
-    for inputs in &task.missing {
+    // the entries are the recipe's: rewritten on every build
+    write_entries(&dir, &task.name)?;
+    let mut missing: Vec<&ShardInputs> = task.missing.iter().collect();
+    missing.sort_by_key(|i| i.kind == ShardKind::Literals);
+    for inputs in missing {
+        if inputs.kind == ShardKind::Literals {
+            for recipe in &cfg.slices {
+                for (tag, entry) in ENTRIES {
+                    let out = dir.join("build").join(recipe.slice.name()).join(tag);
+                    // a failed build contributes no files; the module
+                    // shard records the error
+                    let _ = ensure_build(recipe, &dir, entry, &out);
+                }
+            }
+        }
         let shard = match inputs.kind {
-            ShardKind::Literals => literal_shard(&dir, inputs),
+            ShardKind::Literals => {
+                let slices: Vec<IndexSlice> = cfg.slices.iter().map(|r| r.slice).collect();
+                literal_shard(&dir, inputs, &slices)
+            }
             ShardKind::Modules(slice) => {
                 let recipe = cfg
                     .slices
