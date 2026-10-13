@@ -18,6 +18,7 @@ fn sel(code: &str) -> FunctionCodeSelection<'_> {
         fn_end_line: None,
         anchor_start_lines: None,
         identifier_names: None,
+        max_lines: MAX_CODE_LINES,
     }
 }
 
@@ -106,12 +107,12 @@ fn anchors_outside_the_range_add_no_window() {
 #[test]
 fn caps_prior_version_context() {
     let code = make_lines(3000);
-    let capped = cap_context_code(&code, "t");
+    let capped = cap_context_code(&code, "t", MAX_CODE_LINES);
     assert!(line_count(&capped) <= MAX_CODE_LINES + 2);
     assert!(capped.contains("line(500);"));
     assert!(!capped.contains("line(501);"));
     let small = make_lines(100);
-    assert_eq!(cap_context_code(&small, "t"), small);
+    assert_eq!(cap_context_code(&small, "t", MAX_CODE_LINES), small);
 }
 
 #[test]
@@ -196,4 +197,32 @@ fn an_untrusted_mapping_still_windows_every_requested_identifier() {
     assert!(r.contains("var Qz = line(550);"), "{r}");
     assert!(line_count(&r) <= MAX_CODE_LINES);
     assert!(crate::naming::shown::unshown(&r, &names).is_empty());
+}
+
+/// The window size is the selection's own (config key
+/// `naming.code_window_lines`, config sweep step 8): a smaller budget cuts,
+/// windows and caps at IT, not at the compiled-in default.
+#[test]
+fn the_code_window_size_is_the_selections_own() {
+    let code = make_lines(300);
+    let r = select_function_code(&FunctionCodeSelection {
+        max_lines: 100,
+        ..sel(&code)
+    });
+    assert_eq!(line_count(&r), 102);
+    assert!(r.contains("line(100);") && !r.contains("line(101);"));
+    assert_eq!(line_count(&cap_context_code(&code, "t", 100)), 102);
+    assert_eq!(cap_context_code(&code, "t", 300), code);
+    let anchors = [Some(150)];
+    let windowed = select_function_code(&FunctionCodeSelection {
+        fn_start_line: Some(1),
+        fn_end_line: Some(300),
+        anchor_start_lines: Some(&anchors),
+        max_lines: 100,
+        ..sel(&code)
+    });
+    assert!(line_count(&windowed) <= 100 + 4, "{windowed}");
+    assert!(windowed.contains("line(150);"));
+    assert!(fits_at_default_pads(&[50, 150, 250], 300, MAX_CODE_LINES));
+    assert!(!fits_at_default_pads(&[50, 150, 250], 300, 100));
 }

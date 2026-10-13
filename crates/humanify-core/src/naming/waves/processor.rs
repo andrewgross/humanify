@@ -1566,9 +1566,13 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
         let is_retry = call.round > 1;
         let full_code = self.select_request_code(f, remaining, &binding_map);
         let close = self.inp.close[f].as_ref();
-        let prior_context = close
-            .filter(|c| !c.prior_code.is_empty())
-            .map(|c| cap_context_code(&c.prior_code, &self.inp.graph.functions[f].session_id));
+        let prior_context = close.filter(|c| !c.prior_code.is_empty()).map(|c| {
+            cap_context_code(
+                &c.prior_code,
+                &self.inp.graph.functions[f].session_id,
+                self.inp.tunables.code_window_lines,
+            )
+        });
         let code = if is_retry {
             extract_retry_snippet(&full_code, remaining)
         } else {
@@ -1740,6 +1744,7 @@ impl<'a, 's, 'p, 'l, P: NameProvider> Run<'a, 's, 'p, 'l, P> {
             fn_end_line: Some(i64::from(self.inp.view.line_of(span.end))),
             anchor_start_lines: Some(&anchors),
             identifier_names: Some(remaining),
+            max_lines: self.inp.tunables.code_window_lines,
         })
     }
 

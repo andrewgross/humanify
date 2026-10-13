@@ -19,7 +19,10 @@
 //! The TS's `debug.log` lines are not reproduced (log-only; no output
 //! reads them).
 
-/// Maximum lines of function code shown to the LLM per request.
+/// Maximum lines of function code shown to the LLM per request — the
+/// DEFAULT of the config key `naming.code_window_lines` (config sweep step
+/// 8, 2026-10-13); the run's value reaches every selection as
+/// [`FunctionCodeSelection::max_lines`] / the `max_lines` arguments.
 pub const MAX_CODE_LINES: usize = 500;
 
 /// Header window: function signature + opening context, always shown.
@@ -50,21 +53,23 @@ pub struct FunctionCodeSelection<'a> {
     /// Used only to rescue an entry with no usable declaration loc: the
     /// identifier is located in the GENERATED code instead.
     pub identifier_names: Option<&'a [String]>,
+    /// The code budget in lines (`naming.code_window_lines`).
+    pub max_lines: usize,
 }
 
-fn flat_cut(lines: &[&str]) -> String {
-    format!("{}{TRUNCATED_TAIL}", lines[..MAX_CODE_LINES].join("\n"))
+fn flat_cut(lines: &[&str], max_lines: usize) -> String {
+    format!("{}{TRUNCATED_TAIL}", lines[..max_lines].join("\n"))
 }
 
 /// Cap prompt CONTEXT code (the prior version of a close-matched function)
 /// at the code budget: an uncapped multi-thousand-line prior overflows the
 /// model context and 400-fails the whole batch.
-pub fn cap_context_code(code: &str, _session_id: &str) -> String {
+pub fn cap_context_code(code: &str, _session_id: &str, max_lines: usize) -> String {
     let lines: Vec<&str> = code.split('\n').collect();
-    if lines.len() <= MAX_CODE_LINES {
+    if lines.len() <= max_lines {
         return code.to_string();
     }
-    flat_cut(&lines)
+    flat_cut(&lines, max_lines)
 }
 
 /// 1-based inclusive line window.
@@ -117,8 +122,8 @@ fn build_windows(anchors: &[i64], line_count: i64, pad_before: i64, pad_after: i
 /// Whether windows around `anchors` (1-based lines of a `line_count`-line
 /// code) fit the code budget at the DEFAULT padding — the coverage sweep
 /// batches its targets so no batch's windows need shrinking (2026-10-04).
-pub fn fits_at_default_pads(anchors: &[i64], line_count: i64) -> bool {
-    total_lines(&build_windows(anchors, line_count, PAD_BEFORE, PAD_AFTER)) <= MAX_CODE_LINES as i64
+pub fn fits_at_default_pads(anchors: &[i64], line_count: i64, max_lines: usize) -> bool {
+    total_lines(&build_windows(anchors, line_count, PAD_BEFORE, PAD_AFTER)) <= max_lines as i64
 }
 
 fn render_windows(lines: &[&str], windows: &[Window]) -> String {
@@ -224,7 +229,7 @@ fn has_token(hay: &[u16], needle: &[u16]) -> bool {
 /// windows fit the budget.
 pub fn select_function_code(sel: &FunctionCodeSelection<'_>) -> String {
     let lines: Vec<&str> = sel.code.split('\n').collect();
-    if lines.len() <= MAX_CODE_LINES {
+    if lines.len() <= sel.max_lines {
         return sel.code.to_string();
     }
     // An untrusted loc mapping no longer means the flat head (2026-10-04,
@@ -232,12 +237,12 @@ pub fn select_function_code(sel: &FunctionCodeSelection<'_>) -> String {
     // located in the GENERATED code instead, so none is asked blind. Only
     // a selection that names no identifier keeps the flat cut.
     let Some(anchors) = resolve_anchors(sel, &lines).or_else(|| rescue_anchors(sel, &lines)) else {
-        return flat_cut(&lines);
+        return flat_cut(&lines, sel.max_lines);
     };
     let line_count = lines.len() as i64;
     let (mut pad_before, mut pad_after) = (PAD_BEFORE, PAD_AFTER);
     let mut windows = build_windows(&anchors, line_count, pad_before, pad_after);
-    while total_lines(&windows) > MAX_CODE_LINES as i64 && pad_after > MIN_PAD {
+    while total_lines(&windows) > sel.max_lines as i64 && pad_after > MIN_PAD {
         pad_before = MIN_PAD.max(pad_before / 2);
         pad_after = MIN_PAD.max(pad_after / 2);
         windows = build_windows(&anchors, line_count, pad_before, pad_after);

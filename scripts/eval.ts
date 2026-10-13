@@ -17,6 +17,7 @@
  * every card in the directory and a mixed-commit summary reads as one run.
  */
 import { spawnSync } from "node:child_process";
+import * as crypto from "node:crypto";
 import {
   computeBands,
   writeNoiseBands
@@ -24,7 +25,10 @@ import {
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { parseSetting } from "../experiments/lib/pipeline-config.js";
+import {
+  collectSettings,
+  parseSetting
+} from "../experiments/lib/pipeline-config.js";
 import {
   type BaseMode,
   labelBaseModes
@@ -35,6 +39,8 @@ const REPO = path.resolve(import.meta.dirname, "..");
 const EXP096_PYTHON =
   "/work/exp095-library-fingerprints/scale/.venv/bin/python";
 const RESULTS = path.join(REPO, "experiments/034-eval-harness/results");
+/** The eval's pair list and per-host path defaults (data, read here once). */
+const PAIRS_JSON = path.join(REPO, "experiments/034-eval-harness/pairs.json");
 
 interface Verb {
   name: string;
@@ -204,15 +210,91 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
 };
 
 /**
- * `eval score`'s arguments: the label, and the flags handed to run.sh in
- * the order given. Every flag is validated here, before anything runs.
+ * The ONE run config `eval score` hands run.sh (config sweep step 7,
+ * 2026-10-13). eval.ts is the only parser: every flag is validated and every
+ * default resolved HERE, written to one JSON file, and run.sh reads that file
+ * instead of argv. Before, run.sh parsed the same 16 flags again — two
+ * parsers that could disagree about a typo. Its sha256 is recorded in the
+ * label's pipeline.json.
+ */
+export interface ScoreRunConfig {
+  kind: "eval-score";
+  label: string;
+  baseMode: BaseMode;
+  /** `--pairs` filter ("215->216,85->86"), or null for every pair. */
+  pairs: string | null;
+  /** `--endpoint`, or null: run.sh asks lib/llm-endpoint.sh (local file). */
+  endpoint: string | null;
+  /** `--llm-cache` — iteration only, never valid for a gate run. */
+  llmCache: string | null;
+  layout: boolean;
+  vendorScore: boolean;
+  bootPrompt: boolean;
+  selfHop: boolean;
+  inputsBase: string;
+  priorsBase: string;
+  workdir: string;
+  /** Absolute path of the binary to build, record and score. */
+  bin: string;
+  forceMixed: boolean;
+  /** `--pipeline-set` entries, in order, for every launch's --config file. */
+  pipelineSettings: string[];
+}
+
+/**
+ * The --config keys run.sh itself writes into a launch's file. A
+ * `--pipeline-set` naming one is refused here, before anything builds — the
+ * writer (pipeline-config.ts) would refuse it too, but only at the first
+ * launch. Keep in step with run.sh's `pipeline_config` calls.
+ */
+const SCORE_HARNESS_KEYS = [
+  "llm.reasoning_effort",
+  "llm.concurrency",
+  "split.enabled",
+  "llm.cache_dir",
+  "diagnostics.log_file",
+  "diagnostics.stats_json",
+  "diagnostics.diagnostics_file"
+];
+
+/** Why a set of `--pipeline-set` entries is refused, or null. */
+function pipelineSetRefusal(entries: string[]): string | null {
+  try {
+    collectSettings([
+      ...SCORE_HARNESS_KEYS.map((k): [string, string] => [k, "(harness)"]),
+      ...entries.map(parseSetting)
+    ]);
+    return null;
+  } catch (e) {
+    return `--pipeline-set: ${(e as Error).message}`;
+  }
+}
+
+function pairsDefaults(): { inputsBase: string; priorsBase: string } {
+  const j = JSON.parse(fs.readFileSync(PAIRS_JSON, "utf8"));
+  return { inputsBase: j.inputsBase, priorsBase: j.priorsBase };
+}
+
+/** A flag's string value, or the fallback. */
+function strFlag(
+  flags: Record<string, string | true>,
+  name: string,
+  fallback: string
+): string {
+  const v = flags[name];
+  return typeof v === "string" ? v : fallback;
+}
+
+/**
+ * `eval score`'s arguments → the label and its run config. Every flag is
+ * validated here, before anything runs.
  */
 export function scoreArgs(args: string[]):
   | {
       label: string;
       force: boolean;
       baseMode: BaseMode;
-      passthrough: string[];
+      config: ScoreRunConfig;
     }
   | string {
   const parsed = parseFlags(args, SCORE_FLAGS);
@@ -221,17 +303,116 @@ export function scoreArgs(args: string[]):
   if (!label || parsed.positional.length > 1) {
     return "usage: eval score <label> [flags]";
   }
-  const seeded = parsed.flags["--seeded-base"] === true;
-  const archive = parsed.flags["--archive-prior"] === true;
+  const f = parsed.flags;
+  const seeded = f["--seeded-base"] === true;
+  const archive = f["--archive-prior"] === true;
   if (seeded && archive) {
     return "--seeded-base and --archive-prior are exclusive: one base mode per run";
   }
+  const sets = parsed.given.filter(
+    (_, i) => parsed.given[i - 1] === "--pipeline-set"
+  );
+  const setRefusal = pipelineSetRefusal(sets);
+  if (setRefusal) return setRefusal;
+  const baseMode: BaseMode = archive
+    ? "archive"
+    : seeded
+      ? "seeded"
+      : "scratch";
+  const force = f["--force-mixed"] === true;
+  const defaults = pairsDefaults();
+  const optional = (name: string) => {
+    const v = f[name];
+    return typeof v === "string" ? v : null;
+  };
   return {
     label,
-    force: parsed.flags["--force-mixed"] === true,
-    baseMode: archive ? "archive" : seeded ? "seeded" : "scratch",
-    passthrough: parsed.given
+    force,
+    baseMode,
+    config: {
+      kind: "eval-score",
+      label,
+      baseMode,
+      pairs: optional("--pairs"),
+      endpoint: optional("--endpoint"),
+      llmCache: optional("--llm-cache"),
+      layout: f["--no-layout"] !== true,
+      vendorScore: f["--no-vendor-score"] !== true,
+      bootPrompt: f["--no-boot-prompt"] !== true,
+      selfHop: f["--no-self-hop"] !== true,
+      inputsBase: strFlag(f, "--inputs-base", defaults.inputsBase),
+      priorsBase: strFlag(f, "--priors-base", defaults.priorsBase),
+      workdir: strFlag(f, "--workdir", "/tmp/eval-work"),
+      bin: path.resolve(
+        REPO,
+        strFlag(f, "--bin", path.join(REPO, "target/release/humanify"))
+      ),
+      forceMixed: force,
+      pipelineSettings: sets
+    }
   };
+}
+
+/**
+ * `neutrality.sh`'s run config: the baseline ref, the pair, and where each
+ * leg reads and writes. The workdir carries the cache and the priors by
+ * default — the documented trap (a fresh workdir is a COLD cache and a void
+ * verdict), kept visible rather than silently changed.
+ */
+export interface NeutralityRunConfig {
+  kind: "neutrality";
+  baseline: string;
+  /** `<from>:<to>`. */
+  pair: string;
+  workdir: string;
+  cache: string;
+  priors: string;
+  inputsBase: string;
+  endpoint: string | null;
+}
+
+const NEUTRALITY_FLAGS: Record<string, FlagKind> = {
+  "--workdir": "value",
+  "--cache": "value",
+  "--priors": "value",
+  "--inputs-base": "value",
+  "--endpoint": "value"
+};
+
+/** `eval neutrality`'s arguments → its run config, validated here. */
+export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
+  const parsed = parseFlags(args, NEUTRALITY_FLAGS);
+  if (typeof parsed === "string") return parsed;
+  const [baseline, pair = "2.1.85:2.1.86", ...extra] = parsed.positional;
+  if (!baseline || extra.length > 0) {
+    return "usage: eval neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL]";
+  }
+  if (!/^[^:\s]+:[^:\s]+$/.test(pair)) {
+    return `pair "${pair}" is not <from>:<to> (e.g. 2.1.215:2.1.216)`;
+  }
+  const f = parsed.flags;
+  const workdir = strFlag(f, "--workdir", "/work");
+  return {
+    kind: "neutrality",
+    baseline,
+    pair,
+    workdir,
+    cache: strFlag(f, "--cache", path.join(workdir, "neutrality-cache")),
+    priors: strFlag(f, "--priors", path.join(workdir, "exp050-cold")),
+    inputsBase: strFlag(f, "--inputs-base", pairsDefaults().inputsBase),
+    endpoint: typeof f["--endpoint"] === "string" ? f["--endpoint"] : null
+  };
+}
+
+/** Write a run config (creating its directory); returns the file's sha256. */
+export function writeRunConfig(
+  file: string,
+  config: ScoreRunConfig | NeutralityRunConfig
+): string {
+  const text = `${JSON.stringify(config, null, 2)}\n`;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 const LIBRARY_FLAGS: Record<string, FlagKind> = {
@@ -358,7 +539,7 @@ const VERBS: Verb[] = [
         console.error(`eval score: ${parsed}`);
         return 2;
       }
-      const { label, force, baseMode, passthrough } = parsed;
+      const { label, force, baseMode, config } = parsed;
       const err =
         guardLabel(label, force) ??
         guardPipeline(label, force) ??
@@ -367,10 +548,9 @@ const VERBS: Verb[] = [
         console.error(err);
         return 2;
       }
-      const pairsAt = passthrough.indexOf("--pairs");
-      if (pairsAt >= 0) {
+      if (config.pairs !== null) {
         console.log(
-          `PARTIAL: --pairs ${passthrough[pairsAt + 1]} — this label will not cover the full pair set.`
+          `PARTIAL: --pairs ${config.pairs} — this label will not cover the full pair set.`
         );
       }
       if (baseMode === "archive") {
@@ -386,19 +566,21 @@ const VERBS: Verb[] = [
           "SCRATCH BASES (default): each base rebuilt with no prior — a full cold run per base. NOT comparable to the seeded references (main-2026-09-18 and every label before 2026-10-03); the leaderboard refuses the mix."
         );
       }
-      // --force-mixed passes through too: run.sh needs it to accept a binary
-      // built from another commit (pipeline-bin.ts).
+      // The one run config: run.sh reads it and parses no flags.
+      // (forceMixed is in it too: run.sh needs it to accept a binary built
+      // from another commit, pipeline-bin.ts.)
+      const file = path.join(config.workdir, `${label}.run-config.json`);
+      writeRunConfig(file, config);
       return sh("bash", [
         path.join(REPO, "experiments/034-eval-harness/run.sh"),
-        label,
-        ...passthrough
+        file
       ]);
     }
   },
   {
     name: "neutrality",
     usage:
-      "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D]",
+      "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL]",
     description:
       "Byte-identity A/B against a committed ref with a shared WARM cache (~25min). " +
       "Default cache is the standing warm one — a fresh/per-run cache makes the run cold and the verdict void.",
@@ -407,20 +589,16 @@ const VERBS: Verb[] = [
     cannotProve:
       "anything from a COLD run (baseline leg wrote entries) — cold verdicts are void, null-control proven 2026-08-11",
     run(args) {
-      const parsed = parseFlags(args, {
-        "--workdir": "value",
-        "--cache": "value",
-        "--priors": "value",
-        "--inputs-base": "value",
-        "--endpoint": "value"
-      });
-      if (typeof parsed === "string") {
-        console.error(`eval neutrality: ${parsed}`);
+      const config = neutralityArgs(args);
+      if (typeof config === "string") {
+        console.error(`eval neutrality: ${config}`);
         return 2;
       }
+      const file = path.join(config.workdir, "neutrality-run-config.json");
+      writeRunConfig(file, config);
       return sh("bash", [
         path.join(REPO, "experiments/lib/neutrality.sh"),
-        ...args
+        file
       ]);
     }
   },

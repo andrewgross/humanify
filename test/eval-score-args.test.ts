@@ -1,19 +1,41 @@
 import assert from "node:assert";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { describe, it } from "node:test";
-import { guardBaseMode, scoreArgs } from "../scripts/eval.js";
+import {
+  guardBaseMode,
+  neutralityArgs,
+  scoreArgs,
+  writeRunConfig
+} from "../scripts/eval.js";
 
 /**
- * `eval score`'s flag parsing: what reaches run.sh. `--pipeline-set` is a
- * pipeline setting (`section.key=value`, a --config key since config sweep
- * step 5), validated here and repeated in order — run-launch.test.ts
- * proves run.sh writes them into every launch's config file.
+ * `eval score`'s flag parsing: what reaches run.sh. Since config sweep step
+ * 7 (2026-10-13) eval.ts is the ONE parser: it validates every flag, resolves
+ * every default, and hands run.sh a single run config file — run.sh parses no
+ * flags. `--pipeline-set` is a pipeline setting (`section.key=value`, a
+ * --config key since step 5), kept in order — run-launch.test.ts proves
+ * run.sh writes them into every launch's config file.
  */
-describe("eval score argument passthrough", () => {
-  it("passes --pipeline-set values through in order", () => {
-    const r = scoreArgs([
+const REPO = path.resolve(import.meta.dirname, "..");
+const PAIRS = JSON.parse(
+  fs.readFileSync(
+    path.join(REPO, "experiments/034-eval-harness/pairs.json"),
+    "utf8"
+  )
+);
+
+function score(args: string[]) {
+  const r = scoreArgs(args);
+  assert.ok(typeof r !== "string", String(r));
+  return r;
+}
+
+describe("eval score argument parsing", () => {
+  it("keeps --pipeline-set values in order", () => {
+    const r = score([
       "lbl",
       "--pipeline-set",
       "naming.schedule=sequential",
@@ -22,16 +44,12 @@ describe("eval score argument passthrough", () => {
       "--pipeline-set",
       "naming.batch_size=10"
     ]);
-    assert.ok(typeof r !== "string", String(r));
     assert.strictEqual(r.label, "lbl");
-    assert.deepStrictEqual(r.passthrough, [
-      "--pipeline-set",
+    assert.deepStrictEqual(r.config.pipelineSettings, [
       "naming.schedule=sequential",
-      "--pairs",
-      "85->86",
-      "--pipeline-set",
       "naming.batch_size=10"
     ]);
+    assert.strictEqual(r.config.pairs, "85->86");
   });
 
   it("refuses --pipeline-set without a value, or with a malformed one", () => {
@@ -43,6 +61,38 @@ describe("eval score argument passthrough", () => {
     ]) {
       assert.strictEqual(typeof scoreArgs(bad), "string", bad.join(" "));
     }
+  });
+
+  it("refuses a --pipeline-set key the harness sets itself, or one set twice", () => {
+    // Moved here from run.sh (step 7): two layers disagreeing about one
+    // setting is refused before anything builds.
+    for (const key of [
+      "llm.concurrency=8",
+      "llm.reasoning_effort=high",
+      "split.enabled=false",
+      "llm.cache_dir=/x",
+      "diagnostics.log_file=/x",
+      "diagnostics.stats_json=/x",
+      "diagnostics.diagnostics_file=/x"
+    ]) {
+      assert.match(
+        String(scoreArgs(["lbl", "--pipeline-set", key])),
+        /set twice/,
+        key
+      );
+    }
+    assert.match(
+      String(
+        scoreArgs([
+          "lbl",
+          "--pipeline-set",
+          "naming.batch_size=10",
+          "--pipeline-set",
+          "naming.batch_size=12"
+        ])
+      ),
+      /set twice/
+    );
   });
 
   it("refuses the retired --pipeline-arg, naming its replacement", () => {
@@ -59,30 +109,75 @@ describe("eval score argument passthrough", () => {
     );
   });
 
-  it("without --pipeline-set the passthrough is exactly the parsed flags", () => {
-    const r = scoreArgs(["lbl", "--force-mixed", "--bin", "b"]);
-    assert.ok(typeof r !== "string");
-    assert.deepStrictEqual(r.passthrough, ["--force-mixed", "--bin", "b"]);
-  });
-
-  it("defaults to a SCRATCH base, with no flag passed to run.sh", () => {
-    const r = scoreArgs(["lbl"]);
-    assert.ok(typeof r !== "string");
+  it("resolves EVERY default into the run config: nothing is left for run.sh to decide", () => {
+    const r = score(["lbl"]);
     assert.strictEqual(r.baseMode, "scratch");
-    assert.deepStrictEqual(r.passthrough, []);
+    assert.deepStrictEqual(r.config, {
+      kind: "eval-score",
+      label: "lbl",
+      baseMode: "scratch",
+      pairs: null,
+      endpoint: null,
+      llmCache: null,
+      layout: true,
+      vendorScore: true,
+      bootPrompt: true,
+      selfHop: true,
+      inputsBase: PAIRS.inputsBase,
+      priorsBase: PAIRS.priorsBase,
+      workdir: "/tmp/eval-work",
+      bin: path.join(REPO, "target/release/humanify"),
+      forceMixed: false,
+      pipelineSettings: []
+    });
   });
 
-  it("--seeded-base selects the archive-seeded rebuild and reaches run.sh", () => {
-    const r = scoreArgs(["lbl", "--seeded-base"]);
-    assert.ok(typeof r !== "string", String(r));
-    assert.strictEqual(r.baseMode, "seeded");
-    assert.deepStrictEqual(r.passthrough, ["--seeded-base"]);
+  it("every flag lands in its run config field", () => {
+    const r = score([
+      "lbl",
+      "--force-mixed",
+      "--seeded-base",
+      "--endpoint",
+      "http://127.0.0.1:9/v1",
+      "--llm-cache",
+      "/c",
+      "--no-layout",
+      "--no-vendor-score",
+      "--no-boot-prompt",
+      "--no-self-hop",
+      "--inputs-base",
+      "/i",
+      "--priors-base",
+      "/p",
+      "--workdir",
+      "/w",
+      "--bin",
+      "rel/humanify"
+    ]);
+    assert.strictEqual(r.force, true);
+    assert.deepStrictEqual(r.config, {
+      kind: "eval-score",
+      label: "lbl",
+      baseMode: "seeded",
+      pairs: null,
+      endpoint: "http://127.0.0.1:9/v1",
+      llmCache: "/c",
+      layout: false,
+      vendorScore: false,
+      bootPrompt: false,
+      selfHop: false,
+      inputsBase: "/i",
+      priorsBase: "/p",
+      workdir: "/w",
+      // Resolved against the repo, so run.sh never resolves a path itself.
+      bin: path.join(REPO, "rel/humanify"),
+      forceMixed: true,
+      pipelineSettings: []
+    });
   });
 
   it("--archive-prior is the archive mode", () => {
-    const r = scoreArgs(["lbl", "--archive-prior"]);
-    assert.ok(typeof r !== "string");
-    assert.strictEqual(r.baseMode, "archive");
+    assert.strictEqual(score(["lbl", "--archive-prior"]).baseMode, "archive");
   });
 
   // Config sweep 2026-10-13, no backwards compatibility: a renamed flag's old
@@ -92,9 +187,6 @@ describe("eval score argument passthrough", () => {
       String(scoreArgs(["lbl", "--no-vendor"])),
       /--no-vendor-score/
     );
-    const r = scoreArgs(["lbl", "--no-vendor-score"]);
-    assert.ok(typeof r !== "string", String(r));
-    assert.deepStrictEqual(r.passthrough, ["--no-vendor-score"]);
   });
 
   it("refuses --heap-mb: it was inert for the binary and is deleted", () => {
@@ -106,6 +198,85 @@ describe("eval score argument passthrough", () => {
       String(scoreArgs(["lbl", "--seeded-base", "--archive-prior"])),
       /--seeded-base.*--archive-prior|--archive-prior.*--seeded-base/
     );
+  });
+});
+
+describe("the run config file", () => {
+  it("is written once, and its sha256 is the file's", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runcfg-"));
+    try {
+      const file = path.join(dir, "deep/run-config.json");
+      const sha = writeRunConfig(file, score(["lbl"]).config);
+      const bytes = fs.readFileSync(file);
+      assert.strictEqual(
+        sha,
+        crypto.createHash("sha256").update(bytes).digest("hex")
+      );
+      assert.strictEqual(JSON.parse(bytes.toString()).label, "lbl");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("eval neutrality argument parsing", () => {
+  it("resolves the documented defaults (the workdir carries the cache and priors)", () => {
+    const r = neutralityArgs(["main"]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r, {
+      kind: "neutrality",
+      baseline: "main",
+      pair: "2.1.85:2.1.86",
+      workdir: "/work",
+      cache: "/work/neutrality-cache",
+      priors: "/work/exp050-cold",
+      inputsBase: PAIRS.inputsBase,
+      endpoint: null
+    });
+    // The trap CLAUDE.md names: a new workdir moves the cache with it.
+    const moved = neutralityArgs([
+      "main",
+      "2.1.215:2.1.216",
+      "--workdir",
+      "/w"
+    ]);
+    assert.ok(typeof moved !== "string");
+    assert.strictEqual(moved.cache, "/w/neutrality-cache");
+    assert.strictEqual(moved.pair, "2.1.215:2.1.216");
+  });
+
+  it("an explicit --cache / --priors survive a --workdir", () => {
+    const r = neutralityArgs([
+      "b7235695",
+      "2.1.215:2.1.216",
+      "--workdir",
+      "/w",
+      "--cache",
+      "/work/neutrality-cache",
+      "--priors",
+      "/work/exp050-cold",
+      "--inputs-base",
+      "/i",
+      "--endpoint",
+      "http://127.0.0.1:9/v1"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.strictEqual(r.cache, "/work/neutrality-cache");
+    assert.strictEqual(r.priors, "/work/exp050-cold");
+    assert.strictEqual(r.inputsBase, "/i");
+    assert.strictEqual(r.endpoint, "http://127.0.0.1:9/v1");
+  });
+
+  it("refuses a missing baseline, a malformed pair, an extra positional, and the deleted per-leg commands", () => {
+    for (const bad of [
+      [],
+      ["main", "2.1.85-2.1.86"],
+      ["main", "2.1.85:2.1.86", "extra"],
+      ["main", "--candidate-cmd", "x"],
+      ["main", "--baseline-cmd", "x"]
+    ]) {
+      assert.strictEqual(typeof neutralityArgs(bad), "string", bad.join(" "));
+    }
   });
 });
 
