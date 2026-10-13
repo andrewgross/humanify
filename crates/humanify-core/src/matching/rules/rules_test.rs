@@ -4,7 +4,7 @@
 
 use crate::graph::edges::Scope;
 use crate::matching::rules::{
-    Evidence, Profile, RESOLVE, RuleList, RuleSpec, Stage, cross, cross_version,
+    Evidence, Profile, RESOLVE, RuleList, RuleSpec, Stage, cross, cross_version, library,
 };
 
 const READS_INTO: RuleSpec = RuleSpec::new(
@@ -44,6 +44,24 @@ fn the_cross_version_profile_reads_every_edge_as_today() {
             .rules()
             .iter()
             .any(|r| r.may_read(Evidence::GraphAll))
+    );
+}
+
+#[test]
+fn no_built_in_library_rule_reads_into_but_the_boundary_check() {
+    let into: Vec<&str> = library()
+        .rules()
+        .iter()
+        .filter(|r| r.reads.iter().any(|e| e.reads_into()))
+        .map(|r| r.name)
+        .collect();
+    assert_eq!(into, vec!["boundary"]);
+    assert!(
+        library()
+            .rules()
+            .iter()
+            .filter(|r| r.name == "boundary")
+            .all(|r| r.stage == Stage::Check)
     );
 }
 
@@ -106,7 +124,7 @@ fn every_tier_a_pair_row_can_carry_is_a_cross_version_rule() {
 }
 
 #[test]
-#[should_panic(expected = "not on the CrossVersion list")]
+#[should_panic(expected = "not on the Library list")]
 fn a_rule_off_the_list_cannot_decide() {
-    cross_version().decide("input.js:1:0".into(), "input.js:2:0".into(), "down");
+    library().decide("unit@0-1".into(), "index:P".into(), "memberKey");
 }

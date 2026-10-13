@@ -13,7 +13,7 @@
 //!   `match_functions` / `prior::match_prior_version` run them). The prior
 //!   is ONE program, so its rules read every edge ([`Evidence::GraphAll`]):
 //!   restricting vendor regions to INSIDE evidence is step 5, with an eval.
-//! - **library**: the index lookup (exp095/097) and
+//! - **library** ([`library`]): the index lookup (exp095/097) and
 //!   discovery's fixpoint. Caller evidence crossing the app→library
 //!   boundary describes the APP (Andrew, 2026-10-13), so the library
 //!   profile REFUSES any rule that reads INTO edges, or every edge, as
@@ -278,10 +278,13 @@ pub struct Decision {
 // ---------------------------------------------------------------------------
 
 use Evidence::{
-    Claims, Features, Fingerprint, GraphAll, MemberKey, Position, Resolver, StatementContext,
+    Claims, Families, Features, Fingerprint, GraphAll, Literals, MemberKey, Position, Resolver,
+    Size, StatementContext, Text,
 };
 
 const MATCH_KEY: Evidence = Fingerprint("match-key");
+const INSIDE: Evidence = Evidence::Graph(Scope::Inside);
+const OUT_OF: Evidence = Evidence::Graph(Scope::OutOf);
 
 /// The cross-version resolve rungs, in the order `matching::cascade`
 /// executes them on a bucket of more than one candidate (TS
@@ -396,6 +399,111 @@ pub fn cross_version() -> RuleList {
             cross::INTERCHANGEABLE_POOLS,
             cross::CLOSE_TIER,
             cross::SAME_PROGRAM,
+        ],
+    )
+}
+
+// ---------------------------------------------------------------------------
+// The library profile: the index lookup + discovery
+// ---------------------------------------------------------------------------
+
+/// The library profile's rules (exp095/097; docs/design/library-discovery.md
+/// §5-§7), each declaring what it reads. None reads an INTO edge as
+/// identity evidence.
+pub mod lib {
+    use super::*;
+
+    const UNITS: Evidence = Fingerprint("units");
+
+    /// Lookup: a unit's whole print, or its largest functions' prints
+    /// covering half of it, held by 1-3 packages (structural rule).
+    pub const STRUCTURAL: RuleSpec = RuleSpec::new("structural", Stage::Seed, &[UNITS, Size]);
+    /// Lookup: an index module may be at most 4x the query's + 4096 bytes.
+    pub const SPECIFICITY: RuleSpec = RuleSpec::new("specificity", Stage::Guard, &[Size]);
+    /// Lookup: a claim under 100 nodes needs another claim of its package
+    /// within 10 statements.
+    pub const SUPPORT: RuleSpec = RuleSpec::new("support", Stage::Guard, &[Position, Claims]);
+    /// Lookup: the literal rule names the same family (agreement).
+    pub const AGREEMENT: RuleSpec =
+        RuleSpec::new("agreement", Stage::Guard, &[Literals, Families, Text]);
+    /// Discovery seeds: package readers and kept banners in the unit's own
+    /// text.
+    pub const DECLARED: RuleSpec = RuleSpec::new("declared", Stage::Seed, &[Text]);
+    pub const BANNER: RuleSpec = RuleSpec::new("banner", Stage::Seed, &[Text]);
+    /// The isolation veto: an index seed with no same-family neighbour
+    /// (INSIDE edges of the family's region). A seed the index is
+    /// ambiguous about (the structural rule accepts more than one family)
+    /// cannot count claims derived only from itself.
+    pub const ISOLATION_VETO: RuleSpec = RuleSpec::new(
+        "isolationVeto",
+        Stage::Guard,
+        &[INSIDE, Claims, Families, UNITS, Size],
+    );
+    /// DOWN: a unit whose library callers are all one package P is P's
+    /// (INSIDE edges of P plus the unit); the app's callers are not read.
+    pub const DOWN: RuleSpec = RuleSpec::new("down", Stage::Propagate, &[INSIDE, Claims]);
+    /// MODULE: a unit of a module whose claims are all P, whose closure
+    /// stays inside the module.
+    pub const MODULE: RuleSpec = RuleSpec::new(
+        "module",
+        Stage::Propagate,
+        &[INSIDE, OUT_OF, Position, Claims],
+    );
+    /// GLUE: a lazy wrapper whose body is all P.
+    pub const GLUE: RuleSpec = RuleSpec::new("glue", Stage::Propagate, &[INSIDE, Claims]);
+    /// Containment: a bundled library is a subset of its package's build,
+    /// so a unit a propagation rule would add to package P's region, at or
+    /// over the index's row floor, that no print of P's family holds is not
+    /// P's (the INSIDE edge that would bring it in is one P's entry cannot
+    /// have). Below the floor, or an index entry the bundle lacks, counts
+    /// for nothing.
+    pub const CONTAINMENT: RuleSpec = RuleSpec::new(
+        "containment",
+        Stage::Guard,
+        &[UNITS, Size, Families, Claims],
+    );
+    /// The targeted lookup of a queued region: accepted only for a family
+    /// the region calls (its OUT-OF edges, abstract: the callee's package).
+    pub const TARGETED: RuleSpec =
+        RuleSpec::new("targeted", Stage::Seed, &[UNITS, Size, OUT_OF, Families]);
+    /// DOWN-CLASS: what a claim reaches over unidentified code (report).
+    pub const LIBRARY_CLASS: RuleSpec =
+        RuleSpec::new("libraryClass", Stage::Report, &[OUT_OF, Claims, Size]);
+    /// The candidate queue: closed regions that call claimed code (report;
+    /// their OUT-OF edges in abstract form).
+    pub const QUEUE: RuleSpec = RuleSpec::new("queue", Stage::Report, &[OUT_OF, Claims, Size]);
+    /// The boundary check: INTO edges per claimed package, AFTER the claims
+    /// (they should land on the package's entry points). Never decides.
+    pub const BOUNDARY: RuleSpec = RuleSpec::new(
+        "boundary",
+        Stage::Check,
+        &[Evidence::Graph(Scope::Into), Claims],
+    );
+}
+
+/// The library profile, in the order a run applies it: the lookup's
+/// structural rule and its three guards, discovery's seeds, the fixpoint's
+/// rules (DOWN, MODULE, GLUE, first wins) under containment, the isolation
+/// veto, the targeted round, the reports and the boundary check.
+pub fn library() -> RuleList {
+    RuleList::of(
+        Profile::Library,
+        &[
+            lib::STRUCTURAL,
+            lib::SPECIFICITY,
+            lib::SUPPORT,
+            lib::AGREEMENT,
+            lib::DECLARED,
+            lib::BANNER,
+            lib::DOWN,
+            lib::MODULE,
+            lib::GLUE,
+            lib::CONTAINMENT,
+            lib::ISOLATION_VETO,
+            lib::TARGETED,
+            lib::LIBRARY_CLASS,
+            lib::QUEUE,
+            lib::BOUNDARY,
         ],
     )
 }

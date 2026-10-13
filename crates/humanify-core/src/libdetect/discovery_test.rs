@@ -103,8 +103,9 @@ fn module_fills_only_behind_its_closure_guard_and_glue_takes_the_wrapper() {
     assert_eq!(r.claim("var I"), Some(("P", Rule::Glue, 1)));
     // Its closure leaves the module: not filled.
     assert_eq!(r.claim("var orphanOut"), None);
-    // Unidentified app code outside the module calls it: not filled.
-    assert_eq!(r.claim("var calledByApp"), None);
+    // P's own code calls it: DOWN, though the app calls it too — who calls
+    // a library from outside (an INTO edge) is the app's, not identity.
+    assert_eq!(r.claim("var calledByApp"), Some(("P", Rule::Down, 1)));
     assert_eq!(r.claim("var appUtil"), None);
 }
 
@@ -153,22 +154,34 @@ fn the_veto_repeats_once_a_dropped_seed_strands_another() {
     );
     // c is isolated (its neighbour d is another family): dropped. d keeps
     // e as a same-family neighbour and survives.
-    assert_eq!(r.claim("var c"), None);
+    let vetoed: Vec<u32> = r.found.vetoed.iter().map(|s| s.unit).collect();
+    assert_eq!(vetoed, vec![r.unit("var c")]);
     assert_eq!(r.claim("var d"), Some(("other", Rule::Seed, 0)));
+    // Its one library caller is d: without an index nothing contradicts
+    // DOWN (with one, containment does — `containment_*` below).
+    assert_eq!(r.claim("var c"), Some(("other", Rule::Down, 1)));
 }
 
 #[test]
 fn the_content_floor_keeps_a_content_free_claim_from_owning_app_code() {
+    // Two libraries share `dep` and `thing` (DOWN cannot pick one), so
+    // both stay unclaimed; DOWN-CLASS marks what a claim of at least the
+    // floor reaches (big -> dep), never what only a content-free claim
+    // reaches (ns -> thing).
     let r = run(
-        "var ns = {};\nrt(ns, { f: () => appModuleThing() });\nvar appModuleThing = () => \"app\";\nvar big = () => depOfBig() + \"padding padding padding\";\nvar depOfBig = () => 1;\nvar app = () => depOfBig() + big() + ns.f();\n",
+        "var ns = {};\nvar fill = () => thing();\nvar thing = () => \"app\";\nvar big = () => dep() + \"padding padding padding\";\nvar dep = () => 1;\nvar c = () => dep()+thing();\nvar app = () => dep() + big() + ns.f();\n",
         &[
             ("var ns", "pkgA", declared()),
+            ("var fill", "pkgA", declared()),
             ("var big", "pkgB", declared()),
+            ("var c", "pkgC", declared()),
         ],
     );
+    assert_eq!(r.claim("var dep"), None, "two libraries call it");
+    assert_eq!(r.claim("var thing"), None, "two libraries call it");
     let class: Vec<u32> = r.found.library_class.keys().copied().collect();
-    assert_eq!(class, vec![r.unit("var depOfBig")]);
-    assert_eq!(r.found.library_class[&r.unit("var depOfBig")], "pkgB");
+    assert_eq!(class, vec![r.unit("var dep")]);
+    assert_eq!(r.found.library_class[&r.unit("var dep")], "pkgB");
 }
 
 #[test]
@@ -471,4 +484,137 @@ fn unit_rows_list_every_graph_unit_with_its_prints_and_bindings() {
     assert_eq!(row("b = function").bindings, 4, "b, x, y, z");
     assert_eq!(row("a = 1").bindings, 1);
     assert!(rows.iter().all(|r| r.module_bytes >= u64::from(r.bytes)));
+}
+
+/// Per graph unit, its first characters and its claim (package, rule).
+type ClaimRows = Vec<(String, Option<(String, Rule)>)>;
+
+/// Discovery over `code` with an index holding, per listed statement
+/// head, that statement's whole print under the listed owners (structural
+/// rule, no neighbour support).
+fn run_indexed(code: &str, held: &[(&str, &[&str])]) -> (ReferenceGraph, Discovery, ClaimRows) {
+    use crate::libdetect::discovery::{BundlePieces, IndexLookup, discover_in_bundle};
+    use crate::libindex::format::UnitRow;
+    use crate::libindex::lookup::{LibraryIndex, LookupRules};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::SingleWrapperFunction,
+        grammar: ModuleWrapperGrammar::BunAndEsbuild,
+        interop: InteropHelpers::Bun,
+    };
+    let prints = crate::libindex::units::bundle_unit_prints(
+        code,
+        &ingest,
+        pieces.layout,
+        pieces.grammar,
+        pieces.interop,
+    );
+    let mut rows = Vec::new();
+    for (head, owners) in held {
+        let (_, p) = prints
+            .iter()
+            .find(|(u, _)| code[u.span.start as usize..].starts_with(head))
+            .unwrap_or_else(|| panic!("no unit {head:?}"));
+        for owner in *owners {
+            rows.push(UnitRow {
+                hash: p.whole.hash.clone(),
+                owner: (*owner).into(),
+                file: "index.js".into(),
+                nodes: p.whole.nodes,
+                content: p.whole.content,
+                module_bytes: 500,
+                versions: vec![("1.0.0".into(), "1.0.0".into())],
+            });
+        }
+    }
+    let index = LibraryIndex::from_rows(rows, vec![]);
+    let rules = LookupRules {
+        agreement: false,
+        support: 0,
+        ..LookupRules::default()
+    };
+    let (graph, found) = discover_in_bundle(
+        code,
+        &ingest,
+        pieces,
+        &[],
+        &[],
+        Some(IndexLookup {
+            index: &index,
+            rules,
+            targeted: None,
+        }),
+        DiscoveryOptions::default(),
+    );
+    let rows = graph
+        .units
+        .iter()
+        .enumerate()
+        .map(|(u, unit)| {
+            let head: String = code[unit.span.start as usize..].chars().take(10).collect();
+            let claim = found
+                .claims
+                .get(&(u as u32))
+                .map(|c| (c.package.clone(), c.rule));
+            (head, claim)
+        })
+        .collect();
+    (graph, found, rows)
+}
+
+fn claim_of(rows: &ClaimRows, head: &str) -> Option<(String, Rule)> {
+    rows.iter()
+        .find(|(h, _)| h.starts_with(head))
+        .unwrap_or_else(|| panic!("no unit {head:?}"))
+        .1
+        .clone()
+}
+
+const CONTAINED: &str = "var lib = function (t) { return t.split(\",\").map(dep).map(tiny).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\") + dep(\"b\");\n";
+
+#[test]
+fn containment_refuses_a_propagated_unit_the_package_s_build_does_not_hold() {
+    // A bundled library is a subset of its package's build. dep is at or
+    // over the index's row floor and P's rows do not hold it (Q's do, or
+    // nobody's): P's build cannot contain it, so DOWN from P's claim does
+    // not take it. tiny is under the floor: the index can say nothing, DOWN
+    // takes it. app is called by nobody: never claimed.
+    for held in [
+        &[("var lib", &["P"][..]), ("var dep", &["Q"][..])][..],
+        &[("var lib", &["P"][..])][..],
+    ] {
+        let (_, _, rows) = run_indexed(CONTAINED, held);
+        assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+        assert_eq!(claim_of(&rows, "var dep"), None, "{held:?}");
+        assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+        assert_eq!(claim_of(&rows, "var app"), None);
+    }
+}
+
+#[test]
+fn an_ambiguous_seed_cannot_support_itself_through_its_own_claims() {
+    // lib's only neighbour is tiny, claimed by DOWN from lib alone. Held
+    // by P only, lib keeps that support (as before step 4); held by P and
+    // Q (a sponge, a fork), it needs independent evidence and is vetoed.
+    let code = "var lib = function (t) { return t.split(\",\").map(tiny).filter(Boolean).join(\"|\").concat(t.length); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
+    let (_, found, rows) = run_indexed(code, &[("var lib", &["P"])]);
+    assert!(found.vetoed.is_empty());
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    let (_, found, rows) = run_indexed(code, &[("var lib", &["P", "Q"])]);
+    assert_eq!(found.vetoed.len(), 1);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), None);
+}
+
+#[test]
+fn the_boundary_check_counts_into_edges_after_the_claims() {
+    // P's rows hold dep too: DOWN may take it, though the app calls it.
+    let (_, found, rows) = run_indexed(CONTAINED, &[("var lib", &["P"]), ("var dep", &["P", "Q"])]);
+    assert_eq!(claim_of(&rows, "var dep").map(|c| c.0), Some("P".into()));
+    // app calls lib and dep: two INTO edges landing on two P units.
+    let b = found.boundary.get("P").copied().unwrap_or_default();
+    assert_eq!((b.into_edges, b.into_units), (2, 2));
 }

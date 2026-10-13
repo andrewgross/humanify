@@ -22,6 +22,8 @@ pub mod function_carry;
 
 #[cfg(test)]
 mod discovery_test;
+#[cfg(test)]
+mod scope_fixture_test;
 
 use std::collections::HashMap;
 use std::fs;
