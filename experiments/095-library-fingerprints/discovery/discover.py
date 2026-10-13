@@ -299,6 +299,10 @@ def score(g, st, meta, sample, traps, only=None):
         'libRecall': round(est(meta, sample, lambda r: lib(r) and claimed(r)) / lib_tot, 4),
         'libRightFamily': round(est(meta, sample, lambda r: lib(r) and claimed(r)
                                     and fam(st.pkg[r['unit']]) == fam(r['pkg'])) / lib_tot, 4),
+        'libRightPackage': round(est(meta, sample, lambda r: lib(r) and claimed(r)
+                                     and st.pkg[r['unit']] == r['pkg']) / lib_tot, 4),
+        'libWrongSampleUnits': sorted((r['unit'], r['pkg'], st.pkg[r['unit']]) for r in sample
+                                      if lib(r) and claimed(r) and st.pkg[r['unit']] != r['pkg']),
         'appClaimedEstKB': round(est(meta, sample, lambda r: app(r) and claimed(r)) / 1e3, 1),
         'appClaimedSampleUnits': sorted(r['unit'] for r in sample if app(r) and claimed(r)),
         'helperClaimedSampleUnits': sorted(r['unit'] for r in sample if cls(r) == 'compiler-helper' and claimed(r)),

@@ -39,30 +39,6 @@ fn index_claims(raw: &str, pred: &str) -> Vec<(u32, String)> {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let code = std::fs::read_to_string(&args[1]).expect("bundle");
-    let claims = match (args.get(3), args.get(4)) {
-        (Some(raw), Some(pred)) => index_claims(raw, pred),
-        _ => Vec::new(),
-    };
-    let t0 = Instant::now();
-    let allocator = oxc_allocator::Allocator::default();
-    let ingest = Ingest::parse_unambiguous(&allocator, &code);
-    assert!(ingest.errors.is_empty(), "parse errors");
-    let t_parse = t0.elapsed();
-    let layout = BundleLayout::SingleWrapperFunction;
-    let grammar = ModuleWrapperGrammar::BunAndEsbuild;
-    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
-    let tables = SymbolTables::build(ingest.semantic());
-    let factories: Vec<oxc_span::Span> = grammar
-        .classify_factories(
-            &code,
-            ingest.program,
-            ingest.semantic(),
-            wrapper.as_ref().map(|w| w.body_span),
-            &tables,
-        )
-        .map(|c| c.factories.iter().map(|f| f.span).collect())
-        .unwrap_or_default();
     // INDEX=<dir>: look statement units up in a library index. AGREEMENT=0
     // (structural alone), SPEC=0 (no specificity), TARGETED=0 (no queue
     // round), SUPPORT=<n>.
@@ -102,7 +78,64 @@ fn main() {
             },
         ),
     });
-    if let (Some(at), Some(ix)) = (flag("DEBUG_AT"), index.as_ref()) {
+    // --many <jobs.tsv>: one bundle per line, `bundle<TAB>report<TAB>units dump`,
+    // all looked up in the ONE index loaded above (exp095 index-v2 lane).
+    if args[1] == "--many" {
+        for line in std::fs::read_to_string(&args[2]).expect("jobs").lines() {
+            let f: Vec<&str> = line.split('\t').collect();
+            if f.len() < 3 {
+                continue;
+            }
+            eprintln!("== {}", f[0]);
+            run_one(f[0], f[1], Some(f[2]), Vec::new(), lookup, index.as_ref());
+        }
+        return;
+    }
+    let claims = match (args.get(3), args.get(4)) {
+        (Some(raw), Some(pred)) => index_claims(raw, pred),
+        _ => Vec::new(),
+    };
+    let dump = std::env::var("DUMP_UNITS").ok();
+    run_one(
+        &args[1],
+        &args[2],
+        dump.as_deref(),
+        claims,
+        lookup,
+        index.as_ref(),
+    );
+}
+
+fn run_one(
+    bundle: &str,
+    report_path: &str,
+    dump: Option<&str>,
+    claims: Vec<(u32, String)>,
+    lookup: Option<IndexLookup>,
+    index: Option<&humanify_core::libindex::lookup::LibraryIndex>,
+) {
+    let flag = |k: &str| std::env::var(k).ok();
+    let code = std::fs::read_to_string(bundle).expect("bundle");
+    let t0 = Instant::now();
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, &code);
+    assert!(ingest.errors.is_empty(), "parse errors");
+    let t_parse = t0.elapsed();
+    let layout = BundleLayout::SingleWrapperFunction;
+    let grammar = ModuleWrapperGrammar::BunAndEsbuild;
+    let wrapper = layout.find_wrapper(ingest.program, ingest.semantic());
+    let tables = SymbolTables::build(ingest.semantic());
+    let factories: Vec<oxc_span::Span> = grammar
+        .classify_factories(
+            &code,
+            ingest.program,
+            ingest.semantic(),
+            wrapper.as_ref().map(|w| w.body_span),
+            &tables,
+        )
+        .map(|c| c.factories.iter().map(|f| f.span).collect())
+        .unwrap_or_default();
+    if let (Some(at), Some(ix)) = (flag("DEBUG_AT"), index) {
         let at: u32 = at.parse().expect("offset");
         let statements = humanify_core::modules::container_statements(
             ingest.program,
@@ -164,7 +197,7 @@ fn main() {
         },
     );
     let t_discover = t1.elapsed();
-    if let Ok(path) = std::env::var("DUMP_UNITS") {
+    if let Some(path) = dump {
         // start, end, owned bytes, kind, runtime — every unit (lab scoring).
         let rows: String = graph
             .units
@@ -179,7 +212,7 @@ fn main() {
         std::fs::write(path, rows).expect("units dump");
     }
     let report = DiscoveryReport::new(&graph, &found, true);
-    std::fs::write(&args[2], serde_json::to_string(&report).unwrap()).expect("write");
+    std::fs::write(report_path, serde_json::to_string(&report).unwrap()).expect("write");
     eprintln!(
         "parse {:.1}s, discover {:.1}s; units {} edges {} runtime {} factories {} lazy {}; index claims in {}; claims {} vetoed {} class {} queue {}",
         t_parse.as_secs_f64(),

@@ -87,7 +87,7 @@ fn main() {
     let t1 = std::time::Instant::now();
     let lits: Vec<Shard> = pkgs
         .par_iter()
-        .map(|d| literal_shard(d, &inputs(ShardKind::Literals, &d.to_string_lossy())))
+        .map(|d| literal_shard(d, &inputs(ShardKind::Literals, &d.to_string_lossy()), &[]))
         .collect();
     eprintln!(
         "{} installs -> {} literal files in {:.0}s",

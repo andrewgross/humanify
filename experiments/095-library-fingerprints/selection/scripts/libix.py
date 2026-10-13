@@ -13,14 +13,14 @@ The design rule, as the scale lane re-derived it at top-2,000 (scale/README.md Â
       >= 10 bits.
   Sâˆ§L the design: both claim, and their packages are in one family. The name is L's package if WM's owners hold
       it, else WM's owner.
-Families (crates/humanify-index/data/families.json): the five named families, same npm scope, the scoped forks.
+Families (crates/humanify-core/src/libindex/families.json): the five named families, same npm scope, the scoped forks.
 """
 import json, math, os, re, collections
 import numpy as np
 import scipy.sparse as sp
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../crates/humanify-index/data")
-FAM = json.load(open(os.path.join(DATA, "families.json")))
+FAM = json.load(open(os.path.join(DATA, "../../humanify-core/src/libindex/families.json")))
 STOPL = json.load(open(os.path.join(DATA, "stoplists.json")))
 STAIN_FILE = re.compile(STOPL["lookupFilePatterns"]["stainless"]["file"])
 SHIM_FILE = re.compile(STOPL["lookupFilePatterns"]["shim"]["file"])

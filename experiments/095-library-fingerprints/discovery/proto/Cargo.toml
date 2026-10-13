@@ -38,3 +38,7 @@ path = "src/core_discover.rs"
 [[bin]]
 name = "exp095-lab-index"
 path = "src/lab_index.rs"
+
+[[bin]]
+name = "exp095-declared-all"
+path = "src/declared_all.rs"
