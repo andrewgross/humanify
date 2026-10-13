@@ -660,6 +660,7 @@ fn pipeline_body(
         opts.diagnostics.is_some().then_some(DiscoveryRequest {
             list_units: opts.library_discovery_units,
             index: library_index.as_ref(),
+            ..DiscoveryRequest::default()
         }),
         profiler,
         renderer,

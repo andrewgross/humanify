@@ -507,7 +507,11 @@ pub fn run_match(args: &MatchVerbArgs<'_>, out: Option<&str>) -> Result<(), Stri
 /// A `--bundler`/`--minifier` override: the enum's serialized name, with
 /// the valid set listed on a bad name (the verb fails louder than the
 /// pipeline, which silently drops an unknown override).
-fn parse_override<T>(value: Option<&str>, valid: &[T], what: &str) -> Result<Option<T>, String>
+pub(crate) fn parse_override<T>(
+    value: Option<&str>,
+    valid: &[T],
+    what: &str,
+) -> Result<Option<T>, String>
 where
     T: serde::de::DeserializeOwned + serde::Serialize + Copy,
 {

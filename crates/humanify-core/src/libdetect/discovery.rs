@@ -685,14 +685,21 @@ pub struct BundlePieces {
 pub struct DiscoveryRequest<'x> {
     pub list_units: bool,
     pub index: Option<&'x crate::libindex::lookup::LibraryIndex>,
+    /// The lookup's rules; None = the default (agreement). The pipeline
+    /// never sets it; the `discover` verb's `--rule structural` does.
+    pub rules: Option<crate::libindex::lookup::LookupRules>,
+    /// Every unit with its fingerprints in the report (`unitRows`): the
+    /// `discover` verb's scorer input (exp096). The pipeline never asks.
+    pub unit_prints: bool,
 }
 
 impl<'x> DiscoveryRequest<'x> {
-    /// The index lookup a run makes: the default rules for every statement,
-    /// and a targeted round on queued regions (a 20-node floor, no
-    /// neighbour support: the region's own calls are the context).
+    /// The index lookup a run makes: the request's rules (default: the
+    /// pipeline's) for every statement, and a targeted round on queued
+    /// regions (a 20-node floor, no neighbour support: the region's own
+    /// calls are the context).
     pub fn lookup(&self) -> Option<IndexLookup<'x>> {
-        let rules = crate::libindex::lookup::LookupRules::default();
+        let rules = self.rules.unwrap_or_default();
         Some(IndexLookup {
             index: self.index?,
             rules,
@@ -733,21 +740,7 @@ pub fn discover_in_bundle(
     options: DiscoveryOptions,
 ) -> (ReferenceGraph, Discovery) {
     let semantic = ingest.semantic();
-    let wrapper = pieces.layout.find_wrapper(ingest.program, semantic);
-    let statements = crate::modules::container_statements(
-        ingest.program,
-        semantic,
-        wrapper.as_ref().map(|w| w.body_span),
-    );
-    let facts = crate::graph::references::BundlerFacts::recognise(
-        code,
-        statements,
-        pieces.grammar,
-        pieces.interop,
-    );
-    let graph = crate::graph::references::build_reference_graph(
-        code, semantic, statements, factories, &facts,
-    );
+    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
     let families = PackageFamilies::shipped();
     let mut seeds: Vec<Seed> = index_claims
         .iter()
@@ -802,6 +795,138 @@ pub fn discover_in_bundle(
     seeds.extend(more);
     let found = discover(&graph, &seeds, &families, options);
     (graph, found)
+}
+
+/// The container statements, bundler facts and statement reference graph
+/// of a RAW bundle — what discovery and [`unit_rows`] both read.
+fn bundle_graph<'a>(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'a>,
+    pieces: BundlePieces,
+    factories: &[oxc_span::Span],
+) -> (
+    &'a [oxc_ast::ast::Statement<'a>],
+    crate::graph::references::BundlerFacts,
+    ReferenceGraph,
+) {
+    let semantic = ingest.semantic();
+    let wrapper = pieces.layout.find_wrapper(ingest.program, semantic);
+    let statements = crate::modules::container_statements(
+        ingest.program,
+        semantic,
+        wrapper.as_ref().map(|w| w.body_span),
+    );
+    let facts = crate::graph::references::BundlerFacts::recognise(
+        code,
+        statements,
+        pieces.grammar,
+        pieces.interop,
+    );
+    let graph = crate::graph::references::build_reference_graph(
+        code, semantic, statements, factories, &facts,
+    );
+    (statements, facts, graph)
+}
+
+/// One fingerprint in a [`UnitRow`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct PrintRow {
+    pub start: u32,
+    pub end: u32,
+    pub hash: String,
+    pub nodes: u32,
+    pub content: u32,
+}
+
+impl PrintRow {
+    fn of(p: &crate::libindex::units::UnitPrint) -> PrintRow {
+        PrintRow {
+            start: p.span.start,
+            end: p.span.end,
+            hash: p.hash.clone(),
+            nodes: p.nodes,
+            content: p.content,
+        }
+    }
+}
+
+/// One unit of the reference graph with what the index lookup reads of it
+/// (`unitRows`, the `discover` verb's scorer input): its fingerprints, the
+/// module size specificity compares, and how many bindings it declares.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnitRow {
+    pub start: u32,
+    pub end: u32,
+    pub bytes: u32,
+    /// `Statement`, `LazyModule`, `LazyBody`, `FactoryBody` or `Factory`.
+    pub kind: &'static str,
+    /// A lazy or factory body's module unit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module: Option<u32>,
+    pub runtime: bool,
+    pub module_bytes: u64,
+    /// Symbols declared inside this unit and no unit nested in it.
+    pub bindings: u32,
+    /// The whole unit's print (None: a container — wrapper or module).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub whole: Option<PrintRow>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub functions: Vec<PrintRow>,
+}
+
+/// Every unit of the bundle's reference graph, in graph order, with its
+/// prints (the lookup's: `libindex::units::unit_prints` over the same
+/// units discovery builds).
+pub fn unit_rows(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'_>,
+    pieces: BundlePieces,
+    factories: &[oxc_span::Span],
+) -> Vec<UnitRow> {
+    use crate::graph::references::UnitKind;
+    let semantic = ingest.semantic();
+    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
+    let units = crate::graph::references::container_units(statements, factories, &facts, false);
+    let tables = crate::hash::serialize::SymbolTables::build(semantic);
+    let prints = crate::libindex::units::unit_prints(&units, &tables);
+    let sizes = module_bytes(&graph);
+    let mut bindings = vec![0u32; graph.units.len()];
+    let scoping = semantic.scoping();
+    for symbol in scoping.symbol_ids() {
+        if let Some(u) = graph.unit_at(scoping.symbol_span(symbol).start) {
+            bindings[u as usize] += 1;
+        }
+    }
+    graph
+        .units
+        .iter()
+        .enumerate()
+        .map(|(i, u)| {
+            let (kind, module) = match u.kind {
+                UnitKind::Statement => ("Statement", None),
+                UnitKind::LazyModule => ("LazyModule", None),
+                UnitKind::LazyBody { module } => ("LazyBody", Some(module)),
+                UnitKind::FactoryBody { module } => ("FactoryBody", Some(module)),
+                UnitKind::Factory => ("Factory", None),
+            };
+            let p = prints.get(i).and_then(Option::as_ref);
+            UnitRow {
+                start: u.span.start,
+                end: u.span.end,
+                bytes: u.bytes,
+                kind,
+                module,
+                runtime: u.runtime,
+                module_bytes: sizes[i],
+                bindings: bindings[i],
+                whole: p.map(|p| PrintRow::of(&p.whole)),
+                functions: p
+                    .map(|p| p.functions.iter().map(PrintRow::of).collect())
+                    .unwrap_or_default(),
+            }
+        })
+        .collect()
 }
 
 /// The index lookup's view of the bundle: each statement unit's prints,
@@ -944,6 +1069,10 @@ pub struct DiscoveryReport {
     pub library_class: Vec<SpanRow>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub queue: Vec<QueueRow>,
+    /// Every unit with its prints, only when asked for
+    /// ([`DiscoveryRequest::unit_prints`]; the `discover` verb).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unit_rows: Vec<UnitRow>,
 }
 
 impl DiscoveryReport {

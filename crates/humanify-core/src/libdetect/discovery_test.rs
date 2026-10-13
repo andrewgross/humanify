@@ -383,3 +383,74 @@ fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
     );
     assert_eq!(claim("var app"), None);
 }
+
+#[test]
+fn a_request_carries_its_rules_and_defaults_to_agreement() {
+    use crate::libdetect::discovery::DiscoveryRequest;
+    use crate::libindex::lookup::{LibraryIndex, LookupRules};
+    let index = LibraryIndex::from_rows(vec![], vec![]);
+    let default = DiscoveryRequest {
+        index: Some(&index),
+        ..DiscoveryRequest::default()
+    };
+    let l = default.lookup().expect("an index");
+    let t = l.targeted.expect("a targeted round");
+    assert!(l.rules.agreement && t.agreement, "the pipeline's rule");
+    assert_eq!((t.min_nodes, t.support), (20, 0));
+    let structural = DiscoveryRequest {
+        rules: Some(LookupRules {
+            agreement: false,
+            ..LookupRules::default()
+        }),
+        ..default
+    };
+    let l = structural.lookup().expect("an index");
+    let t = l.targeted.expect("a targeted round");
+    assert!(!l.rules.agreement && !t.agreement, "both rounds structural");
+    assert_eq!((t.min_nodes, t.support), (20, 0));
+}
+
+#[test]
+fn unit_rows_list_every_graph_unit_with_its_prints_and_bindings() {
+    use crate::libdetect::discovery::{BundlePieces, discover_in_bundle, unit_rows};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = "var helper = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\"); };\nvar a = 1, b = function (x, y) { var z = x + y; return z; };\nvar I = init(() => { b(1, 2); });\n";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::SingleWrapperFunction,
+        grammar: ModuleWrapperGrammar::BunAndEsbuild,
+        interop: InteropHelpers::Bun,
+    };
+    let rows = unit_rows(code, &ingest, pieces, &[]);
+    let (graph, _) = discover_in_bundle(
+        code,
+        &ingest,
+        pieces,
+        &[],
+        &[],
+        None,
+        DiscoveryOptions::default(),
+    );
+    assert_eq!(rows.len(), graph.units.len(), "parallel to the graph");
+    for (r, u) in rows.iter().zip(&graph.units) {
+        assert_eq!(
+            (r.start, r.end, r.bytes),
+            (u.span.start, u.span.end, u.bytes)
+        );
+    }
+    let row = |head: &str| {
+        rows.iter()
+            .find(|r| code[r.start as usize..].starts_with(head))
+            .unwrap_or_else(|| panic!("no row {head:?}"))
+    };
+    let helper = row("var helper");
+    let whole = helper.whole.as_ref().expect("a statement has a print");
+    assert!(whole.nodes >= 20 && whole.content >= 3, "{whole:?}");
+    assert_eq!(helper.functions.len(), 1, "the function expression");
+    assert_eq!(helper.bindings, 2, "helper and e");
+    assert_eq!(row("b = function").bindings, 4, "b, x, y, z");
+    assert_eq!(row("a = 1").bindings, 1);
+    assert!(rows.iter().all(|r| r.module_bytes >= u64::from(r.bytes)));
+}

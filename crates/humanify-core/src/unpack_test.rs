@@ -2001,7 +2001,7 @@ fn library_discovery_reports_and_changes_no_written_byte() {
         BunUnpackOptions {
             library_discovery: Some(crate::libdetect::discovery::DiscoveryRequest {
                 list_units: true,
-                index: None,
+                ..Default::default()
             }),
             ..Default::default()
         },
@@ -2023,9 +2023,50 @@ fn library_discovery_reports_and_changes_no_written_byte() {
     assert!(report.claims.iter().all(|c| c.package == "left-pad"));
     assert_eq!(report.graph.factories, 2);
     assert!(
+        serde_json::to_value(&report)
+            .unwrap()
+            .get("unitRows")
+            .is_none(),
+        "unit prints only when asked for"
+    );
+    assert!(
         report
             .queue
             .iter()
             .any(|q| bundle[q.start as usize..].starts_with("var app"))
+    );
+}
+
+#[test]
+fn library_discovery_lists_unit_prints_for_the_discover_verb() {
+    let bundle = format!(
+        "{BUN_BUNDLE}\nvar pkg={{name:\"left-pad\",version:\"1.3.0\",main:\"index.js\",license:\"MIT\",pad:()=>priv()}};\nvar priv=()=>1;\n"
+    );
+    let dir = TempDir::new("disc-prints");
+    let out = unpack_bun(
+        &bundle,
+        &dir.0,
+        BunUnpackOptions {
+            library_discovery: Some(crate::libdetect::discovery::DiscoveryRequest {
+                unit_prints: true,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let report = out.library_discovery.expect("asked for");
+    assert_eq!(report.unit_rows.len() as u32, report.graph.units);
+    let pkg = report
+        .unit_rows
+        .iter()
+        .find(|r| bundle[r.start as usize..].starts_with("var pkg="))
+        .expect("the package statement's row");
+    assert!(pkg.whole.is_some() && pkg.functions.len() == 1, "{pkg:?}");
+    assert!(
+        serde_json::to_value(&report)
+            .unwrap()
+            .get("unitRows")
+            .is_some()
     );
 }
