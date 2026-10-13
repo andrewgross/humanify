@@ -1,0 +1,75 @@
+{
+ "bundleSha256": "8e18769f19bbf4b86cb14e018519d23d92cc4968ec3895f437dfc07b88090f0b",
+ "claimedBytes": {
+  "right": 222910,
+  "wrongFamily": 10921
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_vibe-kit_grok-cli-6b9101",
+ "exploratory": {
+  "names": {
+   "bindings": 3686,
+   "bindingsSameVersion": 3686,
+   "bindingsVersionKnown": 3686,
+   "exactBytes": 195172,
+   "exactUnits": 381,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "4d1db97507a8b2c298a8fc646aa2b6630fce0717855af88ba47a0f2ee27a9a54",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 171482,
+  "recall": 0.439001,
+  "wrongFamilyShare": 0.037505
+ },
+ "label": "exp097-s4-agreement",
+ "missBytes": {
+  "a": 116246,
+  "c": 13732,
+  "d-file": 14110,
+  "e-agree": 15516,
+  "e-support": 444,
+  "e-veto": 3242,
+  "f": 4419
+ },
+ "noDiscovery": null,
+ "reportSha256": "2d9e11230b9961321384e71dd2fb9e20d093799e2822ef2b2fae79a92f4e7b6a",
+ "rule": "agreement",
+ "schema": "exp096-score/2",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 24,
+  "<self>": 102492,
+  "copy": 7536,
+  "library": 390619
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "bun",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 7536,
+  "libraryBytes": 390619,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 222910,
+  "namedBytes": 222910,
+  "namedBytesShipperOnly": 222910,
+  "recall": 0.570658,
+  "recallShipperOnly": 0.570658,
+  "wrongFamilyBytes": 10921,
+  "wrongFamilyBytesShipperOnly": 10921,
+  "wrongFamilyShare": 0.046705,
+  "wrongFamilyShareShipperOnly": 0.046705,
+  "wrongNameShare": 0.046705,
+  "wrongNameShareShipperOnly": 0.046705
+ },
+ "truthMethod": "sourcemap"
+}

@@ -1,0 +1,78 @@
+{
+ "bundleSha256": "7c027b99cf18e555ae926a3c5e49fa744d12afe958d91d6476a212d12d59ec89",
+ "claimedBytes": {
+  "family": 1407,
+  "origin": 4761,
+  "right": 271728,
+  "wrongFamily": 4642
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_angular_cli-38b7f2",
+ "exploratory": {
+  "names": {
+   "bindings": 3467,
+   "bindingsSameVersion": 3118,
+   "bindingsVersionKnown": 3467,
+   "exactBytes": 260507,
+   "exactUnits": 282,
+   "sameVersionShare": 0.899337
+  }
+ },
+ "indexId": "c7f20f883ff6d75fd159bcf9006c9044b385962bbeee0203b83b4fdd42585c06",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 261696,
+  "recall": 0.668878,
+  "wrongFamilyShare": 0.009504
+ },
+ "label": "exp097-s3b-structural",
+ "missBytes": {
+  "a": 44264,
+  "b": 12630,
+  "c": 27501,
+  "d-file": 23882,
+  "e-ambig": 595,
+  "e-support": 582,
+  "e-veto": 489,
+  "f": 3407
+ },
+ "noDiscovery": null,
+ "reportSha256": "035e83aee1c741be1a92ec2e2721918bed7b0e5ba512fa1d833c82e0a7b6857c",
+ "rule": "structural",
+ "schema": "exp096-score/2",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 24,
+  "<self>": 64,
+  "copy": 4800,
+  "library": 391246
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 4800,
+  "libraryBytes": 391246,
+  "namedAsOriginBytes": 4761,
+  "namedAsShipperBytes": 273135,
+  "namedBytes": 277896,
+  "namedBytesShipperOnly": 273135,
+  "recall": 0.710285,
+  "recallShipperOnly": 0.698116,
+  "wrongFamilyBytes": 4642,
+  "wrongFamilyBytesShipperOnly": 9403,
+  "wrongFamilyShare": 0.01643,
+  "wrongFamilyShareShipperOnly": 0.03328,
+  "wrongNameShare": 0.01643,
+  "wrongNameShareShipperOnly": 0.03328
+ },
+ "truthMethod": "sourcemap"
+}

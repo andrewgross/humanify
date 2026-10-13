@@ -1,0 +1,71 @@
+{
+ "bundleSha256": "f865211220ef8a85f7bbcf4e63498fa432d738d4b5ec579d1497311eecbb9be7",
+ "claimedBytes": {
+  "right": 13448
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-electron_laradumps-6b1722",
+ "exploratory": {
+  "names": {
+   "bindings": 139,
+   "bindingsSameVersion": 135,
+   "bindingsVersionKnown": 139,
+   "exactBytes": 7201,
+   "exactUnits": 30,
+   "sameVersionShare": 0.971223
+  }
+ },
+ "indexId": "4d1db97507a8b2c298a8fc646aa2b6630fce0717855af88ba47a0f2ee27a9a54",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 9616,
+  "recall": 0.028845,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "exp097-s4-agreement",
+ "missBytes": {
+  "a": 309834,
+  "b": 190,
+  "c": 889,
+  "d-file": 5977,
+  "e-agree": 2370,
+  "e-veto": 658
+ },
+ "noDiscovery": null,
+ "reportSha256": "5db19ad452fe33f170ddd0e72fa18b43e35dd0d4ebc6812a11edf1e54570d8b9",
+ "rule": "agreement",
+ "schema": "exp096-score/2",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 1798,
+  "library": 333366
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "libraryBytes": 333366,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 13448,
+  "namedBytes": 13448,
+  "namedBytesShipperOnly": 13448,
+  "recall": 0.04034,
+  "recallShipperOnly": 0.04034,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongFamilyShareShipperOnly": 0.0,
+  "wrongNameShare": 0.0,
+  "wrongNameShareShipperOnly": 0.0
+ },
+ "truthMethod": "sourcemap"
+}
