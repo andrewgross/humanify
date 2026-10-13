@@ -98,25 +98,71 @@ fn look_alikes_are_refused() {
 }
 
 /// esbuild's `__export` registrar closes its descriptor after
-/// `enumerable`; Bun's goes on with `configurable`, and `__copyProps`'s
-/// getter is an arrow.
+/// `enumerable`; Bun's goes on with `configurable` and a bound `set`, and
+/// `__copyProps`'s getter is an arrow. The FIRST registrar is read.
 #[test]
-fn the_esbuild_export_registrar() {
-    use crate::modules::helper_shape::has_esbuild_export_registrar;
-    assert!(has_esbuild_export_registrar(
-        "h=(n,e)=>{for(var o in e)r(n,o,{get:e[o],enumerable:!0})}"
-    ));
-    assert!(has_esbuild_export_registrar(
-        "for (var name in all)\n    __defProp(target, name, { get: all[name], enumerable: true });"
-    ));
+fn the_export_registrars() {
+    use crate::modules::helper_shape::{ExportRegistrar, first_export_registrar};
     for src in [
-        // Bun's registrar.
+        "h=(n,e)=>{for(var o in e)r(n,o,{get:e[o],enumerable:!0})}",
+        "for (var name in all)\n    __defProp(target, name, { get: all[name], enumerable: true });",
+        // esbuild's first, Bun's after.
+        "h=(n,e)=>{for(var o in e)r(n,o,{get:e[o],enumerable:!0})};for(var o in n)t(e,o,{get:n[o],enumerable:!0,configurable:!0,set:q.bind(n,o)})",
+    ] {
+        assert_eq!(
+            first_export_registrar(src),
+            Some(ExportRegistrar::Esbuild),
+            "{src}"
+        );
+    }
+    for src in [
         "for(var o in n)t(e,o,{get:n[o],enumerable:!0,configurable:!0,set:q.bind(n,o)})",
+        "for (var name in all)\n    __defProp(target, name, {\n      get: all[name],\n      enumerable: true,\n      configurable: true,\n      set: __exportSetter.bind(all, name)\n    });",
+        // Bun's first, esbuild's after.
+        "for(var o in n)t(e,o,{get:n[o],enumerable:!0,configurable:!0,set:q.bind(n,o)});h=(n,e)=>{for(var o in e)r(n,o,{get:e[o],enumerable:!0})}",
+    ] {
+        assert_eq!(
+            first_export_registrar(src),
+            Some(ExportRegistrar::Bun),
+            "{src}"
+        );
+    }
+    for src in [
         // esbuild's __copyProps.
         "r(n,t,{get:()=>e[t],enumerable:!(l=b(e,t))||l.enumerable})",
         // A word that only contains `enumerable`.
         "{get:e[o],isenumerable:!0}",
+        // `configurable` without the setter is neither.
+        "t(e,o,{get:n[o],enumerable:!0,configurable:!0})",
     ] {
-        assert!(!has_esbuild_export_registrar(src), "{src}");
+        assert_eq!(first_export_registrar(src), None, "{src}");
     }
+}
+
+/// The prologue ends where the helper first WRAPS a module (`= NAME(`
+/// with a factory): a stray `.f(` or a plain call of a same-named local
+/// does not end it.
+#[test]
+fn the_runtime_prologue_ends_at_the_first_module_wrapper() {
+    use crate::modules::helper_shape::runtime_prologue;
+    let head = "var f=(t,n)=>()=>(n||t((n={exports:{}}).exports,n),n.exports);var g=x.f(1),h=f(2);";
+    for (call, what) in [
+        ("var p=f(function(x,y){y.exports=1});", "function factory"),
+        ("var p=f((x,y)=>{y.exports=1});", "arrow factory"),
+        ("var p=f(x=>{x.a=1});", "one-param arrow"),
+        (
+            "var p=f({\"a.js\"(x,y){y.exports=1}});",
+            "esbuild's keyed factory",
+        ),
+    ] {
+        let src = format!("{head}{call}");
+        assert_eq!(
+            runtime_prologue(&src),
+            &src[..head.len() + "var p=".len()],
+            "{what}"
+        );
+    }
+    // No helper, or a helper never called: the whole text.
+    assert_eq!(runtime_prologue("var a=1;"), "var a=1;");
+    assert_eq!(runtime_prologue(head), head);
 }

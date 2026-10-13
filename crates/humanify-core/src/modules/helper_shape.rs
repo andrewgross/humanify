@@ -42,6 +42,8 @@ pub struct ModuleHelperShape {
     /// The factory is called indirectly, `(0, A[…])(…)` — esbuild's
     /// unminified runtime (and a re-minified copy of it).
     pub indirect: bool,
+    /// Byte offset of the marker's `{` — inside the helper's declaration.
+    pub marker: usize,
 }
 
 impl ModuleHelperShape {
@@ -222,6 +224,7 @@ fn helper_around(source: &str, open: usize) -> Option<ModuleHelperShape> {
             },
             guarded,
             indirect,
+            marker: open,
         });
     }
     None
@@ -232,21 +235,26 @@ fn word_bounded(bytes: &[u8], at: usize, len: usize) -> bool {
         && bytes.get(at + len).is_none_or(|b| !is_ident_byte(*b))
 }
 
-/// esbuild's `__export` registrar, by shape: a property descriptor
-/// `{ get: A[B], enumerable: !0 }` (or `true`) that CLOSES there. Bun's
-/// registrar writes the same getter but always goes on with
-/// `configurable: !0, set: …`, and esbuild's other getters
-/// (`__copyProps`'s `get: () => from[key]`) are arrows — so this one
-/// descriptor is esbuild's own, minified or not.
-pub fn has_esbuild_export_registrar(source: &str) -> bool {
+/// Whose `__export` registrar a descriptor is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExportRegistrar {
+    /// `{ get: A[B], enumerable: !0 }` (or `true`) that CLOSES there.
+    Esbuild,
+    /// The same getter going on with `configurable: !0, set: …` — Bun's
+    /// runtime, minified or not.
+    Bun,
+}
+
+/// The FIRST `__export` registrar in `source`, by shape: a property
+/// descriptor `{ get: A[B], enumerable: !0 …`. esbuild's closes after
+/// `enumerable`; Bun's always goes on with `configurable: !0, set: …`;
+/// esbuild's other getters (`__copyProps`'s `get: () => from[key]`) are
+/// arrows and are neither. The first one is the outer runtime's: a
+/// bundle's own helpers precede the code it bundles, which may carry a
+/// registrar of its own.
+pub fn first_export_registrar(source: &str) -> Option<ExportRegistrar> {
     let bytes = source.as_bytes();
-    source.match_indices("enumerable").any(|(at, _)| {
-        let tail = || -> Option<()> {
-            let i = eat(bytes, at + "enumerable".len(), b":")?;
-            let i = eat(bytes, i, b"!0").or_else(|| eat(bytes, i, b"true"))?;
-            eat(bytes, i, b"}")?;
-            Some(())
-        };
+    source.match_indices("enumerable").find_map(|(at, _)| {
         let head = || -> Option<()> {
             let comma = eat_back(bytes, at, b",")?;
             let close = eat_back(bytes, comma, b"]")?;
@@ -258,7 +266,61 @@ pub fn has_esbuild_export_registrar(source: &str) -> bool {
             eat_back(bytes, get, b"{")?;
             Some(())
         };
-        word_bounded(bytes, at, "enumerable".len()) && tail().is_some() && head().is_some()
+        let truthy = |i: usize| eat(bytes, i, b"!0").or_else(|| eat(bytes, i, b"true"));
+        let tail = || -> Option<ExportRegistrar> {
+            let i = eat(bytes, at + "enumerable".len(), b":")?;
+            let i = truthy(i)?;
+            if eat(bytes, i, b"}").is_some() {
+                return Some(ExportRegistrar::Esbuild);
+            }
+            let i = eat(bytes, i, b",")?;
+            let i = eat(bytes, i, b"configurable")?;
+            let i = eat(bytes, i, b":")?;
+            let i = eat(bytes, truthy(i)?, b",")?;
+            let i = eat(bytes, i, b"set")?;
+            eat(bytes, i, b":")?;
+            Some(ExportRegistrar::Bun)
+        };
+        if !word_bounded(bytes, at, "enumerable".len()) {
+            return None;
+        }
+        head()?;
+        tail()
+    })
+}
+
+/// The bundle's RUNTIME PROLOGUE: the text before the module helper first
+/// wraps a module (`= NAME(` with a factory: `function`, an arrow, or
+/// esbuild's keyed `{…}`). What follows is module bodies — code the bundle
+/// carries, which may have been built by another bundler, or ship one as
+/// a string — so a bundler's runtime is read from the prologue only. The
+/// whole text when there is no helper or it is never called.
+pub fn runtime_prologue(source: &str) -> &str {
+    let Some(helper) = find_module_helper(source) else {
+        return source;
+    };
+    let end = first_wrapper_call(source, &helper.helper.name, helper.marker);
+    &source[..end.unwrap_or(source.len())]
+}
+
+/// The offset of `NAME` in the first `= NAME(factory` after `from`.
+fn first_wrapper_call(source: &str, name: &str, from: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    source[from..].match_indices(name).find_map(|(rel, _)| {
+        let at = from + rel;
+        if !word_bounded(bytes, at, name.len()) {
+            return None;
+        }
+        let eq = eat_back(bytes, at, b"=")?;
+        if eq > 0 && b"=!<>+-*/%&|^?".contains(&bytes[eq - 1]) {
+            return None;
+        }
+        let i = eat(bytes, at + name.len(), b"(")?;
+        let factory = eat(bytes, i, b"function").is_some()
+            || eat(bytes, i, b"(").is_some()
+            || eat(bytes, i, b"{").is_some()
+            || ident_at(bytes, i).is_some_and(|(_, e)| eat(bytes, e, b"=>").is_some());
+        factory.then_some(at)
     })
 }
 

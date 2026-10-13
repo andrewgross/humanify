@@ -26,9 +26,10 @@ use humanify_model::detection::SignalStrength;
 
 use self::js_text::js_prefix;
 use self::signals::{
-    detect_browserify, detect_bun_bundler, detect_esbuild, detect_minifier, detect_parcel,
-    detect_webpack,
+    detect_browserify, detect_bun_bundler, detect_bun_debug_id, detect_esbuild, detect_minifier,
+    detect_parcel, detect_webpack,
 };
+use crate::modules::helper_shape::runtime_prologue;
 
 /// TS `SCAN_LIMIT`: 16K, in UTF-16 code units (`code.slice(0, SCAN_LIMIT)`).
 const SCAN_LIMIT: usize = 16 * 1024;
@@ -43,11 +44,19 @@ const BUNDLER_DETECTORS: [fn(&str) -> Vec<DetectionSignal>; 5] = [
     detect_bun_bundler,
 ];
 
-/// TS `detectBundle`.
+/// TS `detectBundle`. The bundler detectors read the RUNTIME PROLOGUE of
+/// the scan window ([`runtime_prologue`]): once the module helper wraps
+/// its first module the text is module bodies, whose own runtimes (a
+/// dependency built by esbuild or webpack, a bundle shipped as a string)
+/// are not this bundle's (exp096: 7 of 67 Bun `--target node` builds were
+/// named after such code). Bun's debug ID is read from the input's end;
+/// the minifier from the whole window.
 pub fn detect_bundle(code: &str) -> BundlerDetectionResult {
     let slice = js_prefix(code, SCAN_LIMIT);
+    let runtime = runtime_prologue(slice);
     let mut signals: Vec<DetectionSignal> =
-        BUNDLER_DETECTORS.iter().flat_map(|d| d(slice)).collect();
+        BUNDLER_DETECTORS.iter().flat_map(|d| d(runtime)).collect();
+    signals.extend(detect_bun_debug_id(code));
     signals.extend(detect_minifier(slice));
     BundlerDetectionResult {
         bundler: pick_bundler(&signals),

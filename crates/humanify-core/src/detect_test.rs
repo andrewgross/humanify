@@ -621,11 +621,18 @@ fn the_plain_helper_alone_is_bun_when_unsure() {
     let r = detect_bundle(BUN_MINIFIED_NO_BANNER);
     assert_eq!(r.bundler.kind, BundlerType::Bun);
     assert_eq!(r.bundler.tier, DetectionTier::Definitive);
+    // Bun's own `__export` (with `configurable` + `set`) is Bun's shape,
+    // and not esbuild's.
     let bun = detect_bun_bundler(BUN_MINIFIED_NO_BANNER);
     assert_eq!(bun.len(), 1);
-    assert_eq!(bun[0].strength, Some(SignalStrength::SharedShape));
-    // Bun's own `__export` (with `configurable`) is not esbuild's.
+    assert_eq!(bun[0].strength, Some(SignalStrength::Shape));
     assert!(detect_esbuild(BUN_MINIFIED_NO_BANNER).is_empty());
+    // The plain helper with no registrar at all: the shared shape, Bun's.
+    let plain = "var g=(e,n)=>()=>(n||e((n={exports:{}}).exports,n),n.exports);var a=g((r)=>{r.label=\"cjsdep\"});";
+    let r = detect_bundle(plain);
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    let bun = detect_bun_bundler(plain);
+    assert_eq!(bun[0].strength, Some(SignalStrength::SharedShape));
 }
 
 #[test]
@@ -654,4 +661,89 @@ fn the_helper_shapes_leave_banner_and_unminified_verdicts_alone() {
     let r = detect_bundle(unminified);
     assert_eq!(r.bundler.kind, BundlerType::Esbuild);
     assert!(detect_bun_bundler(unminified).is_empty());
+}
+
+// ---- layer 6: the OUTER bundle's runtime (exp096 held-out census) ---------
+// A bundle's own runtime comes first; once the module helper is CALLED the
+// text is module bodies — vendored code that may itself have been built by
+// esbuild or webpack, or ship a bundle as a string. Bun writes no banner for
+// `--target node`, so on those builds a dependency's runtime used to name
+// the bundler. The fixtures are hand-written, after the shapes Bun 1.4.0
+// `--minify --target node` writes (exp096 corpus).
+
+/// Bun `--target node --minify`'s prologue: the plain helper and Bun's own
+/// `__export` registrar (`configurable` + a bound `set`).
+const BUN_NODE_PROLOGUE: &str = "var a=Object.create;var{getPrototypeOf:b,defineProperty:c,getOwnPropertyNames:d}=Object,e=Object.prototype.hasOwnProperty;function g(t){return this[t]}var f=(t,n)=>()=>(n||t((n={exports:{}}).exports,n),n.exports);var h=(t)=>t;function k(t,n){this[t]=h.bind(null,n)}var m=(t,n)=>{for(var o in n)c(t,o,{get:n[o],enumerable:!0,configurable:!0,set:k.bind(n,o)})};";
+
+#[test]
+fn an_esbuild_registrar_inside_a_module_body_is_not_the_bundler() {
+    let code = format!(
+        "{BUN_NODE_PROLOGUE}var p=f(function(x,y){{var q=Object.defineProperty,r=(u,v)=>{{for(var w in v)q(u,w,{{get:v[w],enumerable:!0}})}};y.exports=1}});"
+    );
+    let r = detect_bundle(&code);
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    let bun = detect_bun_bundler(&code);
+    assert_eq!(
+        bun[0].strength,
+        Some(SignalStrength::Shape),
+        "Bun's registrar is Bun's own shape"
+    );
+}
+
+#[test]
+fn a_bundle_shipped_as_a_string_is_not_the_bundler() {
+    let code = "var f=(t,n)=>()=>(n||t((n={exports:{}}).exports,n),n.exports);var p=f(function(x,y){y.exports='var q=Object.defineProperty,r=(u,v)=>{for(var w in v)q(u,w,{get:v[w],enumerable:!0})};'});";
+    assert_eq!(detect_bundle(code).bundler.kind, BundlerType::Bun);
+}
+
+#[test]
+fn a_webpack_name_inside_a_module_body_is_not_the_bundler() {
+    let code = "var f=(t,n)=>()=>(n||t((n={exports:{}}).exports,n),n.exports);var p=f(function(x,y){y.exports=function(){return __webpack_require__(1)}});";
+    let r = detect_bundle(code);
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    assert!(r.bundler.conflict.is_none(), "{:?}", r.bundler.conflict);
+}
+
+#[test]
+fn of_two_registrars_in_the_prologue_the_first_is_the_bundlers() {
+    // Bun ESM (`createRequire`) with a hoisted ESM dependency that carries
+    // an esbuild-like registrar of its own, before any module call.
+    let code = format!(
+        "import{{createRequire as z}}from\"node:module\";{BUN_NODE_PROLOGUE}var s=z(import.meta.url);var i=(A,e)=>{{let t={{}};for(var r in A)c(t,r,{{get:A[r],enumerable:!0}});return t}};var p=f(function(x,y){{y.exports=1}});"
+    );
+    let r = detect_bundle(&code);
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    assert!(
+        detect_esbuild(&code)
+            .iter()
+            .all(|s| s.strength != Some(SignalStrength::Shape))
+    );
+}
+
+#[test]
+fn bun_s_sourcemap_debug_id_names_bun() {
+    // Bun ends every debug ID with "dun!dun!" in hex.
+    let r = detect_bundle("module.exports={};\n\n//# debugId=C1145FCE225F6B6464756E2164756E21\n");
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    assert_eq!(r.bundler.tier, DetectionTier::Definitive);
+    // Any other debug ID is not Bun's.
+    let other = detect_bundle("module.exports={};\n//# debugId=C1145FCE225F6B640123456789ABCDEF\n");
+    assert_eq!(other.bundler.kind, BundlerType::Unknown);
+    // Nor is the mark anywhere but the trailing comment.
+    let inner =
+        detect_bundle("var s='//# debugId=C1145FCE225F6B6464756E2164756E21';\nmodule.exports=s;\n");
+    assert_eq!(inner.bundler.kind, BundlerType::Unknown);
+}
+
+#[test]
+fn a_bun_registrar_inside_an_esbuild_module_body_leaves_esbuild() {
+    let code = "var c=Object.defineProperty;var f=(t,n)=>()=>(n||t((n={exports:{}}).exports,n),n.exports),m=(t,n)=>{for(var o in n)c(t,o,{get:n[o],enumerable:!0})};var p=f(function(x,y){var q=(u,v)=>{for(var w in v)c(u,w,{get:v[w],enumerable:!0,configurable:!0,set:k.bind(v,w)})};y.exports=1});";
+    assert_eq!(detect_bundle(code).bundler.kind, BundlerType::Esbuild);
+}
+
+#[test]
+fn a_webpack_bootstrap_with_a_bundled_dependency_stays_webpack() {
+    let code = "(function(modules){function __webpack_require__(id){var module={exports:{}};modules[id](module,module.exports,__webpack_require__);return module.exports}return __webpack_require__(1)})({1:function(module,exports,__webpack_require__){var f=(t,n)=>()=>(n||t((n={exports:{}}).exports,n),n.exports);var p=f(function(x,y){y.exports=1});module.exports=p()}});";
+    let r = detect_bundle(code);
+    assert_eq!(r.bundler.kind, BundlerType::Webpack);
 }
