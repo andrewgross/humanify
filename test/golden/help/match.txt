@@ -8,7 +8,6 @@ Arguments:
 Options:
       --prior-version <PRIOR_VERSION>  The prior release's (humanified) text, as `--prior-version`
   -o, --out <OUT>                      Write the dump here instead of stdout
-      --sequential                     Accepted, now inert: the prior side is built once per run, so there is no thread schedule to choose. Never changed the dump
       --bundler <BUNDLER>              Force the bundler type (as the pipeline's flag)
       --minifier <MINIFIER>            Force the minifier type (as the pipeline's flag)
       --work-dir <WORK_DIR>            Where the unpack adapter writes its tree; default a temp dir that is removed afterwards

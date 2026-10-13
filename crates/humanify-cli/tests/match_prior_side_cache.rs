@@ -93,7 +93,6 @@ fn dump(dir: &std::path::Path, input: &str, prior: &str) -> Value {
     match_dump(&MatchVerbArgs {
         input,
         prior_version: prior,
-        sequential: false,
         bundler: None,
         minifier: None,
         webcrack_shim: None,

@@ -269,6 +269,10 @@ pub struct CliCommand {
     pub options: Vec<CliOption>,
     pub commands: Vec<CliCommand>,
     pub enable_positional_options: bool,
+    /// Flags that were renamed or deleted, with what to say instead: still
+    /// unknown options (exit 1, `commander.unknownOption`), but the error
+    /// names the replacement (no backwards compatibility, no silent alias).
+    pub retired: Vec<(String, String)>,
     /// Commander's `_optionValues` after construction (declared defaults).
     defaults: OptionValues,
 }
@@ -302,6 +306,7 @@ impl CliCommand {
             options: Vec::new(),
             commands: Vec::new(),
             enable_positional_options: false,
+            retired: Vec::new(),
             defaults: OptionValues::default(),
         }
     }
@@ -326,6 +331,13 @@ impl CliCommand {
 
     pub fn argument(mut self, spec: &str, description: &str) -> Self {
         self.arguments.push(CliArgument::new(spec, description));
+        self
+    }
+
+    /// A retired flag: refused as unknown, with `note` (what replaced it)
+    /// appended to the error.
+    pub fn retired_option(mut self, flag: &str, note: &str) -> Self {
+        self.retired.push((flag.to_string(), note.to_string()));
         self
     }
 
@@ -437,9 +449,16 @@ impl CliCommand {
         }
         // Every pipeline command has an action handler.
         if let Some(flag) = parsed.unknown.first() {
+            let name = flag.split_once('=').map_or(flag.as_str(), |(n, _)| n);
+            let note = self
+                .retired
+                .iter()
+                .find(|(f, _)| f == name)
+                .map(|(_, n)| format!(" ({n})"))
+                .unwrap_or_default();
             return self.error(
                 ancestors,
-                &format!("error: unknown option '{flag}'"),
+                &format!("error: unknown option '{flag}'{note}"),
                 "commander.unknownOption",
             );
         }

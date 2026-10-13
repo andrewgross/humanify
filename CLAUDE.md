@@ -186,8 +186,9 @@ against real npm packages) is RETIRED with the TS matcher it tested; the Rust
 matcher's replacement is an open follow-up in `docs/rust-port/19-cutover.md`.
 `--skip-preflight` is refused as an unknown flag.
 
-`--heap-mb` is recorded in every run manifest but INERT: the binary is not a
-Node process. Run an eval ALONE — a parallel heavy job (a gate batch, another
+There is no heap flag: the binary is not a Node process (`--heap-mb`, which
+was inert, was deleted in the 2026-10-13 config sweep and is refused, as is
+the renamed `--no-vendor` → `--no-vendor-score`). Run an eval ALONE — a parallel heavy job (a gate batch, another
 eval) has OOM-killed a rebase before and silently degraded a label to the
 archive prior (`ts-control-fec64e5` r1; check eval logs for "rebase FAILED").
 
@@ -271,8 +272,11 @@ UNKNOWN, not passing.
   four trees with `claude_code_version_too_old` — since 2026-09-18 the API
   refuses the account-default model to any CLI older than 2.1.251, which is
   every version walked here. The gate now pins `BOOT_GATE_MODEL`
-  (`experiments/lib/boot-gate.sh`, default haiku-4-5) and all four trees pass
-  both halves with it; each `*-boot.json` carries a `rerecorded` note.
+  (`experiments/lib/boot-gate.sh`; haiku-4-5 at the time, re-pinned to
+  `claude-opus-4-1` on 2026-09-28 when the API began refusing haiku-4-5,
+  sonnet-4-5 and sonnet-5 on the walked CLIs — `ae80cf71`) and all four
+  trees pass both halves with it; each `*-boot.json` carries a `rerecorded`
+  note.
 - `main-2026-08-20` — the previous reference, superseded by the above,
   scored at the merge commit `77c4a59` (main; exp082-087 arc). Four pairs,
   all exit 0, boot gates OK (both halves), seeded bases. Hold

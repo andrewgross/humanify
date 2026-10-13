@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build the pipeline — the Rust binary — for a harness leg, and say where it
-# is. Sourced by the shell instruments that launch it (gate.sh, selfhop.sh,
-# neutrality.sh); run.sh builds through experiments/lib/pipeline-bin.ts, which
+# is. Sourced by the shell instrument that launches it (neutrality.sh);
+# run.sh builds through experiments/lib/pipeline-bin.ts, which
 # also records the build's commit for the label.
 #
 #   source experiments/lib/build-bin.sh

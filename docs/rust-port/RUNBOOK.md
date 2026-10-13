@@ -33,7 +33,7 @@ same commit (open decision 2 in `00-control.md`).
 oracle). `npm ci --ignore-scripts && npm rebuild esbuild @swc/core` — never
 fix `isolated-vm`. `bun` lives in `~/.bun/bin` and the boot gate is fatal
 without it. The boot gate pins `BOOT_GATE_MODEL` (default
-`claude-haiku-4-5-20251001`) because the API refuses the default model to
+`claude-opus-4-1` since 2026-09-28, `ae80cf71`; haiku-4-5 is refused) because the API refuses the default model to
 every CLI version this project walks.
 
 **LLM.** `http://<llm-host>:8000/v1` = `openai/gpt-oss-20b` (measurement
@@ -124,7 +124,8 @@ that cannot run must not pass.
   until-loop; never a blocking sleep. Include an error-storm tripwire
   (`grep -ac 'Connection error'`) in any watcher on an LLM run.
 - `src/` is not edited while a neutrality candidate leg runs.
-- Heap: `--heap-mb 65536` is the default; 14 GB OOMs cold on 215→216.
+- Heap: none to set — the binary is not a Node process (`--heap-mb` was
+  inert and was deleted, config sweep 2026-10-13).
 - Every result that changes a number in a doc gets a dated note in that doc
   the same day (rule 9).
 

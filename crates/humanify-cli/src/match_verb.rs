@@ -95,12 +95,6 @@ pub struct MatchVerbArgs<'a> {
     pub input: &'a str,
     /// `--prior-version`: the prior release's (humanified) text.
     pub prior_version: &'a str,
-    /// `--sequential`: accepted, and now INERT — the flag chose which
-    /// thread built the per-call prior side, and the prior side is no
-    /// longer per-call (built once per run, [`match_dump`]). Kept so the
-    /// flag's documented byte-identity contract stays honest: it never
-    /// changed the dump's bytes and it still cannot.
-    pub sequential: bool,
     /// `--bundler <type>` override, as the pipeline's flag.
     pub bundler: Option<&'a str>,
     /// `--minifier <type>` override, as the pipeline's flag.

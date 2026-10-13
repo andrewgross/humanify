@@ -124,6 +124,8 @@ function parseFlags(
       positional.push(a);
       continue;
     }
+    const retired = RETIRED_FLAGS[a];
+    if (retired) return `${a} is retired: ${retired}`;
     const kind = spec[a];
     if (!kind) {
       return `unknown flag ${a} — valid: ${Object.keys(spec).join(", ") || "(none)"}`;
@@ -145,6 +147,17 @@ function parseFlags(
   return { positional, flags, given };
 }
 
+/**
+ * Flags renamed or deleted by the config sweep (2026-10-13; no backwards
+ * compatibility): refused before anything runs, naming what replaced them.
+ * run.sh refuses the same spellings with the same words.
+ */
+const RETIRED_FLAGS: Record<string, string> = {
+  "--no-vendor": "renamed: use --no-vendor-score",
+  "--heap-mb":
+    "removed: it was inert (the pipeline is a Rust binary, not a Node process)"
+};
+
 const SCORE_FLAGS: Record<string, FlagKind> = {
   "--force-mixed": "bool",
   // The base mode (run.sh header): default SCRATCH — each v-1 rebuilt by
@@ -154,11 +167,10 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
   "--seeded-base": "bool",
   "--archive-prior": "bool",
   "--pairs": "value",
-  "--heap-mb": "value",
   "--endpoint": "value",
   "--llm-cache": "value",
   "--no-layout": "bool",
-  "--no-vendor": "bool",
+  "--no-vendor-score": "bool",
   "--no-boot-prompt": "bool",
   "--no-self-hop": "bool",
   "--inputs-base": "value",

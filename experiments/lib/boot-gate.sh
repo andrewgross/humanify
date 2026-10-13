@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# The boot gate, once. `source` this; it defines `boot_gate`.
+# The boot gate, once. `source` this; it defines `boot_version` and
+# `boot_prompt` (the two halves every caller asserts — run.sh and walk.sh).
 #
 # WHY THIS FILE EXISTS. Seven scripts carried their own copy and they disagreed
 # on the thing that matters most — what happens when `bun` is missing:
@@ -9,6 +10,8 @@
 #   prints and      034/run.sh, 054/pinned-ab.sh, 056/walk.sh,
 #   CONTINUES       037/leverb-*.sh, 038/validate-alias-fix.sh
 #   no guard at all 038/selfhop-ledger-check.sh
+# (054/pinned-ab.sh became lib/gate.sh, deleted in the config sweep
+# 2026-10-13 with lib/selfhop.sh — not in the eval registry.)
 #
 # `bun` is NOT on PATH by default in this container (it lives in ~/.bun/bin), so
 # the common case was a gate that reported success having verified nothing. That
@@ -21,16 +24,16 @@
 # the first real call. Both halves, always.
 #
 # Usage:
-#   source "$(dirname "$0")/../lib/boot-gate.sh"
-#   boot_gate /work/some-tree 2.1.216        # exits 1 on failure
-#   BOOT_GATE_SOFT=1 boot_gate ...           # report only, never exit
+#   source "$(dirname "$0")/../lib/boot-gate.sh"   # exits 1 without bun
+#   v=$(boot_version /work/some-tree)   # must contain the version
+#   p=$(boot_prompt /work/some-tree)    # must contain "boot-ok"
 set -uo pipefail
 
 # Make bun resolvable before anything asks whether it exists.
 export PATH="$HOME/.bun/bin:$PATH"
 
-# The live half pins an explicit model — every caller (this gate, 034/run.sh,
-# 056/walk.sh) must pass it. Since 2026-09-18 the API refuses the
+# The live half pins an explicit model — every caller (034/run.sh,
+# walk/walk.sh) must pass it. Since 2026-09-18 the API refuses the
 # ACCOUNT-DEFAULT model to any CLI older than 2.1.251
 # (`claude_code_version_too_old`), and every version this project walks is
 # older, so an unpinned prompt fails on every tree no matter what the pipeline
@@ -44,8 +47,8 @@ export PATH="$HOME/.bun/bin:$PATH"
 # re-recorded with it).
 export BOOT_GATE_MODEL="${BOOT_GATE_MODEL:-claude-opus-4-1}"
 
-# The ONE environment a walked CLI boots under (run.sh, walk.sh and boot_gate
-# all go through boot_version / boot_prompt below — there used to be three
+# The ONE environment a walked CLI boots under (run.sh and walk.sh both go
+# through boot_version / boot_prompt below — there used to be three
 # copies of the probe and two half-lists of what to strip). A launching agent
 # session exports two kinds of state the walked CLI must not inherit:
 # - its MODEL overrides (ANTHROPIC_MODEL + the per-tier defaults): inherited,
@@ -81,34 +84,6 @@ boot_prompt() {
 if ! command -v bun >/dev/null 2>&1; then
   echo "FATAL: \`bun\` is not on PATH (looked in \$PATH and \$HOME/.bun/bin)." >&2
   echo "       The boot gate cannot run, and a run without it is not gated." >&2
-  echo "       Install bun or set BOOT_GATE_SOFT=1 to acknowledge an ungated run." >&2
-  [ "${BOOT_GATE_SOFT:-0}" = "1" ] || exit 1
-fi
-
-# boot_gate <treeDir> <expectedVersion>
-# Asserts BOTH halves: the tree loads and reports its version, AND it answers a
-# live prompt. Returns non-zero (or exits) on failure.
-boot_gate() {
-  local dir="$1" want="$2"
-
-  if [ ! -f "$dir/run.cjs" ]; then
-    echo "BOOT GATE FAIL $dir — no run.cjs (nothing to boot)"
-    [ "${BOOT_GATE_SOFT:-0}" = "1" ] && return 1
-    exit 1
-  fi
-
-  local version prompt
-  version=$(boot_version "$dir")
-  prompt=$(boot_prompt "$dir")
-
-  if [[ "$version" == *"$want"* && "$prompt" == *"boot-ok"* ]]; then
-    echo "BOOT GATE OK   $dir ($version)"
-    return 0
-  fi
-
-  echo "BOOT GATE FAIL $dir"
-  echo "  --version -> '$version'   (wanted to contain '$want')"
-  echo "  -p        -> '$prompt'    (wanted to contain 'boot-ok')"
-  [ "${BOOT_GATE_SOFT:-0}" = "1" ] && return 1
+  echo "       Install bun (https://bun.sh) into \$HOME/.bun/bin." >&2
   exit 1
-}
+fi

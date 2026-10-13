@@ -19,7 +19,7 @@ use crate::progress::{LineRenderer, ProgressRenderer, TtyRenderer};
 use crate::report::{
     report_internal_errors, report_parse_failures, report_semantic_failures, report_vendor_naming,
 };
-use crate::unified::{CommandOptions, FlagExplicitness, check_flag_invariants};
+use crate::unified::{CommandOptions, check_flag_invariants};
 use crate::writers::{PlacementStats, StageHashes, stage_fingerprint};
 use humanify_model::jsshape::JsType;
 
@@ -282,8 +282,6 @@ fn opts_of(v: &Value) -> CommandOptions {
         split: b("split").unwrap_or(false),
         split_pure: b("splitPure").unwrap_or(false),
         split_ledger: s("splitLedger"),
-        naming_floor: b("namingFloor"),
-        naming_floor_sweep: b("namingFloorSweep"),
         bundler: s("bundler"),
         minifier: s("minifier"),
         ..CommandOptions::default()
@@ -294,11 +292,8 @@ fn opts_of(v: &Value) -> CommandOptions {
 fn flag_invariants_match() {
     let v = vectors();
     for case in v["invariants"].as_array().unwrap() {
-        let explicit = case["explicit"].as_object().map(|e| FlagExplicitness {
-            naming_floor_sweep: e.get("namingFloorSweep").and_then(Value::as_bool),
-        });
         assert_eq!(
-            check_flag_invariants(&opts_of(&case["opts"]), explicit),
+            check_flag_invariants(&opts_of(&case["opts"])),
             strs(&case["violations"]),
             "{case}"
         );
@@ -313,7 +308,7 @@ fn plain() -> CommandOptions {
 
 #[test]
 fn unified_test_plain_run_has_no_violations() {
-    assert!(check_flag_invariants(&plain(), None).is_empty());
+    assert!(check_flag_invariants(&plain()).is_empty());
 }
 
 #[test]
@@ -323,7 +318,7 @@ fn unified_test_split_dependents_require_split() {
         ..plain()
     };
     assert_eq!(
-        check_flag_invariants(&pure, None),
+        check_flag_invariants(&pure),
         ["--split-pure requires --split"]
     );
     let ledger = CommandOptions {
@@ -331,48 +326,13 @@ fn unified_test_split_dependents_require_split() {
         ..plain()
     };
     assert_eq!(
-        check_flag_invariants(&ledger, None),
+        check_flag_invariants(&ledger),
         ["--split-ledger requires --split"]
     );
     for mut o in [pure, ledger] {
         o.split = true;
-        assert!(check_flag_invariants(&o, None).is_empty());
+        assert!(check_flag_invariants(&o).is_empty());
     }
-}
-
-#[test]
-fn unified_test_sweep_rules() {
-    let sweep = CommandOptions {
-        naming_floor_sweep: Some(true),
-        ..plain()
-    };
-    assert!(
-        check_flag_invariants(&sweep, None).is_empty(),
-        "floor on by default"
-    );
-    let contradiction = CommandOptions {
-        naming_floor: Some(false),
-        ..sweep.clone()
-    };
-    assert_eq!(
-        check_flag_invariants(&contradiction, None),
-        ["--naming-floor-sweep requires --naming-floor"]
-    );
-    assert!(
-        check_flag_invariants(
-            &contradiction,
-            Some(FlagExplicitness {
-                naming_floor_sweep: Some(false)
-            })
-        )
-        .is_empty(),
-        "the DEFAULT sweep gates off silently"
-    );
-    let reconcile = CommandOptions {
-        reconcile_prior_diff: Some(true),
-        ..plain()
-    };
-    assert!(check_flag_invariants(&reconcile, None).is_empty());
 }
 
 #[test]
@@ -380,16 +340,13 @@ fn unified_test_every_violation_at_once_in_flag_order() {
     let o = CommandOptions {
         split_pure: true,
         split_ledger: Some("ledger.json".into()),
-        naming_floor_sweep: Some(true),
-        naming_floor: Some(false),
         ..plain()
     };
     assert_eq!(
-        check_flag_invariants(&o, None),
+        check_flag_invariants(&o),
         [
             "--split-pure requires --split",
-            "--split-ledger requires --split",
-            "--naming-floor-sweep requires --naming-floor"
+            "--split-ledger requires --split"
         ]
     );
 }
@@ -408,14 +365,14 @@ fn unified_test_enum_flag_values() {
             bundler: Some(b.into()),
             ..plain()
         };
-        assert!(check_flag_invariants(&o, None).is_empty());
+        assert!(check_flag_invariants(&o).is_empty());
     }
     for m in ["terser", "esbuild", "swc", "bun", "none"] {
         let o = CommandOptions {
             minifier: Some(m.into()),
             ..plain()
         };
-        assert!(check_flag_invariants(&o, None).is_empty());
+        assert!(check_flag_invariants(&o).is_empty());
     }
     let bad = CommandOptions {
         split_pure: true,
@@ -424,7 +381,7 @@ fn unified_test_enum_flag_values() {
         ..plain()
     };
     assert_eq!(
-        check_flag_invariants(&bad, None),
+        check_flag_invariants(&bad),
         [
             "--split-pure requires --split",
             "--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"foobar\")",
@@ -436,7 +393,7 @@ fn unified_test_enum_flag_values() {
         ..plain()
     };
     assert_eq!(
-        check_flag_invariants(&sentinel, None),
+        check_flag_invariants(&sentinel),
         [
             "--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"unknown\")"
         ]

@@ -4,7 +4,7 @@
 main `e12c94d2`). No pipeline code was touched.** Binary: the release
 build (`cargo build --release --locked`) of `e12c94d2`. All runs
 LLM-free — the deterministic stub (`scripts/lib/stub-llm.ts`), `--profile`
-captured, RSS sampled every 2s. Raw artifacts:
+(spelled `--perf-trace` since the 2026-10-13 config sweep) captured, RSS sampled every 2s. Raw artifacts:
 `/work/perf-inventory/` (`run-one.mts` the runner, `analyze.py` the
 RSS-vs-phase aligner, `run{1,2a,2b,3,4}*/` per-run profile.json + rss.csv
 

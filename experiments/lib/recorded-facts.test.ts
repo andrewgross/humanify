@@ -61,7 +61,15 @@ const MANIFEST_ARCHIVAL = [
   "config.cache.entriesAfter",
   // The argv head spawned (WP5.6f). Reproduction only: what is JUDGED about
   // a binary is its build commit and sha, both warned on.
-  "pipeline.command"
+  "pipeline.command",
+  // Printed in the run log. Judged only against a Node heap ceiling, which
+  // a Rust binary does not have: the heap-headroom check and the inert
+  // --heap-mb went in the config sweep (2026-10-13).
+  "outcome.peakRssMb",
+  // Which pipeline ran. Only the heap check read it per run (it stood down
+  // for a binary); every run since the cutover is "rust-bin", and the
+  // label-level guard (eval.ts guardPipeline) judges pipeline.json's kind.
+  "pipeline.kind"
 ] as const;
 
 /**
@@ -172,13 +180,11 @@ function fullManifest(): RunManifest {
       model: "m",
       reasoningEffort: "high",
       concurrency: 1,
-      heapMb: 1,
       killSwitches: ["fossil-split"],
       cache: { enabled: true, entriesBefore: 1, entriesAfter: 1, written: 0 }
     },
-    // kind "ts" keeps the heap check's reads in play (it stands down for a
-    // binary, where --heap-mb is inert); the bin checks read their block
-    // whatever the kind, so this record exercises every reader at once.
+    // The bin checks read their block whatever the kind, so this record
+    // exercises every reader at once.
     pipeline: {
       kind: "ts",
       command: ["/r/target/release/humanify"],

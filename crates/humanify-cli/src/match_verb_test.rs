@@ -63,7 +63,6 @@ fn dump_for(dir: &std::path::Path) -> Value {
     match_dump(&MatchVerbArgs {
         input: &input.display().to_string(),
         prior_version: &formatted_prior(dir),
-        sequential: false,
         bundler: None,
         minifier: None,
         webcrack_shim: None,
@@ -244,7 +243,6 @@ fn a_missing_prior_file_is_a_loud_error() {
     let err = match_dump(&MatchVerbArgs {
         input: &input.display().to_string(),
         prior_version: &dir.join("nope.js").display().to_string(),
-        sequential: false,
         bundler: None,
         minifier: None,
         webcrack_shim: None,
@@ -312,7 +310,6 @@ fn raw_bundle_vendor_factories_are_wrapped_and_loudly_reported() {
     let dump = match_dump(&MatchVerbArgs {
         input: &input,
         prior_version: &prior,
-        sequential: false,
         bundler: None,
         minifier: None,
         webcrack_shim: None,
@@ -440,7 +437,6 @@ fn raw_bundle_dump(dir: &std::path::Path, bundle: &str, prior_text: &str) -> Res
     match_dump(&MatchVerbArgs {
         input: &input_file.display().to_string(),
         prior_version: &prior,
-        sequential: false,
         bundler: None,
         minifier: None,
         webcrack_shim: None,

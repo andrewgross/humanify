@@ -14,8 +14,8 @@
  *  1. PEAK MEMORY. GNU `time` is not installed in this environment, and
  *     `process.resourceUsage()` reports only the calling process. The child's
  *     high-water mark lives in `/proc/<pid>/status` as `VmHWM` and has to be
- *     sampled while it is alive — after it exits, the file is gone. `EVAL_HEAP`
- *     has been a guess since 14336 MB OOMed cold; this makes it a measurement.
+ *     sampled while it is alive — after it exits, the file is gone. A heap
+ *     ceiling was a guess until 14336 MB OOMed cold; this makes it a measurement.
  *
  *  2. CACHE ACCOUNTING. The entry count has to be taken immediately before and
  *     after the run to mean anything. Rule 10 exists because eight legs ran
@@ -80,7 +80,6 @@ interface RunConfig {
   model: string;
   reasoningEffort: string;
   concurrency: number;
-  heapMb: number;
   cacheDir?: string;
   /** Artifacts the run promised, checked and sized afterwards. */
   artifacts: string[];
@@ -217,13 +216,7 @@ async function main(): Promise<void> {
   const launchedSha = cfg.bin ? sha256File(cmd) : undefined;
   const child = spawn(cmd, [...head, ...cfg.args], {
     cwd: cfg.repo,
-    stdio: ["ignore", out, out],
-    // Inert for the binary (not a Node process) — the launch env every
-    // binary-scored reference ran with; run.sh says so in the run log.
-    env: {
-      ...process.env,
-      NODE_OPTIONS: `--max-old-space-size=${cfg.heapMb}`
-    }
+    stdio: ["ignore", out, out]
   });
 
   // Sample the child's high-water mark while it is alive; after it exits,
@@ -295,7 +288,6 @@ async function main(): Promise<void> {
       model: cfg.model,
       reasoningEffort: cfg.reasoningEffort,
       concurrency: cfg.concurrency,
-      heapMb: cfg.heapMb,
       killSwitches: switchesFromArgv(cfg.args),
       // Counted ONCE: two separate walks could disagree and produce a
       // `written` that matches neither endpoint.
@@ -324,7 +316,7 @@ async function main(): Promise<void> {
   const rss = peakRssMb === undefined ? "?" : `${peakRssMb} MB`;
   console.log(
     `  run: exit ${exitCode}, ${manifest.wallSeconds}s, peak RSS ${rss}` +
-      ` of ${cfg.heapMb} MB heap, cache +${manifest.config.cache.written}`
+      `, cache +${manifest.config.cache.written}`
   );
   for (const line of manifestWarnings(manifest)) console.log(`  !! ${line}`);
 

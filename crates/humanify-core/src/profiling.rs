@@ -221,7 +221,7 @@ impl Profiler {
 pub const PHASE_TID: u32 = 4;
 
 /// The profiler the core's [`phase`] spans record into, when the CLI
-/// installed one (`--profile`). Core stages do not carry a `&Profiler`;
+/// installed one (`--perf-trace`). Core stages do not carry a `&Profiler`;
 /// this is the one ambient seam, and it only OBSERVES — nothing reads it
 /// back into a decision.
 static GLOBAL: RwLock<Option<(Instant, Arc<Mutex<Recorded>>)>> = RwLock::new(None);

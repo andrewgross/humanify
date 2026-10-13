@@ -26,6 +26,11 @@ import { describe, it } from "node:test";
  * reference before 2026-10-03 — and its golden is the previous golden byte
  * for byte, plus the recorded `"baseMode"` in each run config
  * (run-launch.seeded-base.golden.txt).
+ *
+ * Config sweep 2026-10-13: the inert `NODE_OPTIONS=--max-old-space-size`
+ * the launches carried (and the run configs' `heapMb`) were deleted with
+ * `--heap-mb`; both goldens were re-recorded and differ ONLY there — every
+ * argv is byte-identical to the one the references were scored by.
  */
 
 const HERE = import.meta.dirname;
@@ -143,6 +148,12 @@ function runHarness(
   for (const name of ["npx", "humanify"]) {
     fs.writeFileSync(path.join(shims, name), RECORDER, { mode: 0o755 });
   }
+  // lib/boot-gate.sh is FATAL without bun (no soft mode since the config
+  // sweep, 2026-10-13). The recorder writes no run.cjs, so bun is never
+  // asked to boot anything; it only has to exist.
+  fs.writeFileSync(path.join(shims, "bun"), "#!/usr/bin/env bash\nexit 0\n", {
+    mode: 0o755
+  });
   // The harness builds the default binary with the user-level cargo
   // (pipeline-bin.ts puts $HOME/.cargo/bin first). A HOME under the scratch
   // root makes that cargo a recorder that FAILS, so a no---bin run is
@@ -179,7 +190,6 @@ function runHarness(
           ...process.env,
           PATH: `${shims}:${process.env.PATH ?? ""}`,
           NODE_OPTIONS: "",
-          BOOT_GATE_SOFT: "1",
           RECORDER_ROOT: root,
           RECORDER_REAL_NPX: realNpx(),
           ...Object.fromEntries(
@@ -359,9 +369,8 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(cfgs?.length, 4, h.launches);
   });
 
-  it("says --heap-mb is inert and records the binary as the label's pipeline", () => {
+  it("records the binary as the label's pipeline", () => {
     const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
-    assert.match(h.stdout, /INERT for the Rust binary/);
     assert.match(h.results, /pipeline\.json: .*"kind":"rust-bin"/);
     // The matcher preflight tested the deleted TS matcher; it is retired
     // (docs/rust-port/19-cutover.md) and writes no verdict any more.
@@ -379,6 +388,30 @@ describe("run.sh pipeline launches", () => {
       assert.strictEqual(h.status, 2, `${flag}: ${h.stdout}`);
       assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
     }
+  });
+
+  it("renamed/deleted flags are refused upfront, naming what replaced them", () => {
+    for (const [flag, want] of [
+      ["--no-vendor", /--no-vendor-score/],
+      ["--heap-mb", /removed/]
+    ] as const) {
+      const h = runHarness([
+        "--bin",
+        "<TMP>/shims/humanify",
+        "--force-mixed",
+        flag,
+        "1"
+      ]);
+      assert.strictEqual(h.status, 2, `${flag}: ${h.stdout}`);
+      assert.match(h.stdout, want);
+      assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
+    }
+  });
+
+  it("no pipeline launch sets NODE_OPTIONS: the binary is not a Node process", () => {
+    const h = runHarness(["--bin", "<TMP>/shims/humanify", "--force-mixed"]);
+    assert.strictEqual(h.status, 0, h.stdout);
+    assert.doesNotMatch(h.launches, /max-old-space-size|heapMb/);
   });
 
   it("--bin whose build commit is not the label's commit is REFUSED without --force-mixed", () => {
