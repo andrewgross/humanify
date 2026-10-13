@@ -194,10 +194,13 @@ pub const MATCH_KEY_PRIVATES_BLINDED: CanonicalForm = CanonicalForm {
 /// The library index's statement-unit prints (`libindex::units`): the
 /// match key with private names blinded (a minifier's `#e` is renamed per
 /// build). Its own stamp — the index manifest's `units` — because an index
-/// is built offline and read by a later binary.
+/// is built offline and read by a later binary. The version also covers
+/// the UNIT MODEL (what a unit is: `graph::references::container_units`),
+/// pinned by `libindex::units_test`'s `UNIT_MODEL_PINS`: 3 = esbuild 0.28's
+/// guarded `__esm` is a lazy module (main's 68b090e3; exp097).
 pub const LIBRARY_UNITS: CanonicalForm = CanonicalForm {
     name: "units",
-    version: 2,
+    version: 3,
     stamped_in: Some("library index manifest `units`"),
     privates: Privates::Blinded,
     ..MATCH_KEY

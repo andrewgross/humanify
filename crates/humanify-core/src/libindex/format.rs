@@ -18,6 +18,14 @@ use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT
 /// The format tag in every manifest.
 pub const INDEX_FORMAT: &str = "humanify-library-index/1";
 
+/// The build recipe's version (`humanify-index`'s `recipe` module: every
+/// rule of how a slice's bundles are made). Recorded per slice in the
+/// manifest and in every shard key; the loader refuses another.
+pub const RECIPE_VERSION: &str = "recipe/4";
+
+/// How a refusal says to fix it.
+const REBUILD: &str = "rebuild the index with this binary's `humanify-index build` (the shard store rebuilds only what changed)";
+
 /// A semantic version (precedence per semver 2.0: build metadata ignored,
 /// a prerelease before its release, prerelease identifiers numeric < text).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -171,13 +179,21 @@ pub struct LiteralRow {
 
 /// The fingerprint versions an index was built with; the pipeline refuses
 /// an index whose stamp differs from its own (a half-matching index would
-/// silently half-name — the vendor record's `hashVersion` rule).
+/// silently half-name — the vendor record's `hashVersion` rule). EVERY
+/// field is checked ([`Manifest::check_compatible`]); a stamp this binary
+/// does not know, or one the manifest lacks, does not deserialize.
+///
+/// - `module`: the whole-module print, the vendor content key (its
+///   serializer form and the known-globals set are part of that version);
+/// - `literals`: the literal extractor;
+/// - `units`: the statement unit model AND its serializer form (the match
+///   key with private names blinded) — `units_test`'s pin fails when either
+///   changes under a constant version.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FingerprintVersions {
     pub module: String,
     pub literals: String,
-    /// Statement-level units (absent in an index built before them).
-    #[serde(default)]
     pub units: String,
 }
 
@@ -208,6 +224,9 @@ pub struct SliceRecord {
     pub slice: String,
     pub bundler: String,
     pub version: String,
+    /// The build recipe's version ([`RECIPE_VERSION`]) this slice was
+    /// built under.
+    pub recipe: String,
     pub published: Option<String>,
     pub newest_at_as_of: Option<String>,
     pub bundler_after_as_of: bool,
@@ -247,4 +266,37 @@ pub struct Manifest {
     pub tables: BTreeMap<String, String>,
     /// data file → sha256.
     pub data: BTreeMap<String, String>,
+}
+
+impl Manifest {
+    /// Can this binary read the index? Every compatibility stamp is
+    /// compared — the format, each fingerprint version, every slice's
+    /// recipe version — and every mismatch is named with both spellings
+    /// (fail early: a half-matching index would silently half-claim).
+    /// Whether the index HAS a bundle's slice is the loader's question.
+    pub fn check_compatible(&self) -> Result<(), String> {
+        let ours = fingerprint_versions();
+        let mut wrong: Vec<String> = Vec::new();
+        let mut differ = |field: &str, theirs: &str, ours: &str| {
+            if theirs != ours {
+                wrong.push(format!("{field} {theirs} (this binary reads {ours})"));
+            }
+        };
+        differ("format", &self.format, INDEX_FORMAT);
+        differ("module", &self.fingerprints.module, &ours.module);
+        differ("literals", &self.fingerprints.literals, &ours.literals);
+        differ("units", &self.fingerprints.units, &ours.units);
+        for s in &self.slices {
+            differ(
+                &format!("recipe (slice {})", s.slice),
+                &s.recipe,
+                RECIPE_VERSION,
+            );
+        }
+        if wrong.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
+        }
+    }
 }

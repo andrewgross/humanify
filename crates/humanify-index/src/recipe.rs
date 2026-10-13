@@ -10,8 +10,9 @@ use std::process::Command;
 
 use humanify_core::libindex::IndexSlice;
 
-/// The build recipe's version (in every shard key).
-pub const RECIPE_VERSION: &str = "recipe/4";
+/// The build recipe's version (in every shard key and the manifest's
+/// slice records; the pipeline's loader checks it).
+pub use humanify_core::libindex::format::RECIPE_VERSION;
 
 /// Source files larger than this are not read (the lab's 4 MB cap).
 pub const MAX_SOURCE_BYTES: u64 = 4_000_000;

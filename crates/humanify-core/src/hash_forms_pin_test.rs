@@ -357,7 +357,8 @@ fn js_files(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
 
 /// The persisted version stamps: an index manifest, a vendor manifest and
 /// a split ledger are keyed by them, so step 2 may move where they live
-/// but never their values.
+/// but never their values. A deliberate era change moves one here (units/3:
+/// the unit model's esbuild lazy modules, exp097).
 #[test]
 fn version_stamps_are_pinned() {
     let v = crate::libindex::format::fingerprint_versions();
@@ -371,7 +372,7 @@ fn version_stamps_are_pinned() {
     );
     assert_eq!(
         got,
-        "statement=3 factory=4 module=vendor-content-key/4 literals=literals/1 units=units/2"
+        "statement=3 factory=4 module=vendor-content-key/4 literals=literals/1 units=units/3"
     );
 }
 

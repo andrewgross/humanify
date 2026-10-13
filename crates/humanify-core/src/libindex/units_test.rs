@@ -127,3 +127,122 @@ fn private_names_are_minified_names_not_content() {
         "only `get`; the private names are the minifier's"
     );
 }
+
+/// The unit model's pins: (`LIBRARY_UNITS.version`, digest of every unit print of
+/// [`PIN_FIXTURES`]). A change to WHAT a unit is or how it hashes — the
+/// unit cut, the container rules, the serializer — moves the digest, and
+/// an index built before it holds units a run can no longer produce: the
+/// form's version (`hash::forms::LIBRARY_UNITS`) MUST be bumped with it (main's 68b090e3 split esbuild 0.28's
+/// guarded `__esm` wrappers into lazy-body statements under a constant
+/// `units/2`, and every stale index shard was reused — exp096
+/// `lazy_modules.py`). Add the new (version, digest) row; never edit one.
+const UNIT_MODEL_PINS: &[(u64, &str)] = &[
+    // index v2's builder (a537a92b, before 68b090e3)
+    (
+        2,
+        "5b0dc0e84270ec06a75422d08e00b8a4b909db75653b26c78451322529c590fe",
+    ),
+    // 68b090e3: esbuild 0.28's guarded `__esm` is a lazy module (only the
+    // two esbuild 0.28 minified fixtures move; Bun and esbuild <= 0.27
+    // print byte-identically)
+    (
+        3,
+        "3e6f96ad7285928182214b208ff61b84aa50c679b7951585c4d14772524978f7",
+    ),
+];
+
+/// One esbuild 0.28 minified bundle (guarded `__esm`), the esbuild ESM
+/// and minified-ESM forms, and three Bun forms (the slice each is
+/// fingerprinted under: the builder's own path).
+const PIN_FIXTURES: &[(&str, &str, crate::libindex::IndexSlice)] = {
+    use crate::libindex::IndexSlice::{Bun, Esbuild};
+    &[
+        (
+            "esbuild-minified-0.28",
+            include_str!(
+                "../../../../test/e2e/fixtures/esbuild-minified-0.28/build/v1.0.0/build/index.js"
+            ),
+            Esbuild,
+        ),
+        (
+            "esbuild-minified-esm",
+            include_str!(
+                "../../../../test/e2e/fixtures/esbuild-minified-esm/build/v1.0.0/build/index.js"
+            ),
+            Esbuild,
+        ),
+        (
+            "esbuild-esm",
+            include_str!("../../../../test/e2e/fixtures/esbuild-esm/build/v1.0.0/build/index.js"),
+            Esbuild,
+        ),
+        (
+            "bun-lazy",
+            include_str!("../../../../test/e2e/fixtures/bun-lazy/build/v1.0.0/build/index.js"),
+            Bun,
+        ),
+        (
+            "bun-esm-minified",
+            include_str!(
+                "../../../../test/e2e/fixtures/bun-esm-minified/build/v1.0.0/build/index.js"
+            ),
+            Bun,
+        ),
+        (
+            "bun-bundle",
+            include_str!("../../../../test/e2e/fixtures/bun-bundle/build/v1.0.0/build/index.js"),
+            Bun,
+        ),
+    ]
+};
+
+fn unit_model_digest() -> String {
+    use crate::libindex::units::bundle_unit_prints;
+    use sha2::{Digest, Sha256};
+    let mut lines = String::new();
+    for (name, code, slice) in PIN_FIXTURES {
+        let toolchain = crate::toolchain::resolve_toolchain(
+            &crate::detect::detect_bundle(code),
+            Some(slice.bundler()),
+            None,
+        );
+        let allocator = Allocator::default();
+        let ingest = Ingest::parse_unambiguous(&allocator, code);
+        assert!(ingest.errors.is_empty(), "{name} must parse");
+        for (unit, prints) in bundle_unit_prints(
+            code,
+            &ingest,
+            toolchain.layout.piece,
+            toolchain.module_wrappers.piece,
+            toolchain.interop.piece,
+        ) {
+            for p in std::iter::once(&prints.whole).chain(&prints.functions) {
+                lines.push_str(&format!(
+                    "{name} {:?} {}..{} {} {} {}\n",
+                    unit.kind, p.span.start, p.span.end, p.hash, p.nodes, p.content
+                ));
+            }
+        }
+    }
+    Sha256::digest(lines.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+#[test]
+fn the_unit_model_cannot_change_under_a_constant_version() {
+    let version = crate::hash::forms::LIBRARY_UNITS.version;
+    let digest = unit_model_digest();
+    let pinned: Vec<&str> = UNIT_MODEL_PINS
+        .iter()
+        .filter(|(v, _)| *v == version)
+        .map(|(_, d)| *d)
+        .collect();
+    assert_eq!(
+        pinned,
+        vec![digest.as_str()],
+        "the unit model's digest is {digest}; units/{version} pins {pinned:?}. \
+         A changed model needs a NEW `LIBRARY_UNITS` version and a new UNIT_MODEL_PINS row"
+    );
+}

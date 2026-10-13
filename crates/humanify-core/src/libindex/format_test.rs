@@ -101,3 +101,93 @@ fn the_fingerprint_stamp_names_the_pipelines_own_versions() {
     );
     assert_eq!(f.units, crate::hash::forms::LIBRARY_UNITS.stamp());
 }
+
+fn manifest_for(slices: &[&str]) -> super::format::Manifest {
+    use super::format::{INDEX_FORMAT, Manifest, RECIPE_VERSION, SliceRecord};
+    Manifest {
+        format: INDEX_FORMAT.into(),
+        as_of: "2026-10-11T23:59:59.999Z".into(),
+        fingerprints: fingerprint_versions(),
+        registry: Default::default(),
+        slices: slices
+            .iter()
+            .map(|s| SliceRecord {
+                slice: (*s).into(),
+                bundler: (*s).into(),
+                version: "1.0.0".into(),
+                recipe: RECIPE_VERSION.into(),
+                published: None,
+                newest_at_as_of: None,
+                bundler_after_as_of: false,
+            })
+            .collect(),
+        packages: vec![],
+        refused: vec![],
+        shards: Default::default(),
+        tables: Default::default(),
+        data: Default::default(),
+    }
+}
+
+#[test]
+fn a_manifest_built_by_this_binary_is_compatible() {
+    assert_eq!(manifest_for(&["bun", "esbuild"]).check_compatible(), Ok(()));
+}
+
+#[test]
+fn every_compatibility_version_is_checked_and_named() {
+    // Each stamp alone: the refusal names the field, both spellings, and
+    // how to rebuild (fail early, never half-match).
+    type Edit = fn(&mut super::format::Manifest);
+    let cases: [(&str, Edit); 5] = [
+        ("format", |m| m.format = "humanify-library-index/0".into()),
+        ("module", |m| {
+            m.fingerprints.module = "vendor-content-key/3".into()
+        }),
+        ("literals", |m| {
+            m.fingerprints.literals = "literals/0".into()
+        }),
+        ("units", |m| m.fingerprints.units = "units/2".into()),
+        ("recipe", |m| m.slices[0].recipe = "recipe/3".into()),
+    ];
+    for (field, edit) in cases {
+        let mut m = manifest_for(&["bun"]);
+        edit(&mut m);
+        let err = m.check_compatible().expect_err(field);
+        assert!(err.contains(field), "{field}: {err}");
+        assert!(err.contains("humanify-index build"), "{field}: {err}");
+    }
+}
+
+#[test]
+fn an_unknown_or_missing_stamp_does_not_deserialize() {
+    // A stamp this binary does not know (a newer index) or one it expects
+    // and the manifest lacks (an older one) is a refusal, not a default.
+    let m = manifest_for(&["bun"]);
+    let mut v = serde_json::to_value(&m).unwrap();
+    v["fingerprints"]["serializer"] = "x/1".into();
+    assert!(serde_json::from_value::<super::format::Manifest>(v).is_err());
+    let mut v = serde_json::to_value(&m).unwrap();
+    v["fingerprints"].as_object_mut().unwrap().remove("units");
+    assert!(serde_json::from_value::<super::format::Manifest>(v).is_err());
+    let mut v = serde_json::to_value(&m).unwrap();
+    v["slices"][0].as_object_mut().unwrap().remove("recipe");
+    assert!(serde_json::from_value::<super::format::Manifest>(v).is_err());
+}
+
+#[test]
+fn every_form_the_index_manifest_stamps_is_a_checked_field() {
+    // The form registry is the list of persisted stamps: each one stamped
+    // in the library index manifest must be a FingerprintVersions field
+    // that check_compatible compares (a new one fails here until it is).
+    let stamped: Vec<String> = crate::hash::forms::FORMS
+        .iter()
+        .filter(|f| {
+            f.stamped_in
+                .is_some_and(|s| s.starts_with("library index manifest"))
+        })
+        .map(|f| f.stamp())
+        .collect();
+    let f = fingerprint_versions();
+    assert_eq!(stamped, vec![f.units.clone(), f.module.clone()]);
+}

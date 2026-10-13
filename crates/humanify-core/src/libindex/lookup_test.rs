@@ -194,7 +194,7 @@ fn agreement_needs_the_literal_rule_to_name_the_same_family() {
 #[test]
 fn the_loader_refuses_another_unit_fingerprint() {
     use crate::libindex::IndexSlice;
-    use crate::libindex::format::{Manifest, fingerprint_versions};
+    use crate::libindex::format::{Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions};
     let dir = std::env::temp_dir().join(format!("humanify-lookup-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write_manifest = |units: &str| {
@@ -205,7 +205,15 @@ fn the_loader_refuses_another_unit_fingerprint() {
             as_of: "2026-10-12".into(),
             fingerprints: f,
             registry: Default::default(),
-            slices: vec![],
+            slices: vec![SliceRecord {
+                slice: "bun".into(),
+                bundler: "bun".into(),
+                version: "1.4.0".into(),
+                recipe: RECIPE_VERSION.into(),
+                published: None,
+                newest_at_as_of: None,
+                bundler_after_as_of: false,
+            }],
             packages: vec![],
             refused: vec![],
             shards: Default::default(),

@@ -333,7 +333,7 @@ fn library_index(dir: &Path, slice: bool) -> String {
     use humanify_core::libindex::format::{INDEX_FORMAT, fingerprint_versions};
     std::fs::create_dir_all(dir).unwrap();
     let slices = if slice {
-        serde_json::json!([{"slice": "bun", "bundler": "bun", "version": "1", "published": null,
+        serde_json::json!([{"slice": "bun", "bundler": "bun", "version": "1", "recipe": humanify_core::libindex::format::RECIPE_VERSION, "published": null,
             "newestAtAsOf": null, "bundlerAfterAsOf": false}])
     } else {
         serde_json::json!([])

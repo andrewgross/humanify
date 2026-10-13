@@ -7,7 +7,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
-use super::format::{LiteralRow, Manifest, UnitRow, fingerprint_versions};
+use super::format::{LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
 use super::units::{StatementPrints, UnitPrint};
 
@@ -90,8 +90,9 @@ impl LibraryIndex {
     }
 
     /// Load `dir`'s `units.<slice>.jsonl` and `literals.jsonl`, refusing an
-    /// index whose unit or literal fingerprint differs from this build's
-    /// (a half-matching index would silently half-claim).
+    /// index any of whose compatibility stamps differs from this build's
+    /// ([`Manifest::check_compatible`]: a half-matching index would
+    /// silently half-claim).
     pub fn load(dir: &Path, slice: super::IndexSlice) -> Result<LibraryIndex, String> {
         let read = |name: &str| {
             std::fs::read_to_string(dir.join(name)).map_err(|e| format!("{name}: {e}"))
@@ -99,13 +100,13 @@ impl LibraryIndex {
         let manifest_text = read("manifest.json")?;
         let manifest: Manifest =
             serde_json::from_str(&manifest_text).map_err(|e| format!("manifest.json: {e}"))?;
-        let ours = fingerprint_versions();
-        if manifest.fingerprints.units != ours.units
-            || manifest.fingerprints.literals != ours.literals
-        {
+        manifest.check_compatible()?;
+        if !manifest.slices.iter().any(|s| s.slice == slice.name()) {
+            let has: Vec<&str> = manifest.slices.iter().map(|s| s.slice.as_str()).collect();
             return Err(format!(
-                "the index was built with {:?}; this build reads {:?}",
-                manifest.fingerprints, ours
+                "the index has no slice {} (has: {})",
+                slice.name(),
+                has.join(", ")
             ));
         }
         let rows = |name: &str| -> Result<Vec<String>, String> {

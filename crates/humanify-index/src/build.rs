@@ -148,6 +148,7 @@ fn slice_records(
             bundler: package.to_string(),
             bundler_after_as_of: published.as_ref().is_some_and(|t| *t > cfg.as_of),
             version,
+            recipe: RECIPE_VERSION.to_string(),
             published,
             newest_at_as_of: newest,
         });
