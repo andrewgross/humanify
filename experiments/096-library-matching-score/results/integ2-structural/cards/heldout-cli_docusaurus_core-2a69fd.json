@@ -1,0 +1,71 @@
+{
+ "bundleSha256": "5327ffebc4cee3d0ccc2b86197909cff9d60cc8fb4951f5ee0ddde2f993896dc",
+ "claimedBytes": {
+  "right": 479520,
+  "wrongFamily": 22667
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_docusaurus_core-2a69fd",
+ "exploratory": {
+  "names": {
+   "bindings": 4020,
+   "bindingsSameVersion": 4004,
+   "bindingsVersionKnown": 4020,
+   "exactBytes": 384177,
+   "exactUnits": 781,
+   "sameVersionShare": 0.99602
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 405161,
+  "recall": 0.502318,
+  "wrongFamilyShare": 0.01166
+ },
+ "label": "integ2-structural",
+ "missBytes": {
+  "a": 173485,
+  "b": 1587,
+  "c": 59937,
+  "d-absent": 885,
+  "d-file": 17366,
+  "d-variant": 40991,
+  "e-ambig": 220,
+  "e-other": 86,
+  "e-spec": 2076,
+  "e-support": 9943,
+  "e-veto": 5568,
+  "f": 14918
+ },
+ "noDiscovery": null,
+ "reportSha256": "c4d93d10a1c7c38ae368901d8d5d4db213b73c6bccd0f4a177497bf654066505",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 2842,
+  "<unmapped>": 74,
+  "library": 806582
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 806582,
+  "namedBytes": 479520,
+  "recall": 0.594509,
+  "wrongFamilyBytes": 22667,
+  "wrongFamilyShare": 0.045137,
+  "wrongNameShare": 0.045137
+ },
+ "truthMethod": "sourcemap"
+}

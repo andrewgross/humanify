@@ -1,0 +1,70 @@
+{
+ "bundleSha256": "2131be7c581a625045111de07b14a742445cbff7843cac44d3ae01b1816fafde",
+ "claimedBytes": {
+  "family": 3906,
+  "right": 512327,
+  "wrongFamily": 43301
+ },
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-electron_tidgi-a6a012",
+ "exploratory": {
+  "names": {
+   "bindings": 7817,
+   "bindingsSameVersion": 7817,
+   "bindingsVersionKnown": 7817,
+   "exactBytes": 504445,
+   "exactUnits": 906,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 391842,
+  "recall": 0.168133,
+  "wrongFamilyShare": 0.001412
+ },
+ "label": "ix-v2-agreement",
+ "missBytes": {
+  "a": 1435396,
+  "b": 1959,
+  "c": 75177,
+  "d-absent": 10142,
+  "d-file": 14228,
+  "e-agree": 82419,
+  "e-other": 1826,
+  "e-support": 1996,
+  "e-veto": 191027,
+  "f": 144
+ },
+ "noDiscovery": null,
+ "reportSha256": "3cdd4928bd45785fd660b415e1fb9a63dc1906f22b8ad9edc0bccd6c55b91cf8",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 6212,
+  "<unmapped>": 689,
+  "library": 2330547
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 2330547,
+  "namedBytes": 516233,
+  "recall": 0.221507,
+  "wrongFamilyBytes": 43301,
+  "wrongFamilyShare": 0.077388,
+  "wrongNameShare": 0.077388
+ },
+ "truthMethod": "sourcemap"
+}

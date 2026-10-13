@@ -206,6 +206,9 @@ pub struct AdapterRun<'n> {
     pub manifest_prior_order_disabled: bool,
     /// The webcrack subprocess shim (the webcrack adapter errors without it).
     pub webcrack_shim: Option<&'n webcrack::WebcrackShim>,
+    /// Run library discovery, report-only (`--diagnostics`; vendor-record
+    /// adapters; docs/design/library-discovery.md).
+    pub library_discovery: Option<crate::libdetect::discovery::DiscoveryRequest<'n>>,
 }
 
 impl<'n> AdapterRun<'n> {
@@ -226,6 +229,7 @@ impl<'n> AdapterRun<'n> {
             prior: None,
             manifest_prior_order_disabled: false,
             webcrack_shim: None,
+            library_discovery: None,
         }
     }
 }
@@ -248,7 +252,7 @@ impl AdapterOutcome {
 }
 
 /// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —
-/// THE one dispatch site: the pipeline, the `unpack`, `libdetect` and
+/// THE one dispatch site: the pipeline, the `unpack`, `discover` and
 /// `match` verbs all come through here, so a registered adapter is run
 /// the same way everywhere.
 pub fn run_adapter(
@@ -274,6 +278,7 @@ pub fn run_adapter(
                     module_wrappers: run.module_wrappers,
                     interop: run.interop,
                     module_identity: run.module_identity,
+                    library_discovery: run.library_discovery,
                 },
             )?)))
         }

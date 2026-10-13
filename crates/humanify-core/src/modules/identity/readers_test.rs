@@ -3,7 +3,8 @@
 //! — including its measured false positives.
 
 use super::readers::{
-    self, Claim, ModuleView, export_names, hint_repository, hint_version, parse_banner,
+    self, Claim, ModuleView, aws_sdk_client, export_names, hint_aws_sdk_client, hint_repository,
+    hint_version, parse_banner, version_constant,
 };
 use super::{DeclaredPath, ModuleProvenance, PathKind};
 use crate::modules::lex::lex_raw;
@@ -42,6 +43,30 @@ fn a_scoped_package_json_keeps_its_scope() {
     let c = read(body, readers::read_package_json).unwrap();
     assert_eq!(c.package.as_deref(), Some("@grpc/grpc-js"));
     assert_eq!(c.version.as_deref(), Some("1.14.4"));
+}
+
+#[test]
+fn a_package_json_in_any_key_order_names_its_package() {
+    // sharp's package.json puts `description` between `name` and `version`
+    // (Claude Code 2.1.216, the one inlined package.json the first-two-keys
+    // rule missed).
+    let body = r#"(x0v,GDg)=>{GDg.exports={name:"sharp",description:"High performance Node.js image processing",version:"0.34.5",author:"Lovell Fuller <npm@lovell.info>",homepage:"https://sharp.pixelplumbing.com",main:"lib/index.js"}}"#;
+    let c = read(body, readers::read_package_json).expect("declared");
+    assert_eq!(c.package.as_deref(), Some("sharp"));
+    assert_eq!(c.version.as_deref(), Some("0.34.5"));
+    assert_eq!(c.member.as_deref(), Some("package.json"));
+    // `version` first, `name` later.
+    let body =
+        r#"(e,t)=>{t.exports={version:"2.0.1",license:"MIT",name:"@scope/pkg",main:"x.js"}}"#;
+    let c = read(body, readers::read_package_json).expect("declared");
+    assert_eq!(c.package.as_deref(), Some("@scope/pkg"));
+}
+
+#[test]
+fn a_nested_name_or_version_is_not_the_package_json_s_own() {
+    // `name` and `version` must be keys of the SAME object.
+    let body = r#"(e,t)=>{t.exports={name:"x-client",main:"a.js",engines:{version:"1.0.0"}}}"#;
+    assert!(read(body, readers::read_package_json).is_none());
 }
 
 #[test]
@@ -183,6 +208,47 @@ fn a_one_letter_language_is_declared() {
     );
 }
 
+#[test]
+fn typescript_renames_the_javascript_grammar_through_object_assign() {
+    // highlight.js 11's typescript.js, as Claude Code 2.1.216 ships it: the
+    // JavaScript definition, then `Object.assign(r,{name, aliases})` with no
+    // keywords of its own.
+    let body = r#"(zIR,Plp)=>{function j(e){return{name:"JavaScript",aliases:["js","jsx","mjs","cjs"],keywords:a,illegal:/#/,contains:[]}}function ts(e){let r=j(e);r.contains=r.contains.concat([u]);return Object.assign(r,{name:"TypeScript",aliases:["ts","tsx","mts","cts"]}),r}Plp.exports=ts}"#;
+    let c = read(body, readers::read_highlight_js_grammar).unwrap();
+    assert_eq!(c.member.as_deref(), Some("TypeScript"));
+    assert_eq!(c.aliases, vec!["ts", "tsx", "mts", "cts"]);
+}
+
+#[test]
+fn a_grammar_of_grammar_keys_only_is_a_grammar() {
+    // highlight.js's plaintext.js: no keywords, no contains — but every key
+    // is a language-definition key, and one is not `aliases`.
+    let body = r#"(tIR,Lsp)=>{function swy(e){return{name:"Plain text",aliases:["text","txt"],disableAutodetect:!0}}Lsp.exports=swy}"#;
+    let c = read(body, readers::read_highlight_js_grammar).unwrap();
+    assert_eq!(c.member.as_deref(), Some("Plain text"));
+    assert_eq!(c.aliases, vec!["text", "txt"]);
+    // `{name, aliases}` alone is any registry.
+    let body = r#"(e,t)=>{t.exports=[{name:"teleport",aliases:["tp"]}]}"#;
+    assert!(read(body, readers::read_highlight_js_grammar).is_none());
+    // An `Object.assign` rename with no grammar before it names nothing.
+    let body = r#"(e,t)=>{t.exports=Object.assign(c,{name:"teleport",aliases:["tp"]})}"#;
+    assert!(read(body, readers::read_highlight_js_grammar).is_none());
+}
+
+#[test]
+fn a_slash_command_table_is_not_a_grammar() {
+    // The LOOSE shape `{name, aliases}` is also Claude Code's own
+    // slash-command table: only `{name, …keywords|contains}` is a grammar.
+    let body = r#"(e,t)=>{var c=[{name:"teleport",aliases:["tp"],description:"Resume a remote session",isEnabled:()=>!0,type:"local-jsx"},{name:"schedule",aliases:[],description:"Manage schedules",argumentHint:"[name]"}];t.exports=c}"#;
+    assert!(read(body, readers::read_highlight_js_grammar).is_none());
+    let body =
+        r#"(e,t)=>{t.exports={name:"remote-control",aliases:["rc"],illegal:"no",description:"x"}}"#;
+    assert!(
+        read(body, readers::read_highlight_js_grammar).is_none(),
+        "a grammar key after `name` is not enough without keywords or contains"
+    );
+}
+
 // ---- a scoped package quoting itself ----------------------------------------
 
 #[test]
@@ -218,6 +284,14 @@ fn a_scoped_name_that_is_not_a_message_prefix_is_not_an_identity() {
     assert!(read(body, readers::read_scoped_error_prefix).is_none());
     // Two different packages quoting themselves: abstain.
     let body = r#"(e,t)=>{throw Error("@a/one: x"),Error("@b/two: y")}"#;
+    assert!(read(body, readers::read_scoped_error_prefix).is_none());
+}
+
+#[test]
+fn an_unscoped_message_prefix_is_not_an_identity() {
+    // The census: `pkg: …` without a scope names its own package 13 times
+    // in 210 (`choices:`, `host:`, `getAliasesFromMetadata:`).
+    let body = r#"(e,t)=>{throw Error("choices: must be an array"),Error("commander: bad")}"#;
     assert!(read(body, readers::read_scoped_error_prefix).is_none());
 }
 
@@ -316,6 +390,48 @@ fn a_repository_url_is_a_hint_not_a_name() {
 }
 
 #[test]
+fn a_version_constant_declares_a_version_only() {
+    // A TypeScript `version.ts` (@opentelemetry/*): a version, no name.
+    let body = r#"(e6n)=>{Object.defineProperty(e6n,"__esModule",{value:!0});e6n.VERSION=void 0;e6n.VERSION="1.9.0"}"#;
+    let c = read(body, version_constant).expect("a version");
+    assert_eq!(c.version.as_deref(), Some("1.9.0"));
+    assert_eq!(c.package, None, "a version never names a package");
+    assert_eq!(c.member, None);
+    // axios: the literal sits in a variable the export reads.
+    let body = r#"(e,t)=>{var Nvt="1.15.2";rB.CancelToken=DSl;rB.isCancel=RLr;rB.VERSION=Nvt;rB.toFormData=x}"#;
+    assert_eq!(
+        read(body, version_constant).unwrap().version.as_deref(),
+        Some("1.15.2")
+    );
+    // An ES module's export getter (`export { Nvt as VERSION }`).
+    let body = r#"(e,t)=>{var Nvt="1.15.2";X(t,{VERSION:()=>Nvt,default:()=>rB})}"#;
+    assert_eq!(
+        read(body, version_constant).unwrap().version.as_deref(),
+        Some("1.15.2")
+    );
+    // acorn: `e.version=Oo` on its exports.
+    let body = r#"(e,t)=>{var Oo="8.15.0";e.version=Oo}"#;
+    assert_eq!(
+        read(body, version_constant).unwrap().version.as_deref(),
+        Some("8.15.0")
+    );
+}
+
+#[test]
+fn a_version_field_or_comparison_is_not_a_version_constant() {
+    // An object's `version:` field is a record (an MCP client's own
+    // name/version, a build macro object), not the module's version.
+    let body = r#"(e,t)=>{var c=new Client({name:"claude-code",version:"1.0.0"});var m={ISSUES:"x",VERSION:"2.1.216"}.VERSION;t.exports=c}"#;
+    assert!(read(body, version_constant).is_none());
+    // A comparison reads a version, it does not declare one.
+    let body = r#"(e,t)=>{var Oar="0.0.0";function f(t){if(t.version===Oar)return[]}}"#;
+    assert!(read(body, version_constant).is_none());
+    // Two different versions: abstain.
+    let body = r#"(e,t)=>{e.VERSION="1.9.0";e.version="2.0.0"}"#;
+    assert!(read(body, version_constant).is_none());
+}
+
+#[test]
 fn a_version_constant_is_a_hint() {
     assert_eq!(
         hint(r#"(e,t)=>{e.VERSION="1.9.0"}"#, hint_version).as_deref(),
@@ -341,4 +457,42 @@ fn the_export_list_reads_the_renamed_exports_parameter() {
     );
     let body = r#"function(e,t){t.exports.parse=function(){};t.exports.stringify=1}"#;
     assert_eq!(export_names(&lex_raw(body)), vec!["parse", "stringify"]);
+}
+
+// ---- AWS SDK v3 client/command pairs: a hint, never a package ---------------
+
+#[test]
+fn an_aws_sdk_command_declares_its_client() {
+    let body = r#"(e,t)=>{class Q9 extends B.classBuilder().ep(K).m(function(r,o,n,i){return[Y(n,this.serialize,this.deserialize)]}).s("AmazonBedrockControlPlaneService","ListTagsForResource",{}).n("BedrockClient","ListTagsForResourceCommand").f(void 0,void 0).ser(a).de(b).build(){}}"#;
+    let c = with(body, &ModuleProvenance::default(), aws_sdk_client).expect("a client");
+    assert_eq!(c.client, "BedrockClient");
+    assert_eq!(c.commands, vec!["ListTagsForResourceCommand".to_string()]);
+    assert_eq!(
+        hint(body, hint_aws_sdk_client).as_deref(),
+        Some("AWS SDK v3 client BedrockClient (1 command: ListTagsForResourceCommand)")
+    );
+}
+
+#[test]
+fn an_aws_client_name_is_not_its_package() {
+    // `STSClient` ships in BOTH @aws-sdk/client-sts and
+    // @aws-sdk/nested-clients (the census corpus): the pair names the
+    // service, so it is a hint and no identity reader reads it.
+    let body = r#"(e,t)=>{class A extends C{}.n("STSClient","AssumeRoleCommand").build(){}}"#;
+    assert!(
+        super::declare(body, &ModuleProvenance::default())
+            .identity
+            .is_none()
+    );
+    // Not a Client/Command pair: nothing.
+    for body in [
+        r#"(e,t)=>{x.n("BedrockClient","list")}"#,
+        r#"(e,t)=>{x.n("Foo","BarCommand")}"#,
+        r#"(e,t)=>{var a="BedrockClient",b="ListTagsForResourceCommand"}"#,
+    ] {
+        assert!(with(body, &ModuleProvenance::default(), aws_sdk_client).is_none());
+    }
+    // Two clients in one module: abstain.
+    let body = r#"(e,t)=>{a.n("STSClient","AssumeRoleCommand");b.n("SSOOIDCClient","CreateTokenCommand")}"#;
+    assert!(with(body, &ModuleProvenance::default(), aws_sdk_client).is_none());
 }

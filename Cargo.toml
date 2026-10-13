@@ -1,7 +1,9 @@
 # Virtual workspace manifest — docs/rust-port/05-rust-toolchain.md §1.
-# Four crates since the TS-parity retirement (2026-09-28): the dump differ
-# (humanify-parity) compared TS-side artifact dumps and then, post-cutover,
-# nothing — its only caller was the deleted rust:parity stage.
+# Four pipeline crates since the TS-parity retirement (2026-09-28): the dump
+# differ (humanify-parity) compared TS-side artifact dumps and then,
+# post-cutover, nothing — its only caller was the deleted rust:parity stage.
+# Plus humanify-index (2026-10-11): the OFFLINE library index builder, kept
+# out of the pipeline binary (docs/design/library-index.md §1).
 [workspace]
 resolver = "3"
 members = [
@@ -9,6 +11,7 @@ members = [
   "crates/humanify-core",
   "crates/humanify-llm",
   "crates/humanify-cli",
+  "crates/humanify-index",
 ]
 
 [workspace.package]

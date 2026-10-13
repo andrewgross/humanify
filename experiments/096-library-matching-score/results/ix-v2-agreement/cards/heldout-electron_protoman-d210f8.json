@@ -1,0 +1,53 @@
+{
+ "bundleSha256": "c5575f5965f30214c7a24b39340049115393c0619d10e53bb69d6c9d6ebd5d4e",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-electron_protoman-d210f8",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-agreement",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "a6f3f1fa33590a39899b6e5dbd6583a8f1f52257784e9f450fb34e0dc32f1f7b",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 906
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "bun",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

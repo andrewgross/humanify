@@ -1,0 +1,64 @@
+{
+ "bundleSha256": "a99a6598f4587fbf8d540fe8b1d37a261c6c2eb47cba36a311784700e4d2d087",
+ "claimedBytes": {
+  "right": 63683
+ },
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-electron_dopamine-f0a6b2",
+ "exploratory": {
+  "names": {
+   "bindings": 1086,
+   "bindingsSameVersion": 1086,
+   "bindingsVersionKnown": 1086,
+   "exactBytes": 63627,
+   "exactUnits": 19,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "bfb9d80adc0d65d7b6c1ee02d1b947b6493e1ef68d9c9602b1edcecc3aadc8ce",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 63174,
+  "recall": 0.512926,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-ccexact-structural",
+ "missBytes": {
+  "a": 57837,
+  "b": 443,
+  "c": 136,
+  "d-file": 659,
+  "e-support": 124,
+  "e-veto": 282
+ },
+ "noDiscovery": null,
+ "reportSha256": "d7477428a800e51b3ef48ffc33b9bbc4435ee8ce40db5003415cd9f269135b17",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 1355,
+  "<unmapped>": 381,
+  "library": 123164
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 123164,
+  "namedBytes": 63683,
+  "recall": 0.517059,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

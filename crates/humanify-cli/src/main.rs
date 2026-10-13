@@ -5,8 +5,8 @@
 //!   env-reads <path>`) — the commander grammar the harness drives
 //!   (contract 14 §1), parsed by `humanify_cli::commander` from the
 //!   declarations in `humanify_cli::surface`;
-//! - the stage VERBS below (`detect`, `unpack`, `format`, `format-check`,
-//!   `match`) — one pipeline stage run on its own, for
+//! - the stage VERBS below (`detect`, `unpack`, `discover`, `format`,
+//!   `format-check`, `match`) — one pipeline stage run on its own, for
 //!   inspection and for the gate (`format-check` replays the committed
 //!   formatter goldens, test/parity/format-goldens.json — the formatter's
 //!   frozen spec; `match` is the ground-truth harness's instrument). Parsed
@@ -110,6 +110,35 @@ enum Command {
         /// `npx tsx` from its repo root; required for webpack/browserify.
         #[arg(long)]
         webcrack_shim: Option<String>,
+    },
+    /// Library discovery on its own (exp096's library-matching score):
+    /// detect → the unpack adapter (no namer, no prior, scratch dir) with
+    /// discovery on → the `libraryDiscovery` report as JSON, every claimed
+    /// unit listed. Report-only; no LLM path executes.
+    Discover {
+        /// The bundle (read as UTF-8, invalid bytes replaced).
+        input: String,
+        /// The library index directory (its slice is chosen by the
+        /// detected bundler). An index that cannot be read fails the verb.
+        #[arg(long)]
+        library_index: Option<String>,
+        /// `agreement` (the pipeline's rule) or `structural` (no literal
+        /// agreement).
+        #[arg(long, default_value = "agreement")]
+        rule: String,
+        /// The pipeline's `--bundler` override (bun, esbuild, …); the
+        /// detector's own verdict is recorded under `detected`.
+        #[arg(long)]
+        bundler: Option<String>,
+        /// Also list every unit with its fingerprints (`unitRows`).
+        #[arg(long)]
+        unit_prints: bool,
+        /// Where the adapter unpacks (default: a scratch dir, removed).
+        #[arg(long)]
+        work_dir: Option<String>,
+        /// Write the JSON here (default: stdout).
+        #[arg(long)]
+        out: Option<String>,
     },
     /// WP5.6's native formatter (`core::format`): the stage-6 beautify of
     /// one file — Babel's `transform()` with the four stage-6 plugins and
@@ -252,6 +281,28 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some(Command::Discover {
+            input,
+            library_index,
+            rule,
+            bundler,
+            unit_prints,
+            work_dir,
+            out,
+        }) => {
+            let args = humanify_cli::discover_verb::DiscoverArgs {
+                input: &input,
+                library_index: library_index.as_deref(),
+                rule: &rule,
+                bundler: bundler.as_deref(),
+                unit_prints,
+                work_dir: work_dir.as_deref(),
+            };
+            if let Err(e) = humanify_cli::discover_verb::run_discover(&args, out.as_deref()) {
+                eprintln!("ERROR: {e}");
+                std::process::exit(1);
+            }
+        }
         Some(Command::Format {
             input,
             out,
@@ -360,6 +411,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
             prior: prior.and_then(bun::load_prior_vendor),
             manifest_prior_order_disabled: false,
             webcrack_shim: shim.as_ref(),
+            library_discovery: None,
         },
     )? {
         AdapterOutcome::VendorRecord(outcome) => outcome,

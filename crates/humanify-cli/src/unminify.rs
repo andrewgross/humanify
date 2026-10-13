@@ -54,6 +54,12 @@ pub struct Unpacked {
     pub vendor_record: Option<BunModulesManifest>,
     /// The vendor content carry (finding #90), for the diagnostics.
     pub content_carry: Option<bun::ContentCarryReport>,
+    /// Library declarations read in app code (finding #95) — report-only,
+    /// for the diagnostics.
+    pub app_declarations: Vec<humanify_core::modules::identity::AppDeclaration>,
+    /// Library discovery (exp095), when the run asked for it — report-only,
+    /// for the diagnostics.
+    pub library_discovery: Option<humanify_core::libdetect::discovery::DiscoveryReport>,
 }
 
 /// `unpackBundle`: run the run's adapter into `out_dir` through the one
@@ -70,6 +76,7 @@ pub fn unpack_bundle(
     log: &mut humanify_core::artifact_dump::DispatchLog,
     prior_version: Option<&Path>,
     manifest_prior_order_disabled: bool,
+    library_discovery: Option<humanify_core::libdetect::discovery::DiscoveryRequest<'_>>,
     profiler: &Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Unpacked, String> {
@@ -112,9 +119,10 @@ pub fn unpack_bundle(
             prior: prior_vendor,
             manifest_prior_order_disabled,
             webcrack_shim: Some(&shim),
+            library_discovery,
         },
     )?;
-    let (files, vendor_record, content_carry) = match outcome {
+    let (files, vendor_record, content_carry, app_declarations, library_discovery) = match outcome {
         AdapterOutcome::VendorRecord(outcome) => {
             report_vendor_unpack(&outcome, renderer);
             let outcome = *outcome;
@@ -122,9 +130,11 @@ pub fn unpack_bundle(
                 outcome.result.files,
                 outcome.manifest,
                 outcome.content_carry,
+                outcome.app_declarations,
+                outcome.library_discovery,
             )
         }
-        AdapterOutcome::Files(result) => (result.files, None, None),
+        AdapterOutcome::Files(result) => (result.files, None, None, Vec::new(), None),
     };
     span.end(Some(
         JsObject::new()
@@ -141,6 +151,8 @@ pub fn unpack_bundle(
         vendor_naming: namer.stats,
         vendor_record,
         content_carry,
+        app_declarations,
+        library_discovery,
     })
 }
 

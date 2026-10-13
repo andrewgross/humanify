@@ -1157,6 +1157,42 @@ fn a_ts_era_prior_carries_its_names_by_content() {
     assert_eq!(read_manifest(&fresh.0)["hashVersion"], 4);
 }
 
+/// The next release, where Bun's minifier happened to spell the shared
+/// factory `gc` — a name that is ALSO a known global (Node's `--expose-gc`
+/// hook). The real case: 2.1.85's protobufjs factory is `var gc=B(...)`
+/// and nine factories read it as `gc()`.
+const SHIMS_REROLLED_TO_A_GLOBAL_SPELLING: &str = concat!(
+    "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\n",
+    "var gc=x((exports,module)=>{ module.exports=function one(a){return a+1}; });\n",
+    "var zB=x((exports,module)=>{ module.exports=gc(); });\n",
+    "var kC=x((exports,module)=>{ module.exports=gc(); });\n",
+    "var main=zB();"
+);
+
+#[test]
+fn a_bundle_declared_name_that_spells_a_global_still_keys_by_position() {
+    // `gc` is declared by the bundle, so the factories' `gc()` is a
+    // reference to the rest of the bundle — a slot, exactly like the prior
+    // vendor file's `lib_<hash8>.f()` — not the host's `gc`.
+    let (_prior, prior_file) = ts_era_prior("tsera-gc", |h| format!("{:0>16}", h.len()));
+    let fresh = TempDir::new("tsera-gc-fresh");
+    let outcome = unpack_bun(
+        SHIMS_REROLLED_TO_A_GLOBAL_SPELLING,
+        &fresh.0,
+        BunUnpackOptions {
+            prior: load_prior_vendor(&prior_file),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        names_in_bundle_order(&fresh.0, &outcome),
+        vec!["dep-one", "shim-a", "shim-b"]
+    );
+    let rekey = outcome.rekey.expect("re-keyed");
+    assert_eq!((rekey.groups_joined, rekey.factories_joined), (2, 3));
+}
+
 #[test]
 fn a_ts_era_prior_never_joins_by_hash_bytes() {
     // The TS bytes happen to EQUAL the Rust's, but the vendor files are
@@ -1930,6 +1966,109 @@ fn a_changed_declared_name_never_vetoes_a_content_pair() {
     let m2 = factories(&read_manifest(&second.0));
     let after = entry_with(&m2, "RouterOS", &second.0);
     assert_eq!(s(after, "fileName"), s(&before, "fileName"));
+}
+
+/// Every file under `dir`, relative path → bytes.
+fn tree(dir: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                stack.push(p);
+            } else {
+                out.insert(
+                    p.strip_prefix(dir).unwrap().to_path_buf(),
+                    fs::read(&p).unwrap(),
+                );
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn library_discovery_reports_and_changes_no_written_byte() {
+    let bundle = format!(
+        "{BUN_BUNDLE}\nvar pkg={{name:\"left-pad\",version:\"1.3.0\",main:\"index.js\",license:\"MIT\",pad:()=>priv()}};\nvar priv=()=>1;\nvar app=()=>pkg.pad();\n"
+    );
+    let (off, on) = (TempDir::new("disc-off"), TempDir::new("disc-on"));
+    let without = unpack_bun(&bundle, &off.0, BunUnpackOptions::default()).unwrap();
+    let with = unpack_bun(
+        &bundle,
+        &on.0,
+        BunUnpackOptions {
+            library_discovery: Some(crate::libdetect::discovery::DiscoveryRequest {
+                list_units: true,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(without.library_discovery.is_none(), "off unless asked for");
+    assert_eq!(tree(&off.0), tree(&on.0), "report-only: the same tree");
+    let report = with.library_discovery.expect("asked for");
+    let claimed: Vec<(&str, crate::libdetect::discovery::Rule)> = report
+        .claims
+        .iter()
+        .map(|c| (&bundle[c.start as usize..c.start as usize + 8], c.rule))
+        .collect();
+    use crate::libdetect::discovery::Rule;
+    assert_eq!(
+        claimed,
+        vec![("var pkg=", Rule::Seed), ("var priv", Rule::Down)]
+    );
+    assert!(report.claims.iter().all(|c| c.package == "left-pad"));
+    assert_eq!(report.graph.factories, 2);
+    assert!(
+        serde_json::to_value(&report)
+            .unwrap()
+            .get("unitRows")
+            .is_none(),
+        "unit prints only when asked for"
+    );
+    assert!(
+        report
+            .queue
+            .iter()
+            .any(|q| bundle[q.start as usize..].starts_with("var app"))
+    );
+}
+
+#[test]
+fn library_discovery_lists_unit_prints_for_the_discover_verb() {
+    let bundle = format!(
+        "{BUN_BUNDLE}\nvar pkg={{name:\"left-pad\",version:\"1.3.0\",main:\"index.js\",license:\"MIT\",pad:()=>priv()}};\nvar priv=()=>1;\n"
+    );
+    let dir = TempDir::new("disc-prints");
+    let out = unpack_bun(
+        &bundle,
+        &dir.0,
+        BunUnpackOptions {
+            library_discovery: Some(crate::libdetect::discovery::DiscoveryRequest {
+                unit_prints: true,
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let report = out.library_discovery.expect("asked for");
+    assert_eq!(report.unit_rows.len() as u32, report.graph.units);
+    let pkg = report
+        .unit_rows
+        .iter()
+        .find(|r| bundle[r.start as usize..].starts_with("var pkg="))
+        .expect("the package statement's row");
+    assert!(pkg.whole.is_some() && pkg.functions.len() == 1, "{pkg:?}");
+    assert!(
+        serde_json::to_value(&report)
+            .unwrap()
+            .get("unitRows")
+            .is_some()
+    );
 }
 
 // ---- joined declarations (a re-minified esbuild bundle) ----------------------

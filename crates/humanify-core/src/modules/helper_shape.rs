@@ -26,6 +26,16 @@
 //! ([`ModuleHelperShape::esbuild_only`]): Bun's runtime never writes the
 //! `try` guard (esbuild 0.28) or the `(0, cb[…])` indirect call
 //! (esbuild's unminified runtime); the plain arrow is written by both.
+//!
+//! The bundler's OTHER small runtime helpers are read by shape here too
+//! (library discovery's externals, `toolchain::InteropHelpers`):
+//! [`esbuild_runtime_shape`] (`__name`, `__publicField`, `__require`) and
+//! [`reexport_shape`] (`__reExport`). Bun's `__toESM` / `__toCommonJS`
+//! stay with the scope plan that rewrites references to them
+//! (`unpack::bun::scope::bun_helper_shape`).
+
+use oxc_ast::ast::Expression;
+use oxc_span::GetSpan;
 
 use super::IdentifiedHelper;
 
@@ -42,6 +52,8 @@ pub struct ModuleHelperShape {
     /// The factory is called indirectly, `(0, A[…])(…)` — esbuild's
     /// unminified runtime (and a re-minified copy of it).
     pub indirect: bool,
+    /// Byte offset of the marker's `{` — inside the helper's declaration.
+    pub marker: usize,
 }
 
 impl ModuleHelperShape {
@@ -222,6 +234,7 @@ fn helper_around(source: &str, open: usize) -> Option<ModuleHelperShape> {
             },
             guarded,
             indirect,
+            marker: open,
         });
     }
     None
@@ -232,21 +245,26 @@ fn word_bounded(bytes: &[u8], at: usize, len: usize) -> bool {
         && bytes.get(at + len).is_none_or(|b| !is_ident_byte(*b))
 }
 
-/// esbuild's `__export` registrar, by shape: a property descriptor
-/// `{ get: A[B], enumerable: !0 }` (or `true`) that CLOSES there. Bun's
-/// registrar writes the same getter but always goes on with
-/// `configurable: !0, set: …`, and esbuild's other getters
-/// (`__copyProps`'s `get: () => from[key]`) are arrows — so this one
-/// descriptor is esbuild's own, minified or not.
-pub fn has_esbuild_export_registrar(source: &str) -> bool {
+/// Whose `__export` registrar a descriptor is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ExportRegistrar {
+    /// `{ get: A[B], enumerable: !0 }` (or `true`) that CLOSES there.
+    Esbuild,
+    /// The same getter going on with `configurable: !0, set: …` — Bun's
+    /// runtime, minified or not.
+    Bun,
+}
+
+/// The FIRST `__export` registrar in `source`, by shape: a property
+/// descriptor `{ get: A[B], enumerable: !0 …`. esbuild's closes after
+/// `enumerable`; Bun's always goes on with `configurable: !0, set: …`;
+/// esbuild's other getters (`__copyProps`'s `get: () => from[key]`) are
+/// arrows and are neither. The first one is the outer runtime's: a
+/// bundle's own helpers precede the code it bundles, which may carry a
+/// registrar of its own.
+pub fn first_export_registrar(source: &str) -> Option<ExportRegistrar> {
     let bytes = source.as_bytes();
-    source.match_indices("enumerable").any(|(at, _)| {
-        let tail = || -> Option<()> {
-            let i = eat(bytes, at + "enumerable".len(), b":")?;
-            let i = eat(bytes, i, b"!0").or_else(|| eat(bytes, i, b"true"))?;
-            eat(bytes, i, b"}")?;
-            Some(())
-        };
+    source.match_indices("enumerable").find_map(|(at, _)| {
         let head = || -> Option<()> {
             let comma = eat_back(bytes, at, b",")?;
             let close = eat_back(bytes, comma, b"]")?;
@@ -258,7 +276,61 @@ pub fn has_esbuild_export_registrar(source: &str) -> bool {
             eat_back(bytes, get, b"{")?;
             Some(())
         };
-        word_bounded(bytes, at, "enumerable".len()) && tail().is_some() && head().is_some()
+        let truthy = |i: usize| eat(bytes, i, b"!0").or_else(|| eat(bytes, i, b"true"));
+        let tail = || -> Option<ExportRegistrar> {
+            let i = eat(bytes, at + "enumerable".len(), b":")?;
+            let i = truthy(i)?;
+            if eat(bytes, i, b"}").is_some() {
+                return Some(ExportRegistrar::Esbuild);
+            }
+            let i = eat(bytes, i, b",")?;
+            let i = eat(bytes, i, b"configurable")?;
+            let i = eat(bytes, i, b":")?;
+            let i = eat(bytes, truthy(i)?, b",")?;
+            let i = eat(bytes, i, b"set")?;
+            eat(bytes, i, b":")?;
+            Some(ExportRegistrar::Bun)
+        };
+        if !word_bounded(bytes, at, "enumerable".len()) {
+            return None;
+        }
+        head()?;
+        tail()
+    })
+}
+
+/// The bundle's RUNTIME PROLOGUE: the text before the module helper first
+/// wraps a module (`= NAME(` with a factory: `function`, an arrow, or
+/// esbuild's keyed `{…}`). What follows is module bodies — code the bundle
+/// carries, which may have been built by another bundler, or ship one as
+/// a string — so a bundler's runtime is read from the prologue only. The
+/// whole text when there is no helper or it is never called.
+pub fn runtime_prologue(source: &str) -> &str {
+    let Some(helper) = find_module_helper(source) else {
+        return source;
+    };
+    let end = first_wrapper_call(source, &helper.helper.name, helper.marker);
+    &source[..end.unwrap_or(source.len())]
+}
+
+/// The offset of `NAME` in the first `= NAME(factory` after `from`.
+fn first_wrapper_call(source: &str, name: &str, from: usize) -> Option<usize> {
+    let bytes = source.as_bytes();
+    source[from..].match_indices(name).find_map(|(rel, _)| {
+        let at = from + rel;
+        if !word_bounded(bytes, at, name.len()) {
+            return None;
+        }
+        let eq = eat_back(bytes, at, b"=")?;
+        if eq > 0 && b"=!<>+-*/%&|^?".contains(&bytes[eq - 1]) {
+            return None;
+        }
+        let i = eat(bytes, at + name.len(), b"(")?;
+        let factory = eat(bytes, i, b"function").is_some()
+            || eat(bytes, i, b"(").is_some()
+            || eat(bytes, i, b"{").is_some()
+            || ident_at(bytes, i).is_some_and(|(_, e)| eat(bytes, e, b"=>").is_some());
+        factory.then_some(at)
     })
 }
 
@@ -275,3 +347,75 @@ pub fn find_module_helper(source: &str) -> Option<ModuleHelperShape> {
 
 #[cfg(test)]
 mod helper_shape_test;
+
+/// The bundler's OTHER runtime helpers by SHAPE — the ones no vendored body
+/// is rewritten to, but which app and library code alike call, so library
+/// discovery treats them as runtime (`graph::references::BundlerFacts`):
+/// esbuild's `__name` (`(t,v)=>defProp(t,"name",{value:v,configurable:!0})`,
+/// written for `--keep-names`), `__publicField`
+/// (`(o,k,v)=>defNormal(o,typeof k!="symbol"?k+"":k,v)`) and `__require`
+/// (a call whose text keeps `Dynamic require of`, minified or not).
+pub(crate) fn esbuild_runtime_shape(code: &str, init: &Expression<'_>) -> Option<&'static str> {
+    /// esbuild's are under 400 bytes, minified or not.
+    const HELPER_TEXT_MAX: usize = 1024;
+    let span = init.span();
+    let text = &code[span.start as usize..span.end as usize];
+    if text.len() > HELPER_TEXT_MAX {
+        return None;
+    }
+    match init {
+        Expression::ArrowFunctionExpression(arrow)
+            if !arrow.r#async
+                && arrow.params.rest.is_none()
+                && !matches!(arrow.body, oxc_ast::ast::ArrowFunctionBody::FunctionBody(_)) =>
+        {
+            match arrow.params.items.len() {
+                2 if text.contains("\"name\"") && text.contains("configurable") => {
+                    Some(NAME_SETTER)
+                }
+                3 if text.contains("typeof") && text.contains("\"symbol\"") => {
+                    Some("__publicField")
+                }
+                _ => None,
+            }
+        }
+        Expression::CallExpression(_) if text.contains("Dynamic require of") => Some("__require"),
+        _ => None,
+    }
+}
+
+/// esbuild's `__name`: it also DEFINES its first argument (a
+/// namespace-filling helper in library discovery's graph).
+pub(crate) const NAME_SETTER: &str = "__name";
+
+/// The re-export copier (`__reExport`) by SHAPE: a small, synchronous
+/// three-parameter arrow that copies a module's exports except `"default"`
+/// onto its first argument (and its third). Bun's spells the loop out
+/// (`if(!has.call(e,o)&&o!=="default")defProp(e,o,{get:…,enumerable:!0})`);
+/// esbuild's is `(copy(e,t,"default"),r&&copy(r,t,"default"))`.
+/// `__toESM` also has three parameters and a `"default"`, and is told apart
+/// by its `__esModule` check.
+pub(crate) fn reexport_shape(code: &str, init: &Expression<'_>) -> bool {
+    /// Bun's is ~400 bytes minified, esbuild's ~150 unminified.
+    const HELPER_TEXT_MAX: usize = 1024;
+    let Expression::ArrowFunctionExpression(arrow) = init else {
+        return false;
+    };
+    let text = &code[arrow.span.start as usize..arrow.span.end as usize];
+    if arrow.r#async
+        || arrow.params.items.len() != 3
+        || arrow.params.rest.is_some()
+        || text.len() > HELPER_TEXT_MAX
+        || text.contains("__esModule")
+    {
+        return false;
+    }
+    if !matches!(arrow.body, oxc_ast::ast::ArrowFunctionBody::FunctionBody(_)) {
+        // esbuild: both calls hand "default" as the exception.
+        return text.matches("\"default\"").count() == 2;
+    }
+    let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    compact.contains("!==\"default\"")
+        && compact.contains("{get:")
+        && compact.contains("enumerable")
+}

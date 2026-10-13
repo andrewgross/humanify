@@ -104,6 +104,15 @@ fn is_builtin(spec: &str) -> bool {
     BUILTIN_MODULES.contains(&bare) || BUILTIN_MODULES.contains(&head)
 }
 
+/// Is `name` EXACTLY a Node builtin module's name, in either spelling
+/// (`fs`, `node:fs`, `fs/promises`; any `node:` name)? Unlike a require
+/// specifier ([`is_builtin`]), a deeper path under a builtin's name is
+/// not one — the literal index's question (`libindex::literals`): an
+/// ordinary string `"path/to/file"` is not the `path` module.
+pub(crate) fn is_builtin_name(name: &str) -> bool {
+    name.starts_with("node:") || BUILTIN_MODULES.contains(&name)
+}
+
 /// The installable package name: scope + name, deep subpath dropped.
 fn package_name(spec: &str) -> String {
     let parts: Vec<&str> = spec.split('/').collect();

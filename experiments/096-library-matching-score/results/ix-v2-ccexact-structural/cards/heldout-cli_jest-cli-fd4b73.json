@@ -1,0 +1,56 @@
+{
+ "bundleSha256": "f391d00767f0a84fd0556aa20e242151d810caacfa246ba5e88510094c7be30a",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_jest-cli-fd4b73",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "bfb9d80adc0d65d7b6c1ee02d1b947b6493e1ef68d9c9602b1edcecc3aadc8ce",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-ccexact-structural",
+ "missBytes": {
+  "a": 2802
+ },
+ "noDiscovery": null,
+ "reportSha256": "cea7c1cdd62a71a7c9977438cd231673d94588f4f56ab63a1ef6d2b2117aad31",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 23,
+  "library": 2802
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 2802,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

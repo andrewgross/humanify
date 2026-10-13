@@ -1,0 +1,66 @@
+{
+ "bundleClaimedBytes": 565803,
+ "bundleSha256": "ec64d65a1e772ac04719715af0210dc0da6160a048d9922284cafc3cb5da1f76",
+ "claimedBytes": {
+  "right": 511200
+ },
+ "claimedSampleUnits": {
+  "right": 23
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "cc-2.1.216",
+ "estimate": "stratified ratio estimate from the 620-unit labelled sample (bytes are src-wide estimates)",
+ "exploratory": {
+  "names": {
+   "bindings": 4662,
+   "bindingsSameVersion": 199,
+   "bindingsVersionKnown": 217,
+   "exactBytes": 251279,
+   "exactUnits": 526,
+   "sameVersionShare": 0.917051,
+   "versionScope": "labelled sample units only"
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "label": "ix-v2-agreement",
+ "missBytes": {
+  "a": 751159,
+  "b": 219747,
+  "c": 54136,
+  "d-nofile": 403705,
+  "e-agree": 194117,
+  "e-support": 28629,
+  "e-veto": 58769
+ },
+ "noDiscovery": null,
+ "reportSha256": "cf0e04a019716eab95378a0871302164f7e538452406be937a6e7ff87ae2d156",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "cc",
+ "statementBytes": {
+  "<app>": 13036401,
+  "<compiler-helper>": 22856,
+  "library": 2221462
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "bun",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "appClaimedSampleUnits": 0,
+  "libraryBytes": 2221462,
+  "namedBytes": 511200,
+  "recall": 0.230119,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sample"
+}

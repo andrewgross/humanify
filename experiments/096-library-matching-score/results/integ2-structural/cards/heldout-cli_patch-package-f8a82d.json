@@ -1,0 +1,53 @@
+{
+ "bundleSha256": "84ebc5e102c665b21b6a0dbaeb614820d4b89605550133e914022cf85b7ed639",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_patch-package-f8a82d",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "integ2-structural",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "3139e6b51130915e2e586fc21c3435a9a9f0d73d058ec60c22df52a8589d79bd",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 23
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

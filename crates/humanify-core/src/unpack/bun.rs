@@ -250,6 +250,9 @@ pub struct BunUnpackOptions<'n> {
     /// The run's module identity source (the toolchain's P17 piece): what
     /// the bundler kept about each module, for the declared identity.
     pub module_identity: crate::toolchain::ModuleIdentitySource,
+    /// Run library discovery over the app code, report-only
+    /// (`libdetect::discovery`; the CLI asks for it with `--diagnostics`).
+    pub library_discovery: Option<crate::libdetect::discovery::DiscoveryRequest<'n>>,
 }
 
 impl Default for BunUnpackOptions<'_> {
@@ -265,6 +268,7 @@ impl Default for BunUnpackOptions<'_> {
             module_wrappers: crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
             interop: crate::toolchain::InteropHelpers::Bun,
             module_identity: crate::toolchain::ModuleIdentitySource::Bun,
+            library_discovery: None,
         }
     }
 }
@@ -295,6 +299,12 @@ pub struct BunUnpackOutcome {
     /// The declared-identity carry (finding #95), when a prior was given:
     /// one entry per pair, with the key both sides declared.
     pub declared_carry: Option<Vec<DeclaredCarry>>,
+    /// Library declarations read in APP code (finding #95, exp095) —
+    /// report-only, for the diagnostics: nothing is named or moved by them.
+    pub app_declarations: Vec<crate::modules::identity::AppDeclaration>,
+    /// Library discovery over the app code (exp095), when asked for —
+    /// report-only: nothing is named, moved or renamed by it.
+    pub library_discovery: Option<crate::libdetect::discovery::DiscoveryReport>,
 }
 
 /// What the content carry did: how many modules it could pair, against
@@ -382,6 +392,8 @@ pub fn unpack_bun(
             helper_refs: 0,
             content_carry: None,
             declared_carry: None,
+            app_declarations: Vec::new(),
+            library_discovery: None,
         })
     };
 
@@ -413,6 +425,12 @@ pub fn unpack_bun(
     // Per RETAINED factory (extraction order): the manifest's capture
     // records for its body's app-scope reads (finding #60).
     let mut captures_by_module: Vec<Vec<ManifestCapture>> = Vec::new();
+    // Every classified module, before the scope plan keeps any in the app:
+    // library discovery treats each as one external unit (the lab's model).
+    let classified_modules: Vec<oxc_span::Span> = classification
+        .as_ref()
+        .map(|c| c.factories.iter().map(|f| f.span).collect())
+        .unwrap_or_default();
     if let Some(c) = classification.as_mut() {
         let plan = scope::plan_bundle_scope_refs(
             code,
@@ -436,6 +454,8 @@ pub fn unpack_bun(
         .map(|_| IdentifierPlanner::build(&ingest));
     let mut content_carry = None;
     let mut declared_carry = None;
+    let mut app_declarations = Vec::new();
+    let mut library_discovery = None;
     // What the bundler kept about the whole bundle (P17), read once.
     let bundle_facts = options.module_identity.bundle_facts(code);
     if let (Some(c), Some(planner)) = (classification.as_mut(), planner.as_ref()) {
@@ -447,11 +467,15 @@ pub fn unpack_bun(
         // bundle (the formatter drops the comments a bundler kept) before
         // any name is chosen.
         declare_identities(c, code, options.module_identity, &bundle_facts);
+        app_declarations =
+            crate::modules::identity::scan_app_declarations(code, &app_statements(c));
+        library_discovery = discovery_report(code, &ingest, &options, grammar, &classified_modules);
         if let Some(entries) = &prior.stale_era {
             // A stale-era prior (TS or an older hashVersion): re-key its
             // names and order by CONTENT onto this run's structural hashes
             // (modules::vendor_content).
-            let keys = fresh_content_keys(code, &c.factories, require_var.as_deref());
+            let declared = scope::statement_level_names(&ingest, &c.container);
+            let keys = fresh_content_keys(code, &c.factories, require_var.as_deref(), &declared);
             let fresh: Vec<(String, Option<String>)> = c
                 .factories
                 .iter()
@@ -660,7 +684,66 @@ pub fn unpack_bun(
             }
             carries
         }),
+        app_declarations,
+        library_discovery,
     })
+}
+
+/// Library discovery over the app code (exp095), report-only, when the run
+/// asked for it: every classified module (`classified`, before the scope
+/// plan kept any in the app) is one external unit.
+fn discovery_report(
+    code: &str,
+    ingest: &Ingest<'_>,
+    options: &BunUnpackOptions<'_>,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+    classified: &[oxc_span::Span],
+) -> Option<crate::libdetect::discovery::DiscoveryReport> {
+    use crate::libdetect::discovery::{
+        BundlePieces, DiscoveryOptions, DiscoveryReport, discover_in_bundle,
+    };
+    let request = options.library_discovery?;
+    let pieces = BundlePieces {
+        layout: options.layout,
+        grammar,
+        interop: options.interop,
+    };
+    let (graph, found) = discover_in_bundle(
+        code,
+        ingest,
+        pieces,
+        classified,
+        &[],
+        request.lookup(),
+        DiscoveryOptions::default(),
+    );
+    let mut report = DiscoveryReport::new(&graph, &found, request.list_units);
+    report.index_id = request.index.map(|ix| ix.id.clone());
+    if request.unit_prints {
+        report.unit_rows = crate::libdetect::discovery::unit_rows(code, ingest, pieces, classified);
+    }
+    Some(report)
+}
+
+/// The container statements no extracted module lives in: the app's own
+/// top-level code (and any library code hoisted into it).
+fn app_statements(c: &BunModuleClassification) -> Vec<oxc_span::Span> {
+    let mut modules: Vec<(u32, u32)> = c
+        .factories
+        .iter()
+        .map(|f| (f.span.start, f.span.end))
+        .collect();
+    modules.sort_unstable();
+    c.container
+        .iter()
+        .filter(|s| {
+            // The first module ending after the statement starts overlaps
+            // it when it also starts before the statement ends.
+            let i = modules.partition_point(|m| m.1 <= s.start);
+            modules.get(i).is_none_or(|m| m.0 >= s.end)
+        })
+        .copied()
+        .collect()
 }
 
 /// Every non-asset module's declared identity and hints (finding #95): the
@@ -836,8 +919,9 @@ fn carry_by_content(
 /// The AST classification on the parsed input (`classifyWithAst` minus the
 /// naming, which the caller sequences around the hook), inside the
 /// container the run's bundle `layout` finds, under the run's module
-/// wrapper `grammar`.
-fn classify(
+/// wrapper `grammar`. Also the library index's module walk
+/// (`modules::vendor_content::bundle_content_keys`).
+pub(crate) fn classify(
     code: &str,
     ingest: &Ingest<'_>,
     layout: crate::toolchain::BundleLayout,

@@ -1,0 +1,69 @@
+{
+ "bundleSha256": "8b5b7a9a7ee743bf1f8a64f9e7f00fc41ea7ed853898aa3c0206f5ff066a2fa0",
+ "claimedBytes": {
+  "right": 134975,
+  "wrongFamily": 22411
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_lighthouse-000018",
+ "exploratory": {
+  "names": {
+   "bindings": 1827,
+   "bindingsSameVersion": 1827,
+   "bindingsVersionKnown": 1827,
+   "exactBytes": 99871,
+   "exactUnits": 67,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 121129,
+  "recall": 0.010904,
+  "wrongFamilyShare": 0.10395
+ },
+ "label": "ix-v2-agreement",
+ "missBytes": {
+  "a": 10898528,
+  "c": 20284,
+  "d-file": 7653,
+  "e-agree": 40933,
+  "e-ambig": 400,
+  "e-other": 687,
+  "e-spec": 171,
+  "e-support": 493,
+  "e-veto": 2626,
+  "f": 1446
+ },
+ "noDiscovery": null,
+ "reportSha256": "09f3e2526076b491abc4370013aee6fa4161ef8530bf39a4ba1261b4690ef56c",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 4796176,
+  "<unmapped>": 74,
+  "library": 11108196
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "bun",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 11108196,
+  "namedBytes": 134975,
+  "recall": 0.012151,
+  "wrongFamilyBytes": 22411,
+  "wrongFamilyShare": 0.142395,
+  "wrongNameShare": 0.142395
+ },
+ "truthMethod": "sourcemap"
+}

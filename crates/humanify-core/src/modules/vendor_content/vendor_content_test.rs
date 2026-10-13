@@ -2,6 +2,8 @@
 //! the prior tree's vendor file (relinked or not), whatever the release-
 //! specific spellings; the re-key carries only exact group matches.
 
+use std::collections::HashSet;
+
 use super::{
     NameSource, StaleEraEntry, UNJOINED, prior_file_content_key, rekey_prior_by_content,
     vendor_content_key,
@@ -12,9 +14,14 @@ use super::{
 const FRESH: &str =
     "(exports,module)=>{ var p=REQ(\"node:path\"); module.exports=qA(p.sep)+kC+hZ(process); }";
 
+/// A content key with no program-declared names.
+fn key(text: &str) -> Option<String> {
+    vendor_content_key(text, &HashSet::new())
+}
+
 fn fresh_key() -> String {
     let body = crate::unpack::bun::rewrite_require_calls(FRESH, "REQ");
-    vendor_content_key(&body).expect("parses")
+    key(&body).expect("parses")
 }
 
 #[test]
@@ -41,20 +48,40 @@ fn content_and_known_globals_are_in_the_key() {
         "(exports,module)=>{ var p=REQ(\"node:path\"); module.exports=qA(p.sep)+kC+hZ(Buffer); }",
         "REQ",
     );
-    assert_ne!(vendor_content_key(&other_global), Some(fresh_key()));
+    assert_ne!(key(&other_global), Some(fresh_key()));
     // So is a literal's class and the tree shape.
     assert_ne!(
-        vendor_content_key("(e,m)=>{ m.exports=qA(1); }"),
-        vendor_content_key("(e,m)=>{ m.exports=qA(\"1\"); }")
+        key("(e,m)=>{ m.exports=qA(1); }"),
+        key("(e,m)=>{ m.exports=qA(\"1\"); }")
     );
     // Two references to ONE outside binding are not two outside bindings.
     assert_ne!(
-        vendor_content_key("(e,m)=>{ m.exports=qA(qA); }"),
-        vendor_content_key("(e,m)=>{ m.exports=qA(kC); }")
+        key("(e,m)=>{ m.exports=qA(qA); }"),
+        key("(e,m)=>{ m.exports=qA(kC); }")
     );
     // An unparseable text keys to nothing.
-    assert_eq!(vendor_content_key("(a,b)=>{"), None);
+    assert_eq!(key("(a,b)=>{"), None);
     assert_eq!(prior_file_content_key("var x = 1;"), None);
+}
+
+#[test]
+fn a_program_declared_name_that_spells_a_known_global_is_a_slot() {
+    // 2.1.85: Bun spelled the protobufjs factory `gc` (also Node's
+    // `--expose-gc` hook), and its dependents read it as `gc()`. The prior
+    // vendor file reads the same factory as `lib_f3ea04ef.f()`.
+    let fresh = "(FIO,ru7)=>{ru7.exports=LJ;var KsH=gc();function LJ(H){this.lo=H}}";
+    let prior = concat!(
+        "const lib_f3ea04ef = require(\"./protobufjs-minimal/lib_f3ea04ef.js\");\n",
+        "const { __commonJS } = require(\"../.humanify/__bun-runtime.js\");\n",
+        "exports.f = __commonJS((E,M)=>{M.exports=LJ;var K=lib_f3ea04ef.f();function LJ(H){this.lo=H}});\n",
+    );
+    let bundle_declared: HashSet<String> = ["gc".to_string()].into();
+    assert_eq!(
+        vendor_content_key(fresh, &bundle_declared),
+        prior_file_content_key(prior)
+    );
+    // Undeclared, `gc` IS the host's global: content, verbatim.
+    assert_ne!(key(fresh), prior_file_content_key(prior));
 }
 
 fn entry(name: &str, ts: &str, ordinal: usize, key: Option<&str>) -> StaleEraEntry {
@@ -163,4 +190,42 @@ fn the_rekey_refuses_anything_inexact() {
         ("g".to_string(), Some("K".to_string())),
     ];
     assert!(rekey_prior_by_content(&spread, &prior).names.is_empty());
+}
+
+// ---- a whole bundle's module keys (the library index's module fingerprint)
+
+/// The same two CommonJS modules, minified twice with different spellings.
+const BUNDLE_A: &str = r#"var m=(e,r)=>()=>(r||e((r={exports:{}}).exports,r),r.exports);var B=m((ge,q)=>{q.exports=function(e){return e+"abc"}});var C=m((x,y)=>{var t=B();y.exports=function(n){return t(n)*1024}});module.exports=C();"#;
+const BUNDLE_B: &str = r#"var k=(a,b)=>()=>(b||a((b={exports:{}}).exports,b),b.exports);var Z=k((Q,W)=>{W.exports=function(n){return n+"abc"}});var Y=k((P,O)=>{var s=Z();O.exports=function(v){return s(v)*1024}});module.exports=Y();"#;
+
+fn bundle_keys(code: &str) -> Vec<super::BundleModuleKey> {
+    super::bundle_content_keys(
+        code,
+        crate::toolchain::ModuleWrapperGrammar::BunAndEsbuild,
+        crate::toolchain::BundleLayout::SingleWrapperFunction,
+    )
+}
+
+#[test]
+fn every_bundled_module_gets_the_pipelines_content_key_in_bundle_order() {
+    let a = bundle_keys(BUNDLE_A);
+    assert_eq!(a.len(), 2);
+    let first = &BUNDLE_A[a[0].body_span.start as usize..a[0].body_span.end as usize];
+    assert_eq!(first, r#"(ge,q)=>{q.exports=function(e){return e+"abc"}}"#);
+    // The key IS the vendor content key of that factory's text.
+    assert_eq!(a[0].key, key(first));
+    assert!(a.iter().all(|m| m.key.is_some()));
+    assert_ne!(a[0].key, a[1].key);
+}
+
+#[test]
+fn a_bundled_module_keys_the_same_whatever_the_minifier_named_things() {
+    let a: Vec<Option<String>> = bundle_keys(BUNDLE_A).into_iter().map(|m| m.key).collect();
+    let b: Vec<Option<String>> = bundle_keys(BUNDLE_B).into_iter().map(|m| m.key).collect();
+    assert_eq!(a, b);
+}
+
+#[test]
+fn a_bundle_without_modules_has_no_module_keys() {
+    assert!(bundle_keys("function f(){return 1}module.exports=f;").is_empty());
 }

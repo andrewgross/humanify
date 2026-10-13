@@ -188,6 +188,12 @@ reaches):
 | `diff` (`DIFF_DEADLINE`, `naming/reconcile/hunks.rs`)     | 10 min   | 4.5 s for the largest diff the pipeline runs, the pre-split reconcile over the whole Claude Code bundle (793k vs 805k lines, 2.1.215 -> 2.1.216); per-file diffs are far smaller | post-split: counted as `diff_failed` (apart from parse `discarded`) and a WARNING naming the first file; pre-split: a WARNING that the reconcile did not run (audit R3, fixed) |
 | `git rev-parse` (`GIT_DEADLINE`, `unified.rs`)            | 1 min    | milliseconds                                                                                                                                                                     | not a checkout / no git: the decided quiet "unknown"; a timeout: "unknown" and a WARNING                                                                                       |
 
+The offline index builder (`crates/humanify-index`, not the pipeline) runs
+`npm install`, `npm view` and the bundlers through the same owner, under
+`INSTALL_DEADLINE` (30 min), `VIEW_DEADLINE` (5 min), `BUILD_DEADLINE`
+(30 min) and `VERSION_DEADLINE` (1 min); a failure fails that package's
+task, which is reported and indexes nothing.
+
 Up to one `diff` per core still runs at once on the rayon pool (R4, the
 unsized pool). Resource exhaustion on the shared box can still fail one,
 but it can no longer change the tree without a WARNING.

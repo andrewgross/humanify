@@ -1,0 +1,26 @@
+{
+  "about": "Package families: a claim naming another member of the true package's family is family-correct, not wrong (exp095 scale lane, results/family-effect.json; docs/design/library-index.md section 7). Read by the LOOKUP. A member ending in * is a prefix.",
+  "families": [
+    { "name": "azure-msal", "members": ["@azure/msal-*"] },
+    { "name": "aws-sdk", "members": ["@aws-sdk/*", "@smithy/*"] },
+    {
+      "name": "glob",
+      "members": ["glob", "lru-cache", "minimatch", "path-scurry"]
+    },
+    {
+      "name": "lodash",
+      "members": ["es-toolkit", "lodash", "lodash-es", "lodash.*"]
+    },
+    { "name": "uri", "members": ["fast-uri", "uri-js"] }
+  ],
+  "rules": {
+    "sameScope": "two packages of one npm scope are one family",
+    "scopedForks": [
+      ["busboy", "@fastify/busboy"],
+      ["colors", "@colors/colors"],
+      ["proxy-addr", "@fastify/proxy-addr"],
+      ["quick-lru", "@alloc/quick-lru"],
+      ["sax", "@trysound/sax"]
+    ]
+  }
+}

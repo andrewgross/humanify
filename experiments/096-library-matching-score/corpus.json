@@ -1,0 +1,1753 @@
+{
+  "entries": [
+    {
+      "bundler": "bun",
+      "description": "Claude Code 2.1.216, the bun --compile binary's extracted entry (Bun, --target bun, minified)",
+      "files": {
+        "bundle": {
+          "bytes": 20455273,
+          "name": "index.js",
+          "origin": "/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js",
+          "sha256": "ec64d65a1e772ac04719715af0210dc0da6160a048d9922284cafc3cb5da1f76"
+        }
+      },
+      "id": "cc-2.1.216",
+      "set": "cc",
+      "truth": {
+        "method": "sample",
+        "sha256": "1f379d97b7eaba51faa5e87365975e63e0719159ac939515de1bbc2b747c5e9d"
+      }
+    },
+    {
+      "appPackage": "@angular/cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_angular_cli-38b7f2: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 6201369,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_angular_cli-38b7f2/entry.js",
+          "sha256": "7c027b99cf18e555ae926a3c5e49fa744d12afe958d91d6476a212d12d59ec89"
+        },
+        "map": {
+          "bytes": 20764485,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_angular_cli-38b7f2/entry.js.map",
+          "sha256": "f7f1a64bdce7b1cb6dac88194d966b96f52d13c2fcdf6d98527b250228a93cd9"
+        }
+      },
+      "id": "heldout-cli_angular_cli-38b7f2",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "17c870d0edfd459e86eb5deee2e0e5bf8b81472fe30e538c01c083bd9e221482"
+      }
+    },
+    {
+      "appPackage": "appium",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_appium-12c815: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 3125042,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_appium-12c815/entry.js",
+          "sha256": "a25f285b7707aca21442cf640baa30e23da5108ef9991ad6925d2cbc0e6bc8ba"
+        },
+        "map": {
+          "bytes": 9261394,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_appium-12c815/entry.js.map",
+          "sha256": "5cd4a61e46ed8604d3aa770208c774203ca57ed3af2b7dbd392d9645268b518b"
+        }
+      },
+      "id": "heldout-cli_appium-12c815",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e87d2a7102be0afff2729974bae67308e3061b8c2c3eb3f5feb283b9bf1d05df"
+      }
+    },
+    {
+      "appPackage": "browserslist",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_browserslist-bc765f: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 172333,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_browserslist-bc765f/entry.js",
+          "sha256": "23f138ef16f987acfa584d9c7c549665fcdf76070a1b23b07463966f79bbebc8"
+        },
+        "map": {
+          "bytes": 325692,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_browserslist-bc765f/entry.js.map",
+          "sha256": "94672c8daaa6f0afc03d15fd09d171ef4e9773ab76fbd23e813cd876be68b40a"
+        }
+      },
+      "id": "heldout-cli_browserslist-bc765f",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ed73a1650b8ada9c13f4ffb5dc7ff4453e2361d0ddcb305d73a3c6a485c80dfa"
+      }
+    },
+    {
+      "appPackage": "conventional-changelog-writer",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_conventional-changelog-writer-c3ddfd: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 11991,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_conventional-changelog-writer-c3ddfd/entry.js",
+          "sha256": "47941e9bfc7f7e4ac0d6ef1001c8b344addedc7eb41f2a8244527ed8cbbf20c2"
+        },
+        "map": {
+          "bytes": 114753,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_conventional-changelog-writer-c3ddfd/entry.js.map",
+          "sha256": "35cc14c08492af90f876f334062a0001486a81b11955c397cf8f822e783acba8"
+        }
+      },
+      "id": "heldout-cli_conventional-changelog-writer-c3ddfd",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c54654035e61848cb567f8036fc66db3342f6573c869e0e70eecf295d5376c29"
+      }
+    },
+    {
+      "appPackage": "@cucumber/gherkin-utils",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_cucumber_gherkin-utils-1a5aa9: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 193,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_cucumber_gherkin-utils-1a5aa9/entry.js",
+          "sha256": "987ffbacb40c5cc8bce717ff2728b1e41103218f58c028c12e0e89f16be4514b"
+        },
+        "map": {
+          "bytes": 400,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_cucumber_gherkin-utils-1a5aa9/entry.js.map",
+          "sha256": "fd7f39ba2afd96b9466b5ce8a0f12beee15b70cead56a745e3865d5cca309d47"
+        }
+      },
+      "id": "heldout-cli_cucumber_gherkin-utils-1a5aa9",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9b530c542ef2798b6368137e5589b8dfcc444668e953bdf7ade378b229900e2e"
+      }
+    },
+    {
+      "appPackage": "docsify-cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_docsify-cli-afa7ea: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 187,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_docsify-cli-afa7ea/entry.js",
+          "sha256": "4e3971a3994e59682e54a83a4cc9cf97bd3b2c23c754b1ed16e4fd25da7a82af"
+        },
+        "map": {
+          "bytes": 360,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_docsify-cli-afa7ea/entry.js.map",
+          "sha256": "0c7e15a9ca6e4a6822bbf5e1f704099bb55dd40ce5a1df620dea6a0e61545477"
+        }
+      },
+      "id": "heldout-cli_docsify-cli-afa7ea",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "78fbf1c8602377dbbeb1e2e7439c784adfacdc88fddf84715ec7f606a304b487"
+      }
+    },
+    {
+      "appPackage": "@docusaurus/core",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_docusaurus_core-2a69fd: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 19052229,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_docusaurus_core-2a69fd/entry.js",
+          "sha256": "5327ffebc4cee3d0ccc2b86197909cff9d60cc8fb4951f5ee0ddde2f993896dc"
+        },
+        "map": {
+          "bytes": 53479027,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_docusaurus_core-2a69fd/entry.js.map",
+          "sha256": "354045b28220010616f43dedb6afe105afbf228c40b5e5fa424001f6a595ab11"
+        }
+      },
+      "id": "heldout-cli_docusaurus_core-2a69fd",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "05928dc26df2323bb65a25cf180053cacfa080e1e11acc93f0d0e55fd45d64b4"
+      }
+    },
+    {
+      "appPackage": "dogapi",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_dogapi-d0a72c: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 186,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_dogapi-d0a72c/entry.js",
+          "sha256": "9b826cbebfe7672bcf440cbf39e86faab36dfd66193f12f01766d48b04d4c4e6"
+        },
+        "map": {
+          "bytes": 344,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_dogapi-d0a72c/entry.js.map",
+          "sha256": "94dbc9c9c6edbea17b7748e1bd276988036241e3c156d0c8fddba660821071c2"
+        }
+      },
+      "id": "heldout-cli_dogapi-d0a72c",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1328583b310bc173fad9ce170e5f434f98f038ccdbd5a83dbc4dcf811f687a58"
+      }
+    },
+    {
+      "appPackage": "@dotenvx/dotenvx",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_dotenvx_dotenvx-627499: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 1638145,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_dotenvx_dotenvx-627499/entry.js",
+          "sha256": "b37c5790ef676d5721cdf099631b42b2b0332b26e311065ccf33d0b5f3ef1bff"
+        },
+        "map": {
+          "bytes": 3543555,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_dotenvx_dotenvx-627499/entry.js.map",
+          "sha256": "262be0502e8f65ea39f1a64164d3d1ff16c65dbbce37cc2287f28250dfa52536"
+        }
+      },
+      "id": "heldout-cli_dotenvx_dotenvx-627499",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c27176166607efc429233837fa9c7b66e117c208b8b75f854e862acb05f7e2e1"
+      }
+    },
+    {
+      "appPackage": "edge-runtime",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_edge-runtime-3c8bb9: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 495694,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_edge-runtime-3c8bb9/entry.js",
+          "sha256": "bdd24833c593e35a58abfcfdcf609d6989144e02a7e17611aa6f3b0fdf67cdfb"
+        },
+        "map": {
+          "bytes": 1285801,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_edge-runtime-3c8bb9/entry.js.map",
+          "sha256": "35ab7e9e2bf44289330ed6d9746ba9be618be8d706af26ff01ac9e59c571d55f"
+        }
+      },
+      "id": "heldout-cli_edge-runtime-3c8bb9",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f083d575f38030e640550baf0b1ef74c438b6156eb789a54dcbbac613972de02"
+      }
+    },
+    {
+      "appPackage": "heroku",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_heroku-92c689: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2361969,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_heroku-92c689/entry.js",
+          "sha256": "fbd751bb46089b46f06208d9b4ac3a0a7908cc99017f0095322a81de32965f21"
+        },
+        "map": {
+          "bytes": 8352132,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_heroku-92c689/entry.js.map",
+          "sha256": "b1eb005151fe8e66d39a053cc4f10bf84eebc8f1fa18c9b5597474c1a6a8ae91"
+        }
+      },
+      "id": "heldout-cli_heroku-92c689",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ff5d3ba516ab3f6df06617a4649bef2c94c9193e4c751b3db148e30c0e2bf5b2"
+      }
+    },
+    {
+      "appPackage": "html-minifier-terser",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_html-minifier-terser-9654a2: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 834325,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_html-minifier-terser-9654a2/entry.js",
+          "sha256": "b676ee70062b583e364d9ca218de7cac848c55665934daddd0e9d40a31d998f2"
+        },
+        "map": {
+          "bytes": 2870041,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_html-minifier-terser-9654a2/entry.js.map",
+          "sha256": "1f3776566bf521c06868624b55c7119e87474167b4223ce73c3fd753252f8386"
+        }
+      },
+      "id": "heldout-cli_html-minifier-terser-9654a2",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3e5c9dfea2247536f359005bf62d07bcd187c463a6e986f6b44bd245e156233d"
+      }
+    },
+    {
+      "appPackage": "jest-cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_jest-cli-fd4b73: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2735297,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_jest-cli-fd4b73/entry.js",
+          "sha256": "f391d00767f0a84fd0556aa20e242151d810caacfa246ba5e88510094c7be30a"
+        },
+        "map": {
+          "bytes": 8157598,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_jest-cli-fd4b73/entry.js.map",
+          "sha256": "2cd9d41be5aa30173ce32e356a6a996858b1f3c45436bebcd1bf3a6470599d09"
+        }
+      },
+      "id": "heldout-cli_jest-cli-fd4b73",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "348761425e8d84891140b5babea17136c6c996d0bf2bda78219d9e44b3d771dc"
+      }
+    },
+    {
+      "appPackage": "js-beautify",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_js-beautify-1dffe2: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 286912,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_js-beautify-1dffe2/entry.js",
+          "sha256": "0e942873fb012773e05e64534f9fe898286d09b77a5920eaf85194d2b8522e9f"
+        },
+        "map": {
+          "bytes": 894458,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_js-beautify-1dffe2/entry.js.map",
+          "sha256": "45327b4b97a6396d19a1b7545085899d8bb37aaf6ba10783b3b35d863b997fa2"
+        }
+      },
+      "id": "heldout-cli_js-beautify-1dffe2",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ebd4c9e8cb974ed5e67bacb313a1716235258a1b369f46bea2606d84cf65c031"
+      }
+    },
+    {
+      "appPackage": "lighthouse",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_lighthouse-000018: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 16873313,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_lighthouse-000018/entry.js",
+          "sha256": "8b5b7a9a7ee743bf1f8a64f9e7f00fc41ea7ed853898aa3c0206f5ff066a2fa0"
+        },
+        "map": {
+          "bytes": 11028770,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_lighthouse-000018/entry.js.map",
+          "sha256": "b0c394ed51e661f0679dd175a10934e4cac03386f2dbe103ac7acbb3277bd8ec"
+        }
+      },
+      "id": "heldout-cli_lighthouse-000018",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c794c49845508b15e1908bc744953963ff36d95dcef37c8f11f75902cbb036e1"
+      }
+    },
+    {
+      "appPackage": "@microsoft/rush",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_microsoft_rush-ab38ae: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 304,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_microsoft_rush-ab38ae/entry.js",
+          "sha256": "63403f482c9a909d1088428102a52b7dfe4f9720130b771d66ae5f001c6e0de6"
+        },
+        "map": {
+          "bytes": 629,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_microsoft_rush-ab38ae/entry.js.map",
+          "sha256": "30e846f67ab6da73445fabef7d8a55827c5c9dcad0c774033527db944464f36a"
+        }
+      },
+      "id": "heldout-cli_microsoft_rush-ab38ae",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cb2226f31a8a4d09d6f41bff610ca0a7a61ee9eede34988d6844c7eb0da9897e"
+      }
+    },
+    {
+      "appPackage": "mocha",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_mocha-929c58: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 482729,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_mocha-929c58/entry.js",
+          "sha256": "268cdf52448e27060defb9d7766d730c501e29daadb909b58e881affaa437f25"
+        },
+        "map": {
+          "bytes": 1607774,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_mocha-929c58/entry.js.map",
+          "sha256": "0ca5e72580e13c45b5d994ec348a7ac57987e5fba88ef0f50fd77a1ee0c9ce36"
+        }
+      },
+      "id": "heldout-cli_mocha-929c58",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "42f29720859c5d8ad75991f97906d0c46b630df0c7a305c4552fd1e690c5da18"
+      }
+    },
+    {
+      "appPackage": "mssql",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_mssql-e7997a: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 185,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_mssql-e7997a/entry.js",
+          "sha256": "14088e910f1245985cddeae0d9ea3d8b3249cef2a926a16d6ae7e85327216a82"
+        },
+        "map": {
+          "bytes": 340,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_mssql-e7997a/entry.js.map",
+          "sha256": "01bfcdac82f7922ee96ec9bbb5f51cd5ccfc52f0f5dd8aabdf253ba7ec823b65"
+        }
+      },
+      "id": "heldout-cli_mssql-e7997a",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5dbd11145dff7d08abffba955ee62e3a95d41b0fefcb0c05e0aa9429738f4e14"
+      }
+    },
+    {
+      "appPackage": "msw",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_msw-e7fbef: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 145205,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_msw-e7fbef/entry.js",
+          "sha256": "43670d4055129e00415087893cacd0eaf3a9feae467524ce00668e2fcb37c73a"
+        },
+        "map": {
+          "bytes": 530206,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_msw-e7fbef/entry.js.map",
+          "sha256": "e571066000effbc886dc32501334a48a04c7b29a3d657c520e1deb597945f863"
+        }
+      },
+      "id": "heldout-cli_msw-e7fbef",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "85063752f4903ebcaeee63f12fb57a24a7f1e141b6d82c3b8168e223f82deae8"
+      }
+    },
+    {
+      "appPackage": "@nestjs/cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_nestjs_cli-a95754: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 4749990,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_nestjs_cli-a95754/entry.js",
+          "sha256": "8f29dddebfa7168b4631a8805a5c5f33f090519e250e737f9c850afa34e36d3f"
+        },
+        "map": {
+          "bytes": 16210595,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_nestjs_cli-a95754/entry.js.map",
+          "sha256": "0b8893d09fe857916866d77febb2a95b4610a3af6a9850772d4ff9b95721dcae"
+        }
+      },
+      "id": "heldout-cli_nestjs_cli-a95754",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ab2932fbd66dbebfe10ea24736f3e8e3fc3e38757c57f9013d1ae41f07ab2e90"
+      }
+    },
+    {
+      "appPackage": "patch-package",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_patch-package-f8a82d: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 454889,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_patch-package-f8a82d/entry.js",
+          "sha256": "84ebc5e102c665b21b6a0dbaeb614820d4b89605550133e914022cf85b7ed639"
+        },
+        "map": {
+          "bytes": 1900004,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_patch-package-f8a82d/entry.js.map",
+          "sha256": "65eb8a1553edacf937b9605f4a46c7f3b50f7d736c3bdf130c46bab05c13fe85"
+        }
+      },
+      "id": "heldout-cli_patch-package-f8a82d",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4042b3591a745a09a77be37ca972528dbafbe60194fa4757f45d269554d158e5"
+      }
+    },
+    {
+      "appPackage": "pino-pretty",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_pino-pretty-95ad12: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 65559,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_pino-pretty-95ad12/entry.js",
+          "sha256": "3a184ade34d5a771851841b888472d4bd47e56a3bce0fec80cf89719a1fc88f8"
+        },
+        "map": {
+          "bytes": 248906,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_pino-pretty-95ad12/entry.js.map",
+          "sha256": "ac9ed9d96c714a1e5154d6ea6f1436a5ebc5f4f25343bd6cc8b41545bbe544d2"
+        }
+      },
+      "id": "heldout-cli_pino-pretty-95ad12",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9aa557e1f28711313ce42c466b954fa6451cea675aa7563e38514575011b890e"
+      }
+    },
+    {
+      "appPackage": "renovate",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_renovate-020df3: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 17685575,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_renovate-020df3/entry.js",
+          "sha256": "1a0046f392192f8bbd8dccfa2362cfbe8bfee12129026d3e7cff4aa59945c474"
+        },
+        "map": {
+          "bytes": 51422040,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_renovate-020df3/entry.js.map",
+          "sha256": "4ce956284b3da65cc21970afe75737a24551cab425b5228b7e6b12d54e722caa"
+        }
+      },
+      "id": "heldout-cli_renovate-020df3",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7b38e99996a284cafa0e821b3952884aaab8d7701d9612b540aa6012230f69dc"
+      }
+    },
+    {
+      "appPackage": "svgo",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_svgo-55a14e: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 478372,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_svgo-55a14e/entry.js",
+          "sha256": "ee5446d63b73915d2d9e1e93742530f8996db7f14fedc947656c1b255f53de81"
+        },
+        "map": {
+          "bytes": 2066493,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_svgo-55a14e/entry.js.map",
+          "sha256": "8e97b4b9aa99b597a583336aa1d8d827442dc5e31adc95cfd6296cb5392c825a"
+        }
+      },
+      "id": "heldout-cli_svgo-55a14e",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2b349adc03a9a080e3e3088f8d3d41e8fff04eaec08f786b05046535ffe20a4f"
+      }
+    },
+    {
+      "appPackage": "@swc/cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_swc_cli-c73345: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 750598,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_swc_cli-c73345/entry.js",
+          "sha256": "2480c78141a9e27ac69aee8e6c2c31ba6ce4026dbcaac44266dccc4e1d590cfc"
+        },
+        "map": {
+          "bytes": 2281360,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_swc_cli-c73345/entry.js.map",
+          "sha256": "90ebe07ed8a83f555b77b448a652abbce567e887a790c9ab23a3fee205f38989"
+        }
+      },
+      "id": "heldout-cli_swc_cli-c73345",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a7cc3123947203e47e78f406dd03530d8b00583fa2d1b0be56a5150afaeee1a4"
+      }
+    },
+    {
+      "appPackage": "task-master-ai",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_task-master-ai-07e8e2: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 19656714,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_task-master-ai-07e8e2/entry.js",
+          "sha256": "4b90af14d0687ba66bc819bfd68f0ff9e58138c153949db84a69f2b91500013d"
+        },
+        "map": {
+          "bytes": 48493203,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_task-master-ai-07e8e2/entry.js.map",
+          "sha256": "1d798d53cf538681edd6a580402610d536be79655ab1f8a2d41ae5071e03b9ff"
+        }
+      },
+      "id": "heldout-cli_task-master-ai-07e8e2",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "feed9b5e71481655a89d8838f9b83d6097c68bbf8c3c70d80ea27ae543051b6f"
+      }
+    },
+    {
+      "appPackage": "tldr",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_tldr-c1f82a: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 184,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_tldr-c1f82a/entry.js",
+          "sha256": "81b1110bdcaa4507c45935feb1fd87c22df46a79fdd468aa1db566324b104bdd"
+        },
+        "map": {
+          "bytes": 336,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_tldr-c1f82a/entry.js.map",
+          "sha256": "a295c7e7485c0e19af6ea3c60982013797ca4e8102610237889eb8455f66fb91"
+        }
+      },
+      "id": "heldout-cli_tldr-c1f82a",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e11f6f06c1ca94f70f82a1e1bb2cad0d88243b3d5411809e57a4772d8b518645"
+      }
+    },
+    {
+      "appPackage": "twilio-cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_twilio-cli-ba3266: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 183,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_twilio-cli-ba3266/entry.js",
+          "sha256": "f80854eee065991ca768f1e871ef7bfbbd1ee3a2c53521e560473c54b411508e"
+        },
+        "map": {
+          "bytes": 353,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_twilio-cli-ba3266/entry.js.map",
+          "sha256": "4de1e04b20b89c0c5bcc34b4fb0246466655919d0e6f93ff085556119cd96cff"
+        }
+      },
+      "id": "heldout-cli_twilio-cli-ba3266",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b312b64c54e0ab3e3e8e70293f02a0a32b4df13d64bd0f5968683c20bfc2e5eb"
+      }
+    },
+    {
+      "appPackage": "typeorm",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_typeorm-b652cc: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 251915,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_typeorm-b652cc/entry.js",
+          "sha256": "1a6d89671ef7ffc3603730830c48abcf71eb213ff78e8aa954db0e07493f68a6"
+        },
+        "map": {
+          "bytes": 844805,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_typeorm-b652cc/entry.js.map",
+          "sha256": "42185b522afa833d97262a5e5738c21fe9671e936355d44f1e8381deeb831848"
+        }
+      },
+      "id": "heldout-cli_typeorm-b652cc",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1c950873f9bceb1578866547286485d61e05cefd14e6762e69924e81066afb7d"
+      }
+    },
+    {
+      "appPackage": "@ui5/cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_ui5_cli-9b14c6: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 316074,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_ui5_cli-9b14c6/entry.js",
+          "sha256": "53ee94c16f27b78a88b610e5e3c1b05ef05201a484e3051cc0d07b4af8e09f1d"
+        },
+        "map": {
+          "bytes": 1066379,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_ui5_cli-9b14c6/entry.js.map",
+          "sha256": "a5b5e2847fdfbe1a2769d6d684896832317d63af18ba068935847963f3d7f324"
+        }
+      },
+      "id": "heldout-cli_ui5_cli-9b14c6",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "eccfd4038d233621fd93f50adfdf91f66429091629e024b3204af628ccb330ed"
+      }
+    },
+    {
+      "appPackage": "@vercel/nft",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_vercel_nft-fea484: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 433915,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_vercel_nft-fea484/entry.js",
+          "sha256": "a0cbc9706a92ea3151d4d3ef58bdc49783b4a7c90f8c277ada118c87c187fafc"
+        },
+        "map": {
+          "bytes": 1274931,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_vercel_nft-fea484/entry.js.map",
+          "sha256": "421768147f9b721cebfdd7a4f78a2063f746302c9419bbd0960216d69d689a1a"
+        }
+      },
+      "id": "heldout-cli_vercel_nft-fea484",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "55a214e4e79e73c80f862e255974fcf8a19e9b71309b54d1308e3f12d86eb668"
+      }
+    },
+    {
+      "appPackage": "@vibe-kit/grok-cli",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_vibe-kit_grok-cli-6b9101: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2351569,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_vibe-kit_grok-cli-6b9101/entry.js",
+          "sha256": "8e18769f19bbf4b86cb14e018519d23d92cc4968ec3895f437dfc07b88090f0b"
+        },
+        "map": {
+          "bytes": 5904399,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_vibe-kit_grok-cli-6b9101/entry.js.map",
+          "sha256": "69b101cdd942448d51d9677bbae13862d967c1c2796854cbf810c2444db53ddc"
+        }
+      },
+      "id": "heldout-cli_vibe-kit_grok-cli-6b9101",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c78fd52377b40a71f6a9c008f60c88507ac49d8ada23642e29c0daa2c41faea6"
+      }
+    },
+    {
+      "appPackage": "vite",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_vite-56bf22: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 1401604,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_vite-56bf22/entry.js",
+          "sha256": "40f7b6d4de87e8851c500d465c3a6a3de66d525725887084a537910856a86a9c"
+        },
+        "map": {
+          "bytes": 4513385,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_vite-56bf22/entry.js.map",
+          "sha256": "aefdd0aa4d550ef0fcd5acd2a96ede3aa90cc9d3146ed621e05f834d4c3e2616"
+        }
+      },
+      "id": "heldout-cli_vite-56bf22",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "721d2adfe18439c5f4e03b913cf953947e6ff772862ee282a00f36da0d89ee41"
+      }
+    },
+    {
+      "appPackage": "wrangler",
+      "bundler": "bun",
+      "description": "exp095 held-out app cli_wrangler-e7b080: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 11180910,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_wrangler-e7b080/entry.js",
+          "sha256": "26698ba74e7ff648fe14ec22556adbc7d76db9bd1545e1d86e8666a5b56d1c37"
+        },
+        "map": {
+          "bytes": 33423047,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/cli_wrangler-e7b080/entry.js.map",
+          "sha256": "c5cc2b9b2b3bf28d77834231abcea240d9db6ea993d85fc5000f0df11d786599"
+        }
+      },
+      "id": "heldout-cli_wrangler-e7b080",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a327a2d5eebaef2da08e2cf9d8a589e2bd5c731a6e95b599343cede429c999ae"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_assessment-disaggregation-80df9f: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 66901,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_assessment-disaggregation-80df9f/entry.js",
+          "sha256": "2adf589c67e107606b22ed2412bf6337b3e2abb4e52c17c6e30ecafed16b7db0"
+        },
+        "map": {
+          "bytes": 195413,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_assessment-disaggregation-80df9f/entry.js.map",
+          "sha256": "c1a1eb50e997eaa18457328ce855a9aa581bf26c32fdb01f48f6abbd7cdb9f20"
+        }
+      },
+      "id": "heldout-electron_assessment-disaggregation-80df9f",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "14ca28fd41a9e0ada71e9c34756cece31e6fe5a9280e2e9b47ab25a808cf541f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_bdash-be3321: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 15345579,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_bdash-be3321/entry.js",
+          "sha256": "bf76d24622672776d375863ee3761b9e1cb806e68c1573d691c298cec050ecfe"
+        },
+        "map": {
+          "bytes": 16372928,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_bdash-be3321/entry.js.map",
+          "sha256": "49824362f72b3c60629d1a48eb9d471c84ad99a61033929be3519dc95578c7e7"
+        }
+      },
+      "id": "heldout-electron_bdash-be3321",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "339b911aa8638cd19796fb8213e48e0fa1f76f5fe2adfe678d83b2ba5feb304e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_boxhero-3a8771: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 287480,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_boxhero-3a8771/entry.js",
+          "sha256": "9a11d9cef293bbd970972e6cb3fe29b815a9727a587f0030dc69fd1602fdd01a"
+        },
+        "map": {
+          "bytes": 1086573,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_boxhero-3a8771/entry.js.map",
+          "sha256": "a51ea48973f7e5fd970f174751ba21b12527706107f79b7de577eb8a2ae6e0e3"
+        }
+      },
+      "id": "heldout-electron_boxhero-3a8771",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9c007c15c8a4b42f6744c9a663fd71fba5767e6ee3b93ae0a6dbaaa31f552655"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_clippo-ca7efb: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 105496,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_clippo-ca7efb/entry.js",
+          "sha256": "1aa0dfb4d7aec1043c35f8d10ed55514aed701952d20398053c625ea91d1f492"
+        },
+        "map": {
+          "bytes": 314514,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_clippo-ca7efb/entry.js.map",
+          "sha256": "5b1fff8b6d17a386366593abc6731c0a7f8cdd14dda91b9ff460391d7441c00d"
+        }
+      },
+      "id": "heldout-electron_clippo-ca7efb",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "64ec5966ca414adcbed8f854feded667f779a24247700f19b6c938ae9c05e30a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_codex-a8a988: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 5815890,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_codex-a8a988/entry.js",
+          "sha256": "f0bc419864636f43a0f0da98a953cbe944d7c21e1d29b42c93196b7b23ab6e79"
+        },
+        "map": {
+          "bytes": 15967337,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_codex-a8a988/entry.js.map",
+          "sha256": "ac49505e6989e13030850e9b217e5f0b40aced15c63ac2feeed27f0c3669f096"
+        }
+      },
+      "id": "heldout-electron_codex-a8a988",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1c5e09f5782540bdcd40d55d994532179cecf7eed778c7238ed7adaf7affb98e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_dn-tool-container-fc1197: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2619972,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_dn-tool-container-fc1197/entry.js",
+          "sha256": "265a8d02e2049244fdc23a4ac3894216f5a6eab07dd66520c0d04332aa1afb33"
+        },
+        "map": {
+          "bytes": 8811703,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_dn-tool-container-fc1197/entry.js.map",
+          "sha256": "b04f95987872e5da6c1704a93049472028dc2ec79464b098ddbcfbb8d7588e12"
+        }
+      },
+      "id": "heldout-electron_dn-tool-container-fc1197",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "59bb0260a6f2ebb2367aaebff6c0bd67f6313bbea7cd43a1f457b030a7419e9d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_dopamine-f0a6b2: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2670425,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_dopamine-f0a6b2/entry.js",
+          "sha256": "a99a6598f4587fbf8d540fe8b1d37a261c6c2eb47cba36a311784700e4d2d087"
+        },
+        "map": {
+          "bytes": 7845935,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_dopamine-f0a6b2/entry.js.map",
+          "sha256": "dd938d54aad475d6db67258a84c8b822346f5b2f8acaa19deb12a81e20faf54a"
+        }
+      },
+      "id": "heldout-electron_dopamine-f0a6b2",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4adf8c10fd9e7eb5d3bc1ef03c94ee4ea51c8c76abff6acdc674153a25694761"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_droppoint-ce0770: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 59990,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_droppoint-ce0770/entry.js",
+          "sha256": "d013ed5114f303fc89f83f8a6e22b3abd496603db24e59126b76831f9256f03f"
+        },
+        "map": {
+          "bytes": 127112,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_droppoint-ce0770/entry.js.map",
+          "sha256": "addb17153d6dd7b6f8c4d21b42c70c51ba5a10e826cc009f6d1ca9c06faff03d"
+        }
+      },
+      "id": "heldout-electron_droppoint-ce0770",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2af4a304d08b7a482e0cefa487d5fbe814b8fae399c6e1bfaf910c8b073becac"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_f-curator-1583a3: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2204805,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_f-curator-1583a3/entry.js",
+          "sha256": "bfec6ffbba298fe4d790b26640b541d6b9e9465cbe986eeaa6ddc97640d7a9dc"
+        },
+        "map": {
+          "bytes": 8561169,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_f-curator-1583a3/entry.js.map",
+          "sha256": "8dee16d0335d9ec252c47072d121ad754f6b55875093c725621866fe69c7b499"
+        }
+      },
+      "id": "heldout-electron_f-curator-1583a3",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "921a54bba0c5a6ce6bae4c232f7830630c1f32a12b9a92857cef3f5c1dea9903"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_git-it-f7b00d: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 419568,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_git-it-f7b00d/entry.js",
+          "sha256": "034566c8c1451215e7077ff84cca536bdb74b0e6e46d2b7e38b66f12f80e8ec8"
+        },
+        "map": {
+          "bytes": 997011,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_git-it-f7b00d/entry.js.map",
+          "sha256": "1effddad27c622c11103911dbbc5e369c2de8cfe4be1bc6f5cc9cad0834b25db"
+        }
+      },
+      "id": "heldout-electron_git-it-f7b00d",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "652e17ee3d57e4da54ad3fea309b188822ccfe2bf4ecee7865f306eb01aea43e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_githoard-28108b: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 1679085,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_githoard-28108b/entry.js",
+          "sha256": "49b15e4daf35616c17e150962dc9c471e8b9215503fe45e536f30f3ef3aec89b"
+        },
+        "map": {
+          "bytes": 5140491,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_githoard-28108b/entry.js.map",
+          "sha256": "9f8e25ef8e929d0fc9ebb8e57eed7a567f30933f9cb050c048fb5d3f7e0197eb"
+        }
+      },
+      "id": "heldout-electron_githoard-28108b",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0a4c1f238b95d60c51940fbaec55490d15d432e5338ade62f0c84d49ee7ebf8f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_katana-e7e862: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 1069288,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_katana-e7e862/entry.js",
+          "sha256": "da2511f83f0bd68a0c4768281d0711fc330e66031c71599fc10206754894adef"
+        },
+        "map": {
+          "bytes": 3172597,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_katana-e7e862/entry.js.map",
+          "sha256": "40a3850c924a7659ecff9109a7f00640b45c048b3fc3845173200a128b346c59"
+        }
+      },
+      "id": "heldout-electron_katana-e7e862",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a301fe95edc134061b2640f29b7ae532884a16ed4c05e66db4e05451766f55f1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_kube-dev-dashboard-29a7eb: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 4388752,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_kube-dev-dashboard-29a7eb/entry.js",
+          "sha256": "09fc63a3f156e200a608eb5c66dd287ac3e28c7ae6af50146499108e714424a6"
+        },
+        "map": {
+          "bytes": 14594729,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_kube-dev-dashboard-29a7eb/entry.js.map",
+          "sha256": "a4c92e787630acd95df30c0cba1ee1d63c434480fef610ac9ab3694b106927aa"
+        }
+      },
+      "id": "heldout-electron_kube-dev-dashboard-29a7eb",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2201e01998f07652af40a1546004c569dfa70a65786c09757e8acd4d20826a4f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_kube-forwarder-4433ac: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 3721874,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_kube-forwarder-4433ac/entry.js",
+          "sha256": "95a7f3f7598bec509a49cc0b99720ed41250673b90cd222e571abafc27adf9e8"
+        },
+        "map": {
+          "bytes": 13458202,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_kube-forwarder-4433ac/entry.js.map",
+          "sha256": "6f2ab1909ac368f002b9b1f251e8bf35d4a1aa8435bc96cd488c425b4159edde"
+        }
+      },
+      "id": "heldout-electron_kube-forwarder-4433ac",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a1a0cb58be9d6f98f80719c585f4bd772f6cb9cee55834e1d54e2443a0b38984"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_laradumps-6b1722: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 4354543,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_laradumps-6b1722/entry.js",
+          "sha256": "f865211220ef8a85f7bbcf4e63498fa432d738d4b5ec579d1497311eecbb9be7"
+        },
+        "map": {
+          "bytes": 11109428,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_laradumps-6b1722/entry.js.map",
+          "sha256": "d00586a225e6309cea0b70bc0f73ec3c7bbaf20902224121cf789e2847d9e3b2"
+        }
+      },
+      "id": "heldout-electron_laradumps-6b1722",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "74013c788f87c767263b9fa1dbb0277be9f51fa1a157f8708e9fe72ad2930747"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_last-hit-4cbb5e: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 119338,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_last-hit-4cbb5e/entry.js",
+          "sha256": "a61e9de181d27c4fa41ba0d17ac10d3ffda2debcf98a5dc9bdc0069a0f314287"
+        },
+        "map": {
+          "bytes": 416774,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_last-hit-4cbb5e/entry.js.map",
+          "sha256": "aaf627fe23c9f9b8389b5c32e7011e80fe1e0dda8759f44090042b128289fc9b"
+        }
+      },
+      "id": "heldout-electron_last-hit-4cbb5e",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f38d751386cddec3781f8bdaf4b700769ebd47d0195023e5cdbd0e1871ab99be"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_lepton-ce8097: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 7491979,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_lepton-ce8097/entry.js",
+          "sha256": "980ad244eee39186e8b355a628a30b2ddee755bc54509df0eed09ac91ffc6494"
+        },
+        "map": {
+          "bytes": 20631512,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_lepton-ce8097/entry.js.map",
+          "sha256": "4ee9b93049ff40321afc36f0aada6814c735255c4cb9f803afd7b24ac18f817e"
+        }
+      },
+      "id": "heldout-electron_lepton-ce8097",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2c5a7974866b12b5e478c4e8e63607033dc7497d87d1e6bb69303eca2513929e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_lightproxy-e594cf: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 17369518,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_lightproxy-e594cf/entry.js",
+          "sha256": "096ef2b76385b06f7eeb83cc110cfd58ebbac886725c1b60a85ccc6a0b4f1d68"
+        },
+        "map": {
+          "bytes": 34296483,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_lightproxy-e594cf/entry.js.map",
+          "sha256": "e79b3165f92370bd837844c09cec0078e2a0601d4adc700641860e5a52350760"
+        }
+      },
+      "id": "heldout-electron_lightproxy-e594cf",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0d5725570f3406e6f0655be3d3cab055b55310958149b41214f717bce7ef3ac9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_mailspring-8a1116: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 5653171,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_mailspring-8a1116/entry.js",
+          "sha256": "6db4e3476790b71ac709f3cdc5713387971a853d7b14b1e5fd13fa1795e1527f"
+        },
+        "map": {
+          "bytes": 8477184,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_mailspring-8a1116/entry.js.map",
+          "sha256": "04bdb930b1e8bdf31338c34b618bb37f53bece06a9943504237a44afd0d665fc"
+        }
+      },
+      "id": "heldout-electron_mailspring-8a1116",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cefd31707040aadccf0d6cb95f8fe470ee6f12ef090ebde680102d6e4ceee6be"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_mdp-9248c0: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 4810209,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_mdp-9248c0/entry.js",
+          "sha256": "b157e167f6782626238a8a1329e6303b8c60ec063c7ea6432711b3229e9c2ecc"
+        },
+        "map": {
+          "bytes": 14029297,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_mdp-9248c0/entry.js.map",
+          "sha256": "f56b7c15ac596966258d1a03d96a72dfee1d154e125efc8c725b5c43d1f0b98e"
+        }
+      },
+      "id": "heldout-electron_mdp-9248c0",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1f2345a16398dd5a491d5671ffad8b05e2e0b4c64b84e99ed1660bcced7cc0fb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_movieprint-0e8281: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 35770947,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_movieprint-0e8281/entry.js",
+          "sha256": "ba29058de851940a7cb269fe7725532b0a0699d0331e09b76a5704c663be72e2"
+        },
+        "map": {
+          "bytes": 74437279,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_movieprint-0e8281/entry.js.map",
+          "sha256": "1fa9f084265d8970b8e8ca836906c2dc7b4c97ddb110f1f4fb19cc64d4573c1f"
+        }
+      },
+      "id": "heldout-electron_movieprint-0e8281",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ec33ee8ede5e53e4d494f3a7581bfaaacaf53880773c3751673ead7b52ddf7fd"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_mytools-693f12: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 5908265,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_mytools-693f12/entry.js",
+          "sha256": "2bdf9329d0f3d9a1c959a2612adf7cc0a71ab248b00c0c5c26de43b54c01f327"
+        },
+        "map": {
+          "bytes": 17263401,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_mytools-693f12/entry.js.map",
+          "sha256": "21eea7cd45a2a5de885bb06012fb527a1ca76c8c24615760c008315345d6a4ff"
+        }
+      },
+      "id": "heldout-electron_mytools-693f12",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "10086ea2c207219cc482c3eb9ff3a4e49ad8752f3d47d1edbffd1a9df62bd571"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_oversetter-c90466: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 321327,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_oversetter-c90466/entry.js",
+          "sha256": "05b7aa2d39ec9b89494fb277ecc3cd31f27d1064fd7a605101ea6b2d4014a9fe"
+        },
+        "map": {
+          "bytes": 541200,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_oversetter-c90466/entry.js.map",
+          "sha256": "8196749fa3bf8844cf8f671ec5547e78d01a2d095fd98f5cd24c2abeb93730ed"
+        }
+      },
+      "id": "heldout-electron_oversetter-c90466",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bf4eb5dda501b713bd90dc732205952dd897ba1a9236a3d689935056c82e907a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_papercubes-3925f3: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 324666,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_papercubes-3925f3/entry.js",
+          "sha256": "ff270e0fdf6788e9c02028fb3c6efd56fe17f43149bfa3a1330f5ddebdcd79d8"
+        },
+        "map": {
+          "bytes": 1735417,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_papercubes-3925f3/entry.js.map",
+          "sha256": "f41e29e67d6b8dd88cb589bb690697a46d8f73388f4dcabb8563b41b6bf70727"
+        }
+      },
+      "id": "heldout-electron_papercubes-3925f3",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "469e0da21f935757b67e3cac1b1ad7408d7417b472fd7d0ee58959b5cbfde92d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_postbird-93aec8: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 1492498,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_postbird-93aec8/entry.js",
+          "sha256": "d9f1badab887655e773e4f60982f6898738e6f8e5755d72de900342ba631e2ce"
+        },
+        "map": {
+          "bytes": 3935330,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_postbird-93aec8/entry.js.map",
+          "sha256": "05c7e5e8feb4c212486690ec64bf9229db1d58e7156e2b3be41988283637bb2a"
+        }
+      },
+      "id": "heldout-electron_postbird-93aec8",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4ef24ffd432d021e3e3f6a9c3d1e02a6b91ea7783c5151b10716fbdf529816ab"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_protoman-d210f8: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2265148,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_protoman-d210f8/entry.js",
+          "sha256": "c5575f5965f30214c7a24b39340049115393c0619d10e53bb69d6c9d6ebd5d4e"
+        },
+        "map": {
+          "bytes": 7255737,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_protoman-d210f8/entry.js.map",
+          "sha256": "943e79465e2dc8bb88dda00ce92607cfcac3807c15754d33a3f680a0dc6e7105"
+        }
+      },
+      "id": "heldout-electron_protoman-d210f8",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ba877d1096b65447170051545b60390e92666611d0da5603078cdf1ef116d6d8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_pullp-f4f629: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 2531105,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_pullp-f4f629/entry.js",
+          "sha256": "865fcb1f18f48ef7bdb6e06f69459d55230b83d542921761bcb8a225e66ca87e"
+        },
+        "map": {
+          "bytes": 7079788,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_pullp-f4f629/entry.js.map",
+          "sha256": "5407e0dd90b97c6e224d762a6044206d6cbb2312e71fab200416c3e725e1664c"
+        }
+      },
+      "id": "heldout-electron_pullp-f4f629",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "292170c1fb1e2cf5df94b800b51e84750d5389cdbd50d15067a44f0f2762b8fd"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_quail-c98161: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 369,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_quail-c98161/entry.js",
+          "sha256": "d80f1424eb6d59832a9c90277068f391d2ae54386ee92960c42f7ac71c47945f"
+        },
+        "map": {
+          "bytes": 734,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_quail-c98161/entry.js.map",
+          "sha256": "bac5a4a59537ce6695c8418d0d8a7efcd78593386b08f7c1b294a5716ed62030"
+        }
+      },
+      "id": "heldout-electron_quail-c98161",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "21166da8fc3a1f6b135b99ac8122d78780ce8da7d2f4594f2b1a847b23862f8f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_tabby-terminal-5f2f53: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 7291601,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_tabby-terminal-5f2f53/entry.js",
+          "sha256": "f4eee52ceb1514d5f4655107c22ac0ddda8312474828967ecfce3fd4660d3fb5"
+        },
+        "map": {
+          "bytes": 26150316,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_tabby-terminal-5f2f53/entry.js.map",
+          "sha256": "e219e3e7f53a8c3a963598a67f96dece7af9b4ec6d430eed7c77d9362c10f703"
+        }
+      },
+      "id": "heldout-electron_tabby-terminal-5f2f53",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "627eb42acf1a7a4e6a5457ca054697ba401a378ee5c38044aa366782e4584eed"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_tidgi-a6a012: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 24458830,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_tidgi-a6a012/entry.js",
+          "sha256": "2131be7c581a625045111de07b14a742445cbff7843cac44d3ae01b1816fafde"
+        },
+        "map": {
+          "bytes": 72563664,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_tidgi-a6a012/entry.js.map",
+          "sha256": "5fa66981c2798706f21608d456570e002b7857f04a5138e6ef8ea03d8c0f1256"
+        }
+      },
+      "id": "heldout-electron_tidgi-a6a012",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1656a26aa11553ecb05c4b5ff6c8984f2e131157fc67deb7f9bd40b113f0a1b8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_todometer-c3e08e: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 5066143,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_todometer-c3e08e/entry.js",
+          "sha256": "ff492a0b4b0056b96c193607efa0b8bb3e51adbab5414bc7e50d941d9a99f55b"
+        },
+        "map": {
+          "bytes": 13403697,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_todometer-c3e08e/entry.js.map",
+          "sha256": "340630b937e79e8e060c0f289f5aeec6588bcab771c5e014b6d7ab8204379c3b"
+        }
+      },
+      "id": "heldout-electron_todometer-c3e08e",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "22e3df4ea0458e2a8e30e2f8556d629d6ac2e9b6b607e232d220bca76de36f78"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_wizard-mirror-a71cba: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 137918,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_wizard-mirror-a71cba/entry.js",
+          "sha256": "669034e7542b99820cec62260302121f7194c9fe3b4dd9b44803cd1aa67263ce"
+        },
+        "map": {
+          "bytes": 533486,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_wizard-mirror-a71cba/entry.js.map",
+          "sha256": "3ddffeaed028602afb79a7fc2028cc62e5840960d39cf19c0fca4563fb2f01c6"
+        }
+      },
+      "id": "heldout-electron_wizard-mirror-a71cba",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c94e1b72501446c2f62172778c8fb35f84494b45301578ad549a28cc99bc4a1a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "bundler": "bun",
+      "description": "exp095 held-out app electron_yet-another-gitbook-reader-fc22c4: Bun 1.4.0 --minify --target node + sourcemap",
+      "files": {
+        "bundle": {
+          "bytes": 7478698,
+          "name": "entry.js",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_yet-another-gitbook-reader-fc22c4/entry.js",
+          "sha256": "aa965b341bccf3f22a209259b3d99786effe2b1833d58b0ea3cf233b66662180"
+        },
+        "map": {
+          "bytes": 24640056,
+          "name": "entry.js.map",
+          "origin": "/work/exp095-library-fingerprints/selection/heldout/electron_yet-another-gitbook-reader-fc22c4/entry.js.map",
+          "sha256": "eb9c93ad82a770c58819856a1cc4090ef0f67fb0b7c109920514a4a4dd8a83b3"
+        }
+      },
+      "id": "heldout-electron_yet-another-gitbook-reader-fc22c4",
+      "set": "heldout",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "24ab1eebf349e398439abe680016ced663938fba4edf3c53cb0c7a59e1b4bc0b"
+      }
+    },
+    {
+      "bundler": "esbuild",
+      "description": "wrangler's published cli.js re-minified with esbuild --minify (exp095 eval); maps composed",
+      "files": {
+        "bundle": {
+          "bytes": 2847119,
+          "name": "cli.min.js",
+          "origin": "/work/exp095-index-v2-data/eval/wrangler/cli.min.js",
+          "sha256": "82fe097b086479015c61915d69aac7f364558d66385c4a23a1468dd3378958ee"
+        },
+        "innerMap": {
+          "bytes": 10681612,
+          "name": "cli.js.map",
+          "origin": "/work/exp095-index-v2-data/eval/wrangler/cli.js.map",
+          "sha256": "52f92e98b33204a31bfeb86c31c48d883d8adc59a08b558bf35058e11188a1b4"
+        },
+        "map": {
+          "bytes": 9394282,
+          "name": "cli.min.js.map",
+          "origin": "/work/exp095-index-v2-data/eval/wrangler/cli.min.js.map",
+          "sha256": "abc73abfd034d902c05fab8af603a03519ae13b5e7d6391985a7681e80b9a6bb"
+        }
+      },
+      "id": "wrangler-min",
+      "set": "wrangler",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "37df2b70f4daa0d069e2029145374cbcc255220a85b705dcc571491c605f3116"
+      }
+    },
+    {
+      "appPackage": "task-master-ai",
+      "bundler": "esbuild",
+      "description": "held-out app task-master-ai rebuilt with esbuild 0.28.2 --bundle --minify --platform=node --format=esm --sourcemap (the index's esbuild recipe; same install as heldout-cli_task-master-ai)",
+      "files": {
+        "bundle": {
+          "bytes": 20182143,
+          "name": "entry.js",
+          "origin": "/work/exp096-data/build/esbuild-task-master-ai/entry.js",
+          "sha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0"
+        },
+        "map": {
+          "bytes": 56591778,
+          "name": "entry.js.map",
+          "origin": "/work/exp096-data/build/esbuild-task-master-ai/entry.js.map",
+          "sha256": "a6ea8c5af9a747cb8925fb8c6907c4c4f3e3e024c39279f06db3627c8c3bd780"
+        }
+      },
+      "id": "esbuild-task-master-ai",
+      "set": "esbuild-app",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2127fc05f02da404ccfcc84369af241bc5668c7af1a55229e6af70d0e694c26a"
+      }
+    }
+  ],
+  "schema": "exp096-corpus/1"
+}

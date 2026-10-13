@@ -17,7 +17,11 @@
 //! code units. `CommentRegion` carries bytes; a writer that must reproduce
 //! the TS JSON converts with `js_text::utf16_offset`.
 
+pub mod discovery;
 pub mod function_carry;
+
+#[cfg(test)]
+mod discovery_test;
 
 use std::collections::HashMap;
 use std::fs;

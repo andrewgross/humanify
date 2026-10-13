@@ -1,0 +1,9 @@
+{
+ "binarySha256": "83442344353aea148e2d97b1775322a4770c5ca83f468359ea5919b240ffd653",
+ "buildCommit": "132ae6350ed70a37014746a142f1970cff9f8271",
+ "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
+ "indexBytes": 440319007,
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "instrument": "humanify discover --unit-prints --bundler <corpus bundler>",
+ "rule": "agreement"
+}

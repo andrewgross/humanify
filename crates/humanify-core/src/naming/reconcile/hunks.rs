@@ -65,24 +65,8 @@ pub fn compute_normal_diff(prior_text: &str, new_text: &str) -> Result<String, S
 
 /// A private temp directory (`fs.mkdtempSync(os.tmpdir()/humanify-reconcile-)`).
 fn tempdir() -> Result<std::path::PathBuf, String> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static SEQ: AtomicU64 = AtomicU64::new(0);
-    let base = std::env::temp_dir();
-    for _ in 0..100 {
-        let n = SEQ.fetch_add(1, Ordering::Relaxed);
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.subsec_nanos())
-            .unwrap_or(0);
-        let dir = base.join(format!(
-            "humanify-reconcile-{}-{n}-{nanos}",
-            std::process::id()
-        ));
-        if std::fs::create_dir(&dir).is_ok() {
-            return Ok(dir);
-        }
-    }
-    Err("cannot create a reconcile temp dir".to_string())
+    crate::scratch::temp_dir("humanify-reconcile")
+        .map_err(|_| "cannot create a reconcile temp dir".to_string())
 }
 
 /// `HUNK_HEADER`: `^(\d+)(?:,\d+)?([acd])(\d+)(?:,\d+)?$`.

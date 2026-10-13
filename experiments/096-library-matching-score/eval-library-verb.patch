@@ -1,0 +1,35 @@
+diff --git a/scripts/eval.ts b/scripts/eval.ts
+index 30a4979d..0b7b2a0c 100644
+--- a/scripts/eval.ts
++++ b/scripts/eval.ts
+@@ -450,6 +450,30 @@ const VERBS: Verb[] = [
+       return 0;
+     }
+   },
++  {
++    name: "library",
++    usage:
++      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--force-mixed]",
++    description:
++      "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
++      "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
++      "(experiments/096-library-matching-score/corpus.json: Claude Code 2.1.216, 67 held-out apps, wrangler, an " +
++      "esbuild app; every input content-addressed), and writes one card per bundle + a summary under that " +
++      "experiment's results/<label>; its leaderboard.py compares labels.",
++    proves:
++      "how much library code the index names on THESE bundles (recall), that no app code was claimed (the hard " +
++      "bar), the wrong-family share vs the ~0.2% bar, and why each missed library statement was missed; " +
++      "deterministic (measured band 0), so any delta between labels is real",
++    cannotProve:
++      "anything about a bundle outside the corpus, about the vendor/ CommonJS modules (whole-module rows are not " +
++      "scored), about names (nothing is renamed yet), or about the cross-version diff — that is `score`",
++    run(args) {
++      return sh("bash", [
++        path.join(REPO, "experiments/096-library-matching-score/run.sh"),
++        ...args
++      ]);
++    }
++  },
+   {
+     name: "leaderboard",
+     usage: "leaderboard <label> [label...] [--force-mixed]",

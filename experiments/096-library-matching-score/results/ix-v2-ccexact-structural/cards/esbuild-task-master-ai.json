@@ -1,0 +1,73 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 26634,
+  "foreign": 32754,
+  "right": 1548092,
+  "selfOther": 1751,
+  "wrongFamily": 246068
+ },
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 14191,
+   "bindingsSameVersion": 13887,
+   "bindingsVersionKnown": 13922,
+   "exactBytes": 1090487,
+   "exactUnits": 1285,
+   "sameVersionShare": 0.997486
+  }
+ },
+ "indexId": "bfb9d80adc0d65d7b6c1ee02d1b947b6493e1ef68d9c9602b1edcecc3aadc8ce",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 1476311,
+  "recall": 0.297469,
+  "wrongFamilyShare": 0.013716
+ },
+ "label": "ix-v2-ccexact-structural",
+ "missBytes": {
+  "a": 2511006,
+  "b": 661457,
+  "c": 26973,
+  "d-absent": 99229,
+  "d-file": 56943,
+  "e-ambig": 101,
+  "e-other": 164,
+  "e-support": 1953,
+  "e-veto": 13032,
+  "f": 17318
+ },
+ "noDiscovery": null,
+ "reportSha256": "a4eefff569f4925ce078b90600b954361b33792675abcae15dd4de071fa8be8a",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80307,
+  "<self>": 1115176,
+  "<unmapped>": 132,
+  "library": 4962902
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 4962902,
+  "namedBytes": 1574726,
+  "recall": 0.317299,
+  "wrongFamilyBytes": 246068,
+  "wrongFamilyShare": 0.135143,
+  "wrongNameShare": 0.135013
+ },
+ "truthMethod": "sourcemap"
+}

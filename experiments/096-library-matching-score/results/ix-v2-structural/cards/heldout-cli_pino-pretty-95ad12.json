@@ -1,0 +1,60 @@
+{
+ "bundleSha256": "3a184ade34d5a771851841b888472d4bd47e56a3bce0fec80cf89719a1fc88f8",
+ "claimedBytes": {
+  "right": 990,
+  "wrongFamily": 34
+ },
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_pino-pretty-95ad12",
+ "exploratory": {
+  "names": {
+   "bindings": 20,
+   "bindingsSameVersion": 20,
+   "bindingsVersionKnown": 20,
+   "exactBytes": 926,
+   "exactUnits": 2,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 926,
+  "recall": 0.860595,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-structural",
+ "missBytes": {
+  "b": 34,
+  "c": 52
+ },
+ "noDiscovery": null,
+ "reportSha256": "be95842fc3c41ddaf879b1ae39bdbfc5cc572378ae47347603fdaeff91447861",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 23,
+  "library": 1076
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 1076,
+  "namedBytes": 990,
+  "recall": 0.920074,
+  "wrongFamilyBytes": 34,
+  "wrongFamilyShare": 0.033203,
+  "wrongNameShare": 0.033203
+ },
+ "truthMethod": "sourcemap"
+}

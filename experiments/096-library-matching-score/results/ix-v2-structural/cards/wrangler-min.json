@@ -1,0 +1,54 @@
+{
+ "bundleSha256": "82fe097b086479015c61915d69aac7f364558d66385c4a23a1468dd3378958ee",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": false,
+ "entry": "wrangler-min",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-structural",
+ "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran)",
+ "missBytes": {
+  "no-discovery": 1994010
+ },
+ "noDiscovery": "the esbuild adapter unpacked no bundled module (the one-file floor): no discovery ran",
+ "reportSha256": "c35d7398eb29878c6b2bfa6e4cc7652130abedcfc96c70fffaf74ec51cf6a8af",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "wrangler",
+ "statementBytes": {},
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 1994010,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

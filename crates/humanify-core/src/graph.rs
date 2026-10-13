@@ -27,6 +27,11 @@
 //! mapping carries symbol ids, so slots join to declaration spans by
 //! identity (scoping.symbol_span), never by name.
 
+pub mod references;
+
+#[cfg(test)]
+mod references_test;
+
 use std::collections::{BTreeSet, HashMap};
 
 use oxc_ast::AstKind;

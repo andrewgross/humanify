@@ -12,7 +12,7 @@ use humanify_model::detection::{
     BundlerType, DetectionSignal, DetectionTier, MinifierType, SignalStrength,
 };
 
-use crate::modules::helper_shape::{find_module_helper, has_esbuild_export_registrar};
+use crate::modules::helper_shape::{ExportRegistrar, find_module_helper, first_export_registrar};
 
 use super::js_text::{
     contains_word, eat, eat_quote, is_line_terminator, is_word_boundary, js_prefix, skip_js_space,
@@ -145,9 +145,9 @@ fn has_var_export(code: &str) -> bool {
 /// names, which Bun's runtime writes too: shared helper names. Then the
 /// module helper's SHAPE, which survives `--minify` (spec I2): a form only
 /// esbuild writes ([`esbuild_only`] — the `try` guard,
-/// the indirect call), or any form beside esbuild's own `__export`
-/// registrar ([`has_esbuild_export_registrar`]) — each a [`Shape`]
-/// signal.
+/// the indirect call), or any form whose bundle's FIRST `__export`
+/// registrar is esbuild's ([`first_export_registrar`]) — each a [`Shape`]
+/// signal. `code` is the runtime prologue (`detect::detect_bundle`).
 ///
 /// [`Shape`]: SignalStrength::Shape
 /// [`esbuild_only`]: crate::modules::helper_shape::ModuleHelperShape::esbuild_only
@@ -168,7 +168,7 @@ pub fn detect_esbuild(code: &str) -> Vec<DetectionSignal> {
     if let Some(helper) = find_module_helper(code) {
         let pattern = if helper.esbuild_only() {
             Some("module helper shape (esbuild's guarded or indirect form)")
-        } else if has_esbuild_export_registrar(code) {
+        } else if first_export_registrar(code) == Some(ExportRegistrar::Esbuild) {
             Some("module helper shape + esbuild's __export registrar")
         } else {
             None
@@ -255,9 +255,12 @@ fn has_create_require_import(code: &str) -> bool {
 
 /// TS `detectBunBundler`: the `// @bun` banner (the strongest signal
 /// there is); else the `{exports:{}}` factory + the `createRequire` import
-/// together (a shape); else the module helper in the plain form both
-/// bundlers write ([`find_module_helper`], spec I2) — a [`SharedShape`]:
-/// an input nothing more specific names gets Bun's pieces.
+/// together (a shape); else Bun's own `__export` registrar as the bundle's
+/// first ([`first_export_registrar`]: `configurable` + `set`, which
+/// `--target node` builds keep with no banner — a shape); else the module
+/// helper in the plain form both bundlers write ([`find_module_helper`],
+/// spec I2) — a [`SharedShape`]: an input nothing more specific names gets
+/// Bun's pieces.
 ///
 /// [`SharedShape`]: SignalStrength::SharedShape
 pub fn detect_bun_bundler(code: &str) -> Vec<DetectionSignal> {
@@ -277,12 +280,46 @@ pub fn detect_bun_bundler(code: &str) -> Vec<DetectionSignal> {
             SignalStrength::Shape,
         )];
     }
+    if first_export_registrar(code) == Some(ExportRegistrar::Bun) {
+        return vec![bundler_signal(
+            "bun-bundler",
+            "Bun's __export registrar (configurable + set)",
+            BundlerType::Bun,
+            SignalStrength::Shape,
+        )];
+    }
     if find_module_helper(code).is_some_and(|h| !h.esbuild_only()) {
         return vec![bundler_signal(
             "bun-bundler",
             "module helper shape (the plain form Bun and esbuild share)",
             BundlerType::Bun,
             SignalStrength::SharedShape,
+        )];
+    }
+    Vec::new()
+}
+
+/// Bun ends every sourcemap debug ID with `64756E2164756E21` — "dun!dun!"
+/// in hex — and writes it as the file's LAST line, `//# debugId=<32 hex>`.
+/// Read from the end of the whole input (the prologue scan never reaches
+/// it): Bun's own mark, as strong as a runtime name. Present only when the
+/// build wrote a sourcemap; the one Bun signal a bundle with no runtime at
+/// all (a single ESM module) can carry.
+pub fn detect_bun_debug_id(code: &str) -> Vec<DetectionSignal> {
+    const PREFIX: &str = "//# debugId=";
+    const BUN_SUFFIX: &str = "64756E2164756E21";
+    let last_line = code.trim_end().rsplit('\n').next().unwrap_or("");
+    let is_bun = last_line.trim().strip_prefix(PREFIX).is_some_and(|id| {
+        id.len() == 32
+            && id.bytes().all(|b| b.is_ascii_hexdigit())
+            && id[16..].eq_ignore_ascii_case(BUN_SUFFIX)
+    });
+    if is_bun {
+        return vec![bundler_signal(
+            "bun-bundler",
+            "Bun's sourcemap debug ID (…64756E2164756E21)",
+            BundlerType::Bun,
+            SignalStrength::OwnRuntimeName,
         )];
     }
     Vec::new()

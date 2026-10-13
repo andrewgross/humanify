@@ -4,6 +4,7 @@
 //! `std::env` — the guard test in this crate enforces it.
 
 pub mod commander;
+pub mod discover_verb;
 pub mod env;
 pub mod env_reads;
 pub mod failed_output;
@@ -57,6 +58,8 @@ pub fn pipeline_main(argv: &[String]) -> i32 {
     }
 }
 
+#[cfg(test)]
+mod discover_verb_test;
 #[cfg(test)]
 mod env_reads_test;
 #[cfg(test)]

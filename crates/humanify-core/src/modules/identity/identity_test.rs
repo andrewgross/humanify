@@ -4,8 +4,9 @@
 use super::provenance::{bun_module_provenance, esbuild_bundle_facts, esbuild_module_provenance};
 use super::{
     DeclaredIdentity, DeclaredPath, ModuleProvenance, PathKind, declare, member_stem,
-    pair_by_declared_identity,
+    pair_by_declared_identity, scan_app_declarations,
 };
+use oxc_span::Span;
 
 // ---- Bun: what it kept ------------------------------------------------------
 
@@ -230,5 +231,101 @@ fn a_module_without_a_declared_identity_is_never_paired_by_it() {
     let prior = [grammar("Go", &[])];
     assert!(
         pair_by_declared_identity(&[None], &prior.iter().map(Some).collect::<Vec<_>>()).is_empty()
+    );
+}
+
+// ---- the version constant completes an identity, never starts one -----------
+
+#[test]
+fn a_version_constant_adds_the_version_to_another_reader_s_name() {
+    let body = r#"(e,t)=>{var hv="3.936.0";e.VERSION=hv;function f(){throw Error("@aws-sdk/core::resolveAwsSdkSigV4Config - `credentials` missing")}}"#;
+    let id = declare(body, &ModuleProvenance::default())
+        .identity
+        .unwrap();
+    assert_eq!(id.source, "scoped-error-prefix");
+    assert_eq!(id.package.as_deref(), Some("@aws-sdk/core"));
+    assert_eq!(id.version.as_deref(), Some("3.936.0"));
+}
+
+#[test]
+fn a_version_constant_alone_is_a_hint_not_an_identity() {
+    let body = r#"(e6n)=>{Object.defineProperty(e6n,"__esModule",{value:!0});e6n.VERSION=void 0;e6n.VERSION="1.9.0"}"#;
+    let d = declare(body, &ModuleProvenance::default());
+    assert_eq!(d.identity, None);
+    assert_eq!(d.hints, vec!["version 1.9.0".to_string()]);
+}
+
+#[test]
+fn a_declared_version_is_not_overwritten_by_the_constant() {
+    // The package.json's own version stands.
+    let body =
+        r#"(e,t)=>{t.exports={name:"gaxios",version:"7.1.4",main:"x.js"};e.VERSION="9.9.9"}"#;
+    let id = declare(body, &ModuleProvenance::default())
+        .identity
+        .unwrap();
+    assert_eq!(id.version.as_deref(), Some("7.1.4"));
+}
+
+// ---- app code: report-only declarations -------------------------------------
+
+#[test]
+fn app_statements_report_library_declarations_without_naming_anything() {
+    // Library code Bun hoisted into the app (no module boundary): an AWS
+    // command class, an inlined client package.json, a scoped error; then
+    // the app's own slash-command table and its own Cedar grammar.
+    let stmts = [
+        r#"var Q9;var Nwu=b(()=>{Q9=class extends B.classBuilder().s("AmazonBedrockControlPlaneService","ListTagsForResource",{}).n("BedrockClient","ListTagsForResourceCommand").build(){}});"#,
+        r#"var Cj={name:"@aws-sdk/client-sso",description:"AWS SDK for JavaScript Sso Client",version:"3.936.0",main:"./dist-cjs/index.js",license:"Apache-2.0"};"#,
+        r#"function f(){throw Error("@aws-sdk/token-providers - fromSso")}"#,
+        r#"var cmds=[{name:"teleport",aliases:["tp"],description:"Resume a remote session",type:"local-jsx"}];"#,
+        r#"var aUg=(e)=>({name:"Cedar",aliases:["cedarpolicy"],keywords:{keyword:"permit forbid"},contains:[e.QUOTE_STRING_MODE]});"#,
+        r#"var m={ISSUES:"x",VERSION:"2.1.216"}.VERSION;"#,
+    ];
+    let mut code = String::new();
+    let mut spans = Vec::new();
+    for s in stmts {
+        let start = code.len() as u32;
+        code.push_str(s);
+        spans.push(Span::new(start, code.len() as u32));
+    }
+    let rows = scan_app_declarations(&code, &spans);
+    let got: Vec<(u32, &str, Option<&str>, Option<&str>)> = rows
+        .iter()
+        .map(|r| {
+            (
+                r.start,
+                r.reader.as_str(),
+                r.package.as_deref().or(r.client.as_deref()),
+                r.version.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (
+                spans[0].start,
+                "aws-sdk-client",
+                Some("BedrockClient"),
+                None
+            ),
+            (
+                spans[1].start,
+                "package-json",
+                Some("@aws-sdk/client-sso"),
+                Some("3.936.0")
+            ),
+            (
+                spans[2].start,
+                "scoped-error-prefix",
+                Some("@aws-sdk/token-providers"),
+                None
+            ),
+        ],
+        "the slash-command table, the app's own grammar and its build-constant object report nothing"
+    );
+    assert_eq!(
+        rows[0].commands,
+        vec!["ListTagsForResourceCommand".to_string()]
     );
 }

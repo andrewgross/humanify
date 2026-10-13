@@ -1,0 +1,53 @@
+{
+ "bundleSha256": "14088e910f1245985cddeae0d9ea3d8b3249cef2a926a16d6ae7e85327216a82",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "bun",
+  "minifier": "unknown"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_mssql-e7997a",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "integ-agreement",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "d3c14eb696fc6970e3df65bd9ec7fa7b0d4edbb404002e0294eb91376f95ded3",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 22
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "unknown",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}
