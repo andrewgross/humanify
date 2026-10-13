@@ -40,6 +40,22 @@
     - **Unpack.** On this branch, minified wrangler and 2 held-out apps hit the adapter's one-file floor, so no
       discovery runs at all. They score 0 with the miss class `no-discovery`. Main's 68b090e3 (finding #96)
       should lift wrangler. A label on a branch carrying that fix will show it.
+  - **After merging main (2026-10-13, labels `integ-agreement` / `integ-structural`, commit `132ae635`, same
+    index and corpus).** Claude Code and the held-out aggregate are unchanged to the printed digit; no label claims
+    app code. Main's esbuild fixes (findings #96: the module helper by shape; the guarded `__esm` as an init
+    helper) move exactly the esbuild-built inputs:
+
+    | input                    | agreement      | structural     | why                                                                                       |
+    | ------------------------ | -------------- | -------------- | ----------------------------------------------------------------------------------------- |
+    | wrangler (re-minified)   | 0% -> **6.6%** | 0% -> **7.5%** | unpacks now (368 factories, 549 lazy modules); was the one-file floor                     |
+    | task-master-ai (esbuild) | 20.1% -> 18.4% | 31.7% -> 29.1% | its 1,997 `__esm` modules are now lazy modules: 17,646 -> 23,995 statements, fewer claims |
+    | held-out wrangler, vite  | +0.02 pt / 0   | +0.02 pt / 0   | one or two more runtime helpers by shape; same claims                                     |
+
+    The detector's own verdict moves on 59 cards (the runner passes `--bundler`, so nothing scored follows it):
+    54 held-out bundles `unknown` -> `bun`; wrangler, held-out wrangler, todometer and task-master-ai `unknown` ->
+    `esbuild`; held-out renovate `bun` -> `unknown`. `manifest_sha` now hashes the corpus manifest's canonical spelling: the commit
+    hook had re-spelled `corpus.json`, so the file's bytes no longer matched the labels' `corpusSha256`.
+
   - **Run cost:** 70 bundles in about 80 s at 4 in flight. Claude Code takes 11 s and 1.4 GB. Peak memory is
     2.4 GB. Most of a small bundle's time goes to loading the index (440 MB on disk).
 

@@ -41,7 +41,10 @@ def load_manifest():
 
 
 def manifest_sha():
-    return sha256_file(MANIFEST)
+    """The corpus manifest's identity: the sha256 of its CANONICAL spelling (`dump`), not of the file's bytes — the
+    commit hook re-spells committed JSON (prettier), which moved the file hash with no entry changed."""
+    with open(MANIFEST) as fh:
+        return hashlib.sha256(dump(json.load(fh)).encode()).hexdigest()
 
 
 def corpus_path(entry, role):
