@@ -180,7 +180,7 @@ function fullManifest(): RunManifest {
       model: "m",
       reasoningEffort: "high",
       concurrency: 1,
-      killSwitches: ["fossil-split"],
+      resolved: { switches: { disabled: ["fossil-split"], probes: [] } },
       cache: { enabled: true, entriesBefore: 1, entriesAfter: 1, written: 0 }
     },
     // The bin checks read their block whatever the kind, so this record

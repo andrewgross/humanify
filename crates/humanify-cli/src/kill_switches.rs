@@ -145,8 +145,9 @@ pub enum SwitchKind {
     Probe,
 }
 
-/// The applied switches, built ONCE at the CLI boundary and passed by value
-/// into the pipeline (the TS module-global `active`, made a value).
+/// The applied switches, built ONCE at the parse point (`crate::config`)
+/// and held in the run's `Config` (the TS module-global `active`, made a
+/// value).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SwitchState {
     applied: BTreeSet<Switch>,
@@ -209,6 +210,25 @@ impl SwitchState {
     /// a non-default run says so in its own recorded configuration.
     pub fn active(&self) -> Vec<Switch> {
         self.applied.iter().copied().collect()
+    }
+}
+
+impl serde::Serialize for SwitchState {
+    /// The run record's `switches`: `{disabled: [...], probes: [...]}`,
+    /// names in registry order.
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let of = |disable: bool| -> Vec<&'static str> {
+            Switch::ALL
+                .iter()
+                .filter(|sw| sw.is_disable() == disable && self.switch_on(**sw))
+                .map(|sw| sw.name())
+                .collect()
+        };
+        let mut m = s.serialize_map(Some(2))?;
+        m.serialize_entry("disabled", &of(true))?;
+        m.serialize_entry("probes", &of(false))?;
+        m.end()
     }
 }
 

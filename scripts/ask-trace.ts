@@ -159,8 +159,6 @@ async function main(): Promise<void> {
     path.join(outDir, "tree"),
     "--dump-asks",
     path.join(outDir, "asks.jsonl"),
-    "--api-key",
-    "ask-trace",
     "--retries",
     "0",
     "--endpoint",
@@ -171,7 +169,12 @@ async function main(): Promise<void> {
   binArgs.push(...args.passthrough);
 
   // Async on purpose: the stub lives in this process (see scripts/e2e.ts).
-  const child = spawn(BIN, binArgs, { stdio: ["ignore", "ignore", "pipe"] });
+  // The binary's API key comes from HUMANIFY_API_KEY only (config sweep
+  // step 4); the stub accepts any.
+  const child = spawn(BIN, binArgs, {
+    stdio: ["ignore", "ignore", "pipe"],
+    env: { ...process.env, HUMANIFY_API_KEY: "ask-trace" }
+  });
   child.stderr.on("data", (c) => {
     process.stderr.write(c);
   });

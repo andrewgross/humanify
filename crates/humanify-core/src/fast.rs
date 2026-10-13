@@ -5,7 +5,8 @@
 //! the byte-identical parallelization kept — the pre-flip default path's
 //! bytes at the same `--batch-size`. Individual levers stay selectable
 //! with the rust-only `--relaxed-levers <list>` (hidden from help; the
-//! `--pipeline-arg` sizing path). Both tiers are DETERMINISTIC: the same
+//! `--pipeline-arg` sizing path; its names are parsed by the CLI's config
+//! owner). Both tiers are DETERMINISTIC: the same
 //! input and the same model answers give the same bytes, run after run.
 //!
 //! - [`FastTier::Exact`] only reorders or parallelizes work whose outcome
@@ -58,25 +59,6 @@ impl Levers {
     pub fn has(self, l: Lever) -> bool {
         self.0 & (1 << l as u32) != 0
     }
-
-    /// `a,b` lever names; unknown names are an error listing the valid set.
-    pub fn parse(list: &str) -> Result<Levers, String> {
-        let mut out = Levers(0);
-        for name in list.split(',').filter(|s| !s.is_empty()) {
-            let l = Lever::ALL
-                .iter()
-                .find(|l| l.name() == name)
-                .ok_or_else(|| {
-                    let valid: Vec<&str> = Lever::ALL.iter().map(|l| l.name()).collect();
-                    format!(
-                        "unknown relaxed lever \"{name}\" (valid: {})",
-                        valid.join(", ")
-                    )
-                })?;
-            out = out.with(*l);
-        }
-        Ok(out)
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -110,14 +92,13 @@ mod fast_test {
     use super::*;
 
     #[test]
-    fn levers_parse() {
+    fn lever_sets() {
         let all = Levers::all();
         assert!(Lever::ALL.iter().all(|&l| all.has(l)));
-        let one = Levers::parse("window-lanes").unwrap();
+        let one = Levers::default().with(Lever::WindowLanes);
         assert!(one.has(Lever::WindowLanes) && !one.has(Lever::DeferShadowed));
-        let both = Levers::parse("window-lanes,defer-shadowed").unwrap();
+        let both = one.with(Lever::DeferShadowed);
         assert_eq!(both, all);
-        assert!(Levers::parse("nope").is_err());
         assert!(!FastTier::Exact.lever(Lever::WindowLanes));
         assert!(!FastTier::Off.on());
         assert!(FastTier::Relaxed(Levers::all()).on());

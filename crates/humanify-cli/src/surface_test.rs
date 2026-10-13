@@ -14,8 +14,8 @@
 
 use serde_json::Value;
 
+use crate::surface::CommandOptions;
 use crate::surface::{PipelineParse, RETIRED_FLAGS, help_text, package_version, parse_pipeline};
-use crate::unified::CommandOptions;
 
 fn argv(a: &[&str]) -> Vec<String> {
     a.iter().map(|s| s.to_string()).collect()
@@ -120,19 +120,15 @@ fn a_malformed_number_is_refused() {
 /// both; passing BOTH was last-wins and is now a conflict.
 #[test]
 fn the_two_skip_libraries_spellings_conflict() {
-    assert_eq!(parse_opts(&["in.js"]).settings_input().skip_libraries, None);
-    assert_eq!(
-        parse_opts(&["in.js", "--skip-libraries"])
-            .settings_input()
-            .skip_libraries,
-        Some(true)
-    );
-    assert_eq!(
-        parse_opts(&["in.js", "--no-skip-libraries"])
-            .settings_input()
-            .skip_libraries,
-        Some(false)
-    );
+    let skip = |a: &[&str]| {
+        crate::config::Config::build("in.js", &parse_opts(a), |_| Some("k".to_string()))
+            .expect("valid")
+            .library
+            .skip_libraries
+    };
+    assert!(skip(&["in.js"]));
+    assert!(skip(&["in.js", "--skip-libraries"]));
+    assert!(!skip(&["in.js", "--no-skip-libraries"]));
     refusal(
         &["in.js", "--skip-libraries", "--no-skip-libraries"],
         "--skip-libraries",
@@ -179,22 +175,7 @@ fn a_retired_flag_is_refused_naming_its_replacement() {
     );
 }
 
-/// The `--no-` spellings of the default-on levers still work.
-#[test]
-fn the_negated_lever_flags_turn_their_lever_off() {
-    let s = parse_opts(&["in.js", "--no-naming-floor", "--no-naming-floor-sweep"]).settings_input();
-    assert_eq!(
-        (s.naming_floor, s.naming_floor_sweep),
-        (Some(false), Some(false))
-    );
-    let s = parse_opts(&["in.js", "--no-reconcile-prior-diff"]).settings_input();
-    assert_eq!(s.reconcile_prior_diff, Some(false));
-    let s = parse_opts(&["in.js"]).settings_input();
-    assert_eq!(
-        (s.naming_floor, s.naming_floor_sweep, s.reconcile_prior_diff),
-        (None, None, None)
-    );
-}
+// (The `--no-` lever spellings: config_test.rs.)
 
 // --- schedule and Rust-only flags -----------------------------------------
 
@@ -202,12 +183,14 @@ fn the_negated_lever_flags_turn_their_lever_off() {
 /// 2026-09-28): the DEFAULT is the relaxed tier, every lever on, no flag.
 #[test]
 fn the_naming_schedule_defaults_to_relaxed() {
-    use crate::unified::FastTier;
-    use humanify_core::fast::Levers;
-    let tier = |a: &[&str]| parse_opts(a).fast_tier();
+    use humanify_core::fast::{FastTier, Lever, Levers};
+    let tier = |a: &[&str]| {
+        let o = parse_opts(a);
+        crate::config::schedule(o.sequential, o.relaxed_levers.as_deref())
+    };
     assert_eq!(tier(&["in.js"]), Ok(FastTier::Relaxed(Levers::all())));
     assert_eq!(tier(&["in.js", "--sequential"]), Ok(FastTier::Exact));
-    let lanes = FastTier::Relaxed(Levers::parse("window-lanes").unwrap());
+    let lanes = FastTier::Relaxed(Levers::default().with(Lever::WindowLanes));
     assert_eq!(
         tier(&["in.js", "--relaxed-levers", "window-lanes"]),
         Ok(lanes)

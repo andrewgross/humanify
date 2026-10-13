@@ -208,6 +208,11 @@ else
 fi
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
+# The binary reads its API key from HUMANIFY_API_KEY only (config sweep
+# step 4, 2026-10-13: `--api-key` was retired — a secret never goes on a
+# command line, which the launch record would keep). Exported once; every
+# launch below inherits it.
+export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 
@@ -272,7 +277,7 @@ for i in $(seq 0 $((npairs - 1))); do
       fi
       rm -rf "$REBASE"
       "${PIPE_CMD[@]}" "$INPUT_FROM" \
-        --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+        --split --endpoint "$ENDPOINT" --model "$MODELNAME" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
         ${REBASE_SEED_ARGS[@]+"${REBASE_SEED_ARGS[@]}"} \
@@ -308,7 +313,7 @@ for i in $(seq 0 $((npairs - 1))); do
   mkdir -p "$WORK/$MODEL"
   RUN_CFG="$WORK/$MODEL/$TO.runcfg.json"
   ARGS_JSON=$(printf '%s\n' "$INPUT" --split \
-    --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+    --endpoint "$ENDPOINT" --model "$MODELNAME" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
     ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
     --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
@@ -483,7 +488,7 @@ self_hop_leg() {
   local out="$1" log="$2"
   shift 2
   "${PIPE_CMD[@]}" "$INPUT" \
-    --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+    --split --endpoint "$ENDPOINT" --model "$MODELNAME" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
     "${@+"$@"}" \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \

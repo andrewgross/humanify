@@ -31,6 +31,11 @@ import { describe, it } from "node:test";
  * the launches carried (and the run configs' `heapMb`) were deleted with
  * `--heap-mb`; both goldens were re-recorded and differ ONLY there — every
  * argv is byte-identical to the one the references were scored by.
+ *
+ * Config sweep step 4 (2026-10-13): `--api-key` was retired — the binary
+ * reads HUMANIFY_API_KEY only, and run.sh exports it. Both goldens were
+ * re-recorded: every launch line loses `--api-key local` and records the
+ * key it inherited (`HUMANIFY_API_KEY=local`); nothing else moved.
  */
 
 const HERE = import.meta.dirname;
@@ -52,7 +57,7 @@ const PAIRS: Array<[string, string]> = JSON.parse(
  */
 const RECORDER = String.raw`#!/usr/bin/env bash
 LOG="$RECORDER_ROOT/calls.log"
-echo "$(basename "$0") NODE_OPTIONS=${"$"}{NODE_OPTIONS:-} :: $(printf '%q ' "$@")" >> "$LOG"
+echo "$(basename "$0") NODE_OPTIONS=${"$"}{NODE_OPTIONS:-} HUMANIFY_API_KEY=${"$"}{HUMANIFY_API_KEY:-} :: $(printf '%q ' "$@")" >> "$LOG"
 write_tree() {
   local out="" cache="" prev=""
   for a in "$@"; do
@@ -190,6 +195,8 @@ function runHarness(
           ...process.env,
           PATH: `${shims}:${process.env.PATH ?? ""}`,
           NODE_OPTIONS: "",
+          // Never inherited: run.sh must export the key itself.
+          HUMANIFY_API_KEY: "",
           RECORDER_ROOT: root,
           RECORDER_REAL_NPX: realNpx(),
           ...Object.fromEntries(

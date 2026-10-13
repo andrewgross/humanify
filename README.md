@@ -108,15 +108,18 @@ itself, or a local server (llama.cpp, vLLM, Ollama's OpenAI endpoint, …).
 
 ```shell
 # OpenAI
-humanify obfuscated.js -o out --model gpt-4o-mini --api-key "$OPENAI_API_KEY"
+HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify obfuscated.js -o out --model gpt-4o-mini
 
-# A local OpenAI-compatible server
-humanify obfuscated.js -o out --endpoint http://localhost:8000/v1 \
-  --model openai/gpt-oss-20b --api-key local --reasoning-effort low
+# A local OpenAI-compatible server (any non-empty key)
+HUMANIFY_API_KEY=local humanify obfuscated.js -o out \
+  --endpoint http://localhost:8000/v1 --model openai/gpt-oss-20b --reasoning-effort low
 ```
 
-The API key comes from `--api-key`, else `HUMANIFY_API_KEY`, else
-`OPENAI_API_KEY`.
+The API key comes from the `HUMANIFY_API_KEY` environment variable (or a
+`.env` file in the working directory) and nowhere else: a secret never goes
+on the command line. Every option is checked before any work starts — a bad
+value, a conflict or a missing input file is refused, all at once, and
+nothing is written.
 
 Common options (`humanify --help` lists them all):
 

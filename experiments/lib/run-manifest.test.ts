@@ -52,7 +52,7 @@ function base(over: Partial<RunManifest> = {}): RunManifest {
       model: "m",
       reasoningEffort: "low",
       concurrency: 32,
-      killSwitches: [],
+      resolved: { switches: { disabled: [], probes: [] } },
       cache: { enabled: false, entriesBefore: 0, entriesAfter: 0, written: 0 }
     },
     outcome: { exitCode: 0, errors: [], peakRssMb: 8000, artifacts: [] },
@@ -328,16 +328,40 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
     );
   });
 
-  it("flags any kill switch left on, and names it", () => {
+  it("flags any kill switch left on, and names it — from the binary's own record", () => {
     const w = manifestWarnings(
       base({
         config: {
           ...base().config,
-          killSwitches: ["content-anchor"]
+          resolved: {
+            switches: {
+              disabled: ["content-anchor"],
+              probes: ["shingle-probe"]
+            }
+          }
         }
       })
     );
+    assert.ok(w.some((l) => l.includes("content-anchor, shingle-probe")));
+    assert.ok(!w.some((l) => /configuration record/.test(l)));
+  });
+
+  it("reads a pre-2026-10-13 manifest's argv-derived switches", () => {
+    const { resolved: _, ...legacy } = base().config;
+    const w = manifestWarnings(
+      base({ config: { ...legacy, killSwitches: ["content-anchor"] } })
+    );
     assert.ok(w.some((l) => l.includes("content-anchor")));
+    assert.ok(!w.some((l) => /configuration record/.test(l)));
+  });
+
+  it("says a run with no configuration record has UNKNOWN settings", () => {
+    const { resolved: _, ...none } = base().config;
+    const w = manifestWarnings(base({ config: none }));
+    assert.ok(
+      w.some((l) => /no configuration record/.test(l) && /UNKNOWN/.test(l)),
+      JSON.stringify(w)
+    );
   });
 
   it("flags a non-zero exit even when everything else looks fine", () => {

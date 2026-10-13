@@ -140,7 +140,8 @@ fn command(dir: &Path, input: &str, out: &Path, endpoint: &str) -> Command {
     cmd.current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
-        .args([input, "--api-key", "k", "--model", "stub-model", "-c", "8"])
+        .env("HUMANIFY_API_KEY", "k")
+        .args([input, "--model", "stub-model", "-c", "8"])
         .args(["--retries", "0", "--endpoint", endpoint])
         .arg("-o")
         .arg(out);

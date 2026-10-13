@@ -1,9 +1,9 @@
 # Config consolidation: one parse point, one typed config, one file
 
-Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-2
-landed on main (`587e211f`); **step 3 (clap for the pipeline) is done** on
-branch `cleanup/config-sweep-3-clap` — §2.1 and §5 record what changed.
-Steps 4-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
+Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-3
+landed on main (`fe008408`); **step 4 (one typed `Config`) is done** on
+branch `cleanup/config-sweep-4-typed-config` — §5 records what changed.
+Steps 5-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
 to clean up old flags and make sure config is parsed in ONE place and used
 downstream." Rule applied throughout: no backwards compatibility — an old
 spelling is deleted, not aliased.
@@ -352,11 +352,44 @@ marked **G** touch how the harness launches the binary and update
    flags refused by name (test per retired flag, red first); re-record
    the help goldens. Neutrality because `meta.json`'s `flags` record and the
    stats file are written from the parsed options.
-4. **One `Config` type** (N). Fold `Settings`, `SwitchState`, `Levers` and
+4. **DONE 2026-10-13. One `Config` type** (N). Fold `Settings`, `SwitchState`, `Levers` and
    `CommandOptions` into it; one default per knob (the `unpack` verb reads
    the same `[llm]` defaults). Write the resolved config into stats and the
    run manifest. Add the guard test (red first: plant a `std::env` read and
    a raw option read in core, watch it fail).
+
+   What landed: `humanify_cli::config` owns `Config` — sections `io`,
+   `llm`, `matching`, `naming`, `library`, `unpack`, `split`, `switches`,
+   `diagnostics`, `perf` (each a future TOML table; `library` is where step
+   6 lands). `settings.rs` is deleted; `SwitchState` is a field; the lever
+   parser moved out of `humanify-core`; `CommandOptions` holds only "given
+   or not" (no clap defaults) and nothing past `Config::build` reads it.
+   Every knob is resolved to its EFFECTIVE value (an unset batch size is
+   the 25 the processor would use), except `max_tokens`, whose "unset" is
+   part of the LLM cache key. Defaults deduplicated: the LLM timeout (two
+   crates), the model (`unpack` verb: `openai/gpt-oss-20b` → the
+   pipeline's `gpt-4o-mini`; no harness script launches `unpack`, so only
+   a manual `unpack --llm-cache` replay of an eval cache must now pass
+   `--model openai/gpt-oss-20b --reasoning-effort low`), the reasoning
+   effort (`unpack`: `low` → unset, like the pipeline), the retry count
+   (the rate limiter's). `--api-key` and the `OPENAI_API_KEY` fallback are
+   retired: the key is read once from `HUMANIFY_API_KEY`, and the harness
+   exports it. New refusals, all collected and printed together before
+   anything is created: zero for a count that must be positive
+   (concurrency, module concurrency, timeout, max/context tokens, batch
+   size, max retries), a context window the completion reserve fills, an
+   empty value for any named option, a non-http(s) endpoint, an unknown
+   reasoning effort (now a clap enum), and a missing `--prior-version` /
+   `--split-ledger` file (the input was checked only after the log file
+   and the cache directory were created). The record (`Config::record`,
+   the API key redacted) is the stats file's `config` block; the run
+   manifest copies it as `config.resolved`, and the kill-switch warning
+   reads it instead of re-parsing the argv. `tests/env_guard.rs` is the
+   guard (§3.5). Proof: launch parity — all 53 captured launches, their
+   `--api-key` removed, resolve to the captured effective settings (the
+   fixture is unchanged); warm neutrality vs `fe008408` on
+   2.1.215→2.1.216.
+
 5. **The config file** (N, G). `--config <file>`, TOML, compiled-in
    defaults, strict keys. Every flag outside the six operational ones moves
    into it and is deleted. A test proves the compiled-in defaults equal

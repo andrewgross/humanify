@@ -518,6 +518,12 @@ js_record! {
         /// recorded scorecard — the `reask` precedent, verbatim. Absent is
         /// UNKNOWN to the eval, never zero.
         provider_errors: Option<ProviderErrorStats> = "providerErrors",
+        /// The `config` block (2026-10-13, config sweep step 4): the run's
+        /// whole resolved configuration, the API key redacted — the
+        /// CLI's `Config::record`, verbatim. ALWAYS written on runs from
+        /// this writer; ABSENT on every earlier recorded scorecard — the
+        /// `reask` precedent, verbatim.
+        config: Option<JsValue> = "config",
     }
 }
 

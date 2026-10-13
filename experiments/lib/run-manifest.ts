@@ -76,8 +76,21 @@ export interface RunManifest {
     model: string;
     reasoningEffort: string;
     concurrency: number;
-    /** Kill switches set in the environment for THIS run. */
-    killSwitches: string[];
+    /**
+     * The run's kill switches as the HARNESS read them off the argv it
+     * launched. Written only by runs before 2026-10-13; a newer run's
+     * switches are the binary's own record, `resolved.switches` — read
+     * either through `activeSwitches`.
+     */
+    killSwitches?: string[];
+    /**
+     * The binary's OWN record of its whole resolved configuration (config
+     * sweep step 4, 2026-10-13): the stats file's `config` block, the API
+     * key redacted. The harness copies it rather than re-deriving settings
+     * from the argv it passed. Absent on runs before 2026-10-13 and on a
+     * run that wrote no stats file (`pipeline-config-missing` warns).
+     */
+    resolved?: PipelineConfigRecord;
     cache: {
       enabled: boolean;
       entriesBefore: number;
@@ -126,6 +139,24 @@ export interface RunManifest {
     residueLocality: number;
     byTier: Record<string, number>;
   };
+}
+
+/** The binary's configuration record (the CLI's `Config::record`); only
+ *  the parts the harness judges are typed. */
+export interface PipelineConfigRecord {
+  switches: { disabled: string[]; probes: string[] };
+  [section: string]: unknown;
+}
+
+/**
+ * The kill switches a run had applied, sorted: the binary's own record
+ * when it wrote one, else (runs before 2026-10-13) what the harness read
+ * off its argv. Undefined when neither exists — UNKNOWN, never "none".
+ */
+function activeSwitches(m: RunManifest): string[] | undefined {
+  const r = m.config.resolved;
+  if (r) return [...r.switches.disabled, ...r.switches.probes].sort();
+  return m.config.killSwitches;
 }
 
 const MANIFEST_SUFFIX = "-run.json";
@@ -398,10 +429,25 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
   },
   {
     name: "kill-switch-active",
-    fires: (m) => m.config.killSwitches.length > 0,
-    say: (m) =>
-      `${m.config.killSwitches.length} kill switch(es) ACTIVE — this run is ` +
-      `not the default pipeline: ${m.config.killSwitches.join(", ")}`
+    fires: (m) => (activeSwitches(m)?.length ?? 0) > 0,
+    say: (m) => {
+      const on = activeSwitches(m) ?? [];
+      return (
+        `${on.length} kill switch(es) ACTIVE — this run is ` +
+        `not the default pipeline: ${on.join(", ")}`
+      );
+    }
+  },
+  {
+    // 2026-10-13: the binary records its own configuration in the stats
+    // file; a run without that record (it wrote no stats file — it
+    // crashed, or ran without --stats-json) has settings nobody can read
+    // back, kill switches included.
+    name: "pipeline-config-missing",
+    fires: (m) => activeSwitches(m) === undefined,
+    say: () =>
+      "the binary wrote no configuration record (no stats file): this " +
+      "run's settings, kill switches included, are UNKNOWN."
   },
   {
     name: "dirty-tree",

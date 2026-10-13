@@ -124,6 +124,9 @@ source "$REPO/experiments/lib/llm-endpoint.sh"
 ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
+# The binary reads its API key from HUMANIFY_API_KEY only (config sweep
+# step 4, 2026-10-13: `--api-key` was retired).
+export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 
@@ -304,7 +307,7 @@ for V in "${VERSIONS[@]}"; do
   STATS="$OUT/runs/$V.stats.json"
   rm -f "$STATS"
   ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --split \
-    --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+    --endpoint "$ENDPOINT" --model "$MODELNAME" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$TREE" \
     ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} --stats-json "$STATS" \
     -vv --log-file "$OUT/runs/$V.log" | jq -R . | jq -s .)

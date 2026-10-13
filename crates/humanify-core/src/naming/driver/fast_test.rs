@@ -260,9 +260,15 @@ fn with_a_prior_fast_ships_the_parity_bytes() {
 /// strings went with `--fast`; the schedule is the relaxed tier by default
 /// and `--sequential` selects the exact one).
 fn tier_of(name: &str) -> crate::fast::FastTier {
-    use crate::fast::{FastTier, Levers};
+    use crate::fast::{FastTier, Lever, Levers};
     match name.strip_prefix("relaxed:") {
-        Some(list) => FastTier::Relaxed(Levers::parse(list).expect("lever names")),
+        Some(list) => FastTier::Relaxed(list.split(',').fold(Levers::default(), |set, n| {
+            let l = Lever::ALL
+                .into_iter()
+                .find(|l| l.name() == n)
+                .expect("lever names");
+            set.with(l)
+        })),
         None if name == "relaxed" => FastTier::Relaxed(Levers::all()),
         _ => FastTier::Exact,
     }

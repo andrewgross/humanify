@@ -6,25 +6,29 @@
 //! scenario corpus that asserted them end to end was retired 2026-09-28;
 //! the e2e drives the real invocations):
 //!
-//! 1. flag invariants — every violation `Error: <msg>` on stderr, exit 1;
-//! 2. kill switches — `Error: <msg>`, exit 1;
+//! 1. the configuration — resolved and validated BEFORE this action runs
+//!    (`crate::config`, the one parse point): every refusal `Error: <msg>`
+//!    on stderr, all at once, exit 1;
+//! 2. the input files: a missing input exits 1 with the red
+//!    `File <x> not found`, a missing `--prior-version`/`--split-ledger`
+//!    with `Error: <flag> file not found: <path>` — before anything is
+//!    created (config sweep step 4: the input used to be checked after
+//!    the log file and the cache directory were made);
 //! 3. verbosity and `--log-file` (implies -vv, appends);
 //! 4. the renderer (TTY dashboard only when stderr is a terminal and not
 //!    `-vv` without a log file);
-//! 5. settings — `Error: <msg>`, exit 1;
-//! 6. the provider: `--llm-cache` is created here (CachedLLMProvider's
-//!    constructor), before the input is even checked;
-//! 7. the pipeline, whose `finally` writes the profile and finishes the
-//!    renderer: a missing input exits 1 IMMEDIATELY with the red
-//!    `File <x> not found` (process.exit skips the finally); every other
-//!    failure below runs the finally, then prints `Error: <msg>` and exits
-//!    1 — where the TS dies with an uncaught exception and a stack trace,
-//!    the Rust binary prints that exception's own `Error:` line (the
-//!    declared normalization of the TS crash class, 14 §2).
+//! 5. the provider: `--llm-cache` is created here (CachedLLMProvider's
+//!    constructor);
+//! 6. the pipeline, whose `finally` writes the profile and finishes the
+//!    renderer: every failure below runs the finally, then prints
+//!    `Error: <msg>` and exits 1 — where the TS dies with an uncaught
+//!    exception and a stack trace, the Rust binary prints that exception's
+//!    own `Error:` line (the declared normalization of the TS crash class,
+//!    14 §2).
 //!
 //! Every stage runs natively (stage 6, the formatter, since WP5.6d).
 
-use humanify_core::place::assign::namer::{DEFAULT_CONTEXT_TOKENS, SplitNamerBudget};
+use humanify_core::place::assign::namer::SplitNamerBudget;
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -32,142 +36,21 @@ use std::sync::{Arc, Mutex};
 use humanify_core::libdetect::discovery::DiscoveryRequest;
 use humanify_core::libindex::lookup::LibraryIndex;
 use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
-use humanify_core::naming::waves::batch::WaveTunables;
 use humanify_core::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
 use humanify_core::place::method::MarkerOffer;
 use humanify_core::toolchain::{Toolchain, resolve_toolchain};
 use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
-use humanify_model::detection::{
-    BundlerType, MinifierType, SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS,
-};
 use humanify_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConfig};
 
-use crate::kill_switches::{Switch, SwitchState};
+use crate::config::Config;
+use crate::kill_switches::Switch;
 use crate::log::{debug_reset_output, debug_set_output, verbose};
 use crate::pipeline_config::enum_name;
 use crate::progress::{ProgressRenderer, create_progress_renderer};
-use crate::settings::{Settings, SettingsInput, resolve_settings};
 use crate::unminify::{filter_libraries, report_vendor_naming, unpack_bundle};
-use crate::util::MAX_DEFAULT_MODULE_CONCURRENCY;
 
-/// The parsed options: declared (for clap) in `surface`, the one parse
-/// point.
-pub use crate::surface::CommandOptions;
-
-pub use humanify_core::fast::{FastTier, Levers};
-
-impl CommandOptions {
-    /// The naming schedule: the DEFAULT is the relaxed tier with every
-    /// lever on; `--sequential` selects the conservative one (the relaxed
-    /// levers OFF, the exact tier's byte-identical parallelization kept —
-    /// the pre-2026-09-28 default's bytes at the same `--batch-size`), and
-    /// `--relaxed-levers` sizes a subset. The error is a bad lever name or
-    /// the flags' contradiction; `run` refuses before anything launches.
-    pub fn fast_tier(&self) -> Result<FastTier, String> {
-        if self.sequential {
-            return if self.relaxed_levers.is_some() {
-                Err("--sequential already turns the relaxed levers off; \
-                     --relaxed-levers has nothing to select"
-                    .to_string())
-            } else {
-                Ok(FastTier::Exact)
-            };
-        }
-        match self.relaxed_levers.as_deref() {
-            None => Ok(FastTier::Relaxed(Levers::all())),
-            Some(list) => Levers::parse(list).map(FastTier::Relaxed),
-        }
-    }
-}
-
-impl CommandOptions {
-    pub(crate) fn settings_input(&self) -> SettingsInput {
-        // An unset negatable lever is None (the resolver's default, on);
-        // its `--no-` flag is Some(false).
-        let off = |no: bool| if no { Some(false) } else { None };
-        SettingsInput {
-            endpoint: Some(self.endpoint.clone()),
-            model: Some(self.model.clone()),
-            api_key: self.api_key.clone(),
-            timeout: Some(self.timeout),
-            retries: Some(self.retries),
-            concurrency: Some(self.concurrency),
-            batch_size: self.batch_size,
-            max_retries: self.max_retries,
-            max_free_retries: self.max_free_retries,
-            lane_threshold: self.lane_threshold,
-            rename_retries: self.rename_retries,
-            llm_cache: self.llm_cache.clone(),
-            reasoning_effort: self.reasoning_effort.clone(),
-            max_tokens: self.max_tokens,
-            context_tokens: self.context_tokens,
-            module_concurrency: self.module_concurrency,
-            skip_libraries: match (self.skip_libraries, self.no_skip_libraries) {
-                (true, _) => Some(true),
-                (_, true) => Some(false),
-                _ => None,
-            },
-            naming_floor: off(self.no_naming_floor),
-            naming_floor_sweep: off(self.no_naming_floor_sweep),
-            reconcile_prior_diff: off(self.no_reconcile_prior_diff),
-            prior_version: self.prior_version.clone(),
-        }
-    }
-}
-
-fn truthy(v: &Option<String>) -> bool {
-    v.as_deref().is_some_and(|s| !s.is_empty())
-}
-
-fn enum_violation<T: serde::Serialize + Copy>(
-    flag: &str,
-    value: &Option<String>,
-    allowed: &[T],
-) -> Option<String> {
-    let v = value.as_deref()?;
-    let names: Vec<String> = allowed.iter().map(|a| enum_name(*a)).collect();
-    if names.iter().any(|n| n == v) {
-        return None;
-    }
-    Some(format!(
-        "{flag} must be one of: {} (got \"{v}\")",
-        names.join(", ")
-    ))
-}
-
-/// `checkFlagInvariants`: one message per violation, preconditions first
-/// (in flag-declaration order), then the enum values.
-pub fn check_flag_invariants(opts: &CommandOptions) -> Vec<String> {
-    let rules = [
-        (opts.split_pure, "--split-pure", opts.split, "--split"),
-        (
-            truthy(&opts.split_ledger),
-            "--split-ledger",
-            opts.split,
-            "--split",
-        ),
-    ];
-    let mut out: Vec<String> = rules
-        .iter()
-        .filter(|(when, _, needs, _)| *when && !*needs)
-        .map(|(_, flag, _, prereq)| format!("{flag} requires {prereq}"))
-        .collect();
-    out.extend(enum_violation(
-        "--bundler",
-        &opts.bundler,
-        &SELECTABLE_BUNDLERS,
-    ));
-    out.extend(enum_violation(
-        "--minifier",
-        &opts.minifier,
-        &SELECTABLE_MINIFIERS,
-    ));
-    out.extend(opts.fast_tier().err());
-    out
-}
-
-/// A failure below the settings step: `Error: <message>` after the
+/// A failure below the configuration: `Error: <message>` after the
 /// finally (the TS uncaught-exception class, its headline only).
 struct Crash(String);
 
@@ -175,14 +58,6 @@ impl From<String> for Crash {
     fn from(s: String) -> Self {
         Crash(s)
     }
-}
-
-/// How the pipeline body ended.
-enum Ended {
-    /// Ran to its end (exit code: 0, or 1 if a report marked it failed).
-    Done(i32),
-    /// `process.exit(code)` inside the body — skips the finally.
-    Immediate(i32),
 }
 
 /// A Node `fs` error's message (`ENOENT: no such file or directory, open
@@ -204,50 +79,38 @@ fn read_utf8(path: &str) -> Result<String, Crash> {
         .map_err(|e| Crash(node_fs_error(&e, "open", path)))
 }
 
-/// The action: `humanify <input> [options]`. Returns the process exit code.
-pub fn run(input: &str, opts: &CommandOptions) -> i32 {
-    let violations = check_flag_invariants(opts);
-    if !violations.is_empty() {
-        for m in violations {
+/// The action: `humanify <input> [options]`, on the run's validated
+/// configuration. Returns the process exit code.
+pub fn run(config: &Config) -> i32 {
+    let input = config.io.input.as_str();
+    // ensureFileExists → err(): red message, exit 1 — now before anything
+    // is created.
+    if !Path::new(input).exists() {
+        eprintln!("\x1b[31mFile {input} not found\x1b[0m");
+        return 1;
+    }
+    let missing = config.missing_inputs();
+    if !missing.is_empty() {
+        for m in missing {
             eprintln!("Error: {m}");
         }
         return 1;
     }
-    let split_list = |v: &Option<String>| -> Vec<String> {
-        v.as_deref()
-            .map(|s| s.split(',').map(str::to_string).collect())
-            .unwrap_or_default()
-    };
-    let switches =
-        match SwitchState::configure(&split_list(&opts.disable), &split_list(&opts.probe)) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("Error: {e}");
-                return 1;
-            }
-        };
-    verbose().set_level(opts.verbose.min(2));
-    let log_file = match open_log_file(opts) {
+    verbose().set_level(config.diagnostics.verbosity);
+    let log_file = match open_log_file(config.diagnostics.log_file.as_deref()) {
         Ok(f) => f,
         Err(msg) => {
             eprintln!("Error: {msg}");
             return 1;
         }
     };
-    let use_rich_ui =
-        std::io::stderr().is_terminal() && (verbose().level() < 2 || opts.log_file.is_some());
+    let use_rich_ui = std::io::stderr().is_terminal()
+        && (verbose().level() < 2 || config.diagnostics.log_file.is_some());
     let mut renderer = create_progress_renderer(use_rich_ui);
-    let settings = match resolve_settings(&opts.settings_input()) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Error: {e}");
-            return 1;
-        }
-    };
-    let profiler = humanify_core::profiling::Profiler::new(opts.perf_trace.is_some());
+    let profiler = humanify_core::profiling::Profiler::new(config.perf.perf_trace.is_some());
     profiler.install_global();
     // buildProvider: the cache wrapper mkdirs its dir at construction.
-    if let Some(dir) = &settings.llm_cache_dir
+    if let Some(dir) = &config.llm.cache_dir
         && let Err(e) = std::fs::create_dir_all(dir)
     {
         return crash(
@@ -257,33 +120,22 @@ pub fn run(input: &str, opts: &CommandOptions) -> i32 {
         );
     }
 
-    let provider = match build_provider(&settings) {
+    let provider = match build_provider(&config.llm) {
         Ok(p) => p,
         Err(e) => return crash(&mut *renderer, &e, log_file.is_some()),
     };
 
-    let ended = run_pipeline(
-        input,
-        opts,
-        &settings,
-        &switches,
-        &provider,
-        &profiler,
-        &mut *renderer,
-    );
-    if let Ok(Ended::Immediate(code)) = ended {
-        return code;
-    }
+    let ended = run_pipeline(config, &provider, &profiler, &mut *renderer);
     report_memo(&provider, &mut *renderer);
     // The TS `finally`.
-    finalize_profile(opts, input, &profiler, &mut *renderer);
+    finalize_profile(config, &profiler, &mut *renderer);
     renderer.finish();
     if log_file.is_some() {
         crate::log::verbose().reset_output();
         debug_reset_output();
     }
     match ended {
-        Ok(Ended::Done(code)) | Ok(Ended::Immediate(code)) => code,
+        Ok(code) => code,
         Err(Crash(message)) => {
             eprintln!("Error: {message}");
             1
@@ -320,8 +172,8 @@ type SharedFile = Arc<Mutex<std::fs::File>>;
 /// `--log-file`: append the debug AND verbose streams, raise the level to
 /// at least 2. (The TS opens its stream lazily and an open failure
 /// surfaces asynchronously later; the Rust binary reports it here.)
-fn open_log_file(opts: &CommandOptions) -> Result<Option<SharedFile>, String> {
-    let Some(path) = &opts.log_file else {
+fn open_log_file(path: Option<&str>) -> Result<Option<SharedFile>, String> {
+    let Some(path) = path else {
         return Ok(None);
     };
     let file = std::fs::OpenOptions::new()
@@ -343,14 +195,15 @@ fn open_log_file(opts: &CommandOptions) -> Result<Option<SharedFile>, String> {
 }
 
 fn finalize_profile(
-    opts: &CommandOptions,
-    input: &str,
+    config: &Config,
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) {
-    let Some(path) = &opts.perf_trace else { return };
+    let Some(path) = &config.perf.perf_trace else {
+        return;
+    };
     use humanify_core::profiling::{format_profile_summary, to_trace_events};
-    let report = profiler.finalize(Some(input));
+    let report = profiler.finalize(Some(&config.io.input));
     let trace =
         serde_json::to_string_pretty(&to_trace_events(&report)).expect("a trace serializes");
     if let Err(e) = std::fs::write(path, trace) {
@@ -361,35 +214,20 @@ fn finalize_profile(
     renderer.message(&format!("Profile written to {path}"));
 }
 
-fn parse_enum<T: serde::de::DeserializeOwned>(v: &Option<String>) -> Option<T> {
-    v.as_deref()
-        .and_then(|s| serde_json::from_value(serde_json::Value::String(s.to_string())).ok())
-}
-
 /// runPipeline, through the ported stages.
 fn run_pipeline(
-    input: &str,
-    opts: &CommandOptions,
-    settings: &Settings,
-    switches: &SwitchState,
+    config: &Config,
     provider: &dyn NameProvider,
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<Ended, Crash> {
-    // ensureFileExists → err(): red message, process.exit(1), no finally.
-    if !Path::new(input).exists() {
-        eprintln!("\x1b[31mFile {input} not found\x1b[0m");
-        return Ok(Ended::Immediate(1));
-    }
-    let Some(sim_path) = &opts.simulate_llm_latency else {
-        return pipeline_body(
-            input, opts, settings, switches, provider, profiler, renderer,
-        );
+) -> Result<i32, Crash> {
+    let Some(sim_path) = &config.perf.simulate_llm_latency else {
+        return pipeline_body(config, provider, profiler, renderer);
     };
     // The instrument: the run's own answers, priced on a virtual clock
     // with the rate limiter's slot count (crate::llm_sim).
-    let sim = crate::llm_sim::LatencySim::new(provider, settings.concurrency as usize);
-    let ended = pipeline_body(input, opts, settings, switches, &sim, profiler, renderer);
+    let sim = crate::llm_sim::LatencySim::new(provider, config.llm.concurrency as usize);
+    let ended = pipeline_body(config, &sim, profiler, renderer);
     let report = sim.report();
     renderer.message(&format!(
         "LLM latency simulation: {} calls, simulated LLM wall {:.1}s (effective concurrency {:.1})",
@@ -413,79 +251,66 @@ fn run_pipeline(
 /// starves the rate limiter.
 const PROMPT_WINDOW_HEADROOM: usize = 16;
 
-/// The split namer's prompt budget: `--context-tokens` (else the default
-/// model context) less the `--max-tokens` completion reserve (finding #39).
-fn split_namer_budget(settings: &Settings) -> SplitNamerBudget {
-    SplitNamerBudget::for_model(
-        settings
-            .context_tokens
-            .map_or(DEFAULT_CONTEXT_TOKENS, |t| t as u64),
-        settings
-            .max_tokens
-            .map_or(humanify_model::llm::DEFAULT_MAX_TOKENS, |t| t as u64),
-    )
+/// The split namer's prompt budget: the model context less the
+/// completion reserve (finding #39).
+fn split_namer_budget(llm: &crate::config::Llm) -> SplitNamerBudget {
+    SplitNamerBudget::for_model(llm.context_tokens, llm.completion_tokens())
 }
 
 /// `buildProvider`: cache OUTERMOST (hits bypass the limiter and the debug
 /// wrapper), then the rate limiter sized over both lanes, the debug
 /// wrapper, the HTTP client. A miss goes to the endpoint and a non-empty
 /// answer is written to the cache, exactly as the TS provider stack does.
-fn build_provider(settings: &Settings) -> Result<LlmClient<LiveStack>, String> {
-    let max_tokens = settings.max_tokens.map(|t| t as u64);
-    let reasoning_effort = settings.reasoning_effort.map(str::to_string);
-    let mut config = LlmConfig::new(&settings.endpoint, &settings.api_key, &settings.model);
-    config.timeout_ms = settings.timeout as u64;
+fn build_provider(llm: &crate::config::Llm) -> Result<LlmClient<LiveStack>, String> {
+    let reasoning_effort = llm.reasoning_effort.map(|e| e.name().to_string());
+    let mut config = LlmConfig::new(&llm.endpoint, llm.api_key.expose(), &llm.model);
+    config.timeout_ms = llm.timeout_ms;
     config.reasoning_effort = reasoning_effort.clone();
-    if let Some(t) = max_tokens {
+    if let Some(t) = llm.max_tokens {
         config.max_tokens = t;
     }
-    let defaults = RateLimitConfig::default();
     let rate = RateLimitConfig {
-        // The OUTER bound over both of the processor's limiters: the
-        // bundler is not detected yet, so the widest default lane.
-        max_concurrent: (settings.concurrency
-            + settings
-                .module_concurrency
-                .unwrap_or(f64::from(MAX_DEFAULT_MODULE_CONCURRENCY)))
-            as usize,
-        retry_attempts: settings
-            .retry_attempts
-            .map_or(defaults.retry_attempts, |r| r as u32),
-        ..defaults
+        // The OUTER bound over both of the processor's limiters.
+        max_concurrent: llm.outer_concurrency(),
+        retry_attempts: llm.retries,
+        ..RateLimitConfig::default()
     };
     LlmClient::live(LiveOptions {
         config,
         rate,
-        key_params: CacheKeyParams {
-            model: settings.model.clone(),
-            temperature: Some(0.0),
-            max_tokens,
-            reasoning_effort,
-        },
-        cache_dir: settings
-            .llm_cache_dir
-            .as_ref()
-            .map(std::path::PathBuf::from),
+        key_params: cache_key_params(llm),
+        cache_dir: llm.cache_dir.as_ref().map(std::path::PathBuf::from),
         metrics: None,
         log: Some(crate::log::llm_log_sink()),
     })
     .map_err(|e| e.to_string())
 }
 
+/// What an LLM cache entry is keyed by beyond the prompt. The TS passes a
+/// literal temperature 0 (unified.ts buildProvider).
+fn cache_key_params(llm: &crate::config::Llm) -> CacheKeyParams {
+    CacheKeyParams {
+        model: llm.model.clone(),
+        temperature: Some(0.0),
+        max_tokens: llm.max_tokens,
+        reasoning_effort: llm.reasoning_effort.map(|e| e.name().to_string()),
+    }
+}
+
 fn pipeline_body(
-    input: &str,
-    opts: &CommandOptions,
-    settings: &Settings,
-    switches: &SwitchState,
+    config: &Config,
     provider: &dyn NameProvider,
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<Ended, Crash> {
+) -> Result<i32, Crash> {
     use humanify_core::profiling::phase;
+    let input = config.io.input.as_str();
+    let switches = &config.switches;
+    let outputs = &config.diagnostics;
     let ph = phase("read+detect");
     let bundled_code = read_utf8(input)?;
-    let (toolchain, markers) = detect_stage(&bundled_code, opts, switches, profiler);
-    let prior = load_prior_version_code(opts, renderer)?;
+    let (toolchain, markers) = detect_stage(&bundled_code, config, profiler);
+    let prior = load_prior_version_code(config, renderer)?;
     drop(ph);
 
     // armRecorders: the diagnostics/dump recorders arrive with the stages
@@ -493,39 +318,35 @@ fn pipeline_body(
 
     // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
     // then library detection picks the files the per-file stages process.
-    let out_dir = opts.output_dir.as_str();
-    let prior_path = opts
-        .prior_version
-        .as_deref()
-        .filter(|p| !p.is_empty())
-        .map(Path::new);
+    let out_dir = config.io.output_dir.as_str();
+    let prior_path = config.matching.prior_version.as_deref().map(Path::new);
     // The run's per-dispatch recorder (finding #65): `--dump-artifacts`
     // streams prompts.jsonl + cache-keys.jsonl rows to part files as the
     // dispatches commit; `--dump-asks` retains the small ask rows;
     // WITHOUT either flag nothing per ask survives its dispatch — the
     // accumulated dispatch records were the ~99GB holder of a full-bundle
     // fresh run.
-    let mut naming_config = naming_config(settings, &toolchain, opts, switches);
+    let mut naming_config = naming_config(config, &toolchain);
     // The module step names each recorded module once, for its wrapper and
     // its file — offered whenever the toolchain offers the module markers
     // (the step checks they describe the bundle, as the split does).
     naming_config.module_naming =
-        (markers == MarkerOffer::Offered).then(|| split_namer_budget(settings));
-    let mut dispatch_log = match opts.dump_artifacts.as_deref() {
+        (markers == MarkerOffer::Offered).then(|| split_namer_budget(&config.llm));
+    let mut dispatch_log = match outputs.dump_artifacts.as_deref() {
         Some(dir) => humanify_core::artifact_dump::DispatchLog::dump(
             naming_config.params.clone(),
             Path::new(dir),
         )
         .map_err(|e| Crash(node_fs_error(&e, "open", dir)))?,
         None => {
-            if opts.dump_asks.is_some() {
+            if outputs.dump_asks.is_some() {
                 humanify_core::artifact_dump::DispatchLog::asks(naming_config.params.clone())
             } else {
                 humanify_core::artifact_dump::DispatchLog::off(naming_config.params.clone())
             }
         }
     };
-    let library_index = load_library_index(opts, &toolchain, renderer);
+    let library_index = load_library_index(config, &toolchain, renderer);
     let ph = phase("unpack+vendor");
     let mut unpacked = unpack_bundle(
         &bundled_code,
@@ -536,18 +357,21 @@ fn pipeline_body(
         prior_path,
         switches.switch_on(Switch::ManifestPriorOrder),
         // Report-only: discovery's rows go to the diagnostics, nowhere else.
-        opts.diagnostics.is_some().then_some(DiscoveryRequest {
-            list_units: opts.library_discovery_units,
-            index: library_index.as_ref(),
-            ..DiscoveryRequest::default()
-        }),
+        outputs
+            .diagnostics_file
+            .is_some()
+            .then_some(DiscoveryRequest {
+                list_units: config.library.discovery_units,
+                index: library_index.as_ref(),
+                ..DiscoveryRequest::default()
+            }),
         profiler,
         renderer,
     )?;
     drop(ph);
     let ph = phase("library-detection");
     let unpacked_files = std::mem::take(&mut unpacked.files);
-    let (files_to_process, mixed_files) = if settings.skip_libraries {
+    let (files_to_process, mixed_files) = if config.library.skip_libraries {
         let filtered = filter_libraries(
             unpacked_files,
             toolchain.library_detector.piece,
@@ -563,7 +387,7 @@ fn pipeline_body(
     let mut failures = Failures::default();
     let prompt_window = naming_config.prompt_window;
     let mut naming = NamingRun {
-        opts,
+        split: config.split.enabled,
         config: naming_config,
         log: &mut dispatch_log,
         prior: prior.as_deref(),
@@ -594,7 +418,7 @@ fn pipeline_body(
     let mut split_method = None;
     let mut failed_calls = naming.failed_calls;
     failed_calls.vendor = unpacked.vendor_naming.batches_failed;
-    if opts.split
+    if config.split.enabled
         && let Some(NamedFile {
             outcome,
             path: source,
@@ -610,13 +434,13 @@ fn pipeline_body(
             toolchain,
             vendor_record: unpacked.vendor_record.as_ref(),
             prior_version: prior_path,
-            split_ledger: opts.split_ledger.as_deref(),
-            split_pure: opts.split_pure,
+            split_ledger: config.split.ledger.as_deref(),
+            split_pure: config.split.pure,
             markers,
             switches,
             provider,
             log: &mut dispatch_log,
-            namer_budget: split_namer_budget(settings),
+            namer_budget: split_namer_budget(&config.llm),
             prompt_window,
             // Finding #60: the vendor bridge resolves the manifest's raw
             // capture names against this PRE-RENAME text.
@@ -659,7 +483,7 @@ fn pipeline_body(
     {
         let _ph = phase("reports");
         let reports = RunReports {
-            opts,
+            config,
             outcome,
             fresh,
             placement: &placement,
@@ -670,7 +494,7 @@ fn pipeline_body(
             library_discovery: unpacked.library_discovery.as_ref(),
         };
         reports.write_diagnostics(renderer)?;
-        if let Some(dest) = &opts.stats_json {
+        if let Some(dest) = &outputs.stats_json {
             write_stats_json(
                 dest,
                 outcome,
@@ -680,11 +504,12 @@ fn pipeline_body(
                 RunLevelStats {
                     split_method,
                     failed_calls: &failed_calls,
+                    config,
                 },
                 renderer,
             )?;
         }
-        if let Some(dir) = &opts.dump_artifacts {
+        if let Some(dir) = &outputs.dump_artifacts {
             let regions: Vec<humanify_core::libdetect::CommentRegion> = mixed_files
                 .iter()
                 .filter(|(p, _)| p == path)
@@ -705,7 +530,7 @@ fn pipeline_body(
                     output_dir: Path::new(out_dir),
                     minified: &bundled_code,
                     prior: prior.as_deref(),
-                    flags: dump_flags(opts, settings, &toolchain),
+                    flags: dump_flags(config, &toolchain),
                     regions: &regions,
                     layout: toolchain.layout.piece,
                     module_wrappers: toolchain.module_wrappers.piece,
@@ -789,7 +614,7 @@ prior, {} calls ({} failed), {} named, {} retried as duplicates, {} disclosed re
                 m(peak.gauges.strategy_module_bytes),
             ));
         }
-        if let Some(dest) = &opts.dump_asks {
+        if let Some(dest) = &outputs.dump_asks {
             let n = humanify_core::artifact_dump::write_ask_rows(
                 Path::new(dest),
                 dispatch_log.ask_rows(),
@@ -802,14 +627,14 @@ prior, {} calls ({} failed), {} named, {} retried as duplicates, {} disclosed re
     // No named file: the dump flags wrote nothing today, and the streamed
     // parts go the same way.
     dispatch_log.discard();
-    Ok(Ended::Done(failures.close(renderer)))
+    Ok(failures.close(renderer))
 }
 
 /// The run's recorded reports, written after the split in the TS order
 /// (unified.ts runPipeline: diagnostics, eval stats, the artifact dump,
 /// the rename ledger).
 struct RunReports<'a> {
-    opts: &'a CommandOptions,
+    config: &'a Config,
     outcome: &'a NamingOutcome,
     /// The formatted text the naming stage ran on.
     fresh: &'a str,
@@ -847,14 +672,15 @@ struct DumpContext<'a> {
 /// for it. Report-only: an index that cannot be read is said so, and
 /// discovery runs without it.
 fn load_library_index(
-    opts: &CommandOptions,
+    config: &Config,
     toolchain: &Toolchain,
     renderer: &mut dyn ProgressRenderer,
 ) -> Option<LibraryIndex> {
-    let dir = opts
-        .library_index
+    let dir = config
+        .library
+        .index
         .as_deref()
-        .filter(|_| opts.diagnostics.is_some())?;
+        .filter(|_| config.diagnostics.diagnostics_file.is_some())?;
     let read = humanify_core::libindex::IndexSlice::for_bundler(toolchain.bundler)
         .ok_or_else(|| "the index has no slice for this bundler".to_string())
         .and_then(|slice| LibraryIndex::load(Path::new(dir), slice));
@@ -871,34 +697,44 @@ fn load_library_index(
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
 /// selection and the decision levers; unset optional flags are absent.
-fn dump_flags(
-    opts: &CommandOptions,
-    settings: &Settings,
-    toolchain: &Toolchain,
-) -> humanify_model::js::JsValue {
+/// The switch lists are the applied switches in registry order.
+fn dump_flags(config: &Config, toolchain: &Toolchain) -> humanify_model::js::JsValue {
     use humanify_model::js::{JsObject, JsValue};
     let mut f = JsObject::new();
-    f.insert("split", JsValue::Bool(opts.split));
-    f.insert("splitPure", JsValue::Bool(opts.split_pure));
+    f.insert("split", JsValue::Bool(config.split.enabled));
+    f.insert("splitPure", JsValue::Bool(config.split.pure));
     f.insert("bundler", JsValue::str(enum_name(toolchain.bundler)));
     f.insert("minifier", JsValue::str(enum_name(toolchain.minifier)));
-    f.insert("skipLibraries", JsValue::Bool(settings.skip_libraries));
+    f.insert(
+        "skipLibraries",
+        JsValue::Bool(config.library.skip_libraries),
+    );
     f.insert(
         "reconcilePriorDiff",
-        JsValue::Bool(settings.levers.reconcile_prior_diff),
+        JsValue::Bool(config.matching.reconcile_prior_diff),
     );
-    f.insert("namingFloor", JsValue::Bool(settings.levers.naming_floor));
+    f.insert("namingFloor", JsValue::Bool(config.naming.naming_floor));
     f.insert(
         "namingFloorSweep",
-        JsValue::Bool(settings.levers.naming_floor_sweep),
+        JsValue::Bool(config.naming.naming_floor_sweep),
     );
-    f.insert("model", JsValue::str(settings.model.as_str()));
+    f.insert("model", JsValue::str(config.llm.model.as_str()));
     f.insert_opt(
         "reasoningEffort",
-        settings.reasoning_effort.map(JsValue::str),
+        config.llm.reasoning_effort.map(|e| JsValue::str(e.name())),
     );
-    f.insert_opt("disable", opts.disable.as_deref().map(JsValue::str));
-    f.insert_opt("probe", opts.probe.as_deref().map(JsValue::str));
+    let list = |disable: bool| -> Option<JsValue> {
+        let names: Vec<&str> = config
+            .switches
+            .active()
+            .into_iter()
+            .filter(|s| s.is_disable() == disable)
+            .map(|s| s.name())
+            .collect();
+        (!names.is_empty()).then(|| JsValue::str(names.join(",")))
+    };
+    f.insert_opt("disable", list(true));
+    f.insert_opt("probe", list(false));
     JsValue::Object(f)
 }
 
@@ -952,7 +788,10 @@ impl RunReports<'_> {
             AnchorTexts, DiagnosticsInputs, build_diagnostics_report,
         };
         use humanify_model::js::{JsObject, JsValue, stringify_pretty};
-        let (Some(dest), Some(coverage)) = (&self.opts.diagnostics, &self.outcome.coverage) else {
+        let (Some(dest), Some(coverage)) = (
+            &self.config.diagnostics.diagnostics_file,
+            &self.outcome.coverage,
+        ) else {
             return Ok(());
         };
         let out = self.outcome;
@@ -1060,8 +899,10 @@ impl RunReports<'_> {
     /// `--rename-ledger` (writeRenameLedger): the ledger, its source
     /// snapshot, the standalone applier.
     fn write_rename_ledger(&self, renderer: &mut dyn ProgressRenderer) -> Result<(), Crash> {
-        let (Some(dir), Some(bundle)) = (&self.opts.rename_ledger, &self.outcome.rename_ledger)
-        else {
+        let (Some(dir), Some(bundle)) = (
+            &self.config.diagnostics.rename_ledger,
+            &self.outcome.rename_ledger,
+        ) else {
             return Ok(());
         };
         crate::writers::write_rename_ledger(Path::new(dir), bundle)
@@ -1079,17 +920,12 @@ impl RunReports<'_> {
 /// (once, from the adapter's capability).
 fn detect_stage(
     bundled_code: &str,
-    opts: &CommandOptions,
-    switches: &SwitchState,
+    config: &Config,
     profiler: &humanify_core::profiling::Profiler,
 ) -> (Toolchain, MarkerOffer) {
     let span = profiler.pipeline_span("detection");
     let detection = humanify_core::detect::detect_bundle(bundled_code);
-    let toolchain = resolve_toolchain(
-        &detection,
-        parse_enum::<BundlerType>(&opts.bundler),
-        parse_enum::<MinifierType>(&opts.minifier),
-    );
+    let toolchain = resolve_toolchain(&detection, config.unpack.bundler, config.unpack.minifier);
     let bundler_name = enum_name(toolchain.bundler);
     let adapter = toolchain.unpack.piece;
     span.end(Some(
@@ -1136,7 +972,7 @@ fn detect_stage(
     // offers the module markers at all.
     let markers = if !adapter.provides_module_fossils() {
         MarkerOffer::NotProvided
-    } else if switches.switch_on(Switch::FossilSplit) {
+    } else if config.switches.switch_on(Switch::FossilSplit) {
         MarkerOffer::Disabled
     } else {
         verbose()
@@ -1167,7 +1003,8 @@ struct NamedFile {
 /// generate, the post-generate passes) — core::naming::driver::run_naming,
 /// the one owner.
 struct NamingRun<'a> {
-    opts: &'a CommandOptions,
+    /// `--split`: the tree is written by the split, not file by file.
+    split: bool,
     config: NamingConfig,
     /// The run's per-dispatch recorder (finding #65).
     log: &'a mut humanify_core::artifact_dump::DispatchLog,
@@ -1212,7 +1049,7 @@ impl NamingRun<'_> {
                 .map(humanify_core::libdetect::function_carry::LibraryClassification::Carried);
             let outcome = self.name_one(&formatted.text, library.as_ref(), renderer)?;
             log_input_output(&code, outcome.code.as_deref().unwrap_or_default());
-            if !self.opts.split
+            if !self.split
                 && let Some(shipped) = &outcome.code
             {
                 // skipFileWrite is off without --split: the file is rewritten.
@@ -1349,6 +1186,8 @@ fn log_input_output(input: &str, output: &str) {
 struct RunLevelStats<'a> {
     split_method: Option<humanify_model::stats::SplitMethodStats>,
     failed_calls: &'a crate::provider_failures::ProviderFailures,
+    /// The run's configuration: the stats file's `config` block.
+    config: &'a Config,
 }
 
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
@@ -1379,6 +1218,10 @@ fn write_stats_json(
     stats.toolchain = Some(crate::pipeline_config::toolchain_record(toolchain));
     stats.split_method = run.split_method;
     stats.provider_errors = Some(run.failed_calls.stats());
+    stats.config = Some(
+        humanify_model::js::JsValue::parse(&run.config.record().to_string())
+            .expect("serde_json writes JSON"),
+    );
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
     renderer.message(&format!("Eval stats written to {dest}"));
@@ -1495,61 +1338,30 @@ impl Failures {
 }
 
 /// The plugin options the naming stage decides by (createRenamePlugin's).
-fn naming_config(
-    settings: &Settings,
-    toolchain: &Toolchain,
-    opts: &CommandOptions,
-    switches: &SwitchState,
-) -> NamingConfig {
+fn naming_config(config: &Config, toolchain: &Toolchain) -> NamingConfig {
     NamingConfig {
         never_rename: toolchain.never_rename.piece,
         module_group_size: toolchain.tuning.piece.module_group_size(),
         layout: toolchain.layout.piece,
         module_wrappers: toolchain.module_wrappers.piece,
         name_profile: toolchain.name_profile.piece,
-        skip_libraries: settings.skip_libraries,
-        reconcile_prior_diff: settings.levers.reconcile_prior_diff,
-        naming_floor: settings.levers.naming_floor,
-        naming_floor_sweep: settings.levers.naming_floor_sweep,
+        skip_libraries: config.library.skip_libraries,
+        reconcile_prior_diff: config.matching.reconcile_prior_diff,
+        naming_floor: config.naming.naming_floor,
+        naming_floor_sweep: config.naming.naming_floor_sweep,
         source_map: false,
-        emit_rename_ledger: opts.rename_ledger.is_some(),
-        family_permute_disabled: switches.switch_on(Switch::FamilyPermute),
-        params: CacheKeyParams {
-            model: settings.model.clone(),
-            // The TS passes a literal 0 (unified.ts buildProvider).
-            temperature: Some(0.0),
-            max_tokens: settings.max_tokens.map(|t| t as u64),
-            reasoning_effort: settings.reasoning_effort.map(str::to_string),
-        },
-        capture_dump: opts.dump_artifacts.is_some(),
-        shingle_probe: switches.switch_on(Switch::ShingleProbe),
-        fast: opts.fast_tier().unwrap_or_default(),
+        emit_rename_ledger: config.diagnostics.rename_ledger.is_some(),
+        family_permute_disabled: config.switches.switch_on(Switch::FamilyPermute),
+        params: cache_key_params(&config.llm),
+        capture_dump: config.diagnostics.dump_artifacts.is_some(),
+        shingle_probe: config.switches.switch_on(Switch::ShingleProbe),
+        fast: config.naming.schedule,
         // The rendered-prompt window (finding #65): every in-flight call
         // plus a backfill headroom over the provider stack's outer
         // concurrency bound (build_provider's), never the whole round.
-        prompt_window: DEFAULT_PROMPT_WINDOW.max(
-            (settings.concurrency
-                + settings
-                    .module_concurrency
-                    .unwrap_or(f64::from(MAX_DEFAULT_MODULE_CONCURRENCY))) as usize
-                + PROMPT_WINDOW_HEADROOM,
-        ),
-        tunables: {
-            let d = WaveTunables::default();
-            WaveTunables {
-                batch_size: settings.batch_size.map_or(d.batch_size, |n| n as usize),
-                max_retries: settings
-                    .max_retries_per_identifier
-                    .map_or(d.max_retries, |n| n as u32),
-                max_free_retries: settings.max_free_retries.map(|n| n as u32),
-                lane_threshold: settings
-                    .lane_threshold
-                    .map_or(d.lane_threshold, |n| n as usize),
-                reask_limit: settings
-                    .rename_retries
-                    .map_or(d.reask_limit, |n| n as usize),
-            }
-        },
+        prompt_window: DEFAULT_PROMPT_WINDOW
+            .max(config.llm.outer_concurrency() + PROMPT_WINDOW_HEADROOM),
+        tunables: config.naming.tunables(),
         // Set by the caller from the toolchain's marker offer.
         module_naming: None,
     }
@@ -1558,10 +1370,10 @@ fn naming_config(
 /// `loadPriorVersionCode`: an empty prior is an error, never a silent
 /// zero-transfer run.
 fn load_prior_version_code(
-    opts: &CommandOptions,
+    config: &Config,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<Option<String>, Crash> {
-    let Some(path) = opts.prior_version.as_deref().filter(|p| !p.is_empty()) else {
+    let Some(path) = config.matching.prior_version.as_deref() else {
         return Ok(None);
     };
     let code = read_utf8(path)?;

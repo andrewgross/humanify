@@ -846,6 +846,8 @@ impl NamingOutcome {
             split_method: None,
             // Run-wide: the CLI fills it from every namer (unified.rs).
             provider_errors: None,
+            // Set by the CLI from the run's Config (its record).
+            config: None,
             prompt_guard: Some(prompt_guard_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),
