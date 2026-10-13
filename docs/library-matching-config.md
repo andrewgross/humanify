@@ -132,10 +132,16 @@ max_rounds = 50
 veto_support = "without-module"
 ```
 
-**Missing or stale index — fail loud.** With `--library-matching` not `off`,
-a missing, unreadable or version-mismatched index exits 1, naming both
-versions and the rebuild command. `off` never opens the index, so a stale
-index cannot break a default run.
+**Missing or stale index — fail loud, before any work.** With
+`--library-matching` not `off`, a missing, unreadable or version-mismatched
+index exits 1, naming both versions and the rebuild command; so does a mode
+other than `off` with no index, and an index given with mode `off` (it
+would be silently ignored). `off` never opens the index, so a stale index
+cannot break a default run. All of these are checked at the one parse
+point, before unpacking starts; the full refusal table (conflicts between a
+flag and the config file, unknown keys, wrong types, out-of-range
+thresholds, retired keys) is config-consolidation.md §3.1, and it applies
+to every `[library]` key.
 
 ## 3. Recipes: an index is a set of packing-tool slices
 
@@ -146,8 +152,11 @@ package's `module` field (`dist-es`) where `--target node` resolves `main`
 - **A recipe** = bundler + bundler version + target + format + minify (+
   platform and entry conditions where the bundler has them). Today's two,
   hard-wired in `recipe.rs`: Bun `--target node --format cjs --minify`;
-  esbuild `--platform=node --minify`. Proposed first addition: Bun
-  `--target bun --format cjs --minify` (Claude Code's).
+  esbuild `--platform=node --minify`. **First shipped index (Andrew,
+  2026-10-13): three slices** — Bun `--target bun` (Claude Code's), Bun
+  `--target node`, and esbuild — each `--format cjs --minify`. The Bun
+  `target bun` slice is new (another ~hour of Bun builds on 24 cores; the
+  shard store reuses every install).
 - **An index is a set of recipe slices.** `humanify index build` and
   `fetch` must name their recipes (`--recipe bun:target=bun,format=cjs,minify`,
   repeatable, or a recipe file); there is no default recipe. Each slice's
@@ -161,7 +170,14 @@ package's `module` field (`dist-es`) where `--target node` resolves `main`
 - **No matching slice:** in `report` a `WARNING: library index <id> has no
 slice for recipe <r> (has: …)` line on stderr, and a `libraryDiscovery.
 recipeMissing` entry in diagnostics and stats; detection falls back to
-  path/banner. In `names`: exit 1. Never a silent miss.
+  path/banner. In `names`: exit 1. Never a silent miss. The check needs
+  detection's recipe, so it runs right after detection and still before
+  unpacking. **Report stays a warning in the binary** (a report-only run
+  has lost only its report, and the user still gets their output), **but
+  the eval refuses it**: `run.sh` runs `humanify index verify <id> --recipe
+  <detected>` per pair before the first launch and stops the label on a
+  missing slice, because a label's library numbers from a run without a
+  slice are meaningless.
 - **When detection cannot tell the target** (a Bun bundle that does not say
   `bun` vs `node`), the toolchain records `target: unknown`; the run uses the
   slice the index marks for that bundler as default, and says so in the
@@ -274,6 +290,10 @@ README):
    see config-consolidation.md for the file itself and the `--profile` name
    clash.
 
+7. **Config file is TOML; only operational flags stay** (input, output,
+   model endpoint, `--library-matching`, `--library-index`, `--config`);
+   conflicts and bad values are refused loudly before any work.
+8. **First index slices:** Bun target bun, Bun target node, esbuild (§3).
+
 Still open: whether `--library-matching report` becomes the default once it
-is proven byte-neutral, and which recipe slices the first shipped index
-carries.
+is proven byte-neutral.
