@@ -669,34 +669,6 @@ pub fn name_cjs_factories(
     counts
 }
 
-/// The container's statements: the wrapper body's (when the body is a
-/// block — the TS bodyPath.isBlockStatement() gate) or the program's. A
-/// wrapper body that is not found (or not a block) has none. ONE owner:
-/// the factory classification and the statement reference graph
-/// (`graph::references`) read the same list.
-pub fn container_statements<'a>(
-    program: &'a oxc_ast::ast::Program<'a>,
-    semantic: &oxc_semantic::Semantic<'a>,
-    wrapper_body: Option<Span>,
-) -> &'a [oxc_ast::ast::Statement<'a>] {
-    let Some(body) = wrapper_body else {
-        return program.body.as_slice();
-    };
-    semantic
-        .nodes()
-        .iter()
-        .find(|n| n.span() == body && function_body_kind(&n.kind()))
-        .and_then(|n| match n.kind() {
-            // oxc stores a function's body as FunctionBody (Babel: the
-            // body IS a BlockStatement) — the wrapper container is the
-            // function body's statement list.
-            AstKind::FunctionBody(b) => Some(b.statements.as_slice()),
-            AstKind::BlockStatement(b) => Some(b.body.as_slice()),
-            _ => None,
-        })
-        .unwrap_or(&[])
-}
-
 /// Classify the factories of a parsed bundle — either bundler's form
 /// (bun's direct function, esbuild's single-key object; the helper
 /// identification is [`identify_cjs_factory`], bun's marker first).
@@ -713,10 +685,11 @@ pub fn classify_bun_modules<'a>(
     let helper = identify_cjs_factory(source)?;
 
     let nodes = semantic.nodes();
-    let container_stmts: Vec<Span> = container_statements(program, semantic, wrapper_body)
-        .iter()
-        .map(|s| s.span())
-        .collect();
+    let container_stmts: Vec<Span> =
+        crate::cut::container_statements(program, semantic, wrapper_body)
+            .iter()
+            .map(|s| s.span())
+            .collect();
 
     let comments = semantic.comments();
     let mut line_starts: Vec<u32> = vec![0];
@@ -852,10 +825,6 @@ pub fn classify_bun_modules<'a>(
 
 /// The container-body node kinds: a function's body (oxc FunctionBody;
 /// Babel BlockStatement) or a bare block.
-fn function_body_kind(kind: &AstKind<'_>) -> bool {
-    matches!(kind, AstKind::FunctionBody(_) | AstKind::BlockStatement(_))
-}
-
 fn line_of(offset: u32, line_starts: &[u32]) -> u32 {
     match line_starts.binary_search(&offset) {
         Ok(i) => i as u32 + 1,

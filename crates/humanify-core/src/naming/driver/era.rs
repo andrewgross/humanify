@@ -97,10 +97,7 @@ fn module_source_of<'j>(
     text: &'j str,
     grammar: crate::toolchain::ModuleWrapperGrammar,
 ) -> Option<crate::naming::module_names::ModuleSource<'j>> {
-    let body = match wrapper_body {
-        Some(span) => crate::twins::block_body_by_span(json, span),
-        None => json.get("body").and_then(Value::as_array),
-    }?;
+    let body = crate::cut::container_statement_values(json, wrapper_body)?;
     Some(crate::naming::module_names::ModuleSource {
         body,
         text,

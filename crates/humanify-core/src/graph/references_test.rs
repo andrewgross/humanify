@@ -5,9 +5,9 @@ use std::collections::HashSet;
 
 use oxc_allocator::Allocator;
 
-use crate::graph::references::{
-    BundlerFacts, EdgeKind, ReferenceGraph, UnitKind, build_reference_graph,
-};
+use crate::cut::units::{BundlerFacts, UnitKind};
+use crate::graph::edges::EdgeKind;
+use crate::graph::references::{ReferenceGraph, build_reference_graph};
 use crate::ingest::Ingest;
 
 fn names(list: &[&str]) -> HashSet<String> {
@@ -44,7 +44,9 @@ fn unit(g: &ReferenceGraph, code: &str, head: &str) -> u32 {
 }
 
 fn has(g: &ReferenceGraph, from: u32, to: u32, kind: EdgeKind) -> bool {
-    g.edges.contains(&(from, to, kind))
+    g.edges
+        .iter()
+        .any(|e| e.from == from && e.to == to && e.kind == kind)
 }
 
 fn linked(g: &ReferenceGraph, from: u32, to: u32) -> bool {
@@ -133,8 +135,10 @@ fn a_namespace_helper_and_an_init_time_member_write_define_their_target() {
     let extra = unit(&g, code, "N.extra");
     let reader = unit(&g, code, "var z");
     let configure = unit(&g, code, "function configure");
-    assert!(has(&g, fill, ns, EdgeKind::Write) && has(&g, ns, fill, EdgeKind::Write));
-    assert!(has(&g, extra, ns, EdgeKind::Write) && has(&g, ns, extra, EdgeKind::Write));
+    assert!(has(&g, fill, ns, EdgeKind::InitMutation) && has(&g, ns, fill, EdgeKind::InitMutation));
+    assert!(
+        has(&g, extra, ns, EdgeKind::InitMutation) && has(&g, ns, extra, EdgeKind::InitMutation)
+    );
     assert!(
         has(&g, reader, fill, EdgeKind::Read),
         "N's readers reach the module that fills it"
@@ -183,7 +187,9 @@ fn a_lazy_module_owns_its_body_statements() {
         g.units[fill as usize].kind,
         UnitKind::LazyBody { module: init }
     );
-    assert!(has(&g, init, fill, EdgeKind::Body) && has(&g, init, call, EdgeKind::Body));
+    assert!(
+        has(&g, init, fill, EdgeKind::LazyWrapper) && has(&g, init, call, EdgeKind::LazyWrapper)
+    );
     assert!(has(&g, fill, unit(&g, code, "function g"), EdgeKind::Read));
     assert!(has(&g, call, unit(&g, code, "function h"), EdgeKind::Read));
     // The wrapper owns only its overhead.
@@ -335,7 +341,7 @@ fn esbuild_runtime_helpers_are_recognised_by_shape() {
         &g,
         fill,
         unit(&g, ESBUILD_PRELUDE, "var ns"),
-        EdgeKind::Write
+        EdgeKind::InitMutation
     ));
 }
 
@@ -364,5 +370,5 @@ fn esbuild_name_require_and_public_field_helpers_are_runtime_by_shape() {
     // The name setter defines the function it names.
     let named = unit(&g, ESBUILD_MINIFIED, "function b");
     let setter = unit(&g, ESBUILD_MINIFIED, "n(b");
-    assert!(has(&g, setter, named, EdgeKind::Write));
+    assert!(has(&g, setter, named, EdgeKind::InitMutation));
 }
