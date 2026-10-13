@@ -2,14 +2,17 @@
 # exp097: build one index with a given humanify-index binary over a shared shard store (only missing shards build).
 # The package list and pins are split into 4 parts built in parallel (4 jobs each) pinned to CPUS (24 cores =
 # the lane's cap), then one merge run over the whole list (reuses every shard; parses nothing).
-# usage: build-index.sh <data-dir> <name> <cpu-list> <humanify-index binary> <packages.txt> <pins.txt> -- <recipe flags>
-#   <data-dir> holds store/ registry/ work/ (registry and work may be symlinks); writes ix/<name>, logs/, parts/.
+# usage: build-index.sh <data-dir> <work-dir> <name> <cpu-list> <humanify-index binary> <packages.txt> <pins.txt> -- <recipe flags>
+#   <data-dir> holds store/ and registry/ (may be a symlink); writes ix/<name>, logs/, parts/.
+#   <work-dir> is the install/build tree, passed VERBATIM: a build's sourcemap paths are relative to the out dir as the
+#   bundler saw it (through any symlink), so reusing index v2's builds needs v2's own spelling,
+#   /work/exp095-index-v2-data/final/work (a first step-1 build through another symlink attributed no unit: README).
 #   The recipe flags are the binary's own (step 1: --slices bun,esbuild --bun B --esbuild E; step 2+: --recipe ...).
 set -euo pipefail
-[ $# -ge 7 ] && [ "$7" = "--" ] || { sed -n 2,8p "$0"; exit 2; }
-DATA=$1; NAME=$2; CPUS=$3; IX=$4; LIST=$5; PINS=$6; shift 7
+[ $# -ge 8 ] && [ "$8" = "--" ] || { sed -n 2,11p "$0"; exit 2; }
+DATA=$1; WORK=$2; NAME=$3; CPUS=$4; IX=$5; LIST=$6; PINS=$7; shift 8
 ASOF=2026-10-11   # index v2's date: the same plan, so only the changed shard kinds rebuild
-common=(--as-of "$ASOF" --registry "$DATA/registry" --store "$DATA/store" --work "$DATA/work"
+common=(--as-of "$ASOF" --registry "$DATA/registry" --store "$DATA/store" --work "$WORK"
   --policy year-all+minor "$@")
 mkdir -p "$DATA/ix" "$DATA/logs" "$DATA/parts"
 start=$(date +%s)

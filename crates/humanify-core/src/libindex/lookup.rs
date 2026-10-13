@@ -24,6 +24,10 @@ pub struct LibraryIndex {
     /// sha256 of the manifest (the id a run records); empty when built
     /// from rows.
     pub id: String,
+    /// The recipe slice read (`bun-bun-cjs-min`) and why it was chosen;
+    /// empty when built from rows.
+    pub slice: String,
+    pub slice_reason: String,
     packages: Vec<String>,
     package_ids: HashMap<String, u32>,
     units: HashMap<String, Vec<UnitHit>>,
@@ -89,31 +93,37 @@ impl LibraryIndex {
         ix
     }
 
-    /// Load `dir`'s `units.<slice>.jsonl` and `literals.jsonl`, refusing an
-    /// index any of whose compatibility stamps differs from this build's
-    /// ([`Manifest::check_compatible`]: a half-matching index would
-    /// silently half-claim).
-    pub fn load(dir: &Path, slice: super::IndexSlice) -> Result<LibraryIndex, String> {
+    /// Load `dir`'s slice for the bundle's `recipe` (`units.<slice>.jsonl`)
+    /// and `literals.jsonl`, refusing an index any of whose compatibility
+    /// stamps differs from this build's ([`Manifest::check_compatible`]: a
+    /// half-matching index would silently half-claim). The slice is chosen
+    /// in ONE place, [`super::recipe::choose_slice`]; an index with no
+    /// slice for the recipe is [`LoadError::NoSlice`].
+    pub fn load(
+        dir: &Path,
+        recipe: &super::recipe::DetectedRecipe,
+    ) -> Result<LibraryIndex, LoadError> {
         let read = |name: &str| {
             std::fs::read_to_string(dir.join(name)).map_err(|e| format!("{name}: {e}"))
         };
         let manifest_text = read("manifest.json")?;
+        super::format::check_manifest_stamps(&manifest_text)?;
         let manifest: Manifest =
             serde_json::from_str(&manifest_text).map_err(|e| format!("manifest.json: {e}"))?;
         manifest.check_compatible()?;
-        if !manifest.slices.iter().any(|s| s.slice == slice.name()) {
-            let has: Vec<&str> = manifest.slices.iter().map(|s| s.slice.as_str()).collect();
-            return Err(format!(
-                "the index has no slice {} (has: {})",
-                slice.name(),
-                has.join(", ")
-            ));
-        }
+        let id = hex_sha256(manifest_text.as_bytes());
+        let recipes = manifest.recipes()?;
+        let (chosen, reason) =
+            super::recipe::choose_slice(&recipes, recipe).map_err(|e| LoadError::NoSlice {
+                why: format!("library index {id} has {e}"),
+                id: id.clone(),
+            })?;
+        let slice = chosen.slice_name();
         let rows = |name: &str| -> Result<Vec<String>, String> {
             Ok(read(name)?.lines().map(String::from).collect())
         };
         let parse = |line: &str, name: &str| format!("{name}: {line:.60}");
-        let units: Vec<UnitRow> = rows(&format!("units.{}.jsonl", slice.name()))?
+        let units: Vec<UnitRow> = rows(&format!("units.{slice}.jsonl"))?
             .iter()
             .map(|l| serde_json::from_str(l).map_err(|_| parse(l, "units")))
             .collect::<Result<_, _>>()?;
@@ -122,7 +132,9 @@ impl LibraryIndex {
             .map(|l| serde_json::from_str(l).map_err(|_| parse(l, "literals")))
             .collect::<Result<_, _>>()?;
         let mut ix = LibraryIndex::from_rows(units, literals);
-        ix.id = hex_sha256(manifest_text.as_bytes());
+        ix.id = id;
+        ix.slice = slice;
+        ix.slice_reason = reason.to_string();
         Ok(ix)
     }
 
@@ -267,6 +279,31 @@ impl LibraryIndex {
         tied.sort_by(|a, b| self.packages[*a as usize].cmp(&self.packages[*b as usize]));
         let p = previous.filter(|p| tied.contains(p)).unwrap_or(tied[0]);
         (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1))).then_some((p, best))
+    }
+}
+
+/// Why an index was not loaded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LoadError {
+    /// Missing, unreadable or incompatible: the run must stop.
+    Unusable(String),
+    /// Readable and compatible, but it holds no slice for the bundle's
+    /// recipe: a loud WARNING in report mode (the run loses only its
+    /// report), a failure for an instrument. `id`: the index's id.
+    NoSlice { id: String, why: String },
+}
+
+impl From<String> for LoadError {
+    fn from(e: String) -> Self {
+        LoadError::Unusable(e)
+    }
+}
+
+impl std::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoadError::Unusable(e) | LoadError::NoSlice { why: e, .. } => f.write_str(e),
+        }
     }
 }
 

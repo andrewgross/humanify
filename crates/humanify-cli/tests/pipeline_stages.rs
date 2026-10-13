@@ -328,26 +328,35 @@ fn skip_libraries_off_processes_every_unpacked_file() {
 }
 
 /// A library index directory: a manifest with this build's stamps, and
-/// (`slice`) an empty `units.bun.jsonl` + `literals.jsonl`.
+/// (`slice`) one recipe slice, Bun `--target node` (BUN_BUNDLE has no
+/// `// @bun` banner), with an empty unit table + `literals.jsonl`.
 fn library_index(dir: &Path, slice: bool) -> String {
-    use humanify_core::libindex::format::{INDEX_FORMAT, fingerprint_versions};
+    library_index_with(dir, if slice { &[NODE_RECIPE][..] } else { &[] })
+}
+
+const NODE_RECIPE: (&str, &str) = ("bun-node-cjs-min", "bun:target=node,format=cjs,minify");
+
+fn library_index_with(dir: &Path, recipes: &[(&str, &str)]) -> String {
+    use humanify_core::libindex::format::{INDEX_FORMAT, RECIPE_VERSION, fingerprint_versions};
     std::fs::create_dir_all(dir).unwrap();
-    let slices = if slice {
-        serde_json::json!([{"slice": "bun", "bundler": "bun", "version": "1", "recipe": humanify_core::libindex::format::RECIPE_VERSION, "published": null,
-            "newestAtAsOf": null, "bundlerAfterAsOf": false}])
-    } else {
-        serde_json::json!([])
-    };
+    let slices: Vec<serde_json::Value> = recipes
+        .iter()
+        .map(|(slice, recipe)| {
+            serde_json::json!({"slice": slice, "recipe": recipe, "recipeVersion": RECIPE_VERSION,
+                "defaultForBundler": true, "bundler": "bun", "version": "1", "published": null,
+                "newestAtAsOf": null, "bundlerAfterAsOf": false})
+        })
+        .collect();
     let manifest = serde_json::json!({
         "format": INDEX_FORMAT, "asOf": "2026-10-11", "fingerprints": fingerprint_versions(),
         "registry": {"earliestFetch": null, "latestFetch": null, "packuments": {}},
         "slices": slices, "packages": [], "refused": [], "shards": {}, "tables": {}, "data": {}
     });
     std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
-    if slice {
-        std::fs::write(dir.join("units.bun.jsonl"), "").unwrap();
-        std::fs::write(dir.join("literals.jsonl"), "").unwrap();
+    for (slice, _) in recipes {
+        std::fs::write(dir.join(format!("units.{slice}.jsonl")), "").unwrap();
     }
+    std::fs::write(dir.join("literals.jsonl"), "").unwrap();
     dir.display().to_string()
 }
 
@@ -801,4 +810,44 @@ fn a_refused_configuration_creates_nothing() {
     for p in side_effects {
         assert!(!s.0.join(p).exists(), "{p} was created by a refused run");
     }
+}
+
+#[test]
+fn an_index_with_no_slice_for_the_bundles_recipe_warns_naming_both() {
+    // exp097: slices are build recipes. BUN_BUNDLE has no `// @bun` banner
+    // (Bun --target node); an index holding only the target-bun slice has
+    // nothing for it — a loud WARNING naming the detected recipe and the
+    // index's, and the run goes on.
+    let s = Scratch::new("no-recipe-slice");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let ix = library_index_with(
+        &s.0.join("ix"),
+        &[("bun-bun-cjs-min", "bun:target=bun,format=cjs,minify")],
+    );
+    let out = s.out();
+    let o = run(
+        &s.0,
+        &[
+            &input,
+            "-o",
+            out.to_str().unwrap(),
+            "--library-matching",
+            "report",
+            "--library-index",
+            &ix,
+        ],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    let report: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(out.join(".humanify/library-report.json")).expect("written"),
+    )
+    .unwrap();
+    let w = report["recipeMissing"].as_str().expect("recorded");
+    assert!(
+        w.contains("no slice for recipe bun:target=node")
+            && w.contains("has: bun:target=bun,format=cjs,minify"),
+        "{w}"
+    );
+    assert!(err.contains(w), "{err}");
 }

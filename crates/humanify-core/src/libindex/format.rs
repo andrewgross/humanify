@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT};
 
 /// The format tag in every manifest.
-pub const INDEX_FORMAT: &str = "humanify-library-index/1";
+pub const INDEX_FORMAT: &str = "humanify-library-index/2";
 
 /// The build recipe's version (`humanify-index`'s `recipe` module: every
 /// rule of how a slice's bundles are made). Recorded per slice in the
@@ -216,17 +216,26 @@ pub struct RegistrySnapshot {
     pub packuments: BTreeMap<String, String>,
 }
 
-/// A bundler slice as built: which bundler binary, and whether it is newer
-/// than the as-of date.
+/// One recipe slice as built (`humanify-library-index/2`: an index is a
+/// set of recipe slices, docs/library-matching-config.md §3): the recipe,
+/// the bundler binary's version, and whether that is newer than the as-of
+/// date.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SliceRecord {
+    /// The slice name ([`super::recipe::Recipe::slice_name`]): its tables
+    /// are `units.<slice>.jsonl` / `modules.<slice>.jsonl`.
     pub slice: String,
+    /// The recipe's spelling (`bun:target=bun,format=cjs,minify`).
+    pub recipe: String,
+    /// The build rules' version ([`RECIPE_VERSION`]) it was built under.
+    pub recipe_version: String,
+    /// The slice a bundle of this bundler reads when it does not record
+    /// its target (the builder marks the first recipe of each bundler).
+    pub default_for_bundler: bool,
+    /// The bundler's npm package and its version.
     pub bundler: String,
     pub version: String,
-    /// The build recipe's version ([`RECIPE_VERSION`]) this slice was
-    /// built under.
-    pub recipe: String,
     pub published: Option<String>,
     pub newest_at_as_of: Option<String>,
     pub bundler_after_as_of: bool,
@@ -268,12 +277,66 @@ pub struct Manifest {
     pub data: BTreeMap<String, String>,
 }
 
+/// The stamps of a manifest, read leniently: an index from another era
+/// may not deserialize as this binary's [`Manifest`], and its refusal must
+/// still name the stamps that differ (not a serde "missing field").
+#[derive(Deserialize)]
+struct Stamps {
+    #[serde(default)]
+    format: String,
+    #[serde(default)]
+    fingerprints: BTreeMap<String, String>,
+}
+
+/// The manifest TEXT's format and fingerprint stamps against this
+/// binary's, before the strict parse: Err names every one that differs
+/// (an unknown or missing stamp included) and how to rebuild.
+pub fn check_manifest_stamps(text: &str) -> Result<(), String> {
+    let theirs: Stamps = serde_json::from_str(text).map_err(|e| format!("manifest.json: {e}"))?;
+    let ours = fingerprint_versions();
+    let ours: BTreeMap<&str, &str> = [
+        ("module", ours.module.as_str()),
+        ("literals", ours.literals.as_str()),
+        ("units", ours.units.as_str()),
+    ]
+    .into_iter()
+    .collect();
+    let mut wrong = Vec::new();
+    if theirs.format != INDEX_FORMAT {
+        wrong.push(format!(
+            "format {} (this binary reads {INDEX_FORMAT})",
+            theirs.format
+        ));
+    }
+    let keys: BTreeSet<&str> = ours
+        .keys()
+        .copied()
+        .chain(theirs.fingerprints.keys().map(String::as_str))
+        .collect();
+    for k in keys {
+        let (t, o) = (
+            theirs.fingerprints.get(k).map(String::as_str),
+            ours.get(k).copied(),
+        );
+        if t != o {
+            let show = |v: Option<&str>| v.unwrap_or("(none)").to_string();
+            wrong.push(format!("{k} {} (this binary reads {})", show(t), show(o)));
+        }
+    }
+    if wrong.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
+    }
+}
+
 impl Manifest {
     /// Can this binary read the index? Every compatibility stamp is
     /// compared — the format, each fingerprint version, every slice's
-    /// recipe version — and every mismatch is named with both spellings
-    /// (fail early: a half-matching index would silently half-claim).
-    /// Whether the index HAS a bundle's slice is the loader's question.
+    /// recipe version and spelling — and every mismatch is named with both
+    /// spellings (fail early: a half-matching index would silently
+    /// half-claim). Which slice a bundle reads is [`Manifest::recipes`] +
+    /// `recipe::choose_slice`, a separate question.
     pub fn check_compatible(&self) -> Result<(), String> {
         let ours = fingerprint_versions();
         let mut wrong: Vec<String> = Vec::new();
@@ -288,15 +351,39 @@ impl Manifest {
         differ("units", &self.fingerprints.units, &ours.units);
         for s in &self.slices {
             differ(
-                &format!("recipe (slice {})", s.slice),
-                &s.recipe,
+                &format!("recipe version (slice {})", s.slice),
+                &s.recipe_version,
                 RECIPE_VERSION,
             );
+        }
+        if let Err(e) = self.recipes() {
+            wrong.push(e);
         }
         if wrong.is_empty() {
             Ok(())
         } else {
             Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
         }
+    }
+
+    /// The index's recipes in manifest order, each with its
+    /// default-for-bundler mark; Err when a slice's recipe does not parse
+    /// or its name is not its recipe's.
+    pub fn recipes(&self) -> Result<Vec<(super::recipe::Recipe, bool)>, String> {
+        self.slices
+            .iter()
+            .map(|s| {
+                let r = super::recipe::Recipe::parse(&s.recipe)?;
+                if r.slice_name() != s.slice {
+                    return Err(format!(
+                        "slice {} records recipe {} (whose slice is {})",
+                        s.slice,
+                        s.recipe,
+                        r.slice_name()
+                    ));
+                }
+                Ok((r, s.default_for_bundler))
+            })
+            .collect()
     }
 }

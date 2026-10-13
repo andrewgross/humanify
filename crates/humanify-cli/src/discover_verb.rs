@@ -25,7 +25,6 @@
 
 use std::path::Path;
 
-use humanify_core::libindex::IndexSlice;
 use humanify_core::libindex::lookup::LibraryIndex;
 use serde_json::{Value, json};
 
@@ -84,19 +83,15 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
         )?,
         None,
     );
+    let recipe =
+        humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
+    // An instrument fails on a missing slice too: a score taken without
+    // its index would read as a real zero.
     let index = match args.library_index {
-        Some(dir) => {
-            let slice = IndexSlice::for_bundler(toolchain.bundler).ok_or_else(|| {
-                format!(
-                    "the index has no slice for bundler {}",
-                    enum_name(toolchain.bundler)
-                )
-            })?;
-            Some(
-                LibraryIndex::load(Path::new(dir), slice)
-                    .map_err(|e| format!("library index {dir}: {e}"))?,
-            )
-        }
+        Some(dir) => Some(
+            LibraryIndex::load(Path::new(dir), &recipe)
+                .map_err(|e| format!("library index {dir}: {e}"))?,
+        ),
         None => None,
     };
     let (work_dir, owned) = match args.work_dir {
@@ -155,7 +150,13 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
             "bundler": enum_name(toolchain.bundler),
             "minifier": enum_name(toolchain.minifier),
             "adapter": adapter.name(),
-            "slice": IndexSlice::for_bundler(toolchain.bundler).map(IndexSlice::name),
+            "slice": index.as_ref().map(|ix| ix.slice.as_str()),
+        },
+        "recipe": {
+            "detected": recipe.describe(),
+            "targetReason": recipe.target_reason,
+            "slice": index.as_ref().map(|ix| ix.slice.as_str()),
+            "sliceReason": index.as_ref().map(|ix| ix.slice_reason.as_str()),
         },
         "noDiscovery": no_discovery,
         "rule": rule_name(args.library),

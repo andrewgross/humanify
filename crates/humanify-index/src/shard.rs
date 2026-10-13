@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use humanify_core::libindex::IndexSlice;
+use humanify_core::libindex::recipe::Recipe;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -23,18 +23,20 @@ pub const SHARD_FORMAT: &str = "humanify-index-shard/1";
 /// What a shard holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShardKind {
-    /// Whole-module keys of one bundler slice's builds.
-    Modules(IndexSlice),
+    /// Whole-module (and statement-unit) prints of one recipe slice's
+    /// builds.
+    Modules(Recipe),
     /// Literal sets of the npm source files (bundler-independent).
     Literals,
 }
 
 impl ShardKind {
-    /// The recorded spelling (and the store directory).
-    pub fn name(self) -> &'static str {
+    /// The recorded spelling (and the store directory): the recipe's
+    /// slice name, or `literals`.
+    pub fn name(self) -> String {
         match self {
-            ShardKind::Modules(slice) => slice.name(),
-            ShardKind::Literals => "literals",
+            ShardKind::Modules(recipe) => recipe.slice_name(),
+            ShardKind::Literals => "literals".to_string(),
         }
     }
 }
@@ -65,9 +67,10 @@ struct KeyView<'a> {
 impl ShardInputs {
     /// sha256 (hex) of the inputs in a fixed order.
     pub fn key(&self) -> String {
+        let kind = self.kind.name();
         let view = KeyView {
             format: SHARD_FORMAT,
-            kind: self.kind.name(),
+            kind: &kind,
             package: &self.package,
             version: &self.version,
             bundler: self.bundler.as_deref(),
@@ -231,7 +234,7 @@ pub fn write_shard(store: &Path, shard: &Shard) -> Result<(), String> {
 
 /// The stored shard for `inputs`, if one exists with the SAME key.
 pub fn read_current(store: &Path, inputs: &ShardInputs) -> Option<Shard> {
-    let path = shard_path(store, inputs.kind.name(), &inputs.package, &inputs.version);
+    let path = shard_path(store, &inputs.kind.name(), &inputs.package, &inputs.version);
     let text = std::fs::read_to_string(path).ok()?;
     let shard: Shard = serde_json::from_str(&text).ok()?;
     (shard.key == inputs.key()).then_some(shard)

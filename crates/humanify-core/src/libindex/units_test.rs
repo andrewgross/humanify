@@ -154,8 +154,8 @@ const UNIT_MODEL_PINS: &[(u64, &str)] = &[
 /// One esbuild 0.28 minified bundle (guarded `__esm`), the esbuild ESM
 /// and minified-ESM forms, and three Bun forms (the slice each is
 /// fingerprinted under: the builder's own path).
-const PIN_FIXTURES: &[(&str, &str, crate::libindex::IndexSlice)] = {
-    use crate::libindex::IndexSlice::{Bun, Esbuild};
+const PIN_FIXTURES: &[(&str, &str, crate::libindex::recipe::RecipeBundler)] = {
+    use crate::libindex::recipe::RecipeBundler::{Bun, Esbuild};
     &[
         (
             "esbuild-minified-0.28",
@@ -203,7 +203,7 @@ fn unit_model_digest() -> String {
     for (name, code, slice) in PIN_FIXTURES {
         let toolchain = crate::toolchain::resolve_toolchain(
             &crate::detect::detect_bundle(code),
-            Some(slice.bundler()),
+            Some(slice.bundler_type()),
             None,
         );
         let allocator = Allocator::default();

@@ -779,10 +779,15 @@ impl Config {
 /// rebuild). The stamps are compared by ONE owner,
 /// `libindex::format::Manifest::check_compatible` (the loader's too).
 pub fn library_index_stale(dir: &std::path::Path) -> Result<(), String> {
-    use humanify_core::libindex::format::Manifest;
+    use humanify_core::libindex::format::{Manifest, check_manifest_stamps};
     let shown = dir.display();
     let text = std::fs::read_to_string(dir.join("manifest.json"))
         .map_err(|e| format!("library index {shown}: manifest.json unreadable: {e}"))?;
+    // an older era may not parse as this binary's manifest: its stamps
+    // first, so the refusal names them
+    if serde_json::from_str::<serde_json::Value>(&text).is_ok() {
+        check_manifest_stamps(&text).map_err(|e| format!("library index {shown}: {e}"))?;
+    }
     let m: Manifest = serde_json::from_str(&text).map_err(|e| {
         format!("library index {shown}: manifest.json is not an index manifest: {e}")
     })?;

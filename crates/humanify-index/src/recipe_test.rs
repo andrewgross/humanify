@@ -1,6 +1,6 @@
 //! The builder's recipe rules: which npm files feed the literal index.
 
-use humanify_core::libindex::IndexSlice;
+use humanify_core::libindex::recipe::RecipeBundler;
 
 use super::recipe::{bundler_package, is_source_file, is_sponge_file};
 
@@ -42,8 +42,8 @@ fn source_files_are_javascript_and_json_but_not_type_declarations() {
 
 #[test]
 fn each_slice_names_its_bundlers_npm_package() {
-    assert_eq!(bundler_package(IndexSlice::Bun), "bun");
-    assert_eq!(bundler_package(IndexSlice::Esbuild), "esbuild");
+    assert_eq!(bundler_package(RecipeBundler::Bun), "bun");
+    assert_eq!(bundler_package(RecipeBundler::Esbuild), "esbuild");
 }
 
 #[test]

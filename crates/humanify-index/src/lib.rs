@@ -19,3 +19,10 @@ mod recipe_test;
 mod shard_test;
 #[cfg(test)]
 mod sourcemap_test;
+
+/// The recipe the index-crate tests build under (index v2's Bun slice).
+#[cfg(test)]
+pub(crate) fn bun_node() -> humanify_core::libindex::recipe::Recipe {
+    humanify_core::libindex::recipe::Recipe::parse("bun:target=node,format=cjs,minify")
+        .expect("a recipe")
+}

@@ -192,24 +192,30 @@ fn agreement_needs_the_literal_rule_to_name_the_same_family() {
 }
 
 #[test]
-fn the_loader_refuses_another_unit_fingerprint() {
-    use crate::libindex::IndexSlice;
-    use crate::libindex::format::{Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions};
+fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
+    use crate::libindex::format::{
+        INDEX_FORMAT, Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions,
+    };
+    use crate::libindex::lookup::LoadError;
+    use crate::libindex::recipe::detect_recipe;
+    use humanify_model::detection::{BundlerType, MinifierType};
     let dir = std::env::temp_dir().join(format!("humanify-lookup-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let write_manifest = |units: &str| {
         let mut f = fingerprint_versions();
         f.units = units.into();
         let m = Manifest {
-            format: "humanify-library-index/1".into(),
+            format: INDEX_FORMAT.into(),
             as_of: "2026-10-12".into(),
             fingerprints: f,
             registry: Default::default(),
             slices: vec![SliceRecord {
-                slice: "bun".into(),
+                slice: "bun-bun-cjs-min".into(),
+                recipe: "bun:target=bun,format=cjs,minify".into(),
+                recipe_version: RECIPE_VERSION.into(),
+                default_for_bundler: true,
                 bundler: "bun".into(),
                 version: "1.4.0".into(),
-                recipe: RECIPE_VERSION.into(),
                 published: None,
                 newest_at_as_of: None,
                 bundler_after_as_of: false,
@@ -227,20 +233,33 @@ fn the_loader_refuses_another_unit_fingerprint() {
         .unwrap();
     };
     std::fs::write(
-        dir.join("units.bun.jsonl"),
+        dir.join("units.bun-bun-cjs-min.jsonl"),
         serde_json::to_string(&row("a", "zod", 150, 10)).unwrap() + "\n",
     )
     .unwrap();
     std::fs::write(dir.join("literals.jsonl"), "").unwrap();
+    let target_bun = detect_recipe(
+        "// @bun @bun-cjs\nvar a;",
+        BundlerType::Bun,
+        MinifierType::Bun,
+    );
+    let target_node = detect_recipe("var a;", BundlerType::Bun, MinifierType::Bun);
     write_manifest("units/0");
-    assert!(LibraryIndex::load(&dir, IndexSlice::Bun).is_err());
+    assert!(matches!(
+        LibraryIndex::load(&dir, &target_bun),
+        Err(LoadError::Unusable(_))
+    ));
     write_manifest(&fingerprint_versions().units);
-    let ix = LibraryIndex::load(&dir, IndexSlice::Bun).expect("loads");
-    assert_eq!(ix.id.len(), 64);
+    let ix = LibraryIndex::load(&dir, &target_bun).expect("loads");
+    assert_eq!((ix.id.len(), ix.slice.as_str()), (64, "bun-bun-cjs-min"));
     assert_eq!(
         claims(&ix, &[whole("a", 150)], structural()),
         vec![(0, "zod".into())]
     );
+    match LibraryIndex::load(&dir, &target_node) {
+        Err(LoadError::NoSlice { why, .. }) => assert!(why.contains("bun:target=node"), "{why}"),
+        other => panic!("a target-node bundle has no slice here: {:?}", other.err()),
+    }
     std::fs::remove_dir_all(&dir).ok();
 }
 

@@ -290,14 +290,14 @@
     },
     {
       "file": "crates/humanify-index/src/recipe.rs",
-      "scope": "Recipe::bundler_version",
+      "scope": "RecipeBuild::bundler_version",
       "construct": "subprocess",
       "pattern": "subprocess",
       "reason": "`<bundler> --version` for the index manifest, through humanify_core::subprocess::run under VERSION_DEADLINE (1 min; it answers in ms); a non-zero exit, empty answer or timeout is an error"
     },
     {
       "file": "crates/humanify-index/src/recipe.rs",
-      "scope": "Recipe::build",
+      "scope": "RecipeBuild::build",
       "construct": "subprocess",
       "pattern": "subprocess",
       "reason": "one minified bun/esbuild build of a package entry, through humanify_core::subprocess::run under BUILD_DEADLINE (30 min; seconds in the exp095 builds); a non-zero exit or timeout returns the error text and the build contributes no files (the module shard records it)"
