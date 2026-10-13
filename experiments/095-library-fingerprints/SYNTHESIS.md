@@ -415,3 +415,42 @@ Retractions and updates to the sections above live here (rule 9).
     - a vendored-copy rule (a kept `/*! name */` banner, or the shipping package's own unit rows);
     - pins for Claude Code's `src/` libraries that no reader names (MCP SDK, @anthropic-ai/sdk, ink are not in this
       index).
+
+---
+
+## 9. Why the index misses library code, and what matches better (2026-10-13; `misses/`)
+
+- **Most misses are coverage, not matching.** One primary cause per missed library byte (index `b00fa735…`,
+  structural rule, after the fixpoint):
+
+  | cause                                          | Claude Code 2.1.216 | held-out apps | of held-out indexed packages | minified wrangler |
+  | ---------------------------------------------- | ------------------- | ------------- | ---------------------------- | ----------------- |
+  | named                                          | 37.1%               | 18.5%         | 72.6%                        | 25.6%             |
+  | a. package not in the index                    | 33.8%               | 74.5%         | —                            | 16.2%             |
+  | b. version not in, no indexed version has it   | 8.0%                | 2.1%          | 8.4%                         | 21.2%             |
+  | c. under the size / content floors             | 1.0%                | 1.4%          | 5.5%                         | 10.7%             |
+  | d. version in, the hash differs                | 17.4%               | 1.0%          | 3.9%                         | 22.6%             |
+  | e. hash matches, a guard refused (mostly veto) | 2.7%                | 2.2%          | 8.6%                         | 2.7%              |
+  | f. the code is indexed under another package   | 0                   | 0.2%          | 0.9%                         | 0.8%              |
+
+  Under the default agreement rule, "named" falls to 23.0% / 12.0% / 16.8% and the difference is the literal rule
+  refusing statements whose literal sets are too small (e-agree).
+
+- **The hash differences are mostly the build recipe.** Claude Code is built for Bun `--target bun`, which bundles a
+  package's `module` build (AWS SDK `dist-es`) and escapes non-ASCII; the index is built for `--target node`
+  (`dist-cjs`, UTF-8). On Claude Code's exact versions, index seeds go from 52.1% (target node) to **71.2%**
+  (target bun), 0 app, 0 wrong family. Minified wrangler's d is mostly whole CommonJS modules left as one
+  statement by this branch's unpack (fixed on main, 68b090e3). Held-out apps, built exactly like the index, have
+  ~4% of indexed bytes in d: interop wrapping, the index resolving the `development` export condition, and units
+  the builder drops silently (generated code with no sourcemap segment inside).
+- **Matching ideas, index seeds, app claimed 0 in every case:** a light normaliser (template raw spellings,
+  `const`/`let`, function/class declaration ≡ expression) +6.3 points on Claude Code and +15.4 (structural) /
+  +9.8 (agreement) on wrangler, ~0 on held-out apps; binding prints (`var x=e` ≡ `x=e`) +0.3; function prints
+  from 20 nodes +1.0 / +2.7 structural; literal agreement over a region of same-family claims +1.4 (held-out,
+  agreement); exempting agreement-backed claims from the isolation veto +3.5 (held-out, 97% right). One rare long
+  literal alone names a wrong package for 20% of bytes (pre-bundled copies) — not usable alone.
+- **Recommended:** coverage and pins first; index slices built like the target (Bun target bun / node, the
+  production condition, both ESM and CJS builds); a light versioned normaliser plus binding prints; two-evidence
+  naming with region-level literal agreement, agreement-backed claims exempt from the veto. A MinHash or alignment
+  verifier is not needed yet: once the code is indexed and built the same way, real hash differences are a few
+  percent.

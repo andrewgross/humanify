@@ -1,0 +1,44 @@
+# Throwaway lab tool (exp095 lane "misses"): dump every statement unit's
+# fingerprints (and, on request, canonical forms) exactly as library
+# discovery and the index builder compute them. Detached from the repo
+# workspace on purpose — not part of the pipeline or the gate.
+[package]
+name = "exp095-misses"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+oxc_allocator = "=0.150.0"
+oxc_ast = "=0.150.0"
+oxc_estree = "=0.150.0"
+oxc_parser = "=0.150.0"
+oxc_semantic = "=0.150.0"
+oxc_span = "=0.150.0"
+serde_json = "=1.0.142"
+humanify-core = { path = "../../../../crates/humanify-core" }
+humanify-index = { path = "../../../../crates/humanify-index" }
+rayon = "=1.12.0"
+sha2 = "=0.10.9"
+
+[[bin]]
+name = "exp095-unit-dump"
+path = "src/unit_dump.rs"
+
+[[bin]]
+name = "exp095-variant-rows"
+path = "src/variant_rows.rs"
+
+[[bin]]
+name = "exp095-variant-lookup"
+path = "src/variant_lookup.rs"
+
+[[bin]]
+name = "exp095-long-literal"
+path = "src/long_literal.rs"
+
+[[bin]]
+name = "exp095-region-agree"
+path = "src/region_agree.rs"
