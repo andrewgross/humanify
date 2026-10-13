@@ -62,7 +62,7 @@ pub enum Switch {
 }
 
 impl Switch {
-    /// The flag name on the wire (`--disable a,b` / `--probe c`), exactly
+    /// The name in the config file (`switches.disable = ["a", "b"]`), exactly
     /// the TS registry's keys.
     pub fn name(&self) -> &'static str {
         match self {
@@ -139,9 +139,9 @@ impl Switch {
 /// of things I turned off" stays a true statement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SwitchKind {
-    /// `--disable` turns a shipped pass OFF.
+    /// `switches.disable` turns a shipped pass OFF.
     Disable,
-    /// `--probe` turns instrumentation ON.
+    /// `switches.probe` turns instrumentation ON.
     Probe,
 }
 
@@ -154,7 +154,7 @@ pub struct SwitchState {
 }
 
 impl SwitchState {
-    /// Apply the parsed `--disable`/`--probe` lists. Called ONCE from the
+    /// Apply the `switches.disable` / `switches.probe` lists. Called ONCE from the
     /// CLI action. An unknown or wrong-kind name is an error with the valid
     /// list — a switch that could not take effect must never look accepted
     /// (the exact failure the env generation allowed: an exported typo was
@@ -177,8 +177,8 @@ impl SwitchState {
                 };
                 if entry.is_none() || wrong_kind {
                     let flag = match kind {
-                        SwitchKind::Disable => "--disable",
-                        SwitchKind::Probe => "--probe",
+                        SwitchKind::Disable => "switches.disable",
+                        SwitchKind::Probe => "switches.probe",
                     };
                     return Err(format!(
                         "{flag}: unknown {} switch \"{name}\" — valid: {}",

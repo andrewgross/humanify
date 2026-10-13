@@ -11,8 +11,10 @@
 //! chosen), stopped before naming: NO LLM path executes, and the verb never
 //! constructs a provider. Two things only the verb can ask for:
 //!
-//! - `--rule structural`: the lookup without the literal agreement rule
-//!   (the pipeline always runs the default, agreement);
+//! - the lookup's and discovery's tunables from a `--config` file's
+//!   `[library]` keys (the structural rule is `[library.lookup] agreement
+//!   = false`; it was `--rule structural` until config sweep step 6) — the
+//!   lab's knobs, read by the same owner as the pipeline's;
 //! - `--unit-prints`: every unit with the fingerprints the lookup read
 //!   (`unitRows`), so a scorer can say WHY a library unit was missed
 //!   without re-implementing the unit model.
@@ -23,10 +25,11 @@
 
 use std::path::Path;
 
-use humanify_core::libdetect::discovery::DiscoveryRequest;
 use humanify_core::libindex::IndexSlice;
-use humanify_core::libindex::lookup::{LibraryIndex, LookupRules};
+use humanify_core::libindex::lookup::LibraryIndex;
 use serde_json::{Value, json};
+
+use crate::config::{ConfigFile, Library, library_from_file};
 
 use crate::pipeline_config::enum_name;
 
@@ -38,8 +41,8 @@ pub struct DiscoverArgs<'a> {
     pub input: &'a str,
     /// The index directory (None: discovery's own evidence seeds only).
     pub library_index: Option<&'a str>,
-    /// `agreement` (the pipeline's rule) or `structural`.
-    pub rule: &'a str,
+    /// The `[library]` settings (the lookup rules, discovery's tunables).
+    pub library: &'a Library,
     /// `--bundler`: the pipeline's override (the detector's verdict is
     /// recorded either way, under `detected`).
     pub bundler: Option<&'a str>,
@@ -48,15 +51,22 @@ pub struct DiscoverArgs<'a> {
     pub work_dir: Option<&'a str>,
 }
 
-/// The lookup rules a `--rule` names: None = the pipeline's default.
-pub fn rules_for(rule: &str) -> Result<Option<LookupRules>, String> {
-    match rule {
-        "agreement" => Ok(None),
-        "structural" => Ok(Some(LookupRules {
-            agreement: false,
-            ..LookupRules::default()
-        })),
-        other => Err(format!("unknown --rule {other:?} (agreement | structural)")),
+/// The verb's `[library]` settings: the `--config` file's, else the
+/// compiled-in defaults. Any refused key fails the verb.
+pub fn library_settings(config: Option<&str>) -> Result<Library, String> {
+    let file = config
+        .map(ConfigFile::read)
+        .transpose()
+        .map_err(|e| e.join("\n"))?;
+    library_from_file(file.as_ref()).map_err(|e| e.join("\n"))
+}
+
+/// The rule's name in the output (`agreement` | `structural`).
+fn rule_name(library: &Library) -> &'static str {
+    if library.lookup.agreement {
+        "agreement"
+    } else {
+        "structural"
     }
 }
 
@@ -64,7 +74,6 @@ pub fn rules_for(rule: &str) -> Result<Option<LookupRules>, String> {
 /// `noDiscovery` saying why when the adapter ran none).
 pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     use humanify_model::detection::{BundlerType, SELECTABLE_BUNDLERS};
-    let rules = rules_for(args.rule)?;
     let detection = humanify_core::detect::detect_bundle(code);
     let toolchain = humanify_core::toolchain::resolve_toolchain(
         &detection,
@@ -107,11 +116,10 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
         code,
         Path::new(&work_dir),
         humanify_core::unpack::AdapterRun {
-            library_discovery: Some(DiscoveryRequest {
+            library_discovery: Some(humanify_core::libdetect::discovery::DiscoveryRequest {
                 list_units: true,
-                index: index.as_ref(),
-                rules,
                 unit_prints: args.unit_prints,
+                ..args.library.discovery_request(index.as_ref())
             }),
             ..humanify_core::unpack::AdapterRun::new(
                 toolchain.interop.piece,
@@ -150,7 +158,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
             "slice": IndexSlice::for_bundler(toolchain.bundler).map(IndexSlice::name),
         },
         "noDiscovery": no_discovery,
-        "rule": args.rule,
+        "rule": rule_name(args.library),
         "libraryDiscovery": report,
     }))
 }

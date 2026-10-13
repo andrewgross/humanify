@@ -679,15 +679,27 @@ pub struct BundlePieces {
     pub interop: crate::toolchain::InteropHelpers,
 }
 
-/// What a run asks discovery for (`--diagnostics` turns it on): the
-/// per-unit listings, and an index to look statement units up in.
+/// The targeted round's node floor when the run does not set one (config
+/// `library.lookup.targeted.min_nodes`).
+pub const TARGETED_MIN_NODES: u32 = 20;
+/// The targeted round's neighbour support when the run does not set one:
+/// none — the region's own calls are the context.
+pub const TARGETED_SUPPORT: usize = 0;
+
+/// What a run asks discovery for (`--library-matching report` turns it
+/// on): the per-unit listings, an index to look statement units up in,
+/// and the run's tunables (the config file's `[library]` keys).
 #[derive(Clone, Copy, Default)]
 pub struct DiscoveryRequest<'x> {
     pub list_units: bool,
     pub index: Option<&'x crate::libindex::lookup::LibraryIndex>,
-    /// The lookup's rules; None = the default (agreement). The pipeline
-    /// never sets it; the `discover` verb's `--rule structural` does.
+    /// The lookup's rules; None = the default (agreement).
     pub rules: Option<crate::libindex::lookup::LookupRules>,
+    /// The targeted round's floor and support, `(min_nodes, support)`;
+    /// None = [`TARGETED_MIN_NODES`], [`TARGETED_SUPPORT`].
+    pub targeted: Option<(u32, usize)>,
+    /// The fixpoint's tunables.
+    pub options: DiscoveryOptions,
     /// Every unit with its fingerprints in the report (`unitRows`): the
     /// `discover` verb's scorer input (exp096). The pipeline never asks.
     pub unit_prints: bool,
@@ -700,12 +712,15 @@ impl<'x> DiscoveryRequest<'x> {
     /// calls are the context).
     pub fn lookup(&self) -> Option<IndexLookup<'x>> {
         let rules = self.rules.unwrap_or_default();
+        let (min_nodes, support) = self
+            .targeted
+            .unwrap_or((TARGETED_MIN_NODES, TARGETED_SUPPORT));
         Some(IndexLookup {
             index: self.index?,
             rules,
             targeted: Some(crate::libindex::lookup::LookupRules {
-                min_nodes: 20,
-                support: 0,
+                min_nodes,
+                support,
                 ..rules
             }),
         })

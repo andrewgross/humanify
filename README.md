@@ -110,28 +110,42 @@ itself, or a local server (llama.cpp, vLLM, Ollama's OpenAI endpoint, …).
 # OpenAI
 HUMANIFY_API_KEY="$OPENAI_API_KEY" humanify obfuscated.js -o out --model gpt-4o-mini
 
-# A local OpenAI-compatible server (any non-empty key)
-HUMANIFY_API_KEY=local humanify obfuscated.js -o out \
-  --endpoint http://localhost:8000/v1 --model openai/gpt-oss-20b --reasoning-effort low
+# A local OpenAI-compatible server (any non-empty key), with settings
+# from a config file
+HUMANIFY_API_KEY=local humanify obfuscated.js -o out --config humanify.toml \
+  --endpoint http://localhost:8000/v1 --model openai/gpt-oss-20b
 ```
 
 The API key comes from the `HUMANIFY_API_KEY` environment variable (or a
 `.env` file in the working directory) and nowhere else: a secret never goes
-on the command line. Every option is checked before any work starts — a bad
-value, a conflict or a missing input file is refused, all at once, and
-nothing is written.
+on the command line or in the config file.
 
-Common options (`humanify --help` lists them all):
+Only the operational options are flags: the input, `-o, --output-dir`,
+`--prior-version` (the previous release's `.humanify/humanified.js`: names,
+file layout and vendor names carry across versions), `--endpoint`,
+`--model`, `-v`/`-vv`, `--config <file>`, and the library decision
+(`--library-matching off|report|names`, default off, with
+`--library-index <dir>` for `report`, which writes
+`.humanify/library-report.json` and changes no other output byte; `names`
+is refused until an eval passes it). Everything else is a key in
+the TOML config file; [`humanify.example.toml`](./humanify.example.toml)
+lists every key with its default and meaning (it is generated from the
+binary's own key registry, so it cannot drift). For example:
 
-| option                       | what it does                                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `-o, --output-dir <dir>`     | where the result goes (default `output`)                                                                    |
-| `--split`                    | write a multi-file tree (`src/` + `vendor/` + a runnable CommonJS scaffold) instead of one file             |
-| `--prior-version <file>`     | the previous release's `.humanify/humanified.js`: names, file layout and vendor names carry across versions |
-| `--llm-cache <dir>`          | cache model answers on disk, keyed by request content — reruns are nearly free and deterministic            |
-| `-c, --concurrency <n>`      | concurrent model requests                                                                                   |
-| `--reasoning-effort <level>` | `low` / `medium` / `high`, for reasoning models only                                                        |
-| `--stats-json <file>`        | a compact match/rename breakdown                                                                            |
+```toml
+[llm]
+reasoning_effort = "low"   # for reasoning models only
+concurrency = 64
+cache_dir = "llm-cache"    # cache model answers on disk: reruns are nearly free
+[split]
+enabled = true             # a multi-file tree (src/ + vendor/ + a runnable scaffold)
+[diagnostics]
+stats_json = "stats.json"  # a compact match/rename breakdown
+```
+
+Everything is checked before any work starts — an unknown key, a wrong type,
+an out-of-range value, a flag that disagrees with the file, a missing input
+file — and refused, all at once, naming the key; nothing is written.
 
 Cross-version use: humanify release N, then humanify release N+1 with
 `--prior-version <N's output>/.humanify/humanified.js`, and the diff between

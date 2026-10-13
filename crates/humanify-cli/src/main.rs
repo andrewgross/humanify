@@ -124,10 +124,12 @@ enum Command {
         /// detected bundler). An index that cannot be read fails the verb.
         #[arg(long)]
         library_index: Option<String>,
-        /// `agreement` (the pipeline's rule) or `structural` (no literal
-        /// agreement).
-        #[arg(long, default_value = "agreement")]
-        rule: String,
+        /// A config file: its `[library]` keys tune the lookup and the
+        /// discovery (`[library.lookup] agreement = false` is the
+        /// structural rule; it was `--rule structural`). Default: the
+        /// pipeline's compiled-in values.
+        #[arg(long)]
+        config: Option<String>,
         /// The pipeline's `--bundler` override (bun, esbuild, …); the
         /// detector's own verdict is recorded under `detected`.
         #[arg(long)]
@@ -279,16 +281,23 @@ fn main() {
         Some(Command::Discover {
             input,
             library_index,
-            rule,
+            config,
             bundler,
             unit_prints,
             work_dir,
             out,
         }) => {
+            let library = match humanify_cli::discover_verb::library_settings(config.as_deref()) {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("ERROR: {e}");
+                    std::process::exit(1);
+                }
+            };
             let args = humanify_cli::discover_verb::DiscoverArgs {
                 input: &input,
                 library_index: library_index.as_deref(),
-                rule: &rule,
+                library: &library,
                 bundler: bundler.as_deref(),
                 unit_prints,
                 work_dir: work_dir.as_deref(),

@@ -23,8 +23,14 @@
  *                      barrier's disclosed re-ask); the default policy
  *                      answers `<id>Renamed`
  *   --sequential       the conservative naming schedule
+ *   --set <section.key=value>
+ *                      one pipeline setting, written into the launch's
+ *                      `--config` file (repeatable; e.g. `--set
+ *                      split.enabled=true --set naming.batch_size=10`) —
+ *                      since config sweep step 5 every setting but the
+ *                      operational flags is a config key
  *   -- <flags…>        anything after `--` passes to the binary verbatim
- *                      (e.g. `-- --split --batch-size 10`)
+ *                      (its operational flags only, e.g. `-- --model m`)
  *
  * Prints the per-reason ask summary (TOTAL first) and exits with the
  * binary's exit code. Needs target/release/humanify (rust:build).
@@ -34,6 +40,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import {
+  parseSetting,
+  type Setting,
+  writePipelineConfig
+} from "../experiments/lib/pipeline-config.js";
 import { collideAnswer, startStubLlm, stubAnswer } from "./lib/stub-llm.js";
 
 const BIN = path.join(
@@ -63,7 +74,8 @@ export interface AskRow {
 export function usage(): string {
   return [
     "usage: npx tsx scripts/ask-trace.ts <input.js> [--out <dir>]",
-    "         [--prior <path>] [--collide <name>] [--sequential] [-- <pipeline flags>]"
+    "         [--prior <path>] [--collide <name>] [--sequential]",
+    "         [--set <section.key=value>]... [-- <pipeline flags>]"
   ].join("\n");
 }
 
@@ -73,6 +85,7 @@ export interface AskTraceArgs {
   prior?: string;
   collide?: string;
   sequential: boolean;
+  settings: Array<[string, Setting]>;
   passthrough: string[];
 }
 
@@ -93,13 +106,26 @@ function setValue(a: AskTraceArgs, flag: string, v: string): void {
   else a.collide = v;
 }
 
+function settingOf(entry: string): [string, Setting] {
+  try {
+    return parseSetting(entry);
+  } catch (e) {
+    fail(`--set: ${(e as Error).message}`);
+  }
+}
+
 /** Parse the CLI the way the harness's own flags parse (fail loud). */
 export function parseArgs(argv: string[]): AskTraceArgs {
   const [input, ...rest] = argv;
   if (!input || input.startsWith("-")) {
     fail(usage());
   }
-  const args: AskTraceArgs = { input, sequential: false, passthrough: [] };
+  const args: AskTraceArgs = {
+    input,
+    sequential: false,
+    settings: [],
+    passthrough: []
+  };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (a === "--") {
@@ -108,6 +134,9 @@ export function parseArgs(argv: string[]): AskTraceArgs {
     }
     if (a === "--sequential") {
       args.sequential = true;
+    } else if (a === "--set") {
+      args.settings.push(settingOf(takeValue(a, rest, i)));
+      i += 1;
     } else if (a === "--out" || a === "--prior" || a === "--collide") {
       setValue(args, a, takeValue(a, rest, i));
       i += 1;
@@ -153,19 +182,27 @@ async function main(): Promise<void> {
   const answer = args.collide ? collideAnswer(args.collide) : stubAnswer;
   const { server, url } = await startStubLlm(answer);
 
+  // Every setting but the operational flags is a `--config` key (config
+  // sweep step 5): the runner's own, then `--set`'s.
+  const config = path.join(outDir, "humanify.toml");
+  writePipelineConfig(config, [
+    ["diagnostics.dump_asks", path.join(outDir, "asks.jsonl")],
+    ["llm.retries", 0],
+    ...(args.sequential
+      ? ([["naming.schedule", "sequential"]] as Array<[string, Setting]>)
+      : []),
+    ...args.settings
+  ]);
   const binArgs = [
     input,
     "-o",
     path.join(outDir, "tree"),
-    "--dump-asks",
-    path.join(outDir, "asks.jsonl"),
-    "--retries",
-    "0",
+    "--config",
+    config,
     "--endpoint",
     url
   ];
   if (args.prior) binArgs.push("--prior-version", path.resolve(args.prior));
-  if (args.sequential) binArgs.push("--sequential");
   binArgs.push(...args.passthrough);
 
   // Async on purpose: the stub lives in this process (see scripts/e2e.ts).

@@ -1,7 +1,11 @@
 # Library matching: one setting, the index and its life cycle
 
 Status: DESIGN + CONFIG REVIEW, 2026-10-13, updated the same day with Andrew's
-six answers (§6). Nothing here is built. Companion to
+six answers (§6). **§2 is built** (config sweep step 6, branch
+`cleanup/config-sweep-5-6`; config-consolidation.md §5 step 6 records what
+landed — including that the missing-slice WARNING runs against today's
+one-slice-per-bundler index until exp097's recipe slices reach main). §3's
+recipes, §4's `humanify index` verb and §5's eval flags are not built. Companion to
 [matching-architecture.md](./matching-architecture.md) (step 4 is where this
 lands on main) and [config-consolidation.md](./config-consolidation.md) (the
 one config file this setting lives in). Rule applied throughout: no backwards

@@ -9,7 +9,7 @@ fn configure_with_unknown_disable_name_errors_with_valid_list() {
     let err = SwitchState::configure(&["no-such-switch".into()], &[])
         .expect_err("an unknown switch must be an error");
     assert!(
-        err.contains("--disable: unknown disable switch \"no-such-switch\""),
+        err.contains("switches.disable: unknown disable switch \"no-such-switch\""),
         "message should name the flag and the bad name: {err}"
     );
     for name in valid_names(SwitchKind::Disable) {
@@ -24,7 +24,7 @@ fn configure_with_unknown_disable_name_errors_with_valid_list() {
 fn configure_with_probe_name_in_disable_list_is_wrong_kind() {
     // shingle-probe is the registry's only probe switch.
     let err = SwitchState::configure(&["shingle-probe".into()], &[])
-        .expect_err("a probe name under --disable is wrong-kind, fatal");
+        .expect_err("a probe name under switches.disable is wrong-kind, fatal");
     assert!(
         err.contains("wrong-kind") || err.contains("unknown"),
         "{err}"

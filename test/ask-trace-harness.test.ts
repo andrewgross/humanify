@@ -94,16 +94,23 @@ describe("the runner's arg parsing and summary", () => {
       "--collide",
       "boom",
       "--sequential",
+      "--set",
+      "split.enabled=true",
+      "--set",
+      "naming.batch_size=10",
       "--",
-      "--split",
-      "--batch-size",
-      "10"
+      "--model",
+      "m"
     ]);
     assert.equal(a.input, "in.js");
     assert.equal(a.out, "o");
     assert.equal(a.collide, "boom");
     assert.equal(a.sequential, true);
-    assert.deepEqual(a.passthrough, ["--split", "--batch-size", "10"]);
+    assert.deepEqual(a.settings, [
+      ["split.enabled", true],
+      ["naming.batch_size", 10]
+    ]);
+    assert.deepEqual(a.passthrough, ["--model", "m"]);
     const bare = parseArgs(["in.js"]);
     assert.equal(bare.out, undefined);
     assert.deepEqual(bare.passthrough, []);

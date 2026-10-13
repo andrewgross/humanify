@@ -24,12 +24,26 @@
 //!   and the consumer applied a default (`batch_size.map_or(25)`), the
 //!   expected record applies that same default (`effective`). The
 //!   comparison is of what the run actually uses.
+//!
+//! Config sweep step 5 (2026-10-13) moved every non-operational flag into
+//! the `--config` TOML file. The fixture is STILL untouched: each captured
+//! argv is translated ([`to_config`]: kept flags stay, each moved flag
+//! becomes its key, per `MOVED_FLAGS`) and must resolve to the captured
+//! effective record; a refusal must refuse with the captured message in
+//! today's names (the flag spelled as its key). And every launch in the
+//! re-recorded goldens — argv + the TOML file it carries — must resolve to
+//! the effective record of a captured launch: the harness's new launches
+//! configure the run exactly as the old ones did.
 
 use serde_json::{Value, json};
 
-use crate::config::{API_KEY_VAR, Config, DEFAULT_CONTEXT_TOKENS, DEFAULT_MODULE_CONCURRENCY};
+use crate::config::file::{Kind, Val};
+use crate::config::keys::KEYS;
+use crate::config::{
+    API_KEY_VAR, Config, ConfigFile, DEFAULT_CONTEXT_TOKENS, DEFAULT_MODULE_CONCURRENCY,
+};
 use crate::pipeline_config::enum_name;
-use crate::surface::{CommandOptions, PipelineParse, parse_pipeline};
+use crate::surface::{CommandOptions, MOVED_FLAGS, PipelineParse, parse_pipeline};
 use humanify_core::naming::waves::batch::WaveTunables;
 
 fn repo_file(rel: &str) -> String {
@@ -42,10 +56,16 @@ const GOLDENS: [&str; 2] = [
     "experiments/034-eval-harness/run-launch.seeded-base.golden.txt",
 ];
 
-/// Every launch in a launch golden: the `humanify NODE_OPTIONS=... :: <argv>`
-/// lines and each run config's `args`.
-fn golden_launches(text: &str) -> Vec<Vec<String>> {
-    let mut out = Vec::new();
+/// One launch: its argv and the TOML of the `--config` file it passed
+/// (empty: none).
+type Launch = (Vec<String>, String);
+
+/// Every launch in a launch golden: each `humanify NODE_OPTIONS=... ::
+/// <argv>` line with the `humanify-config| <line>` lines after it (the
+/// recorder prints the file it was given), and each run config's `args`
+/// with its `configToml`.
+fn golden_launches(text: &str) -> Vec<Launch> {
+    let mut out: Vec<Launch> = Vec::new();
     let mut block: Option<String> = None;
     for line in text.lines() {
         if let Some(b) = block.as_mut() {
@@ -54,21 +74,84 @@ fn golden_launches(text: &str) -> Vec<Vec<String>> {
             if line == "}" {
                 let cfg: Value = serde_json::from_str(b).expect("a run config is JSON");
                 let args = cfg["args"].as_array().expect("a run config has args");
-                out.push(
-                    args.iter()
-                        .map(|a| a.as_str().unwrap().to_string())
-                        .collect(),
-                );
+                let argv = args
+                    .iter()
+                    .map(|a| a.as_str().unwrap().to_string())
+                    .collect();
+                let toml = cfg["configToml"].as_str().unwrap_or("").to_string();
+                out.push((argv, toml));
                 block = None;
             }
+        } else if let Some(rest) = line.strip_prefix("humanify-config| ") {
+            let last = out.last_mut().expect("a config line follows its launch");
+            last.1.push_str(rest);
+            last.1.push('\n');
+        } else if line == "humanify-config|" {
+            out.last_mut()
+                .expect("a config line follows its launch")
+                .1
+                .push('\n');
         } else if line.starts_with("humanify ") {
             let (_, argv) = line.split_once(" :: ").expect("a launch line has ' :: '");
-            out.push(argv.split_whitespace().map(str::to_string).collect());
+            out.push((
+                argv.split_whitespace().map(str::to_string).collect(),
+                String::new(),
+            ));
         } else if line.starts_with("runcfg-") && line.ends_with(": {") {
             block = Some("{\n".to_string());
         }
     }
     out
+}
+
+/// A captured (pre-step-5) argv in today's form: the operational flags
+/// stay; each moved flag becomes its `--config` key — the translation the
+/// harness launchers made by hand.
+fn to_config(argv: &[String]) -> Launch {
+    let mut kept = Vec::new();
+    let mut sections: std::collections::BTreeMap<&str, Vec<String>> = Default::default();
+    let mut i = 0;
+    while i < argv.len() {
+        let (name, attached) = match argv[i].split_once('=') {
+            Some((n, v)) if n.starts_with('-') => (n.to_string(), Some(v.to_string())),
+            _ => (argv[i].clone(), None),
+        };
+        let Some((_, dotted, example)) = MOVED_FLAGS.iter().find(|(f, _, _)| *f == name) else {
+            kept.push(argv[i].clone());
+            i += 1;
+            continue;
+        };
+        let key = KEYS.iter().find(|k| k.dotted() == *dotted).unwrap();
+        let literal = if example.is_empty() {
+            let raw = attached.unwrap_or_else(|| {
+                i += 1;
+                argv[i].clone()
+            });
+            match key.kind {
+                Kind::Int { .. } => raw,
+                Kind::List(_) => Val::List(raw.split(',').map(str::to_string).collect()).render(),
+                _ => Val::Text(raw).render(),
+            }
+        } else {
+            example.to_string()
+        };
+        sections
+            .entry(key.section)
+            .or_default()
+            .push(format!("{} = {literal}", key.name));
+        i += 1;
+    }
+    // Step 6: an index was read only for the diagnostics' report — today
+    // that is `--library-matching report` (an index with matching off is
+    // refused as a conflict).
+    if kept.iter().any(|a| a == "--library-index") {
+        kept.extend(["--library-matching".to_string(), "report".to_string()]);
+    }
+    let toml: String = sections
+        .iter()
+        .map(|(s, lines)| format!("[{s}]\n{}\n", lines.join("\n")))
+        .collect();
+    (kept, toml)
 }
 
 fn words(s: &str) -> Vec<String> {
@@ -144,12 +227,12 @@ fn transcribed_launches() -> Vec<Vec<String>> {
     .collect()
 }
 
-pub(crate) fn corpus() -> Vec<Vec<String>> {
-    let mut all: Vec<Vec<String>> = GOLDENS
+/// Every launch in today's goldens.
+fn golden_corpus() -> Vec<Launch> {
+    let mut all: Vec<Launch> = GOLDENS
         .iter()
         .flat_map(|g| golden_launches(&repo_file(g)))
         .collect();
-    all.extend(transcribed_launches());
     let mut seen = std::collections::BTreeSet::new();
     all.retain(|a| seen.insert(a.clone()));
     all
@@ -178,7 +261,7 @@ fn settings_json(c: &Config) -> Value {
         "maxFreeRetries": g.max_free_retries.map(f64::from),
         "laneThreshold": n(g.lane_threshold as f64),
         "renameRetries": n(g.rename_retries as f64),
-        "skipLibraries": c.library.skip_libraries,
+        "skipLibraries": c.library.skips_libraries(),
         "namingFloor": g.naming_floor,
         "namingFloorSweep": g.naming_floor_sweep,
         "reconcilePriorDiff": c.matching.reconcile_prior_diff,
@@ -189,11 +272,21 @@ fn settings_json(c: &Config) -> Value {
 /// ONE resolver (`Config::build`). A refused configuration records its
 /// refusals where the commander-era record kept the flag-invariant
 /// verdict.
-pub(crate) fn record(input: &str, opts: &CommandOptions) -> Value {
+pub(crate) fn record(input: &str, opts: &CommandOptions, file: Option<&ConfigFile>) -> Value {
     let env = |name: &str| (name == API_KEY_VAR).then(|| ENV_KEY.to_string());
-    let c = match Config::build(input, opts, env) {
+    let c = match Config::build(input, opts, file, env) {
         Ok(c) => c,
-        Err(refusals) => return json!({ "input": input, "invariants": refusals }),
+        Err(refusals) => {
+            let refusals: Vec<String> = refusals
+                .iter()
+                .map(|m| {
+                    m.trim_start_matches(CONFIG_NAME)
+                        .trim_start_matches(": ")
+                        .to_string()
+                })
+                .collect();
+            return json!({ "input": input, "invariants": refusals });
+        }
     };
     let switch_list = |disable: bool| -> Option<String> {
         let names: Vec<&str> = c
@@ -225,7 +318,7 @@ pub(crate) fn record(input: &str, opts: &CommandOptions) -> Value {
         "logFile": d.log_file,
         "diagnostics": d.diagnostics_file,
         "libraryIndex": c.library.index,
-        "libraryDiscoveryUnits": c.library.discovery_units,
+        "libraryDiscoveryUnits": c.library.report_units,
         "perfTrace": c.perf.perf_trace,
         "renameLedger": d.rename_ledger,
         "statsJson": d.stats_json,
@@ -257,8 +350,19 @@ fn without_api_key(argv: &[String]) -> Vec<String> {
 /// messages.
 fn effective(captured: &Value) -> Value {
     let invariants = &captured["invariants"];
-    if invariants.as_array().is_some_and(|a| !a.is_empty()) {
-        return json!({ "input": captured["input"], "invariants": invariants });
+    if let Some(list) = invariants.as_array().filter(|a| !a.is_empty()) {
+        // In today's names: the flags are keys.
+        let renamed: Vec<String> = list
+            .iter()
+            .map(|m| {
+                m.as_str()
+                    .unwrap()
+                    .replace("--split-pure", "split.pure")
+                    .replace("--split", "split.enabled")
+                    .replace("--bundler", "unpack.bundler")
+            })
+            .collect();
+        return json!({ "input": captured["input"], "invariants": renamed });
     }
     let mut out = captured.clone();
     let s = out["settings"]["Ok"]
@@ -289,9 +393,14 @@ fn effective(captured: &Value) -> Value {
     out
 }
 
-fn parsed_record(argv: &[String]) -> Value {
+/// The name the translated launches' config file is checked under.
+const CONFIG_NAME: &str = "humanify.toml";
+
+fn parsed_record((argv, toml): &Launch) -> Value {
+    let file = (!toml.is_empty())
+        .then(|| ConfigFile::parse(CONFIG_NAME, toml).unwrap_or_else(|e| panic!("{toml}: {e:?}")));
     match parse_pipeline(argv) {
-        PipelineParse::Run { input, opts } => record(&input, &opts),
+        PipelineParse::Run { input, opts } => record(&input, &opts, file.as_ref()),
         PipelineParse::Exit { code, stderr, .. } => {
             panic!("{argv:?} did not parse (exit {code}):\n{stderr}")
         }
@@ -300,43 +409,58 @@ fn parsed_record(argv: &[String]) -> Value {
 
 const FIXTURE: &str = "crates/humanify-cli/tests/fixtures/launch-parity.json";
 
-/// The capture. It ran ONCE against the commander port at 587e211f
-/// (`cargo test -p humanify-cli capture_launch_parity -- --ignored`); the
-/// port is gone, so a re-capture now records the clap surface — run it
-/// only to add a new launch shape deliberately, and review the diff (an
-/// existing row must not change).
+/// THE parity gate, half one: every captured launch, its `--api-key`
+/// removed and its moved flags written as `--config` keys, resolves to the
+/// EFFECTIVE settings the commander port gave it.
 #[test]
-#[ignore = "writes the fixture; run only to re-capture deliberately"]
-fn capture_launch_parity() {
-    let rows: Vec<Value> = corpus()
-        .iter()
-        .map(|argv| json!({ "argv": argv, "record": parsed_record(argv) }))
-        .collect();
-    let path = format!("{}/../../{FIXTURE}", env!("CARGO_MANIFEST_DIR"));
-    let text = serde_json::to_string_pretty(&rows).unwrap() + "\n";
-    std::fs::write(&path, text).unwrap();
-}
-
-/// THE parity gate: every captured launch, its `--api-key` removed, parses
-/// to the EFFECTIVE settings the commander port gave it, and every launch
-/// in the goldens is captured.
-#[test]
-fn every_harness_launch_parses_to_its_captured_settings() {
+fn every_captured_launch_resolves_to_its_captured_settings() {
     let rows: Vec<Value> = serde_json::from_str(&repo_file(FIXTURE)).expect("the fixture is JSON");
+    for row in &rows {
+        let argv =
+            without_api_key(&serde_json::from_value::<Vec<String>>(row["argv"].clone()).unwrap());
+        let launch = to_config(&argv);
+        assert_eq!(
+            parsed_record(&launch),
+            effective(&row["record"]),
+            "{argv:?} as {launch:?}"
+        );
+    }
+    assert!(rows.len() >= 50, "the corpus shrank: {}", rows.len());
+    // The transcribed launchers (e2e, ask-trace, the crate's tests, one
+    // row per flag) are all captured.
     let captured: Vec<Vec<String>> = rows
         .iter()
         .map(|r| {
             without_api_key(&serde_json::from_value::<Vec<String>>(r["argv"].clone()).unwrap())
         })
         .collect();
-    for argv in corpus() {
+    for argv in transcribed_launches() {
+        assert!(captured.contains(&argv), "not captured: {argv:?}");
+    }
+}
+
+/// Half two: every launch the harness makes TODAY (the re-recorded
+/// goldens: argv + its TOML) resolves to the effective settings of a
+/// captured launch — the same configuration, spelled as a file.
+#[test]
+fn every_golden_launch_resolves_to_a_captured_launchs_settings() {
+    let rows: Vec<Value> = serde_json::from_str(&repo_file(FIXTURE)).expect("the fixture is JSON");
+    let wanted: Vec<Value> = rows.iter().map(|r| effective(&r["record"])).collect();
+    let launches = golden_corpus();
+    assert!(
+        launches.len() >= 14,
+        "the goldens shrank: {}",
+        launches.len()
+    );
+    for launch in launches {
         assert!(
-            captured.contains(&argv),
-            "a launch with no captured settings (add it to the fixture deliberately): {argv:?}"
+            !launch.1.is_empty(),
+            "a golden launch without a config file: {launch:?}"
+        );
+        let got = parsed_record(&launch);
+        assert!(
+            wanted.contains(&got),
+            "a golden launch whose settings no captured launch had:\n{launch:?}\n{got:#}"
         );
     }
-    for (argv, row) in captured.iter().zip(&rows) {
-        assert_eq!(parsed_record(argv), effective(&row["record"]), "{argv:?}");
-    }
-    assert!(rows.len() >= 50, "the corpus shrank: {}", rows.len());
 }
