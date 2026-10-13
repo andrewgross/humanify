@@ -42,8 +42,9 @@ const PURITY: f64 = 0.9;
 
 /// What a module shard's unit rows are, beyond the fingerprint: 2 = rows
 /// of pre-bundled ("sponge") files are dropped ([`sponge_evidence`], exp097
-/// step 3). In every module shard's key.
-pub const UNIT_ROWS_VERSION: &str = "unit-rows/2";
+/// step 3); 3 = the same rows, and the shard's notes now record the drops
+/// (2's shards carried empty sponge notes). In every module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/3";
 
 /// Units smaller than this are not indexed (the lab's unit votes counted
 /// units of >= 20 nodes; the lookup's own floor is higher).
@@ -655,6 +656,10 @@ pub(crate) fn fingerprint_bundle(
     );
     shard.notes.multi_module_units_dropped += made - (shard.units.len() - kept_before);
     shard.notes.unit_mixed_spans += notes.mixed_spans;
+    for (kind, n) in notes.sponge_unit_files {
+        *shard.notes.sponge_unit_files.entry(kind).or_default() += n;
+    }
+    shard.notes.sponge_unit_rows += notes.sponge_unit_rows;
     Ok(())
 }
 

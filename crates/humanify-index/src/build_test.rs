@@ -474,3 +474,56 @@ fn a_module_marker_names_its_package_in_every_bundlers_spelling() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
+    // The shard's notes say what the filter dropped (fingerprint_bundle
+    // carries unit_rows' sponge notes, not only its mixed spans).
+    use crate::build::fingerprint_bundle;
+    use crate::shard::{Shard, ShardInputs, ShardKind};
+    let root = std::env::temp_dir().join(format!(
+        "humanify-index-sponge-notes-{}",
+        std::process::id()
+    ));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    write("node_modules/dep/dist/dep.min.js", "x");
+    let stmt = "var parse=function(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase()})};";
+    let code = format!("{stmt}\n");
+    let segments: Vec<(u32, u32, u32)> = (0..stmt.len() as u32)
+        .step_by(4)
+        .map(|c| (0, c, 0))
+        .collect();
+    let map = serde_json::json!({
+        "version": 3,
+        "sources": ["../node_modules/dep/dist/dep.min.js"],
+        "mappings": crate::sourcemap::encode_mappings(&segments),
+    });
+    write("out/out.js", &code);
+    write("out/out.js.map", &map.to_string());
+    let mut shard = Shard::new(&ShardInputs {
+        kind: ShardKind::Modules(bun_node()),
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: Some("bun@test".into()),
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    });
+    fingerprint_bundle(bun_node(), &root.join("out"), &mut shard).expect("fingerprint");
+    assert!(shard.units.is_empty(), "{:?}", shard.units);
+    assert_eq!(
+        shard.notes.sponge_unit_files.get("file-name"),
+        Some(&1),
+        "{:?}",
+        shard.notes
+    );
+    assert!(shard.notes.sponge_unit_rows > 0, "{:?}", shard.notes);
+    std::fs::remove_dir_all(&root).ok();
+}
