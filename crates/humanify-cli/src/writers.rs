@@ -19,6 +19,9 @@ use sha2::{Digest, Sha256};
 pub const SPLIT_LEDGER_PATH: &str = ".humanify/split-ledger.json";
 pub const PLACEMENT_STATS_PATH: &str = ".humanify/placement-stats.json";
 pub const STAGE_HASHES_PATH: &str = ".humanify/stage-hashes.json";
+/// `--library-matching report`'s report (config sweep step 6): a
+/// diagnostics-only sidecar, read by no decision.
+pub const LIBRARY_REPORT_PATH: &str = ".humanify/library-report.json";
 
 /// `stageFingerprint(content)`: the first 16 hex of sha256 over the UTF-8
 /// bytes — a stage-boundary fingerprint short enough to compare by eye.
@@ -66,6 +69,12 @@ js_record! {
         residue_locality: f64 = "residueLocality",
         by_tier: CountMap = "byTier",
     }
+}
+
+/// A JSON document, pretty (indent 2) with a trailing newline.
+pub fn write_json_file(path: &Path, doc: &serde_json::Value) -> std::io::Result<()> {
+    let text = serde_json::to_string_pretty(doc).expect("a JSON value serializes");
+    write_creating_parent(path, &format!("{text}\n"))
 }
 
 /// `writePlacementStats`.

@@ -36,13 +36,17 @@ fn provider_errors_are_reported_at_the_default_verbosity() {
     let s = Scratch(dir);
     let input = s.0.join("bundle.js");
     std::fs::write(&input, INPUT).unwrap();
+    let config = s.0.join("humanify.toml");
+    std::fs::write(&config, "[llm]\nconcurrency = 4\nretries = 0\n").unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_humanify"))
         .current_dir(&s.0)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env("HUMANIFY_API_KEY", "k")
         .arg(&input)
-        .args(["--api-key", "k", "--model", "stub-model", "-c", "4"])
-        .args(["--retries", "0", "--endpoint", &dead_endpoint()])
+        .args(["--model", "stub-model", "--endpoint", &dead_endpoint()])
+        .arg("--config")
+        .arg(&config)
         .arg("-o")
         .arg(s.0.join("out"))
         .output()
@@ -129,23 +133,24 @@ fn run_failing(fixture: &str) -> FailedRun {
     ));
     let stats = s.0.join("stats.json");
     let (endpoint, requests) = failing_endpoint();
+    let config = s.0.join("humanify.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "[llm]\nconcurrency = 16\nretries = 0\n[split]\nenabled = true\n\
+             [diagnostics]\nstats_json = {stats:?}\n"
+        ),
+    )
+    .unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_humanify"))
         .current_dir(&s.0)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env("HUMANIFY_API_KEY", "k")
         .arg(&input)
-        .args([
-            "--split",
-            "--api-key",
-            "k",
-            "--model",
-            "stub-model",
-            "-c",
-            "16",
-        ])
-        .args(["--retries", "0", "--endpoint", &endpoint])
-        .arg("--stats-json")
-        .arg(&stats)
+        .args(["--model", "stub-model", "--endpoint", &endpoint])
+        .arg("--config")
+        .arg(&config)
         .arg("-o")
         .arg(s.0.join("out"))
         .output()

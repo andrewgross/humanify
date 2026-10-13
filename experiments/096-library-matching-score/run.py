@@ -93,11 +93,19 @@ def guard(run_dir, config, force):
     print(f"!! MIXED CONFIG in label — {msg} — forced.")
 
 
-def run_one(binary, entry, out_dir, opts, index_dir):
+def write_rule_config(run_dir, rule):
+    """The claim rule as the binary's config file (config sweep step 6: `discover --rule` became the
+    `[library.lookup] agreement` key; every other library tunable stays at its compiled-in default)."""
+    path = os.path.join(run_dir, "discover.toml")
+    open(path, "w").write(f"[library.lookup]\nagreement = {'true' if rule == 'agreement' else 'false'}\n")
+    return path
+
+
+def run_one(binary, entry, out_dir, opts, index_dir, config):
     """One `humanify discover` run in a child process; its wall time and peak memory measured from outside."""
     report = os.path.join(out_dir, entry["id"] + ".json")
     cmd = ["taskset", "-c", opts["--cpus"], binary, "discover", lib096.corpus_path(entry, "bundle"),
-           "--library-index", index_dir, "--rule", opts["--rule"], "--bundler", entry["bundler"], "--unit-prints",
+           "--library-index", index_dir, "--config", config, "--bundler", entry["bundler"], "--unit-prints",
            "--out", report]
     t = time.monotonic()
     # a child per run, waited on here: ru_maxrss of RUSAGE_CHILDREN is the max over all waited children, so
@@ -126,15 +134,17 @@ def main():
     index_id, index_bytes = index_facts(index_dir)
     config = {"buildCommit": commit, "binarySha256": sha256_file(binary), "indexDir": index_dir,
               "indexId": index_id, "indexBytes": index_bytes, "rule": opts["--rule"],
-              "corpusSha256": lib096.manifest_sha(), "instrument": "humanify discover --unit-prints --bundler <corpus bundler>"}
+              "corpusSha256": lib096.manifest_sha(), "instrument": "humanify discover --unit-prints --bundler <corpus bundler> --config discover.toml"}
     guard(run_dir, config, force)
     open(os.path.join(run_dir, "pipeline.json"), "w").write(dump(config))
+    rule_config = write_rule_config(run_dir, opts["--rule"])
     entries = lib096.load_manifest()["entries"]
     # biggest first, so the long ones do not trail
     entries.sort(key=lambda e: -e["files"]["bundle"]["bytes"])
     t0 = time.monotonic()
     with ThreadPoolExecutor(int(opts["--jobs"])) as pool:
-        for eid, wall in pool.map(lambda e: run_one(binary, e, os.path.join(run_dir, "reports"), opts, index_dir),
+        for eid, wall in pool.map(lambda e: run_one(binary, e, os.path.join(run_dir, "reports"), opts, index_dir,
+                                                         rule_config),
                                   entries):
             print(f"  ran {eid} in {wall:.1f}s", flush=True)
     print(f"ran {len(entries)} bundles in {time.monotonic() - t0:.0f}s")

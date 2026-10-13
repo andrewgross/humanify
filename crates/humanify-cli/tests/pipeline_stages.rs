@@ -63,15 +63,31 @@ impl Drop for Scratch {
 /// adapter's vendor namer is always wired (as in the TS), and a test must
 /// never reach a real endpoint.
 fn run(dir: &Path, args: &[&str]) -> Output {
+    run_with(dir, args, &[])
+}
+
+/// `run`, plus `--config` settings (dotted TOML lines, `split.enabled =
+/// true`) beside the no-retries one.
+fn run_with(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
+    let config = dir.join("humanify.toml");
+    let toml: String = std::iter::once("llm.retries = 0")
+        .chain(settings.iter().copied())
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&config, toml).unwrap();
     Command::new(env!("CARGO_BIN_EXE_humanify"))
         .current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env("HUMANIFY_API_KEY", "k")
         .args(args)
-        .args(["--endpoint", "http://127.0.0.1:9/v1", "--retries", "0"])
+        .args(["--endpoint", "http://127.0.0.1:9/v1", "--config"])
+        .arg(&config)
         .output()
         .unwrap()
 }
+
+const SPLIT: &str = "split.enabled = true";
 
 fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).into_owned()
@@ -82,7 +98,7 @@ fn a_bun_run_writes_the_vendor_tree_then_formats_and_names_runtime_js() {
     let s = Scratch::new("bun-format");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let o = run(&s.0, &[&input, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(!err.contains("NOT YET PORTED"), "{err}");
@@ -129,7 +145,7 @@ fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
     let minified: String = wrapped.lines().map(str::trim).collect::<Vec<_>>().join("");
     let input = s.write("bundle.js", &minified);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "--split", "-o", &out]);
+    let o = run_with(&s.0, &[&input, "-o", &out], &[SPLIT]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(err.contains("Split complete: written to"), "{err}");
@@ -176,7 +192,7 @@ fn the_ts_input_options_are_gone() {
         "--ts-library-functions",
         "--inject-ts-hashes",
     ] {
-        let o = run(&s.0, &[&input, "--api-key", "k", flag, &input]);
+        let o = run(&s.0, &[&input, flag, &input]);
         let err = stderr(&o);
         assert_eq!(o.status.code(), Some(1), "{flag}: {err}");
         assert!(
@@ -202,7 +218,7 @@ fn a_mixed_file_freezes_only_its_library_functions() {
     text.push_str("/*! tinylib v1.2.3 */var libFn=function(z){return z*2};console.log(libFn(3));");
     let input = s.write("fresh.js", &text);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let o = run(&s.0, &[&input, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(
@@ -222,7 +238,7 @@ fn a_plain_script_passes_through_as_index_js() {
     let s = Scratch::new("passthrough");
     let input = s.write("plain.js", PLAIN);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let o = run(&s.0, &[&input, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     // Formatted (Babel prints no trailing newline) and named — the dead
@@ -241,10 +257,8 @@ fn a_failed_vendor_batch_is_counted_not_fatal() {
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
     let cache = s.0.join("cache").display().to_string();
-    let o = run(
-        &s.0,
-        &[&input, "--api-key", "k", "--llm-cache", &cache, "-o", &out],
-    );
+    let cache_dir = format!("llm.cache_dir = {cache:?}");
+    let o = run_with(&s.0, &[&input, "-o", &out], &[&cache_dir]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     let manifest: serde_json::Value = serde_json::from_str(
@@ -274,6 +288,7 @@ fn unpack_verb_counts_carries_from_run_state_not_the_manifest() {
         cmd.current_dir(&s.0)
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
+            .env("HUMANIFY_API_KEY", "k")
             .args(["unpack", &input, out]);
         if let Some(p) = prior {
             cmd.args(["--prior-version", p]);
@@ -298,9 +313,10 @@ fn skip_libraries_off_processes_every_unpacked_file() {
     let s = Scratch::new("no-skip");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
-    let o = run(
+    let o = run_with(
         &s.0,
-        &[&input, "--api-key", "k", "--no-skip-libraries", "-o", &out],
+        &[&input, "-o", &out],
+        &["library.unnamed = \"model\""],
     );
     let err = stderr(&o);
     // Native stage 6 runs per file: all three unpacked files are formatted
@@ -308,6 +324,150 @@ fn skip_libraries_off_processes_every_unpacked_file() {
     assert_eq!(o.status.code(), Some(0), "{err}");
     for i in 1..=3 {
         assert!(err.contains(&format!("Processing file {i}/3")), "{err}");
+    }
+}
+
+/// A library index directory: a manifest with this build's stamps, and
+/// (`slice`) an empty `units.bun.jsonl` + `literals.jsonl`.
+fn library_index(dir: &Path, slice: bool) -> String {
+    use humanify_core::libindex::format::{INDEX_FORMAT, fingerprint_versions};
+    std::fs::create_dir_all(dir).unwrap();
+    let slices = if slice {
+        serde_json::json!([{"slice": "bun", "bundler": "bun", "version": "1", "published": null,
+            "newestAtAsOf": null, "bundlerAfterAsOf": false}])
+    } else {
+        serde_json::json!([])
+    };
+    let manifest = serde_json::json!({
+        "format": INDEX_FORMAT, "asOf": "2026-10-11", "fingerprints": fingerprint_versions(),
+        "registry": {"earliestFetch": null, "latestFetch": null, "packuments": {}},
+        "slices": slices, "packages": [], "refused": [], "shards": {}, "tables": {}, "data": {}
+    });
+    std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
+    if slice {
+        std::fs::write(dir.join("units.bun.jsonl"), "").unwrap();
+        std::fs::write(dir.join("literals.jsonl"), "").unwrap();
+    }
+    dir.display().to_string()
+}
+
+/// Config sweep step 6: `--library-matching report` runs discovery and
+/// WRITES its report (`.humanify/library-report.json`) without
+/// `--diagnostics`, and changes no other output byte against `off`. A
+/// detected bundler the index has no slice for is a loud WARNING, recorded
+/// as `recipeMissing`, and the run goes on.
+#[test]
+fn library_matching_report_writes_its_report_and_changes_nothing_else() {
+    let s = Scratch::new("lib-report");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let off_dir = s.0.join("off");
+    let off = run(&s.0, &[&input, "-o", off_dir.to_str().unwrap()]);
+    assert_eq!(off.status.code(), Some(0), "{}", stderr(&off));
+    assert!(
+        !off_dir.join(".humanify/library-report.json").exists(),
+        "off reports nothing"
+    );
+    for (tag, slice) in [("with-slice", true), ("no-slice", false)] {
+        let ix = library_index(&s.0.join(format!("ix-{tag}")), slice);
+        let out = s.0.join(tag);
+        let o = run(
+            &s.0,
+            &[
+                &input,
+                "-o",
+                out.to_str().unwrap(),
+                "--library-matching",
+                "report",
+                "--library-index",
+                &ix,
+            ],
+        );
+        let err = stderr(&o);
+        assert_eq!(o.status.code(), Some(0), "{tag}: {err}");
+        let report: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(out.join(".humanify/library-report.json")).expect("written"),
+        )
+        .unwrap();
+        assert_eq!(report["matching"], "report");
+        assert_eq!(
+            report["indexId"].as_str().map(str::len),
+            Some(64),
+            "{report}"
+        );
+        assert!(err.contains("Library matching (report): "), "{err}");
+        if slice {
+            assert!(report["recipeMissing"].is_null(), "{report}");
+            assert!(report["libraryDiscovery"].is_object(), "{report}");
+        } else {
+            let w = report["recipeMissing"].as_str().expect("recorded");
+            assert!(
+                w.starts_with("WARNING: library index ") && w.contains("no slice"),
+                "{w}"
+            );
+            assert!(err.contains(w), "the warning is on stderr: {err}");
+        }
+        let mut got = snapshot(&out);
+        got.remove(".humanify/library-report.json");
+        assert_eq!(
+            got,
+            snapshot(&off_dir),
+            "{tag}: report changed an output byte"
+        );
+    }
+}
+
+/// Library matching refusals happen before any work: the output
+/// directory is never created.
+#[test]
+fn a_refused_library_decision_creates_nothing() {
+    let s = Scratch::new("lib-refused");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let out = s.out().display().to_string();
+    let stale = s.0.join("stale");
+    library_index(&stale, true);
+    let m = std::fs::read_to_string(stale.join("manifest.json")).unwrap();
+    std::fs::write(stale.join("manifest.json"), m.replace("units/", "units/0")).unwrap();
+    for (args, want) in [
+        (
+            vec!["--library-matching", "names", "--library-index", "x"],
+            "refused until an eval",
+        ),
+        (
+            vec!["--library-matching", "report"],
+            "needs --library-index",
+        ),
+        (vec!["--library-index", "x"], "--library-matching off"),
+        (
+            vec![
+                "--library-matching",
+                "report",
+                "--library-index",
+                "/nonexistent/ix",
+            ],
+            "no such directory",
+        ),
+        (
+            vec![
+                "--library-matching",
+                "report",
+                "--library-index",
+                stale.to_str().unwrap(),
+            ],
+            "this binary reads units/",
+        ),
+        (
+            vec!["--no-skip-libraries"],
+            "moved: set library.unnamed = \"model\"",
+        ),
+    ] {
+        let o = run(
+            &s.0,
+            &[&[input.as_str(), "-o", &out][..], &args[..]].concat(),
+        );
+        let err = stderr(&o);
+        assert_eq!(o.status.code(), Some(1), "{args:?}: {err}");
+        assert!(err.contains(want), "{args:?} must say {want:?}: {err}");
+        assert!(!s.out().exists(), "{args:?} created the output");
     }
 }
 
@@ -324,7 +484,7 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
     let out = s.out().display().to_string();
     // Baseline: the same run without a prior, whose shipped text is a
     // genuinely bound prior for the second pass.
-    let base = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let base = run(&s.0, &[&input, "-o", &out]);
     assert_eq!(base.status.code(), Some(0), "{}", stderr(&base));
     let prior = s.out().join("index.js").display().to_string();
     // The incident's shape: a small non-empty file that is NOT this
@@ -334,8 +494,6 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
         &s.0,
         &[
             &input,
-            "--api-key",
-            "k",
             "--prior-version",
             &stub,
             "-o",
@@ -357,8 +515,6 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
         &s.0,
         &[
             &input,
-            "--api-key",
-            "k",
             "--prior-version",
             &prior,
             "-o",
@@ -402,7 +558,7 @@ fn the_profile_names_the_split_finish_constituents() {
     let v1 = s.write("v1.js", &variant("aaaa", "greet"));
     let v2 = s.write("v2.js", &variant("bbbb", "hail"));
     let out1 = s.0.join("tree-v1").display().to_string();
-    let o = run(&s.0, &[&v1, "--api-key", "k", "--split", "-o", &out1]);
+    let o = run_with(&s.0, &[&v1, "-o", &out1], &[SPLIT]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     // The printed gauges (finding #66), pinned on the FRESH run (the
@@ -420,20 +576,17 @@ fn the_profile_names_the_split_finish_constituents() {
     assert!(prior.is_file(), "the first run wrote its bundle");
     let out2 = s.0.join("tree-v2").display().to_string();
     let prof = s.0.join("profile.json").display().to_string();
-    let o = run(
+    let trace = format!("perf.perf_trace = {prof:?}");
+    let o = run_with(
         &s.0,
         &[
             &v2,
-            "--api-key",
-            "k",
-            "--split",
             "--prior-version",
             &prior.display().to_string(),
-            "--perf-trace",
-            &prof,
             "-o",
             &out2,
         ],
+        &[SPLIT, &trace],
     );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
@@ -495,16 +648,10 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js");
     let out = s.out().display().to_string();
-    let first = run(
+    let first = run_with(
         &s.0,
-        &[
-            &fixture.display().to_string(),
-            "--api-key",
-            "k",
-            "--split",
-            "-o",
-            &out,
-        ],
+        &[&fixture.display().to_string(), "-o", &out],
+        &[SPLIT],
     );
     let err = stderr(&first);
     assert_eq!(first.status.code(), Some(0), "{err}");
@@ -524,7 +671,7 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
 
     // A different bundle with no vendor modules at all, into the SAME folder.
     let input = s.write("plain-wrapper.js", &wrapped());
-    let second = run(&s.0, &[&input, "--api-key", "k", "--split", "-o", &out]);
+    let second = run_with(&s.0, &[&input, "-o", &out], &[SPLIT]);
     let err = stderr(&second);
     assert_eq!(second.status.code(), Some(0), "{err}");
     // On main the finish re-parsed the earlier run's (already re-linked)
@@ -547,4 +694,111 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
         err.contains("WARNING") && err.contains("not written by this run"),
         "the leftovers are reported:\n{err}"
     );
+}
+
+/// Config sweep steps 4-5: a refused configuration — a bad value, a
+/// missing API key, a missing prior, and every `--config` refusal (an
+/// unknown key, a flag/file conflict, a file that is not TOML or not
+/// there, a moved flag) — exits 1 naming every problem, and NOTHING has
+/// been created: no output tree, no log file, no cache directory.
+#[test]
+fn a_refused_configuration_creates_nothing() {
+    let s = Scratch::new("refused");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let out = s.out().display().to_string();
+    let side_effects = ["out", "cache", "run.log"];
+    let common = [input.as_str(), "-o", &out];
+    let sinks = [
+        "llm.cache_dir = \"cache\"",
+        "diagnostics.log_file = \"run.log\"",
+    ];
+    let bad_value = run_with(
+        &s.0,
+        &common,
+        &[&sinks[..], &["llm.concurrency = 0", "split.pure = true"]].concat(),
+    );
+    let err = stderr(&bad_value);
+    assert_eq!(bad_value.status.code(), Some(1), "{err}");
+    assert!(
+        err.contains("Error: split.pure requires split.enabled"),
+        "{err}"
+    );
+    assert!(
+        err.contains("humanify.toml: llm.concurrency must be at least 1 (got 0)"),
+        "{err}"
+    );
+    let no_key = Command::new(env!("CARGO_BIN_EXE_humanify"))
+        .current_dir(&s.0)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .args(common)
+        .output()
+        .unwrap();
+    assert_eq!(no_key.status.code(), Some(1));
+    assert!(
+        stderr(&no_key).contains("Error: API key required: set HUMANIFY_API_KEY"),
+        "{}",
+        stderr(&no_key)
+    );
+    let no_prior = run_with(
+        &s.0,
+        &[&common[..], &["--prior-version", "missing.js"]].concat(),
+        &sinks,
+    );
+    assert_eq!(no_prior.status.code(), Some(1));
+    assert!(
+        stderr(&no_prior)
+            .contains("Error: prior version (--prior-version) file not found: missing.js"),
+        "{}",
+        stderr(&no_prior)
+    );
+    let refused = |o: &Output, want: &str| {
+        let err = stderr(o);
+        assert_eq!(o.status.code(), Some(1), "{want}: {err}");
+        assert!(err.contains(want), "must name {want}:\n{err}");
+    };
+    refused(
+        &run_with(
+            &s.0,
+            &common,
+            &[&sinks[..], &["naming.batchsize = 3"]].concat(),
+        ),
+        "unknown key naming.batchsize (did you mean naming.batch_size?)",
+    );
+    refused(
+        &run_with(
+            &s.0,
+            &[&common[..], &["--model", "a"]].concat(),
+            &[&sinks[..], &["llm.model = \"b\""]].concat(),
+        ),
+        "config conflict: llm.model = \"a\" (--model) vs \"b\"",
+    );
+    refused(
+        &run_with(&s.0, &common, &[&sinks[..], &["[naming"]].concat()),
+        "not valid TOML",
+    );
+    refused(
+        &run_with(
+            &s.0,
+            &common,
+            &[&sinks[..], &["llm.api_key = \"sk\""]].concat(),
+        ),
+        "llm.api_key is retired",
+    );
+    let missing = Command::new(env!("CARGO_BIN_EXE_humanify"))
+        .current_dir(&s.0)
+        .env_clear()
+        .env("HUMANIFY_API_KEY", "k")
+        .args(common)
+        .args(["--config", "nope.toml"])
+        .output()
+        .unwrap();
+    refused(&missing, "--config nope.toml: cannot read the config file");
+    refused(
+        &run_with(&s.0, &[&common[..], &["--split"]].concat(), &sinks),
+        "'--split' (moved: set split.enabled = true in --config)",
+    );
+    for p in side_effects {
+        assert!(!s.0.join(p).exists(), "{p} was created by a refused run");
+    }
 }

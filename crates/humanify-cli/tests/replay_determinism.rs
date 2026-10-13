@@ -128,20 +128,33 @@ fn start() -> (String, Arc<AtomicUsize>) {
 }
 
 fn run(dir: &Path, input: &str, out: &Path, cache: &Path, endpoint: &str) -> Output {
-    command(dir, input, out, endpoint)
-        .arg("--llm-cache")
-        .arg(cache)
-        .output()
-        .unwrap()
+    command(
+        dir,
+        input,
+        out,
+        endpoint,
+        &format!("llm.cache_dir = {cache:?}\n"),
+    )
+    .output()
+    .unwrap()
 }
 
-fn command(dir: &Path, input: &str, out: &Path, endpoint: &str) -> Command {
+/// One launch; `settings` are extra `--config` lines (dotted TOML).
+fn command(dir: &Path, input: &str, out: &Path, endpoint: &str, settings: &str) -> Command {
+    let config = out.with_extension("toml");
+    std::fs::write(
+        &config,
+        format!("llm.concurrency = 8\nllm.retries = 0\n{settings}"),
+    )
+    .unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_humanify"));
     cmd.current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
-        .args([input, "--api-key", "k", "--model", "stub-model", "-c", "8"])
-        .args(["--retries", "0", "--endpoint", endpoint])
+        .env("HUMANIFY_API_KEY", "k")
+        .args([input, "--model", "stub-model", "--endpoint", endpoint])
+        .arg("--config")
+        .arg(&config)
         .arg("-o")
         .arg(out);
     cmd
@@ -219,7 +232,7 @@ fn without_a_cache_identical_requests_reach_the_model_once() {
     let input = input.display().to_string();
     let (url, counter, seen) = start_recording();
 
-    let out = command(&s.0, &input, &s.0.join("out"), &url)
+    let out = command(&s.0, &input, &s.0.join("out"), &url, "")
         .output()
         .unwrap();
     let err = String::from_utf8_lossy(&out.stderr).into_owned();

@@ -26,8 +26,12 @@
  *     under any other name fails (finding #55 — the naming stage renamed
  *     `export function createStore`; the `esm-exports` fixture holds every
  *     export form).
- *  5. SEQUENTIAL — the conservative naming schedule, `--sequential
- *     --batch-size 10` (docs/rust-port/20-fast-mode.md §defaults): fresh
+ *  5. SEQUENTIAL — the conservative naming schedule, `naming.schedule =
+ *     "sequential"` + `naming.batch_size = 10` (the `--sequential
+ *     --batch-size 10` flags until config sweep step 5 moved every
+ *     non-operational flag into the `--config` file; each launch here
+ *     writes one, experiments/lib/pipeline-config.ts) (docs/rust-port/
+ *     20-fast-mode.md §defaults): fresh
  *     and prior each run twice, byte-identical, and BOTH trees must equal
  *     the committed legacy goldens (test/golden/legacy-default/) — the
  *     pre-2026-09-28 binary's default path (stashed at
@@ -49,7 +53,7 @@
  *
  * BUNDLE fixtures (`"bundle": true` in fixture.config.json — e.g.
  * `esbuild-bundle`, a real esbuild 0.27.2 iife build) ARE split trees:
- * every leg runs with `--split`, and the boot step compares the input
+ * every leg runs split (`split.enabled = true`), and the boot step compares the input
  * bundle's observable behavior (stdout + exit of `node <input>`) with
  * `node run.cjs` in the emitted runnable graph (`bun-bundle`, a real Bun
  * CJS build, runs its input the way Bun's loader does —
@@ -66,7 +70,7 @@
  * whose detection is wrong is still run, split and booted end to end.
  *
  * THE SPLIT METHOD (`expect.splitMethod`, `expect.apart`): the fresh run
- * writes `--stats-json`, and its `splitMethod.method` must be the one the
+ * writes its stats file (`diagnostics.stats_json`), and its `splitMethod.method` must be the one the
  * fixture declares — `module-markers` (the bundle's lazy-init modules
  * describe it: `bun-lazy`), `fresh-grouping` (they do not: `bun-plain`,
  * `bun-mixed`, the one-planted-module fixtures), or `not-split` (a bundle
@@ -95,7 +99,14 @@ import type { AddressInfo } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import {
+  type Setting,
+  writePipelineConfig
+} from "../experiments/lib/pipeline-config.js";
 import { startStubLlm, stubAnswer } from "./lib/stub-llm.js";
+
+/** `--config` settings for one launch, as dotted keys. */
+type Settings = Array<[string, Setting]>;
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const BIN = path.join(REPO, "target/release/humanify");
@@ -360,13 +371,25 @@ function startStub(): Promise<http.Server> {
  */
 async function runBinary(
   args: string[],
+  settings: Settings,
   endpoint: string,
   label: string
 ): Promise<string> {
+  // Every setting but the operational flags is a `--config` key (config
+  // sweep step 5): one file per launch, beside its output directory.
+  const out = args[args.indexOf("-o") + 1];
+  const config = `${out}.toml`;
+  fs.mkdirSync(path.dirname(config), { recursive: true });
+  writePipelineConfig(config, [["llm.retries", 0], ...settings]);
   const child = spawn(
     BIN,
-    [...args, "--endpoint", endpoint, "--api-key", "e2e", "--retries", "0"],
-    { stdio: ["ignore", "ignore", "pipe"] }
+    [...args, "--endpoint", endpoint, "--config", config],
+    {
+      stdio: ["ignore", "ignore", "pipe"],
+      // The binary's API key comes from HUMANIFY_API_KEY only (config
+      // sweep step 4); the stub accepts any.
+      env: { ...process.env, HUMANIFY_API_KEY: "e2e" }
+    }
   );
   let stderr = "";
   child.stderr.on("data", (c) => {
@@ -609,12 +632,15 @@ async function freshLeg(
   endpoint: string,
   bundle: boolean,
   fresh: string,
-  splitArgs: string[]
+  split: Settings
 ): Promise<string> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
-  const statsArgs = bundle ? ["--stats-json", `${fresh}.stats.json`] : [];
+  const stats: Settings = bundle
+    ? [["diagnostics.stats_json", `${fresh}.stats.json`]]
+    : [];
   const stderr = await runBinary(
-    [inputOf(name, pair.v1), ...splitArgs, ...statsArgs, "-o", fresh],
+    [inputOf(name, pair.v1), "-o", fresh],
+    [...split, ...stats],
     endpoint,
     `${label} fresh`
   );
@@ -646,17 +672,19 @@ async function priorLeg(
   priorReference: string,
   prior: string,
   again: string,
-  splitArgs: string[]
+  split: Settings
 ): Promise<void> {
   const label = `${name} ${pair.v1}->${pair.v2}`;
   const priorArgs = [inputOf(name, pair.v2), "--prior-version", priorReference];
   await runBinary(
-    [...priorArgs, ...splitArgs, "-o", prior],
+    [...priorArgs, "-o", prior],
+    split,
     endpoint,
     `${label} prior`
   );
   await runBinary(
-    [...priorArgs, ...splitArgs, "-o", again],
+    [...priorArgs, "-o", again],
+    split,
     endpoint,
     `${label} prior (again)`
   );
@@ -712,7 +740,7 @@ async function runPair(
   const prior = path.join(root, "prior-a");
   const again = path.join(root, "prior-b");
   // A bundle fixture's output is the runnable split tree.
-  const splitArgs = bundle ? ["--split"] : [];
+  const split: Settings = bundle ? [["split.enabled", true]] : [];
 
   // The prior the next release diffs against: the split tree's
   // humanified source (or the named file a bundle the split does not read
@@ -723,9 +751,9 @@ async function runPair(
     endpoint,
     bundle,
     fresh,
-    splitArgs
+    split
   );
-  await priorLeg(name, pair, endpoint, priorReference, prior, again, splitArgs);
+  await priorLeg(name, pair, endpoint, priorReference, prior, again, split);
   const seqPriorA = await sequencedLeg(
     root,
     label,
@@ -733,7 +761,7 @@ async function runPair(
     pair,
     endpoint,
     bundle,
-    splitArgs
+    split
   );
 
   const legs = { fresh, prior, sequential: seqPriorA };
@@ -844,9 +872,13 @@ async function sequencedLeg(
   pair: VersionPair,
   endpoint: string,
   bundle: boolean,
-  splitArgs: string[]
+  split: Settings
 ): Promise<string> {
-  const seqArgs = ["--sequential", "--batch-size", "10"];
+  const seq: Settings = [
+    ...split,
+    ["naming.schedule", "sequential"],
+    ["naming.batch_size", 10]
+  ];
   const seqFreshA = path.join(root, "seq-fresh-a");
   const seqFreshB = path.join(root, "seq-fresh-b");
   const seqPriorA = path.join(root, "seq-prior-a");
@@ -855,12 +887,14 @@ async function sequencedLeg(
   const freshGolden = path.join(goldenDir, `${name}-${pair.v1}-fresh`);
   const priorGolden = path.join(goldenDir, `${name}-${pair.v1}-${pair.v2}`);
   const seqFreshStderr = await runBinary(
-    [inputOf(name, pair.v1), ...splitArgs, ...seqArgs, "-o", seqFreshA],
+    [inputOf(name, pair.v1), "-o", seqFreshA],
+    seq,
     endpoint,
     `${label} sequential fresh`
   );
   await runBinary(
-    [inputOf(name, pair.v1), ...splitArgs, ...seqArgs, "-o", seqFreshB],
+    [inputOf(name, pair.v1), "-o", seqFreshB],
+    seq,
     endpoint,
     `${label} sequential fresh (again)`
   );
@@ -872,16 +906,17 @@ async function sequencedLeg(
   const seqPriorArgs = [
     inputOf(name, pair.v2),
     "--prior-version",
-    seqPriorReference,
-    ...seqArgs
+    seqPriorReference
   ];
   await runBinary(
-    [...seqPriorArgs, ...splitArgs, "-o", seqPriorA],
+    [...seqPriorArgs, "-o", seqPriorA],
+    seq,
     endpoint,
     `${label} sequential prior`
   );
   await runBinary(
-    [...seqPriorArgs, ...splitArgs, "-o", seqPriorB],
+    [...seqPriorArgs, "-o", seqPriorB],
+    seq,
     endpoint,
     `${label} sequential prior (again)`
   );

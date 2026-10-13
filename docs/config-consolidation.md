@@ -1,9 +1,9 @@
 # Config consolidation: one parse point, one typed config, one file
 
-Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-2
-landed on main (`587e211f`); **step 3 (clap for the pipeline) is done** on
-branch `cleanup/config-sweep-3-clap` — §2.1 and §5 record what changed.
-Steps 4-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
+Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-4
+landed on main (`df6ace2a`); **steps 5 (the `--config` file) and 6 (the
+one library decision) are done** on branch `cleanup/config-sweep-5-6` — §5
+records what changed. Steps 7-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
 to clean up old flags and make sure config is parsed in ONE place and used
 downstream." Rule applied throughout: no backwards compatibility — an old
 spelling is deleted, not aliased.
@@ -352,12 +352,45 @@ marked **G** touch how the harness launches the binary and update
    flags refused by name (test per retired flag, red first); re-record
    the help goldens. Neutrality because `meta.json`'s `flags` record and the
    stats file are written from the parsed options.
-4. **One `Config` type** (N). Fold `Settings`, `SwitchState`, `Levers` and
+4. **DONE 2026-10-13. One `Config` type** (N). Fold `Settings`, `SwitchState`, `Levers` and
    `CommandOptions` into it; one default per knob (the `unpack` verb reads
    the same `[llm]` defaults). Write the resolved config into stats and the
    run manifest. Add the guard test (red first: plant a `std::env` read and
    a raw option read in core, watch it fail).
-5. **The config file** (N, G). `--config <file>`, TOML, compiled-in
+
+   What landed: `humanify_cli::config` owns `Config` — sections `io`,
+   `llm`, `matching`, `naming`, `library`, `unpack`, `split`, `switches`,
+   `diagnostics`, `perf` (each a future TOML table; `library` is where step
+   6 lands). `settings.rs` is deleted; `SwitchState` is a field; the lever
+   parser moved out of `humanify-core`; `CommandOptions` holds only "given
+   or not" (no clap defaults) and nothing past `Config::build` reads it.
+   Every knob is resolved to its EFFECTIVE value (an unset batch size is
+   the 25 the processor would use), except `max_tokens`, whose "unset" is
+   part of the LLM cache key. Defaults deduplicated: the LLM timeout (two
+   crates), the model (`unpack` verb: `openai/gpt-oss-20b` → the
+   pipeline's `gpt-4o-mini`; no harness script launches `unpack`, so only
+   a manual `unpack --llm-cache` replay of an eval cache must now pass
+   `--model openai/gpt-oss-20b --reasoning-effort low`), the reasoning
+   effort (`unpack`: `low` → unset, like the pipeline), the retry count
+   (the rate limiter's). `--api-key` and the `OPENAI_API_KEY` fallback are
+   retired: the key is read once from `HUMANIFY_API_KEY`, and the harness
+   exports it. New refusals, all collected and printed together before
+   anything is created: zero for a count that must be positive
+   (concurrency, module concurrency, timeout, max/context tokens, batch
+   size, max retries), a context window the completion reserve fills, an
+   empty value for any named option, a non-http(s) endpoint, an unknown
+   reasoning effort (now a clap enum), and a missing `--prior-version` /
+   `--split-ledger` file (the input was checked only after the log file
+   and the cache directory were created). The record (`Config::record`,
+   the API key redacted) is the stats file's `config` block; the run
+   manifest copies it as `config.resolved`, and the kill-switch warning
+   reads it instead of re-parsing the argv. `tests/env_guard.rs` is the
+   guard (§3.5). Proof: launch parity — all 53 captured launches, their
+   `--api-key` removed, resolve to the captured effective settings (the
+   fixture is unchanged); warm neutrality vs `fe008408` on
+   2.1.215→2.1.216.
+
+5. **DONE 2026-10-13. The config file** (N, G). `--config <file>`, TOML, compiled-in
    defaults, strict keys. Every flag outside the six operational ones moves
    into it and is deleted. A test proves the compiled-in defaults equal
    today's defaults, value by value. **Refusal tests, each written red
@@ -367,15 +400,90 @@ marked **G** touch how the harness launches the binary and update
    key; retired flag; unknown switch name; unreadable/invalid TOML; and a
    test that each refusal happens before the unpack stage writes anything
    (the output directory stays empty).
-6. **One library decision** (N). Delete `--skip-libraries` /
+
+   What landed: every setting is declared ONCE in the key registry
+   (`humanify_cli::config::keys::KEYS`: section, name, type and range,
+   default, one-line meaning, and the flag for an operational one); the
+   TOML is read only by `config::file` (the env guard's owner for `toml`).
+   Flags kept: the input, `-o/--output-dir`, `--prior-version`,
+   `--endpoint`, `-m/--model`, `--config`, `-v` (plus help/version, and the
+   library spellings until step 6). **33 flags moved** (34 spellings with
+   `-c`): each is refused naming its key (`MOVED_FLAGS`,
+   `error: unexpected argument '--split' (moved: set split.enabled = true
+in --config)`). The operational settings are file keys too
+   (`io.output_dir`, `llm.endpoint`, `llm.model`, `matching.prior_version`,
+   `diagnostics.verbosity`); a flag and the file that disagree are refused
+   naming both (`config conflict: llm.endpoint = "http://a/v1" (--endpoint)
+vs "http://b/v1" (cfg.toml)`), agreeing ones are recorded as
+   `flag+file`. Refused at the read, all collected and printed with every
+   other refusal: not TOML, unreadable, unknown key (with "did you mean"),
+   retired key (`llm.api_key`, `perf.profile`, `naming.sequential`,
+   `io.input`), wrong type, out of range (counts, `verbosity` 0..=2, u32
+   ceilings, enum names, lever names, empty strings, non-http endpoints).
+   Messages now name KEYS, not flags (`split.pure requires split.enabled`,
+   `switches.disable: unknown disable switch …`); the TS-era invariant
+   vectors are checked through a translation of their flag names.
+   The stats `config` block gains `configFile: {path, sha256}` and
+   `sources` (each non-default value: flag / file / flag+file).
+   `humanify.example.toml` is RENDERED from the registry (keys with a flag
+   commented out, so a copy never conflicts) and held byte-equal by a test,
+   which also proves loading it changes nothing.
+   Harness: `experiments/lib/pipeline-config.ts` writes one TOML per
+   launch (run.sh's rebase, scored leg and both self-hop legs; walk.sh;
+   neutrality.sh; e2e.ts; ask-trace.ts); `eval score`/run.sh
+   `--pipeline-arg` is retired for `--pipeline-set <section.key=value>`
+   (a key the harness sets itself is refused up front), recorded as
+   `pipelineSettings`; each run config carries its `configToml`.
+   neutrality.sh and walk.sh ask the binary (`--help`) whether it reads
+   `--config`, so a baseline from before this step still gets the same
+   settings as flags. Launch goldens re-recorded (the recorder logs each
+   launch's file as `humanify-config|` lines). Launch parity: all 53
+   captured launches, translated flag-by-flag into keys, resolve to their
+   captured effective settings, and every re-recorded golden launch
+   resolves to a captured launch's settings.
+
+6. **DONE 2026-10-13. One library decision** (N). Delete `--skip-libraries` /
    `--no-skip-libraries`; add `--library-matching off|report|names`
    (default off) and `[library] unnamed = "leave"|"model"`. Neutrality on
    the default; an e2e run proves `unnamed = "model"` equals today's
    `--no-skip-libraries` byte for byte. **Refusal tests, red first:**
    missing index; unreadable index; each version mismatch; `names` with no
    matching slice (refused); `report` with no matching slice (WARNING line
+
    - `recipeMissing` in diagnostics, output identical to `off`); a mode
      other than off without an index; an index with mode `off`.
+
+   What landed: flags `--library-matching off|report|names` (default
+   off) and `--library-index <dir|id>` (also keys `library.matching`,
+   `library.index`; an id resolves under `library.index_store`). Moved to
+   keys and refused as flags: `--skip-libraries` → `library.unnamed =
+"leave"` (the default), `--no-skip-libraries` → `unnamed = "model"`,
+   `--library-discovery-units` → `library.report_units`; the `discover`
+   verb's `--rule` → `[library.lookup] agreement` (false = structural).
+   The lookup rules (`[library.lookup]`: min_nodes, min_content,
+   min_function_content, cover, max_packages, support, strong,
+   specificity + factor + slack, agreement, min_literals, literal_score,
+   literal_cover, literal_margin; `[library.lookup.targeted]` min_nodes,
+   support) and discovery's options (`[library.discovery]` closure_floor,
+   queue_cap_bytes, max_rounds, veto_support) are keys whose defaults
+   ARE the code's (`LookupRules::default()`, `DiscoveryOptions::default()`,
+   the targeted constants now named in `libdetect::discovery`); a test
+   holds them equal. Behaviour: `off` opens no index and runs no discovery
+   (before, `--diagnostics` alone ran discovery without an index — that
+   diagnostics section is gone in `off`); `report` runs discovery with the
+   index and WRITES `.humanify/library-report.json` (mode, index id,
+   `recipeMissing`, the discovery report) with or without diagnostics,
+   plus one stderr line and a `libraryMatching` block in the diagnostics;
+   no other output byte moves (pipeline test, off vs report, with and
+   without a slice). Refused before any work: `names`; `report` without
+   an index; an index with `off`; a missing directory, unreadable or
+   non-index manifest, or any stamp mismatch (format, module, units,
+   literals — the loader checked only units and literals). A detected
+   bundler with no slice is a WARNING + `recipeMissing`, the run going on
+   with path/banner detection — implemented against today's one-slice-
+   per-bundler index (`units.<bun|esbuild>.jsonl`), since exp097's recipe
+   slices are not on main; its loader replaces the lookup, not the rule.
+
 7. **Harness: one run config** (G). `eval.ts` validates once and writes the
    run config JSON plus the binary's `config.toml` per launch; `run.sh` and
    `neutrality.sh` read them instead of re-parsing argv; launches pass only

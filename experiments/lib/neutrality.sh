@@ -114,6 +114,11 @@ source "$HERE/llm-endpoint.sh"
 ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
+# The binary reads its API key from HUMANIFY_API_KEY only (config sweep
+# step 4, 2026-10-13: `--api-key` was retired — a secret never goes on a
+# command line, which the launch record would keep). Exported once; every
+# launch below inherits it.
+export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 source "$HERE/build-bin.sh"
@@ -176,6 +181,31 @@ fi
 
 count_cache() { find "$CACHE" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
+# leg_flags <label> <out> <cmd...>: sets LEG_FLAGS, the pipeline argv after
+# the input for one leg. Both legs get the SAME settings. Since config sweep
+# step 5 (2026-10-13) the binary takes only its operational flags and reads
+# every other setting from a --config TOML file (written here, per leg,
+# OUTSIDE the compared tree, by experiments/lib/pipeline-config.ts). A
+# baseline built from before that commit has no --config and takes the same
+# settings as the flags it had then — asked of the binary itself (its
+# --help), so the harness never guesses from a commit date.
+leg_flags() {
+  local label="$1" out="$2"
+  shift 2
+  if "$@" --help 2>/dev/null | grep -q -- '--config <file>'; then
+    local toml="$WORK/neutrality-$label.toml"
+    npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$toml" \
+      "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" split.enabled=true \
+      "llm.cache_dir=$CACHE" || return 1
+    LEG_FLAGS=(--config "$toml" --endpoint "$ENDPOINT" --model "$MODELNAME" \
+      -o "$out" --prior-version "$PRIOR")
+  else
+    LEG_FLAGS=(--split --endpoint "$ENDPOINT" --model "$MODELNAME" \
+      --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
+      --llm-cache "$CACHE" --prior-version "$PRIOR")
+  fi
+}
+
 # Clear last run's exit codes BEFORE anything else. They are read at verdict
 # time, and nothing used to delete them — so a leg that died without writing
 # one (killed, OOM, the script edited mid-flight) made the verdict silently
@@ -204,22 +234,19 @@ run_leg() {
     # what ran — a stored result with no provenance line is not citable.
     local LEG_ARR=()
     eval "LEG_ARR=($CMD_TEMPLATE)"
+    leg_flags "$LABEL" "$OUT" "${LEG_ARR[@]}" || return 1
     {
       echo "# neutrality per-leg cmd: $CMD_TEMPLATE"
-      "${LEG_ARR[@]}" "$INPUT" --split \
-        --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
-        --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-        --llm-cache "$CACHE" --prior-version "$PRIOR"
+      "${LEG_ARR[@]}" "$INPUT" "${LEG_FLAGS[@]}"
     } > "$WORK/neutrality-$LABEL.stdout" 2>&1
   else
     # The leg's OWN binary, built from its commit — never a leftover.
     local BIN
     BIN=$(build_humanify "$SRCDIR" "$WORK/neutrality-$LABEL.build.log") || return 1
     echo "    binary: $BIN"
-    "$BIN" "$INPUT" --split \
-      --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
-      --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-      --llm-cache "$CACHE" --prior-version "$PRIOR" \
+    leg_flags "$LABEL" "$OUT" "$BIN" || return 1
+    echo "    flags: ${LEG_FLAGS[*]}"
+    "$BIN" "$INPUT" "${LEG_FLAGS[@]}" \
       > "$WORK/neutrality-$LABEL.stdout" 2>&1
   fi
   local RC=$?
@@ -294,7 +321,8 @@ fi
 # me one. Everything else under .humanify/ is NOT in this list on purpose:
 # `humanified.js` and `split-ledger.json` become the NEXT release's prior, so a
 # difference there is as load-bearing as a difference in src/.
-DIAGNOSTIC_ONLY=(".humanify/placement-stats.json" ".humanify/stage-hashes.json")
+DIAGNOSTIC_ONLY=(".humanify/placement-stats.json" ".humanify/stage-hashes.json"
+  ".humanify/library-report.json")
 
 EXCLUDES=()
 for f in "${DIAGNOSTIC_ONLY[@]}"; do

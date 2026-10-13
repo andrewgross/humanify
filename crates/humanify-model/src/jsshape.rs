@@ -29,6 +29,9 @@ pub enum Schema {
     /// An index-signature object (`Record<string, number>`).
     Map(Box<Schema>),
     Object(Vec<Prop>),
+    /// Any JSON value, kept verbatim (a free-form record such as the
+    /// stats file's `config` block, whose owner is the CLI's `Config`).
+    Any,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,6 +53,7 @@ impl Schema {
             Schema::Number => json!({"kind": "number"}),
             Schema::String => json!({"kind": "string"}),
             Schema::Boolean => json!({"kind": "boolean"}),
+            Schema::Any => json!({"kind": "any"}),
             Schema::Array(items) => json!({"kind": "array", "items": items.to_probe_json()}),
             Schema::Map(values) => json!({"kind": "map", "values": values.to_probe_json()}),
             Schema::Object(props) => {
@@ -158,6 +162,18 @@ impl JsType for f64 {
     }
     fn schema() -> Schema {
         Schema::Number
+    }
+}
+
+impl JsType for JsValue {
+    fn to_js(&self) -> JsValue {
+        self.clone()
+    }
+    fn from_js(v: &JsValue, _at: &str) -> Result<Self, String> {
+        Ok(v.clone())
+    }
+    fn schema() -> Schema {
+        Schema::Any
     }
 }
 

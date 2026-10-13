@@ -9,7 +9,22 @@ use std::path::{Path, PathBuf};
 use humanify_core::libindex::format::{Manifest, UnitRow, fingerprint_versions};
 use serde_json::Value;
 
+use crate::config::{ConfigFile, Library, library_from_file};
 use crate::discover_verb::{DiscoverArgs, discover};
+
+/// The `[library]` settings a config text gives (empty: the defaults).
+fn library(toml: &str) -> Library {
+    let f = ConfigFile::check("cfg.toml", toml).expect("a valid config");
+    library_from_file(Some(&f)).expect("valid")
+}
+
+fn rule(name: &str) -> Library {
+    match name {
+        "agreement" => library(""),
+        "structural" => library("[library.lookup]\nagreement = false\n"),
+        other => panic!("{other}"),
+    }
+}
 
 fn fixture() -> String {
     let p = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -88,13 +103,13 @@ fn index_claims(doc: &Value) -> usize {
 fn the_rule_reaches_the_lookup_and_the_units_are_listed() {
     let code = fixture();
     let ix = self_index(&code, "rule");
-    let run = |rule: &str, unit_prints: bool| {
+    let run = |name: &str, unit_prints: bool| {
         discover(
             &code,
             &DiscoverArgs {
                 input: "fixture",
                 library_index: ix.to_str(),
-                rule,
+                library: &rule(name),
                 bundler: None,
                 unit_prints,
                 work_dir: None,
@@ -126,21 +141,56 @@ fn the_rule_reaches_the_lookup_and_the_units_are_listed() {
 }
 
 #[test]
-fn a_bad_rule_or_an_unreadable_index_fails_the_verb() {
+fn a_bad_setting_or_an_unreadable_index_fails_the_verb() {
     let code = fixture();
-    let args = |rule, library_index| DiscoverArgs {
+    let agreement = rule("agreement");
+    let args = |library_index| DiscoverArgs {
         input: "fixture",
         library_index,
-        rule,
+        library: &agreement,
         bundler: None,
         unit_prints: false,
         work_dir: None,
     };
-    assert!(discover(&code, &args("loose", None)).is_err());
-    assert!(discover(&code, &args("agreement", Some("/nonexistent/index"))).is_err());
+    assert!(discover(&code, &args(Some("/nonexistent/index"))).is_err());
     assert!(
-        discover(&code, &args("agreement", None)).is_ok(),
+        discover(&code, &args(None)).is_ok(),
         "no index: evidence seeds only"
+    );
+    // The lab knobs are config keys, refused like any other.
+    let bad = ConfigFile::check("cfg.toml", "[library.lookup]\ncover = 1.5\n").expect_err("x");
+    assert_eq!(
+        bad,
+        ["cfg.toml: library.lookup.cover = 1.5 is outside 0..1"]
+    );
+    assert!(crate::discover_verb::library_settings(Some("/nonexistent/c.toml")).is_err());
+}
+
+#[test]
+fn the_default_settings_are_the_pipelines_compiled_in_rules() {
+    use humanify_core::libdetect::discovery::{DiscoveryOptions, DiscoveryRequest};
+    use humanify_core::libindex::lookup::{LibraryIndex, LookupRules};
+    let ix = LibraryIndex::from_rows(vec![], vec![]);
+    let l = library("");
+    assert_eq!(
+        format!("{:?}", l.rules()),
+        format!("{:?}", LookupRules::default())
+    );
+    assert_eq!(
+        format!("{:?}", l.discovery_options()),
+        format!("{:?}", DiscoveryOptions::default())
+    );
+    let ours = l.discovery_request(Some(&ix)).lookup().expect("an index");
+    let today = DiscoveryRequest {
+        index: Some(&ix),
+        ..DiscoveryRequest::default()
+    }
+    .lookup()
+    .expect("an index");
+    assert_eq!(format!("{:?}", ours.rules), format!("{:?}", today.rules));
+    assert_eq!(
+        format!("{:?}", ours.targeted),
+        format!("{:?}", today.targeted)
     );
 }
 
@@ -159,7 +209,7 @@ fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
             &DiscoverArgs {
                 input: "plain",
                 library_index: None,
-                rule: "agreement",
+                library: &rule("agreement"),
                 bundler,
                 unit_prints: false,
                 work_dir: None,
@@ -185,7 +235,7 @@ fn a_bundle_the_adapter_floors_reports_that_no_discovery_ran() {
         &DiscoverArgs {
             input: "plain",
             library_index: None,
-            rule: "agreement",
+            library: &rule("agreement"),
             bundler: Some("bun"),
             unit_prints: true,
             work_dir: None,

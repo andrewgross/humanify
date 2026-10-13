@@ -1,55 +1,203 @@
-//! The kill-switch/env guard tests (WP1.1's exit gate; TS analog:
-//! src/kill-switches.test.ts:112-138). The env guard is the port of the
-//! "no process.env outside the allowlist" rule; in Rust the rule is "no
-//! std::env outside the ONE env module" (02 §2).
+//! The configuration guard: ONE owner reads configuration (config sweep
+//! step 4, docs/config-consolidation.md §3.5). It walks every crate's
+//! non-test sources and fails:
+//!
+//! 1. a `std::env` read (or `dotenvy`) outside `humanify-cli/src/env.rs`,
+//!    the one process-input reader;
+//! 2. a call into that reader (`env::get`, `env::user_args`) outside the
+//!    parse point — `config.rs` (the API key) and `main.rs` (argv);
+//! 3. an argument parser (`clap`) outside the parse point — `surface.rs`
+//!    (the pipeline's declaration), `main.rs` (the stage verbs'),
+//!    `config.rs` — and the index builder, a separate binary;
+//! 4. a config-file reader (`toml`) outside `config/file.rs`, the
+//!    `--config` file's one reader (config sweep step 5);
+//! 5. a JSON lookup of a setting name (`v["skipLibraries"]`,
+//!    `.get("model")`, `.bool(…)`) outside the config owner (`config.rs`
+//!    and its `config/` modules): a setting is read from the typed
+//!    `Config`, never re-read from a JSON map.
+//!
+//! Clippy's `disallowed_methods` ban on `std::env::var` is the static layer
+//! under rule 1. A source file's test code — `*_test.rs`, `tests/`, and an
+//! inline `#[cfg(test)] mod … { … }` (the file's tail, by convention) — is
+//! not guarded; code after a one-line `#[cfg(test)] mod x_test;` is.
 
 use std::path::Path;
 
-/// Walk every crate source and fail on `std::env` outside
-/// crates/humanify-cli/src/env.rs.
-#[test]
-fn std_env_confined_to_the_env_module() {
+/// One rule: what it forbids, and the files allowed to do it.
+struct Rule {
+    name: &'static str,
+    /// The line matches the forbidden construct.
+    hit: fn(&str) -> bool,
+    /// Paths (suffixes) exempt from the rule, each with its reason.
+    owners: &'static [(&'static str, &'static str)],
+}
+
+const ENV_MODULE: (&str, &str) = ("humanify-cli/src/env.rs", "the one process-input reader");
+const CONFIG: (&str, &str) = ("humanify-cli/src/config.rs", "the configuration owner");
+const CONFIG_FILE: (&str, &str) = (
+    "humanify-cli/src/config/file.rs",
+    "the --config file's one reader (the configuration owner's module)",
+);
+const CONFIG_KEYS: (&str, &str) = (
+    "humanify-cli/src/config/keys.rs",
+    "the key registry (the configuration owner's module)",
+);
+const MAIN: (&str, &str) = (
+    "humanify-cli/src/main.rs",
+    "the binary's entry: argv in, and the stage verbs' clap declarations",
+);
+const SURFACE: (&str, &str) = (
+    "humanify-cli/src/surface.rs",
+    "the pipeline's clap declaration",
+);
+const INDEX_MAIN: (&str, &str) = (
+    "humanify-index/src/main.rs",
+    "the library-index builder: a separate binary with its own argv",
+);
+
+fn rules() -> Vec<Rule> {
+    vec![
+        Rule {
+            name: "std::env / dotenv read outside the env module",
+            hit: |l| {
+                // A scratch-directory path convention, not a config read.
+                !l.contains("std::env::temp_dir")
+                    && (l.contains("std::env::")
+                        || l.contains("env::var(")
+                        || l.contains("dotenvy"))
+            },
+            owners: &[ENV_MODULE],
+        },
+        Rule {
+            name: "process-input reader called outside the parse point",
+            hit: |l| {
+                l.contains("env::get(")
+                    || l.contains("env::user_args(")
+                    || l.contains("crate::env::")
+            },
+            owners: &[ENV_MODULE, CONFIG, MAIN],
+        },
+        Rule {
+            name: "argument parser outside the parse point",
+            hit: |l| l.contains("clap::") || l.contains("use clap"),
+            owners: &[CONFIG, MAIN, SURFACE, INDEX_MAIN],
+        },
+        Rule {
+            name: "config-file reader outside the config owner",
+            hit: |l| l.contains("toml::") || l.contains("use toml"),
+            owners: &[CONFIG_FILE],
+        },
+    ]
+}
+
+/// Every guarded (path, line number, line) in the workspace's sources.
+fn guarded_lines() -> Vec<(String, usize, String)> {
     let crates_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut offenders: Vec<String> = Vec::new();
-    let mut examined = 0usize;
+    let mut out = Vec::new();
     walk(&crates_dir, &mut |path, src| {
-        examined += 1;
-        // Only src/ trees are guarded: tests/ may read env for scratch
-        // paths, and the guard's own matcher lines must not self-report.
-        let s = path.to_string_lossy();
-        let guarded = s.contains("/src/") && !s.contains("/tests/");
-        let is_env_module = path.ends_with("humanify-cli/src/env.rs");
-        for (line_no, line) in src.lines().enumerate() {
-            let trimmed = line.trim_start();
-            let is_comment = trimmed.starts_with("//") || trimmed.starts_with("//!");
-            // The benign call: a scratch-directory path convention, not an
-            // ambient-config read (no decision input; 02 §2's hazard class
-            // is environment VARIABLES).
-            let benign = line.contains("std::env::temp_dir");
-            if guarded
-                && !is_env_module
-                && !is_comment
-                && !benign
-                && (line.contains("std::env::") || line.contains("env::var("))
-            {
-                offenders.push(format!(
-                    "{}:{}: {}",
-                    path.display(),
-                    line_no + 1,
-                    line.trim()
-                ));
+        let s = path.to_string_lossy().replace('\\', "/");
+        if !s.contains("/src/") || s.contains("/tests/") || s.ends_with("_test.rs") {
+            return;
+        }
+        let lines: Vec<&str> = src.lines().collect();
+        let mut i = 0;
+        while i < lines.len() {
+            let trimmed = lines[i].trim_start();
+            if trimmed.starts_with("#[cfg(test)]") {
+                // `#[cfg(test)] mod x_test;` declares a test FILE (walked
+                // and skipped on its own): skip just the declaration — code
+                // after it is still guarded. Anything else (an inline
+                // `mod tests { … }`, by convention the file's tail) ends
+                // the guarded part.
+                match lines.get(i + 1).map(|l| l.trim()) {
+                    Some(next) if next.starts_with("mod ") && next.ends_with(';') => {
+                        i += 2;
+                        continue;
+                    }
+                    _ => break,
+                }
             }
+            if !trimmed.starts_with("//") {
+                out.push((s.clone(), i + 1, lines[i].to_string()));
+            }
+            i += 1;
         }
     });
+    out
+}
+
+fn offenders(
+    rule_hit: impl Fn(&str) -> bool,
+    owners: &[(&'static str, &'static str)],
+) -> Vec<String> {
+    guarded_lines()
+        .into_iter()
+        .filter(|(path, _, line)| rule_hit(line) && !owners.iter().any(|(o, _)| path.ends_with(o)))
+        .map(|(path, n, line)| format!("{path}:{n}: {}", line.trim()))
+        .collect()
+}
+
+/// Rule 5: a setting's name looked up in a JSON map. The names are the
+/// config record's own keys (`humanify_cli::config::setting_keys`), so a
+/// new setting is guarded the day it is added.
+fn setting_lookup_offenders() -> Vec<String> {
+    let mut names: Vec<String> = humanify_cli::config::setting_keys()
+        .iter()
+        .map(|k| k.rsplit('.').next().unwrap_or(k).to_string())
+        .collect();
+    names.sort();
+    names.dedup();
+    let patterns: Vec<String> = names
+        .iter()
+        .flat_map(|n| {
+            [
+                format!("[\"{n}\"]"),
+                format!(".get(\"{n}\")"),
+                format!(".bool(\"{n}\")"),
+                format!(".str(\"{n}\")"),
+                format!(".num(\"{n}\")"),
+            ]
+        })
+        .collect();
+    offenders(
+        |line| patterns.iter().any(|p| line.contains(p.as_str())),
+        &[CONFIG, CONFIG_FILE, CONFIG_KEYS],
+    )
+}
+
+#[test]
+fn no_setting_is_read_back_out_of_a_json_map() {
+    let found = setting_lookup_offenders();
     assert!(
-        examined > 0,
-        "the guard examined nothing — fixture gave it no sources"
+        found.is_empty(),
+        "a setting looked up by name in a JSON map outside the config owner — \
+         read the typed Config (docs/config-consolidation.md §3.5):\n  {}",
+        found.join("\n  ")
     );
+}
+
+#[test]
+fn the_guard_examines_sources() {
     assert!(
-        offenders.is_empty(),
-        "std::env escapes the env module — every env read belongs to \
-         crates/humanify-cli/src/env.rs (02 §2):\n{}",
-        offenders.join("\n")
+        guarded_lines().len() > 10_000,
+        "the guard examined (almost) nothing — the walk is broken"
+    );
+}
+
+#[test]
+fn configuration_is_read_only_by_its_owner() {
+    let mut failures = Vec::new();
+    for rule in rules() {
+        let found = offenders(rule.hit, rule.owners);
+        if !found.is_empty() {
+            failures.push(format!("{}:\n  {}", rule.name, found.join("\n  ")));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "configuration read outside its owner (docs/config-consolidation.md §3.5) — \
+         read the typed Config instead:\n{}",
+        failures.join("\n")
     );
 }
 

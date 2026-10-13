@@ -62,7 +62,7 @@ pub enum Switch {
 }
 
 impl Switch {
-    /// The flag name on the wire (`--disable a,b` / `--probe c`), exactly
+    /// The name in the config file (`switches.disable = ["a", "b"]`), exactly
     /// the TS registry's keys.
     pub fn name(&self) -> &'static str {
         match self {
@@ -139,21 +139,22 @@ impl Switch {
 /// of things I turned off" stays a true statement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SwitchKind {
-    /// `--disable` turns a shipped pass OFF.
+    /// `switches.disable` turns a shipped pass OFF.
     Disable,
-    /// `--probe` turns instrumentation ON.
+    /// `switches.probe` turns instrumentation ON.
     Probe,
 }
 
-/// The applied switches, built ONCE at the CLI boundary and passed by value
-/// into the pipeline (the TS module-global `active`, made a value).
+/// The applied switches, built ONCE at the parse point (`crate::config`)
+/// and held in the run's `Config` (the TS module-global `active`, made a
+/// value).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SwitchState {
     applied: BTreeSet<Switch>,
 }
 
 impl SwitchState {
-    /// Apply the parsed `--disable`/`--probe` lists. Called ONCE from the
+    /// Apply the `switches.disable` / `switches.probe` lists. Called ONCE from the
     /// CLI action. An unknown or wrong-kind name is an error with the valid
     /// list — a switch that could not take effect must never look accepted
     /// (the exact failure the env generation allowed: an exported typo was
@@ -176,8 +177,8 @@ impl SwitchState {
                 };
                 if entry.is_none() || wrong_kind {
                     let flag = match kind {
-                        SwitchKind::Disable => "--disable",
-                        SwitchKind::Probe => "--probe",
+                        SwitchKind::Disable => "switches.disable",
+                        SwitchKind::Probe => "switches.probe",
                     };
                     return Err(format!(
                         "{flag}: unknown {} switch \"{name}\" — valid: {}",
@@ -209,6 +210,25 @@ impl SwitchState {
     /// a non-default run says so in its own recorded configuration.
     pub fn active(&self) -> Vec<Switch> {
         self.applied.iter().copied().collect()
+    }
+}
+
+impl serde::Serialize for SwitchState {
+    /// The run record's `switches`: `{disabled: [...], probes: [...]}`,
+    /// names in registry order.
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let of = |disable: bool| -> Vec<&'static str> {
+            Switch::ALL
+                .iter()
+                .filter(|sw| sw.is_disable() == disable && self.switch_on(**sw))
+                .map(|sw| sw.name())
+                .collect()
+        };
+        let mut m = s.serialize_map(Some(2))?;
+        m.serialize_entry("disabled", &of(true))?;
+        m.serialize_entry("probes", &of(false))?;
+        m.end()
     }
 }
 

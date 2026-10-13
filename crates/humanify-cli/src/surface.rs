@@ -14,8 +14,16 @@
 //!   `-c5`); the only combined short form is the `-v` counter (`-vv`);
 //! - numbers are typed: a non-negative integer or a refusal (commander:
 //!   JavaScript `parseInt`, so `-c 12abc` ran at 12);
-//! - `--skip-libraries` with `--no-skip-libraries` is a conflict (both
-//!   still parse alone, until the library decision deletes them).
+//! - `--skip-libraries` with `--no-skip-libraries` was a conflict; both are
+//!   gone since the library decision (config sweep step 6: `[library]
+//!   unnamed`).
+//!
+//! Config sweep step 5 (2026-10-13): only the OPERATIONAL flags are flags
+//! — the input, `-o`, `--prior-version`, `--endpoint`, `--model`,
+//! `--config`, `-v`, and the ONE library decision (`--library-matching`,
+//! `--library-index`, step 6). Every other
+//! setting is a key in the `--config` TOML file; its old flag is refused
+//! naming the key ([`MOVED_FLAGS`]).
 //!
 //! Every launch the harness makes parses to the settings the commander
 //! port gave it (launch_parity_test.rs, captured from the port at
@@ -26,8 +34,7 @@
 use clap::{CommandFactory, FromArgMatches, Parser};
 use serde_json::Value;
 
-use crate::util::{DEFAULT_CONCURRENCY, DEFAULT_LLM_TIMEOUT_MS};
-use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
+use crate::config::{API_KEY_VAR, DEFAULT_ENDPOINT, DEFAULT_MODEL, DEFAULT_OUTPUT_DIR};
 
 /// package.json's version — the single source `-V` prints.
 pub fn package_version() -> String {
@@ -39,25 +46,19 @@ pub fn package_version() -> String {
         .to_string()
 }
 
-fn names<T: serde::Serialize>(values: &[T]) -> String {
-    values
-        .iter()
-        .map(|v| {
-            serde_json::to_value(v)
-                .ok()
-                .and_then(|j| j.as_str().map(str::to_string))
-                .unwrap_or_default()
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+fn endpoint_help() -> String {
+    format!(
+        "OpenAI-compatible API endpoint (default: {DEFAULT_ENDPOINT}). The API key is read \
+         from {API_KEY_VAR} (the environment or a .env file), never from a flag"
+    )
 }
 
-fn bundler_help() -> String {
-    format!("Force bundler type ({})", names(&SELECTABLE_BUNDLERS))
+fn model_help() -> String {
+    format!("Model identifier (default: {DEFAULT_MODEL})")
 }
 
-fn minifier_help() -> String {
-    format!("Force minifier type ({})", names(&SELECTABLE_MINIFIERS))
+fn output_help() -> String {
+    format!("Output directory (default: {DEFAULT_OUTPUT_DIR})")
 }
 
 /// The pipeline program: the input and its options.
@@ -73,39 +74,36 @@ struct PipelineCli {
     opts: CommandOptions,
 }
 
-/// The parsed options. Value options are typed here, once; `settings`
-/// resolves them against the environment.
+/// The parsed options, exactly as given: `None`/`false` is "not given".
+/// Only the OPERATIONAL flags are flags (config sweep step 5, Andrew
+/// 2026-10-13): what to read, where to write, which model, which config
+/// file. Every other setting is a key in the `--config` file (each moved
+/// flag is refused naming its key, [`MOVED_FLAGS`]). No default lives here
+/// — `crate::config` owns every default, resolves and validates the
+/// options ONCE into the run's `Config`, and nothing else reads these
+/// fields.
 #[derive(clap::Args, Clone, Debug, Default)]
 pub struct CommandOptions {
     #[arg(
         long,
-        value_name = "url",
-        default_value = "https://api.openai.com/v1",
-        help = "OpenAI-compatible API endpoint"
+        value_name = "file",
+        help = "TOML config file: every setting that is not a flag (see \
+                humanify.example.toml for each key, its default and meaning). A \
+                flag that disagrees with the file is refused"
     )]
-    pub endpoint: String,
+    pub config: Option<String>,
+    #[arg(short = 'o', long, value_name = "output", help = output_help())]
+    pub output_dir: Option<String>,
     #[arg(
         long,
-        value_name = "key",
-        help = "API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)"
+        value_name = "path",
+        help = "Path to a prior humanified file for cross-version rename reuse"
     )]
-    pub api_key: Option<String>,
-    #[arg(
-        short = 'm',
-        long,
-        value_name = "model",
-        default_value = "gpt-4o-mini",
-        help = "Model identifier"
-    )]
-    pub model: String,
-    #[arg(
-        short = 'o',
-        long,
-        value_name = "output",
-        default_value = "output",
-        help = "Output directory"
-    )]
-    pub output_dir: String,
+    pub prior_version: Option<String>,
+    #[arg(long, value_name = "url", help = endpoint_help())]
+    pub endpoint: Option<String>,
+    #[arg(short = 'm', long, value_name = "model", help = model_help())]
+    pub model: Option<String>,
     #[arg(
         short = 'v',
         long,
@@ -114,263 +112,84 @@ pub struct CommandOptions {
     )]
     pub verbose: u8,
     #[arg(
-        short = 'c',
         long,
-        value_name = "n",
-        default_value_t = u64::from(DEFAULT_CONCURRENCY),
-        help = "Max concurrent function-lane LLM requests. Module-lane size is set \
-                separately via --module-concurrency; the global in-flight cap is their sum."
+        value_name = "mode",
+        help = "Library matching: off (path/banner detection only, the default), report \
+                (also the library index lookup + graph discovery, reported; output \
+                unchanged), names (refused until an eval passes it)"
     )]
-    pub concurrency: u64,
+    pub library_matching: Option<String>,
     #[arg(
         long,
-        value_name = "n",
-        help = "Max concurrent module-lane LLM requests (default derived from -c)"
-    )]
-    pub module_concurrency: Option<u64>,
-    #[arg(long, value_name = "n", help = "Per-request completion token budget")]
-    pub max_tokens: Option<u64>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Model context window in tokens; sizes the batched split-naming \
-                prompts (default: 32768, the local measurement model's window)"
-    )]
-    pub context_tokens: Option<u64>,
-    #[arg(
-        long,
-        value_name = "passes",
-        help = "Comma-separated pass switches to turn OFF for ablation (unknown \
-                names are fatal and list the valid set)"
-    )]
-    pub disable: Option<String>,
-    #[arg(
-        long,
-        value_name = "probes",
-        help = "Comma-separated instrumentation probes to turn ON (unknown names \
-                are fatal and list the valid set)"
-    )]
-    pub probe: Option<String>,
-    #[arg(
-        long,
-        value_name = "n",
-        default_value_t = 3,
-        help = "Number of retry attempts for failed API calls"
-    )]
-    pub retries: u64,
-    #[arg(
-        long,
-        value_name = "ms",
-        default_value_t = DEFAULT_LLM_TIMEOUT_MS,
-        help = "LLM request timeout in milliseconds"
-    )]
-    pub timeout: u64,
-    #[arg(
-        long,
-        value_name = "dir",
-        help = "Cache LLM responses on disk keyed by request content. Repeated \
-                prompts become deterministic across sessions and reruns are nearly \
-                free — it also pins answers against a server whose replies drift \
-                between runs."
-    )]
-    pub llm_cache: Option<String>,
-    #[arg(
-        long,
-        value_name = "level",
-        help = "Reasoning effort for reasoning models: low, medium, or high (no env \
-                fallback; default: server-side default). 'low' is ~8x faster on \
-                gpt-oss at equal name quality; only set it for reasoning models — \
-                non-reasoning models (e.g. gpt-4o-mini) reject it."
-    )]
-    pub reasoning_effort: Option<String>,
-    // The two library spellings stay until the library decision (config
-    // sweep step 6) replaces both; together they are a conflict.
-    #[arg(
-        long,
-        conflicts_with = "no_skip_libraries",
-        help = "Skip library code instead of processing it with the LLM (the default)"
-    )]
-    pub skip_libraries: bool,
-    #[arg(long, help = "Process library code with the LLM")]
-    pub no_skip_libraries: bool,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Write debug logs to file (implies -vv)"
-    )]
-    pub log_file: Option<String>,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Write detailed rename diagnostics to JSON file"
-    )]
-    pub diagnostics: Option<String>,
-    /// The library fingerprint index discovery looks statement units up in
-    /// (report-only, with `--diagnostics`).
-    #[arg(
-        long,
-        value_name = "dir",
-        help = "Library fingerprint index for --diagnostics' libraryDiscovery \
-                (report-only: names, moves and renames nothing)"
+        value_name = "dir|id",
+        help = "The library fingerprint index (a directory, or an id under \
+                library.index_store); required unless --library-matching is off, \
+                refused with off"
     )]
     pub library_index: Option<String>,
-    #[arg(
-        long,
-        help = "List every claimed, vetoed, library-class and queued unit in \
-                --diagnostics' libraryDiscovery (default: totals and packages)"
-    )]
-    pub library_discovery_units: bool,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Write the deterministic match/rename breakdown as compact JSON \
-                (coverage + transfer stats + prior-match counts) for the eval harness"
-    )]
-    pub stats_json: Option<String>,
-    #[arg(
-        long,
-        value_name = "dir",
-        help = "Write the span-keyed decision-record dump to this directory \
-                (instrumentation). Inert by construction: the run's decisions are \
-                unchanged (proven by neutrality)."
-    )]
-    pub dump_artifacts: Option<String>,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Write the reason-labeled ask log (one JSONL row per LLM ask: scope, \
-                identifiers, wave/round, WHY it was asked) to this path. Recording \
-                only — no decision reads it; off unless passed."
-    )]
-    pub dump_asks: Option<String>,
-    #[arg(long, value_name = "type", help = bundler_help())]
-    pub bundler: Option<String>,
-    #[arg(long, value_name = "type", help = minifier_help())]
-    pub minifier: Option<String>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Identifiers per LLM batch (default: 25)"
-    )]
-    pub batch_size: Option<u64>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Per-identifier LLM call limit, initial + retries (default: 2; \
-                further conflicts resolve by suffixing)"
-    )]
-    pub max_retries: Option<u64>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Name-conflict re-ask limit: how many times a rejected rename \
-                suggestion may be re-asked, each retry disclosing every failed \
-                suggestion (default: 2). Independent of --max-retries — a \
-                barrier/sweep collision re-ask consumes this budget, not the \
-                in-window call limit"
-    )]
-    pub rename_retries: Option<u64>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Cross-lane collision retry limit (default: 100)"
-    )]
-    pub max_free_retries: Option<u64>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Min bindings to enable parallel lanes (default: 25)"
-    )]
-    pub lane_threshold: Option<u64>,
-    #[arg(
-        long,
-        help = "Split output into a multi-file tree (src/ + vendor/ + run scaffold), \
-                emitted as a runnable CommonJS module graph by default"
-    )]
-    pub split: bool,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Path to a prior humanified file for cross-version rename reuse"
-    )]
-    pub prior_version: Option<String>,
-    #[arg(
-        long,
-        help = "Disable the prior-diff reconcile pass (on by default with \
-                --prior-version: after generation, snap rename-noise diff hunks back \
-                to the prior version's names)"
-    )]
-    pub no_reconcile_prior_diff: bool,
-    #[arg(
-        long,
-        help = "Disable the deterministic naming floor (on by default: closes \
-                minted-token coverage gaps by class/function-expression inner-id \
-                derivation + decoration retry)"
-    )]
-    pub no_naming_floor: bool,
-    #[arg(
-        long,
-        help = "Disable the LLM sweep of minted survivors (on by default: LLM-names \
-                the params/decls/vars the naming floor cannot derive; prior names \
-                transfer first)"
-    )]
-    pub no_naming_floor_sweep: bool,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Prior split ledger for cross-release file-assignment inheritance \
-                (default: auto-discovered next to --prior-version)"
-    )]
-    pub split_ledger: Option<String>,
-    #[arg(
-        long,
-        help = "Emit the byte-exact review tree instead of the runnable CommonJS \
-                module graph (the --split default). Requires --split"
-    )]
-    pub split_pure: bool,
-    #[arg(
-        long,
-        value_name = "dir",
-        help = "Write a replayable rename ledger (every rename keyed by byte \
-                position) + source snapshot + a standalone apply.mjs, so the \
-                LLM-rename output can be reproduced without re-running the model"
-    )]
-    pub rename_ledger: Option<String>,
-    #[arg(
-        long,
-        help = "The conservative naming schedule: the relaxed levers OFF (each naming \
-                window waits for the previous one and for its own shadowed-binding \
-                round), the byte-identical parallelization kept. The DEFAULT is the \
-                relaxed schedule (both levers on); --sequential ships the \
-                pre-2026-09-28 default's bytes at the same --batch-size — for \
-                debugging and comparison"
-    )]
-    pub sequential: bool,
-    // NOT in the help: a lever-sizing knob, not a user knob. None = every
-    // lever.
-    #[arg(
-        long,
-        value_name = "levers",
-        hide = true,
-        help = "Comma-separated subset of the relaxed levers to turn on (default: \
-                every lever)"
-    )]
-    pub relaxed_levers: Option<String>,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Instrument: price this run's LLM schedule with cold per-call \
-                latencies on a virtual clock and write the simulated LLM wall time \
-                to <path> (JSON)"
-    )]
-    pub simulate_llm_latency: Option<String>,
-    #[arg(
-        long,
-        value_name = "path",
-        help = "Write a performance trace to JSON file (Chrome Trace Event format, \
-                viewable at chrome://tracing or ui.perfetto.dev)"
-    )]
-    pub perf_trace: Option<String>,
+}
+
+/// Flags MOVED into the config file (config sweep step 5, 2026-10-13; no
+/// backwards compatibility): `(old spelling, the key, the value a
+/// no-argument flag meant — empty for a flag that took a value)`. Each is
+/// refused naming its key, never aliased.
+pub const MOVED_FLAGS: &[(&str, &str, &str)] = &[
+    ("-c", "llm.concurrency", ""),
+    ("--concurrency", "llm.concurrency", ""),
+    ("--module-concurrency", "llm.module_concurrency", ""),
+    ("--max-tokens", "llm.max_tokens", ""),
+    ("--context-tokens", "llm.context_tokens", ""),
+    ("--retries", "llm.retries", ""),
+    ("--timeout", "llm.timeout_ms", ""),
+    ("--llm-cache", "llm.cache_dir", ""),
+    ("--reasoning-effort", "llm.reasoning_effort", ""),
+    ("--disable", "switches.disable", ""),
+    ("--probe", "switches.probe", ""),
+    ("--log-file", "diagnostics.log_file", ""),
+    ("--diagnostics", "diagnostics.diagnostics_file", ""),
+    ("--stats-json", "diagnostics.stats_json", ""),
+    ("--dump-artifacts", "diagnostics.dump_artifacts", ""),
+    ("--dump-asks", "diagnostics.dump_asks", ""),
+    ("--rename-ledger", "diagnostics.rename_ledger", ""),
+    ("--bundler", "unpack.bundler", ""),
+    ("--minifier", "unpack.minifier", ""),
+    ("--batch-size", "naming.batch_size", ""),
+    ("--max-retries", "naming.max_retries", ""),
+    ("--rename-retries", "naming.rename_retries", ""),
+    ("--max-free-retries", "naming.max_free_retries", ""),
+    ("--lane-threshold", "naming.lane_threshold", ""),
+    ("--sequential", "naming.schedule", "\"sequential\""),
+    ("--relaxed-levers", "naming.relaxed_levers", ""),
+    ("--no-naming-floor", "naming.naming_floor", "false"),
+    (
+        "--no-naming-floor-sweep",
+        "naming.naming_floor_sweep",
+        "false",
+    ),
+    (
+        "--no-reconcile-prior-diff",
+        "matching.reconcile_prior_diff",
+        "false",
+    ),
+    ("--split", "split.enabled", "true"),
+    ("--split-pure", "split.pure", "true"),
+    ("--split-ledger", "split.ledger", ""),
+    ("--perf-trace", "perf.perf_trace", ""),
+    ("--simulate-llm-latency", "perf.simulate_llm_latency", ""),
+    // The library decision (config sweep step 6): one setting, not two
+    // flags (docs/library-matching-config.md §2).
+    ("--skip-libraries", "library.unnamed", "\"leave\""),
+    ("--no-skip-libraries", "library.unnamed", "\"model\""),
+    ("--library-discovery-units", "library.report_units", "true"),
+];
+
+/// The refusal for a moved flag.
+fn moved_note(key: &str, example: &str) -> String {
+    if example.is_empty() {
+        format!("moved: set {key} in --config")
+    } else {
+        format!("moved: set {key} = {example} in --config")
+    }
 }
 
 /// Flags renamed or deleted by the config sweep (2026-10-13; no backwards
@@ -378,24 +197,42 @@ pub struct CommandOptions {
 /// the pipeline program, `Some(verb)` for a clap stage verb (main.rs).
 /// The old spelling is refused, naming its replacement, never aliased.
 pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
-    (None, "--profile", "renamed: use --perf-trace"),
+    (
+        None,
+        "--profile",
+        "renamed and moved: set perf.perf_trace in --config",
+    ),
+    (
+        None,
+        "--api-key",
+        "removed: set HUMANIFY_API_KEY in the environment — a secret never goes on the \
+         command line",
+    ),
     (
         None,
         "--naming-floor",
-        "removed: it restated the default (on); --no-naming-floor turns it off",
+        "removed: it restated the default (on); naming.naming_floor = false in --config \
+         turns it off",
     ),
     (
         None,
         "--naming-floor-sweep",
-        "removed: it restated the default (on); --no-naming-floor-sweep turns it off",
+        "removed: it restated the default (on); naming.naming_floor_sweep = false in \
+         --config turns it off",
     ),
     (
         None,
         "--reconcile-prior-diff",
         "removed: it restated the default (on with --prior-version); \
-         --no-reconcile-prior-diff turns it off",
+         matching.reconcile_prior_diff = false in --config turns it off",
     ),
     (Some("detect"), "--profile", "renamed: use --perf-trace"),
+    (
+        Some("discover"),
+        "--rule",
+        "moved: set library.lookup.agreement in a --config file (false = the structural \
+         rule)",
+    ),
     (Some("unpack"), "--index", "renamed: use --bundle-order"),
     (
         Some("match"),
@@ -410,10 +247,19 @@ pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
 pub fn retired_flag(verb: Option<&str>, args: &[String]) -> Option<String> {
     args.iter().take_while(|a| *a != "--").find_map(|arg| {
         let name = arg.split_once('=').map_or(arg.as_str(), |(n, _)| n);
-        RETIRED_FLAGS
+        let retired = RETIRED_FLAGS
             .iter()
             .find(|(v, flag, _)| *v == verb && *flag == name)
-            .map(|(_, flag, note)| format!("error: unexpected argument '{flag}' ({note})\n"))
+            .map(|(_, flag, note)| (*flag, note.to_string()));
+        let moved = || {
+            MOVED_FLAGS
+                .iter()
+                .find(|(flag, _, _)| verb.is_none() && *flag == name)
+                .map(|(flag, key, example)| (*flag, moved_note(key, example)))
+        };
+        retired
+            .or_else(moved)
+            .map(|(flag, note)| format!("error: unexpected argument '{flag}' ({note})\n"))
     })
 }
 

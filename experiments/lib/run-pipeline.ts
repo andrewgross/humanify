@@ -35,6 +35,7 @@ import {
 } from "./pipeline-bin.js";
 import {
   type BaseMode,
+  type PipelineConfigRecord,
   type RunManifest,
   manifestWarnings,
   type ProcSample,
@@ -144,28 +145,22 @@ function readProcTree(): ProcSample[] {
 }
 
 /**
- * Kill switches set in the environment we are about to hand to the child.
- *
- * Delegates to the registry's owner rather than matching on the `HUMANIFY_`
- * prefix, which over-reported: `HUMANIFY_MAX_TOKENS` is a token budget,
- * `HUMANIFY_AMBIGUITY_PROBE` is deliberately excluded from the registry, and
- * `HUMANIFY_STRIP_USING` is read by the emitted tree — none is a switch the
- * pipeline honours, and all three match the prefix. Under rule 10 a provenance
- * field naming switches the run did not honour is exactly the kind of lie the
- * manifest exists to prevent.
+ * The binary's configuration record: the `config` block of the stats file
+ * the run promised (an artifact ending `.stats.json`). Undefined when the
+ * run wrote none — a crash, or no `--stats-json` — and then the manifest
+ * says so (`pipeline-config-missing`) instead of guessing from the argv.
  */
-function switchesFromArgv(args: string[]): string[] {
-  // Since 2026-08-12 switches are CLI flags, and the pipeline runs as a
-  // CHILD process — the only true record of its switches is the argv this
-  // runner hands it. (In-process activeKillSwitches() would always read
-  // empty here; recording that would be the manifest lie rule 10 bans.)
-  const out: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--disable" || args[i] === "--probe") {
-      out.push(...(args[i + 1]?.split(",") ?? []));
-    }
+function pipelineConfigOf(cfg: RunConfig): PipelineConfigRecord | undefined {
+  const stats = cfg.artifacts.find((p) => p.endsWith(".stats.json"));
+  if (!stats || !fs.existsSync(stats)) return undefined;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(stats, "utf8")) as {
+      config?: PipelineConfigRecord;
+    };
+    return parsed.config;
+  } catch {
+    return undefined;
   }
-  return out.sort();
 }
 
 /**
@@ -239,6 +234,7 @@ async function main(): Promise<void> {
   fs.closeSync(out);
 
   const entriesAfter = countFiles(cfg.cacheDir);
+  const resolved = pipelineConfigOf(cfg);
 
   // Where the split put things. Written by the pipeline beside the ledger;
   // read here so one manifest answers "what happened" including placement,
@@ -288,7 +284,9 @@ async function main(): Promise<void> {
       model: cfg.model,
       reasoningEffort: cfg.reasoningEffort,
       concurrency: cfg.concurrency,
-      killSwitches: switchesFromArgv(cfg.args),
+      // The binary's own record of its configuration — never re-derived
+      // from the argv this runner handed it.
+      ...(resolved ? { resolved } : {}),
       // Counted ONCE: two separate walks could disagree and produce a
       // `written` that matches neither endpoint.
       cache: {

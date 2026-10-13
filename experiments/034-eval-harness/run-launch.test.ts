@@ -31,6 +31,21 @@ import { describe, it } from "node:test";
  * the launches carried (and the run configs' `heapMb`) were deleted with
  * `--heap-mb`; both goldens were re-recorded and differ ONLY there — every
  * argv is byte-identical to the one the references were scored by.
+ *
+ * Config sweep step 4 (2026-10-13): `--api-key` was retired — the binary
+ * reads HUMANIFY_API_KEY only, and run.sh exports it. Both goldens were
+ * re-recorded: every launch line loses `--api-key local` and records the
+ * key it inherited (`HUMANIFY_API_KEY=local`); nothing else moved.
+ *
+ * Config sweep step 5 (2026-10-13): the binary takes only its operational
+ * flags; every other setting is a key in a `--config` TOML file run.sh
+ * writes per launch (experiments/lib/pipeline-config.ts). Both goldens
+ * were re-recorded: each launch line keeps input, `--endpoint`, `--model`,
+ * `-o`, `--prior-version` and `-vv` and passes `--config <file>`, and the
+ * recorder logs that file under it (`humanify-config|` lines; each run
+ * config carries it as `configToml`). The moved flags' VALUES are
+ * unchanged — launch_parity_test.rs proves every golden launch resolves to
+ * the effective settings of the launch it replaced.
  */
 
 const HERE = import.meta.dirname;
@@ -52,14 +67,26 @@ const PAIRS: Array<[string, string]> = JSON.parse(
  */
 const RECORDER = String.raw`#!/usr/bin/env bash
 LOG="$RECORDER_ROOT/calls.log"
-echo "$(basename "$0") NODE_OPTIONS=${"$"}{NODE_OPTIONS:-} :: $(printf '%q ' "$@")" >> "$LOG"
+echo "$(basename "$0") NODE_OPTIONS=${"$"}{NODE_OPTIONS:-} HUMANIFY_API_KEY=${"$"}{HUMANIFY_API_KEY:-} :: $(printf '%q ' "$@")" >> "$LOG"
+config_of() {
+  local prev=""
+  for a in "$@"; do
+    [[ "$prev" == "--config" ]] && { echo "$a"; return; }
+    prev="$a"
+  done
+}
+# The pipeline's --config file, logged under its launch line.
+cfg="$(config_of "$@")"
+if [[ "$(basename "$0")" != "npx" && -n "$cfg" && -f "$cfg" ]]; then
+  sed 's/^/humanify-config| /; s/ $//' "$cfg" >> "$LOG"
+fi
 write_tree() {
   local out="" cache="" prev=""
   for a in "$@"; do
     [[ "$prev" == "-o" ]] && out="$a"
-    [[ "$prev" == "--llm-cache" ]] && cache="$a"
     prev="$a"
   done
+  [[ -n "$cfg" && -f "$cfg" ]] && cache="$(sed -n 's/^cache_dir = "\(.*\)"$/\1/p' "$cfg")"
   [[ -n "$out" ]] || return 0
   mkdir -p "$out/.humanify"
   echo "bundle" > "$out/.humanify/humanified.js"
@@ -73,7 +100,7 @@ write_tree() {
 }
 if [[ "$(basename "$0")" != "npx" ]]; then write_tree "$@"; exit 0; fi
 case "$*" in
-  *pipeline-bin.ts*) exec "$RECORDER_REAL_NPX" "$@" ;;
+  *pipeline-bin.ts*|*pipeline-config.ts*) exec "$RECORDER_REAL_NPX" "$@" ;;
   *run-pipeline.ts*)
     cfg="${"$"}{@: -1}"
     cp "$cfg" "$RECORDER_ROOT/runcfg-$(jq -r .version "$cfg").json"
@@ -128,7 +155,9 @@ function launchesOf(root: string, label: string): string {
   const calls = fs
     .readFileSync(path.join(root, "calls.log"), "utf8")
     .split("\n")
-    .filter((l) => /src\/index\.ts|^humanify |^cargo /.test(l));
+    .filter((l) =>
+      /src\/index\.ts|^humanify |^humanify-config\||^cargo /.test(l)
+    );
   const cfgs = fs
     .readdirSync(root)
     .filter((f) => f.startsWith("runcfg-"))
@@ -190,6 +219,8 @@ function runHarness(
           ...process.env,
           PATH: `${shims}:${process.env.PATH ?? ""}`,
           NODE_OPTIONS: "",
+          // Never inherited: run.sh must export the key itself.
+          HUMANIFY_API_KEY: "",
           RECORDER_ROOT: root,
           RECORDER_REAL_NPX: realNpx(),
           ...Object.fromEntries(
@@ -475,51 +506,65 @@ describe("run.sh pipeline launches", () => {
     assert.strictEqual(hop.warm.ok, false);
   });
 
-  it("--pipeline-arg reaches ALL THREE launch sites, appended once each, in order", () => {
+  it("--pipeline-set reaches ALL THREE launch sites' config files, once each, in order", () => {
     const h = runHarness([
       "--bin",
       "<TMP>/shims/humanify",
       "--force-mixed",
-      "--pipeline-arg",
-      "--sequential",
-      "--pipeline-arg",
-      "--batch-size",
-      "--pipeline-arg",
-      "10"
+      "--pipeline-set",
+      "naming.schedule=sequential",
+      "--pipeline-set",
+      "naming.batch_size=10"
     ]);
     assert.strictEqual(h.status, 0, h.stdout);
     const bin = h.launches.split("\n").filter((l) => l.startsWith("humanify "));
-    // 4 rebases + cold + warm self-hop, each carrying the args once.
+    // 4 rebases + cold + warm self-hop, each with its own config file.
     assert.strictEqual(bin.length, 6, h.launches);
-    for (const l of bin) {
+    for (const l of bin)
+      assert.match(l, /--config <TMP>\/work\/<LABEL>\/\S+\.toml/);
+    // Each launch's file carries the settings once, after the harness's.
+    const blocks = h.launches.split(/^humanify /m).slice(1);
+    assert.strictEqual(blocks.length, 6);
+    for (const b of blocks) {
       assert.strictEqual(
-        l.match(/--sequential --batch-size 10/g)?.length,
+        b.match(
+          /humanify-config\| \[naming\]\nhumanify-config\| schedule = "sequential"\nhumanify-config\| batch_size = 10$/m
+        )?.length,
         1,
-        l
+        b
       );
     }
-    // The scored legs' run configs carry them as trailing argv.
+    // The scored legs' run configs carry the file's text.
     const cfgs = h.launches.match(
-      /"--sequential",\s*"--batch-size",\s*"10"\s*\]/g
+      /"configToml": ".*\[naming\]\\nschedule = \\"sequential\\"\\nbatch_size = 10\\n"/g
     );
     assert.strictEqual(cfgs?.length, 4, h.launches);
     // The label's pipeline record names them (a label scored with extra
-    // args must not read as the default pipeline).
+    // settings must not read as the default pipeline).
     assert.match(
       h.results,
-      /pipeline\.json: .*"pipelineArgs":\["--sequential","--batch-size","10"\]/
+      /pipeline\.json: .*"pipelineSettings":\["naming\.schedule=sequential","naming\.batch_size=10"\]/
     );
   });
 
-  it("--pipeline-arg without a value is refused before anything launches", () => {
-    const h = runHarness([
-      "--bin",
-      "<TMP>/shims/humanify",
-      "--force-mixed",
-      "--pipeline-arg"
-    ]);
-    assert.strictEqual(h.status, 2, h.stdout);
-    assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
+  it("--pipeline-set refusals happen before anything launches", () => {
+    for (const bad of [
+      ["--pipeline-set"],
+      ["--pipeline-set", "nodot=1"],
+      // A key the harness sets itself: two layers disagreeing.
+      ["--pipeline-set", "llm.concurrency=8"],
+      // Retired: the settings are config keys now.
+      ["--pipeline-arg", "--sequential"]
+    ]) {
+      const h = runHarness([
+        "--bin",
+        "<TMP>/shims/humanify",
+        "--force-mixed",
+        ...bad
+      ]);
+      assert.strictEqual(h.status, 2, `${bad}: ${h.stdout}`);
+      assert.strictEqual(h.launches, "", "nothing may launch after a refusal");
+    }
   });
 
   it("a --pairs subset self-hops the LAST SCORED pair, not pairs.json's last", () => {

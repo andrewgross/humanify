@@ -124,6 +124,9 @@ source "$REPO/experiments/lib/llm-endpoint.sh"
 ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
+# The binary reads its API key from HUMANIFY_API_KEY only (config sweep
+# step 4, 2026-10-13: `--api-key` was retired).
+export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 
@@ -195,6 +198,13 @@ else
   PIPE_DESC=$(jq -cn --arg tree "$TS_TREE" --arg c "$TS_COMMIT" --argjson d "$TS_DIRTY" \
     --arg srcSha "$SRC_SHA" --argjson cmd "$PIPE_CMD_JSON" \
     '{kind:"ts", tree:$tree, commit:$c, dirty:$d, srcSha256:$srcSha, command:$cmd}')
+fi
+
+# How a hop passes its settings: a --config file when the pipeline reads one
+# (asked of the pipeline itself), else the flags it takes.
+CONFIG_FILE_LAUNCH=0
+if [[ "$PIPELINE" == "rust" ]] && "$FROZEN" --help 2>/dev/null | grep -q -- '--config <file>'; then
+  CONFIG_FILE_LAUNCH=1
 fi
 
 # PREFLIGHT: the pipeline must at least start. A TS tree whose node_modules
@@ -303,11 +313,26 @@ for V in "${VERSIONS[@]}"; do
   rm -rf "$TREE"
   STATS="$OUT/runs/$V.stats.json"
   rm -f "$STATS"
-  ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --split \
-    --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
-    --reasoning-effort "$EFFORT" -c "$CONC" -o "$TREE" \
-    ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} --stats-json "$STATS" \
-    -vv --log-file "$OUT/runs/$V.log" | jq -R . | jq -s .)
+  if [[ "$CONFIG_FILE_LAUNCH" == "1" ]]; then
+    # The binary takes only its operational flags; every other setting is
+    # a key in the hop's --config file (config sweep step 5, 2026-10-13).
+    HOP_TOML="$OUT/runs/$V.toml"
+    npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$HOP_TOML" \
+      "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" split.enabled=true \
+      "diagnostics.stats_json=$STATS" "diagnostics.log_file=$OUT/runs/$V.log" \
+      || { echo "walk.sh: could not write $HOP_TOML — aborting" >&2; exit 1; }
+    ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --config "$HOP_TOML" \
+      --endpoint "$ENDPOINT" --model "$MODELNAME" -o "$TREE" \
+      ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} -vv | jq -R . | jq -s .)
+  else
+    # The archived TS tree, or a binary from before config sweep step 5:
+    # the same settings as the flags they take.
+    ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --split \
+      --endpoint "$ENDPOINT" --model "$MODELNAME" \
+      --reasoning-effort "$EFFORT" -c "$CONC" -o "$TREE" \
+      ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} --stats-json "$STATS" \
+      -vv --log-file "$OUT/runs/$V.log" | jq -R . | jq -s .)
+  fi
   RUN_CFG="$OUT/runs/$V.runcfg.json"
   jq -n --arg pair "${PRIOR_V:-COLD}->$V" --arg version "$V" \
     --arg runLabel "walk-$PIPELINE" --arg resultsDir "$OUT/runs" \

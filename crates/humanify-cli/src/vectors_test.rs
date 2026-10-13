@@ -19,7 +19,7 @@ use crate::progress::{LineRenderer, ProgressRenderer, TtyRenderer};
 use crate::report::{
     report_internal_errors, report_parse_failures, report_semantic_failures, report_vendor_naming,
 };
-use crate::unified::{CommandOptions, check_flag_invariants};
+use crate::surface::CommandOptions;
 use crate::writers::{PlacementStats, StageHashes, stage_fingerprint};
 use humanify_model::jsshape::JsType;
 
@@ -275,78 +275,107 @@ fn selection_matches_the_resolved_toolchain() {
     assert_eq!(cases.len(), 30);
 }
 
-fn opts_of(v: &Value) -> CommandOptions {
-    let s = |k: &str| v.get(k).and_then(Value::as_str).map(str::to_string);
-    let b = |k: &str| v.get(k).and_then(Value::as_bool);
-    CommandOptions {
-        split: b("split").unwrap_or(false),
-        split_pure: b("splitPure").unwrap_or(false),
-        split_ledger: s("splitLedger"),
-        bundler: s("bundler"),
-        minifier: s("minifier"),
-        ..CommandOptions::default()
-    }
+/// The vectors' option record as the config file it now is (config sweep
+/// step 5: these were flags; they are `[split]`/`[unpack]` keys).
+fn toml_of(v: &Value) -> String {
+    let mut out = String::new();
+    let mut section = |name: &str, keys: &[(&str, &str)]| {
+        let set: Vec<String> = keys
+            .iter()
+            .filter_map(|(json, key)| v.get(*json).map(|x| format!("{key} = {x}\n")))
+            .collect();
+        if !set.is_empty() {
+            out.push_str(&format!("[{name}]\n{}", set.concat()));
+        }
+    };
+    section(
+        "split",
+        &[
+            ("split", "enabled"),
+            ("splitPure", "pure"),
+            ("splitLedger", "ledger"),
+        ],
+    );
+    section(
+        "unpack",
+        &[("bundler", "bundler"), ("minifier", "minifier")],
+    );
+    out
+}
+
+/// Every refusal of a configuration, the file's own prefix dropped.
+fn violations(toml: &str) -> Vec<String> {
+    let f = crate::config::ConfigFile::parse("cfg.toml", toml).expect("TOML");
+    let o = CommandOptions::default();
+    let mut v = match crate::config::Config::build("in.js", &o, Some(&f), |_| Some("k".into())) {
+        Ok(_) => Vec::new(),
+        Err(e) => e
+            .into_iter()
+            .map(|m| m.trim_start_matches("cfg.toml: ").to_string())
+            .collect(),
+    };
+    v.sort();
+    v
+}
+
+/// A TS-era message, in today's names: the flags became keys, and an
+/// empty value is refused rather than silently "unset".
+fn renamed(m: &str) -> String {
+    m.replace("--split-pure", "split.pure")
+        .replace("--split-ledger", "split.ledger")
+        .replace("--split", "split.enabled")
+        .replace("--bundler", "unpack.bundler")
+        .replace("--minifier", "unpack.minifier")
 }
 
 #[test]
 fn flag_invariants_match() {
     let v = vectors();
     for case in v["invariants"].as_array().unwrap() {
-        assert_eq!(
-            check_flag_invariants(&opts_of(&case["opts"])),
-            strs(&case["violations"]),
-            "{case}"
-        );
+        let toml = toml_of(&case["opts"]);
+        let mut want: Vec<String> = strs(&case["violations"])
+            .iter()
+            .map(|m| renamed(m))
+            .collect();
+        // One deliberate change: an EMPTY value is refused (config sweep
+        // step 4) — the TS treated an empty ledger as unset and an empty
+        // bundler as an unknown name.
+        if case["opts"]["splitLedger"] == "" {
+            want.push("split.ledger must not be empty".to_string());
+        }
+        if case["opts"]["bundler"] == "" {
+            want = vec!["unpack.bundler must not be empty".to_string()];
+        }
+        want.sort();
+        assert_eq!(violations(&toml), want, "{case}");
     }
 }
 
 // ---- unified.test.ts, fixture for fixture ---------------------------------
 
-fn plain() -> CommandOptions {
-    CommandOptions::default()
-}
-
 #[test]
 fn unified_test_plain_run_has_no_violations() {
-    assert!(check_flag_invariants(&plain()).is_empty());
+    assert!(violations("").is_empty());
 }
 
 #[test]
 fn unified_test_split_dependents_require_split() {
-    let pure = CommandOptions {
-        split_pure: true,
-        ..plain()
-    };
-    assert_eq!(
-        check_flag_invariants(&pure),
-        ["--split-pure requires --split"]
-    );
-    let ledger = CommandOptions {
-        split_ledger: Some("ledger.json".into()),
-        ..plain()
-    };
-    assert_eq!(
-        check_flag_invariants(&ledger),
-        ["--split-ledger requires --split"]
-    );
-    for mut o in [pure, ledger] {
-        o.split = true;
-        assert!(check_flag_invariants(&o).is_empty());
+    let pure = "[split]\npure = true\n";
+    assert_eq!(violations(pure), ["split.pure requires split.enabled"]);
+    let ledger = "[split]\nledger = \"ledger.json\"\n";
+    assert_eq!(violations(ledger), ["split.ledger requires split.enabled"]);
+    for t in [pure, ledger] {
+        assert!(violations(&format!("{t}enabled = true\n")).is_empty());
     }
 }
 
 #[test]
-fn unified_test_every_violation_at_once_in_flag_order() {
-    let o = CommandOptions {
-        split_pure: true,
-        split_ledger: Some("ledger.json".into()),
-        ..plain()
-    };
+fn unified_test_every_violation_at_once() {
     assert_eq!(
-        check_flag_invariants(&o),
+        violations("[split]\npure = true\nledger = \"ledger.json\"\n"),
         [
-            "--split-pure requires --split",
-            "--split-ledger requires --split"
+            "split.ledger requires split.enabled",
+            "split.pure requires split.enabled"
         ]
     );
 }
@@ -361,41 +390,23 @@ fn unified_test_enum_flag_values() {
         "parcel",
         "bun",
     ] {
-        let o = CommandOptions {
-            bundler: Some(b.into()),
-            ..plain()
-        };
-        assert!(check_flag_invariants(&o).is_empty());
+        assert!(violations(&format!("[unpack]\nbundler = \"{b}\"\n")).is_empty());
     }
     for m in ["terser", "esbuild", "swc", "bun", "none"] {
-        let o = CommandOptions {
-            minifier: Some(m.into()),
-            ..plain()
-        };
-        assert!(check_flag_invariants(&o).is_empty());
+        assert!(violations(&format!("[unpack]\nminifier = \"{m}\"\n")).is_empty());
     }
-    let bad = CommandOptions {
-        split_pure: true,
-        bundler: Some("foobar".into()),
-        minifier: Some("gzip".into()),
-        ..plain()
-    };
     assert_eq!(
-        check_flag_invariants(&bad),
+        violations("[split]\npure = true\n[unpack]\nbundler = \"foobar\"\nminifier = \"gzip\"\n"),
         [
-            "--split-pure requires --split",
-            "--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"foobar\")",
-            "--minifier must be one of: terser, esbuild, swc, bun, none (got \"gzip\")"
+            "split.pure requires split.enabled",
+            "unpack.bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"foobar\")",
+            "unpack.minifier must be one of: terser, esbuild, swc, bun, none (got \"gzip\")"
         ]
     );
-    let sentinel = CommandOptions {
-        bundler: Some("unknown".into()),
-        ..plain()
-    };
     assert_eq!(
-        check_flag_invariants(&sentinel),
+        violations("[unpack]\nbundler = \"unknown\"\n"),
         [
-            "--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"unknown\")"
+            "unpack.bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"unknown\")"
         ]
     );
 }

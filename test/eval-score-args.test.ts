@@ -6,43 +6,49 @@ import { describe, it } from "node:test";
 import { guardBaseMode, scoreArgs } from "../scripts/eval.js";
 
 /**
- * `eval score`'s flag parsing: what reaches run.sh. `--pipeline-arg` is the
- * one flag whose VALUE may itself start with `--` (it is a pipeline flag,
- * e.g. `--sequential`), and it repeats in order — run-launch.test.ts proves
- * run.sh appends the args at every launch site.
+ * `eval score`'s flag parsing: what reaches run.sh. `--pipeline-set` is a
+ * pipeline setting (`section.key=value`, a --config key since config sweep
+ * step 5), validated here and repeated in order — run-launch.test.ts
+ * proves run.sh writes them into every launch's config file.
  */
 describe("eval score argument passthrough", () => {
-  it("passes --pipeline-arg values through in order, even when they look like flags", () => {
+  it("passes --pipeline-set values through in order", () => {
     const r = scoreArgs([
       "lbl",
-      "--pipeline-arg",
-      "--sequential",
+      "--pipeline-set",
+      "naming.schedule=sequential",
       "--pairs",
       "85->86",
-      "--pipeline-arg",
-      "--batch-size",
-      "--pipeline-arg",
-      "10"
+      "--pipeline-set",
+      "naming.batch_size=10"
     ]);
     assert.ok(typeof r !== "string", String(r));
     assert.strictEqual(r.label, "lbl");
     assert.deepStrictEqual(r.passthrough, [
-      "--pipeline-arg",
-      "--sequential",
+      "--pipeline-set",
+      "naming.schedule=sequential",
       "--pairs",
       "85->86",
-      "--pipeline-arg",
-      "--batch-size",
-      "--pipeline-arg",
-      "10"
+      "--pipeline-set",
+      "naming.batch_size=10"
     ]);
   });
 
-  it("refuses --pipeline-arg without a value", () => {
-    assert.strictEqual(
-      typeof scoreArgs(["lbl", "--pipeline-arg"]),
-      "string",
-      "a dangling --pipeline-arg must be refused"
+  it("refuses --pipeline-set without a value, or with a malformed one", () => {
+    for (const bad of [
+      ["lbl", "--pipeline-set"],
+      ["lbl", "--pipeline-set", "--sequential"],
+      ["lbl", "--pipeline-set", "nodot=1"],
+      ["lbl", "--pipeline-set", "naming.batch_size"]
+    ]) {
+      assert.strictEqual(typeof scoreArgs(bad), "string", bad.join(" "));
+    }
+  });
+
+  it("refuses the retired --pipeline-arg, naming its replacement", () => {
+    assert.match(
+      String(scoreArgs(["lbl", "--pipeline-arg", "--sequential"])),
+      /--pipeline-set/
     );
   });
 
@@ -53,7 +59,7 @@ describe("eval score argument passthrough", () => {
     );
   });
 
-  it("without --pipeline-arg the passthrough is exactly the parsed flags", () => {
+  it("without --pipeline-set the passthrough is exactly the parsed flags", () => {
     const r = scoreArgs(["lbl", "--force-mixed", "--bin", "b"]);
     assert.ok(typeof r !== "string");
     assert.deepStrictEqual(r.passthrough, ["--force-mixed", "--bin", "b"]);
