@@ -231,7 +231,8 @@ describe("eval neutrality argument parsing", () => {
       cache: "/work/neutrality-cache",
       priors: "/work/exp050-cold",
       inputsBase: PAIRS.inputsBase,
-      endpoint: null
+      endpoint: null,
+      pipelineSettings: []
     });
     // The trap CLAUDE.md names: a new workdir moves the cache with it.
     const moved = neutralityArgs([
@@ -265,6 +266,39 @@ describe("eval neutrality argument parsing", () => {
     assert.strictEqual(r.priors, "/work/exp050-cold");
     assert.strictEqual(r.inputsBase, "/i");
     assert.strictEqual(r.endpoint, "http://127.0.0.1:9/v1");
+  });
+
+  it("records --pipeline-set entries in order, for BOTH legs' config file", () => {
+    const r = neutralityArgs([
+      "372221a0",
+      "2.1.215:2.1.216",
+      "--pipeline-set",
+      "library.matching=report",
+      "--pipeline-set",
+      "library.index=/work/ix"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.pipelineSettings, [
+      "library.matching=report",
+      "library.index=/work/ix"
+    ]);
+  });
+
+  it("refuses a --pipeline-set that names a key the harness sets itself, or is malformed", () => {
+    for (const bad of [
+      ["main", "--pipeline-set", "split.enabled=false"],
+      ["main", "--pipeline-set", "llm.cache_dir=/tmp/cold"],
+      ["main", "--pipeline-set", "library.matching"],
+      [
+        "main",
+        "--pipeline-set",
+        "library.matching=report",
+        "--pipeline-set",
+        "library.matching=off"
+      ]
+    ]) {
+      assert.strictEqual(typeof neutralityArgs(bad), "string", bad.join(" "));
+    }
   });
 
   it("refuses a missing baseline, a malformed pair, an extra positional, and the deleted per-leg commands", () => {

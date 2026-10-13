@@ -3,7 +3,7 @@
 # Prove a change emits IDENTICAL BYTES — the right gate for a refactor.
 #
 #   npm run eval -- neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D]
-#                                [--inputs-base D] [--endpoint URL]
+#                                [--inputs-base D] [--endpoint URL] [--pipeline-set k=v]...
 #   npm run eval -- neutrality main 2.1.215:2.1.216 --cache /work/neutrality-cache
 #   (which runs: experiments/lib/neutrality.sh <run-config.json>)
 #
@@ -57,6 +57,9 @@ set -uo pipefail
 #   priors        root holding the prior trees (default <workdir>/exp050-cold)
 #   inputsBase    pairs.json inputsBase unless --inputs-base
 #   endpoint      --endpoint, or null: .humanify.local.json (llm-endpoint.sh)
+#   pipelineSettings  --pipeline-set entries (section.key=value), written into
+#                 BOTH legs' --config file after the harness's own keys (e.g.
+#                 library.matching=report: prove report mode changes no byte)
 #
 # Each leg runs the Rust binary built from ITS commit: the candidate from this
 # checkout, the baseline from a detached worktree of <baseline-ref> (each
@@ -83,6 +86,10 @@ CACHE=$(run_config .cache)
 PRIOR_ROOT=$(run_config .priors)
 INPUTS=$(run_config .inputsBase)
 ENDPOINT_OVERRIDE=$(run_config .endpoint)
+PIPELINE_SETS=()
+while IFS= read -r entry; do
+  [[ -n "$entry" ]] && PIPELINE_SETS+=("$entry")
+done < <(jq -r '(.pipelineSettings // [])[]' "$RUN_CONFIG")
 mkdir -p "$WORK"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -149,6 +156,7 @@ BASE_SHA="$(git rev-parse --short "$BASELINE")"
 
 echo "=== neutrality: $CANDIDATE_NAME ($CANDIDATE_REF) vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
 echo "    run config: $RUN_CONFIG"
+[[ ${#PIPELINE_SETS[@]} -gt 0 ]] && echo "    both legs: ${PIPELINE_SETS[*]}"
 if [[ "$CANDIDATE_REF" == "$BASE_SHA" ]]; then
   echo "FATAL: candidate and baseline are the same commit — nothing to compare." >&2
   exit 1
@@ -170,10 +178,14 @@ leg_flags() {
     local toml="$WORK/neutrality-$label.toml"
     npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$toml" \
       "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" split.enabled=true \
-      "llm.cache_dir=$CACHE" || return 1
+      "llm.cache_dir=$CACHE" ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"} || return 1
     LEG_FLAGS=(--config "$toml" --endpoint "$ENDPOINT" --model "$MODELNAME" \
       -o "$out" --prior-version "$PRIOR")
   else
+    if [[ ${#PIPELINE_SETS[@]} -gt 0 ]]; then
+      echo "FATAL: leg $label's binary takes no --config file; --pipeline-set cannot reach it" >&2
+      return 1
+    fi
     LEG_FLAGS=(--split --endpoint "$ENDPOINT" --model "$MODELNAME" \
       --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
       --llm-cache "$CACHE" --prior-version "$PRIOR")
