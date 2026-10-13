@@ -1,0 +1,64 @@
+{
+ "bundleSha256": "a25f285b7707aca21442cf640baa30e23da5108ef9991ad6925d2cbc0e6bc8ba",
+ "claimedBytes": {
+  "right": 20658
+ },
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_appium-12c815",
+ "exploratory": {
+  "names": {
+   "bindings": 254,
+   "bindingsSameVersion": 254,
+   "bindingsVersionKnown": 254,
+   "exactBytes": 20123,
+   "exactUnits": 31,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "bfb9d80adc0d65d7b6c1ee02d1b947b6493e1ef68d9c9602b1edcecc3aadc8ce",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 16969,
+  "recall": 0.239892,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-ccexact-agreement",
+ "missBytes": {
+  "a": 12837,
+  "c": 8652,
+  "d-file": 190,
+  "e-agree": 23863,
+  "e-ambig": 693,
+  "e-support": 531,
+  "e-veto": 3312
+ },
+ "noDiscovery": null,
+ "reportSha256": "99176d296ca4ef2009c79c2e5b716b9a8986963281321b9108fd546c87b4c138",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 24,
+  "library": 70736
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 70736,
+  "namedBytes": 20658,
+  "recall": 0.292044,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

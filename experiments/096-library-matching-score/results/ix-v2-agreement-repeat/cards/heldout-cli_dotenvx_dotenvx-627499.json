@@ -1,0 +1,60 @@
+{
+ "bundleSha256": "b37c5790ef676d5721cdf099631b42b2b0332b26e311065ccf33d0b5f3ef1bff",
+ "claimedBytes": {
+  "right": 1358
+ },
+ "detected": {
+  "bundler": "unknown",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_dotenvx_dotenvx-627499",
+ "exploratory": {
+  "names": {
+   "bindings": 12,
+   "bindingsSameVersion": 12,
+   "bindingsVersionKnown": 12,
+   "exactBytes": 1232,
+   "exactUnits": 2,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 989,
+  "recall": 0.176544,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "ix-v2-agreement-repeat",
+ "missBytes": {
+  "a": 4201,
+  "c": 43
+ },
+ "noDiscovery": null,
+ "reportSha256": "7eb01f648c61c630cb4fbaa0c41d9272c2aea31f30f97b11d701be90c018cf80",
+ "rule": "agreement",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 23,
+  "<self>": 1160,
+  "library": 5602
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 5602,
+  "namedBytes": 1358,
+  "recall": 0.242413,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}
