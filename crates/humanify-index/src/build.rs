@@ -43,8 +43,11 @@ const PURITY: f64 = 0.9;
 /// What a module shard's unit rows are, beyond the fingerprint: 2 = rows
 /// of pre-bundled ("sponge") files are dropped ([`sponge_evidence`], exp097
 /// step 3); 3 = the same rows, and the shard's notes now record the drops
-/// (2's shards carried empty sponge notes). In every module shard's key.
-pub const UNIT_ROWS_VERSION: &str = "unit-rows/3";
+/// (2's shards carried empty sponge notes); 4 = no file-name evidence, and
+/// only a strict module-marker comment counts (2/3 dropped right rows:
+/// esquery's own min build, glob comments that mention node_modules). In
+/// every module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/4";
 
 /// Units smaller than this are not indexed (the lab's unit votes counted
 /// units of >= 20 nodes; the lookup's own floor is higher).
@@ -748,15 +751,13 @@ pub fn unit_rows(
 
 /// Why a package's source file is a pre-bundled copy of OTHER packages
 /// ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the file
-/// itself; None for the package's own code. In order: a pre-bundled file
-/// name ([`is_sponge_file`], the literal table's rule), a vendored directory,
-/// a bundler module marker naming another package's `node_modules` path
-/// (esbuild / Bun `// node_modules/x/…`, rolldown `//#region
-/// ../node_modules/x/…`, webpack `/***/ "./node_modules/x/…"`).
+/// itself; None for the package's own code. In order: a vendored directory,
+/// then a bundler MODULE MARKER naming another package's `node_modules`
+/// path ([`module_marker_path`]). A file NAME is not evidence here (unlike
+/// the literal table's [`is_sponge_file`]): a package's own minified build
+/// is its own code — esquery's main IS `dist/esquery.min.js` (measured:
+/// the name rule cost 74 KB of right esquery claims on the held-out apps).
 pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&'static str> {
-    if is_sponge_file(&owner.file) {
-        return Some("file-name");
-    }
     let vendored = ["vendor", "vendored", "third_party", "third-party"];
     let mut parts = owner.file.split('/').collect::<Vec<_>>();
     let name = parts.pop().unwrap_or_default();
@@ -768,24 +769,48 @@ pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&
     }
     let text = std::fs::read_to_string(path).ok()?;
     text.lines()
-        .map(str::trim_start)
-        .filter(|l| l.starts_with("//") || l.starts_with("/*"))
-        .filter_map(|l| marker_package(l))
+        .filter_map(module_marker_path)
+        .filter_map(marker_package)
         .any(|p| p != owner.package)
         .then_some("bundler-marker")
 }
 
-/// The package a comment line's LAST `node_modules/` path names.
-fn marker_package(line: &str) -> Option<&str> {
-    let at = line.rfind("node_modules/")? + "node_modules/".len();
-    let rest = &line[at..];
-    let end = |s: &str| s.find(|c: char| c == '/' || c == '"' || c == '\'' || c.is_whitespace());
-    let first = end(rest).map_or(rest, |i| &rest[..i]);
+/// The module path a bundler's module-boundary comment names, when the
+/// line IS one (not prose that mentions a path — glob's comments on
+/// ignoring `node_modules` are not markers): esbuild / Bun `// <path>` (the
+/// whole comment one source path), rolldown `//#region <path>`, webpack
+/// `/***/ "<path>":` and `/*!*** <path> ***!*/`.
+fn module_marker_path(line: &str) -> Option<&str> {
+    let l = line.trim();
+    let path = if let Some(rest) = l.strip_prefix("//#region ") {
+        rest.trim()
+    } else if let Some(rest) = l.strip_prefix("/*!*** ") {
+        rest.strip_suffix("***!*/")?.trim()
+    } else if let Some(rest) = l.strip_prefix("/***/ ") {
+        let rest = rest.trim().strip_suffix(':')?.trim();
+        rest.strip_prefix('"')
+            .and_then(|r| r.strip_suffix('"'))
+            .or_else(|| rest.strip_prefix('\'').and_then(|r| r.strip_suffix('\'')))?
+    } else {
+        let rest = l.strip_prefix("// ")?.trim();
+        let source = [
+            ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx", ".json",
+        ];
+        (!rest.contains(char::is_whitespace) && source.iter().any(|e| rest.ends_with(e)))
+            .then_some(rest)?
+    };
+    path.contains("node_modules/").then_some(path)
+}
+
+/// The package a marker path's LAST `node_modules/` segment names.
+fn marker_package(path: &str) -> Option<&str> {
+    let at = path.rfind("node_modules/")? + "node_modules/".len();
+    let rest = &path[at..];
+    let mut segs = rest.split('/');
+    let first = segs.next()?;
     if first.starts_with('@') {
-        let after = &rest[first.len()..];
-        let second = after.strip_prefix('/')?;
-        let n = end(second).unwrap_or(second.len());
-        Some(&rest[..first.len() + 1 + n])
+        let second = segs.next()?;
+        Some(&rest[..first.len() + 1 + second.len()])
     } else {
         (!first.is_empty()).then_some(first)
     }

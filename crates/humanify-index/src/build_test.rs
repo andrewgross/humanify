@@ -377,8 +377,9 @@ fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
     // exp097 step 3: a published file that pre-bundles OTHER packages
     // ("sponge": prettier's index.mjs) would name their code as its own.
     // Evidence, each read off the file: a bundler module marker naming
-    // another package's node_modules path, a vendored directory, or a
-    // pre-bundled file name. The package's own files keep their rows.
+    // another package's node_modules path, or a vendored directory. The
+    // package's own files keep their rows — its own minified build too
+    // (esquery's main IS dist/esquery.min.js: a file NAME is not evidence).
     use crate::build::unit_rows;
     use crate::sourcemap::SourceMap;
     let root = std::env::temp_dir().join(format!("humanify-index-sponge-{}", std::process::id()));
@@ -424,12 +425,15 @@ fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
     };
     let (rows, notes) = unit_rows(bun_node(), &code, &map, &root.join("out"));
     let files: std::collections::BTreeSet<&str> = rows.iter().map(|r| r.file.as_str()).collect();
-    assert_eq!(files, ["own.js"].into_iter().collect(), "{rows:?}");
+    assert_eq!(
+        files,
+        ["dist/sp.min.js", "own.js"].into_iter().collect(),
+        "{rows:?}"
+    );
     assert_eq!(
         notes.sponge_unit_files,
         [
             ("bundler-marker".to_string(), 1),
-            ("file-name".to_string(), 1),
             ("vendored-path".to_string(), 1)
         ]
         .into_iter()
@@ -472,6 +476,14 @@ fn a_module_marker_names_its_package_in_every_bundlers_spelling() {
         None,
         "not a comment"
     );
+    assert_eq!(
+        check("/*!*** ./node_modules/x/lib/a.js ***!*/\n"),
+        Some("bundler-marker")
+    );
+    // prose that mentions a node_modules path is not a module marker
+    // (glob's common.js comments on ignoring node_modules)
+    assert_eq!(check("// ignore **/node_modules/** unless asked\n"), None);
+    assert_eq!(check("  // see node_modules/foo/README.md for why\n"), None);
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -494,7 +506,7 @@ fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
         "node_modules/dep/package.json",
         r#"{"name":"dep","version":"1.2.3"}"#,
     );
-    write("node_modules/dep/dist/dep.min.js", "x");
+    write("node_modules/dep/vendor/copy.js", "x");
     let stmt = "var parse=function(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase()})};";
     let code = format!("{stmt}\n");
     let segments: Vec<(u32, u32, u32)> = (0..stmt.len() as u32)
@@ -503,7 +515,7 @@ fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
         .collect();
     let map = serde_json::json!({
         "version": 3,
-        "sources": ["../node_modules/dep/dist/dep.min.js"],
+        "sources": ["../node_modules/dep/vendor/copy.js"],
         "mappings": crate::sourcemap::encode_mappings(&segments),
     });
     write("out/out.js", &code);
@@ -519,7 +531,7 @@ fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
     fingerprint_bundle(bun_node(), &root.join("out"), &mut shard).expect("fingerprint");
     assert!(shard.units.is_empty(), "{:?}", shard.units);
     assert_eq!(
-        shard.notes.sponge_unit_files.get("file-name"),
+        shard.notes.sponge_unit_files.get("vendored-path"),
         Some(&1),
         "{:?}",
         shard.notes
