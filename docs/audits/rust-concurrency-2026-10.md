@@ -31,6 +31,22 @@ fixed, five listed as recommendations), **20 OK**.
 | R5  | RISK (low, determinism of a diagnostic) | `processor.rs:1692/1712` `GuardTally::note`           | `promptGuard.examples` in `--stats-json` is recorded in completion order on the pipelined path                     | read only (real stats show `retryUnshown: 3`). Recommendation   |
 | R6  | RISK (low, blocking in async)           | the runtime thread: `on_done`, disk cache, `-vv` sink | Sync CPU or IO on the only runtime thread delays every in-flight poll. The per-attempt timeout clock keeps running | read only, size not measured                                    |
 
+**Status update, 2026-10-12** (branch `fix/failed-calls-and-deadlines`):
+
+- **R2 — every namer now counted.** One WARNING covers the waves and sweeps,
+  the module namer, the vendor namer, the split namer and the tree reviser
+  (which failed silently). `--stats-json` carries `providerErrors` (total +
+  per namer), and the eval refuses a card whose scored run or rebuilt base
+  lost any call (recommendation 1c). The exit code is unchanged (1a is
+  still open).
+- **R3 — fixed (recommendation 2a).** A failed `diff` is counted as
+  `diff_failed`, apart from the parse discards, and WARNED; the pre-split
+  reconcile's error, which was dropped too, is now a WARNING.
+- **W1 follow-up + `git` — fixed.** All three subprocesses run through one
+  owner, `humanify_core::subprocess::run`, with one deadline over the whole
+  child and a process-group kill: webcrack 30 min, `diff` 10 min, `git`
+  1 min (docs/concurrency.md, "Subprocesses").
+
 Everything that decides the **emitted tree** came out OK. The one place
 where completion order meets decisions (the pipelined lanes) puts
 everything back in canonical order before it is recorded, and three tests

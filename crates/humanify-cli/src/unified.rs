@@ -675,6 +675,7 @@ fn pipeline_body(
         provider,
         profiler,
         mixed_files: &mixed_files,
+        failed_calls: Default::default(),
     };
     drop(ph);
     let ph = phase("format+naming");
@@ -696,6 +697,8 @@ fn pipeline_body(
     let mut split_sections = None;
     let mut post_split = crate::split_stage::PostSplitRecords::default();
     let mut split_method = None;
+    let mut failed_calls = naming.failed_calls;
+    failed_calls.vendor = unpacked.vendor_naming.batches_failed;
     if opts.split
         && let Some(NamedFile {
             outcome,
@@ -745,6 +748,13 @@ fn pipeline_body(
         split_sections = records.dump;
         split_method = Some(records.method);
         post_split = records.post_split;
+        failed_calls.split = records.failed_calls.namer;
+        failed_calls.tree_reviser = records.failed_calls.tree_reviser;
+    }
+    // Every namer's failed calls, one WARNING (audit R2): the naming
+    // stage's, the vendor namer's (stage 3) and the split's.
+    if let Some(warning) = failed_calls.warning() {
+        renderer.message(&warning);
     }
     if let Some(NamedFile {
         outcome,
@@ -770,7 +780,10 @@ fn pipeline_body(
                 &post_split.claims,
                 &unpacked.vendor_naming,
                 &toolchain,
-                split_method,
+                RunLevelStats {
+                    split_method,
+                    failed_calls: &failed_calls,
+                },
                 renderer,
             )?;
         }
@@ -961,14 +974,43 @@ fn dump_flags(
 
 /// `gitShortSha()`: the CWD's `git rev-parse --short HEAD`, "unknown" when
 /// git cannot answer.
-fn git_short_sha() -> String {
-    std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+/// The `git rev-parse` deadline: 1 minute. It answers in milliseconds
+/// from a local checkout; only a hung git (a stuck network filesystem, a
+/// wedged credential helper) reaches it.
+const GIT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The dump manifest's commit, `git rev-parse --short HEAD`.
+fn git_short_sha(renderer: &mut dyn ProgressRenderer) -> String {
+    let mut command = std::process::Command::new("git");
+    command.args(["rev-parse", "--short", "HEAD"]);
+    let (sha, warning) = short_sha(&mut command, GIT_DEADLINE);
+    if let Some(warning) = warning {
+        renderer.message(&warning);
+    }
+    sha
+}
+
+/// Run a `rev-parse`-shaped command: its trimmed stdout, or "unknown".
+/// Not a git checkout, or no git at all, is the decided quiet "unknown"
+/// (the binary runs outside checkouts); a git past `deadline` is killed
+/// and the "unknown" comes with a WARNING (docs/concurrency.md rule 4).
+fn short_sha(
+    command: &mut std::process::Command,
+    deadline: std::time::Duration,
+) -> (String, Option<String>) {
+    use humanify_core::subprocess::SubprocessError;
+    match humanify_core::subprocess::run(command, None, deadline) {
+        Ok(o) if o.status.success() => {
+            (String::from_utf8_lossy(&o.stdout).trim().to_string(), None)
+        }
+        Ok(_) | Err(SubprocessError::Spawn(_)) => ("unknown".to_string(), None),
+        Err(e) => (
+            "unknown".to_string(),
+            Some(format!(
+                "WARNING: git rev-parse failed ({e}) — the dump's manifest records commit \"unknown\""
+            )),
+        ),
+    }
 }
 
 impl RunReports<'_> {
@@ -1053,7 +1095,7 @@ impl RunReports<'_> {
                 dir: Path::new(ctx.dir),
                 output_dir: ctx.output_dir,
                 flags: ctx.flags.clone(),
-                commit: git_short_sha(),
+                commit: git_short_sha(renderer),
                 generated_at: humanify_model::js::iso_now(),
                 minified: ctx.minified,
                 prior: ctx.prior,
@@ -1193,6 +1235,9 @@ struct NamingRun<'a> {
         std::path::PathBuf,
         humanify_core::libdetect::MixedFileDetection,
     )],
+    /// The naming stage's failed calls over every file (the waves and
+    /// sweeps, the module namer) — the run's `providerErrors`.
+    failed_calls: crate::provider_failures::ProviderFailures,
 }
 
 impl NamingRun<'_> {
@@ -1316,16 +1361,17 @@ impl NamingRun<'_> {
         if let Some(warning) = outcome.broken_prior_warning() {
             renderer.message(&warning);
         }
+        // A prior-diff reconcile that was due and did not run (its `diff`
+        // failed or ran past its deadline, audit R3). Print-only.
+        if let Some(warning) = outcome.reconcile_skipped_warning() {
+            renderer.message(&warning);
+        }
         // A failed call is a hole in the output (the run is fail-soft and
         // still exits 0), so it is never only a `-v` line (concurrency
-        // audit 2026-10, R2). Print-only — no decision reads it.
-        if outcome.errors > 0 {
-            renderer.message(&format!(
-                "WARNING: {} LLM call(s) failed after every retry (provider errors) — \
-their names are missing from this output; re-run when the endpoint is healthy",
-                outcome.errors
-            ));
-        }
+        // audit 2026-10, R2): tallied here, WARNED once for every namer
+        // after the split (crate::provider_failures).
+        self.failed_calls.naming += outcome.errors;
+        self.failed_calls.modules += outcome.module_names.failed_calls;
         if outcome.misses > 0 || outcome.errors > 0 {
             verbose().log(&format!(
                 "Naming: {} cache miss(es), {} provider error(s)",
@@ -1354,15 +1400,23 @@ fn log_input_output(input: &str, output: &str) {
     verbose().debug(&format!("Output:  {}", head(output)));
 }
 
+/// What only the whole run knows, for `--stats-json`: the split's method
+/// and every namer's failed calls.
+struct RunLevelStats<'a> {
+    split_method: Option<humanify_model::stats::SplitMethodStats>,
+    failed_calls: &'a crate::provider_failures::ProviderFailures,
+}
+
 /// `--stats-json` (writeEvalStats): the naming stage's record + the vendor
-/// namer's tally (only when it was asked anything) + the selection record.
+/// namer's tally (only when it was asked anything) + the selection record
+/// + the run-level blocks.
 fn write_stats_json(
     dest: &str,
     outcome: &NamingOutcome,
     later_claims: &humanify_core::rename::validated::RenameClaimStats,
     vendor: &humanify_core::modules::vendor_names::VendorNamingStats,
     toolchain: &Toolchain,
-    split_method: Option<humanify_model::stats::SplitMethodStats>,
+    run: RunLevelStats<'_>,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<(), Crash> {
     if outcome.coverage.is_none() {
@@ -1379,7 +1433,8 @@ fn write_stats_json(
     }
     stats.selection = Some(crate::pipeline_config::pipeline_selection_record(toolchain));
     stats.toolchain = Some(crate::pipeline_config::toolchain_record(toolchain));
-    stats.split_method = split_method;
+    stats.split_method = run.split_method;
+    stats.provider_errors = Some(run.failed_calls.stats());
     crate::writers::write_eval_stats(Path::new(dest), &stats)
         .map_err(|e| Crash(node_fs_error(&e, "open", dest)))?;
     renderer.message(&format!("Eval stats written to {dest}"));
@@ -1572,3 +1627,6 @@ fn load_prior_version_code(
     renderer.message(&format!("Prior version: loaded from {path}"));
     Ok(Some(code))
 }
+
+#[cfg(test)]
+mod unified_test;

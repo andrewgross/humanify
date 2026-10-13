@@ -23,6 +23,7 @@ pub mod prior;
 pub mod profiling;
 pub mod propagation;
 pub mod rename;
+pub mod subprocess;
 pub mod toolchain;
 pub mod trail;
 pub mod twins;

@@ -261,6 +261,9 @@ for i in $(seq 0 $((npairs - 1))); do
   # this pair ACTUALLY got: a rebuild that fails falls back to the archive
   # and is recorded as such.
   PAIR_BASE_MODE="archive"
+  # The rebuilt base's stdout, when THIS run rebuilt one: its failed-call
+  # WARNING refuses the pair's card like the scored leg's stats do.
+  REBASE_STDOUT_ARGS=()
   if [[ "$BASE_MODE" != "archive" ]]; then
     INPUT_FROM="$INPUTS/claude-code-$FROM/binary-decompiled/src/entrypoints/index.js"
     if [[ -f "$INPUT_FROM" ]]; then
@@ -285,6 +288,7 @@ for i in $(seq 0 $((npairs - 1))); do
         PRIOR="$REBASE/.humanify/humanified.js"
         PRIOR_LEDGER="$REBASE/.humanify/split-ledger.json"
         PAIR_BASE_MODE="$BASE_MODE"
+        REBASE_STDOUT_ARGS=(--rebase-stdout "$RESULTS/${FROM}-rebase.stdout")
         echo "  prior rebased ($BASE_MODE) -> $PRIOR"
       else
         echo "  rebase FAILED; falling back to archive prior (recorded as baseMode archive)"
@@ -345,8 +349,23 @@ for i in $(seq 0 $((npairs - 1))); do
   # every KPI ever published for those pairs came from a tree the pipeline had
   # rejected. Scoring continues (dropping half the corpus loses more than it
   # protects) but the failure is now stamped where the summary must show it.
+  #
+  # It also REFUSES the card (exit 3) when the scored leg or the rebuilt base
+  # lost LLM answers: the binary exits 0 on failed calls (fail-soft), each is
+  # a hole in the names, and rule 11 says the KPIs cannot tell a lost name
+  # from noise (concurrency audit 2026-10, R2 + recommendation 1c). A refused
+  # pair gets no card — a stale one from an earlier run is removed — and the
+  # summary banners it; the refusal prints the command that re-runs it.
   npx tsx "$REPO/experiments/lib/invariants.ts" "$RESULTS" "$TO" "$PIPELINE_RC" \
-    || echo "  (warning: could not record run status for $PAIR)"
+    --stats "$STATS" --pair "$PAIR" \
+    ${REBASE_STDOUT_ARGS[@]+"${REBASE_STDOUT_ARGS[@]}"}
+  STATUS_RC=$?
+  if [[ $STATUS_RC -eq 3 ]]; then
+    rm -f "$RESULTS/$TO.json"
+    continue
+  elif [[ $STATUS_RC -ne 0 ]]; then
+    echo "  (warning: could not record run status for $PAIR)"
+  fi
   if [[ $PIPELINE_RC -ne 0 ]]; then
     echo "PIPELINE EXITED $PIPELINE_RC for $PAIR — the run declared ITSELF invalid:"
     grep -E "^ERROR:" "$RESULTS/$TO.stdout" | head -5 | sed 's/^/    /'

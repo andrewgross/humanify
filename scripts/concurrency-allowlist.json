@@ -83,16 +83,14 @@
       "scope": "git_short_sha",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`git rev-parse --short HEAD` for the run manifest: Command::output drains both pipes (stdin null), and any failure reads \"unknown\"; a decided, print-only fallback",
-      "exception": "no deadline: a hung git would hang the run (same class as audit W1 follow-up)"
+      "reason": "`git rev-parse --short HEAD` for the dump's manifest, through crate::subprocess::run under GIT_DEADLINE (1 min; it answers in ms): not a checkout or no git reads the decided quiet \"unknown\"; a git past the deadline is killed and WARNED"
     },
     {
       "file": "crates/humanify-core/src/naming/reconcile/hunks.rs",
       "scope": "compute_normal_diff",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "`diff` for the normal-diff hunks (audit R3): Command::output drains both pipes; one per reconcile file on the par seam, results rejoined in ledger order",
-      "exception": "audit R3: a spawn/diff failure silently discards that file's reconcile (counted only in stats.discarded); up to nproc concurrent children; no deadline"
+      "reason": "`diff` for the normal-diff hunks (audit R3, fixed): through crate::subprocess::run under DIFF_DEADLINE (10 min vs 4.5 s measured on the whole Claude Code bundle); one per reconcile file on the par seam, results rejoined in ledger order. A failure is never silent: the post-split pass counts it as diff_failed (apart from parse discards) and WARNS; the pre-split step's error becomes a WARNING"
     },
     {
       "file": "crates/humanify-core/src/naming/reconcile/hunks.rs",
@@ -228,26 +226,46 @@
       "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
+      "file": "crates/humanify-core/src/subprocess.rs",
+      "scope": "kill_group",
+      "construct": "subprocess",
+      "pattern": "subprocess",
+      "reason": "`kill -KILL -- -<pgid>` on the timeout path (core forbids unsafe, so no kill(2)): kill(1) returns at once and needs no deadline of its own; stdio null; whether it worked is reported in TimedOut.killed"
+    },
+    {
+      "file": "crates/humanify-core/src/subprocess.rs",
+      "scope": "run",
+      "construct": "channel",
+      "pattern": "subprocess",
+      "reason": "one bounded sync_channel (capacity 4, one slot per sender) carries the threads' events; nobody blocks on a send. A disconnect with events missing (a drain panicked) kills the group and is an error"
+    },
+    {
+      "file": "crates/humanify-core/src/subprocess.rs",
+      "scope": "run",
+      "construct": "piped-stdio",
+      "pattern": "subprocess",
+      "reason": "stdout and stderr always piped (stdin only when there is input): each pipe has its own drain thread, so no write can block on a full pipe (audit W1)"
+    },
+    {
+      "file": "crates/humanify-core/src/subprocess.rs",
+      "scope": "run",
+      "construct": "thread-spawn",
+      "pattern": "subprocess",
+      "reason": "the drains, the stdin feeder and the exit waiter: plain threads on purpose (not scoped) \u2014 if something outside the killed process group still holds a pipe, they end when it closes and the run does not wait on them. Each sends exactly one event and exits; nothing they produce reaches output except through the returned Finished"
+    },
+    {
+      "file": "crates/humanify-core/src/subprocess.rs",
+      "scope": "run",
+      "construct": "timeout",
+      "pattern": "subprocess",
+      "reason": "recv_timeout until ONE deadline from before spawn: it covers stdin, both outputs and the exit together (rule 3); on expiry the process group is SIGKILLed and the caller gets TimedOut"
+    },
+    {
       "file": "crates/humanify-core/src/unpack/webcrack.rs",
       "scope": "unpack_webcrack",
       "construct": "subprocess",
       "pattern": "subprocess",
-      "reason": "the webcrack shim (audit W1, fixed): non-zero exit or unparseable output is an error",
-      "exception": "audit W1 follow-up: no wall-clock deadline yet; a webcrack that loops forever hangs the run"
-    },
-    {
-      "file": "crates/humanify-core/src/unpack/webcrack.rs",
-      "scope": "unpack_webcrack",
-      "construct": "piped-stdio",
-      "pattern": "subprocess",
-      "reason": "stdin/stdout/stderr piped; a scoped feeder thread writes stdin while wait_with_output drains the other two (audit W1 fix)"
-    },
-    {
-      "file": "crates/humanify-core/src/unpack/webcrack.rs",
-      "scope": "unpack_webcrack",
-      "construct": "thread-scope",
-      "pattern": "subprocess",
-      "reason": "the stdin feeder thread (audit W1 fix): scoped, joined, a panic re-raised; dropping ChildStdin closes it"
+      "reason": "the webcrack shim (audit W1 + follow-up, fixed): through crate::subprocess::run, which feeds stdin while both outputs drain, under WebcrackShim::deadline (production WEBCRACK_DEADLINE, 30 min vs 12 s measured on a 2.9 MB webpack bundle); a timeout kills the shim's process group; timeout, non-zero exit or unparseable output is an error"
     },
     {
       "file": "crates/humanify-llm/src/cache.rs",

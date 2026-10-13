@@ -41,6 +41,140 @@ export interface PairRunStatus {
   exitCode: number;
   /** `ERROR:` lines from the run's stdout — why it failed, in its own words. */
   errors: string[];
+  /** LLM calls the run lost (2026-10-12). Absent on statuses recorded
+   *  before then — UNKNOWN, not zero. */
+  providerErrors?: ProviderErrorsRecord;
+}
+
+/** The binary's `--stats-json` `providerErrors` block: calls that failed
+ *  after every retry, in total and per namer. */
+export interface ProviderErrorCounts {
+  total: number;
+  naming: number;
+  modules: number;
+  vendor: number;
+  split: number;
+  treeReviser: number;
+}
+
+/**
+ * What a pair's runs lost to failed LLM calls (concurrency audit 2026-10,
+ * R2 + recommendation 1c). Every lost call is a hole in the names and the
+ * binary still exits 0, so the eval REFUSES the pair's card when either
+ * run lost any: the scored leg (its stats block) or the rebuilt base (its
+ * stdout's one WARNING line — the rebase launch is held byte-identical to
+ * the references, so it writes no stats).
+ */
+export interface ProviderErrorsRecord {
+  /** The scored leg's block; null = its stats carry none (a binary from
+   *  before 2026-10-12): unknown, never zero. */
+  scored: ProviderErrorCounts | null;
+  /** The rebuilt base's failed calls; null = no base was rebuilt. */
+  rebase: number | null;
+  refused: boolean;
+  /** `<from>-><to>`, for the re-run command. */
+  pair?: string;
+}
+
+const COUNT_KEYS = [
+  "total",
+  "naming",
+  "modules",
+  "vendor",
+  "split",
+  "treeReviser"
+] as const;
+
+/** The scored leg's `providerErrors` block, or null when the stats carry
+ *  none (or cannot be read — the missing-artifact check owns that). */
+function readProviderErrors(statsPath: string): ProviderErrorCounts | null {
+  try {
+    const block = JSON.parse(
+      fs.readFileSync(statsPath, "utf8")
+    )?.providerErrors;
+    if (!block || COUNT_KEYS.some((k) => typeof block[k] !== "number")) {
+      return null;
+    }
+    return Object.fromEntries(
+      COUNT_KEYS.map((k) => [k, block[k]])
+    ) as unknown as ProviderErrorCounts;
+  } catch {
+    return null;
+  }
+}
+
+/** The binary's one failed-call WARNING (crates/humanify-cli/src/
+ *  provider_failures.rs): `WARNING: <n> LLM call(s) failed after every
+ *  retry`. No line = no failed call. */
+const FAILED_CALLS_LINE =
+  /^WARNING: (\d+) LLM call\(s\) failed after every retry/m;
+
+function rebaseProviderErrors(stdoutPath: string): number | null {
+  if (!fs.existsSync(stdoutPath)) return null;
+  const m = FAILED_CALLS_LINE.exec(fs.readFileSync(stdoutPath, "utf8"));
+  return m ? Number(m[1]) : 0;
+}
+
+export interface RunStatusSources {
+  /** The scored leg's `--stats-json`. */
+  stats?: string;
+  /** The rebuilt base's stdout, when this pair rebuilt one. */
+  rebaseStdout?: string;
+  /** `<from>-><to>`. */
+  pair?: string;
+}
+
+function providerErrorsRecord(src: RunStatusSources): ProviderErrorsRecord {
+  const scored = src.stats ? readProviderErrors(src.stats) : null;
+  const rebase = src.rebaseStdout
+    ? rebaseProviderErrors(src.rebaseStdout)
+    : null;
+  return {
+    scored,
+    rebase,
+    refused: (scored?.total ?? 0) > 0 || (rebase ?? 0) > 0,
+    ...(src.pair ? { pair: src.pair } : {})
+  };
+}
+
+/**
+ * Why a pair's card is refused, in lines to print — empty when it is not.
+ * Says what was lost, where, and the command that re-runs the pair.
+ */
+export function providerErrorRefusal(
+  status: PairRunStatus,
+  label: string
+): string[] {
+  const pe = status.providerErrors;
+  if (!pe?.refused) return [];
+  const lines = [
+    `!! REFUSED to score ${pe.pair ?? status.version}: the run lost LLM answers — every failed call is a hole in the names, and the KPIs cannot tell a lost name from noise (rule 11).`
+  ];
+  const s = pe.scored;
+  if (s && s.total > 0) {
+    const parts = [
+      ["naming", s.naming],
+      ["modules", s.modules],
+      ["vendor", s.vendor],
+      ["split", s.split],
+      ["tree reviser", s.treeReviser]
+    ]
+      .filter(([, n]) => (n as number) > 0)
+      .map(([k, n]) => `${k} ${n}`);
+    lines.push(
+      `   scored leg: ${s.total} LLM call(s) failed after every retry (${parts.join(", ")}).`
+    );
+  }
+  if ((pe.rebase ?? 0) > 0) {
+    lines.push(
+      `   rebuilt base: ${pe.rebase} LLM call(s) failed after every retry — the base the pair is diffed against has holes.`
+    );
+  }
+  lines.push(
+    "   No card was written. Check the endpoint (experiments/lib/llm-endpoint.sh), then re-run the pair:",
+    `     npm run eval -- score ${label}${pe.pair ? ` --pairs ${pe.pair}` : ""}`
+  );
+  return lines;
 }
 
 const STATUS_SUFFIX = "-run-status.json";
@@ -95,18 +229,41 @@ function extractErrorBlocks(stdout: string): string[] {
 export function writeRunStatus(
   resultsDir: string,
   version: string,
-  exitCode: number
-): void {
+  exitCode: number,
+  sources?: RunStatusSources
+): PairRunStatus {
   const stdoutPath = path.join(resultsDir, `${version}.stdout`);
   let errors: string[] = [];
   if (exitCode !== 0 && fs.existsSync(stdoutPath)) {
     errors = extractErrorBlocks(fs.readFileSync(stdoutPath, "utf8"));
   }
-  const status: PairRunStatus = { version, exitCode, errors };
+  const status: PairRunStatus = {
+    version,
+    exitCode,
+    errors,
+    ...(sources ? { providerErrors: providerErrorsRecord(sources) } : {})
+  };
   fs.writeFileSync(
     path.join(resultsDir, `${version}${STATUS_SUFFIX}`),
     JSON.stringify(status, null, 2)
   );
+  return status;
+}
+
+/** One recorded status file's fields, or undefined when it is not one. */
+// biome-ignore lint/suspicious/noExplicitAny: external status JSON shape
+function parseRunStatus(j: any): PairRunStatus | undefined {
+  if (typeof j?.version !== "string" || typeof j.exitCode !== "number") {
+    return undefined;
+  }
+  return {
+    version: j.version,
+    exitCode: j.exitCode,
+    errors: Array.isArray(j.errors) ? j.errors : [],
+    ...(typeof j.providerErrors?.refused === "boolean"
+      ? { providerErrors: j.providerErrors }
+      : {})
+  };
 }
 
 /**
@@ -123,14 +280,10 @@ export function loadRunStatuses(resultsDir: string): PairRunStatus[] {
   for (const f of fs.readdirSync(resultsDir)) {
     if (!f.endsWith(STATUS_SUFFIX)) continue;
     try {
-      const j = JSON.parse(fs.readFileSync(path.join(resultsDir, f), "utf8"));
-      if (typeof j?.version === "string" && typeof j.exitCode === "number") {
-        out.push({
-          version: j.version,
-          exitCode: j.exitCode,
-          errors: Array.isArray(j.errors) ? j.errors : []
-        });
-      }
+      const status = parseRunStatus(
+        JSON.parse(fs.readFileSync(path.join(resultsDir, f), "utf8"))
+      );
+      if (status) out.push(status);
     } catch {
       /* not a status file */
     }
@@ -147,14 +300,27 @@ export function loadRunStatuses(resultsDir: string): PairRunStatus[] {
  * nobody reads, which is exactly how the `ERROR:` lines already in every
  * `.stdout` went unnoticed for thirteen result sets.
  */
-export function runStatusBanner(statuses: readonly PairRunStatus[]): string[] {
-  const failed = statuses.filter((s) => s.exitCode !== 0);
-  if (failed.length === 0) return [];
+/** The pairs whose cards were refused for lost LLM answers (they have no
+ *  card, so the table cannot show them; this line does). */
+function refusedBanner(statuses: readonly PairRunStatus[]): string[] {
+  const refused = statuses.filter((s) => s.providerErrors?.refused);
+  if (refused.length === 0) return [];
+  return [
+    `!! ${refused.length} pair(s) REFUSED — their runs lost LLM answers (providerErrors), so no card was scored: ` +
+      refused.map((s) => s.providerErrors?.pair ?? s.version).join(", "),
+    "   See each pair's <v>-run-status.json; re-run them when the endpoint is healthy."
+  ];
+}
 
-  const lines = [
+export function runStatusBanner(statuses: readonly PairRunStatus[]): string[] {
+  const lines = refusedBanner(statuses);
+  const failed = statuses.filter((s) => s.exitCode !== 0);
+  if (failed.length === 0) return lines;
+
+  lines.push(
     `!! ${failed.length} of ${statuses.length} scored pair(s) FAILED IN THE PIPELINE: ` +
       failed.map((f) => f.version).join(", ")
-  ];
+  );
   lines.push(
     "   The KPIs below were computed from tree(s) the pipeline itself marked invalid."
   );
@@ -426,15 +592,56 @@ export function verdictBanner(
  * format in bash:
  *
  *   npx tsx experiments/lib/invariants.ts <results-dir> <version> <exit-code>
+ *     [--stats <stats.json>] [--rebase-stdout <file>] [--pair <from>-><to>]
+ *
+ * Exits 3 when the pair's card is refused (its runs lost LLM answers),
+ * after printing why and how to re-run; run.sh then writes no card.
  */
+function parseCli(argv: string[]): {
+  positional: string[];
+  sources: RunStatusSources;
+} {
+  const flags: Record<string, keyof RunStatusSources> = {
+    "--stats": "stats",
+    "--rebase-stdout": "rebaseStdout",
+    "--pair": "pair"
+  };
+  const positional: string[] = [];
+  const sources: RunStatusSources = {};
+  for (let i = 0; i < argv.length; i++) {
+    const key = flags[argv[i]];
+    if (key) {
+      const value = argv[++i];
+      if (value === undefined) throw new Error(`${argv[i - 1]} needs a value`);
+      sources[key] = value;
+    } else if (argv[i].startsWith("--")) {
+      throw new Error(`unknown flag ${argv[i]}`);
+    } else {
+      positional.push(argv[i]);
+    }
+  }
+  return { positional, sources };
+}
+
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === path.resolve(import.meta.filename)
 ) {
-  const [resultsDir, version, code] = process.argv.slice(2);
+  const { positional, sources } = parseCli(process.argv.slice(2));
+  const [resultsDir, version, code] = positional;
   if (!resultsDir || !version || code === undefined) {
-    console.error("usage: invariants.ts <results-dir> <version> <exit-code>");
+    console.error(
+      "usage: invariants.ts <results-dir> <version> <exit-code> [--stats F] [--rebase-stdout F] [--pair P]"
+    );
     process.exit(2);
   }
-  writeRunStatus(resultsDir, version, Number(code));
+  const status = writeRunStatus(resultsDir, version, Number(code), sources);
+  const refusal = providerErrorRefusal(
+    status,
+    path.basename(path.resolve(resultsDir))
+  );
+  if (refusal.length > 0) {
+    for (const line of refusal) console.log(line);
+    process.exit(3);
+  }
 }

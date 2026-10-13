@@ -8,9 +8,9 @@
 //! The command is configuration (the caller resolves where node and the
 //! shim live); core never reads the environment.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::time::Duration;
 
 use super::{ModuleMetadata, UnpackResult, UnpackedFile};
 
@@ -23,7 +23,18 @@ pub struct WebcrackShim {
     pub args: Vec<String>,
     /// The working directory (the repo root, where `node_modules` resolves).
     pub cwd: Option<PathBuf>,
+    /// The deadline over the shim's whole run (start, stdin, output,
+    /// exit); the production value is [`WEBCRACK_DEADLINE`].
+    pub deadline: Duration,
 }
+
+/// The shim's deadline: 30 minutes. Measured 2026-10-12: a 2.9 MB,
+/// 3,000-module webpack 4 bundle takes 12 s end to end (`npx` start
+/// included), a 10 KB one 0.85 s; time grows about linearly with size, so
+/// a 20 MB bundle should take under 2 minutes. 30 minutes is 150x the
+/// largest measurement and >10x the extrapolation: only a webcrack that
+/// will never finish reaches it (docs/concurrency.md, "Subprocesses").
+pub const WEBCRACK_DEADLINE: Duration = Duration::from_secs(30 * 60);
 
 #[derive(serde::Deserialize)]
 struct ShimFile {
@@ -37,44 +48,22 @@ struct ShimOutput {
 }
 
 /// `WebcrackAdapter.unpack`: run the shim, return its files in the order it
-/// listed them. A non-zero exit or unparseable output is an error — the
-/// TS adapter throws the same way when webcrack does.
-// concurrency: wait_with_output drains stdout/stderr while a scoped feeder thread writes stdin, so the pipes cannot deadlock (audit W1). Known exception: no wall-clock deadline yet (W1 follow-up)
-#[allow(clippy::disallowed_methods)]
+/// listed them. A non-zero exit, unparseable output or a shim past its
+/// deadline (killed) is an error — the TS adapter throws the same way when
+/// webcrack does. The pipes and the deadline are [`crate::subprocess`]'s.
 pub fn unpack_webcrack(
     code: &str,
     out_dir: &Path,
     shim: &WebcrackShim,
 ) -> Result<UnpackResult, String> {
     let mut command = Command::new(&shim.program);
-    command
-        .args(&shim.args)
-        .arg(out_dir)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.args(&shim.args).arg(out_dir);
     if let Some(cwd) = &shim.cwd {
         command.current_dir(cwd);
     }
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("webcrack shim: cannot start {}: {e}", shim.program))?;
-    let mut stdin = child.stdin.take().ok_or("webcrack shim: no stdin")?;
-    // Feed stdin on its own thread WHILE stdout/stderr drain here: a shim
-    // that writes a pipe buffer's worth before it has read all of its
-    // input would otherwise block on its write while this thread blocks on
-    // ours (audit 2026-10, W1). Dropping `stdin` at the end of the feeder
-    // closes it, so the shim sees EOF.
-    let (written, output) = std::thread::scope(|scope| {
-        let feeder = scope.spawn(move || stdin.write_all(code.as_bytes()));
-        let output = child.wait_with_output();
-        let written = feeder
-            .join()
-            .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-        (written, output)
-    });
-    let output = output.map_err(|e| format!("webcrack shim: {e}"))?;
-    written.map_err(|e| format!("webcrack shim: write stdin: {e}"))?;
+    let output =
+        crate::subprocess::run(&mut command, Some(code.as_bytes().to_vec()), shim.deadline)
+            .map_err(|e| format!("webcrack shim ({}): {e}", shim.program))?;
     if !output.status.success() {
         return Err(format!(
             "webcrack shim exited {}: {}",

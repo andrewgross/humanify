@@ -31,6 +31,7 @@ pub fn webcrack_shim(script: &Path) -> WebcrackShim {
             .parent()
             .and_then(Path::parent)
             .map(Path::to_path_buf),
+        deadline: humanify_core::unpack::webcrack::WEBCRACK_DEADLINE,
     }
 }
 

@@ -11,10 +11,12 @@ and how that is checked. Written 2026-10-12 from the concurrency audit
 - **8 rules**, below, one section each. Each says which finding it comes from.
 - **10 patterns**. Every concurrency site in non-test pipeline code must
   follow one of them.
-- **61 sites** on the allowlist (`scripts/concurrency-allowlist.json`) at the
-  start, **5 of them known exceptions**: the two retry layers (R1), the
-  `diff` subprocess (R3), and two subprocesses with no deadline (webcrack,
-  `git`).
+- **64 sites** on the allowlist (`scripts/concurrency-allowlist.json`),
+  **2 of them known exceptions**: the two retry layers (R1). It started at
+  61 sites and 5 exceptions; the other three — the `diff` subprocess (R3)
+  and the webcrack and `git` subprocesses with no deadline — were fixed
+  2026-10-12 by the one subprocess owner (`crate::subprocess`, see
+  Subprocesses).
 - **Three checks enforce it**:
   - clippy, for what a lint can see;
   - the `census:concurrency` gate stage;
@@ -47,8 +49,8 @@ main thread in only four ways:
    - `run_pipelined` is `block_on(FuturesUnordered)`.
    - Each call passes through `AnswerMemo → RateLimited → DebugProvider →
 OpenAiClient`.
-3. **Subprocesses**: the webcrack shim, `diff` for the normal-diff hunks,
-   and `git rev-parse`.
+3. **Subprocesses**, all through `humanify_core::subprocess::run`: the
+   webcrack shim, `diff` for the normal-diff hunks, and `git rev-parse`.
 4. **Observers**: the TTY redraw thread and the profiler's sampler.
 
 The audit has the full diagram ("The thread and runtime model").
@@ -58,18 +60,18 @@ The audit has the full diagram ("The thread and runtime model").
 An allowlist entry names exactly one of these. The census rejects any other
 name.
 
-| pattern          | What it is                                                                   | Where today                                                      |
-| ---------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `par-seam`       | the one place that touches rayon or a scoped thread for CPU work             | `par.rs`                                                         |
-| `llm-runtime`    | the one tokio runtime, its `block_on`s and its bounded fan-outs              | `provider.rs`                                                    |
-| `rate-limiter`   | the concurrency cap (semaphore) and the requests-per-minute window           | `rate.rs`                                                        |
-| `single-flight`  | one key, one answer: per-key async gate plus the answer maps                 | `cache.rs`                                                       |
-| `retry-envelope` | a retry loop's backoff                                                       | `rate.rs` `with_retry`, `client.rs` `post_with_sdk_retries` (R1) |
-| `deadline`       | a timeout that bounds a whole operation, and the HTTP client it applies to   | `client.rs`                                                      |
-| `subprocess`     | a child process: drained pipes, deadline, loud failure                       | `webcrack.rs`, `hunks.rs`, `unified.rs` `git_short_sha`          |
-| `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work  | `metrics.rs`, `llm_sim.rs`                                       |
-| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it | `cache.rs` counters, `PRIOR_PARSES`, `hunks.rs` temp-dir `SEQ`   |
-| `observer`       | a side thread or lock that only watches (progress, profiling, logging)       | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file   |
+| pattern          | What it is                                                                   | Where today                                                                          |
+| ---------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `par-seam`       | the one place that touches rayon or a scoped thread for CPU work             | `par.rs`                                                                             |
+| `llm-runtime`    | the one tokio runtime, its `block_on`s and its bounded fan-outs              | `provider.rs`                                                                        |
+| `rate-limiter`   | the concurrency cap (semaphore) and the requests-per-minute window           | `rate.rs`                                                                            |
+| `single-flight`  | one key, one answer: per-key async gate plus the answer maps                 | `cache.rs`                                                                           |
+| `retry-envelope` | a retry loop's backoff                                                       | `rate.rs` `with_retry`, `client.rs` `post_with_sdk_retries` (R1)                     |
+| `deadline`       | a timeout that bounds a whole operation, and the HTTP client it applies to   | `client.rs`                                                                          |
+| `subprocess`     | a child process: drained pipes, deadline, loud failure                       | `subprocess.rs` (the owner); `webcrack.rs`, `hunks.rs`, `unified.rs` `git_short_sha` |
+| `short-lock`     | a std `Mutex`/`RwLock` held for a few field updates, never across slow work  | `metrics.rs`, `llm_sim.rs`                                                           |
+| `stats-counter`  | an atomic used as a counter or a unique-name sequence; nothing decides on it | `cache.rs` counters, `PRIOR_PARSES`, `hunks.rs` temp-dir `SEQ`                       |
+| `observer`       | a side thread or lock that only watches (progress, profiling, logging)       | `progress.rs`, `profiling.rs`, `log.rs`, `unified.rs` log file                       |
 
 ## CPU parallelism
 
@@ -147,30 +149,48 @@ deadline covers the whole operation, not the first half of it.
   `attempt`, needs its own deadline.
 - **A sleep is not a deadline.** Wait for an event with a timeout, such as
   `recv_timeout` or `timeout_at`. Never poll in a loop with a sleep.
-- **Known gaps:** the webcrack shim (W1 follow-up), the `diff` subprocess
-  (R3) and `git rev-parse` have no deadline. They are marked as exceptions
-  on the allowlist.
+- **Every subprocess has one**, set by its caller and handed to
+  `crate::subprocess::run` (values and why: Subprocesses). The W1
+  follow-up, R3 and the `git` gap were closed 2026-10-12.
 
 ## Subprocesses
 
-**Rule 4.** A child process:
+**Rule 4.** A child process goes through ONE owner,
+`humanify_core::subprocess::run(command, stdin, deadline)`. Do not call
+`Command::output`, `spawn` or `wait_with_output` yourself: the owner is
+where all three parts of this rule live, and its tests pin them.
 
-1. **Drains every pipe concurrently.** With stdin piped, write stdin on its
-   own (scoped) thread while `wait_with_output` drains stdout and stderr.
+1. **Drains every pipe concurrently.** One plain thread each drains stdout,
+   drains stderr, feeds stdin (when there is input) and waits for the exit.
    W1 deadlocked because the bundle was written in full before the output
    pipes were read: a child that wrote 64 KiB first blocked forever.
-   `Command::output()` with stdin left null is safe.
-   `Child::wait_with_output` is disallowed by clippy, and its one site
-   carries the W1 reason.
-2. **Has a deadline on the whole wait.** On expiry, kill the child and fail
-   loudly. Today none of the three subprocesses has a deadline (see
-   Deadlines).
-3. **Fails loudly.** A spawn failure, a non-zero exit or unreadable output
-   is an error or a WARNING, never a silent fallback that changes the tree.
-   R3 is the open exception: a failed `diff` silently discards that file's
-   reconcile, and it is counted only in `stats.discarded`. Up to one `diff`
-   per core runs at once on the rayon pool, so the shared box running out
-   of processes or memory can reach the output this way.
+   `Child::wait_with_output` is disallowed by clippy.
+2. **Has a deadline on the whole wait.** The deadline starts before the
+   spawn and covers stdin, both outputs and the exit together: the caller's
+   thread waits for the threads' events with `recv_timeout`, never a sleep.
+   On expiry the child's whole **process group** is killed (the child is
+   spawned as a group leader). The shim is `npx tsx …`, and its grandchild
+   `node` holds the pipes, so killing `npx` alone would leave the drains
+   blocked. Core forbids `unsafe`, so the kill is `kill -KILL -- -<pgid>`.
+   The threads are not scoped: if something outside the group still holds
+   a pipe, they end when it closes and the run does not wait.
+3. **Fails loudly.** A spawn failure, a non-zero exit, unreadable output or
+   an expired deadline is an error or a WARNING, never a silent fallback
+   that changes the tree.
+
+The three subprocesses and their deadlines (measured 2026-10-12, times a
+generous factor — a deadline only a process that will never finish
+reaches):
+
+| child                                                     | deadline | measured                                                                                                                                                                         | on failure                                                                                                                                                                     |
+| --------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| webcrack shim (`WEBCRACK_DEADLINE`, `unpack/webcrack.rs`) | 30 min   | 12 s for a 2.9 MB / 3,000-module webpack bundle, `npx` start included; 0.85 s for 10 KB; about linear in size                                                                    | the unpack fails: the run stops with the error                                                                                                                                 |
+| `diff` (`DIFF_DEADLINE`, `naming/reconcile/hunks.rs`)     | 10 min   | 4.5 s for the largest diff the pipeline runs, the pre-split reconcile over the whole Claude Code bundle (793k vs 805k lines, 2.1.215 -> 2.1.216); per-file diffs are far smaller | post-split: counted as `diff_failed` (apart from parse `discarded`) and a WARNING naming the first file; pre-split: a WARNING that the reconcile did not run (audit R3, fixed) |
+| `git rev-parse` (`GIT_DEADLINE`, `unified.rs`)            | 1 min    | milliseconds                                                                                                                                                                     | not a checkout / no git: the decided quiet "unknown"; a timeout: "unknown" and a WARNING                                                                                       |
+
+Up to one `diff` per core still runs at once on the rayon pool (R4, the
+unsized pool). Resource exhaustion on the shared box can still fail one,
+but it can no longer change the tree without a WARNING.
 
 ## Shared state
 
@@ -236,9 +256,12 @@ the stats.
 - **A failed call is never silent.** After every retry, a failed LLM call
   leaves a hole in the names. R2 made that hole loud: the run prints
   `WARNING: N LLM call(s) failed after every retry`.
-  - The vendor namer's `batches_failed`, the split namer's `failed_batches`
-    and the module namer's `failed_calls` still report only in stats or the
-    summary line (R2, "still not covered").
+  - Since 2026-10-12 the WARNING covers EVERY namer (the waves and sweeps,
+    the module namer, the vendor namer, the split namer, the tree reviser:
+    `humanify-cli/src/provider_failures.rs`) and is printed once, after the
+    split. `--stats-json` carries the same counts as `providerErrors` (a
+    total plus each namer), and the eval refuses to score a card whose
+    scored run or rebuilt base lost any (`experiments/lib/invariants.ts`).
   - Whether too many failures should make the run exit non-zero is Andrew's
     decision (audit recommendation 1a).
 - **The target: retries in exactly one layer**, with full jitter and a cap
@@ -300,13 +323,15 @@ three lines above. The census fails an allow that has no such comment.
 `// env: <reason>` is accepted for the environment-reader ban, which shares
 the lint.
 
-Today there are 18 allows: 4 in production code and 14 in tests. The
-production four:
+Today there are 18 allows: 3 in production code and 15 in tests. The
+production three:
 
 - `provider.rs` `runtime`: THE runtime;
 - `client.rs` `OpenAiClient::new`: the deadline is per attempt;
-- `webcrack.rs` `unpack_webcrack`: W1's feeder thread;
 - `progress.rs` `TtyRenderer::start`: the observer redraw thread's tick.
+
+(`webcrack.rs` `unpack_webcrack`'s allow for `wait_with_output` went with
+the move to `crate::subprocess`, 2026-10-12.)
 
 The test allows cover private runtimes, `#[tokio::test]`, deliberate sleeps,
 and the stub server.

@@ -586,6 +586,9 @@ impl SplitNamer for ProviderSplitNamer<'_> {
 pub struct ProviderTreeReviser<'p> {
     provider: &'p dyn NameProvider,
     pub dispatched: Vec<LlmCall>,
+    /// Calls that failed after every retry (the folders kept their
+    /// names) — the run's `providerErrors.treeReviser`.
+    pub failed_calls: usize,
 }
 
 impl<'p> ProviderTreeReviser<'p> {
@@ -594,6 +597,7 @@ impl<'p> ProviderTreeReviser<'p> {
         ProviderTreeReviser {
             provider,
             dispatched: Vec::new(),
+            failed_calls: 0,
         }
     }
 
@@ -621,7 +625,10 @@ impl TreeReviser for ProviderTreeReviser<'_> {
                         .map(|p| (f.name.clone(), p.to_string()))
                 })
                 .collect(),
-            _ => Vec::new(),
+            _ => {
+                self.failed_calls += 1;
+                Vec::new()
+            }
         }
     }
 }

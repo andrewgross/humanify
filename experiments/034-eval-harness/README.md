@@ -338,6 +338,21 @@ Judge `reorder` **per hop**, not on the total: a big hop masks a regression on a
 small one, which is exactly how Lever B v1's 118→119 regression hid. Read `reloc`
 next to `relocSt` — only the latter is order-independent.
 
+## A pair whose run lost LLM answers is REFUSED (2026-10-12)
+
+The binary is fail-soft: an LLM call that fails after every retry leaves
+its names out and the run still exits 0. Rule 11 says the KPIs cannot tell
+a lost name from noise, so `run.sh` refuses such a pair: no `<v>.json`
+card (a stale one is removed), `providerErrors.refused: true` in
+`<v>-run-status.json`, a `!! … REFUSED` banner in the summary, and the
+command that re-runs the pair. It reads the scored leg's `--stats-json`
+`providerErrors` block (total + per namer) and the rebuilt base's one
+`WARNING: N LLM call(s) failed` line (the rebase launch is held
+byte-identical to the references, so it writes no stats). A binary from
+before 2026-10-12 writes no block: recorded as `scored: null`, unknown,
+and scored as before. Owner: `experiments/lib/invariants.ts`; tests:
+`experiments/lib/provider-errors.test.ts`.
+
 ## Self-hop: cold count in range, warm leg byte-identical
 
 `run.sh` ends every sweep by re-humanifying the last scored pair's `to` version
