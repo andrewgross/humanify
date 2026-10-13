@@ -77,16 +77,27 @@ pub const SELECTABLE_MINIFIERS: [MinifierType; 5] = [
 ///    it ranks under a banner.
 /// 3. [`Shape`](Self::Shape) — two structural pieces that together only
 ///    this bundler writes (browserify's `[0].call(` + `.exports}`; Bun's
-///    `{exports:{}}` + `createRequire` import). Each piece alone is
-///    common minified text, so the pair ranks under a name that carries
-///    the bundler's own name.
-/// 4. [`SharedHelperName`](Self::SharedHelperName) — a helper name more
+///    `{exports:{}}` + `createRequire` import), or ONE runtime helper's
+///    shape that only this bundler writes (esbuild's module helper with
+///    its `try` guard or its indirect `(0, cb[…])` call; esbuild's module
+///    helper beside its own `__export`). Minified text, so it ranks under
+///    a name that carries the bundler's own name.
+/// 4. [`SharedShape`](Self::SharedShape) — a runtime helper's SHAPE that
+///    more than one bundler writes: the module helper's plain minified
+///    form `(A,B)=>()=>(B||A((B={exports:{}}).exports,B),B.exports)` is
+///    Bun's runtime AND esbuild's up to 0.27 (`modules::helper_shape`).
+///    It survives `--minify`, which a helper NAME does not, and it is a
+///    real module helper, which a name may only mention — so it outranks
+///    a shared name; anything one bundler alone writes outranks it. It is
+///    Bun's signal: an input only this shape names is unsure, and an
+///    unsure input gets Bun's pieces (plugin-spec I2).
+/// 5. [`SharedHelperName`](Self::SharedHelperName) — a helper name more
 ///    than one bundler writes: esbuild's runtime names (`__commonJS`,
 ///    `__toESM`, `__toCommonJS`, `var __export`, `__require`) are also
 ///    Bun's (Bun's runtime copies them; checked on a real `bun build`,
 ///    test/e2e/fixtures/bun-bundle). They say "esbuild-family" and lose to
 ///    anything more specific.
-/// 5. [`WeakToken`](Self::WeakToken) — one common word that suggests a
+/// 6. [`WeakToken`](Self::WeakToken) — one common word that suggests a
 ///    bundler but proves nothing (`installedModules`, a local name in
 ///    webpack 4 bootstraps and in hand-written loaders). The only rank
 ///    whose tier is `likely`, not `definitive`; the toolchain acts on
@@ -99,6 +110,7 @@ pub const SELECTABLE_MINIFIERS: [MinifierType; 5] = [
 pub enum SignalStrength {
     WeakToken,
     SharedHelperName,
+    SharedShape,
     Shape,
     OwnRuntimeName,
     Banner,

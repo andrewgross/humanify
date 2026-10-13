@@ -71,10 +71,10 @@ pub struct ScopePlan {
     pub helper_edits: Vec<TextEdit>,
     /// Reads of wrapper-scope bindings a vendored body can reach through
     /// its owner file's live accessor (finding #60), keyed by the
-    /// classification's factory index: (raw name, the DECLARING statement
-    /// span — a statement shared with an extracted factory loses the
-    /// binding from the runtime, which keeps the reading factory in the
-    /// app). The split resolves the raw name through the fresh text's
+    /// classification's factory index, by raw name (the binding stays
+    /// declared even when its statement also declares an extracted
+    /// factory: the extraction removes a declarator, not the statement).
+    /// The split resolves the raw name through the fresh text's
     /// statement with the SAME declared name; renames then give the
     /// accessor.
     pub bridges: Vec<BridgePlan>,
@@ -87,8 +87,6 @@ pub struct BridgePlan {
     pub factory: usize,
     /// The binding's raw (minified) name as it appears in the body.
     pub name: String,
-    /// The declaring wrapper-body statement's span, in the ORIGINAL bundle.
-    pub stmt_span: Span,
 }
 
 /// What one captured (bundle-scope) symbol is to a vendor body.
@@ -103,7 +101,7 @@ enum Capture {
     /// A binding declared by a wrapper-body statement: a vendor body's
     /// READ reaches it through the owner file's live accessor (finding
     /// #60). A WRITE cannot, and keeps the factory in the app.
-    Binding { stmt: Span },
+    Binding,
     /// Anything else: only the app can resolve it.
     App,
 }
@@ -171,41 +169,20 @@ pub fn plan_bundle_scope_refs(
                     end: span.end as usize,
                     replacement: (*name).to_string(),
                 }),
-                Capture::Binding { stmt } if !write => bridges.push(BridgePlan {
+                Capture::Binding if !write => bridges.push(BridgePlan {
                     factory: idx,
                     name: scoping.symbol_name(symbol).to_string(),
-                    stmt_span: *stmt,
                 }),
-                Capture::Helper(_) | Capture::Binding { .. } | Capture::App => {
+                Capture::Helper(_) | Capture::Binding | Capture::App => {
                     kept.insert(idx);
                 }
             }
         }
     }
     close_over_dependents(&mut kept, &edges);
-    // A bridge whose declaring statement ALSO declares an extracted factory
-    // would lose the binding from the runtime entirely — extraction splices
-    // the whole statement out — so the reading factory stays in the app.
-    // (Bun emits one factory per statement; this is the sound guard, not a
-    // shape that has been observed.)
-    let extracted_stmts: HashSet<(u32, u32)> = factories
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !kept.contains(i))
-        .map(|(_, f)| (f.decl_stmt_span.start, f.decl_stmt_span.end))
-        .collect();
-    let mut changed = false;
-    bridges.retain(|b| {
-        if extracted_stmts.contains(&(b.stmt_span.start, b.stmt_span.end)) {
-            kept.insert(b.factory);
-            changed = true;
-            return false;
-        }
-        true
-    });
-    if changed {
-        close_over_dependents(&mut kept, &edges);
-    }
+    // A bridged binding declared by the same statement as an extracted
+    // factory stays declared: the extraction removes a factory's
+    // DECLARATOR, not the statement (`unpack::bun::declarator_removal`).
     // A kept body is app code: its helper references stay as they are, and
     // its reads resolve natively against the bundle scope — nothing to
     // bridge.
@@ -299,8 +276,8 @@ fn classify_capture(
     }
     // A binding declared by one of the wrapper's own statements: a body's
     // READ can reach it through the owner file's live accessor.
-    if let Some(stmt) = container_statement_span(ingest, symbol, container) {
-        return Capture::Binding { stmt };
+    if container_statement_span(ingest, symbol, container).is_some() {
+        return Capture::Binding;
     }
     Capture::App
 }

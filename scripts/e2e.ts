@@ -78,8 +78,9 @@
  * mixed bundle's eager modules used to pile into one src/index.js.
  *
  * KNOWN GAPS (`KNOWN_GAPS` below): a fixture that exposes a gap the
- * pipeline has today (a minified esbuild build detected as unknown — spec
- * I2) must fail EXACTLY as its entry declares. It is printed as a
+ * pipeline has today must fail EXACTLY as its entry declares (the first
+ * one, a minified esbuild build detected as unknown — spec I2 — was
+ * closed 2026-10-12 and its fixture promoted). It is printed as a
  * KNOWN GAP and the
  * stage stays green; failing any other way, or PASSING, fails the stage —
  * so the fix that closes a gap is told to delete the entry, and the
@@ -196,15 +197,7 @@ export interface KnownGap {
   error: string;
 }
 
-export const KNOWN_GAPS: KnownGap[] = [
-  {
-    fixture: "esbuild-minified",
-    spec: "docs/plugin-spec.md I2; toolchain review R18",
-    reason:
-      "esbuild's detector reads its helper NAMES (`__commonJS`, `__toESM`, …), which --minify shortens to letters: the build detects as unknown, gets the do-nothing (passthrough) adapter and keeps every dependency in the app — no vendor/ (the split still runs and boots)",
-    error: "detection: bundler is unknown, expected esbuild"
-  }
-];
+export const KNOWN_GAPS: KnownGap[] = [];
 
 /** How a fixture's outcome reads against its known-gap entry, if any. */
 export function judgeKnownGap(

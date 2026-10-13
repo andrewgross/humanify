@@ -1,0 +1,22 @@
+{
+  "package": "esbuild-minified-0.28",
+  "repo": "",
+  "sourceStrategy": {
+    "type": "local"
+  },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "expect": {
+    "bundler": "esbuild",
+    "unpackAdapter": "esbuild",
+    "vendor": true,
+    "splitMethod": "fresh-grouping"
+  },
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A real esbuild 0.28.2 `--bundle --minify --format=iife --platform=node` build of the shared node-app source (test/e2e/fixtures/node-app). esbuild 0.28's minified runtime: its CommonJS and lazy-init helpers guard the factory call with `try` (`var a=(n,e)=>()=>{try{return e||n((e={exports:{}}).exports,e),e.exports}catch(o){throw e=0,o}}`, and a three-parameter `__esm`). Detected by that guarded helper shape (spec I2). v1.1.0 perturbs the last dep (adds tripled), the late module's output and the lazy stamp."
+    }
+  ]
+}

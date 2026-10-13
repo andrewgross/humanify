@@ -405,3 +405,71 @@ main();
     assert_eq!(with_vendor.app_bytes, without.app_bytes);
     assert_eq!(with_vendor.covered_bytes, without.covered_bytes);
 }
+
+/// esbuild >= 0.28 guards its lazy-init helper: a THIRD parameter keeps
+/// the first error, and the call sits in a `try` (real 0.28.2 `--minify`
+/// output). Its CommonJS helper, guarded the same way, ends in
+/// `e.exports` — never an init helper.
+const ESBUILD_028_HELPERS: &str = "var g=(n,e,o)=>()=>{if(o)throw o[0];try{return n&&(e=n(n=0)),e}catch(l){throw o=[l],l}};var a=(n,e)=>()=>{try{return e||n((e={exports:{}}).exports,e),e.exports}catch(o){throw e=0,o}};";
+
+#[test]
+fn the_guarded_esbuild_0_28_helper_is_an_init_helper() {
+    let code =
+        format!("{ESBUILD_028_HELPERS}var v;var i=g(()=>{{v=1}});var w;var j=g(()=>{{i();w=2}});");
+    let (hashes, values) = inventory_of(&code);
+    let helpers = super::lazy_init_helper_names(&values);
+    assert_eq!(
+        helpers.into_iter().collect::<Vec<_>>(),
+        vec!["g".to_string()]
+    );
+    let ex = extract_fossil_modules(&values, &hashes).expect("extract");
+    assert_eq!(ex.modules.len(), 2);
+    assert_eq!(ex.modules[1].imports, vec![0]);
+}
+
+#[test]
+fn the_beautified_guarded_helper_is_an_init_helper() {
+    // Stage 6's rendering of the 0.28 helpers (the formatter's real output,
+    // 2026-10-12): the guard and the call unrolled INSIDE the `try`.
+    let code = "\
+var g = (n, e, o) => () => {
+  if (o) {
+    throw o[0];
+  }
+  try {
+    if (n) {
+      e = n(n = 0);
+    }
+    return e;
+  } catch (l) {
+    o = [l];
+    throw l;
+  }
+};
+var a = (n, e) => () => {
+  try {
+    if (!e) {
+      n((e = {
+        exports: {}
+      }).exports, e);
+    }
+    return e.exports;
+  } catch (o) {
+    e = 0;
+    throw o;
+  }
+};
+var v;
+var i = g(() => {
+  v = 1;
+});
+";
+    let (hashes, values) = inventory_of(code);
+    let helpers = super::lazy_init_helper_names(&values);
+    assert_eq!(
+        helpers.into_iter().collect::<Vec<_>>(),
+        vec!["g".to_string()]
+    );
+    let ex = extract_fossil_modules(&values, &hashes).expect("extract");
+    assert_eq!(ex.modules.len(), 1);
+}
