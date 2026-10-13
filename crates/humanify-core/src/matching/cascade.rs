@@ -41,10 +41,11 @@ use super::match_map::MatchMap;
 use super::statement_context::STMT_SPAN_BUCKETS;
 use super::{
     CalleeShape, FingerprintIndex, IndexKind, IndexNode, SHINGLE_SIMILARITY_FLOOR,
-    callee_shapes_equal, jaccard_similarity,
+    callee_shapes_equal,
 };
 use crate::matching::statement_context::{StatementContexts, span_bucket};
 use crate::propagation::{AmbiguousMatches, PropagationRungCounts};
+use crate::similarity::jaccard;
 
 // ---------------------------------------------------------------------------
 // Resolutions (fingerprint-index.ts :215, :1266)
@@ -634,7 +635,7 @@ fn try_shingle_resolve(
         let Some(new_row) = new_side.fn_row(cand_id) else {
             continue;
         };
-        let sim = jaccard_similarity(&old_shingles, &new_side.index.compute_shingle_set(new_row));
+        let sim = jaccard(&old_shingles, &new_side.index.compute_shingle_set(new_row));
         if sim > best_sim {
             second_best_sim = best_sim;
             best_sim = sim;

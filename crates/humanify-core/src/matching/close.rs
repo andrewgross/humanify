@@ -55,7 +55,8 @@
 
 use std::collections::HashSet;
 
-use super::{FingerprintIndex, SHINGLE_SIMILARITY_FLOOR, StructuralFeatures, jaccard_similarity};
+use super::{FingerprintIndex, SHINGLE_SIMILARITY_FLOOR, StructuralFeatures};
+use crate::similarity::jaccard;
 
 /// TS `CLOSE_MATCH_TOP_K` (:171): max candidates kept per old function —
 /// bounds the pair matrix to O(old x K).
@@ -404,7 +405,7 @@ pub fn corroborate(
     if prior_shingles.is_empty() || fresh_shingles.is_empty() {
         return Corroboration::Uncorroborated;
     }
-    if jaccard_similarity(&prior_shingles, &fresh_shingles) >= SHINGLE_SIMILARITY_FLOOR {
+    if jaccard(&prior_shingles, &fresh_shingles) >= SHINGLE_SIMILARITY_FLOOR {
         Corroboration::Shingles
     } else {
         Corroboration::Uncorroborated
@@ -438,8 +439,8 @@ pub fn shingle_probe_line(
             })
             .collect::<std::collections::BTreeSet<String>>()
     };
-    let as_is = jaccard_similarity(prior, fresh);
-    let no_prefix = jaccard_similarity(&unprefixed(prior), &unprefixed(fresh));
+    let as_is = jaccard(prior, fresh);
+    let no_prefix = jaccard(&unprefixed(prior), &unprefixed(fresh));
     let edges =
         |s: &std::collections::BTreeSet<String>| s.iter().filter(|t| t.contains('→')).count();
     let verdict = |x: f64| {

@@ -17,6 +17,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::similarity::{containment_from_counts, jaccard_from_counts};
+
 /// `FossilSignature`: one module as the matcher sees it.
 #[derive(Clone, Debug, Default)]
 pub struct FossilSignature {
@@ -74,8 +76,7 @@ fn declared_overlap(a: &FossilSignature, b: &FossilSignature) -> f64 {
     if sa.is_empty() || sb.is_empty() {
         return 0.0;
     }
-    let inter = declared_intersection(&sa, &sb);
-    inter as f64 / (sa.len() + sb.len() - inter) as f64
+    jaccard_from_counts(declared_intersection(&sa, &sb), sa.len(), sb.len())
 }
 
 /// `declaredContainment`: |∩| / |smaller set|, 0 when either side
@@ -86,7 +87,7 @@ fn declared_containment(a: &FossilSignature, b: &FossilSignature) -> f64 {
     if sa.len() < 2 || sb.len() < 2 {
         return 0.0;
     }
-    declared_intersection(&sa, &sb) as f64 / sa.len().min(sb.len()) as f64
+    containment_from_counts(declared_intersection(&sa, &sb), sa.len(), sb.len())
 }
 
 const EXPORT_SET_FLOOR: f64 = 0.6;
@@ -120,12 +121,7 @@ fn overlap(a: &FossilSignature, b: &FossilSignature) -> f64 {
             inter += ca[h.as_str()].min(cb.get(h.as_str()).copied().unwrap_or(0));
         }
     }
-    let union = a.hashes.len() + b.hashes.len() - inter;
-    if union == 0 {
-        0.0
-    } else {
-        inter as f64 / union as f64
-    }
+    jaccard_from_counts(inter, a.hashes.len(), b.hashes.len())
 }
 
 /// `importersOf`: module → the modules importing it (duplicates kept, in
@@ -437,7 +433,7 @@ fn jaccard(a: &HashSet<&str>, b: &HashSet<&str>) -> f64 {
     }
     let (small, big) = if a.len() < b.len() { (a, b) } else { (b, a) };
     let inter = small.iter().filter(|x| big.contains(*x)).count();
-    inter as f64 / (a.len() + b.len() - inter) as f64
+    jaccard_from_counts(inter, a.len(), b.len())
 }
 
 /// `bestGradedCandidate`.

@@ -20,7 +20,7 @@ use crate::matching::build_fingerprint_index;
 use crate::matching::close::CloseCandidate;
 use crate::matching::row_node_ids;
 use crate::matching::statement_align::{
-    AlignSide, NameHint, build_side_index, compute_body_local_transfers, parse_json_unbounded,
+    AlignSide, NameHint, build_side_index, compute_body_local_transfers,
 };
 
 use super::super::close_dump::close_dump;
@@ -68,9 +68,9 @@ fn with_close_pair<T>(
     let prior_index = build_fingerprint_index(&prior_graph, prior_ingest.semantic(), &prior_tables);
     let fresh_index = build_fingerprint_index(&fresh_graph, fresh_ingest.semantic(), &fresh_tables);
     let prior_program_json =
-        parse_json_unbounded(&prior_ingest.program.to_estree_json(false, true));
+        crate::ingest::parse_estree_json(&prior_ingest.program.to_estree_json(false, true));
     let fresh_program_json =
-        parse_json_unbounded(&fresh_ingest.program.to_estree_json(false, true));
+        crate::ingest::parse_estree_json(&fresh_ingest.program.to_estree_json(false, true));
     let sides = CloseDumpSides {
         prior_graph: &prior_graph,
         fresh_graph: &fresh_graph,
@@ -335,7 +335,7 @@ fn fold_hints_keeps_a_unanimous_snap() {
 
 #[test]
 fn partial_transfer_pairs_name_and_params_positionally() {
-    let prior = parse_json_unbounded(
+    let prior = crate::ingest::parse_estree_json(
         r#"{"type":"FunctionDeclaration","start":0,"end":40,
             "id":{"type":"Identifier","name":"oldName","start":9,"end":16},
             "params":[
@@ -347,7 +347,7 @@ fn partial_transfer_pairs_name_and_params_positionally() {
                "argument":{"type":"Identifier","name":"c","start":31,"end":32}}
             ]}"#,
     );
-    let fresh = parse_json_unbounded(
+    let fresh = crate::ingest::parse_estree_json(
         r#"{"type":"FunctionDeclaration","start":0,"end":40,
             "id":{"type":"Identifier","name":"n1","start":9,"end":11},
             "params":[
@@ -376,13 +376,13 @@ fn partial_transfer_reads_method_params_under_value_and_skips_the_key() {
     // A method row: oxc nests the function under `value`; the TS's
     // `getFunctionNameId` answers null for methods (no name transfer), and
     // the params are the method's.
-    let prior = parse_json_unbounded(
+    let prior = crate::ingest::parse_estree_json(
         r#"{"type":"MethodDefinition","start":0,"end":40,
             "key":{"type":"Identifier","name":"m1"},
             "value":{"type":"FunctionExpression","start":3,"end":40,
               "params":[{"type":"Identifier","name":"a","start":6,"end":7}]}}"#,
     );
-    let fresh = parse_json_unbounded(
+    let fresh = crate::ingest::parse_estree_json(
         r#"{"type":"MethodDefinition","start":0,"end":40,
             "key":{"type":"Identifier","name":"m2"},
             "value":{"type":"FunctionExpression","start":3,"end":40,
@@ -400,12 +400,12 @@ fn partial_transfer_reads_method_params_under_value_and_skips_the_key() {
 fn partial_transfer_keeps_first_position_on_a_duplicate_key() {
     // The TS Record semantics: a param named like the fn name overwrites
     // the VALUE in place, keeping the first-insert position.
-    let prior = parse_json_unbounded(
+    let prior = crate::ingest::parse_estree_json(
         r#"{"type":"FunctionDeclaration",
             "id":{"type":"Identifier","name":"priorName"},
             "params":[{"type":"Identifier","name":"priorName"}]}"#,
     );
-    let fresh = parse_json_unbounded(
+    let fresh = crate::ingest::parse_estree_json(
         r#"{"type":"FunctionDeclaration",
             "id":{"type":"Identifier","name":"minName"},
             "params":[{"type":"Identifier","name":"minName"}]}"#,
@@ -530,7 +530,7 @@ fn method_row(name: &str, graph: &UnifiedGraph, semantic: &Semantic<'_>) -> (Val
         if matches!(nodes.get_node(parent).kind(), AstKind::ObjectExpression(_))
             && let json = crate::graph::entry_subtree_json(nodes, node_id)
         {
-            let value = parse_json_unbounded(&json);
+            let value = crate::ingest::parse_estree_json(&json);
             if value.get("type").and_then(Value::as_str) == Some("Property")
                 && value
                     .get("key")

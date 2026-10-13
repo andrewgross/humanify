@@ -64,13 +64,15 @@
 //!   links where babel types the links Optional* with per-link `optional`
 //!   flags (no wrapper).
 //!
-//! The literal classes come from `hash::serialize`'s now-`pub(crate)`
-//! helpers (`string_literal_token`, `template_element_token`,
-//! `volatile_literal_token`) — one owner, no copied regexes. Numbers and
+//! The walk's shared rules come from `hash::serialize`, the one owner —
+//! no copies (2026-10-13; they were KEEP-IN-SYNC copies before): the
+//! literal classes (`literal_class`, spelled here as tokens), the
+//! identifier roles (`identifier_role` with `MemberNodeNames::Babel` —
+//! this walk's parents carry babel's object-member names), the bare-position
+//! block unwrap, the skip keys and the string escaping. Numbers and
 //! bigints are EXACT under every mode (exp093: same as the canonical
 //! serializer — the magnitude buckets bridged 0 real pairs); only the
-//! string classes follow the mode. `identifier_role` and the bare-position
-//! block unwrap remain local copies (KEEP-IN-SYNC with `hash::serialize`).
+//! string classes follow the mode.
 //!
 //! Digests are compared ACROSS sides here (prior hash == fresh hash is
 //! the alignment test), so this module leans on the same-walk-same-order
@@ -173,10 +175,13 @@ use serde_json::Value;
 
 use sha2::{Digest, Sha256};
 
-use crate::hash::serialize::{SymbolTables, string_literal_token, template_element_token};
+use crate::hash::serialize::{
+    LiteralClass, MemberNodeNames, SKIP_KEYS, SymbolTables, identifier_role, json_escape,
+    literal_class, unwrappable_block,
+};
 
 use super::SHINGLE_SIMILARITY_FLOOR;
-use super::jaccard_similarity;
+use crate::similarity::{jaccard, shingle_windows};
 
 /// TS `MAX_ALIGN_DEPTH` (:123): recursion budget for descending into
 /// changed container statements. Each else-if link of a chain costs one
@@ -240,18 +245,6 @@ impl<'a, 'j> AlignSide<'a, 'j> {
     pub fn row_span(&self) -> Span {
         self.row_span
     }
-}
-
-/// Parse an ESTree JSON string (a `program.to_estree_json` output or a
-/// graph row's `crate::graph::entry_subtree_json`) into a `Value`. Unbounded
-/// depth: the AST nests hundreds deep, and the input is oxc's own
-/// serialization of a program that parsed. COPIED from
-/// `matching::statement_context`'s private helper (keep-in-sync; a
-/// follow-up can lift it into a shared spot when a third caller appears).
-pub fn parse_json_unbounded(text: &str) -> Value {
-    let mut de = serde_json::Deserializer::from_str(text);
-    de.disable_recursion_limit();
-    serde::Deserialize::deserialize(&mut de).unwrap_or(Value::Null)
 }
 
 /// TS `alignmentUnits`' body indirection for method rows: the row node is
@@ -1489,7 +1482,7 @@ fn contents_agree(
     if prior_shingles.is_empty() || fresh_shingles.is_empty() {
         return false;
     }
-    jaccard_similarity(&prior_shingles, &fresh_shingles) >= SHINGLE_SIMILARITY_FLOOR
+    jaccard(&prior_shingles, &fresh_shingles) >= SHINGLE_SIMILARITY_FLOOR
 }
 
 /// Slot-blind k-gram shingles over a value's serialized token stream (TS
@@ -1505,12 +1498,8 @@ pub(crate) fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeS
         .map(blind_slot_ordinal)
         .collect();
     let mut shingles = BTreeSet::new();
-    if tokens.len() <= SHINGLE_K {
-        shingles.insert(tokens.join("\u{0}"));
-        return shingles;
-    }
-    for i in 0..=(tokens.len() - SHINGLE_K) {
-        shingles.insert(tokens[i..i + SHINGLE_K].join("\u{0}"));
+    for window in shingle_windows(&tokens, SHINGLE_K) {
+        shingles.insert(window.join("\u{0}"));
         if shingles.len() >= SHINGLE_CAP {
             break;
         }
@@ -1536,12 +1525,10 @@ fn blind_slot_ordinal(token: String) -> String {
 // The content token walk — serializePathTokens(preserveLiterals: true)
 // ---------------------------------------------------------------------------
 //
-// KEEP-IN-SYNC with `hash::serialize` (structural-hash.ts's walk): the
-// identifier-role rules, the literal classes, the bare-position block
-// unwrap and the skip keys are copied there from, because serialize.rs's
-// `parts` string has no token delimiters and its helpers are private. A
-// follow-up that makes `identifier_role` / the literal helpers
-// `pub(crate)` can delete the copies below.
+// The same walk as `hash::serialize` (structural-hash.ts's), kept as a
+// token STREAM (serialize.rs's `parts` string has no token delimiters) in
+// babel's field order; the identifier roles, literal classes, block
+// unwrap, skip keys and escaping are serialize.rs's own helpers.
 
 struct Tokenizer<'a> {
     parts: Vec<String>,
@@ -1817,7 +1804,7 @@ impl<'a> Tokenizer<'a> {
         key: &str,
     ) {
         let name = node.get("name").and_then(Value::as_str).unwrap_or("");
-        match identifier_role(parent, key) {
+        match identifier_role(parent, key, MemberNodeNames::Babel) {
             "verbatim" => self.parts.push(format!("I={name}")),
             "label" => {
                 let size = self.label_slots.len();
@@ -1865,18 +1852,6 @@ impl<'a> Tokenizer<'a> {
         }
     }
 }
-
-/// The skip keys — KEEP-IN-SYNC with `hash::serialize::SKIP_KEYS`.
-const SKIP_KEYS: [&str; 8] = [
-    "type",
-    "loc",
-    "start",
-    "end",
-    "range",
-    "extra",
-    "leadingComments",
-    "trailingComments",
-];
 
 /// Babel's PARSED field order — the order `Object.keys(babelNode)` yields
 /// in structural-hash.ts's serializeNode, which is what the TS walk
@@ -2280,218 +2255,48 @@ fn babel_property_shape(map: &serde_json::Map<String, Value>) -> Option<Value> {
     Some(Value::Object(out))
 }
 
-/// The identifier-role rules (serialize.rs's copy of
-/// structural-hash.ts:554-590) over the ESTree parent/key context —
-/// oxc's ESTree type names (MethodDefinition / PropertyDefinition) plus the
-/// babel names the walk translates oxc's "Property" into (ObjectMethod /
-/// ObjectProperty). KEEP-IN-SYNC.
-fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
-    let Some(parent) = parent else {
-        return "slot";
-    };
-    let Some(map) = parent.as_object() else {
-        return "slot";
-    };
-    let ptype = map.get("type").and_then(Value::as_str).unwrap_or("");
-    let computed = map
-        .get("computed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let positional = matches!(
-        (ptype, key),
-        ("MemberExpression", "property")
-            | ("OptionalMemberExpression", "property")
-            // Babel names: object-member keys are verbatim. oxc's "Property"
-            // is translated to ObjectMethod/ObjectProperty before its
-            // children are walked (see [`babel_property_shape`]).
-            | ("ObjectMethod", "key")
-            | ("ObjectProperty", "key")
-            | ("MethodDefinition", "key")
-            | ("PropertyDefinition", "key")
-    );
-    if positional && !computed {
-        return "verbatim";
-    }
-    if ptype == "MetaProperty" {
-        return "verbatim";
-    }
-    if matches!(
-        (ptype, key),
-        ("ExportSpecifier", "exported") | ("ImportSpecifier", "imported")
-    ) {
-        return "verbatim";
-    }
-    if matches!(
-        (ptype, key),
-        ("LabeledStatement", "label")
-            | ("BreakStatement", "label")
-            | ("ContinueStatement", "label")
-    ) {
-        return "label";
-    }
-    "slot"
-}
-
-/// The literal tokens — KEEP-IN-SYNC with `hash::serialize::literal_token`
-/// (same arms; only the STRING classes follow `keep`, numbers and bigints
-/// are exact under every mode since exp093) EXCEPT TemplateElement, which
-/// the TS pushes as TWO parts (`templateElementToken(...)` then
-/// `,tail=${node.tail}`) — the shingle stream keeps that token boundary
-/// where serialize.rs's hash walk merges it into one (the hash
-/// concatenates, so the merge is byte-identical there; k-gram windows are
-/// NOT).
+/// The literal tokens: the shared [`literal_class`] (the canonical
+/// serializer's owner — numbers and bigints exact under every mode since
+/// exp093, only the STRING classes follow `keep`) spelled as this walk's
+/// token stream: a TemplateElement keeps the TS's TWO parts
+/// (`templateElementToken(...)` then `,tail=${node.tail}`) — the k-gram
+/// windows sit on that boundary, where the hash walk concatenates — and
+/// the boolean / null literals the class leaves out are emitted in
+/// BABEL's node shapes (below).
 fn literal_tokens(
     map: &serde_json::Map<String, Value>,
     node_type: &str,
     keep: bool,
 ) -> Option<Vec<String>> {
-    match node_type {
-        // oxc's ESTree emits the STANDARD name "Literal" for every literal
-        // (babel names StringLiteral/NumericLiteral/BigIntLiteral/
-        // RegExpLiteral separately); classify by the value's JSON type the
-        // way babel's type names classify.
-        "Literal" => {
-            if let Some(pattern) = map
-                .get("regex")
-                .and_then(|r| r.get("pattern"))
-                .and_then(Value::as_str)
-            {
-                let flags = map
-                    .get("regex")
-                    .and_then(|r| r.get("flags"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
-                return Some(vec![format!("R={pattern}/{flags}")]);
-            }
-            if let Some(bigint) = map.get("bigint").and_then(Value::as_str) {
-                return Some(vec![format!("B={bigint}")]);
-            }
-            match map.get("value") {
-                Some(Value::String(v)) => Some(vec![string_literal_token(v, keep)]),
-                Some(Value::Number(n)) => Some(vec![format!("N={n}")]),
-                // Booleans and null are NOT literal-classed in the TS
-                // either — babel's BooleanLiteral/NullLiteral fall through
-                // to the generic walk. But the generic walk must run over
-                // BABEL's node, not oxc's "Literal": NullLiteral has no
-                // keys at all and BooleanLiteral carries only `value` (no
-                // raw), while oxc emits raw+value on every Literal. The
-                // generic walk over oxc's shape emitted 4 scaffolding
-                // tokens where TS emits 0-3, shifting every k-gram window
-                // after the literal (a snap verdict flipped on the real
-                // 2.1.118→119 pair). So emit the babel shapes directly.
-                Some(Value::Bool(b)) => Some(vec![
-                    "BooleanLiteral{".to_string(),
-                    "value:".to_string(),
-                    if *b { "true" } else { "false" }.to_string(),
-                    ";".to_string(),
-                    "}".to_string(),
-                ]),
-                Some(Value::Null) | None => Some(vec!["NullLiteral{".to_string(), "}".to_string()]),
-                _ => None,
-            }
-        }
-        "StringLiteral" | "DirectiveLiteral" => {
-            let value = map.get("value")?.as_str()?;
-            Some(vec![string_literal_token(value, keep)])
-        }
-        "NumericLiteral" => {
-            let value = map.get("value")?.as_f64()?;
-            Some(vec![format!("N={value}")])
-        }
-        "BigIntLiteral" => {
-            let value = map.get("value")?.as_str()?;
-            Some(vec![format!("B={value}")])
-        }
-        "RegExpLiteral" => {
-            let pattern = map.get("pattern")?.as_str()?;
-            let flags = map.get("flags")?.as_str()?;
-            Some(vec![format!("R={pattern}/{flags}")])
-        }
-        "TemplateElement" => {
-            let raw = map
-                .get("value")
-                .and_then(|v| v.get("raw"))
-                .and_then(Value::as_str)?;
-            let tail = map.get("tail").and_then(Value::as_bool).unwrap_or(false);
-            Some(vec![
-                template_element_token(raw, keep),
-                format!(",tail={tail}"),
-            ])
-        }
+    if let Some(class) = literal_class(map, node_type, keep) {
+        return Some(match class {
+            LiteralClass::One(token) => vec![token],
+            LiteralClass::Template { element, tail } => vec![element, format!(",tail={tail}")],
+        });
+    }
+    if node_type != "Literal" {
+        return None;
+    }
+    // oxc's ESTree emits "Literal" for booleans and null too. They are NOT
+    // literal-classed in the TS either — babel's BooleanLiteral/NullLiteral
+    // fall through to the generic walk. But the generic walk must run over
+    // BABEL's node, not oxc's "Literal": NullLiteral has no keys at all and
+    // BooleanLiteral carries only `value` (no raw), while oxc emits
+    // raw+value on every Literal. The generic walk over oxc's shape emitted
+    // 4 scaffolding tokens where TS emits 0-3, shifting every k-gram window
+    // after the literal (a snap verdict flipped on the real 2.1.118→119
+    // pair). So emit the babel shapes directly.
+    match map.get("value") {
+        Some(Value::Bool(b)) => Some(vec![
+            "BooleanLiteral{".to_string(),
+            "value:".to_string(),
+            if *b { "true" } else { "false" }.to_string(),
+            ";".to_string(),
+            "}".to_string(),
+        ]),
+        Some(Value::Null) | None => Some(vec!["NullLiteral{".to_string(), "}".to_string()]),
         _ => None,
     }
-}
-
-/// Bare-statement positions (serialize.rs's copy of
-/// structural-hash.ts:748-758). KEEP-IN-SYNC.
-fn is_bare_statement_position(parent: Option<&Value>, key: &str) -> bool {
-    let Some(parent) = parent else { return false };
-    let Some(map) = parent.as_object() else {
-        return false;
-    };
-    let ptype = map.get("type").and_then(Value::as_str).unwrap_or("");
-    matches!(
-        (ptype, key),
-        ("IfStatement", "consequent")
-            | ("IfStatement", "alternate")
-            | ("ForStatement", "body")
-            | ("ForInStatement", "body")
-            | ("ForOfStatement", "body")
-            | ("WhileStatement", "body")
-            | ("DoWhileStatement", "body")
-            | ("LabeledStatement", "body")
-            | ("WithStatement", "body")
-    )
-}
-
-/// A single-statement block at a bare position unwraps — unless the lone
-/// statement is scoping-relevant (let/const/class/function), where the
-/// braces change where the binding lives. KEEP-IN-SYNC with
-/// `hash::serialize::unwrappable_block`.
-fn unwrappable_block<'a>(
-    node: &'a serde_json::Map<String, Value>,
-    parent: Option<&Value>,
-    key: &str,
-) -> Option<&'a Value> {
-    if !is_bare_statement_position(parent, key) {
-        return None;
-    }
-    let body = node.get("body")?.as_array()?;
-    if body.len() != 1 {
-        return None;
-    }
-    let only = body.first()?;
-    let otype = only.get("type").and_then(Value::as_str)?;
-    if matches!(
-        otype,
-        "VariableDeclaration" | "FunctionDeclaration" | "ClassDeclaration"
-    ) {
-        return None;
-    }
-    Some(only)
-}
-
-/// The stream's string escaping — KEEP-IN-SYNC with
-/// `hash::serialize::json_escape` (Node's `JSON.stringify` semantics for
-/// the BMP).
-fn json_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 #[cfg(test)]

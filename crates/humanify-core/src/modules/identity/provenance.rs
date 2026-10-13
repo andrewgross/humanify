@@ -44,7 +44,7 @@ fn is_absolute(p: &str) -> bool {
 /// module's own location requests (`__dirname = "…"`, `__filename = "…"`,
 /// `<require>.resolve("…")`, an inlined `import.meta.url`).
 pub fn bun_module_provenance(body: &str, kept_comment: Option<&str>) -> ModuleProvenance {
-    let t = crate::modules::vendor_pairing::lex_raw(body);
+    let t = crate::modules::lex::lex_raw(body);
     let at = |i: usize| t.get(i).map_or("", String::as_str);
     let mut paths: Vec<DeclaredPath> = Vec::new();
     for (i, token) in t.iter().enumerate() {

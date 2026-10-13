@@ -22,7 +22,7 @@ use crate::ingest::Ingest;
 use crate::matching::{
     CalleeShape, CfgType, EdgeNgramMode, FingerprintIndex, FunctionFingerprint, IndexNode,
     SHINGLE_SIMILARITY_FLOOR, StructuralFeatures, build_binding_fingerprint_index,
-    build_fingerprint_index, callee_shapes_equal, classify_cfg_type, jaccard_similarity,
+    build_fingerprint_index, callee_shapes_equal, classify_cfg_type,
 };
 
 /// The probe's synthetic bundle, byte-for-byte (the session ids embed line
@@ -504,7 +504,7 @@ fn shingle_floor_and_self_similarity_match_the_ts_probe() {
         let index = build_fingerprint_index(unified, ingest.semantic(), tables);
         let shingles = index.compute_shingle_set(0);
         assert_eq!(
-            jaccard_similarity(&shingles, &shingles),
+            crate::similarity::jaccard(&shingles, &shingles),
             probe["selfSimilarity"].as_f64().unwrap()
         );
     });
@@ -825,15 +825,9 @@ fn member_key_matches_the_ts_probes() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn shingles_and_jaccard() {
-    // jaccardSimilarity: |A∩B|/|A∪B|; both empty = 1 (TS :384-394).
-    let empty: BTreeSet<String> = BTreeSet::new();
-    assert_eq!(jaccard_similarity(&empty, &empty), 1.0);
-    let a: BTreeSet<String> = ["x", "y", "z"].iter().map(|s| s.to_string()).collect();
-    let b: BTreeSet<String> = ["y", "z", "w"].iter().map(|s| s.to_string()).collect();
-    assert_eq!(jaccard_similarity(&a, &b), 2.0 / 4.0);
-    assert_eq!(jaccard_similarity(&a, &empty), 0.0);
-
+fn shingles_and_edge_ngrams() {
+    // jaccardSimilarity (TS :384-394) is `crate::similarity::jaccard` —
+    // pinned by its own tests.
     // Edge n-grams: exact mode embeds the callee hash, blurred the shape;
     // one per internal callee (TS :319-333).
     let code = "function callee() { return 1; }\nfunction callerFn() { callee(); }\ncallerFn();\n";

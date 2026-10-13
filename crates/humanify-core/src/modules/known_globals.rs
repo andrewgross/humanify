@@ -17,6 +17,10 @@
 //! REPORTING only. If something ever wants to rename on the strength of it,
 //! that caller needs a different and much stronger justification than "not
 //! in our list".
+//!
+//! The module also owns the function fingerprint's frozen globals
+//! vocabulary ([`is_fingerprint_global`], at the end) — a different
+//! question with a declared, tested relation to these sets.
 
 /// ECMAScript itself — true in every host.
 const ECMASCRIPT: &[&str] = &[
@@ -269,4 +273,129 @@ pub fn is_known_global(name: &str) -> bool {
     GLOBAL_ENVIRONMENTS
         .iter()
         .any(|(_, names)| names.contains(&name))
+}
+
+// ---------------------------------------------------------------------------
+// The FINGERPRINT vocabulary — a frozen, named subset of this module
+// ---------------------------------------------------------------------------
+//
+// The function fingerprint's `externalCalls` feature (`matching::features`)
+// keeps a callee's name only when it is one of THESE globals: TS
+// `KNOWN_GLOBALS` (structural-hash.ts :11-102), verbatim. It is a FROZEN
+// vocabulary, not an answer to "what may a bundle reference" (the
+// environment sets above): changing it changes every function's match key
+// (toolchain review R21, declared). It lived as a local list inside
+// `matching::features` until 2026-10-13; it is owned here so the two
+// questions sit side by side with their relation declared and tested
+// (`modules_test::the_fingerprint_vocabulary_is_the_frozen_structural_hash_list`):
+//
+// - [`FINGERPRINT_HOST_GLOBALS`] — every one is ALSO a reporting global;
+// - [`FINGERPRINT_EXTRA_GLOBALS`] — counted by the fingerprint, unknown to
+//   the reporting sets.
+//
+// The difference is deliberate in both directions. The vocabulary is
+// SMALLER than the reporting sets (no `Bun`, `crypto`, `globalThis`,
+// `exports`, `module`, … — `Bun.write('b')` fingerprints as `*.write`), and
+// `$` is absent (the first name of minifier alphabets — as jQuery it would
+// make features rename-variant). Adding a reporting global to the
+// vocabulary, or an extra to the reporting sets, is a BEHAVIOUR change
+// (match keys; the vendor content key and the census read the reporting
+// sets), never a tidy-up.
+
+/// The fingerprint's globals that are also reporting globals (see the
+/// block comment above), in the TS source's order.
+pub const FINGERPRINT_HOST_GLOBALS: [&str; 79] = [
+    "fetch",
+    "setTimeout",
+    "setInterval",
+    "clearTimeout",
+    "clearInterval",
+    "requestAnimationFrame",
+    "cancelAnimationFrame",
+    "alert",
+    "confirm",
+    "prompt",
+    "console",
+    "document",
+    "window",
+    "navigator",
+    "location",
+    "history",
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+    "XMLHttpRequest",
+    "WebSocket",
+    "Worker",
+    "Blob",
+    "File",
+    "FileReader",
+    "URL",
+    "URLSearchParams",
+    "FormData",
+    "Headers",
+    "Request",
+    "Response",
+    "AbortController",
+    "CustomEvent",
+    "MutationObserver",
+    "IntersectionObserver",
+    "ResizeObserver",
+    "require",
+    "process",
+    "Buffer",
+    "global",
+    "__dirname",
+    "__filename",
+    "Array",
+    "Object",
+    "String",
+    "Number",
+    "Boolean",
+    "Symbol",
+    "BigInt",
+    "Map",
+    "Set",
+    "WeakMap",
+    "WeakSet",
+    "Promise",
+    "Proxy",
+    "Reflect",
+    "JSON",
+    "Math",
+    "Date",
+    "RegExp",
+    "Error",
+    "TypeError",
+    "RangeError",
+    "SyntaxError",
+    "ReferenceError",
+    "URIError",
+    "EvalError",
+    "Function",
+    "eval",
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
+    "encodeURI",
+    "decodeURI",
+    "encodeURIComponent",
+    "decodeURIComponent",
+    "atob",
+    "btoa",
+];
+
+/// The fingerprint's globals the reporting sets do not hold:
+/// `PerformanceObserver` (a real web global the reporting `WEB` set lacks —
+/// adding it there would move vendor content keys) and the TS list's
+/// "common library patterns" (`jQuery`, `React`, `Vue`, `angular`), which
+/// are library bindings, not host globals.
+pub const FINGERPRINT_EXTRA_GLOBALS: [&str; 5] =
+    ["PerformanceObserver", "jQuery", "React", "Vue", "angular"];
+
+/// Whether a free callee name is fingerprint vocabulary (TS
+/// `KNOWN_GLOBALS.has`).
+pub fn is_fingerprint_global(name: &str) -> bool {
+    FINGERPRINT_HOST_GLOBALS.contains(&name) || FINGERPRINT_EXTRA_GLOBALS.contains(&name)
 }
