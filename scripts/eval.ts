@@ -30,6 +30,9 @@ import {
 } from "../experiments/lib/run-manifest.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
+/** numpy/scipy for exp095's family table reader, which the exp096 scorer imports. */
+const EXP096_PYTHON =
+  "/work/exp095-library-fingerprints/scale/.venv/bin/python";
 const RESULTS = path.join(REPO, "experiments/034-eval-harness/results");
 
 interface Verb {
@@ -216,6 +219,36 @@ export function scoreArgs(args: string[]):
     baseMode: archive ? "archive" : seeded ? "seeded" : "scratch",
     passthrough: parsed.given
   };
+}
+
+const LIBRARY_FLAGS: Record<string, FlagKind> = {
+  "--index": "value",
+  "--rule": "value",
+  "--commit": "value",
+  "--jobs": "value",
+  "--cpus": "value",
+  "--force-mixed": "bool"
+};
+
+/**
+ * `eval library`'s arguments (the exp096 library-matching score): the label
+ * and the flags handed to its run.sh, validated here before anything builds.
+ * run.py refuses the same mistakes; this makes them fail before a cargo build.
+ */
+export function libraryArgs(args: string[]): string[] | string {
+  const parsed = parseFlags(args, LIBRARY_FLAGS);
+  if (typeof parsed === "string") return parsed;
+  if (parsed.positional.length !== 1) {
+    return "usage: eval library <label> --index <dir> --rule agreement|structural [flags]";
+  }
+  if (typeof parsed.flags["--index"] !== "string") {
+    return "--index <dir> is required (a humanify library index directory)";
+  }
+  const rule = parsed.flags["--rule"];
+  if (rule !== "agreement" && rule !== "structural") {
+    return "--rule agreement|structural is required";
+  }
+  return [parsed.positional[0], ...parsed.given];
 }
 
 /**
@@ -460,6 +493,59 @@ const VERBS: Verb[] = [
       });
       console.log(`wrote measured bands: ${written}`);
       return 0;
+    }
+  },
+  {
+    name: "library",
+    usage:
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--force-mixed]",
+    description:
+      "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
+      "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
+      "(experiments/096-library-matching-score/corpus.json: Claude Code 2.1.216, 67 held-out apps, wrangler, an " +
+      "esbuild app; every input content-addressed), and writes one card per bundle + a summary under that " +
+      "experiment's results/<label>. Compare labels with `library-leaderboard`.",
+    proves:
+      "how much library code the index names on THESE bundles (recall: the shipping package OR, for a vendored / " +
+      "pre-bundled copy, its origin package), that no app code was claimed (the hard bar), the wrong-family share " +
+      "vs the ~0.2% bar (under both truths: shipper-only and origin-aware), and why each missed library statement " +
+      "was missed; deterministic (measured band 0), so any delta between labels is real",
+    cannotProve:
+      "anything about a bundle outside the corpus, about the vendor/ CommonJS modules (whole-module rows are not " +
+      "scored), about names (nothing is renamed), about versions (a right package from the wrong version counts " +
+      "right), or about the cross-version diff (that is `score`). Claude Code's figures are a 620-unit SAMPLE " +
+      "estimate, and its index C labels are fitted to it, not held out",
+    run(args) {
+      const parsed = libraryArgs(args);
+      if (typeof parsed === "string") {
+        console.error(`eval library: ${parsed}`);
+        return 2;
+      }
+      return sh("bash", [
+        path.join(REPO, "experiments/096-library-matching-score/run.sh"),
+        ...parsed
+      ]);
+    }
+  },
+  {
+    name: "library-leaderboard",
+    usage: "library-leaderboard <label> <label> [label...] [--force-mixed]",
+    description:
+      "Compare exp096 library-matching labels side by side (recall, app claimed, wrong family under both truths, " +
+      "miss causes). REFUSES labels scored on different corpus manifests or scorer versions unless --force-mixed.",
+    proves:
+      "relative library-matching movement between labels on the fixed corpus (band 0: every delta is real)",
+    cannotProve:
+      "why a delta happened when libraryBytes moved too (a unit-model change re-cuts the denominator: check it first)",
+    run(args) {
+      return sh(EXP096_PYTHON, [
+        "-I",
+        path.join(
+          REPO,
+          "experiments/096-library-matching-score/leaderboard.py"
+        ),
+        ...args
+      ]);
     }
   },
   {

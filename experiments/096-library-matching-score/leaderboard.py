@@ -1,7 +1,7 @@
 """exp096 leaderboard: labels side by side, totals first, deltas against the FIRST label.
 
 usage: <venv python> -I leaderboard.py <label> <label> [label...] [--force-mixed]
-Refuses labels scored on different corpus manifests or by different scorer versions (--force-mixed prints them
+Refuses labels scored on different corpus manifests, origin layers or by different scorer versions (--force-mixed prints them
 anyway, loudly). The noise band is read from bands.json (measured: two runs of one configuration, byte-identical
 — band 0); a delta of any size is real."""
 import json
@@ -33,7 +33,7 @@ def main():
     if not args:
         raise SystemExit(__doc__)
     rows = [(lab, *load(lab)) for lab in args]
-    for key in ("corpusSha256",):
+    for key in ("corpusSha256", "originsSha256"):
         vals = {s["config"][key] for _, s, _ in rows}
         if len(vals) > 1:
             msg = f"labels were scored on {len(vals)} different corpus manifests"
@@ -58,10 +58,13 @@ def main():
               f"{c['rule']:10s}  {'PASS' if s['bars']['appBarPassed'] else 'FAIL':7s}  "
               f"{t.get('totalWallSeconds', 0):6.0f}  {t.get('maxPeakRssMb', 0):7.0f}")
     base = rows[0][1]["sets"]
+    print("\nrecall / wrong family: the ORIGIN-AWARE truth (a claim naming the shipping package OR, for a vendored /"
+          "\npre-bundled copy, its origin is right); [shipper] = the old shipper-only truth; as origin = named bytes"
+          "\nright only through the origin")
     for set_ in SETS:
         print(f"\n{SET_NAMES[set_]}")
-        print(f"  {'label':{w}s}  recall   (delta)   app claimed  wrong family  wrong name  "
-              "not indexed  version  too small  hash differs  guard  other pkg  no discovery")
+        print(f"  {'label':{w}s}  recall   (delta)  [shipper]  as origin  app claimed  wrong family  [shipper]  "
+              "wrong name  not indexed  version  too small  hash differs  guard  other pkg  no discovery")
         for lab, s, _ in rows:
             r = s["sets"].get(set_)
             if r is None:
@@ -71,11 +74,13 @@ def main():
             d = r["recall"] - base[set_]["recall"] if set_ in base else 0.0
             dsum = sum(v for k, v in m.items() if k.startswith("d-"))
             esum = sum(v for k, v in m.items() if k.startswith("e-"))
-            print(f"  {lab:{w}s}  {pct(r['recall'])}  ({100 * d:+5.1f})  {r['appClaimedBytes']:11d}  "
-                  f"{pct(r['wrongFamilyShare']):>12s}  {pct(r['wrongNameShare']):>10s}  "
+            origin = r["namedAsOriginBytes"] / r["libraryBytes"] if r["libraryBytes"] else 0.0
+            print(f"  {lab:{w}s}  {pct(r['recall'])}  ({100 * d:+5.1f})  {pct(r['recallShipperOnly']):>9s}  "
+                  f"{pct(origin):>9s}  {r['appClaimedBytes']:11d}  "
+                  f"{pct(r['wrongFamilyShare']):>12s}  {pct(r['wrongFamilyShareShipperOnly']):>9s}  "
+                  f"{pct(r['wrongNameShare']):>10s}  "
                   f"{pct(m.get('a', 0)):>11s}  {pct(m.get('b', 0)):>7s}  {pct(m.get('c', 0)):>9s}  "
                   f"{pct(dsum):>12s}  {pct(esum):>5s}  {pct(m.get('f', 0)):>9s}  {pct(m.get('no-discovery', 0)):>12s}")
-
 
 if __name__ == "__main__":
     main()

@@ -10,8 +10,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "../.."))
 MISSES = os.path.join(REPO, "experiments/095-library-fingerprints/misses/scripts")
-DATA = os.environ.get("EXP096_DATA", "/work/exp096-data")
+DATA = "/work/exp096-data"  # the frozen corpus, truth and raw reports (not committed)
 MANIFEST = os.path.join(HERE, "corpus.json")
+ORIGINS_MANIFEST = os.path.join(HERE, "origins.json")
 # numpy/scipy for libix (family()); the exp095 labs' venv
 VENV_PY = "/work/exp095-library-fingerprints/scale/.venv/bin/python"
 
@@ -54,6 +55,29 @@ def corpus_path(entry, role):
 
 def truth_path(entry):
     return os.path.join(DATA, "truth", entry["id"] + ".truth.json.gz")
+
+
+def origins_path(entry):
+    return os.path.join(DATA, "truth", entry["id"] + ".origins.json.gz")
+
+
+def load_origins_manifest():
+    with open(ORIGINS_MANIFEST) as fh:
+        return json.load(fh)
+
+
+def origins_sha():
+    """The origin layer's identity (canonical spelling, like manifest_sha)."""
+    return hashlib.sha256(dump(load_origins_manifest()).encode()).hexdigest()
+
+
+def load_origins(entry, om):
+    p = origins_path(entry)
+    got = sha256_file(p)
+    if got != om["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: origins {p} sha256 {got[:12]} != origins.json")
+    with gzip.open(p, "rt") as fh:
+        return json.load(fh)
 
 
 def load_truth(entry):

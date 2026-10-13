@@ -32,7 +32,7 @@
  "noDiscovery": "the esbuild adapter unpacked no bundled module (the one-file floor): no discovery ran",
  "reportSha256": "c35d7398eb29878c6b2bfa6e4cc7652130abedcfc96c70fffaf74ec51cf6a8af",
  "rule": "structural",
- "schema": "exp096-score/1",
+ "schema": "exp096-score/2",
  "set": "wrangler",
  "statementBytes": {},
  "toolchain": {
@@ -43,12 +43,20 @@
  },
  "totals": {
   "appClaimedBytes": 0,
+  "copyBytes": 0,
   "libraryBytes": 1994010,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 0,
   "namedBytes": 0,
+  "namedBytesShipperOnly": 0,
   "recall": 0.0,
+  "recallShipperOnly": 0.0,
   "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0,
   "wrongFamilyShare": 0.0,
-  "wrongNameShare": 0.0
+  "wrongFamilyShareShipperOnly": 0.0,
+  "wrongNameShare": 0.0,
+  "wrongNameShareShipperOnly": 0.0
  },
  "truthMethod": "sourcemap"
 }

@@ -2,6 +2,70 @@
 
 ## STATUS (2026-10-13)
 
+- **Scorer 2: the truth is ORIGIN-AWARE (branch `exp096-score-truth`).** A source map credits a vendored or
+  pre-bundled copy to the package that SHIPS it (zod inside `@anthropic-ai/claude-agent-sdk`'s `sdk.mjs`), while the
+  matcher names its ORIGIN. The truth now carries both: `origins.py` reads, from the frozen map's own paths and
+  `sourcesContent`, a vendored directory (`third_party/`, `vendor/`, `vendored/`, ...) or a bundler module marker
+  (esbuild `// node_modules/x/...`, rolldown `//#region`, webpack). A claim is right if it names the shipper OR the
+  origin; `namedAsOrigin` and every old share (`*ShipperOnly`) stay on the card. Every label was re-scored from its
+  raw reports: the shipper-only columns reproduce scorer 1 to the digit on all 9 labels × 4 sets, and the
+  determinism check passes again (70/70).
+
+  - **Hand check before trusting it** (`handcheck.json`, 78 distinct wrong-family claims from 100 byte-weighted
+    draws over both `integ2` labels, each read against the shipped source): **49 copies, 29 real errors.** The new
+    truth credits 44 of the 49 copies and **none of the 29 errors**. It misses 5 copies that leave no marker
+    (openpgp's rollup bundle of tweetnacl, `@ai-sdk/provider-utils`' `src/to-json-schema/zod3-to-json-schema`,
+    `@sentry/node-core`'s `proxy/` copy of agent-base, balanced-match republished as `@isaacs/balanced-match`).
+    By bytes the sample is 97% copies (733 KB caught, 3 KB missed, 21 KB errors).
+  - **Index evidence is NOT used** (measured): a whole-unit hash in the index under the claimed package covers only
+    ~40 KB of the 573 KB the markers leave unexplained, it is the matcher's own evidence, and it cannot tell an
+    origin from a consumer that bundled the shipper (delaunator named `d3-delaunay`, `string-width` named `boxen`).
+  - **Wrong-family share, old -> new truth** (recall old -> new in brackets):
+
+    | label                      | Claude Code | held-out apps                   | esbuild app                     | wrangler    |
+    | -------------------------- | ----------- | ------------------------------- | ------------------------------- | ----------- |
+    | `integ2-agreement`         | 0.0 -> 0.0% | 12.8 -> **7.0%** (11.8 -> 12.6) | 12.4 -> **3.8%** (18.4 -> 20.2) | 0 -> 0%     |
+    | `integ2-structural`        | 0.0 -> 0.0% | 15.5 -> **4.9%** (18.1 -> 20.4) | 20.9 -> **8.3%** (29.1 -> 33.7) | 6.0 -> 6.0% |
+    | `ix-v2-agreement`          | 0.0 -> 0.0% | 12.8 -> 7.0%                    | 13.5 -> 12.3%                   | floor       |
+    | `ix-v2-structural`         | 0.0 -> 0.0% | 15.5 -> 4.9%                    | 13.5 -> 12.6%                   | floor       |
+    | `ix-v2-ccexact-agreement`  | 0.2 -> 0.2% | 12.7 -> 7.0%                    | 13.6 -> 12.3%                   | floor       |
+    | `ix-v2-ccexact-structural` | 0.0 -> 0.0% | 15.6 -> 5.2%                    | 13.5 -> 12.6%                   | floor       |
+
+    `integ-*` equal `integ2-*`; Claude Code is unchanged by construction (its truth is the hand-labelled sample).
+    **Still not at the ~0.2% bar.** What is left is mostly real: sponge index rows (prettier's bundled
+    `index.mjs` named on @google/genai's own code, 158 KB structural; a `Runge-Kutta` package on cytoscape, 125 KB
+    agreement), consumers named for their dependency (d3-delaunay, boxen, got, tinyglobby, axios, @inquirer/core),
+    `content-type` on MCP SDK code, `@license` as a package name. Next lever: the sponge filter for unit rows
+    (exp095 SYNTHESIS §5).
+
+- **The esbuild-app "drop" was mostly the truth; the real loss is a STALE INDEX (`lazy_modules.py`).** Under the
+  origin-aware truth, main's lazy-module unpack RAISED task-master-ai's structural recall 32.1% -> 33.7% and cut
+  wrong family 12.6% -> 8.3%. Byte by byte (`ix-v2-structural` -> `integ2-structural`):
+  - **gained 287 KB**: 210 KB of ajv / zod copies inside claude-agent-sdk's `sdk.mjs`, now split into lazy-body
+    statements and named by their origin. Scorer 1 counted exactly these as wrong family: hence 13.5% -> 20.9%.
+  - **lost 216 KB**: 169 KB had been named through ONE whole lazy-wrapper unit (`u$r=L(()=>{N6r="aws...",...})`)
+    whose hash the index holds; the run now cuts that wrapper into lazy-body statements (`N6r="aws...",v6r=...`),
+    and the index (built 2026-10-12, before main's 68b090e3 taught the unit model esbuild 0.28's guarded `__esm`)
+    has only the wrapper (`d-file`/`d-absent` 117 KB, too small 29 KB). The rest is knock-on: hoisted functions
+    whose neighbours went unnamed now hit the isolation veto (28 KB `e-veto`).
+  - **Why a rebuild would not fix it today:** `UNITS_VERSION` is still `"2"` (`libindex/units.rs`), so the index
+    builder's shard key (`vendor-content-key/4+units/2`) is unchanged and the store REUSES every stale esbuild
+    shard. The unit model changed under a constant fingerprint version.
+  - **Proposed fix (not made here: no crates/ change in this lane):** bump `UNITS_VERSION` whenever the statement
+    unit model changes (68b090e3 did), and rebuild the esbuild slice. **Validated on 7 packages** (the top lost
+    shippers: @opentelemetry/semantic-conventions, @aws-sdk/nested-clients, @smithy/core, marked, mime,
+    @aws-sdk/core, @opentelemetry/api): rebuilt with main's `humanify-index` into a fresh store, the whole-unit
+    hashes of their units in the CURRENT run went from 66 KB (17%) found in v2 to **347 KB (89%)** found in the
+    rebuilt index. **Predicted effect:** task-master-ai structural recall +3.4 to +4.4 points (33.7% -> ~37-38%:
+    the 169 KB wrapper-named bytes back, plus up to 47 KB of veto/size knock-on), wrong family unchanged; the
+    agreement label similarly; wrangler (549 lazy modules) should gain too. Bun inputs are unaffected (their
+    numbers did not move at the merge). The ~41 KB of lazy-body `d-*` bytes in other packages are lazy-in-app but
+    eager-in-index (`var x=v` hoisted to `var x;` + `x=v`): a later binding-init normal form, not this fix.
+- **Eval verb registered:** `npm run eval -- library <label> --index <dir> --rule agreement|structural` and
+  `npm run eval -- library-leaderboard <labels>` (flags validated upfront, `test/eval-library-args.test.ts`; the
+  runner's ambient `EXP096_PYTHON` / `EXP096_DATA` reads are gone, and `run.sh` joined the measurement-owners
+  ratchet against `${VAR:-}` reads).
+
 - **State.** DONE (instrument + first labels). Branch `exp096-library-matching-score` (from `exp095-match-misses`),
   not merged, not pushed. One Rust change: a `humanify discover` verb (commit `486b06b9`, gate ALL 12 STAGES
   PASSED). The pipeline's output is unchanged: the two new request fields default off.
@@ -56,7 +120,7 @@
     `esbuild`; held-out renovate `bun` -> `unknown`. **Fixed by `fix/detect-bun-target-node` (merged, labels `integ2-*`, commit `5205b0f0`):** renovate's prologue holds Bun's own `__export` registrar (`configurable` + `set`) AND a later esbuild-shaped one; main read esbuild on ANY esbuild-shaped registrar, which contradicted Bun's shape -> `unknown`. The fix reads the FIRST registrar of the runtime prologue: the detection census is 108/108 (88 Bun, 20 esbuild: this corpus, the e2e fixtures, the 8 eval-pair Claude Code inputs). Every scored field of `integ2-*` equals `integ-*`. `manifest_sha` now hashes the corpus manifest's canonical spelling: the commit
     hook had re-spelled `corpus.json`, so the file's bytes no longer matched the labels' `corpusSha256`.
 
-  - **OPEN (next library lane): a matcher gap the unpack fix exposed.** Once main recognised task-master-ai's
+  - **CLOSED (see the top of STATUS: a truth artifact + a stale index): a matcher gap the unpack fix exposed.** Once main recognised task-master-ai's
     1,997 lazy esbuild (`__esm`) modules, its recall fell 31.7% -> 29.1% (structural; 20.1% -> 18.4% agreement)
     and its wrong-family share ROSE 13.5% -> 20.9% (structural). The unpack is more correct; the matching is not
     ready for it: discovery now sees lazy-module init-body statements (`LazyBody` units, 17,646 -> 23,995
@@ -72,18 +136,20 @@
 One card per (label, bundle), in `results/<label>/cards/<id>.json`. One `summary.json` per label sums each set
 (held-out = every app's bytes together). Totals come first:
 
-| field                                 | meaning                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `recall`                              | library statement bytes claimed as the right package or a member of its family ÷ library statement bytes                                                                                                                                                                                                                                                                                         |
-| `appClaimedBytes`                     | bytes of APP code (mapped outside `node_modules`) claimed as any package. **The hard bar: must be 0.** `summary.bars.appBarPassed`                                                                                                                                                                                                                                                               |
-| `wrongFamilyShare`                    | claimed library bytes named as ANOTHER family ÷ all claimed library bytes                                                                                                                                                                                                                                                                                                                        |
-| `wrongNameShare`                      | (wrong family + app) ÷ all claimed bytes, judged against the **~0.2% bar** (exp095 scale lane: structural AND literal agreement)                                                                                                                                                                                                                                                                 |
-| `missBytes`                           | every library unit NOT named gets ONE cause. This is the misses lane's classifier (`decompose.classify`), imported unchanged: `a` not indexed, `b` version missing, `c` too small, `d-file`/`d-variant`/`d-absent`/`d-nofile` hash differs, `e-veto`/`e-agree`/`e-support`/`e-spec`/`e-ambig`/`e-other` a guard refused it, `f` indexed as another package, plus `no-discovery` and `unit-model` |
-| `indexSeeds`                          | the same recall and wrong share for index seeds alone (no fixpoint)                                                                                                                                                                                                                                                                                                                              |
-| `selfOther` (in `claimedBytes`)       | the app's OWN package's code (e.g. vite's pre-bundled parse5) named as another package. Reported apart from app code, and not counted in the bar                                                                                                                                                                                                                                                 |
-| `exploratory.names` (**EXPLORATORY**) | for units claimed through an exact whole-unit hash: how many, their bytes, the local bindings they declare, and the share of those bindings whose index rows hold the truth's exact version. See §5                                                                                                                                                                                              |
-| `detected`, `discoveryRan`            | the detector's own verdict beside the toolchain used, and whether discovery ran                                                                                                                                                                                                                                                                                                                  |
-| `timing.json` (per label)             | wall seconds and peak memory per run (index load included), plus the index id and size (`pipeline.json`). This is NOT part of the deterministic cards                                                                                                                                                                                                                                            |
+| field                                                     | meaning                                                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `recall`                                                  | library statement bytes claimed as the right package or a member of its family ÷ library statement bytes                                                                                                                                                                                                                                                                                         |
+| `appClaimedBytes`                                         | bytes of APP code (mapped outside `node_modules`) claimed as any package. **The hard bar: must be 0.** `summary.bars.appBarPassed`                                                                                                                                                                                                                                                               |
+| `wrongFamilyShare`                                        | claimed library bytes named as ANOTHER family ÷ all claimed library bytes                                                                                                                                                                                                                                                                                                                        |
+| `wrongNameShare`                                          | (wrong family + app) ÷ all claimed bytes, judged against the **~0.2% bar** (exp095 scale lane: structural AND literal agreement)                                                                                                                                                                                                                                                                 |
+| `missBytes`                                               | every library unit NOT named gets ONE cause. This is the misses lane's classifier (`decompose.classify`), imported unchanged: `a` not indexed, `b` version missing, `c` too small, `d-file`/`d-variant`/`d-absent`/`d-nofile` hash differs, `e-veto`/`e-agree`/`e-support`/`e-spec`/`e-ambig`/`e-other` a guard refused it, `f` indexed as another package, plus `no-discovery` and `unit-model` |
+| `indexSeeds`                                              | the same recall and wrong share for index seeds alone (no fixpoint)                                                                                                                                                                                                                                                                                                                              |
+| `namedAsShipperBytes` / `namedAsOriginBytes`, `copyBytes` | scorer 2: the named bytes split by HOW they are right (the shipping package's family, or only the origin's), and the library bytes that are a recognisable copy (have an origin). Sets also carry `selfOriginBytes`: the app's own pre-bundled copies named by their origin                                                                                                                      |
+| `*ShipperOnly`                                            | `recall`, `wrongFamilyShare`, `wrongNameShare` under the OLD shipper-only truth (scorer 1, reproduced to the digit)                                                                                                                                                                                                                                                                              |
+| `selfOther` (in `claimedBytes`)                           | the app's OWN package's code (e.g. vite's pre-bundled parse5) named as another package. Reported apart from app code, and not counted in the bar                                                                                                                                                                                                                                                 |
+| `exploratory.names` (**EXPLORATORY**)                     | for units claimed through an exact whole-unit hash: how many, their bytes, the local bindings they declare, and the share of those bindings whose index rows hold the truth's exact version. See §5                                                                                                                                                                                              |
+| `detected`, `discoveryRan`                                | the detector's own verdict beside the toolchain used, and whether discovery ran                                                                                                                                                                                                                                                                                                                  |
+| `timing.json` (per label)                                 | wall seconds and peak memory per run (index load included), plus the index id and size (`pipeline.json`). This is NOT part of the deterministic cards                                                                                                                                                                                                                                            |
 
 Claude Code byte figures are **stratified ratio estimates** from the labelled sample (strata sizes from the
 negatives lane). Its counts are sample units: `appClaimedSampleUnits`, `claimedSampleUnits`.
@@ -128,9 +194,10 @@ a CHANGE: a delta can come from the denominator moving, e.g. a unit-model change
   `bundlerDetected` count, never in recall.
 - **Versions.** "Right" means the right package (or family). A claim naming the right package from the wrong
   version range is not judged.
-- **What the truth cannot see.** A vendored copy is credited to the package that ships it, so the wrong-family
-  share counts correct origins as wrong. Pre-bundled copies inside the app's own package (`selfOther`) are reported
-  apart. Chained-map sources are `<foreign>`. Bun's own map misattributions are noted in exp095 misses §2.1.
+- **What the truth cannot see.** A copy is seen only through a vendored directory or a bundler's module marker
+  (`origins.py`). A copy with neither (rollup output, a copy under the shipper's own `src/`, a republished fork)
+  is still credited to the shipper alone: 5 of 49 copies in the hand check. Pre-bundled copies inside the app's own
+  package (`selfOther`) are reported apart. Chained-map sources are `<foreign>`. Bun's own map misattributions are noted in exp095 misses §2.1.
 - **The corpus is near best case for the index's recipe.** The held-out apps were built with Bun `--target node`,
   exactly like the index, and the esbuild app was built with the index's esbuild flags. Only Claude Code
   (`--target bun`) and wrangler (re-minified) differ from the recipe. Claude Code is one app of one vendor.
@@ -173,9 +240,9 @@ It takes the same adapter path a `--diagnostics --library-index` pipeline run ta
 corpus (`--force-mixed`), and an unreadable index. The leaderboard refuses labels on different corpus manifests or
 scorer versions.
 
-**Registering it** (step 4; do not land on main): `eval-library-verb.patch` adds `npm run eval -- library <label>`
-to `scripts/eval.ts`, with what it proves and cannot prove. It can land only after the library code (discovery,
-libindex, this verb) is on main.
+**Registered:** `npm run eval -- library <label> ...` runs `run.sh`, `npm run eval -- library-leaderboard <labels>`
+runs `leaderboard.py` (`scripts/eval.ts`, with what each proves and cannot prove). The origin layer is frozen once:
+`corpus.py origins` (writes `<DATA>/truth/<id>.origins.json.gz` and `origins.json`; `verify` checks both).
 
 ## 7. Files
 
@@ -185,6 +252,9 @@ libindex, this verb) is on main.
   `bands.json`.
 - `merge_index.py`: a lab union of two index directories (how `v2+ccexact` was made: v2 + the negatives lane's
   index C, `/work/exp096-data/indexes/`).
+- `origins.py`, `origins.json`: the origin layer (scorer 2) and its frozen shas. `handcheck.json`: the hand check's
+  verdicts (names and numbers only), drawn by `handcheck_draw.py`. `lazy_modules.py`: the esbuild-app lazy-module
+  decomposition and the rebuilt-index coverage check.
 - `results/<label>/`: `pipeline.json` (binary sha256, build commit, index id and size, rule, corpus sha),
   `summary.json`, `timing.json`, `cards/`.
 - Bulk, not committed: `/work/exp096-data/` (corpus, truth, raw reports, index cache, the merged index).

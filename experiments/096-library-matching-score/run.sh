@@ -5,5 +5,5 @@
 #       [--commit <ref>] [--jobs N] [--cpus LIST] [--force-mixed]
 # The scorer needs numpy/scipy (exp095's family table reader): the exp095 labs' venv.
 set -euo pipefail
-PY=${EXP096_PYTHON:-/work/exp095-library-fingerprints/scale/.venv/bin/python}
+PY=/work/exp095-library-fingerprints/scale/.venv/bin/python
 exec "$PY" -I "$(dirname "$0")/run.py" "$@"
