@@ -161,6 +161,60 @@ fn a_retired_option_is_unknown() {
     }
 }
 
+/// The stderr a refused argv prints (its first line: the error itself).
+fn refusal(argv: &[&str]) -> String {
+    let argv: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
+    match program().parse(&argv) {
+        ParseOutcome::Exit {
+            exit_code,
+            code,
+            stderr,
+            ..
+        } => {
+            assert_eq!(
+                (exit_code, code),
+                (1, "commander.unknownOption"),
+                "{argv:?}"
+            );
+            stderr.lines().next().unwrap_or_default().to_string()
+        }
+        ParseOutcome::Action { .. } => panic!("{argv:?} still parses"),
+    }
+}
+
+/// Config sweep 2026-10-13, no backwards compatibility: a RENAMED flag's
+/// old spelling is refused, and the refusal names the new one.
+#[test]
+fn a_renamed_option_is_refused_naming_its_replacement() {
+    let line = refusal(&["in.js", "--profile", "p.json"]);
+    assert!(line.contains("'--profile'"), "{line}");
+    assert!(line.contains("--perf-trace"), "{line}");
+    let opts = parse_opts(&["in.js", "--perf-trace", "p.json"]);
+    assert_eq!(opts.str("perfTrace"), Some("p.json"));
+    assert!(help_text("humanify").contains("--perf-trace <path>"));
+}
+
+/// The positive spellings that only restated a default-on lever are gone;
+/// the refusal says so and names the `--no-` form that still works.
+#[test]
+fn a_default_restating_spelling_is_refused() {
+    for (flag, attr) in [
+        ("--naming-floor", "namingFloor"),
+        ("--naming-floor-sweep", "namingFloorSweep"),
+        ("--reconcile-prior-diff", "reconcilePriorDiff"),
+    ] {
+        let line = refusal(&["in.js", flag]);
+        assert!(line.contains(&format!("'{flag}'")), "{line}");
+        let negated = flag.replacen("--", "--no-", 1);
+        assert!(line.contains(&negated), "{line}");
+        assert_eq!(parse_opts(&["in.js", &negated]).bool(attr), Some(false));
+        assert!(
+            !help_text("humanify").contains(&format!("  {flag} ")),
+            "{flag} is still listed in the help"
+        );
+    }
+}
+
 #[test]
 fn version_is_package_json_version() {
     let path = format!("{}/../../package.json", env!("CARGO_MANIFEST_DIR"));

@@ -88,7 +88,6 @@ FORCE_MIXED=0
 SCORE=1
 REBOOT=0
 SCORE_PIDS=()
-HEAP_MB=65536
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --pipeline)       PIPELINE="$2"; shift ;;
@@ -316,7 +315,7 @@ for V in "${VERSIONS[@]}"; do
     --arg outputDir "$TREE" --arg repo "$RUN_REPO" \
     --arg stdoutPath "$OUT/runs/$V.stdout" --arg endpoint "$ENDPOINT" \
     --arg model "$MODELNAME" --arg effort "$EFFORT" --argjson conc "$CONC" \
-    --argjson heapMb "$HEAP_MB" --argjson args "$ARGS_JSON" \
+    --argjson args "$ARGS_JSON" \
     --argjson command "$PIPE_CMD_JSON" \
     --argjson artifacts "$(printf '%s\n' "$TREE/.humanify/humanified.js" \
       "$TREE/.humanify/split-ledger.json" "$STATS" | jq -R . | jq -s .)" \
@@ -324,7 +323,7 @@ for V in "${VERSIONS[@]}"; do
       input:$input, prior:$prior, outputDir:$outputDir, repo:$repo, args:$args,
       command:$command, stdoutPath:$stdoutPath, endpoint:$endpoint,
       model:$model, reasoningEffort:$effort, concurrency:$conc,
-      heapMb:$heapMb, artifacts:$artifacts}' > "$RUN_CFG" \
+      artifacts:$artifacts}' > "$RUN_CFG" \
     || { echo "walk.sh: could not write $RUN_CFG — aborting" >&2; exit 1; }
   if [[ "$PIPELINE" == "rust" ]]; then
     { jq --argjson bin "$BIN_JSON" '. + {bin:$bin}' "$RUN_CFG" > "$RUN_CFG.tmp" && mv "$RUN_CFG.tmp" "$RUN_CFG"; } \

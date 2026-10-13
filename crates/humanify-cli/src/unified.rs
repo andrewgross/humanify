@@ -41,7 +41,7 @@ use humanify_model::detection::{
 };
 use humanify_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConfig};
 
-use crate::commander::{OptionValues, ValueSource};
+use crate::commander::OptionValues;
 use crate::kill_switches::{Switch, SwitchState};
 use crate::log::{debug_reset_output, debug_set_output, verbose};
 use crate::pipeline_config::enum_name;
@@ -75,7 +75,8 @@ pub struct CommandOptions {
     pub lane_threshold: Option<String>,
     /// `--rename-retries <n>`: the name-conflict re-ask budget.
     pub rename_retries: Option<String>,
-    pub profile: Option<String>,
+    /// `--perf-trace <path>`: the Chrome trace-event performance trace.
+    pub perf_trace: Option<String>,
     pub prior_version: Option<String>,
     pub reconcile_prior_diff: Option<bool>,
     pub naming_floor: Option<bool>,
@@ -151,7 +152,7 @@ impl CommandOptions {
             max_free_retries: s("maxFreeRetries"),
             lane_threshold: s("laneThreshold"),
             rename_retries: s("renameRetries"),
-            profile: s("profile"),
+            perf_trace: s("perfTrace"),
             prior_version: s("priorVersion"),
             reconcile_prior_diff: v.bool("reconcilePriorDiff"),
             naming_floor: v.bool("namingFloor"),
@@ -202,13 +203,6 @@ impl CommandOptions {
     }
 }
 
-/// Which default-on flags the user actually typed (commander's value
-/// sources). Without it, a true sweep value counts as explicit.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct FlagExplicitness {
-    pub naming_floor_sweep: Option<bool>,
-}
-
 fn truthy(v: &Option<String>) -> bool {
     v.as_deref().is_some_and(|s| !s.is_empty())
 }
@@ -231,13 +225,7 @@ fn enum_violation<T: serde::Serialize + Copy>(
 
 /// `checkFlagInvariants`: one message per violation, preconditions first
 /// (in flag-declaration order), then the enum values.
-pub fn check_flag_invariants(
-    opts: &CommandOptions,
-    explicit: Option<FlagExplicitness>,
-) -> Vec<String> {
-    let sweep_explicitly_on = explicit
-        .and_then(|e| e.naming_floor_sweep)
-        .unwrap_or(opts.naming_floor_sweep == Some(true));
+pub fn check_flag_invariants(opts: &CommandOptions) -> Vec<String> {
     let rules = [
         (opts.split_pure, "--split-pure", opts.split, "--split"),
         (
@@ -245,12 +233,6 @@ pub fn check_flag_invariants(
             "--split-ledger",
             opts.split,
             "--split",
-        ),
-        (
-            sweep_explicitly_on,
-            "--naming-floor-sweep",
-            opts.naming_floor != Some(false),
-            "--naming-floor",
         ),
     ];
     let mut out: Vec<String> = rules
@@ -312,13 +294,7 @@ fn read_utf8(path: &str) -> Result<String, Crash> {
 /// The action: `humanify <input> [options]`. Returns the process exit code.
 pub fn run(input: &str, values: &OptionValues) -> i32 {
     let opts = CommandOptions::from_values(values);
-    let explicit = FlagExplicitness {
-        naming_floor_sweep: Some(
-            values.source("namingFloorSweep") == Some(ValueSource::Cli)
-                && opts.naming_floor_sweep == Some(true),
-        ),
-    };
-    let violations = check_flag_invariants(&opts, Some(explicit));
+    let violations = check_flag_invariants(&opts);
     if !violations.is_empty() {
         for m in violations {
             eprintln!("Error: {m}");
@@ -356,7 +332,7 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
             return 1;
         }
     };
-    let profiler = humanify_core::profiling::Profiler::new(opts.profile.is_some());
+    let profiler = humanify_core::profiling::Profiler::new(opts.perf_trace.is_some());
     profiler.install_global();
     // buildProvider: the cache wrapper mkdirs its dir at construction.
     if let Some(dir) = &settings.llm_cache_dir
@@ -460,7 +436,7 @@ fn finalize_profile(
     profiler: &humanify_core::profiling::Profiler,
     renderer: &mut dyn ProgressRenderer,
 ) {
-    let Some(path) = &opts.profile else { return };
+    let Some(path) = &opts.perf_trace else { return };
     use humanify_core::profiling::{format_profile_summary, to_trace_events};
     let report = profiler.finalize(Some(input));
     let trace =

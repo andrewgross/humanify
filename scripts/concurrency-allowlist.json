@@ -174,21 +174,21 @@
       "scope": "struct Profiler",
       "construct": "lock",
       "pattern": "observer",
-      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+      "reason": "--perf-trace spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
       "file": "crates/humanify-core/src/profiling.rs",
       "scope": "lock",
       "construct": "lock",
       "pattern": "observer",
-      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+      "reason": "--perf-trace spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
       "file": "crates/humanify-core/src/profiling.rs",
       "scope": "Profiler::new",
       "construct": "lock",
       "pattern": "observer",
-      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+      "reason": "--perf-trace spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
       "file": "crates/humanify-core/src/profiling.rs",
@@ -216,14 +216,14 @@
       "scope": "static GLOBAL",
       "construct": "lock",
       "pattern": "observer",
-      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+      "reason": "--perf-trace spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
       "file": "crates/humanify-core/src/profiling.rs",
       "scope": "push_snapshot",
       "construct": "lock",
       "pattern": "observer",
-      "reason": "--profile spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
+      "reason": "--perf-trace spans from any thread (audit O18): every lock is poison-tolerant; observation only, the profile is not output"
     },
     {
       "file": "crates/humanify-core/src/subprocess.rs",

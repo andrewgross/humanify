@@ -79,6 +79,22 @@ describe("eval score argument passthrough", () => {
     assert.strictEqual(r.baseMode, "archive");
   });
 
+  // Config sweep 2026-10-13, no backwards compatibility: a renamed flag's old
+  // spelling is refused naming the new one; a deleted one says why.
+  it("refuses --no-vendor, naming its new spelling --no-vendor-score", () => {
+    assert.match(
+      String(scoreArgs(["lbl", "--no-vendor"])),
+      /--no-vendor-score/
+    );
+    const r = scoreArgs(["lbl", "--no-vendor-score"]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.passthrough, ["--no-vendor-score"]);
+  });
+
+  it("refuses --heap-mb: it was inert for the binary and is deleted", () => {
+    assert.match(String(scoreArgs(["lbl", "--heap-mb", "1"])), /removed/);
+  });
+
   it("refuses --seeded-base together with --archive-prior: one base per run", () => {
     assert.match(
       String(scoreArgs(["lbl", "--seeded-base", "--archive-prior"])),

@@ -23,16 +23,13 @@
 #                          itself (reads ~3.7x worse and says so per pair).
 #                          Exclusive with --seeded-base.
 #   --pairs <a,b>          restrict to named pairs ("215->216" or full form)
-#   --heap-mb <n>          recorded heap (default 65536) — INERT for the
-#                          binary (not a Node process); kept because every
-#                          run manifest records it
 #   --endpoint <url>       LLM endpoint (default: llm.endpoint in the git-ignored
 #                          .humanify.local.json at the repo root; a worktree
 #                          also reads the main checkout's — lib/llm-endpoint.sh)
 #   --llm-cache <dir>      opt IN to a response cache — iteration only,
 #                          never valid for a gate run
 #   --no-layout            skip the split-tree churn analysis
-#   --no-vendor            skip the vendor churn analysis
+#   --no-vendor-score      skip the vendor churn analysis
 #   --inputs-base <dir>    override pairs.json inputsBase
 #   --priors-base <dir>    override pairs.json priorsBase
 #   --bin <path>           the Rust binary to score (default: this repo's
@@ -76,7 +73,6 @@ WORK="/tmp/eval-work"
 ARCHIVE_PRIOR=0
 SEEDED_BASE=0
 PAIRS_FILTER=""
-HEAP_MB=65536
 ENDPOINT_OVERRIDE=""
 LLM_CACHE_DIR=""
 RUN_LAYOUT=1
@@ -94,11 +90,13 @@ while [[ $# -gt 0 ]]; do
     --archive-prior)  ARCHIVE_PRIOR=1 ;;
     --seeded-base)    SEEDED_BASE=1 ;;
     --pairs)          PAIRS_FILTER="$2"; shift ;;
-    --heap-mb)        HEAP_MB="$2"; shift ;;
     --endpoint)       ENDPOINT_OVERRIDE="$2"; shift ;;
     --llm-cache)      LLM_CACHE_DIR="$2"; shift ;;
     --no-layout)      RUN_LAYOUT=0 ;;
-    --no-vendor)      RUN_VENDOR=0 ;;
+    --no-vendor-score) RUN_VENDOR=0 ;;
+    # Retired by the config sweep (2026-10-13), refused with eval.ts's words.
+    --no-vendor)      echo "run.sh: --no-vendor is retired: renamed: use --no-vendor-score" >&2; exit 2 ;;
+    --heap-mb)        echo "run.sh: --heap-mb is retired: removed: it was inert (the pipeline is a Rust binary, not a Node process)" >&2; exit 2 ;;
     --no-boot-prompt) RUN_BOOT_PROMPT=0 ;;
     --no-self-hop)    RUN_SELF_HOP=0 ;;
     --inputs-base)    INPUTS_OVERRIDE="$2"; shift ;;
@@ -127,12 +125,11 @@ fi
 BASE_MODE="scratch"
 [[ "$SEEDED_BASE" == "1" ]] && BASE_MODE="seeded"
 [[ "$ARCHIVE_PRIOR" == "1" ]] && BASE_MODE="archive"
-# 14336 was sized when this harness ran through an LLM cache. Cold-by-default
-# (rule 10) keeps far more naming state live at once, and 2.1.215->216 — the
-# largest base — OOM'd at 14GB with 219GB free on the box. Sized for the
-# biggest pair, not the smallest; pairs run sequentially so this is a ceiling,
-# not a reservation.
-EVAL_HEAP="$HEAP_MB"
+# The Node heap of the two ANALYSIS steps (analyze.ts, trail-report.ts) — the
+# only Node processes here. The pipeline is a Rust binary and gets no
+# NODE_OPTIONS (the inert --heap-mb flag that set one was deleted, config
+# sweep 2026-10-13). Sized for the biggest pair; a ceiling, not a reservation.
+ANALYSIS_HEAP_MB=65536
 # Fatal when bun is missing, before any pair runs — a sweep that cannot boot its
 # output is not a gated sweep.
 source "$REPO/experiments/lib/boot-gate.sh"
@@ -158,8 +155,6 @@ BIN=$(jq -r .path <<< "$BIN_JSON")
 PIPE_CMD=("$BIN")
 echo "PIPELINE: Rust binary $BIN"
 echo "  sha256 $(jq -r .sha256 <<< "$BIN_JSON"), built from $(jq -r '.commit | if . == "" then "an UNKNOWN commit" else .[0:12] end' <<< "$BIN_JSON")$(jq -r 'if .dirty then " (DIRTY tree)" else "" end' <<< "$BIN_JSON")"
-echo "HEAP: --heap-mb / NODE_OPTIONS are INERT for the Rust binary (it is not a Node process);"
-echo "  the recorded heapMb is not a limit on it, and no heap-headroom warning applies."
 RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" \
   '{command:[$bin], bin:$rec}')
 # The extra pipeline args, as JSON (null when none: the default records stay
@@ -276,7 +271,7 @@ for i in $(seq 0 $((npairs - 1))); do
         echo "=== $PAIR: rebasing prior (re-humanify $FROM from SCRATCH, current pipeline, no prior) ==="
       fi
       rm -rf "$REBASE"
-      NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" "${PIPE_CMD[@]}" "$INPUT_FROM" \
+      "${PIPE_CMD[@]}" "$INPUT_FROM" \
         --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
         "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
@@ -306,8 +301,8 @@ for i in $(seq 0 $((npairs - 1))); do
   # switches, which PRIOR was used, commit + dirty flag, and artifact sizes.
   # Each of those was previously written by a different step or by none at all,
   # and the missing ones are exactly the facts whose absence produced wrong
-  # published numbers (rule 10's cache, the ~3.7x archive-prior trap, an
-  # EVAL_HEAP nobody had ever measured).
+  # published numbers (rule 10's cache, the ~3.7x archive-prior trap, a
+  # heap ceiling nobody had ever measured).
   # The pipeline used to create this directory itself on first write; now the
   # run config lands here BEFORE the pipeline starts, so make it first.
   mkdir -p "$WORK/$MODEL"
@@ -326,7 +321,7 @@ for i in $(seq 0 $((npairs - 1))); do
     --arg outputDir "$OUT" --arg repo "$REPO" \
     --arg stdoutPath "$RESULTS/$TO.stdout" --arg endpoint "$ENDPOINT" \
     --arg model "$MODELNAME" --arg effort "$EFFORT" \
-    --argjson concurrency "$CONC" --argjson heapMb "$EVAL_HEAP" \
+    --argjson concurrency "$CONC" \
     --arg cacheDir "$LLM_CACHE_DIR" \
     --argjson args "$ARGS_JSON" --argjson extra "$RUNCFG_EXTRA" \
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
@@ -336,7 +331,7 @@ for i in $(seq 0 $((npairs - 1))); do
       "outputDir":$outputDir,"repo":$repo,
       "args":$args,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
       "model":$model,"reasoningEffort":$effort,"concurrency":$concurrency,
-      "heapMb":$heapMb,"artifacts":$artifacts}
+      "artifacts":$artifacts}
      + (if $cacheDir == "" then {} else {"cacheDir":$cacheDir} end)
      + $extra' \
     > "$RUN_CFG"
@@ -402,13 +397,13 @@ for i in $(seq 0 $((npairs - 1))); do
     # above (exp046). It was unscored until then, so every reference committed
     # before it prints `-` for the vendor columns -- which is not 0. Vendor
     # scoring rides on LAYOUT_ARGS because analyze.ts takes the trees
-    # positionally; --no-vendor skips it.
+    # positionally; --no-vendor-score skips it.
     PRIOR_VENDOR="$(dirname "$(dirname "$PRIOR")")/vendor"
     if [[ "$RUN_VENDOR" == "1" && -d "$OUT/vendor" && -d "$PRIOR_VENDOR" ]]; then
       LAYOUT_ARGS+=("$OUT/vendor" "$PRIOR_VENDOR")
     fi
   fi
-  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/analyze.ts" \
+  NODE_OPTIONS="--max-old-space-size=$ANALYSIS_HEAP_MB" npx tsx "$HERE/analyze.ts" \
     "$OUT/.humanify/humanified.js" "$PRIOR" \
     "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
     "$STATS" "$PAIR" ${LAYOUT_ARGS[@]+"${LAYOUT_ARGS[@]}"} > "$RESULTS/$TO.json" \
@@ -423,7 +418,7 @@ for i in $(seq 0 $((npairs - 1))); do
     echo "NO DIAGNOSTICS TRAIL for $PAIR at $DIAG — report page NOT written."
     echo "  See $RESULTS/$TO.stdout. Every KPI above is unaffected."
   else
-    NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" npx tsx "$HERE/trail-report.ts" \
+    NODE_OPTIONS="--max-old-space-size=$ANALYSIS_HEAP_MB" npx tsx "$HERE/trail-report.ts" \
       "$DIAG" "$RESULTS/$TO-report.html" \
       "$OUT/.humanify/humanified.js" "$PRIOR" \
       "$OUT/.humanify/split-ledger.json" "$PRIOR_LEDGER" \
@@ -487,7 +482,7 @@ INPUT="${LAST_INPUT:-}"
 self_hop_leg() {
   local out="$1" log="$2"
   shift 2
-  NODE_OPTIONS="--max-old-space-size=$EVAL_HEAP" "${PIPE_CMD[@]}" "$INPUT" \
+  "${PIPE_CMD[@]}" "$INPUT" \
     --split --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
     --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
     "${@+"$@"}" \

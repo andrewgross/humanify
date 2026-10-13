@@ -415,9 +415,11 @@ npm run eval -- score <label> --bin <workspace>/target/release/humanify
   manifest records the sha256 **as launched** and warns if it differs from the
   build, or if the build commit is not the run's. The dispatcher also refuses
   to add binary cards to a pre-cutover TS-scored label.
-- **`--heap-mb` / `NODE_OPTIONS` are INERT** for the binary, because it is not a
-  Node process. The run log says so, and the manifest's heap-headroom warning
-  does not fire for binary runs.
+- **No heap setting.** The binary is not a Node process, so the launches carry
+  no `NODE_OPTIONS` and the manifest records no heap. `--heap-mb` (inert) and
+  the heap-headroom warning were deleted in the config sweep (2026-10-13);
+  `--heap-mb` is refused upfront. Only the two Node analysis steps
+  (`analyze.ts`, `trail-report.ts`) get a fixed 64 GB heap.
 - **The matcher preflight is retired** with the TS matcher it tested (the
   cutover). Labels scored before it still carry `preflight-status.json`, and
   the summary still reads it for them.

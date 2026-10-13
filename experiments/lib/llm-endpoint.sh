@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Where the LLM server is — the ONE owner every shell instrument asks
-# (run.sh, gate.sh, selfhop.sh, neutrality.sh, walk.sh, rust-env-check.sh).
+# (run.sh, neutrality.sh, walk.sh, rust-env-check.sh).
 #
 #   source experiments/lib/llm-endpoint.sh
 #   ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2

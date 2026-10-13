@@ -39,15 +39,13 @@ function livingFiles(): string[] {
 
 describe("measurement owners", () => {
   it("changed-line counting in the living set stays in the declared sites", () => {
-    // Owner: experiments/lib/diff.ts. The three shell scripts are the known
+    // Owner: experiments/lib/diff.ts. The two shell scripts are the known
     // re-implementations, kept because they predate a diff.ts CLI — a NEW
-    // site is a fourth answer to one question and fails here instead of in
+    // site is a third answer to one question and fails here instead of in
     // review. (Historical experiment dirs are out of scope.)
     const allowed = new Set([
       "experiments/lib/diff.ts",
       "experiments/lib/neutrality.sh",
-      "experiments/lib/gate.sh",
-      "experiments/lib/selfhop.sh",
       "experiments/034-eval-harness/run.sh"
     ]);
     const counting = livingFiles().filter((f) =>
@@ -262,12 +260,12 @@ describe("measurement owners", () => {
     // Converted to parsed flags 2026-08-12 per owner direction: config is
     // argv, validated upfront, never read wherever in the script.
     const banned =
-      /\b(EVAL_PAIRS|REBASE_PRIOR|EVAL_LLM_CACHE|EVAL_ENDPOINT|EVAL_LAYOUT|EVAL_VENDOR|EVAL_BOOT_PROMPT|EVAL_INPUTS_BASE|EVAL_PRIORS_BASE|MATCHER_PREFLIGHT|NEUTRALITY_CACHE|NEUTRALITY_PRIORS|SELF_HOP|PINNED_AB_\w+|EXP054_\w+|ISOLATION_CACHE|GATE_CACHE|SELFHOP_CACHE|VERIFY_FRESH|VERIFY_PRIOR)\b/;
+      /\b(EVAL_PAIRS|REBASE_PRIOR|EVAL_LLM_CACHE|EVAL_ENDPOINT|EVAL_LAYOUT|EVAL_VENDOR|EVAL_BOOT_PROMPT|EVAL_INPUTS_BASE|EVAL_PRIORS_BASE|MATCHER_PREFLIGHT|NEUTRALITY_CACHE|NEUTRALITY_PRIORS|SELF_HOP|PINNED_AB_\w+|EXP054_\w+|ISOLATION_CACHE|GATE_CACHE|SELFHOP_CACHE|VERIFY_FRESH|VERIFY_PRIOR|BOOT_GATE_SOFT)\b/;
     for (const f of [
       "experiments/034-eval-harness/run.sh",
       "experiments/lib/neutrality.sh",
-      "experiments/lib/gate.sh",
-      "experiments/lib/selfhop.sh",
+      "experiments/lib/boot-gate.sh",
+      "experiments/walk/walk.sh",
       "scripts/eval.ts"
     ]) {
       assert.ok(
@@ -286,12 +284,11 @@ describe("measurement owners", () => {
     // names the script never assigns.
     const scripts = [
       "experiments/034-eval-harness/run.sh",
-      "experiments/lib/neutrality.sh",
-      "experiments/lib/gate.sh",
-      "experiments/lib/selfhop.sh"
+      "experiments/lib/neutrality.sh"
     ];
-    // boot-gate.sh is excluded: BOOT_GATE_SOFT is shared with archived
-    // callers and accepted as-is (owner decision, 2026-08-12).
+    // boot-gate.sh is excluded: its one ambient read, BOOT_GATE_MODEL, is
+    // accepted as-is (owner decision, 2026-08-12; BOOT_GATE_SOFT was deleted
+    // in the config sweep, 2026-10-13).
     const offenders: string[] = [];
     for (const f of scripts) {
       // Comments can legitimately mention the ${VAR:-} form as prose.
