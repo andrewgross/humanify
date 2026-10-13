@@ -1,9 +1,9 @@
 # Config consolidation: one parse point, one typed config, one file
 
-Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-3
-landed on main (`fe008408`); **step 4 (one typed `Config`) is done** on
-branch `cleanup/config-sweep-4-typed-config` — §5 records what changed.
-Steps 5-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
+Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-4
+landed on main (`df6ace2a`); **step 5 (the `--config` file) is done** on
+branch `cleanup/config-sweep-5-6` — §5 records what changed. Steps 6-8 are
+not built. Asked for by Andrew: "we will need several sweeps of our code and evals
 to clean up old flags and make sure config is parsed in ONE place and used
 downstream." Rule applied throughout: no backwards compatibility — an old
 spelling is deleted, not aliased.
@@ -390,7 +390,7 @@ marked **G** touch how the harness launches the binary and update
    fixture is unchanged); warm neutrality vs `fe008408` on
    2.1.215→2.1.216.
 
-5. **The config file** (N, G). `--config <file>`, TOML, compiled-in
+5. **DONE 2026-10-13. The config file** (N, G). `--config <file>`, TOML, compiled-in
    defaults, strict keys. Every flag outside the six operational ones moves
    into it and is deleted. A test proves the compiled-in defaults equal
    today's defaults, value by value. **Refusal tests, each written red
@@ -400,6 +400,48 @@ marked **G** touch how the harness launches the binary and update
    key; retired flag; unknown switch name; unreadable/invalid TOML; and a
    test that each refusal happens before the unpack stage writes anything
    (the output directory stays empty).
+
+   What landed: every setting is declared ONCE in the key registry
+   (`humanify_cli::config::keys::KEYS`: section, name, type and range,
+   default, one-line meaning, and the flag for an operational one); the
+   TOML is read only by `config::file` (the env guard's owner for `toml`).
+   Flags kept: the input, `-o/--output-dir`, `--prior-version`,
+   `--endpoint`, `-m/--model`, `--config`, `-v` (plus help/version, and the
+   library spellings until step 6). **33 flags moved** (34 spellings with
+   `-c`): each is refused naming its key (`MOVED_FLAGS`,
+   `error: unexpected argument '--split' (moved: set split.enabled = true
+in --config)`). The operational settings are file keys too
+   (`io.output_dir`, `llm.endpoint`, `llm.model`, `matching.prior_version`,
+   `diagnostics.verbosity`); a flag and the file that disagree are refused
+   naming both (`config conflict: llm.endpoint = "http://a/v1" (--endpoint)
+vs "http://b/v1" (cfg.toml)`), agreeing ones are recorded as
+   `flag+file`. Refused at the read, all collected and printed with every
+   other refusal: not TOML, unreadable, unknown key (with "did you mean"),
+   retired key (`llm.api_key`, `perf.profile`, `naming.sequential`,
+   `io.input`), wrong type, out of range (counts, `verbosity` 0..=2, u32
+   ceilings, enum names, lever names, empty strings, non-http endpoints).
+   Messages now name KEYS, not flags (`split.pure requires split.enabled`,
+   `switches.disable: unknown disable switch …`); the TS-era invariant
+   vectors are checked through a translation of their flag names.
+   The stats `config` block gains `configFile: {path, sha256}` and
+   `sources` (each non-default value: flag / file / flag+file).
+   `humanify.example.toml` is RENDERED from the registry (keys with a flag
+   commented out, so a copy never conflicts) and held byte-equal by a test,
+   which also proves loading it changes nothing.
+   Harness: `experiments/lib/pipeline-config.ts` writes one TOML per
+   launch (run.sh's rebase, scored leg and both self-hop legs; walk.sh;
+   neutrality.sh; e2e.ts; ask-trace.ts); `eval score`/run.sh
+   `--pipeline-arg` is retired for `--pipeline-set <section.key=value>`
+   (a key the harness sets itself is refused up front), recorded as
+   `pipelineSettings`; each run config carries its `configToml`.
+   neutrality.sh and walk.sh ask the binary (`--help`) whether it reads
+   `--config`, so a baseline from before this step still gets the same
+   settings as flags. Launch goldens re-recorded (the recorder logs each
+   launch's file as `humanify-config|` lines). Launch parity: all 53
+   captured launches, translated flag-by-flag into keys, resolve to their
+   captured effective settings, and every re-recorded golden launch
+   resolves to a captured launch's settings.
+
 6. **One library decision** (N). Delete `--skip-libraries` /
    `--no-skip-libraries`; add `--library-matching off|report|names`
    (default off) and `[library] unnamed = "leave"|"model"`. Neutrality on

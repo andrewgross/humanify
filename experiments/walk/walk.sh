@@ -200,6 +200,13 @@ else
     '{kind:"ts", tree:$tree, commit:$c, dirty:$d, srcSha256:$srcSha, command:$cmd}')
 fi
 
+# How a hop passes its settings: a --config file when the pipeline reads one
+# (asked of the pipeline itself), else the flags it takes.
+CONFIG_FILE_LAUNCH=0
+if [[ "$PIPELINE" == "rust" ]] && "$FROZEN" --help 2>/dev/null | grep -q -- '--config <file>'; then
+  CONFIG_FILE_LAUNCH=1
+fi
+
 # PREFLIGHT: the pipeline must at least start. A TS tree whose node_modules
 # lost a dependency (the cutover pruned the repo's) dies in 0 s on every hop.
 PREFLIGHT_CMD=($(jq -r '.[]' <<< "$PIPE_CMD_JSON"))
@@ -306,11 +313,26 @@ for V in "${VERSIONS[@]}"; do
   rm -rf "$TREE"
   STATS="$OUT/runs/$V.stats.json"
   rm -f "$STATS"
-  ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --split \
-    --endpoint "$ENDPOINT" --model "$MODELNAME" \
-    --reasoning-effort "$EFFORT" -c "$CONC" -o "$TREE" \
-    ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} --stats-json "$STATS" \
-    -vv --log-file "$OUT/runs/$V.log" | jq -R . | jq -s .)
+  if [[ "$CONFIG_FILE_LAUNCH" == "1" ]]; then
+    # The binary takes only its operational flags; every other setting is
+    # a key in the hop's --config file (config sweep step 5, 2026-10-13).
+    HOP_TOML="$OUT/runs/$V.toml"
+    npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$HOP_TOML" \
+      "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" split.enabled=true \
+      "diagnostics.stats_json=$STATS" "diagnostics.log_file=$OUT/runs/$V.log" \
+      || { echo "walk.sh: could not write $HOP_TOML — aborting" >&2; exit 1; }
+    ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --config "$HOP_TOML" \
+      --endpoint "$ENDPOINT" --model "$MODELNAME" -o "$TREE" \
+      ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} -vv | jq -R . | jq -s .)
+  else
+    # The archived TS tree, or a binary from before config sweep step 5:
+    # the same settings as the flags they take.
+    ARGS_JSON=$(printf '%s\n' "$(input_of "$V")" --split \
+      --endpoint "$ENDPOINT" --model "$MODELNAME" \
+      --reasoning-effort "$EFFORT" -c "$CONC" -o "$TREE" \
+      ${PRIOR_ARGS[@]+"${PRIOR_ARGS[@]}"} --stats-json "$STATS" \
+      -vv --log-file "$OUT/runs/$V.log" | jq -R . | jq -s .)
+  fi
   RUN_CFG="$OUT/runs/$V.runcfg.json"
   jq -n --arg pair "${PRIOR_V:-COLD}->$V" --arg version "$V" \
     --arg runLabel "walk-$PIPELINE" --arg resultsDir "$OUT/runs" \

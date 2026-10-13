@@ -140,6 +140,8 @@ fn start_stub() -> String {
     url
 }
 
+/// One run; `extra` are `--config` settings (dotted TOML lines) beside
+/// no retries and the ask log.
 fn run(
     dir: &Path,
     input: &str,
@@ -148,21 +150,28 @@ fn run(
     endpoint: &str,
     extra: &[&str],
 ) -> std::process::Output {
+    let config = out.with_extension("toml");
+    let toml: String = [
+        "llm.retries = 0".to_string(),
+        format!("diagnostics.dump_asks = {asks:?}"),
+    ]
+    .into_iter()
+    .chain(extra.iter().map(|l| l.to_string()))
+    .map(|l| format!("{l}\n"))
+    .collect();
+    std::fs::write(&config, toml).unwrap();
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_humanify"));
     cmd.current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HUMANIFY_API_KEY", "k")
-        .args([input, "--model", "stub-model", "--retries", "0"])
+        .args([input, "--model", "stub-model"])
         .arg("--endpoint")
         .arg(endpoint)
         .arg("-o")
         .arg(out)
-        .arg("--dump-asks")
-        .arg(asks);
-    for a in extra {
-        cmd.arg(a);
-    }
+        .arg("--config")
+        .arg(&config);
     cmd.output().unwrap()
 }
 
@@ -310,7 +319,7 @@ fn the_second_reask_prompt_carries_the_accumulated_blocklist() {
         &out,
         &asks,
         &url,
-        &["--dump-artifacts", artifacts.to_str().unwrap()],
+        &[&format!("diagnostics.dump_artifacts = {artifacts:?}")],
     );
     let err = String::from_utf8_lossy(&result.stderr).into_owned();
     assert_eq!(result.status.code(), Some(0), "{err}");
@@ -410,14 +419,14 @@ fn the_rename_retries_flag_sizes_the_reask_budget() {
     };
     assert_eq!(count(0, &[]), 2, "the default budget is TWO re-asks");
     assert_eq!(
-        count(1, &["--rename-retries", "1"]),
+        count(1, &["naming.rename_retries = 1"]),
         1,
-        "--rename-retries 1 restores the old single re-ask"
+        "rename_retries = 1 restores the old single re-ask"
     );
     assert_eq!(
-        count(2, &["--rename-retries", "0"]),
+        count(2, &["naming.rename_retries = 0"]),
         0,
-        "--rename-retries 0 never re-asks"
+        "rename_retries = 0 never re-asks"
     );
     // Disabled re-asks still resolve the collision: the deterministic
     // decoration lands in the passthrough adapter's `<out>/index.js` and

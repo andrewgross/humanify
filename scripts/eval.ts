@@ -24,6 +24,7 @@ import {
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { parseSetting } from "../experiments/lib/pipeline-config.js";
 import {
   type BaseMode,
   labelBaseModes
@@ -107,6 +108,18 @@ function guardLabel(label: string, force: boolean): string | null {
  */
 type FlagKind = "bool" | "value" | "repeat";
 
+/** Why a flag's value is refused (missing, a flag, a malformed setting). */
+function valueRefusal(flag: string, v: string | undefined): string | null {
+  if (v === undefined || v.startsWith("--")) return `${flag} needs a value`;
+  if (flag !== "--pipeline-set") return null;
+  try {
+    parseSetting(v);
+    return null;
+  } catch (e) {
+    return `--pipeline-set: ${(e as Error).message}`;
+  }
+}
+
 function parseFlags(
   args: string[],
   spec: Record<string, FlagKind>
@@ -139,11 +152,8 @@ function parseFlags(
       continue;
     }
     const v = args[++i];
-    // A "repeat" flag's value is an argv for ANOTHER program, so it may
-    // itself start with "--" (`--pipeline-arg --sequential`).
-    if (v === undefined || (kind === "value" && v.startsWith("--"))) {
-      return `${a} needs a value`;
-    }
+    const bad = valueRefusal(a, v);
+    if (bad) return bad;
     flags[a] = v;
     given.push(a, v);
   }
@@ -157,6 +167,8 @@ function parseFlags(
  */
 const RETIRED_FLAGS: Record<string, string> = {
   "--no-vendor": "renamed: use --no-vendor-score",
+  "--pipeline-arg":
+    "retired: the pipeline's settings are --config keys now (config sweep step 5) — use --pipeline-set <section.key=value>",
   "--heap-mb":
     "removed: it was inert (the pipeline is a Rust binary, not a Node process)"
 };
@@ -184,10 +196,11 @@ const SCORE_FLAGS: Record<string, FlagKind> = {
   // built from the label's commit. There is no other pipeline since the
   // cutover (docs/rust-port/19-cutover.md).
   "--bin": "value",
-  // One argument appended to EVERY pipeline launch (rebase, scored leg,
-  // both self-hop legs); repeatable, order kept — e.g. `--pipeline-arg
-  // --sequential`. Recorded in the label's pipeline.json.
-  "--pipeline-arg": "repeat"
+  // One pipeline setting for EVERY launch (rebase, scored leg, both
+  // self-hop legs), written into each launch's --config file; repeatable,
+  // order kept — e.g. `--pipeline-set naming.schedule=sequential`. Recorded
+  // in the label's pipeline.json.
+  "--pipeline-set": "repeat"
 };
 
 /**
@@ -329,7 +342,7 @@ const VERBS: Verb[] = [
   {
     name: "score",
     usage:
-      "score <label> [--pairs a,b] [--seeded-base | --archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--pipeline-arg <arg>]... ...",
+      "score <label> [--pairs a,b] [--seeded-base | --archive-prior] [--llm-cache D] [--force-mixed] [--bin target/release/humanify] [--pipeline-set <section.key=value>]... ...",
     description:
       "Cold scored run of the Rust binary over the eval pairs (the harness builds target/release/humanify unless --bin names another); cards + summary under results/<label>. " +
       "Defaults are the gate-valid protocol: SCRATCH bases (each v-1 rebuilt by the current pipeline with no prior), no LLM cache, cold + warm self-hop. " +

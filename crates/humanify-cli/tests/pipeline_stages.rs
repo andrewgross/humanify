@@ -63,16 +63,31 @@ impl Drop for Scratch {
 /// adapter's vendor namer is always wired (as in the TS), and a test must
 /// never reach a real endpoint.
 fn run(dir: &Path, args: &[&str]) -> Output {
+    run_with(dir, args, &[])
+}
+
+/// `run`, plus `--config` settings (dotted TOML lines, `split.enabled =
+/// true`) beside the no-retries one.
+fn run_with(dir: &Path, args: &[&str], settings: &[&str]) -> Output {
+    let config = dir.join("humanify.toml");
+    let toml: String = std::iter::once("llm.retries = 0")
+        .chain(settings.iter().copied())
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&config, toml).unwrap();
     Command::new(env!("CARGO_BIN_EXE_humanify"))
         .current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HUMANIFY_API_KEY", "k")
         .args(args)
-        .args(["--endpoint", "http://127.0.0.1:9/v1", "--retries", "0"])
+        .args(["--endpoint", "http://127.0.0.1:9/v1", "--config"])
+        .arg(&config)
         .output()
         .unwrap()
 }
+
+const SPLIT: &str = "split.enabled = true";
 
 fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).into_owned()
@@ -130,7 +145,7 @@ fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
     let minified: String = wrapped.lines().map(str::trim).collect::<Vec<_>>().join("");
     let input = s.write("bundle.js", &minified);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--split", "-o", &out]);
+    let o = run_with(&s.0, &[&input, "-o", &out], &[SPLIT]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(err.contains("Split complete: written to"), "{err}");
@@ -242,7 +257,8 @@ fn a_failed_vendor_batch_is_counted_not_fatal() {
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
     let cache = s.0.join("cache").display().to_string();
-    let o = run(&s.0, &[&input, "--llm-cache", &cache, "-o", &out]);
+    let cache_dir = format!("llm.cache_dir = {cache:?}");
+    let o = run_with(&s.0, &[&input, "-o", &out], &[&cache_dir]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     let manifest: serde_json::Value = serde_json::from_str(
@@ -394,7 +410,7 @@ fn the_profile_names_the_split_finish_constituents() {
     let v1 = s.write("v1.js", &variant("aaaa", "greet"));
     let v2 = s.write("v2.js", &variant("bbbb", "hail"));
     let out1 = s.0.join("tree-v1").display().to_string();
-    let o = run(&s.0, &[&v1, "--split", "-o", &out1]);
+    let o = run_with(&s.0, &[&v1, "-o", &out1], &[SPLIT]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     // The printed gauges (finding #66), pinned on the FRESH run (the
@@ -412,18 +428,17 @@ fn the_profile_names_the_split_finish_constituents() {
     assert!(prior.is_file(), "the first run wrote its bundle");
     let out2 = s.0.join("tree-v2").display().to_string();
     let prof = s.0.join("profile.json").display().to_string();
-    let o = run(
+    let trace = format!("perf.perf_trace = {prof:?}");
+    let o = run_with(
         &s.0,
         &[
             &v2,
-            "--split",
             "--prior-version",
             &prior.display().to_string(),
-            "--perf-trace",
-            &prof,
             "-o",
             &out2,
         ],
+        &[SPLIT, &trace],
     );
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
@@ -485,9 +500,10 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../test/e2e/fixtures/esbuild-bundle-small/build/v1.0.0/build/index.js");
     let out = s.out().display().to_string();
-    let first = run(
+    let first = run_with(
         &s.0,
-        &[&fixture.display().to_string(), "--split", "-o", &out],
+        &[&fixture.display().to_string(), "-o", &out],
+        &[SPLIT],
     );
     let err = stderr(&first);
     assert_eq!(first.status.code(), Some(0), "{err}");
@@ -507,7 +523,7 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
 
     // A different bundle with no vendor modules at all, into the SAME folder.
     let input = s.write("plain-wrapper.js", &wrapped());
-    let second = run(&s.0, &[&input, "--split", "-o", &out]);
+    let second = run_with(&s.0, &[&input, "-o", &out], &[SPLIT]);
     let err = stderr(&second);
     assert_eq!(second.status.code(), Some(0), "{err}");
     // On main the finish re-parsed the earlier run's (already re-linked)
@@ -532,33 +548,35 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
     );
 }
 
-/// Config sweep step 4: a refused configuration — a bad value, a missing
-/// API key, a missing prior — exits 1 naming every problem, and NOTHING
-/// has been created: no output tree, no log file, no cache directory.
+/// Config sweep steps 4-5: a refused configuration — a bad value, a
+/// missing API key, a missing prior, and every `--config` refusal (an
+/// unknown key, a flag/file conflict, a file that is not TOML or not
+/// there, a moved flag) — exits 1 naming every problem, and NOTHING has
+/// been created: no output tree, no log file, no cache directory.
 #[test]
 fn a_refused_configuration_creates_nothing() {
     let s = Scratch::new("refused");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
     let side_effects = ["out", "cache", "run.log"];
-    let common = [
-        input.as_str(),
-        "-o",
-        &out,
-        "--llm-cache",
-        "cache",
-        "--log-file",
-        "run.log",
+    let common = [input.as_str(), "-o", &out];
+    let sinks = [
+        "llm.cache_dir = \"cache\"",
+        "diagnostics.log_file = \"run.log\"",
     ];
-    let bad_value = run(&s.0, &[&common[..], &["-c", "0", "--split-pure"]].concat());
+    let bad_value = run_with(
+        &s.0,
+        &common,
+        &[&sinks[..], &["llm.concurrency = 0", "split.pure = true"]].concat(),
+    );
     let err = stderr(&bad_value);
     assert_eq!(bad_value.status.code(), Some(1), "{err}");
     assert!(
-        err.contains("Error: --split-pure requires --split"),
+        err.contains("Error: split.pure requires split.enabled"),
         "{err}"
     );
     assert!(
-        err.contains("Error: --concurrency must be at least 1 (got 0)"),
+        err.contains("humanify.toml: llm.concurrency must be at least 1 (got 0)"),
         "{err}"
     );
     let no_key = Command::new(env!("CARGO_BIN_EXE_humanify"))
@@ -574,15 +592,63 @@ fn a_refused_configuration_creates_nothing() {
         "{}",
         stderr(&no_key)
     );
-    let no_prior = run(
+    let no_prior = run_with(
         &s.0,
         &[&common[..], &["--prior-version", "missing.js"]].concat(),
+        &sinks,
     );
     assert_eq!(no_prior.status.code(), Some(1));
     assert!(
-        stderr(&no_prior).contains("Error: --prior-version file not found: missing.js"),
+        stderr(&no_prior)
+            .contains("Error: prior version (--prior-version) file not found: missing.js"),
         "{}",
         stderr(&no_prior)
+    );
+    let refused = |o: &Output, want: &str| {
+        let err = stderr(o);
+        assert_eq!(o.status.code(), Some(1), "{want}: {err}");
+        assert!(err.contains(want), "must name {want}:\n{err}");
+    };
+    refused(
+        &run_with(
+            &s.0,
+            &common,
+            &[&sinks[..], &["naming.batchsize = 3"]].concat(),
+        ),
+        "unknown key naming.batchsize (did you mean naming.batch_size?)",
+    );
+    refused(
+        &run_with(
+            &s.0,
+            &[&common[..], &["--model", "a"]].concat(),
+            &[&sinks[..], &["llm.model = \"b\""]].concat(),
+        ),
+        "config conflict: llm.model = \"a\" (--model) vs \"b\"",
+    );
+    refused(
+        &run_with(&s.0, &common, &[&sinks[..], &["[naming"]].concat()),
+        "not valid TOML",
+    );
+    refused(
+        &run_with(
+            &s.0,
+            &common,
+            &[&sinks[..], &["llm.api_key = \"sk\""]].concat(),
+        ),
+        "llm.api_key is retired",
+    );
+    let missing = Command::new(env!("CARGO_BIN_EXE_humanify"))
+        .current_dir(&s.0)
+        .env_clear()
+        .env("HUMANIFY_API_KEY", "k")
+        .args(common)
+        .args(["--config", "nope.toml"])
+        .output()
+        .unwrap();
+    refused(&missing, "--config nope.toml: cannot read the config file");
+    refused(
+        &run_with(&s.0, &[&common[..], &["--split"]].concat(), &sinks),
+        "'--split' (moved: set split.enabled = true in --config)",
     );
     for p in side_effects {
         assert!(!s.0.join(p).exists(), "{p} was created by a refused run");

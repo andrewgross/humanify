@@ -5,7 +5,7 @@
 //! reader stays `crate::env`.)
 
 use crate::config::{
-    API_KEY_VAR, Config, DEFAULT_CONCURRENCY, DEFAULT_CONTEXT_TOKENS, DEFAULT_ENDPOINT,
+    API_KEY_VAR, Config, ConfigFile, DEFAULT_CONCURRENCY, DEFAULT_CONTEXT_TOKENS, DEFAULT_ENDPOINT,
     DEFAULT_MODEL, DEFAULT_MODULE_CONCURRENCY, DEFAULT_OUTPUT_DIR, MISSING_API_KEY,
     ReasoningEffort, setting_keys,
 };
@@ -26,14 +26,24 @@ fn opts(argv: &[&str]) -> (String, CommandOptions) {
     }
 }
 
-fn config(argv: &[&str]) -> Config {
-    let (input, o) = opts(argv);
-    Config::build(&input, &o, key).unwrap_or_else(|e| panic!("{argv:?} refused: {e:?}"))
+/// A checked config file from TOML text (named `cfg.toml`).
+pub(crate) fn file(toml: &str) -> ConfigFile {
+    ConfigFile::check("cfg.toml", toml).unwrap_or_else(|e| panic!("{toml}\nrefused: {e:?}"))
 }
 
-fn refusals(argv: &[&str]) -> Vec<String> {
+fn config(argv: &[&str]) -> Config {
+    with_file(argv, "")
+}
+
+fn with_file(argv: &[&str], toml: &str) -> Config {
     let (input, o) = opts(argv);
-    Config::build(&input, &o, key).expect_err("must be refused")
+    Config::build(&input, &o, Some(&file(toml)), key)
+        .unwrap_or_else(|e| panic!("{argv:?} {toml} refused: {e:?}"))
+}
+
+fn refusals(argv: &[&str], toml: &str) -> Vec<String> {
+    let (input, o) = opts(argv);
+    Config::build(&input, &o, Some(&file(toml)), key).expect_err("must be refused")
 }
 
 #[test]
@@ -66,31 +76,13 @@ fn every_naming_default_is_the_one_named_default() {
 
 #[test]
 fn typed_values_resolve() {
-    let c = config(&[
-        "in.js",
-        "-c",
-        "7",
-        "--timeout",
-        "1234",
-        "--retries",
-        "5",
-        "--batch-size",
-        "9",
-        "--max-retries",
-        "3",
-        "--max-free-retries",
-        "2",
-        "--lane-threshold",
-        "11",
-        "--rename-retries",
-        "0",
-        "--context-tokens",
-        "131072",
-        "--module-concurrency",
-        "33",
-        "--reasoning-effort",
-        "low",
-    ]);
+    let c = with_file(
+        &["in.js"],
+        "[llm]\nconcurrency = 7\ntimeout_ms = 1234\nretries = 5\ncontext_tokens = 131072\n\
+         module_concurrency = 33\nreasoning_effort = \"low\"\n\
+         [naming]\nbatch_size = 9\nmax_retries = 3\nmax_free_retries = 2\n\
+         lane_threshold = 11\nrename_retries = 0\n",
+    );
     assert_eq!(c.llm.concurrency, 7);
     assert_eq!(c.llm.timeout_ms, 1234);
     assert_eq!(c.llm.retries, 5);
@@ -107,18 +99,16 @@ fn typed_values_resolve() {
 
 #[test]
 fn the_levers_default_on_and_the_sweep_depends_on_the_floor() {
-    let off = config(&["in.js", "--no-naming-floor"]);
+    let off = with_file(&["in.js"], "[naming]\nnaming_floor = false\n");
     assert!(!off.naming.naming_floor && !off.naming.naming_floor_sweep);
-    let sweep_off = config(&["in.js", "--no-naming-floor-sweep"]);
+    let sweep_off = with_file(&["in.js"], "[naming]\nnaming_floor_sweep = false\n");
     assert!(sweep_off.naming.naming_floor && !sweep_off.naming.naming_floor_sweep);
     let prior = config(&["in.js", "--prior-version", "p.js"]);
     assert!(prior.matching.reconcile_prior_diff);
-    let off = config(&[
-        "in.js",
-        "--prior-version",
-        "p.js",
-        "--no-reconcile-prior-diff",
-    ]);
+    let off = with_file(
+        &["in.js", "--prior-version", "p.js"],
+        "[matching]\nreconcile_prior_diff = false\n",
+    );
     assert!(!off.matching.reconcile_prior_diff);
     assert!(
         !config(&["in.js", "--no-skip-libraries"])
@@ -137,7 +127,7 @@ fn the_api_key_comes_from_humanify_api_key_only() {
         |n: &str| (n == "OPENAI_API_KEY").then(|| "o".to_string()),
         |n: &str| (n == API_KEY_VAR).then(String::new),
     ] {
-        let err = Config::build(&input, &o, env).expect_err("no usable key");
+        let err = Config::build(&input, &o, None, env).expect_err("no usable key");
         assert_eq!(err, [MISSING_API_KEY]);
     }
 }
@@ -157,7 +147,10 @@ fn the_api_key_flag_is_retired() {
 
 #[test]
 fn the_record_is_the_whole_config_without_the_secret() {
-    let c = config(&["in.js", "--split", "--disable", "family-permute"]);
+    let c = with_file(
+        &["in.js"],
+        "[split]\nenabled = true\n[switches]\ndisable = [\"family-permute\"]\n",
+    );
     let record = c.record();
     let text = record.to_string();
     assert!(!text.contains("env-key"), "the secret leaked: {text}");
@@ -185,101 +178,113 @@ fn the_record_is_the_whole_config_without_the_secret() {
 
 #[test]
 fn every_refusal_is_collected_before_any_work() {
-    let errs = refusals(&[
-        "in.js",
-        "--split-pure",
-        "--bundler",
-        "foobar",
-        "--disable",
-        "no-such-switch",
-        "-c",
-        "0",
-    ]);
-    assert_eq!(errs[0], "--split-pure requires --split");
-    assert!(errs[1].starts_with("--bundler must be one of"), "{errs:?}");
-    assert_eq!(errs[2], "--concurrency must be at least 1 (got 0)");
+    let (input, o) = opts(&["in.js", "--endpoint", "http://a/v1"]);
+    let f = ConfigFile::parse(
+        "cfg.toml",
+        "[llm]\nendpoint = \"http://b/v1\"\nconcurrency = 0\n[unpack]\nbundler = \"foobar\"\n\
+         [split]\npure = true\n[switches]\ndisable = [\"no-such-switch\"]\n",
+    )
+    .expect("it is TOML");
+    let errs = Config::build(&input, &o, Some(&f), key).expect_err("refused");
+    assert_eq!(
+        errs[0],
+        "cfg.toml: llm.concurrency must be at least 1 (got 0)"
+    );
+    assert_eq!(
+        errs[1],
+        "cfg.toml: unpack.bundler must be one of: webpack, browserify, rollup, esbuild, \
+         parcel, bun (got \"foobar\")"
+    );
+    assert_eq!(
+        errs[2],
+        "config conflict: llm.endpoint = \"http://a/v1\" (--endpoint) vs \"http://b/v1\" \
+         (cfg.toml)"
+    );
+    assert_eq!(errs[3], "split.pure requires split.enabled");
     assert!(
-        errs[3].starts_with("--disable: unknown disable switch"),
+        errs[4].starts_with("switches.disable: unknown disable switch"),
         "{errs:?}"
     );
-    assert_eq!(errs.len(), 4, "{errs:?}");
+    assert_eq!(errs.len(), 5, "{errs:?}");
 }
 
 #[test]
 fn zero_counts_are_refused() {
-    for (flag, name) in [
-        ("--module-concurrency", "--module-concurrency"),
-        ("--timeout", "--timeout"),
-        ("--max-tokens", "--max-tokens"),
-        ("--batch-size", "--batch-size"),
-        ("--max-retries", "--max-retries"),
+    for k in [
+        "llm.module_concurrency",
+        "llm.timeout_ms",
+        "llm.max_tokens",
+        "naming.batch_size",
+        "naming.max_retries",
     ] {
-        let errs = refusals(&["in.js", flag, "0"]);
-        assert!(
-            errs.contains(&format!("{name} must be at least 1 (got 0)")),
-            "{flag}: {errs:?}"
-        );
+        let (section, name) = k.split_once('.').unwrap();
+        let errs = ConfigFile::check("cfg.toml", &format!("[{section}]\n{name} = 0\n"))
+            .expect_err("refused");
+        assert_eq!(errs, [format!("cfg.toml: {k} must be at least 1 (got 0)")]);
     }
     // Zero is a real setting for these: no retries, no re-asks.
-    config(&["in.js", "--retries", "0", "--rename-retries", "0"]);
+    with_file(
+        &["in.js"],
+        "[llm]\nretries = 0\n[naming]\nrename_retries = 0\n",
+    );
 }
 
 #[test]
 fn a_context_window_the_completion_reserve_fills_is_refused() {
-    let errs = refusals(&["in.js", "--context-tokens", "4096"]);
+    let errs = refusals(&["in.js"], "[llm]\ncontext_tokens = 4096\n");
     assert_eq!(errs.len(), 1, "{errs:?}");
     assert!(
-        errs[0].starts_with("--context-tokens (4096) must exceed --max-tokens (6000)"),
+        errs[0].starts_with("llm.context_tokens (4096) must exceed llm.max_tokens (6000)"),
         "{errs:?}"
     );
-    config(&["in.js", "--context-tokens", "4096", "--max-tokens", "1024"]);
+    with_file(
+        &["in.js"],
+        "[llm]\ncontext_tokens = 4096\nmax_tokens = 1024\n",
+    );
 }
 
 #[test]
 fn empty_values_and_non_http_endpoints_are_refused() {
     assert_eq!(
-        refusals(&["in.js", "--prior-version="]),
+        refusals(&["in.js", "--prior-version="], ""),
         ["--prior-version must not be empty"]
     );
     assert_eq!(
-        refusals(&["in.js", "--model="]),
+        refusals(&["in.js", "--model="], ""),
         ["--model must not be empty"]
     );
     assert_eq!(
-        refusals(&["in.js", "--endpoint", "localhost:8000/v1"]),
+        refusals(&["in.js", "--endpoint", "localhost:8000/v1"], ""),
         ["--endpoint must be an http:// or https:// URL (got \"localhost:8000/v1\")"]
+    );
+    assert_eq!(
+        ConfigFile::check("cfg.toml", "[llm]\nendpoint = \"localhost:8000/v1\"\n")
+            .expect_err("refused"),
+        ["cfg.toml: llm.endpoint must be an http:// or https:// URL (got \"localhost:8000/v1\")"]
     );
 }
 
 #[test]
-fn a_bad_reasoning_effort_is_a_usage_error() {
-    let argv: Vec<String> = ["in.js", "--reasoning-effort", "extreme"]
-        .map(String::from)
-        .to_vec();
-    match parse_pipeline(&argv) {
-        PipelineParse::Exit { code, stderr, .. } => {
-            assert_eq!(code, 1);
-            assert!(stderr.contains("extreme"), "{stderr}");
-        }
-        PipelineParse::Run { .. } => panic!("an unknown effort must be refused"),
-    }
+fn a_bad_reasoning_effort_is_refused() {
+    let errs = ConfigFile::check("cfg.toml", "[llm]\nreasoning_effort = \"extreme\"\n")
+        .expect_err("refused");
+    assert_eq!(
+        errs,
+        ["cfg.toml: llm.reasoning_effort must be one of: low, medium, high (got \"extreme\")"]
+    );
 }
 
 #[test]
 fn missing_input_files_are_named() {
-    let c = config(&[
-        "in.js",
-        "--split",
-        "--prior-version",
-        "/nonexistent/prior.js",
-        "--split-ledger",
-        "/nonexistent/ledger.json",
-    ]);
+    let c = with_file(
+        &["in.js", "--prior-version", "/nonexistent/prior.js"],
+        "[split]\nenabled = true\nledger = \"/nonexistent/ledger.json\"\n",
+    );
     assert_eq!(
         c.missing_inputs(),
         [
-            "--prior-version file not found: /nonexistent/prior.js",
-            "--split-ledger file not found: /nonexistent/ledger.json"
+            "prior version (--prior-version) file not found: /nonexistent/prior.js",
+            "split.ledger file not found: /nonexistent/ledger.json"
         ]
     );
 }

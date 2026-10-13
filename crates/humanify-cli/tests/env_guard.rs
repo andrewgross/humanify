@@ -9,10 +9,12 @@
 //! 3. an argument parser (`clap`) outside the parse point — `surface.rs`
 //!    (the pipeline's declaration), `main.rs` (the stage verbs'),
 //!    `config.rs` — and the index builder, a separate binary;
-//! 4. a config-file reader (`toml`) outside `config.rs`;
+//! 4. a config-file reader (`toml`) outside `config/file.rs`, the
+//!    `--config` file's one reader (config sweep step 5);
 //! 5. a JSON lookup of a setting name (`v["skipLibraries"]`,
-//!    `.get("model")`, `.bool(…)`) outside `config.rs`: a setting is read
-//!    from the typed `Config`, never re-read from a JSON map.
+//!    `.get("model")`, `.bool(…)`) outside the config owner (`config.rs`
+//!    and its `config/` modules): a setting is read from the typed
+//!    `Config`, never re-read from a JSON map.
 //!
 //! Clippy's `disallowed_methods` ban on `std::env::var` is the static layer
 //! under rule 1. A source file's test code — `*_test.rs`, `tests/`, and an
@@ -32,6 +34,14 @@ struct Rule {
 
 const ENV_MODULE: (&str, &str) = ("humanify-cli/src/env.rs", "the one process-input reader");
 const CONFIG: (&str, &str) = ("humanify-cli/src/config.rs", "the configuration owner");
+const CONFIG_FILE: (&str, &str) = (
+    "humanify-cli/src/config/file.rs",
+    "the --config file's one reader (the configuration owner's module)",
+);
+const CONFIG_KEYS: (&str, &str) = (
+    "humanify-cli/src/config/keys.rs",
+    "the key registry (the configuration owner's module)",
+);
 const MAIN: (&str, &str) = (
     "humanify-cli/src/main.rs",
     "the binary's entry: argv in, and the stage verbs' clap declarations",
@@ -75,7 +85,7 @@ fn rules() -> Vec<Rule> {
         Rule {
             name: "config-file reader outside the config owner",
             hit: |l| l.contains("toml::") || l.contains("use toml"),
-            owners: &[CONFIG],
+            owners: &[CONFIG_FILE],
         },
     ]
 }
@@ -151,7 +161,7 @@ fn setting_lookup_offenders() -> Vec<String> {
         .collect();
     offenders(
         |line| patterns.iter().any(|p| line.contains(p.as_str())),
-        &[CONFIG],
+        &[CONFIG, CONFIG_FILE, CONFIG_KEYS],
     )
 }
 

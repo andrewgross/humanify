@@ -43,13 +43,22 @@
 #                          deleted at the cutover (docs/rust-port/19-cutover.md).
 #   --force-mixed          accept a --bin built from another/unknown commit or
 #                          a dirty tree (recorded, and warned on per pair)
-#   --pipeline-arg <arg>   append <arg> to EVERY pipeline launch (rebase,
-#                          scored leg, both self-hop legs), after the harness's
-#                          own flags; repeatable, order kept (e.g.
-#                          --pipeline-arg --sequential). The
-#                          args are recorded in pipeline.json and every run
-#                          config. Without it the launches are byte-identical
-#                          to the golden (run-launch.test.ts).
+#   --pipeline-set <section.key=value>
+#                          one pipeline setting for EVERY launch (rebase,
+#                          scored leg, both self-hop legs), written into each
+#                          launch's --config TOML after the harness's own
+#                          keys; repeatable, order kept (e.g. --pipeline-set
+#                          naming.schedule=sequential). A key the harness
+#                          itself sets is refused. Recorded in pipeline.json
+#                          and (as the file) in every run config. Without it
+#                          the launches are byte-identical to the golden
+#                          (run-launch.test.ts).
+#
+# HOW A LAUNCH IS CONFIGURED (config sweep step 5, 2026-10-13): the binary
+# takes only its operational flags (input, -o, --prior-version, --endpoint,
+# --model, --config, -v); every other setting goes in a TOML file written
+# per launch by experiments/lib/pipeline-config.ts, next to the launch's
+# output, and passed as --config.
 #
 # The self-hop always runs both halves (the 5b self-hop gate, 00-control §3):
 # the cold leg records into a fresh cache dir, then a warm leg replays a
@@ -83,7 +92,7 @@ INPUTS_OVERRIDE=""
 PRIORS_OVERRIDE=""
 BIN="$REPO/target/release/humanify"
 FORCE_MIXED=0
-PIPELINE_ARGS=()
+PIPELINE_SETS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workdir)        WORK="$2"; shift ;;
@@ -103,8 +112,9 @@ while [[ $# -gt 0 ]]; do
     --priors-base)    PRIORS_OVERRIDE="$2"; shift ;;
     --bin)            BIN="$2"; shift ;;
     --force-mixed)    FORCE_MIXED=1 ;;
-    --pipeline-arg)   [[ $# -ge 2 ]] || { echo "run.sh: --pipeline-arg needs a value" >&2; exit 2; }
-                      PIPELINE_ARGS+=("$2"); shift ;;
+    --pipeline-arg)   echo "run.sh: --pipeline-arg is retired: the pipeline's settings are --config keys now (config sweep step 5) — use --pipeline-set <section.key=value>" >&2; exit 2 ;;
+    --pipeline-set)   [[ $# -ge 2 && "$2" != --* ]] || { echo "run.sh: --pipeline-set needs a section.key=value" >&2; exit 2; }
+                      PIPELINE_SETS+=("$2"); shift ;;
     --*)            echo "run.sh: unknown flag $1 (see header for the list)" >&2; exit 2 ;;
     *)                if [[ -n "$MODEL" ]]; then echo "run.sh: unexpected arg $1" >&2; exit 2; fi
                       MODEL="$1" ;;
@@ -112,6 +122,16 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 [[ -n "$MODEL" ]] || { echo "usage: run.sh <model-label> [flags]" >&2; exit 2; }
+# Every launch's --config file: the harness's own settings, then the
+# --pipeline-set ones. pipeline-config.ts refuses a key set twice, so a
+# --pipeline-set that collides with a harness key is refused HERE, before
+# anything launches, by checking against every key the harness may set.
+HARNESS_KEYS=(llm.reasoning_effort llm.concurrency split.enabled llm.cache_dir
+  diagnostics.log_file diagnostics.stats_json diagnostics.diagnostics_file)
+if [[ ${#PIPELINE_SETS[@]} -gt 0 ]]; then
+  npx tsx "$REPO/experiments/lib/pipeline-config.ts" --check \
+    $(printf '%s=x ' "${HARNESS_KEYS[@]}") "${PIPELINE_SETS[@]}" || exit 2
+fi
 # The LLM server's address is local, untracked configuration (the repo is
 # public): --endpoint, else .humanify.local.json. Resolved before anything is
 # built, so a missing address costs nothing.
@@ -157,12 +177,12 @@ echo "PIPELINE: Rust binary $BIN"
 echo "  sha256 $(jq -r .sha256 <<< "$BIN_JSON"), built from $(jq -r '.commit | if . == "" then "an UNKNOWN commit" else .[0:12] end' <<< "$BIN_JSON")$(jq -r 'if .dirty then " (DIRTY tree)" else "" end' <<< "$BIN_JSON")"
 RUNCFG_EXTRA=$(jq -cn --arg bin "$BIN" --argjson rec "$BIN_JSON" \
   '{command:[$bin], bin:$rec}')
-# The extra pipeline args, as JSON (null when none: the default records stay
-# byte-identical to the golden).
-PIPELINE_ARGS_JSON=null
-if [[ ${#PIPELINE_ARGS[@]} -gt 0 ]]; then
-  PIPELINE_ARGS_JSON=$(printf '%s\n' "${PIPELINE_ARGS[@]}" | jq -R . | jq -cs .)
-  echo "PIPELINE ARGS (every launch): ${PIPELINE_ARGS[*]}"
+# The extra pipeline settings, as JSON (null when none: the default records
+# stay byte-identical to the golden).
+PIPELINE_SETS_JSON=null
+if [[ ${#PIPELINE_SETS[@]} -gt 0 ]]; then
+  PIPELINE_SETS_JSON=$(printf '%s\n' "${PIPELINE_SETS[@]}" | jq -R . | jq -cs .)
+  echo "PIPELINE SETTINGS (every launch): ${PIPELINE_SETS[*]}"
 fi
 
 case "$BASE_MODE" in
@@ -173,10 +193,10 @@ esac
 
 RESULTS="$HERE/results/$MODEL"
 mkdir -p "$RESULTS" "$WORK"
-jq -cn --argjson bin "$BIN_JSON" --argjson extra "$PIPELINE_ARGS_JSON" \
+jq -cn --argjson bin "$BIN_JSON" --argjson extra "$PIPELINE_SETS_JSON" \
   --arg baseMode "$BASE_MODE" \
   '{pipeline:({kind:"rust-bin", bin:$bin}
-    + (if $extra == null then {} else {pipelineArgs:$extra} end)),
+    + (if $extra == null then {} else {pipelineSettings:$extra} end)),
     baseMode:$baseMode}' > "$RESULTS/pipeline.json"
 
 command -v jq >/dev/null || { echo "jq required"; exit 1; }
@@ -198,12 +218,10 @@ PRIORS="${PRIORS_OVERRIDE:-$(jq -r .priorsBase "$CFG")}"
 # deterministic surface that does not depend on LLM output. Anything whose
 # numbers go into a RESULTS.md or a ship/no-ship gate must run without it.
 if [[ -n "$LLM_CACHE_DIR" ]]; then
-  LLM_CACHE_ARGS=(--llm-cache "$LLM_CACHE_DIR")
   echo "LLM CACHE: ON ($LLM_CACHE_DIR) -- NOT valid for a gate run"
 else
-  LLM_CACHE_ARGS=()
   # The env fallback for the cache flag was deleted 2026-08-12 (flags only),
-  # so omitting the flag IS enough now.
+  # so omitting the key IS enough now.
   echo "LLM CACHE: OFF (cold, every prompt live) -- gate-valid"
 fi
 MODELNAME=$(jq -r .llm.model "$CFG")
@@ -215,6 +233,17 @@ APIKEY=$(jq -r .llm.apiKey "$CFG")
 export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
+
+# pipeline_config <out.toml> <section.key=value>...: write one launch's file.
+pipeline_config() {
+  local out="$1"
+  shift
+  npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$out" \
+    "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" "split.enabled=true" \
+    "$@" ${PIPELINE_SETS[@]+"${PIPELINE_SETS[@]}"}
+}
+CACHE_SETS=()
+[[ -n "$LLM_CACHE_DIR" ]] && CACHE_SETS=("llm.cache_dir=$LLM_CACHE_DIR")
 
 # Record what produced this model, for provenance.
 git -C "$REPO" rev-parse --short HEAD > "$RESULTS/commit.txt" 2>/dev/null || true
@@ -276,13 +305,13 @@ for i in $(seq 0 $((npairs - 1))); do
         echo "=== $PAIR: rebasing prior (re-humanify $FROM from SCRATCH, current pipeline, no prior) ==="
       fi
       rm -rf "$REBASE"
-      "${PIPE_CMD[@]}" "$INPUT_FROM" \
-        --split --endpoint "$ENDPOINT" --model "$MODELNAME" \
-        --reasoning-effort "$EFFORT" -c "$CONC" -o "$REBASE" \
-        "${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"}" \
-        ${REBASE_SEED_ARGS[@]+"${REBASE_SEED_ARGS[@]}"} \
-        -vv --log-file "$RESULTS/${FROM}-rebase.log" \
-        ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} \
+      mkdir -p "$WORK/$MODEL"
+      REBASE_TOML="$WORK/$MODEL/${FROM}-rebased.toml"
+      pipeline_config "$REBASE_TOML" ${CACHE_SETS[@]+"${CACHE_SETS[@]}"} \
+        "diagnostics.log_file=$RESULTS/${FROM}-rebase.log" || exit 2
+      "${PIPE_CMD[@]}" "$INPUT_FROM" --config "$REBASE_TOML" \
+        --endpoint "$ENDPOINT" --model "$MODELNAME" -o "$REBASE" \
+        ${REBASE_SEED_ARGS[@]+"${REBASE_SEED_ARGS[@]}"} -vv \
         > "$RESULTS/${FROM}-rebase.stdout" 2>&1
       if [[ -f "$REBASE/.humanify/humanified.js" ]]; then
         PRIOR="$REBASE/.humanify/humanified.js"
@@ -312,13 +341,13 @@ for i in $(seq 0 $((npairs - 1))); do
   # run config lands here BEFORE the pipeline starts, so make it first.
   mkdir -p "$WORK/$MODEL"
   RUN_CFG="$WORK/$MODEL/$TO.runcfg.json"
-  ARGS_JSON=$(printf '%s\n' "$INPUT" --split \
-    --endpoint "$ENDPOINT" --model "$MODELNAME" \
-    --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
-    ${LLM_CACHE_ARGS[@]+"${LLM_CACHE_ARGS[@]}"} \
-    --prior-version "$PRIOR" --stats-json "$STATS" -vv --log-file "$LOG" \
-    --diagnostics "$WORK/$MODEL/$TO.diag.json" \
-    ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} | jq -R . | jq -s .)
+  RUN_TOML="$WORK/$MODEL/$TO.toml"
+  pipeline_config "$RUN_TOML" ${CACHE_SETS[@]+"${CACHE_SETS[@]}"} \
+    "diagnostics.stats_json=$STATS" "diagnostics.log_file=$LOG" \
+    "diagnostics.diagnostics_file=$WORK/$MODEL/$TO.diag.json" || exit 2
+  ARGS_JSON=$(printf '%s\n' "$INPUT" --config "$RUN_TOML" \
+    --endpoint "$ENDPOINT" --model "$MODELNAME" -o "$OUT" \
+    --prior-version "$PRIOR" -vv | jq -R . | jq -s .)
   jq -n \
     --arg pair "$PAIR" --arg version "$TO" --arg runLabel "$MODEL" \
     --arg resultsDir "$RESULTS" --arg input "$INPUT" --arg prior "$PRIOR" \
@@ -329,12 +358,13 @@ for i in $(seq 0 $((npairs - 1))); do
     --argjson concurrency "$CONC" \
     --arg cacheDir "$LLM_CACHE_DIR" \
     --argjson args "$ARGS_JSON" --argjson extra "$RUNCFG_EXTRA" \
+    --rawfile configToml "$RUN_TOML" \
     --argjson artifacts "$(printf '%s\n' "$OUT/.humanify/humanified.js" \
       "$OUT/.humanify/split-ledger.json" "$STATS" | jq -R . | jq -s .)" \
     '{"pair":$pair,"version":$version,"label":$runLabel,"resultsDir":$resultsDir,
       "input":$input,"prior":$prior,"baseMode":$baseMode,
       "outputDir":$outputDir,"repo":$repo,
-      "args":$args,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
+      "args":$args,"configToml":$configToml,"stdoutPath":$stdoutPath,"endpoint":$endpoint,
       "model":$model,"reasoningEffort":$effort,"concurrency":$concurrency,
       "artifacts":$artifacts}
      + (if $cacheDir == "" then {} else {"cacheDir":$cacheDir} end)
@@ -483,16 +513,13 @@ done
 TO="${LAST_TO:-}"
 INPUT="${LAST_INPUT:-}"
 
-# Run one self-hop leg: <out> <stdout> <cache args...>. Returns its exit code.
+# Run one self-hop leg: <out> <stdout> <cache dir>. Returns its exit code.
 self_hop_leg() {
-  local out="$1" log="$2"
-  shift 2
-  "${PIPE_CMD[@]}" "$INPUT" \
-    --split --endpoint "$ENDPOINT" --model "$MODELNAME" \
-    --reasoning-effort "$EFFORT" -c "$CONC" -o "$out" \
-    "${@+"$@"}" \
+  local out="$1" log="$2" cache="$3"
+  pipeline_config "$out.toml" "llm.cache_dir=$cache" || return 2
+  "${PIPE_CMD[@]}" "$INPUT" --config "$out.toml" \
+    --endpoint "$ENDPOINT" --model "$MODELNAME" -o "$out" \
     --prior-version "$SELF_BASE/.humanify/humanified.js" \
-    ${PIPELINE_ARGS[@]+"${PIPELINE_ARGS[@]}"} \
     > "$log" 2>&1
 }
 
@@ -508,7 +535,7 @@ warm_self_hop() {
   cp -r "$SELF_CACHE" "$cache"
   local before after rc files lines identical ok
   before=$(count_files "$cache")
-  self_hop_leg "$out" "$RESULTS/$TO-selfhop-warm.stdout" --llm-cache "$cache"
+  self_hop_leg "$out" "$RESULTS/$TO-selfhop-warm.stdout" "$cache"
   rc=$?
   after=$(count_files "$cache")
   if [[ ! -f "$out/.humanify/humanified.js" ]]; then
@@ -555,7 +582,7 @@ if [[ "$RUN_SELF_HOP" == "1" && -n "$TO" && -f "$WORK/$MODEL/$TO/.humanify/human
     mkdir -p "$SELF_CACHE"
   fi
   COLD_BEFORE=$(count_files "$SELF_CACHE")
-  self_hop_leg "$SELF_OUT" "$RESULTS/$TO-selfhop.stdout" --llm-cache "$SELF_CACHE"
+  self_hop_leg "$SELF_OUT" "$RESULTS/$TO-selfhop.stdout" "$SELF_CACHE"
   SELF_RC=$?
   COLD_WRITES=$(( $(count_files "$SELF_CACHE") - COLD_BEFORE ))
   # DID IT RUN, before asking whether it MATCHED. `cmp -s` is non-zero for a

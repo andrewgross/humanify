@@ -1,0 +1,106 @@
+# humanify.example.toml — every setting `humanify --config <file>` reads,
+# at its compiled-in default. GENERATED from the key registry
+# (crates/humanify-cli/src/config/keys.rs); a test holds this file
+# byte-equal to the registry, so it cannot drift. Regenerate with
+#   cargo test -p humanify-cli write_the_example_config -- --ignored
+#
+# A key left out keeps its default. Unknown keys, wrong types, out-of-range
+# values and retired keys are refused before any work, naming the key. The
+# operational flags (input, -o, --prior-version, --endpoint, --model,
+# --config, -v) may also be given on the command line; a flag and this
+# file that DISAGREE are refused, naming both. The API key is never a
+# setting: it is read from HUMANIFY_API_KEY only.
+
+[io]
+# Output directory.
+# output_dir = "output"   (usually the flag --output-dir)
+
+[llm]
+# OpenAI-compatible API endpoint (the key: HUMANIFY_API_KEY).
+# endpoint = "https://api.openai.com/v1"   (usually the flag --endpoint)
+# Model identifier.
+# model = "gpt-4o-mini"   (usually the flag --model)
+# LLM request timeout, milliseconds.
+timeout_ms = 300000
+# Retry attempts for a failed API call.
+retries = 3
+# Max concurrent function-lane LLM requests (the in-flight cap is this plus module_concurrency).
+concurrency = 50
+# Max concurrent module-lane LLM requests.
+module_concurrency = 40
+# Per-request completion token budget.
+# max_tokens =   (unset: requests carry 6000, and the LLM cache key records "unset" — a different key from an explicit 6000)
+# Model context window, tokens; sizes the batched split-naming prompts.
+context_tokens = 32768
+# Reasoning effort: low, medium or high ('low' is ~8x faster on gpt-oss).
+# reasoning_effort =   (unset: the server's default; only set it for reasoning models)
+# Cache LLM responses on disk, keyed by request content (iteration only, never a gate run).
+# cache_dir =   (unset: no cache: every prompt is live)
+
+[matching]
+# A prior humanified bundle, for cross-version rename reuse.
+# prior_version =   (unset: a fresh run, nothing to reuse; usually the flag --prior-version)
+# With a prior: snap rename-noise diff hunks back to the prior's names.
+reconcile_prior_diff = true
+
+[naming]
+# "relaxed" (both relaxed levers on) or "sequential" (the pre-2026-09-28 default's bytes at the same batch_size).
+schedule = "relaxed"
+# Lever-sizing knob: the relaxed levers to turn on (relaxed schedule only).
+# relaxed_levers =   (unset: every lever)
+# Identifiers per LLM batch.
+batch_size = 25
+# Per-identifier LLM call limit, initial + retries.
+max_retries = 2
+# Name-conflict re-asks per rejected suggestion, each disclosing every failed one.
+rename_retries = 2
+# Cross-lane collision retry limit.
+# max_free_retries =   (unset: the processor's own rule (100))
+# Min bindings to enable parallel lanes.
+lane_threshold = 25
+# The deterministic naming floor (closes minted-token gaps).
+naming_floor = true
+# The LLM sweep of minted survivors (needs naming_floor).
+naming_floor_sweep = true
+
+[unpack]
+# Force the bundler verdict.
+# bundler =   (unset: detected)
+# Force the minifier verdict.
+# minifier =   (unset: detected)
+
+[split]
+# Split the output into a multi-file tree (src/ + vendor/ + run scaffold).
+enabled = false
+# Emit the byte-exact review tree instead of the runnable module graph (needs enabled).
+pure = false
+# A prior split ledger, for cross-release file-assignment inheritance (needs enabled).
+# ledger =   (unset: auto-discovered next to the prior)
+
+[switches]
+# Ablation: pass switches to turn OFF (unknown names are refused, listing the valid set).
+disable = []
+# Instrumentation probes to turn ON.
+probe = []
+
+[diagnostics]
+# 0, 1 (info) or 2 (debug); -v / -vv on the command line.
+# verbosity = 0   (usually the flag -v)
+# Write debug logs to this file (implies verbosity 2).
+# log_file =   (unset: no log file)
+# Write detailed rename diagnostics to this JSON file.
+# diagnostics_file =   (unset: not written)
+# Write the eval harness's match/rename breakdown (and this config) as JSON.
+# stats_json =   (unset: not written)
+# Write the span-keyed decision-record dump to this directory.
+# dump_artifacts =   (unset: not written)
+# Write the reason-labelled ask log (one JSONL row per LLM ask) to this path.
+# dump_asks =   (unset: not written)
+# Write a replayable rename ledger + source snapshot + apply.mjs to this directory.
+# rename_ledger =   (unset: not written)
+
+[perf]
+# Write a Chrome Trace Event performance trace to this JSON file.
+# perf_trace =   (unset: not written)
+# Price this run's LLM schedule on a virtual clock; write the simulated wall time here.
+# simulate_llm_latency =   (unset: not written)

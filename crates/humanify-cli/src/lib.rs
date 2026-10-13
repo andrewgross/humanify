@@ -56,6 +56,8 @@ pub fn pipeline_main(argv: &[String]) -> i32 {
 }
 
 #[cfg(test)]
+mod config_file_test;
+#[cfg(test)]
 mod config_test;
 #[cfg(test)]
 mod discover_verb_test;
