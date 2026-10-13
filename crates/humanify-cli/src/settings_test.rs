@@ -5,7 +5,7 @@
 use crate::settings::{SettingsInput, parse_reasoning_effort, resolve_settings_with};
 use crate::util::DEFAULT_LLM_TIMEOUT_MS;
 
-/// The environment a commander-parsed run actually arrives with.
+/// The values a parsed run actually arrives with.
 fn cli() -> SettingsInput {
     SettingsInput {
         endpoint: Some("http://cli/v1".into()),
@@ -53,17 +53,17 @@ fn resolves_the_llm_timeout_to_the_single_sourced_default() {
 }
 
 #[test]
-fn parses_numbers_once_into_numbers() {
+fn holds_the_typed_numbers_as_numbers() {
     let input = SettingsInput {
-        concurrency: Some("7".into()),
-        timeout: Some("1234".into()),
-        retries: Some("5".into()),
-        batch_size: Some("9".into()),
-        max_retries: Some("3".into()),
-        max_free_retries: Some("2".into()),
-        lane_threshold: Some("11".into()),
-        rename_retries: Some("2".into()),
-        context_tokens: Some("131072".into()),
+        concurrency: Some(7),
+        timeout: Some(1234),
+        retries: Some(5),
+        batch_size: Some(9),
+        max_retries: Some(3),
+        max_free_retries: Some(2),
+        lane_threshold: Some(11),
+        rename_retries: Some(2),
+        context_tokens: Some(131_072),
         ..cli()
     };
     let s = resolve_settings_with(&input, env_of(&[])).unwrap();
@@ -87,7 +87,7 @@ fn rename_retries_defaults_to_none_and_parses_when_set() {
     assert_eq!(unset.rename_retries, None);
     let set = resolve_settings_with(
         &SettingsInput {
-            rename_retries: Some("0".into()),
+            rename_retries: Some(0),
             ..cli()
         },
         env_of(&[]),
@@ -102,7 +102,7 @@ fn leaves_module_concurrency_undefined_so_the_bundler_aware_default_applies() {
     assert_eq!(unset.module_concurrency, None);
     let via_flag = resolve_settings_with(
         &SettingsInput {
-            module_concurrency: Some("33".into()),
+            module_concurrency: Some(33),
             ..cli()
         },
         env_of(&[]),
@@ -222,30 +222,6 @@ fn empty_endpoint_or_model_is_the_cli_layer_error() {
             "{err}"
         );
     }
-}
-
-#[test]
-fn numbers_are_parsed_with_parse_int_semantics_in_field_order() {
-    // timeout is evaluated before concurrency in the TS object literal.
-    let err = resolve_settings_with(
-        &SettingsInput {
-            timeout: Some("x".into()),
-            concurrency: Some("abc".into()),
-            ..cli()
-        },
-        env_of(&[]),
-    )
-    .unwrap_err();
-    assert_eq!(err, "Invalid number: x");
-    let s = resolve_settings_with(
-        &SettingsInput {
-            concurrency: Some(" 12abc".into()),
-            ..cli()
-        },
-        env_of(&[]),
-    )
-    .unwrap();
-    assert_eq!(s.concurrency, 12.0, "parseInt stops at the first non-digit");
 }
 
 #[test]

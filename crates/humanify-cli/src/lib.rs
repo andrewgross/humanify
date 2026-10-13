@@ -3,10 +3,8 @@
 //! `humanify-core` receives config as values and never touches
 //! `std::env` — the guard test in this crate enforces it.
 
-pub mod commander;
 pub mod discover_verb;
 pub mod env;
-pub mod env_reads;
 pub mod failed_output;
 pub mod kill_switches;
 pub mod llm_sim;
@@ -25,53 +23,37 @@ pub mod unminify;
 pub mod util;
 pub mod writers;
 
-/// The pipeline program's entry (`humanify <input>` / `humanify env-reads`):
-/// parse with the commander-grammar surface, run the action, return the
-/// process exit code. Help, version and usage errors print exactly what
-/// commander prints, where it prints it.
+/// The pipeline program's entry (`humanify <input> [options]`): parse
+/// (`surface`, clap), run, return the process exit code. Help and version
+/// print to stdout and exit 0; a usage error prints to stderr and exits 1.
 pub fn pipeline_main(argv: &[String]) -> i32 {
-    use commander::ParseOutcome;
-    match surface::program().parse(argv) {
-        ParseOutcome::Exit {
-            exit_code,
+    match surface::parse_pipeline(argv) {
+        surface::PipelineParse::Exit {
+            code,
             stdout,
             stderr,
-            ..
         } => {
             use std::io::Write;
             let _ = std::io::stdout().write_all(stdout.as_bytes());
             let _ = std::io::stderr().write_all(stderr.as_bytes());
-            exit_code
+            code
         }
-        ParseOutcome::Action {
-            command,
-            args,
-            opts,
-        } => match command.as_str() {
-            "env-reads" => env_reads::run(
-                &args[0],
-                opts.bool("markdown") == Some(true),
-                opts.str("output"),
-            ),
-            _ => unified::run(&args[0], &opts),
-        },
+        surface::PipelineParse::Run { input, opts } => unified::run(&input, &opts),
     }
 }
 
 #[cfg(test)]
 mod discover_verb_test;
 #[cfg(test)]
-mod env_reads_test;
-#[cfg(test)]
 mod kill_switches_test;
+#[cfg(test)]
+mod launch_parity_test;
 #[cfg(test)]
 mod match_verb_test;
 #[cfg(test)]
 mod settings_test;
 #[cfg(test)]
 mod surface_test;
-#[cfg(test)]
-mod util_test;
 #[cfg(test)]
 mod vectors_test;
 #[cfg(test)]

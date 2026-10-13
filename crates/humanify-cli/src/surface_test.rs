@@ -1,63 +1,210 @@
-//! The pipeline program's flag surface, natively (the TS-recorded option
-//! table and argv corpus — test/parity/wpb4-cli-surface.json — were
-//! retired 2026-09-28; the flags have been the Rust binary's own since
-//! the cutover):
+//! The pipeline program's flag surface (clap since config sweep step 3,
+//! 2026-10-13; the commander-13 port it replaced is gone):
 //!
-//! 1. the rendered HELP text against the committed golden of the BINARY's
-//!    help (test/golden/help/<command>.txt). The Rust binary is the product
-//!    since the cutover, so its help is pinned to itself, not to the TS's
-//!    wording (which named deleted TS files); regenerate a golden with
+//! 1. the rendered HELP text against the committed golden
+//!    (test/golden/help/humanify.txt; regenerate with
 //!    `humanify --help > test/golden/help/humanify.txt` after a deliberate
-//!    wording change;
-//! 2. PARSE checks: the Rust-only flags parse, retired options are
-//!    unknown, and the -V output equals package.json's version.
+//!    change);
+//! 2. the commander ACCIDENTS, each now refused loudly (exit 1, the error
+//!    names the option) instead of silently resolving;
+//! 3. the retired flags, refused naming their replacement;
+//! 4. the usage-error contract: exit 1, never clap's default 2.
+//!
+//! Launch parity with the commander port is `launch_parity_test.rs`.
 
 use serde_json::Value;
 
-use crate::commander::ParseOutcome;
-use crate::surface::{help_text, program};
+use crate::surface::{PipelineParse, RETIRED_FLAGS, help_text, package_version, parse_pipeline};
+use crate::unified::CommandOptions;
 
-/// `--sequential` is Rust-only: declared, parsed, and listed in the help.
-/// `--relaxed-levers` is Rust-only too — and deliberately NOT in the help
-/// (a sizing knob, hidden from the user-facing surface).
-#[test]
-fn the_sequential_flag_parses() {
-    let root = program();
-    let argv: Vec<String> = ["in.js", "--sequential"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    match root.parse(&argv) {
-        ParseOutcome::Action { opts, .. } => {
-            assert_eq!(opts.bool("sequential"), Some(true));
-            assert!(root.help_information(&[]).contains("--sequential"));
-            assert!(
-                !root.help_information(&[]).contains("--relaxed-levers"),
-                "the sizing knob stays hidden from the help"
-            );
+fn argv(a: &[&str]) -> Vec<String> {
+    a.iter().map(|s| s.to_string()).collect()
+}
+
+fn parse_opts(a: &[&str]) -> CommandOptions {
+    match parse_pipeline(&argv(a)) {
+        PipelineParse::Run { opts, .. } => *opts,
+        PipelineParse::Exit { code, stderr, .. } => {
+            panic!("{a:?} did not parse (exit {code}):\n{stderr}")
         }
-        other => panic!("--sequential did not parse: {other:?}"),
     }
 }
 
-fn parse_opts(argv: &[&str]) -> crate::commander::OptionValues {
-    let argv: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
-    match program().parse(&argv) {
-        ParseOutcome::Action { opts, .. } => opts,
-        other => panic!("{argv:?} did not parse: {other:?}"),
+/// A refused argv: exit 1 (usage errors keep the pipeline's exit-1
+/// contract) and the stderr, which must name `names` (the bad option).
+fn refusal(a: &[&str], names: &str) -> String {
+    match parse_pipeline(&argv(a)) {
+        PipelineParse::Exit {
+            code,
+            stdout,
+            stderr,
+        } => {
+            assert_eq!(code, 1, "{a:?}: usage errors exit 1\n{stderr}");
+            assert!(stdout.is_empty(), "{a:?}: a refusal prints to stderr only");
+            assert!(
+                stderr.contains(names),
+                "{a:?}: must name {names}:\n{stderr}"
+            );
+            stderr
+        }
+        PipelineParse::Run { .. } => panic!("{a:?} still parses"),
     }
 }
+
+// --- the commander accidents, now refused ---------------------------------
+
+/// commander: a required option took the next argv entry even when it was
+/// a flag (`--model --split` set the model to "--split" and dropped
+/// `--split`). Now a value never starts with `-`; the option is refused.
+#[test]
+fn a_value_option_does_not_swallow_the_next_flag() {
+    refusal(&["in.js", "--model", "--split"], "--model");
+    refusal(&["in.js", "-o", "--split"], "--output-dir");
+    // ... which also refuses a negative number where a count is expected
+    // (commander handed "-1" through; parseInt made it -1).
+    refusal(&["in.js", "--retries", "-1"], "'-1'");
+}
+
+/// commander: a repeated option was last-wins (`-c 4 -c 8` ran at 8,
+/// silently). The harness never repeats one; a repeat is now refused.
+#[test]
+fn a_repeated_option_is_refused() {
+    refusal(&["in.js", "-c", "4", "-c", "8"], "--concurrency");
+    refusal(&["in.js", "--model", "a", "--model", "b"], "--model");
+    refusal(&["in.js", "--split", "--split"], "--split");
+    refusal(
+        &[
+            "in.js",
+            "--disable",
+            "family-permute",
+            "--disable",
+            "emit-align",
+        ],
+        "--disable",
+    );
+}
+
+/// commander: a short value option took an ATTACHED value (`-c5`, `-ofoo`)
+/// and a boolean could prefix a combo (`-vc 5`). The harness writes
+/// `-c 472` and `-vv`; only the `-v` repeat (`-vv`) stays.
+#[test]
+fn an_attached_short_value_is_refused() {
+    refusal(&["in.js", "-c5"], "-c5");
+    refusal(&["in.js", "-ofoo"], "-ofoo");
+    refusal(&["in.js", "-mgpt"], "-mgpt");
+    refusal(&["in.js", "-c=5"], "-c=5");
+    refusal(&["in.js", "-vc", "5"], "-vc");
+}
+
+/// `-vv` counts (the harness's spelling); `-v` is one level.
+#[test]
+fn the_verbosity_counter_counts() {
+    assert_eq!(parse_opts(&["in.js"]).verbose, 0);
+    assert_eq!(parse_opts(&["in.js", "-v"]).verbose, 1);
+    assert_eq!(parse_opts(&["in.js", "-vv"]).verbose, 2);
+}
+
+/// commander: numbers were JavaScript `parseInt` (`-c 12abc` ran at 12,
+/// `--timeout 1e3` at 1 ms). Numbers are typed now: anything but a
+/// non-negative integer is refused, naming the option.
+#[test]
+fn a_malformed_number_is_refused() {
+    refusal(&["in.js", "-c", "12abc"], "--concurrency");
+    refusal(&["in.js", "--timeout", "1e3"], "--timeout");
+    refusal(&["in.js", "--batch-size", "7.9"], "--batch-size");
+    refusal(&["in.js", "--max-tokens", ""], "--max-tokens");
+}
+
+/// `--skip-libraries` (restates the default) and `--no-skip-libraries`
+/// keep their effect until the library decision (sweep step 6) deletes
+/// both; passing BOTH was last-wins and is now a conflict.
+#[test]
+fn the_two_skip_libraries_spellings_conflict() {
+    assert_eq!(parse_opts(&["in.js"]).settings_input().skip_libraries, None);
+    assert_eq!(
+        parse_opts(&["in.js", "--skip-libraries"])
+            .settings_input()
+            .skip_libraries,
+        Some(true)
+    );
+    assert_eq!(
+        parse_opts(&["in.js", "--no-skip-libraries"])
+            .settings_input()
+            .skip_libraries,
+        Some(false)
+    );
+    refusal(
+        &["in.js", "--skip-libraries", "--no-skip-libraries"],
+        "--skip-libraries",
+    );
+}
+
+/// An unknown option, a missing or extra input, a boolean given a value:
+/// all exit 1, naming what was wrong.
+#[test]
+fn usage_errors_exit_1_naming_the_problem() {
+    refusal(
+        &["in.js", "--ambiguity-probe", "p.json"],
+        "--ambiguity-probe",
+    );
+    refusal(&["in.js", "--split=yes"], "--split");
+    refusal(&["--split"], "<input>");
+    refusal(&[], "<input>");
+    refusal(&["a.js", "b.js"], "b.js");
+    // `env-reads` was deleted with this step (Andrew, 2026-10-13).
+    refusal(&["env-reads", "dir"], "dir");
+}
+
+// --- retired flags --------------------------------------------------------
+
+/// Config sweep 2026-10-13, no backwards compatibility: a renamed or
+/// deleted flag is refused, naming what replaced it — in both spellings.
+#[test]
+fn a_retired_flag_is_refused_naming_its_replacement() {
+    let pipeline: Vec<_> = RETIRED_FLAGS.iter().filter(|r| r.0.is_none()).collect();
+    assert!(!pipeline.is_empty());
+    for (_, flag, note) in pipeline {
+        let err = refusal(&["in.js", flag], flag);
+        assert!(err.contains(note), "{flag}: {err}");
+        let err = refusal(&["in.js", &format!("{flag}=x")], flag);
+        assert!(err.contains(note), "{flag}=x: {err}");
+    }
+    let line = refusal(&["in.js", "--profile", "p.json"], "--profile");
+    assert!(line.contains("--perf-trace"), "{line}");
+    assert_eq!(
+        parse_opts(&["in.js", "--perf-trace", "p.json"])
+            .perf_trace
+            .as_deref(),
+        Some("p.json")
+    );
+}
+
+/// The `--no-` spellings of the default-on levers still work.
+#[test]
+fn the_negated_lever_flags_turn_their_lever_off() {
+    let s = parse_opts(&["in.js", "--no-naming-floor", "--no-naming-floor-sweep"]).settings_input();
+    assert_eq!(
+        (s.naming_floor, s.naming_floor_sweep),
+        (Some(false), Some(false))
+    );
+    let s = parse_opts(&["in.js", "--no-reconcile-prior-diff"]).settings_input();
+    assert_eq!(s.reconcile_prior_diff, Some(false));
+    let s = parse_opts(&["in.js"]).settings_input();
+    assert_eq!(
+        (s.naming_floor, s.naming_floor_sweep, s.reconcile_prior_diff),
+        (None, None, None)
+    );
+}
+
+// --- schedule and Rust-only flags -----------------------------------------
 
 /// The naming schedule (docs/rust-port/20-fast-mode.md, flipped
 /// 2026-09-28): the DEFAULT is the relaxed tier, every lever on, no flag.
-/// `--sequential` is the conservative schedule (the relaxed levers OFF,
-/// the exact tier's byte-identical parallelization kept); the rust-only
-/// `--relaxed-levers` sizes a subset of them.
 #[test]
 fn the_naming_schedule_defaults_to_relaxed() {
-    use crate::unified::{CommandOptions, FastTier};
+    use crate::unified::FastTier;
     use humanify_core::fast::Levers;
-    let tier = |argv: &[&str]| CommandOptions::from_values(&parse_opts(argv)).fast_tier();
+    let tier = |a: &[&str]| parse_opts(a).fast_tier();
     assert_eq!(tier(&["in.js"]), Ok(FastTier::Relaxed(Levers::all())));
     assert_eq!(tier(&["in.js", "--sequential"]), Ok(FastTier::Exact));
     let lanes = FastTier::Relaxed(Levers::parse("window-lanes").unwrap());
@@ -65,153 +212,58 @@ fn the_naming_schedule_defaults_to_relaxed() {
         tier(&["in.js", "--relaxed-levers", "window-lanes"]),
         Ok(lanes)
     );
-    assert_eq!(
-        tier(&["in.js", "--relaxed-levers", "window-lanes,defer-shadowed"]),
-        Ok(FastTier::Relaxed(Levers::all()))
-    );
     assert!(tier(&["in.js", "--relaxed-levers", "bogus"]).is_err());
-    assert!(
-        tier(&["in.js", "--sequential", "--relaxed-levers", "window-lanes"]).is_err(),
-        "--sequential has no relaxed levers to select"
-    );
+    assert!(tier(&["in.js", "--sequential", "--relaxed-levers", "window-lanes"]).is_err());
 }
 
-#[test]
-fn the_llm_latency_simulation_takes_a_path() {
-    let opts = parse_opts(&["in.js", "--simulate-llm-latency", "sim.json"]);
-    assert_eq!(opts.str("simulateLlmLatency"), Some("sim.json"));
-}
+// --- help and version -----------------------------------------------------
 
-/// `--rename-retries <n>` (2026-09-29): Rust-only but USER-FACING —
-/// declared, parsed, and listed in the help (unlike the hidden
-/// `--relaxed-levers`), next to the `--max-retries` cap it composes with.
-#[test]
-fn the_rename_retries_flag_parses_and_lists() {
-    let opts = parse_opts(&["in.js", "--rename-retries", "2"]);
-    assert_eq!(opts.str("renameRetries"), Some("2"));
-    let root = program();
-    let help = root.help_information(&[]);
-    assert!(
-        help.contains("--rename-retries <n>"),
-        "the budget flag is user-facing: {help}"
-    );
-    let max = help.find("--max-retries").expect("--max-retries is listed");
-    let rename = help
-        .find("--rename-retries")
-        .expect("--rename-retries is listed");
-    assert!(
-        max < rename,
-        "--rename-retries lists next to the cap it composes with"
-    );
-}
-
-fn golden_help(command: &str) -> String {
+fn golden_help() -> String {
     let path = format!(
-        "{}/../../test/golden/help/{command}.txt",
+        "{}/../../test/golden/help/humanify.txt",
         env!("CARGO_MANIFEST_DIR")
     );
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
 #[test]
-fn help_text_matches_the_golden() {
-    let root = program();
-    let mut commands = vec![root.name.clone()];
-    commands.extend(root.commands.iter().map(|c| c.name.clone()));
-    for name in commands {
-        assert_eq!(
-            help_text(&name),
-            golden_help(&name),
-            "help for {name} (regenerate the golden with --help after a deliberate change)"
-        );
-    }
-}
-
-/// The help is the binary's user-facing text: it names no file the
-/// cutover deleted (the TS pipeline's `.ts` files) and no migration-era
-/// instrument label.
-#[test]
-fn help_names_no_deleted_ts_file() {
-    let root = program();
-    let mut helps = vec![help_text(&root.name)];
-    helps.extend(root.commands.iter().map(|c| help_text(&c.name)));
-    for help in helps {
-        for stale in [".ts", "parity-era", "07 §2"] {
-            assert!(!help.contains(stale), "help mentions {stale:?}:\n{help}");
+fn help_matches_the_golden_and_prints_to_stdout() {
+    assert_eq!(
+        help_text().trim_end(),
+        golden_help().trim_end(),
+        "help (regenerate the golden with --help after a deliberate change)"
+    );
+    for flag in ["--help", "-h"] {
+        match parse_pipeline(&argv(&[flag])) {
+            PipelineParse::Exit {
+                code,
+                stdout,
+                stderr,
+            } => {
+                assert_eq!((code, stderr.as_str()), (0, ""), "{flag}");
+                assert_eq!(stdout.trim_end(), golden_help().trim_end(), "{flag}");
+            }
+            PipelineParse::Run { .. } => panic!("{flag} ran the pipeline"),
         }
     }
 }
 
-/// Every option the help lists does something: --ambiguity-probe was
-/// parsed and then never read by the Rust pipeline, so it is gone and is
-/// an unknown option like any other.
+/// What the help lists: `--sequential` and `--rename-retries` (next to the
+/// `--max-retries` cap it composes with) are user-facing; the
+/// `--relaxed-levers` sizing knob is hidden; no deleted TS file is named.
 #[test]
-fn a_retired_option_is_unknown() {
-    let argv: Vec<String> = ["in.js", "--ambiguity-probe", "p.json"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    match program().parse(&argv) {
-        ParseOutcome::Exit {
-            exit_code, code, ..
-        } => {
-            assert_eq!((exit_code, code), (1, "commander.unknownOption"));
-        }
-        ParseOutcome::Action { .. } => panic!("--ambiguity-probe still parses"),
+fn help_lists_the_user_flags_only() {
+    let help = help_text();
+    assert!(help.contains("--sequential"), "{help}");
+    assert!(!help.contains("--relaxed-levers"), "{help}");
+    let max = help.find("--max-retries").expect("--max-retries is listed");
+    let rename = help.find("--rename-retries").expect("listed");
+    assert!(max < rename, "{help}");
+    for stale in [".ts", "parity-era", "07 §2", "env-reads"] {
+        assert!(!help.contains(stale), "help mentions {stale:?}:\n{help}");
     }
-}
-
-/// The stderr a refused argv prints (its first line: the error itself).
-fn refusal(argv: &[&str]) -> String {
-    let argv: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
-    match program().parse(&argv) {
-        ParseOutcome::Exit {
-            exit_code,
-            code,
-            stderr,
-            ..
-        } => {
-            assert_eq!(
-                (exit_code, code),
-                (1, "commander.unknownOption"),
-                "{argv:?}"
-            );
-            stderr.lines().next().unwrap_or_default().to_string()
-        }
-        ParseOutcome::Action { .. } => panic!("{argv:?} still parses"),
-    }
-}
-
-/// Config sweep 2026-10-13, no backwards compatibility: a RENAMED flag's
-/// old spelling is refused, and the refusal names the new one.
-#[test]
-fn a_renamed_option_is_refused_naming_its_replacement() {
-    let line = refusal(&["in.js", "--profile", "p.json"]);
-    assert!(line.contains("'--profile'"), "{line}");
-    assert!(line.contains("--perf-trace"), "{line}");
-    let opts = parse_opts(&["in.js", "--perf-trace", "p.json"]);
-    assert_eq!(opts.str("perfTrace"), Some("p.json"));
-    assert!(help_text("humanify").contains("--perf-trace <path>"));
-}
-
-/// The positive spellings that only restated a default-on lever are gone;
-/// the refusal says so and names the `--no-` form that still works.
-#[test]
-fn a_default_restating_spelling_is_refused() {
-    for (flag, attr) in [
-        ("--naming-floor", "namingFloor"),
-        ("--naming-floor-sweep", "namingFloorSweep"),
-        ("--reconcile-prior-diff", "reconcilePriorDiff"),
-    ] {
-        let line = refusal(&["in.js", flag]);
-        assert!(line.contains(&format!("'{flag}'")), "{line}");
-        let negated = flag.replacen("--", "--no-", 1);
-        assert!(line.contains(&negated), "{line}");
-        assert_eq!(parse_opts(&["in.js", &negated]).bool(attr), Some(false));
-        assert!(
-            !help_text("humanify").contains(&format!("  {flag} ")),
-            "{flag} is still listed in the help"
-        );
+    for (_, flag, _) in RETIRED_FLAGS.iter().filter(|r| r.0.is_none()) {
+        assert!(!help.contains(&format!("{flag} ")), "{flag} is listed");
     }
 }
 
@@ -220,9 +272,12 @@ fn version_is_package_json_version() {
     let path = format!("{}/../../package.json", env!("CARGO_MANIFEST_DIR"));
     let pkg: Value =
         serde_json::from_str(&std::fs::read_to_string(&path).expect("package.json")).unwrap();
-    assert_eq!(
-        program().version.as_deref(),
-        pkg["version"].as_str(),
-        "the -V output is package.json's version"
-    );
+    assert_eq!(Some(package_version().as_str()), pkg["version"].as_str());
+    match parse_pipeline(&argv(&["-V"])) {
+        PipelineParse::Exit { code, stdout, .. } => {
+            assert_eq!(code, 0);
+            assert!(stdout.contains(&package_version()), "{stdout}");
+        }
+        PipelineParse::Run { .. } => panic!("-V ran the pipeline"),
+    }
 }

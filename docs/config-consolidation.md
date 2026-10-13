@@ -1,7 +1,9 @@
 # Config consolidation: one parse point, one typed config, one file
 
-Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Nothing here is
-built. Asked for by Andrew: "we will need several sweeps of our code and evals
+Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-2
+landed on main (`587e211f`); **step 3 (clap for the pipeline) is done** on
+branch `cleanup/config-sweep-3-clap` — §2.1 and §5 record what changed.
+Steps 4-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
 to clean up old flags and make sure config is parsed in ONE place and used
 downstream." Rule applied throughout: no backwards compatibility — an old
 spelling is deleted, not aliased.
@@ -59,8 +61,8 @@ neutrality` flags, 7 `neutrality.sh`, 8 `gate.sh`, 6 `selfhop.sh`, 2
 ## 1. How configuration flows today
 
 ```
-argv ─► commander.rs port (pipeline) ──► JSON object of options
-                                          │  unified.rs CommandOptions::from: v.str("…"), v.bool("skipLibraries")
+argv ─► clap, surface.rs (pipeline) ───► CommandOptions (typed; was a commander.rs port until step 3)
+                                          │
                                           ▼
          .env + HUMANIFY_API_KEY/OPENAI_API_KEY ─► settings.rs resolve_settings ─► Settings (frozen)
                                           │
@@ -68,7 +70,7 @@ argv ─► commander.rs port (pipeline) ──► JSON object of options
          --sequential/--relaxed-levers ─► unified.rs Levers (separately)
          --bundler/--minifier ─► toolchain (separately, after detection)
          paths (--prior-version, --split-ledger, --stats-json, …) ─► read where used in unified.rs
-argv ─► clap (six migration verbs) ─► each verb's own args (own defaults)
+argv ─► clap (the stage verbs, main.rs) ─► each verb's own args (own defaults)
 ```
 
 What is already right: `env.rs` is the ONE environment reader (clippy
@@ -76,15 +78,38 @@ What is already right: `env.rs` is the ONE environment reader (clippy
 `kill_switches_test.rs` walks the sources for it); `Settings` has no `&mut`
 API; the toolchain is resolved once. What is not: options reach downstream
 code through four separate resolvers (settings, switches, levers, toolchain)
-plus raw `CommandOptions` fields read throughout `unified.rs`; numbers are
-parsed as JavaScript `parseInt` (`12abc` → 12) for TS-harness parity; and the
-same knob can have different defaults per verb.
+plus raw `CommandOptions` fields read throughout `unified.rs`; and the same
+knob can have different defaults per verb. (Numbers were parsed as
+JavaScript `parseInt`, `12abc` → 12, until step 3 typed them.)
 
 ## 2. Inventory
 
-### 2.1 The pipeline's argument parser (`commander.rs`)
+### 2.1 The pipeline's argument parser (`commander.rs` — DELETED in step 3)
 
-`commander.rs` is a port of the npm `commander` 13 package, kept because the
+**Done (step 3, 2026-10-13):** `commander.rs` (839 lines), its accident
+tests, the `env-reads` command and `util::parse_number` are deleted; the
+pipeline is declared for clap in `surface.rs` (`CommandOptions` derives
+`clap::Args`). Usage errors still exit 1. Every launch the harness makes
+parses to the settings the port gave it — `launch_parity_test.rs` against a
+fixture captured from the port at `587e211f` (53 command lines: both launch
+goldens, e2e.ts, ask-trace.ts, run.sh `--pipeline-arg`, neutrality.sh, the
+crate's integration tests, one row per flag). The accidents, old → new:
+
+| accident (commander port)                                                    | now                                                                                |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| a value option swallowed the next flag (`--model --split` → model "--split") | refused: `a value is required for '--model <model>'`                               |
+| a negative number passed as a value (`--retries -1` → -1)                    | refused: `unexpected argument '-1'`                                                |
+| repeated options last-wins (`-c 4 -c 8` → 8)                                 | refused: `the argument '--concurrency <n>' cannot be used multiple times`          |
+| attached short values and combos (`-c5`, `-ofoo`, `-vc 5`)                   | refused, naming the argument; only `-vv` (the harness's form) stays                |
+| numbers were `parseInt` (`-c 12abc` → 12, `--timeout 1e3` → 1)               | typed: non-negative integers, else `invalid value '12abc' for '--concurrency <n>'` |
+| `--skip-libraries` + `--no-skip-libraries` together: last wins               | refused as a conflict; each alone keeps its effect until step 6                    |
+| (both spellings set false — finding #19)                                     | already fixed by two declarations; stays fixed                                     |
+| unknown option: `unknown option '--x'` + the whole help                      | `unexpected argument '--x' found` + usage line                                     |
+| `-V` printed the bare version                                                | prints `humanify <version>`                                                        |
+
+The original analysis:
+
+`commander.rs` was a port of the npm `commander` 13 package, kept because the
 TS harness used to spawn the TS pipeline with commander's grammar ("the
 grammar IS contract surface — including its accidents"): a required option
 swallows the next argument even if it starts with `-`; repeated options are
@@ -167,7 +192,7 @@ config record.
 
 | verb           | parser    | flags                                                                                                                                                                            | users                                      | proposal                                                                                                         |
 | -------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `env-reads`    | commander | `--markdown`, `-o`                                                                                                                                                               | its own test and help golden               | **delete** (Andrew, 2026-10-13); its source-walking check folds into the config guard test (§3.5)                |
+| `env-reads`    | commander | `--markdown`, `-o`                                                                                                                                                               | its own test and help golden               | **deleted** in step 3 (Andrew, 2026-10-13); its source-walking check folds into the config guard test (§3.5)     |
 | `detect`       | clap      | `--profile`, `--toolchain`, `--split-method`                                                                                                                                     | `scripts/e2e.ts`                           | keep; `--profile` → `--perf-trace`                                                                               |
 | `unpack`       | clap      | `--prior-version`, `--llm-cache`, `--model` (default `openai/gpt-oss-20b`), `--reasoning-effort` (`low`), `--max-tokens`, `--llm-log`, `--index`, `--carries`, `--webcrack-shim` | `tests/pipeline_stages.rs`                 | keep; `--index` → `--bundle-order`; model/effort read from the same `[llm]` config as the pipeline (one default) |
 | `libdetect`    | clap      | `--files`, `--webcrack-shim`                                                                                                                                                     | none found                                 | delete, or fold into `humanify index` as the detector's verdict                                                  |
@@ -321,7 +346,7 @@ marked **G** touch how the harness launches the binary and update
    `BOOT_GATE_SOFT`. Fix CLAUDE.md's boot-gate model line.
 2. **Renames** (G). `unpack --index` → `--bundle-order`; eval `--no-vendor` →
    `--no-vendor-score`; `detect --profile` → `--perf-trace`; `CLONE_CENSUS_ROOT` → `--root`.
-3. **clap for the pipeline** (N). Delete the `env-reads` command and
+3. **DONE 2026-10-13 (§2.1). clap for the pipeline** (N). Delete the `env-reads` command and
    `env_reads.rs` with it. Replace `commander.rs` + `surface.rs`
    with clap declarations; exit 1 on usage errors; typed numbers; retired
    flags refused by name (test per retired flag, red first); re-record
