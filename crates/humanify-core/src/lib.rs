@@ -54,6 +54,9 @@ mod matching_test;
 mod matching_helpers_pin_test;
 
 #[cfg(test)]
+mod hash_forms_pin_test;
+
+#[cfg(test)]
 mod modules_test;
 
 #[cfg(test)]

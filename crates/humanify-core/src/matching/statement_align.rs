@@ -2301,3 +2301,25 @@ fn literal_tokens(
 
 #[cfg(test)]
 mod statement_align_test;
+
+/// The hash-forms pin (`hash_forms_pin_test`): one unit's align-walk
+/// outputs — the blurred unit hash, the numbers-masked group hash, the
+/// literal-keeping hash and the placeholder table.
+#[cfg(test)]
+pub(crate) fn unit_forms_for_pin(
+    value: &Value,
+    tables: &SymbolTables,
+) -> (
+    String,
+    String,
+    String,
+    Vec<(String, Option<SymbolId>, String)>,
+) {
+    let walk = walk_unit(value, tables, false);
+    (
+        sha256_16(walk.parts.join("").as_bytes()),
+        sha256_16(walk.numbers_masked().as_bytes()),
+        unit_hash(value, tables, true),
+        walk.mapping,
+    )
+}
