@@ -427,7 +427,7 @@ pub fn run_naming<P: NameProvider>(
             config.prompt_window,
             trail,
             config.emit_rename_ledger,
-            config.tunables.reask_limit,
+            &config.tunables,
             &decided,
             &stems,
         ) {

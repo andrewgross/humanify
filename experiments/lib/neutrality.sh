@@ -2,9 +2,10 @@
 #
 # Prove a change emits IDENTICAL BYTES — the right gate for a refactor.
 #
-#   experiments/lib/neutrality.sh <baseline-ref> [pair] [--workdir D] [--cache D] [--priors D]
-#                                     [--candidate-cmd '<argv>'] [--baseline-cmd '<argv>']
-#   experiments/lib/neutrality.sh main 2.1.85:2.1.86
+#   npm run eval -- neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D]
+#                                [--inputs-base D] [--endpoint URL]
+#   npm run eval -- neutrality main 2.1.215:2.1.216 --cache /work/neutrality-cache
+#   (which runs: experiments/lib/neutrality.sh <run-config.json>)
 #
 # WHY THIS EXISTS INSTEAD OF RUNNING THE EVAL. The consolidation arc is mostly
 # changes that are supposed to alter nothing a user can see: extracting a
@@ -40,25 +41,22 @@
 # A pass here means "inert on this pair with draws pinned", never "inert".
 set -uo pipefail
 
-# Positionals: <baseline-ref> [from:to].  Flags (no ambient env reads):
-#   --workdir <dir>   scratch root (default /work)
-#   --cache <dir>     shared LLM cache BOTH legs replay (default
-#                     <workdir>/neutrality-cache). The verdict is only valid
-#                     when the baseline leg writes 0 entries to it — a fresh
-#                     or per-run cache means a COLD run, and cold verdicts
-#                     are void (null-control proven, 2026-08-11).
-#   --priors <dir>    root holding the prior trees (default <workdir>/exp050-cold)
-#   --inputs-base <dir>  override pairs.json inputsBase
-#   --endpoint <url>     LLM endpoint (default: .humanify.local.json, llm-endpoint.sh)
-#   --candidate-cmd '<argv>'  per-leg pipeline command (RUNBOOK §7): replaces
-#                     the leg's own `target/release/humanify` (built by this
-#                     script at that leg's commit) with the
-#                     given argv (shell-quoted; the identical pipeline flags
-#                     are appended). Its provenance is the argv, echoed into
-#                     the run header and the leg's stdout. When set, the
-#                     same-commit fatal check is skipped — the candidate is no
-#                     longer a git ref. Needed by a flag-on/off inertness
-#                     proof (07 §3).
+# ONE RUN CONFIG (config sweep step 7, 2026-10-13). This script parses NO
+# flags: `npm run eval -- neutrality` (scripts/eval.ts, neutralityArgs)
+# validates them, resolves every default and writes one run config JSON
+# (<workdir>/neutrality-run-config.json); this script takes only its path.
+# Its fields:
+#   baseline      the ref the candidate (this checkout's HEAD) is compared to
+#   pair          <from>:<to> (default 2.1.85:2.1.86)
+#   workdir       scratch root (default /work)
+#   cache         shared LLM cache BOTH legs replay (default
+#                 <workdir>/neutrality-cache). The verdict is only valid
+#                 when the baseline leg writes 0 entries to it — a fresh
+#                 or per-run cache means a COLD run, and cold verdicts
+#                 are void (null-control proven, 2026-08-11).
+#   priors        root holding the prior trees (default <workdir>/exp050-cold)
+#   inputsBase    pairs.json inputsBase unless --inputs-base
+#   endpoint      --endpoint, or null: .humanify.local.json (llm-endpoint.sh)
 #
 # Each leg runs the Rust binary built from ITS commit: the candidate from this
 # checkout, the baseline from a detached worktree of <baseline-ref> (each
@@ -66,50 +64,35 @@ set -uo pipefail
 # stdout). The TS pipeline these legs launched before the cutover is deleted
 # (docs/rust-port/19-cutover.md); a baseline ref from before it has no binary
 # that is the pipeline, and its verdict would compare two different programs.
-#   --baseline-cmd '<argv>'   same, for the baseline leg (worktree skipped).
-BASELINE=""
-PAIR="2.1.85:2.1.86"
-WORK="/work"
-CACHE_OVERRIDE=""
-PRIORS_OVERRIDE=""
-INPUTS_OVERRIDE=""
-ENDPOINT_OVERRIDE=""
-CANDIDATE_CMD=""
-BASELINE_CMD=""
-POSITIONAL=0
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --workdir) WORK="$2"; shift ;;
-    --cache)   CACHE_OVERRIDE="$2"; shift ;;
-    --priors)  PRIORS_OVERRIDE="$2"; shift ;;
-    --inputs-base) INPUTS_OVERRIDE="$2"; shift ;;
-    --endpoint)    ENDPOINT_OVERRIDE="$2"; shift ;;
-    --candidate-cmd) CANDIDATE_CMD="$2"; shift ;;
-    --baseline-cmd)  BASELINE_CMD="$2"; shift ;;
-    --*)       echo "neutrality.sh: unknown flag $1" >&2; exit 2 ;;
-    *)         case $POSITIONAL in
-                 0) BASELINE="$1" ;;
-                 1) PAIR="$1" ;;
-                 *) echo "neutrality.sh: unexpected arg $1" >&2; exit 2 ;;
-               esac
-               POSITIONAL=$((POSITIONAL+1)) ;;
-  esac
-  shift
-done
-[[ -n "$BASELINE" ]] || { echo "usage: neutrality.sh <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--candidate-cmd '<argv>'] [--baseline-cmd '<argv>']" >&2; exit 2; }
+# (The per-leg `--candidate-cmd` / `--baseline-cmd` of the TS-to-Rust port,
+# RUNBOOK §7, were deleted in step 7: no living caller, and eval.ts never
+# accepted them.)
+RUN_CONFIG="${1:-}"
+if [[ $# -ne 1 || "$RUN_CONFIG" == --* || ! -f "$RUN_CONFIG" ]]; then
+  echo "usage: neutrality.sh <run-config.json> — the run config \`npm run eval -- neutrality <baseline-ref> [from:to] [flags]\` writes; neutrality.sh parses no flags (config sweep step 7)" >&2
+  exit 2
+fi
+[[ "$(jq -r .kind "$RUN_CONFIG")" == "neutrality" ]] || {
+  echo "neutrality.sh: $RUN_CONFIG is not a neutrality run config" >&2; exit 2; }
+# run_config <jq filter>: one field of the run config ("" for null).
+run_config() { jq -r "$1 // empty" "$RUN_CONFIG"; }
+BASELINE=$(run_config .baseline)
+PAIR=$(run_config .pair)
+WORK=$(run_config .workdir)
+CACHE=$(run_config .cache)
+PRIOR_ROOT=$(run_config .priors)
+INPUTS=$(run_config .inputsBase)
+ENDPOINT_OVERRIDE=$(run_config .endpoint)
 mkdir -p "$WORK"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
 CFG="$REPO/experiments/034-eval-harness/pairs.json"
-CACHE="${CACHE_OVERRIDE:-$WORK/neutrality-cache}"
-PRIOR_ROOT="${PRIORS_OVERRIDE:-$WORK/exp050-cold}"
 
 FROM="${PAIR%%:*}"
 TO="${PAIR##*:}"
 
-INPUTS="${INPUTS_OVERRIDE:-$(jq -r .inputsBase "$CFG")}"
 source "$HERE/llm-endpoint.sh"
 ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
@@ -138,15 +121,15 @@ PRIOR="$PRIOR_BASE/.humanify/humanified.js"
 [[ -f "$PRIOR" ]] || {
   echo "FATAL: no prior bundle at $PRIOR" >&2
   echo "       (looked under $PRIOR_ROOT for '$FROM-rebased' then '$FROM')" >&2
-  # The common cause is not a missing prior — it is arg 3 being read as a
-  # scratch dir when it is ALSO the prior root. Say so, rather than let the
-  # message send the reader looking for a bundle that was never there.
+  # The common cause is not a missing prior — it is the workdir being read
+  # as the prior root too. Say so, rather than let the message send the
+  # reader looking for a bundle that was never there.
   [[ -d "$PRIOR_ROOT" ]] || {
     echo "       $PRIOR_ROOT does not exist at all." >&2
-    echo "       Arg 3 (workdir) is also the prior root. To use a separate" >&2
+    echo "       The workdir is also the default prior root. To use a separate" >&2
     echo "       workdir — e.g. to run two pairs at once — keep the priors" >&2
-    echo "       where they are:" >&2
-    echo "         $0 $BASELINE $PAIR --workdir $WORK --priors /work/exp050-cold" >&2
+    echo "       (and the warm cache) where they are:" >&2
+    echo "         npm run eval -- neutrality $BASELINE $PAIR --workdir $WORK --priors /work/exp050-cold --cache /work/neutrality-cache" >&2
   }
   exit 1
 }
@@ -164,24 +147,16 @@ CANDIDATE_REF="$(git rev-parse --short HEAD)"
 CANDIDATE_NAME="$(git rev-parse --abbrev-ref HEAD)"
 BASE_SHA="$(git rev-parse --short "$BASELINE")"
 
-if [[ -n "$CANDIDATE_CMD" ]]; then
-  echo "=== neutrality (per-leg commands): candidate-cmd [$CANDIDATE_CMD] vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
-  # The candidate is no longer a git ref — its provenance is the argv — so
-  # the same-commit fatal check below does not apply (RUNBOOK §7).
-else
-  echo "=== neutrality: $CANDIDATE_NAME ($CANDIDATE_REF) vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
-  if [[ "$CANDIDATE_REF" == "$BASE_SHA" ]]; then
-    echo "FATAL: candidate and baseline are the same commit — nothing to compare." >&2
-    exit 1
-  fi
-fi
-if [[ -n "$BASELINE_CMD" ]]; then
-  echo "=== baseline-cmd [$BASELINE_CMD] (worktree skipped) ==="
+echo "=== neutrality: $CANDIDATE_NAME ($CANDIDATE_REF) vs $BASELINE ($BASE_SHA) on $FROM->$TO ==="
+echo "    run config: $RUN_CONFIG"
+if [[ "$CANDIDATE_REF" == "$BASE_SHA" ]]; then
+  echo "FATAL: candidate and baseline are the same commit — nothing to compare." >&2
+  exit 1
 fi
 
 count_cache() { find "$CACHE" -type f 2>/dev/null | wc -l | tr -d ' '; }
 
-# leg_flags <label> <out> <cmd...>: sets LEG_FLAGS, the pipeline argv after
+# leg_flags <label> <out> <bin>: sets LEG_FLAGS, the pipeline argv after
 # the input for one leg. Both legs get the SAME settings. Since config sweep
 # step 5 (2026-10-13) the binary takes only its operational flags and reads
 # every other setting from a --config TOML file (written here, per leg,
@@ -190,9 +165,8 @@ count_cache() { find "$CACHE" -type f 2>/dev/null | wc -l | tr -d ' '; }
 # settings as the flags it had then — asked of the binary itself (its
 # --help), so the harness never guesses from a commit date.
 leg_flags() {
-  local label="$1" out="$2"
-  shift 2
-  if "$@" --help 2>/dev/null | grep -q -- '--config <file>'; then
+  local label="$1" out="$2" bin="$3"
+  if "$bin" --help 2>/dev/null | grep -q -- '--config <file>'; then
     local toml="$WORK/neutrality-$label.toml"
     npx tsx "$REPO/experiments/lib/pipeline-config.ts" "$toml" \
       "llm.reasoning_effort=$EFFORT" "llm.concurrency=$CONC" split.enabled=true \
@@ -223,32 +197,17 @@ run_leg() {
   # expansion aborts the script.
   local LABEL="$1"
   local SRCDIR="$2"
-  local CMD_TEMPLATE="${3:-}"
   local OUT="$WORK/neutrality-$LABEL"
   rm -rf "$OUT"
   echo "--- leg $LABEL: $SRCDIR"
-  if [[ -n "$CMD_TEMPLATE" ]]; then
-    # Per-leg command (RUNBOOK §7): the template carries the pipeline
-    # invocation's head; the identical pipeline flags are appended. The
-    # provenance is echoed into the leg's stdout so the transcript says
-    # what ran — a stored result with no provenance line is not citable.
-    local LEG_ARR=()
-    eval "LEG_ARR=($CMD_TEMPLATE)"
-    leg_flags "$LABEL" "$OUT" "${LEG_ARR[@]}" || return 1
-    {
-      echo "# neutrality per-leg cmd: $CMD_TEMPLATE"
-      "${LEG_ARR[@]}" "$INPUT" "${LEG_FLAGS[@]}"
-    } > "$WORK/neutrality-$LABEL.stdout" 2>&1
-  else
-    # The leg's OWN binary, built from its commit — never a leftover.
-    local BIN
-    BIN=$(build_humanify "$SRCDIR" "$WORK/neutrality-$LABEL.build.log") || return 1
-    echo "    binary: $BIN"
-    leg_flags "$LABEL" "$OUT" "$BIN" || return 1
-    echo "    flags: ${LEG_FLAGS[*]}"
-    "$BIN" "$INPUT" "${LEG_FLAGS[@]}" \
-      > "$WORK/neutrality-$LABEL.stdout" 2>&1
-  fi
+  # The leg's OWN binary, built from its commit — never a leftover.
+  local BIN
+  BIN=$(build_humanify "$SRCDIR" "$WORK/neutrality-$LABEL.build.log") || return 1
+  echo "    binary: $BIN"
+  leg_flags "$LABEL" "$OUT" "$BIN" || return 1
+  echo "    flags: ${LEG_FLAGS[*]}"
+  "$BIN" "$INPUT" "${LEG_FLAGS[@]}" \
+    > "$WORK/neutrality-$LABEL.stdout" 2>&1
   local RC=$?
   # A non-zero exit is NOT automatically fatal here. The pipeline exits 1 when a
   # file fails the rename-invariant check, having written a complete tree — and
@@ -272,23 +231,19 @@ run_leg() {
 }
 
 BEFORE_A=$(count_cache)
-run_leg candidate "$REPO" "$CANDIDATE_CMD" || exit 1
+run_leg candidate "$REPO" || exit 1
 AFTER_A=$(count_cache)
 
-if [[ -n "$BASELINE_CMD" ]]; then
-  run_leg baseline "" "$BASELINE_CMD" || exit 1
-else
-  WT="$WORK/neutrality-baseline-src"
-  rm -rf "$WT"
-  git worktree remove --force "$WT" 2>/dev/null
-  git worktree add --detach "$WT" "$BASELINE" >/dev/null 2>&1 || {
-    echo "FATAL: could not create a worktree at $WT for $BASELINE" >&2; exit 1; }
-  # The binary shells out to scripts/webcrack-shim.ts (webpack/browserify
-  # inputs only), which needs the repo's installed deps; symlink them.
-  ln -sfn "$REPO/node_modules" "$WT/node_modules"
+WT="$WORK/neutrality-baseline-src"
+rm -rf "$WT"
+git worktree remove --force "$WT" 2>/dev/null
+git worktree add --detach "$WT" "$BASELINE" >/dev/null 2>&1 || {
+  echo "FATAL: could not create a worktree at $WT for $BASELINE" >&2; exit 1; }
+# The binary shells out to scripts/webcrack-shim.ts (webpack/browserify
+# inputs only), which needs the repo's installed deps; symlink them.
+ln -sfn "$REPO/node_modules" "$WT/node_modules"
 
-  run_leg baseline "$WT" || { git worktree remove --force "$WT"; exit 1; }
-fi
+run_leg baseline "$WT" || { git worktree remove --force "$WT"; exit 1; }
 AFTER_B=$(count_cache)
 
 echo
@@ -383,7 +338,5 @@ else
     "$WORK/neutrality-baseline" "$WORK/neutrality-candidate" 2>/dev/null | head -20
 fi
 
-if [[ -z "$BASELINE_CMD" ]]; then
-  git worktree remove --force "$WT" 2>/dev/null
-fi
+git worktree remove --force "$WT" 2>/dev/null
 exit $VERDICT

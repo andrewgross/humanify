@@ -13,6 +13,44 @@ that nothing in the pipeline may be specific to the test app; bundler-specific
 pieces belong in the toolchain. This page is where a reader finds out which
 numbers might quietly break that rule.
 
+## Which values are config keys
+
+Config sweep step 8 (2026-10-13): a value a user plausibly needs to set is
+a key in the `--config` file (`humanify.example.toml` lists every key; its
+default IS the constant named here, held equal by a test). The rows below
+name the key where there is one. Keys: `llm.timeout_ms`, `llm.max_tokens`,
+`llm.concurrency`, `llm.module_concurrency`, `llm.context_tokens`,
+`naming.batch_size`, `naming.max_retries`, `naming.max_free_retries`,
+`naming.lane_threshold`, `naming.rename_retries`, and — new in step 8 —
+`naming.code_window_lines` (the most lines of a function the naming prompt
+shows; a model with a smaller context window needs a smaller one, or its
+requests overflow). The library lookup and discovery thresholds became
+`[library.lookup]` / `[library.discovery]` keys in step 6
+([library-matching-config.md](./library-matching-config.md)).
+
+Deliberately NOT keys (each stays a compiled-in constant):
+
+- **Prompt shape details** (header 30 / pads 20+40, used-names 50/200,
+  prior hints 40, snippet and call-site sizes, context variables 30×120,
+  retry snippet sizes): they shape a prompt inside the window the user
+  already sizes with `naming.code_window_lines` and `llm.context_tokens`;
+  none was ever measured, and a knob nobody can tune from evidence is an
+  invitation to drift. They become keys when a measurement says so.
+- **Split-namer budget** (3 bytes/token, 75% headroom, 60 tokens/entry):
+  a tokenizer fact behind `llm.context_tokens`, conservative on purpose.
+- **Module group size 10/15**: a toolchain value, chosen by detection
+  (`BundlerTuning`), not by the user.
+- **Matching, vote, reconcile, placement, anchor and vendor-pairing
+  thresholds** (code shape): they refuse rather than guess, so a wrong
+  value costs matches, not correctness; turning them is a measurement
+  task (an eval), not a user setting.
+- **Bundle shape gates and name-shape profiles**: bundler/minifier facts,
+  owned by the toolchain and the name profiles; a user overriding them
+  would contradict detection.
+- **Fresh grouping targets** (`DEFAULT_CLUSTER_CONFIG`): belongs to the
+  split-method lane, which is reworking it.
+- **The ledger's 5 MB ordering quirk**: diagnostic only, to be retired.
+
 ## How to read a row
 
 Paths are under `crates/humanify-core/src/` unless they start with
@@ -43,27 +81,27 @@ record beyond the fact that it has not visibly failed on Claude Code.
 
 ## Naming: batching, lanes, retries (model/server)
 
-| Value                                                              | Where                                                                                         | Measured on                                                                                   | Depends on   | Why it should carry over                                                                                                   |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Batch size 25 identifiers per request (`DEFAULT_BATCH_SIZE`)       | `crates/humanify-core/src/naming/waves/batch.rs:38`                                           | CC + model (`docs/rust-port/20-fast-mode.md`: cold wall on 85→86, 118→119; eval-clean)        | model/server | It trades request count against prompt size on one server. Not about the app; re-measure with a different model or server. |
-| Lane split: ≤25 bindings → 0 lanes, ≤200 → 4, ≤1000 → 8, else 16   | `naming/waves/batch.rs:82` (`compute_lane_count`); threshold `:43`, `--lane-threshold`        | TS, none                                                                                      | model/server | Unmeasured. Concurrency shape only — changes speed, and which names share a prompt.                                        |
-| Free retries: 100, or bindings / 4 if larger                       | `naming/waves/batch.rs:41`, `:95`                                                             | TS, none                                                                                      | model/server | Unmeasured. A budget for how often the model's answers collide.                                                            |
-| Re-ask limit 2 (`REASK_LIMIT`, `--rename-retries`)                 | `naming/reask.rs:53`                                                                          | none                                                                                          | model/server | Unmeasured. How often a refused answer is worth asking again depends on the model.                                         |
-| Module-level names asked 10 per request (15 under esbuild)         | `toolchain.rs:457` (`BundlerTuning::module_group_size`)                                       | TS, none (TS `processor.ts:1402`)                                                             | bundler      | Already a toolchain value. Why esbuild gets 15 is not on record.                                                           |
-| Module names grouped within 100 lines of the group's first binding | `naming/waves/processor.rs:1237`                                                              | TS, none (the TS passed radius 50 and compared against `2 × radius`; the comment now says so) | code shape   | Unmeasured. Keeps neighbours in one prompt.                                                                                |
-| Request timeout 300 s, `max_tokens` 6000, concurrency 50           | `crates/humanify-model/src/llm.rs:630`, `:633`; `crates/humanify-cli/src/util.rs:110`, `:114` | TS, none                                                                                      | model/server | About the server, not the app.                                                                                             |
+| Value                                                              | Where                                                                                                                                                                       | Measured on                                                                                   | Depends on   | Why it should carry over                                                                                                   |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Batch size 25 identifiers per request (`DEFAULT_BATCH_SIZE`)       | config `naming.batch_size`; default `crates/humanify-core/src/naming/waves/batch.rs:38`                                                                                     | CC + model (`docs/rust-port/20-fast-mode.md`: cold wall on 85→86, 118→119; eval-clean)        | model/server | It trades request count against prompt size on one server. Not about the app; re-measure with a different model or server. |
+| Lane split: ≤25 bindings → 0 lanes, ≤200 → 4, ≤1000 → 8, else 16   | `naming/waves/batch.rs:82` (`compute_lane_count`); threshold `:43`, config `naming.lane_threshold`                                                                          | TS, none                                                                                      | model/server | Unmeasured. Concurrency shape only — changes speed, and which names share a prompt.                                        |
+| Free retries: 100, or bindings / 4 if larger                       | `naming/waves/batch.rs:41`, `:95`; config `naming.max_free_retries` replaces the rule with a fixed cap                                                                      | TS, none                                                                                      | model/server | Unmeasured. A budget for how often the model's answers collide.                                                            |
+| Re-ask limit 2 (`REASK_LIMIT`, config `naming.rename_retries`)     | `naming/reask.rs:53`                                                                                                                                                        | none                                                                                          | model/server | Unmeasured. How often a refused answer is worth asking again depends on the model.                                         |
+| Module-level names asked 10 per request (15 under esbuild)         | `toolchain.rs:457` (`BundlerTuning::module_group_size`)                                                                                                                     | TS, none (TS `processor.ts:1402`)                                                             | bundler      | Already a toolchain value. Why esbuild gets 15 is not on record.                                                           |
+| Module names grouped within 100 lines of the group's first binding | `naming/waves/processor.rs:1237`                                                                                                                                            | TS, none (the TS passed radius 50 and compared against `2 × radius`; the comment now says so) | code shape   | Unmeasured. Keeps neighbours in one prompt.                                                                                |
+| Request timeout 300 s, `max_tokens` 6000, concurrency 50           | config `llm.timeout_ms`, `llm.max_tokens`, `llm.concurrency` (+ `llm.module_concurrency`); defaults `crates/humanify-model/src/llm.rs`, `crates/humanify-cli/src/config.rs` | TS, none                                                                                      | model/server | About the server, not the app.                                                                                             |
 
 ## Naming: what the prompt shows (model/server)
 
-| Value                                                                       | Where                                           | Measured on                                                    | Depends on   | Why it should carry over                                                                        |
-| --------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
-| Code window 500 lines; header 30, pad 20 before / 40 after                  | `naming/code_window.rs:23`, `:26`, `:28`, `:29` | TS, none                                                       | model/server | Unmeasured. Bounded by the model's context, not the app.                                        |
-| Used-names list 50 (function), 200 (module); prior-name hints 40            | `naming/prompts.rs:70`, `:74`, `:72`            | TS, none                                                       | model/server | Unmeasured.                                                                                     |
-| Snippets 800 chars / 10 lines; call site 200 chars, expanded below 80       | `naming/waves/prompt_text.rs:28`, `:33`, `:35`  | TS, none                                                       | model/server | Unmeasured.                                                                                     |
-| Context variables: at most 30, each at most 120 chars                       | `naming/context.rs:112`, `:114`                 | TS, none                                                       | model/server | Unmeasured.                                                                                     |
-| Retry snippet 30–80 lines (±2 around each use); retry used-names 25         | `naming/waves/processor.rs:3412`–`:3415`        | TS, none                                                       | model/server | Unmeasured.                                                                                     |
-| Split-namer context 32,768 tokens (`DEFAULT_CONTEXT_TOKENS`)                | `place/assign/namer.rs:234`                     | model                                                          | model/server | gpt-oss-20b's window, documented as the local model's default; `--context-tokens` overrides it. |
-| Split-namer budget: 3 bytes/token, 75% headroom, 60 completion tokens/entry | `place/assign/namer.rs:238`, `:241`, `:244`     | CC + model (finding #39: refused prompts ran ~3.9 bytes/token) | model/server | Conservative on purpose (3 under-counts bytes per token); a tokenizer fact, not an app fact.    |
+| Value                                                                                          | Where                                           | Measured on                                                    | Depends on   | Why it should carry over                                                                                 |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------- |
+| Code window 500 lines (config `naming.code_window_lines`); header 30, pad 20 before / 40 after | `naming/code_window.rs:23`, `:26`, `:28`, `:29` | TS, none                                                       | model/server | Unmeasured. Bounded by the model's context, not the app.                                                 |
+| Used-names list 50 (function), 200 (module); prior-name hints 40                               | `naming/prompts.rs:70`, `:74`, `:72`            | TS, none                                                       | model/server | Unmeasured.                                                                                              |
+| Snippets 800 chars / 10 lines; call site 200 chars, expanded below 80                          | `naming/waves/prompt_text.rs:28`, `:33`, `:35`  | TS, none                                                       | model/server | Unmeasured.                                                                                              |
+| Context variables: at most 30, each at most 120 chars                                          | `naming/context.rs:112`, `:114`                 | TS, none                                                       | model/server | Unmeasured.                                                                                              |
+| Retry snippet 30–80 lines (±2 around each use); retry used-names 25                            | `naming/waves/processor.rs:3412`–`:3415`        | TS, none                                                       | model/server | Unmeasured.                                                                                              |
+| Split-namer context 32,768 tokens (`DEFAULT_CONTEXT_TOKENS`)                                   | `place/assign/namer.rs:234`                     | model                                                          | model/server | gpt-oss-20b's window, documented as the local model's default; config `llm.context_tokens` overrides it. |
+| Split-namer budget: 3 bytes/token, 75% headroom, 60 completion tokens/entry                    | `place/assign/namer.rs:238`, `:241`, `:244`     | CC + model (finding #39: refused prompts ran ~3.9 bytes/token) | model/server | Conservative on purpose (3 under-counts bytes per token); a tokenizer fact, not an app fact.             |
 
 ## Matching against the prior version (code shape)
 

@@ -245,10 +245,10 @@ Edit `pairs.json` to change the set or the LLM config (endpoint/model/effort).
 
 ```bash
 # Score the current tree under a MODEL label (a branch, commit, or idea name):
-experiments/034-eval-harness/run.sh main-4117212
+npm run eval -- score main-4117212
 
 # ...make a change, then score it:
-experiments/034-eval-harness/run.sh fix-close-match
+npm run eval -- score fix-close-match
 
 # Compare every model side by side (deltas vs the first-listed baseline):
 npx tsx experiments/034-eval-harness/leaderboard.ts main-4117212 fix-close-match

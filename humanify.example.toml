@@ -58,6 +58,8 @@ rename_retries = 2
 # max_free_retries =   (unset: the processor's own rule (100))
 # Min bindings to enable parallel lanes.
 lane_threshold = 25
+# Most lines of a function the naming prompt shows (longer functions are windowed around the names asked); lower it for a model with a small context window.
+code_window_lines = 500
 # The deterministic naming floor (closes minted-token gaps).
 naming_floor = true
 # The LLM sweep of minted survivors (needs naming_floor).
