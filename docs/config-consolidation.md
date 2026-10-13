@@ -522,10 +522,31 @@ vs "http://b/v1" (cfg.toml)`), agreeing ones are recorded as
    living caller and never reachable through `eval neutrality`).
    Neutrality is now launched as `npm run eval -- neutrality …`.
 
-8. **Thresholds into the config, by area** (N each). Library lookup and
+8. **DONE 2026-10-13. Thresholds into the config, by area** (N each). Library lookup and
    discovery first (they arrive with matching-architecture step 4), then
    any naming/LLM constants a user needs; update tuning-values.md rows to
    point at the config key.
+
+   What landed: the library lookup and discovery thresholds were already
+   keys from step 6 (verified: `[library.lookup]`, `[library.lookup.targeted]`,
+   `[library.discovery]`, defaults held equal to `LookupRules::default()` /
+   `DiscoveryOptions::default()` by `discover_verb_test.rs`). The LLM and
+   naming budgets a user turns (timeout, max tokens, concurrency, context
+   window, batch size, retries, lane threshold, re-asks) were keys from
+   step 5. ONE constant moved: the naming prompt's code window,
+   `naming.code_window_lines` (default 500 = `MAX_CODE_LINES`, which stays
+   only as that default; range 1..). It reaches the wave lanes, the prior's
+   context code and the coverage sweep through `WaveTunables` (the sweep
+   now takes the tunables instead of a bare re-ask count). Why this one: it
+   bounds the main naming prompt by the model's context, and a user on a
+   smaller-context model would otherwise overflow it with no way to fix
+   it. What was NOT moved, and why, is listed in
+   [tuning-values.md](./tuning-values.md#which-values-are-config-keys);
+   its rows now name the key where there is one. Tests (red first): the
+   selection cuts at its own budget; the key resolves into the tunables;
+   0 is refused; the default equals the constant; the example TOML
+   regenerated. Proof: warm neutrality on the default; the exp096 library
+   score unchanged.
 
 ## 6. Decided and open
 

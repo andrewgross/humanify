@@ -42,8 +42,9 @@ const DEFAULT_MAX_FREE_RETRIES: u32 = 100;
 /// Minimum bindings before a function's batch splits into lanes.
 pub const DEFAULT_LANE_THRESHOLD: usize = 25;
 
-/// The processor's tunables (`--batch-size`, `--max-retries`,
-/// `--max-free-retries`, `--lane-threshold`, `--rename-retries`;
+/// The processor's tunables (config `naming.batch_size`, `max_retries`,
+/// `max_free_retries`, `lane_threshold`, `rename_retries`,
+/// `code_window_lines`;
 /// createRenamePlugin's `batchSize` / `maxRetriesPerIdentifier` /
 /// `maxFreeRetries` / `laneThreshold`, plus the Rust-run re-ask budget).
 /// The default is the TS's optionless run.
@@ -64,6 +65,10 @@ pub struct WaveTunables {
     /// cap (`max_retries`) — a collision re-ask rides its own wave-step
     /// round and consumes no lane attempts.
     pub reask_limit: usize,
+    /// The most lines of a function the naming prompt shows
+    /// (`naming.code_window_lines`; the wave lanes, the prior's context
+    /// code and the coverage sweep all cut at it).
+    pub code_window_lines: usize,
 }
 
 impl Default for WaveTunables {
@@ -74,6 +79,7 @@ impl Default for WaveTunables {
             max_free_retries: None,
             lane_threshold: DEFAULT_LANE_THRESHOLD,
             reask_limit: crate::naming::reask::REASK_LIMIT,
+            code_window_lines: crate::naming::code_window::MAX_CODE_LINES,
         }
     }
 }

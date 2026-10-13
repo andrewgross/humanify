@@ -224,6 +224,8 @@ pub struct Naming {
     /// Cross-lane collision retry limit (unset: the processor's own rule).
     pub max_free_retries: Option<u32>,
     pub lane_threshold: usize,
+    /// The most lines of a function the naming prompt shows.
+    pub code_window_lines: usize,
     pub naming_floor: bool,
     /// Implied off when the floor is off — the sweep cannot run without it.
     pub naming_floor_sweep: bool,
@@ -238,6 +240,7 @@ impl Naming {
             max_free_retries: self.max_free_retries,
             lane_threshold: self.lane_threshold,
             reask_limit: self.rename_retries,
+            code_window_lines: self.code_window_lines,
         }
     }
 }
@@ -728,6 +731,7 @@ impl Config {
             rename_retries: count("naming.rename_retries") as usize,
             max_free_retries: r.int("naming.max_free_retries").map(|n| n as u32),
             lane_threshold: count("naming.lane_threshold") as usize,
+            code_window_lines: count("naming.code_window_lines") as usize,
             naming_floor,
             // Implied off when the floor is off.
             naming_floor_sweep: naming_floor && r.flag_on("naming.naming_floor_sweep"),

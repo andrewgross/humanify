@@ -93,7 +93,7 @@ fn sweep(text: &str, provider: &impl NameProvider, check: impl FnOnce(&str, &Ren
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &MinifiedStems::of_program(NameProfile::Bun, semantic),
     );

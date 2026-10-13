@@ -52,8 +52,8 @@ use super::census::{MintedBinding, collect_eligible_bindings};
 use crate::artifact_dump::{Dispatch, DispatchLog, RecordMode};
 use crate::ingest::Ingest;
 use crate::modules::soundness::{EvalWithTaint, collect_eval_with_taint};
-use crate::naming::code_window::MAX_CODE_LINES;
 use crate::naming::prompts::{render_system_prompt, render_user_prompt};
+use crate::naming::waves::batch::WaveTunables;
 use crate::naming::waves::generate::TextView;
 use crate::naming::waves::processor::{answer_refusal, disclose_reject};
 use crate::naming::waves::render::{Occurrences, program_edits, render_program};
@@ -353,6 +353,7 @@ fn windowed_batches(
     span: Span,
     code: &str,
     bucket: Vec<MintedBinding>,
+    max_lines: usize,
 ) -> Vec<(String, Vec<MintedBinding>)> {
     use crate::naming::code_window::{
         FunctionCodeSelection, fits_at_default_pads, select_function_code,
@@ -365,7 +366,7 @@ fn windowed_batches(
         let anchors = target_anchors(view, state, span, &lines, &t);
         let mut joined = cur.0.clone();
         joined.extend(&anchors);
-        if !cur.2.is_empty() && !fits_at_default_pads(&joined, line_count) {
+        if !cur.2.is_empty() && !fits_at_default_pads(&joined, line_count, max_lines) {
             batches.push(std::mem::take(&mut cur));
         }
         cur.1
@@ -387,6 +388,7 @@ fn windowed_batches(
                 fn_end_line: Some(line_count),
                 anchor_start_lines: Some(&anchor_lines),
                 identifier_names: Some(&names),
+                max_lines,
             });
             (shown, targets)
         })
@@ -394,7 +396,7 @@ fn windowed_batches(
 }
 
 /// Build the sweep's groups. A group's code is its key node's rendered
-/// text; over [`MAX_CODE_LINES`] it is no longer the flat HEAD of that
+/// text; over the code window (`naming.code_window_lines`) it is no longer the flat HEAD of that
 /// text (`capCode`, which asked 300 of 306 real sweep targets blind,
 /// 2026-10-04) but a window around each target's declaration and uses,
 /// batched to fit the budget. The guard (`naming::shown`) then refuses
@@ -403,6 +405,7 @@ fn build_groups(
     semantic: &Semantic<'_>,
     state: &RenameState,
     targets: Vec<MintedBinding>,
+    max_lines: usize,
 ) -> BuiltGroups {
     let mut order: Vec<Span> = Vec::new();
     let mut by_key: HashMap<(u32, u32), Vec<MintedBinding>> = HashMap::new();
@@ -429,10 +432,10 @@ fn build_groups(
         let scope = state.scope_of_binding(bucket[0].binding);
         let used_names = all_binding_names(state, scope);
         let code = view.pretty(span, &occ.edits(view.text, state, span), true);
-        let batches = if code.split('\n').count() <= MAX_CODE_LINES {
+        let batches = if code.split('\n').count() <= max_lines {
             vec![(code, bucket)]
         } else {
-            windowed_batches(&view, state, span, &code, bucket)
+            windowed_batches(&view, state, span, &code, bucket, max_lines)
         };
         for (code, batch) in batches {
             let (shown, refused) = split_shown(&code, batch);
@@ -837,10 +840,11 @@ pub fn sweep_minted_names<P: NameProvider>(
     anchor: crate::trail::Anchor,
     params: &CacheKeyParams,
     window: usize,
-    reask_limit: usize,
+    tunables: &WaveTunables,
     decided: Option<&DecidedNames>,
     stems: &MinifiedStems,
 ) -> SweepResult {
+    let reask_limit = tunables.reask_limit;
     let targets = collect_sweep_targets(semantic, state, eligible, taint, decided);
     if targets.is_empty() {
         // Nothing to ask — but the meter still classifies the state: an
@@ -851,7 +855,8 @@ pub fn sweep_minted_names<P: NameProvider>(
             ..SweepResult::default()
         };
     }
-    let BuiltGroups { groups, not_shown } = build_groups(semantic, state, targets);
+    let BuiltGroups { groups, not_shown } =
+        build_groups(semantic, state, targets, tunables.code_window_lines);
     let mut result = SweepResult {
         groups: groups.len(),
         ..SweepResult::default()
@@ -921,7 +926,7 @@ pub fn sweep_minted_names<P: NameProvider>(
             anchor,
             params,
             window,
-            reask_limit,
+            tunables,
             stems,
             &mut result,
         );
@@ -1068,10 +1073,11 @@ fn sweep_reask<P: NameProvider>(
     anchor: crate::trail::Anchor,
     params: &CacheKeyParams,
     window: usize,
-    limit: usize,
+    tunables: &WaveTunables,
     stems: &MinifiedStems,
     result: &mut SweepResult,
 ) {
+    let limit = tunables.reask_limit;
     // Re-asks each pending target has already had (loop iteration k is
     // re-ask round k, so its applies run at spent = k).
     let mut spent = 0usize;
@@ -1092,7 +1098,7 @@ fn sweep_reask<P: NameProvider>(
         let BuiltGroups {
             groups: fresh,
             not_shown,
-        } = build_groups(semantic, state, targets);
+        } = build_groups(semantic, state, targets, tunables.code_window_lines);
         // A re-asked target its rebuilt window no longer shows is refused
         // like a first-round one (the window follows the current names).
         refuse_not_shown(state, not_shown, result);
@@ -1209,8 +1215,8 @@ pub struct DeferredSweepOutcome {
 /// `runDeferredSweep(code)`: the prior-aware sweep over its OWN parse of
 /// the shipping text (`anchor` = reconciled when the reconcile produced
 /// the text, else generated). Err when the text does not parse.
-/// `reask_limit` is the run's name-conflict re-ask budget
-/// (`--rename-retries`); `decided` is the run's decision ledger joined BY
+/// `tunables` carries the run's name-conflict re-ask budget
+/// (`naming.rename_retries`) and code window (`naming.code_window_lines`); `decided` is the run's decision ledger joined BY
 /// NAME — the approximation that stands in for per-binding identity
 /// across the text boundary (see [`DecidedNames`]).
 #[allow(clippy::too_many_arguments)]
@@ -1224,7 +1230,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
     prompt_window: usize,
     trail: StrategyTrail,
     ledger: bool,
-    reask_limit: usize,
+    tunables: &WaveTunables,
     decided: &DecidedNames,
     stems: &MinifiedStems,
 ) -> Result<DeferredSweepOutcome, (String, StrategyTrail)> {
@@ -1250,7 +1256,7 @@ pub fn run_deferred_sweep<P: NameProvider>(
         anchor,
         params,
         prompt_window,
-        reask_limit,
+        tunables,
         Some(decided),
         stems,
     );

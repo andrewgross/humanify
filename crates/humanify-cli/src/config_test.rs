@@ -65,6 +65,12 @@ fn every_llm_default_is_the_one_named_default() {
 fn every_naming_default_is_the_one_named_default() {
     let c = config(&["in.js"]);
     assert_eq!(c.naming.tunables(), WaveTunables::default());
+    // Config sweep step 8: the prompt's code window is a key whose default
+    // IS the code's constant.
+    assert_eq!(
+        c.naming.code_window_lines,
+        humanify_core::naming::code_window::MAX_CODE_LINES
+    );
     assert_eq!(c.naming.schedule, FastTier::Relaxed(Levers::all()));
     assert!(c.naming.naming_floor && c.naming.naming_floor_sweep);
     assert!(c.library.skips_libraries());
@@ -82,7 +88,7 @@ fn typed_values_resolve() {
         "[llm]\nconcurrency = 7\ntimeout_ms = 1234\nretries = 5\ncontext_tokens = 131072\n\
          module_concurrency = 33\nreasoning_effort = \"low\"\n\
          [naming]\nbatch_size = 9\nmax_retries = 3\nmax_free_retries = 2\n\
-         lane_threshold = 11\nrename_retries = 0\n",
+         lane_threshold = 11\nrename_retries = 0\ncode_window_lines = 120\n",
     );
     assert_eq!(c.llm.concurrency, 7);
     assert_eq!(c.llm.timeout_ms, 1234);
@@ -92,6 +98,8 @@ fn typed_values_resolve() {
     assert_eq!(c.naming.max_free_retries, Some(2));
     assert_eq!(c.naming.lane_threshold, 11);
     assert_eq!(c.naming.rename_retries, 0);
+    assert_eq!(c.naming.code_window_lines, 120);
+    assert_eq!(c.naming.tunables().code_window_lines, 120);
     assert_eq!(c.llm.context_tokens, 131_072);
     assert_eq!(c.llm.module_concurrency, 33);
     assert_eq!(c.llm.outer_concurrency(), 40);
@@ -288,4 +296,12 @@ fn missing_input_files_are_named() {
             "split.ledger file not found: /nonexistent/ledger.json"
         ]
     );
+}
+
+#[test]
+fn a_zero_code_window_is_refused() {
+    let err = ConfigFile::check("cfg.toml", "[naming]\ncode_window_lines = 0\n")
+        .expect_err("a window must show code");
+    assert_eq!(err.len(), 1, "{err:?}");
+    assert!(err[0].contains("naming.code_window_lines"), "{err:?}");
 }

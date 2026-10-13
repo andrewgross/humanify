@@ -706,7 +706,7 @@ fn run_era<P: NameProvider>(
                 crate::trail::Anchor::Fresh,
                 opts.params,
                 opts.prompt_window,
-                opts.tunables.reask_limit,
+                &opts.tunables,
                 // The in-era sweep holds the records itself: per-binding
                 // exact, no cross-text join.
                 None,

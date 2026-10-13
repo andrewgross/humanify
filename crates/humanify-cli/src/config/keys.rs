@@ -334,6 +334,17 @@ pub static KEYS: &[Key] = &[
     },
     Key {
         section: "naming",
+        name: "code_window_lines",
+        kind: Kind::Int { min: 1, max: ANY },
+        flag: None,
+        default: || int(tunables().code_window_lines as u64),
+        unset: "",
+        doc: "Most lines of a function the naming prompt shows (longer functions are \
+              windowed around the names asked); lower it for a model with a small context \
+              window.",
+    },
+    Key {
+        section: "naming",
         name: "naming_floor",
         kind: Kind::Bool,
         flag: None,

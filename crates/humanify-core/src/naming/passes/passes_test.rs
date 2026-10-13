@@ -104,7 +104,7 @@ fn a_sweep_collision_gets_one_disclosed_reask() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -194,7 +194,7 @@ fn a_stubborn_sweep_gives_up_after_the_default_two_reasks() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -302,7 +302,7 @@ fn the_second_sweep_reask_discloses_every_prior_suggestion_and_is_bounded() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -382,7 +382,7 @@ fn a_never_asked_single_letter_is_a_sweep_target_and_gets_asked() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -463,7 +463,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -503,7 +503,7 @@ fn a_single_letter_answer_lands_and_is_marked_carried() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -574,7 +574,7 @@ fn sweep_junk_answers_are_still_refused() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -675,7 +675,7 @@ fn a_sweep_answer_borrowing_a_minified_stem_is_refused_and_reasked() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -768,7 +768,7 @@ fn a_sweep_echo_of_a_minified_name_is_refused_and_reasked() {
             Anchor::Fresh,
             &params,
             usize::MAX,
-            2,
+            &crate::naming::waves::batch::WaveTunables::default(),
             None,
             &crate::rename::floor::MinifiedStems::of_program(
                 crate::rename::name_profile::NameProfile::Bun,
@@ -994,7 +994,7 @@ fn the_deferred_sweep_skips_decided_names_and_keeps_exhausted_ones() {
         usize::MAX,
         crate::trail::StrategyTrail::enabled(),
         false,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         &decided,
         &crate::rename::floor::MinifiedStems::empty(crate::rename::name_profile::NameProfile::Bun),
     )
@@ -1086,7 +1086,10 @@ fn the_sweep_reask_budget_is_configurable() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        1,
+        &crate::naming::waves::batch::WaveTunables {
+            reask_limit: 1,
+            ..Default::default()
+        },
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -1116,7 +1119,10 @@ fn the_sweep_reask_budget_is_configurable() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        0,
+        &crate::naming::waves::batch::WaveTunables {
+            reask_limit: 0,
+            ..Default::default()
+        },
         None,
         &crate::rename::floor::MinifiedStems::of_program(
             crate::rename::name_profile::NameProfile::Bun,
@@ -1200,7 +1206,7 @@ fn a_sweep_target_past_line_500_is_shown_in_its_window() {
         Anchor::Fresh,
         &params,
         usize::MAX,
-        2,
+        &crate::naming::waves::batch::WaveTunables::default(),
         None,
         &crate::rename::floor::MinifiedStems::empty(crate::rename::name_profile::NameProfile::Bun),
     );
