@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
+use crate::hash::forms::STATEMENT;
 
 /// One fossil module as the ledger records it (`FossilLedgerModule`).
 #[derive(Clone, Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -74,7 +74,7 @@ impl StableSplitLedger {
     /// (WP5.6e; every era since, re-keyed via
     /// [`rederive_stale_era_hashes`] or refused loudly).
     pub fn hashes_current(&self) -> bool {
-        self.hash_version == Some(STATEMENT_HASH_VERSION)
+        self.hash_version == Some(STATEMENT.version)
     }
 }
 
@@ -109,7 +109,10 @@ impl PriorHashes {
     pub fn describe(&self) -> String {
         match self {
             PriorHashes::Current => {
-                format!("Split ledger hashes: hashVersion {STATEMENT_HASH_VERSION} (current)")
+                format!(
+                    "Split ledger hashes: hashVersion {} (current)",
+                    STATEMENT.version
+                )
             }
             PriorHashes::Rederived(r) => format!(
                 "Split ledger hashes: stale era (hashVersion {}) re-derived from \
@@ -138,10 +141,11 @@ pub fn settle_prior_hashes(
     }
     let Some(text) = prior_text else {
         return PriorHashes::Refused(format!(
-            "hashVersion {} is not {STATEMENT_HASH_VERSION} and no prior text to re-derive from",
+            "hashVersion {} is not {} and no prior text to re-derive from",
             ledger
                 .hash_version
-                .map_or("(absent)".to_string(), |v| v.to_string())
+                .map_or("(absent)".to_string(), |v| v.to_string()),
+            STATEMENT.version
         ));
     };
     match rederive_stale_era_hashes(ledger, text, layout) {
@@ -181,7 +185,7 @@ pub fn rederive_stale_era_hashes(
     let Some(recorded_version) = ledger.hash_version else {
         return Err("the ledger records no hashVersion (pre-WP5.6e): no era to re-derive".into());
     };
-    if recorded_version == STATEMENT_HASH_VERSION {
+    if recorded_version == STATEMENT.version {
         return Err(format!(
             "hashVersion {recorded_version} is current — nothing to re-derive"
         ));
@@ -207,7 +211,8 @@ pub fn rederive_stale_era_hashes(
         {
             return Err(format!(
                 "statement {i}: the recorded (hashVersion {recorded_version}) and current \
-(hashVersion {STATEMENT_HASH_VERSION}) hash partitions differ (not a bijection)"
+(hashVersion {}) hash partitions differ (not a bijection)",
+                STATEMENT.version
             ));
         }
     }
@@ -242,7 +247,7 @@ pub fn rederive_stale_era_hashes(
     ledger.hashes = Some(current);
     ledger.emit_hashes = emit_hashes;
     ledger.fossil_modules = fossil_modules;
-    ledger.hash_version = Some(STATEMENT_HASH_VERSION);
+    ledger.hash_version = Some(STATEMENT.version);
     Ok(Rederived {
         recorded_version,
         statements: ledger.order.len(),

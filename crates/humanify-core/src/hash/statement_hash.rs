@@ -29,33 +29,21 @@
 //! hashed as ONE class). The refusal direction is unchanged and shared: a
 //! `this`/`arguments`/`new.target`-loaded, concise-bodied, named or
 //! generator flip keeps its sides in different classes.
+//!
+//! This walk is the [`STATEMENT`] form (`hash::forms`), and that form's
+//! version is the split ledger's `hashVersion`: a prior ledger hashed
+//! under a different version is REFUSED by every reader
+//! (`StableSplitLedger::hashes_current`), never misread — and, when the
+//! prior text is at hand, RE-DERIVED onto this era's classes through the
+//! proven bijection (`place::ledger::rederive_stale_era_hashes`). It is
+//! its own walk, not a setting of the canonical serializer: it carries no
+//! scalars and numbers no slots (`hash::forms` module doc).
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use super::forms::STATEMENT;
 use super::wrapper_spelling::{arrow_serializes_as_function, function_head_fields};
-
-/// The ledger's `hashVersion` — bump when the serialization changes shape.
-/// A prior ledger hashed under a different version is REFUSED by every
-/// reader (`StableSplitLedger::hashes_current`), never misread — and, when
-/// the prior text is at hand, RE-DERIVED onto this era's classes through
-/// the proven bijection (`place::ledger::rederive_stale_era_hashes`).
-///
-/// 1 = the TS statement-hash bytes (`src/split/statement-hash.ts`), which
-/// every TS-era ledger carries. 2 = THIS function's bytes (WP5.6e,
-/// 2026-09-25: the structuralSignature exemption ended, the Rust hashes
-/// are the only hashes). The two define the same partition on every
-/// measured input (the M3 injection's bijection proof), but never the same
-/// bytes, so a v1 ledger read as v2 would silently join nothing.
-/// 3 = exp094b (2026-10-02): the wrapper-spelling unification reached the
-/// statement arm — a SAFE arrow's node line walks under the
-/// FunctionExpression token (the SAME shared rule as the MatchKey
-/// serializer, `hash::wrapper_spelling`), and the function-head fields
-/// (`async`, `generator`) ride in the node content. A wrapper a bundler
-/// re-serialized arrow -> function keeps its class across the era when
-/// spelled as a function; the ARROW side's bytes are new-era (the version
-/// gate, not the bytes, carries the refusal — exp093's lesson, mirrored).
-pub const STATEMENT_HASH_VERSION: u64 = 3;
 
 /// The value-bearing part of a node (statement-hash.ts's nodeContent): what
 /// distinguishes two structurally-identical trees; identifier names
@@ -255,7 +243,10 @@ pub fn statement_hash(stmt: &Value) -> String {
                 // `hash::wrapper_spelling`) so a bundler's arrow ->
                 // function re-serialization keeps the statement's class,
                 // and the function-head fields ride in nodeContent above.
-                let token = if t == "ArrowFunctionExpression" && arrow_serializes_as_function(map) {
+                let token = if t == "ArrowFunctionExpression"
+                    && STATEMENT.wrapper_spelling
+                    && arrow_serializes_as_function(map)
+                {
                     "FunctionExpression"
                 } else {
                     t

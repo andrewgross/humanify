@@ -24,6 +24,7 @@ use oxc_span::GetSpan;
 use oxc_syntax::reference::ReferenceFlags;
 
 use crate::detect::js_text::{is_js_space, is_word_boundary, skip_js_space};
+use crate::hash::forms::MATCH_KEY;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::modules::identity::{declare, name_from_declared_identity};
@@ -43,8 +44,8 @@ use crate::modules::vendor_pairing::{
     module_features, pair_by_content,
 };
 use crate::modules::{
-    BunModuleClassification, CarriedName, FACTORY_HASH_VERSION, FactoryNameCounts, FactoryRecord,
-    NameSource, hash_fallback_name, name_cjs_factories, text_assets,
+    BunModuleClassification, CarriedName, FactoryNameCounts, FactoryRecord, NameSource,
+    hash_fallback_name, name_cjs_factories, text_assets,
 };
 
 use super::{UnpackResult, UnpackedFile, write_passthrough};
@@ -102,7 +103,7 @@ pub struct PriorVendor {
     /// emitted them (the ordering pass).
     pub factories: Option<Vec<PriorManifestEntry>>,
     /// A stale-era manifest (a `hashVersion` other than
-    /// [`FACTORY_HASH_VERSION`] — TS-written or an older Rust hash era): its
+    /// [`MATCH_KEY`]'s version — TS-written or an older Rust hash era): its
     /// entries with their vendor files' content keys, for the unpack to
     /// re-key against the fresh classification. `names` / `factories` are
     /// then None — that era's bytes never join this run's.
@@ -168,7 +169,7 @@ pub fn load_prior_vendor(prior_file: &Path) -> Option<PriorVendor> {
     if manifest
         .get("hashVersion")
         .and_then(serde_json::Value::as_u64)
-        == Some(FACTORY_HASH_VERSION)
+        == Some(MATCH_KEY.version)
     {
         return Some(PriorVendor {
             names: load_prior_vendor_names(&text),
@@ -637,7 +638,7 @@ pub fn unpack_bun(
             .adapter
             .vendor_record_stamp()
             .ok_or("this adapter writes no vendor record")?,
-        hash_version: FACTORY_HASH_VERSION,
+        hash_version: MATCH_KEY.version,
         runtime_file,
         legal_comments: {
             let mut paths: Vec<String> = Vec::new();

@@ -9,23 +9,24 @@
 
 use oxc_allocator::Allocator;
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::{CanonicalForm, IDENTITY_KEY, MATCH_KEY};
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::{Ingest, program_estree_json};
 
-fn hash_of(code: &str, policy: LiteralPolicy) -> String {
+fn hash_of(code: &str, form: &CanonicalForm) -> String {
     let allocator = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&allocator, code);
     assert!(ingest.errors.is_empty(), "test code must parse: {code}");
     let tables = SymbolTables::build(ingest.semantic());
-    canonical_serialize(&program_estree_json(ingest.program), &tables, policy).hash
+    canonical_serialize(&program_estree_json(ingest.program), &tables, form).hash
 }
 
 fn matchkey(code: &str) -> String {
-    hash_of(code, LiteralPolicy::MatchKey)
+    hash_of(code, &MATCH_KEY)
 }
 
 fn verbatim(code: &str) -> String {
-    hash_of(code, LiteralPolicy::Verbatim)
+    hash_of(code, &IDENTITY_KEY)
 }
 
 #[test]
@@ -331,12 +332,7 @@ mod wrapper_spelling {
             let ingest = Ingest::parse_unambiguous(&allocator, code);
             assert!(ingest.errors.is_empty());
             let tables = SymbolTables::build(ingest.semantic());
-            canonical_serialize(
-                &program_estree_json(ingest.program),
-                &tables,
-                LiteralPolicy::MatchKey,
-            )
-            .parts
+            canonical_serialize(&program_estree_json(ingest.program), &tables, &MATCH_KEY).parts
         };
         assert!(
             parts_of("var b = (x) => { return x; };").contains("FunctionExpression{"),

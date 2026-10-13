@@ -223,7 +223,7 @@ fn run(row: &Value, replay: &Replay) -> Result<(Vec<String>, Vec<Value>), String
     // really uses — stamp it current. (Other versions stay: a capture that
     // exercises a stale ledger keeps exercising it.)
     if let Some(p) = prior.as_mut().filter(|p| p.hash_version == Some(1)) {
-        p.hash_version = Some(crate::hash::statement_hash::STATEMENT_HASH_VERSION);
+        p.hash_version = Some(crate::hash::forms::STATEMENT.version);
     }
     let mut trail = PlacementTrail::default();
     let assignment = if row["fossil"] == true {

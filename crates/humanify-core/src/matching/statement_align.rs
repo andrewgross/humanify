@@ -112,16 +112,19 @@
 //!   numbers exact (they decide a forced snap and a case pairing — not
 //!   this question).
 //!
-//! Policies, all through the one walk:
-//! - unit hashes and the snap gate's definition hash: strings blurred
-//!   (`preserveLiterals: false`), numbers and bigints EXACT (exp093) —
-//!   the unit's alignment GROUP key additionally masks the numbers (the
-//!   number policy above);
-//! - switch-case pairing's test signature (TS `computeStructuralSignature`
-//!   :1013 = `hashAndMapPath(path, true)`) — `case "open"` and
-//!   `case "data"` blur to the same statement hash, so a reordered case
-//!   would cross-pair bodies without a literal-preserving gate;
-//! - the content shingles (`computeContentShingles` binding-role.ts :44 =
+//! Forms, all through the one walk (named in `hash::forms`):
+//! - [`ALIGN_UNIT`] — unit hashes, placeholder tables and the snap gate's
+//!   definition hash: strings blurred (`preserveLiterals: false`), numbers
+//!   and bigints EXACT (exp093); [`ALIGN_GROUP`] — the unit's alignment
+//!   GROUP key, the same stream with the numbers masked (the number
+//!   policy above);
+//! - [`ALIGN_EXACT`] — switch-case pairing's test signature (TS
+//!   `computeStructuralSignature` :1013 = `hashAndMapPath(path, true)`) —
+//!   `case "open"` and `case "data"` blur to the same statement hash, so a
+//!   reordered case would cross-pair bodies without a literal-preserving
+//!   gate;
+//! - [`ALIGN_CONTENT`] — the content shingles (`computeContentShingles`
+//!   binding-role.ts :44 =
 //!   `serializePathTokens(path, {preserveLiterals: true})`), with slot
 //!   ordinals BLINDED after the walk (`$3`→`$`, `L1`→`L`): ordinals are
 //!   assigned in walk order, so one inserted declaration inside a large
@@ -175,6 +178,10 @@ use serde_json::Value;
 
 use sha2::{Digest, Sha256};
 
+use crate::hash::forms::{
+    ALIGN_CONTENT, ALIGN_EXACT, ALIGN_GROUP, ALIGN_UNIT, CanonicalForm, Locals, Numbers, Strings,
+    Walk,
+};
 use crate::hash::serialize::{
     LiteralClass, MemberNodeNames, SKIP_KEYS, SymbolTables, identifier_role, json_escape,
     literal_class, unwrappable_block,
@@ -364,7 +371,7 @@ fn hash_units<'v>(units: Vec<&'v Value>, tables: &SymbolTables) -> Vec<HashedUni
         // slot ordinals, and the ordinals decide both the evidence
         // output order and (cross-side) which k-grams two different
         // contents share.
-        let walk = walk_unit(value, tables, false);
+        let walk = walk_unit(value, tables, &ALIGN_UNIT);
         let span = json_span_opt(Some(value)).unwrap_or(Span::new(u32::MAX, 0));
         let type_name = json_type(value).to_string();
         let mut slot_index = HashMap::with_capacity(walk.mapping.len());
@@ -375,8 +382,8 @@ fn hash_units<'v>(units: Vec<&'v Value>, tables: &SymbolTables) -> Vec<HashedUni
             value,
             span,
             type_name,
-            hash: sha256_16(walk.parts.join("").as_bytes()),
-            masked_hash: sha256_16(walk.numbers_masked().as_bytes()),
+            hash: sha256_16(walk.stream(&ALIGN_UNIT).as_bytes()),
+            masked_hash: sha256_16(walk.stream(&ALIGN_GROUP).as_bytes()),
             mapping: walk.mapping,
             slot_index,
         }
@@ -392,11 +399,16 @@ struct UnitWalk {
 }
 
 impl UnitWalk {
-    /// The stream with every number/bigint token replaced by its bare
-    /// class marker (`N`/`B`) — the alignment group key's input. The
-    /// slot ordinals are untouched (a literal never occupies a slot), so
-    /// two units with equal masked streams still have aligned slot sets.
-    fn numbers_masked(&self) -> String {
+    /// The stream as `form` reads it. Under a numbers-masked form
+    /// ([`ALIGN_GROUP`], the alignment group key) every number/bigint token
+    /// is replaced by its bare class marker (`N`/`B`) — the same walk's
+    /// tokens, not a second walk. The slot ordinals are untouched (a
+    /// literal never occupies a slot), so two units with equal masked
+    /// streams still have aligned slot sets.
+    fn stream(&self, form: &CanonicalForm) -> String {
+        if form.numbers == Numbers::Exact {
+            return self.parts.join("");
+        }
         let mut masked = self.parts.clone();
         for &i in &self.number_tokens {
             masked[i] = masked[i][..1].to_string();
@@ -408,8 +420,8 @@ impl UnitWalk {
 /// The token walk over one node ([`Tokenizer`]) — TS
 /// `serializePathTokens`/`hashAndMapPath`'s `serializeValue(node, null,
 /// "root", state)`.
-fn walk_unit(value: &Value, tables: &SymbolTables, keep: bool) -> UnitWalk {
-    let mut tokenizer = Tokenizer::new(tables, keep);
+fn walk_unit(value: &Value, tables: &SymbolTables, form: &CanonicalForm) -> UnitWalk {
+    let mut tokenizer = Tokenizer::new(tables, form);
     tokenizer.serialize_value(value, None, "");
     UnitWalk {
         parts: tokenizer.parts,
@@ -427,7 +439,7 @@ pub(crate) fn placeholder_table(
     value: &Value,
     tables: &SymbolTables,
 ) -> Vec<(String, Option<SymbolId>, String)> {
-    walk_unit(value, tables, false).mapping
+    walk_unit(value, tables, &ALIGN_UNIT).mapping
 }
 
 /// The walk's 16-hex digest (TS `createHash("sha256").update(parts.join("")).digest("hex").slice(0, 16)`; the same digest
@@ -443,9 +455,9 @@ fn sha256_16(bytes: &[u8]) -> String {
 
 /// The unit hash for one node — [`hash_units`]'s per-unit step, also the
 /// snap gate's definition hash and the switch-case test signature.
-fn unit_hash(value: &Value, tables: &SymbolTables, keep: bool) -> String {
-    let walk = walk_unit(value, tables, keep);
-    sha256_16(walk.parts.join("").as_bytes())
+fn unit_hash(value: &Value, tables: &SymbolTables, form: &CanonicalForm) -> String {
+    let walk = walk_unit(value, tables, form);
+    sha256_16(walk.stream(form).as_bytes())
 }
 
 /// Insertion-ordered groups of the given unit indices by a hash key (TS
@@ -793,7 +805,7 @@ fn switch_case_pairs<'v>(
         }
         // TS `computeStructuralSignature` = `hashAndMapPath(path, true)` —
         // the verbatim-literal walk, this module's own.
-        Some(unit_hash(test, tables, true))
+        Some(unit_hash(test, tables, &ALIGN_EXACT))
     };
     let mut pairs = Vec::new();
     for i in 0..prior_cases.len() {
@@ -1472,8 +1484,8 @@ fn contents_agree(
     // The strongest signal: the definitions are IDENTICAL modulo names —
     // the same walk the unit hashes use (blurred literals; TS
     // `hashPathWithMapping` on the content paths).
-    if unit_hash(prior_content, prior_tables, false)
-        == unit_hash(fresh_content, fresh_tables, false)
+    if unit_hash(prior_content, prior_tables, &ALIGN_UNIT)
+        == unit_hash(fresh_content, fresh_tables, &ALIGN_UNIT)
     {
         return true;
     }
@@ -1490,13 +1502,18 @@ fn contents_agree(
 /// yield one shingle of the whole stream, so tiny contents (`null`, a
 /// single literal) still compare.
 pub(crate) fn content_shingles(tables: &SymbolTables, content: &Value) -> BTreeSet<String> {
-    let mut tokenizer = Tokenizer::new(tables, true);
+    let form = &ALIGN_CONTENT;
+    let mut tokenizer = Tokenizer::new(tables, form);
     tokenizer.serialize_value(content, None, "");
-    let tokens: Vec<String> = tokenizer
-        .parts
-        .into_iter()
-        .map(blind_slot_ordinal)
-        .collect();
+    let tokens: Vec<String> = if form.locals == Locals::SlotsUnnumbered {
+        tokenizer
+            .parts
+            .into_iter()
+            .map(blind_slot_ordinal)
+            .collect()
+    } else {
+        tokenizer.parts
+    };
     let mut shingles = BTreeSet::new();
     for window in shingle_windows(&tokens, SHINGLE_K) {
         shingles.insert(window.join("\u{0}"));
@@ -1546,9 +1563,10 @@ struct Tokenizer<'a> {
     mapping: Vec<(String, Option<SymbolId>, String)>,
     label_slots: HashMap<String, String>,
     counter: u32,
-    /// `preserveLiterals`: unit hashes and the snap gate hash BLURRED
-    /// literals (false); content shingles and the switch-case test
-    /// signature keep them verbatim (true).
+    /// `preserveLiterals` = the form's `Strings::Exact`: unit hashes and
+    /// the snap gate hash BLURRED literals ([`ALIGN_UNIT`]); content
+    /// shingles and the switch-case test signature keep them verbatim
+    /// ([`ALIGN_CONTENT`], [`ALIGN_EXACT`]).
     keep: bool,
     /// Indices into `parts` of every number/bigint literal token — what
     /// [`UnitWalk::numbers_masked`] masks for the alignment group key.
@@ -1562,14 +1580,19 @@ struct Tokenizer<'a> {
 }
 
 impl<'a> Tokenizer<'a> {
-    fn new(tables: &'a SymbolTables, keep: bool) -> Tokenizer<'a> {
+    fn new(tables: &'a SymbolTables, form: &CanonicalForm) -> Tokenizer<'a> {
+        debug_assert!(
+            form.walk == Walk::AlignTokens,
+            "{} is not a setting of the align walk",
+            form.name
+        );
         Tokenizer {
             parts: Vec::with_capacity(256),
             slot_by_symbol: HashMap::new(),
             mapping: Vec::with_capacity(16),
             label_slots: HashMap::new(),
             counter: 0,
-            keep,
+            keep: form.strings == Strings::Exact,
             number_tokens: Vec::new(),
             tables,
             chain: false,
@@ -2301,3 +2324,27 @@ fn literal_tokens(
 
 #[cfg(test)]
 mod statement_align_test;
+
+/// What [`unit_forms_for_pin`] returns: (blurred unit hash, numbers-masked
+/// group hash, literal-keeping hash, placeholder table).
+#[cfg(test)]
+pub(crate) type UnitFormsForPin = (
+    String,
+    String,
+    String,
+    Vec<(String, Option<SymbolId>, String)>,
+);
+
+/// The hash-forms pin (`hash_forms_pin_test`): one unit's align-walk
+/// outputs — the blurred unit hash, the numbers-masked group hash, the
+/// literal-keeping hash and the placeholder table.
+#[cfg(test)]
+pub(crate) fn unit_forms_for_pin(value: &Value, tables: &SymbolTables) -> UnitFormsForPin {
+    let walk = walk_unit(value, tables, &ALIGN_UNIT);
+    (
+        sha256_16(walk.stream(&ALIGN_UNIT).as_bytes()),
+        sha256_16(walk.stream(&ALIGN_GROUP).as_bytes()),
+        unit_hash(value, tables, &ALIGN_EXACT),
+        walk.mapping,
+    )
+}

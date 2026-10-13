@@ -4,7 +4,7 @@
 //! A vendor manifest's `structuralHash` is the cross-release join key of
 //! the carry-over (`name_cjs_factories`) and of the manifest order
 //! (`order_by_prior_manifest`). A prior manifest stamped with any
-//! `hashVersion` other than this run's ([`super::FACTORY_HASH_VERSION`]) —
+//! `hashVersion` other than this run's (`hash::forms::MATCH_KEY`'s version) —
 //! a TS-written one (no stamp; its bytes are `bun-module-classification.ts`
 //! 's own function's, which never equal the Rust's) or one from an older
 //! Rust hash era (exp093 bumped the version: the pre-exp093 blur-era bytes
@@ -49,6 +49,7 @@ use super::known_globals::is_known_global;
 use super::vendor_names::PriorManifestEntry;
 use super::{CarriedName, FactoryRecord, NameSource, factory_structural_hash};
 use crate::babel_view::unparen;
+use crate::hash::forms::VENDOR_CONTENT;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 use crate::unpack::bun::rewrite_require_calls;
@@ -91,7 +92,7 @@ fn keyed(
     free.sort_unstable();
     let tables = SymbolTables::build(ingest.semantic());
     Some((
-        factory_structural_hash(unparen(&stmt.expression), &tables)?,
+        factory_structural_hash(unparen(&stmt.expression), &tables, &VENDOR_CONTENT)?,
         free,
     ))
 }

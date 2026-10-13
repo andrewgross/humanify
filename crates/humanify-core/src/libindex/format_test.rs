@@ -94,15 +94,10 @@ fn a_module_row_serializes_with_a_fixed_key_order() {
 #[test]
 fn the_fingerprint_stamp_names_the_pipelines_own_versions() {
     let f = fingerprint_versions();
-    assert_eq!(
-        f.module,
-        format!(
-            "vendor-content-key/{}",
-            crate::modules::FACTORY_HASH_VERSION
-        )
-    );
+    assert_eq!(f.module, crate::hash::forms::VENDOR_CONTENT.stamp());
     assert_eq!(
         f.literals,
-        format!("literals/{}", super::literals::LITERALS_VERSION)
+        format!("literals/{}", crate::hash::forms::LIBRARY_LITERALS_VERSION)
     );
+    assert_eq!(f.units, crate::hash::forms::LIBRARY_UNITS.stamp());
 }

@@ -13,6 +13,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT};
+
 /// The format tag in every manifest.
 pub const INDEX_FORMAT: &str = "humanify-library-index/1";
 
@@ -182,12 +184,9 @@ pub struct FingerprintVersions {
 /// This build's stamp.
 pub fn fingerprint_versions() -> FingerprintVersions {
     FingerprintVersions {
-        module: format!(
-            "vendor-content-key/{}",
-            crate::modules::FACTORY_HASH_VERSION
-        ),
-        literals: format!("literals/{}", super::literals::LITERALS_VERSION),
-        units: format!("units/{}", super::units::UNITS_VERSION),
+        module: VENDOR_CONTENT.stamp(),
+        literals: format!("literals/{LIBRARY_LITERALS_VERSION}"),
+        units: LIBRARY_UNITS.stamp(),
     }
 }
 

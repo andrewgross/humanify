@@ -21,12 +21,13 @@ use oxc_allocator::Allocator;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::{IDENTITY_KEY, MATCH_KEY};
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::Ingest;
 
 /// Every committed e2e fixture bundle, as (fixture, v1.0.0 text, v1.1.0
 /// text), in fixture-name order.
-fn fixture_pairs() -> Vec<(String, String, String)> {
+pub(crate) fn fixture_pairs() -> Vec<(String, String, String)> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test/e2e/fixtures");
     let mut names: Vec<String> = std::fs::read_dir(&root)
         .expect("e2e fixtures dir")
@@ -59,7 +60,7 @@ fn assert_pinned(section: &str, out: &str, expected: &str) {
     assert_eq!(digest(out), expected, "{section}");
 }
 
-fn digest(text: &str) -> String {
+pub(crate) fn digest(text: &str) -> String {
     Sha256::digest(text.as_bytes())[..12]
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -67,7 +68,7 @@ fn digest(text: &str) -> String {
 }
 
 /// Every JSON node of `root` whose type is in `types`, in pre-order.
-fn nodes_of<'v>(root: &'v Value, types: &[&str], out: &mut Vec<&'v Value>) {
+pub(crate) fn nodes_of<'v>(root: &'v Value, types: &[&str], out: &mut Vec<&'v Value>) {
     match root {
         Value::Object(map) => {
             if map
@@ -86,7 +87,7 @@ fn nodes_of<'v>(root: &'v Value, types: &[&str], out: &mut Vec<&'v Value>) {
     }
 }
 
-const FUNCTION_TYPES: [&str; 3] = [
+pub(crate) const FUNCTION_TYPES: [&str; 3] = [
     "FunctionDeclaration",
     "FunctionExpression",
     "ArrowFunctionExpression",
@@ -110,7 +111,10 @@ const UNIT_TYPES: [&str; 12] = [
 ];
 
 /// One side parsed, with its tables and program JSON.
-fn with_side<T>(text: &str, run: impl FnOnce(&Ingest<'_>, &SymbolTables, &Value) -> T) -> T {
+pub(crate) fn with_side<T>(
+    text: &str,
+    run: impl FnOnce(&Ingest<'_>, &SymbolTables, &Value) -> T,
+) -> T {
     let alloc = Allocator::default();
     let ingest = Ingest::parse(&alloc, text, "input.js");
     let tables = SymbolTables::build(ingest.semantic());
@@ -127,8 +131,8 @@ fn canonical_and_content_lines(text: &str, out: &mut String) {
         let mut units = Vec::new();
         nodes_of(json, &UNIT_TYPES, &mut units);
         for unit in units {
-            let mk = canonical_serialize(unit, tables, LiteralPolicy::MatchKey);
-            let vb = canonical_serialize(unit, tables, LiteralPolicy::Verbatim);
+            let mk = canonical_serialize(unit, tables, &MATCH_KEY);
+            let vb = canonical_serialize(unit, tables, &IDENTITY_KEY);
             let shingles = crate::matching::statement_align::content_shingles(tables, unit);
             let joined: Vec<&str> = shingles.iter().map(String::as_str).collect();
             let _ = writeln!(

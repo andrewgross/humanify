@@ -37,7 +37,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::babel_view::unparen;
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::{CanonicalForm, MATCH_KEY};
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use identity::readers::{BannerInfo, parse_banner};
 
 pub mod helper_shape;
@@ -451,35 +452,17 @@ pub struct FactoryNameCounts {
     pub asset: usize,
 }
 
-/// The version of the factory `structuralHash` bytes a vendor manifest
-/// carries (`hashVersion`). A manifest stamped with ANY other version —
-/// the TS (no stamp; bytes are `bun-module-classification.ts`'s) or an
-/// older Rust hash era — never joins this run's hashes: the carry-over
-/// re-keys it by CONTENT ([`vendor_content`]).
-/// 2 = [`factory_structural_hash`] at WP5.6e (2026-09-25).
-/// 3 = exp093 (2026-09-29): MatchKey literals keep numbers EXACT — old
-///     buckets' hashes are a different era's bytes, re-derived, never
-///     silently matched (a number-free factory's bytes coincide across the
-///     era, so the version gate alone stands between a stale manifest and
-///     a half-carried prior).
-/// 4 = exp094 (2026-10-02): a SAFE arrow serializes under the
-///     FunctionExpression token (`hash::serialize`'s wrapper-spelling
-///     unification), so arrow-factory hashes are a new era's bytes. A
-///     factory spelled as a function expression keeps its bytes ACROSS the
-///     era — the same half-carried-prior shape exp093's gate exists for —
-///     so the version gate alone again stands between a stale manifest and
-///     a silent join.
-pub const FACTORY_HASH_VERSION: u64 = 4;
-
-/// The MatchKey structural hash of a factory body FUNCTION (arrow or
-/// function expression; None for anything else) under `tables` — the
+/// The structural hash of a factory body FUNCTION (arrow or function
+/// expression; None for anything else) under `tables` and `form` — the
 /// cross-version join key, via the same canonical serializer the function
-/// graph uses (strings blurred, numbers exact since exp093). The ONE
-/// owner: the classification and the content re-key ([`vendor_content`])
-/// both hash through it.
+/// graph uses. The ONE owner: the classification hashes under
+/// [`MATCH_KEY`] (the manifest's `structuralHash`, stamped with its
+/// version) and the content re-key ([`vendor_content`]) under
+/// `hash::forms::VENDOR_CONTENT`.
 pub fn factory_structural_hash(
     function: &oxc_ast::ast::Expression<'_>,
     tables: &SymbolTables,
+    form: &CanonicalForm,
 ) -> Option<String> {
     let mut ser = CompactSerializer::new(false, false);
     match function {
@@ -491,7 +474,7 @@ pub fn factory_structural_hash(
     let mut de = serde_json::Deserializer::from_str(&estree);
     de.disable_recursion_limit();
     let body_json: Value = Deserialize::deserialize(&mut de).unwrap_or(Value::Null);
-    Some(canonical_serialize(&body_json, tables, LiteralPolicy::MatchKey).hash)
+    Some(canonical_serialize(&body_json, tables, form).hash)
 }
 
 /// A factory call argument, unwrapped: the factory FUNCTION, the module's
@@ -816,8 +799,8 @@ pub fn classify_bun_modules<'a>(
             // The structural hash of the body function (blurred) — the
             // cross-version join key, via the same canonical serializer the
             // function graph uses.
-            let structural_hash =
-                factory_structural_hash(factory_fn, tables).expect("shape-checked above");
+            let structural_hash = factory_structural_hash(factory_fn, tables, &MATCH_KEY)
+                .expect("shape-checked above");
             // The content hash covers the DECLARATOR's slice (the TS
             // contentHash), not the body's.
             let content_hash: String = {

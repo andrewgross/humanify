@@ -11,17 +11,16 @@ use std::collections::BTreeSet;
 use oxc_span::Span;
 use serde_json::Value;
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize_privates_blinded};
-
-/// The unit fingerprint's version, stamped into an index's manifest.
-pub const UNITS_VERSION: &str = "2";
+use crate::hash::forms::LIBRARY_UNITS;
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 
 /// One unit's fingerprint.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnitPrint {
     pub span: Span,
-    /// The MatchKey canonical hash (locals slotted, private names
-    /// blinded, strings blurred, numbers and globals exact).
+    /// The [`LIBRARY_UNITS`] canonical hash (locals slotted, private
+    /// names blinded, strings blurred, numbers and globals exact; the
+    /// form's version is the index manifest's `units` stamp).
     pub hash: String,
     /// ESTree nodes in the subtree.
     pub nodes: u32,
@@ -54,8 +53,9 @@ fn print(node: &Value, tables: &SymbolTables) -> UnitPrint {
     content_tokens(node, tables, &mut content);
     UnitPrint {
         span: span_of(node),
-        // Private names are the minifier's (`#e`), renamed per build: blind.
-        hash: canonical_serialize_privates_blinded(node, tables, LiteralPolicy::MatchKey).hash,
+        // Private names are the minifier's (`#e`), renamed per build: the
+        // form blinds them.
+        hash: canonical_serialize(node, tables, &LIBRARY_UNITS).hash,
         nodes: count_nodes(node),
         content: content.len() as u32,
     }

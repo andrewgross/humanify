@@ -94,7 +94,7 @@ pub fn unpack_bundle(
             renderer.message(&format!(
                 "Vendor names: the prior manifest is from another hash era (this run writes \
                  hashVersion {}): its {} entries carry by CONTENT, never by hash bytes",
-                humanify_core::modules::FACTORY_HASH_VERSION,
+                humanify_core::hash::forms::MATCH_KEY.version,
                 p.carried_entries()
             ));
         }
