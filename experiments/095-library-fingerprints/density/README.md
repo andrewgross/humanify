@@ -2,6 +2,10 @@
 
 ## STATUS (2026-10-12)
 
+- **Update 2026-10-13 (rule 9):** the builder fixes recommended below (bundled-only literal table, `exports`
+  entries, one-file-one-module check) and the `year-all+minor` policy landed in `../indexv2/` (commit 47e3bd6d),
+  which also built a real index and re-tested the claim rule. Read that README for current numbers.
+
 - **State.** DONE (lab experiment). No pipeline change. Every number below comes from humanify-index shards and the
   scale lane's design rule (`../selection/scripts/libix.py`), Bun slice unless a row says esbuild.
 - **Verdict, totals first.**

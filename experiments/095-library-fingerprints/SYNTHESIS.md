@@ -368,3 +368,50 @@ Retractions and updates to the sections above live here (rule 9).
   keyed library bytes; the builder labels rows the same way — add a one-file-one-module check). Only ~30% of the
   literal table is files a bundle contains (restrict the shard: ~2–3× smaller). Subpath-only packages
   (@modelcontextprotocol/sdk, @aws-sdk/nested-clients) produce no modules: the recipe needs `exports` entries.
+
+---
+
+## 8. A real index, and the claim rule on it (2026-10-13; `indexv2/`)
+
+- **Builder fixed** (commit 47e3bd6d, each change red/green):
+  - the literal table holds only files a build contains: 3.06× smaller (94.9 → 31.0 MB on greedyix-60), held-out
+    recall 20.71% → 20.75%, wrong names unchanged at 0.03%;
+  - entries go through the `exports` map: MCP SDK 0 → 29–81 modules, nested-clients 0 → 5;
+  - a file credited to 2+ modules of one bundle labels none: 1.05% of Bun module rows on the real index, 0 of
+    esbuild's;
+  - `--policy year-all+minor`, `--pinned`.
+- **One real index:** id `b00fa735…`. 1,818 greedy roots (re-priced at the fixed builder's real cost, cut at the
+  curve's knee of 300 MB projected), plus Claude Code's declared-reader packages (last 12 months + the 14 declared
+  pins). 20,847 versions, 2,960 owners, Bun and esbuild slices with unit tables. 430 MB raw / 77 MB tar.gz; about an
+  hour on 24 cores. Unit tables are now the largest part of an index.
+- **Found while building:** AWS SDK v3 bumps the minor every release, so "latest patch of every older minor" is
+  every release (400–650 per package). Reader packages get the 12-month window plus their pins instead.
+- **The claim rule** (index seeds; recall after the fixpoint in brackets):
+
+  | test set                              | structural: recall / app / wrong family     | agreement: recall / app / wrong family |
+  | ------------------------------------- | ------------------------------------------- | -------------------------------------- |
+  | Claude Code 2.1.216 (labelled)        | [37.1%] / 0 / 0 (1 lodash ≡ lodash-es)      | [23.0%] / 0 / 0                        |
+  | Claude Code 2.1.198, 2.1.86 (by hand) | 0 app and 0 fork claims in 40 read          | 0 fork claims                          |
+  | held-out apps (exact map)             | [18.1%] / vite self-copies / 12.5% of named | [11.8%] / vite self-copies / 4.8%      |
+  | minified wrangler (exact map)         | [25.6%] / 0 / 0.8%                          | [16.8%] / 0 / 0%                       |
+
+- **Read by hand, the "wrong family" bytes are mostly vendored copies:** zod inside claude-agent-sdk, rxjs inside
+  puppeteer, js-yaml/lodash inside mermaid, fflate inside openpgp, and so on. There the index names the code's
+  origin and the map can only name the package that shipped it.
+  - Genuine index-side mistakes: ~6 KB structural, ~3 KB agreement in the samples. They come from Bun builds
+    mislabelled to a single wrong file, TypeScript helpers, and pre-bundled "sponge" files (prettier 2's
+    `index.js`).
+- **Neutrality (warm, 2.1.215→2.1.216, the index lookup ON in the candidate leg): NEUTRAL** — 0 files, 0 lines,
+  cache +0 / +0. The in-run section matches the lab tool exactly.
+- **Answer to "does structural stay at ~0 app and ~0 wrong names on a big index?":**
+  - App: yes (0 on Claude Code; held-out "app" bytes are all vite's own pre-bundled dependencies).
+  - Wrong names: no, if a vendored copy counts as wrong. Structural's other-family share is 2.6× agreement's (12.5% vs 4.8% of named;
+    885 KB vs 186 KB of index seeds on the held-out apps).
+- **Recommendation:**
+  - Keep agreement as the default for naming.
+  - Use structural where only "is this library?" matters: it is 1.6× the recall with ~0 app code.
+  - Next:
+    - a sponge filter for unit rows;
+    - a vendored-copy rule (a kept `/*! name */` banner, or the shipping package's own unit rows);
+    - pins for Claude Code's `src/` libraries that no reader names (MCP SDK, @anthropic-ai/sdk, ink are not in this
+      index).
