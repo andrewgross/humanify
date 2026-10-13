@@ -1,13 +1,14 @@
 //! Shards: keyed by exactly what went into them, so an update rebuilds
 //! only what changed.
 
-use humanify_core::libindex::IndexSlice;
+use crate::bun_node;
+use humanify_core::libindex::recipe::Recipe;
 
 use super::shard::{Shard, ShardInputs, ShardKind, ShardModule, read_current, write_shard};
 
 fn inputs() -> ShardInputs {
     ShardInputs {
-        kind: ShardKind::Modules(IndexSlice::Bun),
+        kind: ShardKind::Modules(bun_node()),
         package: "ms".into(),
         version: "2.1.3".into(),
         bundler: Some("bun@1.4.0".into()),
@@ -45,7 +46,14 @@ fn the_key_changes_with_every_input_and_nothing_else() {
             ..inputs()
         },
         ShardInputs {
-            kind: ShardKind::Modules(IndexSlice::Esbuild),
+            kind: ShardKind::Modules(
+                Recipe::parse("esbuild:target=node,format=cjs,minify").unwrap(),
+            ),
+            ..inputs()
+        },
+        ShardInputs {
+            // the same bundler for another target is another slice
+            kind: ShardKind::Modules(Recipe::parse("bun:target=bun,format=cjs,minify").unwrap()),
             ..inputs()
         },
         ShardInputs {

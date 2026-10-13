@@ -1112,6 +1112,11 @@ pub struct DiscoveryReport {
     /// The library index's id (sha256 of its manifest), when one was read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index_id: Option<String>,
+    /// The recipe slice the index was read from, and why that one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_slice: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_slice_reason: Option<String>,
     pub graph: GraphStats,
     /// Seeds KEPT (one per unit, after the isolation veto), by evidence kind.
     pub seeds: BTreeMap<String, u32>,

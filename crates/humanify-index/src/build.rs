@@ -13,17 +13,18 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 
+use humanify_core::libindex::format::compare_versions;
 use humanify_core::libindex::format::{
     PackageRecord, RefusedRecord, RegistrySnapshot, SliceRecord, fingerprint_versions,
 };
 use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literals};
-use humanify_core::libindex::{IndexSlice, format::compare_versions};
+use humanify_core::libindex::recipe::Recipe;
 
 use crate::asof::{VersionPolicy, normalize_time, select_versions};
 use crate::merge::{MergeInput, merge};
 use crate::recipe::{
-    MAX_SOURCE_BYTES, RECIPE_VERSION, Recipe, bundler_package, entry_specifiers, is_source_file,
-    is_sponge_file, unresolved_specifiers,
+    MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
+    is_source_file, is_sponge_file, unresolved_specifiers,
 };
 use crate::registry;
 use crate::shard::{
@@ -39,6 +40,15 @@ const ENTRIES: [(&str, &str); 2] = [("req", "entries/req.cjs"), ("dyn", "entries
 /// from one source file to be attributed (the lab's "pure" spans).
 const PURITY: f64 = 0.9;
 
+/// What a module shard's unit rows are, beyond the fingerprint: 2 = rows
+/// of pre-bundled ("sponge") files are dropped ([`sponge_evidence`], exp097
+/// step 3); 3 = the same rows, and the shard's notes now record the drops
+/// (2's shards carried empty sponge notes); 4 = no file-name evidence, and
+/// only a strict module-marker comment counts (2/3 dropped right rows:
+/// esquery's own min build, glob comments that mention node_modules). In
+/// every module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/4";
+
 /// Units smaller than this are not indexed (the lab's unit votes counted
 /// units of >= 20 nodes; the lookup's own floor is higher).
 pub const UNIT_ROW_MIN_NODES: u32 = 20;
@@ -52,7 +62,9 @@ pub struct BuildConfig {
     pub store: PathBuf,
     pub work: PathBuf,
     pub out: Option<PathBuf>,
-    pub slices: Vec<Recipe>,
+    /// The recipes to build (`--recipe`, in command-line order: the first
+    /// of each bundler is its default slice).
+    pub recipes: Vec<RecipeBuild>,
     pub jobs: usize,
     pub offline: bool,
     /// Which versions of each package to index.
@@ -120,16 +132,18 @@ fn note_fetch(snapshot: &mut RegistrySnapshot, fetched: Option<&str>) {
     }
 }
 
-/// The slice records: each bundler's version, its publish time, the
-/// newest version at the as-of date, and whether the one used is newer.
+/// The slice records: each recipe with its bundler's version, its publish
+/// time, the newest version at the as-of date, and whether the one used is
+/// newer.
 fn slice_records(
     cfg: &BuildConfig,
     snapshot: &mut RegistrySnapshot,
 ) -> Result<Vec<SliceRecord>, String> {
     let mut out = Vec::new();
-    for recipe in &cfg.slices {
-        let version = recipe.bundler_version()?;
-        let package = bundler_package(recipe.slice);
+    let mut seen_bundlers = BTreeSet::new();
+    for build in &cfg.recipes {
+        let version = build.bundler_version()?;
+        let package = bundler_package(build.recipe.bundler);
         let dated = registry::load(&cfg.registry, package, cfg.offline).ok();
         let (published, newest) = match &dated {
             Some((p, sha)) => {
@@ -144,7 +158,10 @@ fn slice_records(
             None => (None, None),
         };
         out.push(SliceRecord {
-            slice: recipe.slice.name().to_string(),
+            slice: build.recipe.slice_name(),
+            recipe: build.recipe.spelling(),
+            recipe_version: RECIPE_VERSION.to_string(),
+            default_for_bundler: seen_bundlers.insert(build.recipe.bundler),
             bundler: package.to_string(),
             bundler_after_as_of: published.as_ref().is_some_and(|t| *t > cfg.as_of),
             version,
@@ -159,10 +176,10 @@ fn slice_records(
 fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardInputs> {
     let f = fingerprint_versions();
     // The literal rows are the files these builds contain, so the
-    // bundlers that decide them are part of the shard's key.
+    // recipes and bundlers that decide them are part of the shard's key.
     let builds: Vec<String> = slices
         .iter()
-        .map(|s| format!("{}@{}", s.bundler, s.version))
+        .map(|s| format!("{}:{}@{}", s.recipe, s.bundler, s.version))
         .collect();
     let mut out = vec![ShardInputs {
         kind: ShardKind::Literals,
@@ -173,16 +190,16 @@ fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardI
         fingerprint: f.literals.clone(),
     }];
     for s in slices {
-        let Some(slice) = IndexSlice::from_name(&s.slice) else {
+        let Ok(recipe) = Recipe::parse(&s.recipe) else {
             continue;
         };
         out.push(ShardInputs {
-            kind: ShardKind::Modules(slice),
+            kind: ShardKind::Modules(recipe),
             package: name.to_string(),
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
-            recipe: RECIPE_VERSION.to_string(),
-            fingerprint: format!("{}+{}", f.module, f.units),
+            recipe: format!("{RECIPE_VERSION} {}", s.recipe),
+            fingerprint: format!("{}+{}+{UNIT_ROWS_VERSION}", f.module, f.units),
         });
     }
     out
@@ -248,8 +265,9 @@ pub fn describe(plan: &Plan) -> String {
     let mut out = format!("as-of {}\n", plan.as_of);
     for s in &plan.slices {
         out.push_str(&format!(
-            "slice {}: {}@{} published {} — newest at as-of: {}{}\n",
+            "slice {} ({}): {}@{} published {} — newest at as-of: {}{}\n",
             s.slice,
+            s.recipe,
             s.bundler,
             s.version,
             s.published.as_deref().unwrap_or("unknown"),
@@ -463,11 +481,11 @@ fn canonical(path: &Path) -> PathBuf {
 
 /// The files `slices`' builds of this install contain: every source a
 /// build's sourcemap maps code to (lexical paths under `dir`).
-fn bundled_files(dir: &Path, slices: &[IndexSlice]) -> BTreeSet<PathBuf> {
+fn bundled_files(dir: &Path, recipes: &[Recipe]) -> BTreeSet<PathBuf> {
     let mut out = BTreeSet::new();
-    for slice in slices {
+    for recipe in recipes {
         for (tag, _) in ENTRIES {
-            let build = dir.join("build").join(slice.name()).join(tag);
+            let build = dir.join("build").join(recipe.slice_name()).join(tag);
             let Ok(text) = std::fs::read_to_string(build.join("out.js.map")) else {
                 continue;
             };
@@ -487,7 +505,7 @@ fn bundled_files(dir: &Path, slices: &[IndexSlice]) -> BTreeSet<PathBuf> {
 /// literal table is files no bundle pulls in — other entry points, CLI
 /// scripts, data, shipped tests), owned by its nearest package.json. With
 /// no slices there is nothing to restrict by: every file.
-pub fn literal_shard(dir: &Path, inputs: &ShardInputs, slices: &[IndexSlice]) -> Shard {
+pub fn literal_shard(dir: &Path, inputs: &ShardInputs, slices: &[Recipe]) -> Shard {
     let mut shard = Shard::new(inputs);
     let mut files = Vec::new();
     walk_files(&dir.join("node_modules"), &mut files);
@@ -543,7 +561,7 @@ pub fn literal_shard(dir: &Path, inputs: &ShardInputs, slices: &[IndexSlice]) ->
 
 /// Build one entry, retrying unresolvable specifiers as externals (up to
 /// 4 rounds) and top-level await as ESM.
-fn build_entry(recipe: &Recipe, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
+fn build_entry(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
     let (mut externals, mut esm) = (Vec::new(), false);
     let mut last = String::new();
     for _ in 0..6 {
@@ -569,7 +587,7 @@ fn build_entry(recipe: &Recipe, dir: &Path, entry: &str, out: &Path) -> Result<(
 /// One bundle's module rows: the pipeline's module walk and content key,
 /// attributed through the sourcemap.
 pub(crate) fn fingerprint_bundle(
-    slice: IndexSlice,
+    recipe: Recipe,
     out: &Path,
     shard: &mut Shard,
 ) -> Result<(), String> {
@@ -578,7 +596,7 @@ pub(crate) fn fingerprint_bundle(
     let map = SourceMap::parse(&map_text)?;
     let toolchain = humanify_core::toolchain::resolve_toolchain(
         &humanify_core::detect::detect_bundle(&code),
-        Some(slice.bundler()),
+        Some(recipe.bundler.bundler_type()),
         None,
     );
     let modules = humanify_core::modules::vendor_content::bundle_content_keys(
@@ -632,7 +650,7 @@ pub(crate) fn fingerprint_bundle(
             key: key.clone(),
         });
     }
-    let (units, notes) = unit_rows(slice, &code, &map, out);
+    let (units, notes) = unit_rows(recipe, &code, &map, out);
     let (made, kept_before) = (units.len(), shard.units.len());
     shard.units.extend(
         units
@@ -641,6 +659,10 @@ pub(crate) fn fingerprint_bundle(
     );
     shard.notes.multi_module_units_dropped += made - (shard.units.len() - kept_before);
     shard.notes.unit_mixed_spans += notes.mixed_spans;
+    for (kind, n) in notes.sponge_unit_files {
+        *shard.notes.sponge_unit_files.entry(kind).or_default() += n;
+    }
+    shard.notes.sponge_unit_rows += notes.sponge_unit_rows;
     Ok(())
 }
 
@@ -650,7 +672,7 @@ pub(crate) fn fingerprint_bundle(
 /// nodes are not indexed. `module_bytes` is the bundled size of the owner
 /// file in this build (the statement units it owns).
 pub fn unit_rows(
-    slice: IndexSlice,
+    recipe: Recipe,
     code: &str,
     map: &SourceMap,
     out: &Path,
@@ -658,7 +680,7 @@ pub fn unit_rows(
     let mut notes = ShardNotes::default();
     let toolchain = humanify_core::toolchain::resolve_toolchain(
         &humanify_core::detect::detect_bundle(code),
-        Some(slice.bundler()),
+        Some(recipe.bundler.bundler_type()),
         None,
     );
     let allocator = oxc_allocator::Allocator::default();
@@ -679,10 +701,24 @@ pub fn unit_rows(
         .map(|(u, _)| (u.span.start, u.span.end))
         .collect();
     let mut cache = HashMap::new();
+    let mut sponges: HashMap<u32, Option<&'static str>> = HashMap::new();
+    let mut sponge_files: BTreeSet<u32> = BTreeSet::new();
     let mut owned = Vec::new();
     for ((unit, prints), tally) in units.iter().zip(map.tally(code, &spans)) {
         match unit_owner(map, out, &tally, &mut cache) {
-            UnitOwner::Owned(owner) => owned.push((owner, u64::from(unit.bytes), prints)),
+            UnitOwner::Owned(owner, src) => {
+                let evidence = *sponges.entry(src).or_insert_with(|| {
+                    sponge_evidence(&owner, &lexical(&out.join(&map.sources[src as usize])))
+                });
+                if let Some(kind) = evidence {
+                    if sponge_files.insert(src) {
+                        *notes.sponge_unit_files.entry(kind.to_string()).or_default() += 1;
+                    }
+                    notes.sponge_unit_rows += 1;
+                    continue;
+                }
+                owned.push((owner, u64::from(unit.bytes), prints));
+            }
             UnitOwner::Mixed => notes.mixed_spans += 1,
             UnitOwner::Unowned => notes.unowned += 1,
         }
@@ -713,8 +749,75 @@ pub fn unit_rows(
     (rows, notes)
 }
 
+/// Why a package's source file is a pre-bundled copy of OTHER packages
+/// ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the file
+/// itself; None for the package's own code. In order: a vendored directory,
+/// then a bundler MODULE MARKER naming another package's `node_modules`
+/// path ([`module_marker_path`]). A file NAME is not evidence here (unlike
+/// the literal table's [`is_sponge_file`]): a package's own minified build
+/// is its own code — esquery's main IS `dist/esquery.min.js` (measured:
+/// the name rule cost 74 KB of right esquery claims on the held-out apps).
+pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&'static str> {
+    let vendored = ["vendor", "vendored", "third_party", "third-party"];
+    let mut parts = owner.file.split('/').collect::<Vec<_>>();
+    let name = parts.pop().unwrap_or_default();
+    if parts.iter().any(|p| vendored.contains(p)) || name.starts_with("third-party.") {
+        return Some("vendored-path");
+    }
+    if std::fs::metadata(path).map_or(true, |m| m.len() > MAX_SOURCE_BYTES) {
+        return None;
+    }
+    let text = std::fs::read_to_string(path).ok()?;
+    text.lines()
+        .filter_map(module_marker_path)
+        .filter_map(marker_package)
+        .any(|p| p != owner.package)
+        .then_some("bundler-marker")
+}
+
+/// The module path a bundler's module-boundary comment names, when the
+/// line IS one (not prose that mentions a path — glob's comments on
+/// ignoring `node_modules` are not markers): esbuild / Bun `// <path>` (the
+/// whole comment one source path), rolldown `//#region <path>`, webpack
+/// `/***/ "<path>":` and `/*!*** <path> ***!*/`.
+fn module_marker_path(line: &str) -> Option<&str> {
+    let l = line.trim();
+    let path = if let Some(rest) = l.strip_prefix("//#region ") {
+        rest.trim()
+    } else if let Some(rest) = l.strip_prefix("/*!*** ") {
+        rest.strip_suffix("***!*/")?.trim()
+    } else if let Some(rest) = l.strip_prefix("/***/ ") {
+        let rest = rest.trim().strip_suffix(':')?.trim();
+        rest.strip_prefix('"')
+            .and_then(|r| r.strip_suffix('"'))
+            .or_else(|| rest.strip_prefix('\'').and_then(|r| r.strip_suffix('\'')))?
+    } else {
+        let rest = l.strip_prefix("// ")?.trim();
+        let source = [
+            ".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx", ".json",
+        ];
+        (!rest.contains(char::is_whitespace) && source.iter().any(|e| rest.ends_with(e)))
+            .then_some(rest)?
+    };
+    path.contains("node_modules/").then_some(path)
+}
+
+/// The package a marker path's LAST `node_modules/` segment names.
+fn marker_package(path: &str) -> Option<&str> {
+    let at = path.rfind("node_modules/")? + "node_modules/".len();
+    let rest = &path[at..];
+    let mut segs = rest.split('/');
+    let first = segs.next()?;
+    if first.starts_with('@') {
+        let second = segs.next()?;
+        Some(&rest[..first.len() + 1 + second.len()])
+    } else {
+        (!first.is_empty()).then_some(first)
+    }
+}
+
 enum UnitOwner {
-    Owned(crate::sourcemap::Owner),
+    Owned(crate::sourcemap::Owner, u32),
     Mixed,
     Unowned,
 }
@@ -731,7 +834,7 @@ fn unit_owner(
     cache: &mut HashMap<PathBuf, Option<(String, String)>>,
 ) -> UnitOwner {
     let total: usize = tally.iter().map(|t| t.1).sum();
-    type Seen = (usize, usize, Option<crate::sourcemap::Owner>);
+    type Seen = (usize, usize, Option<(crate::sourcemap::Owner, u32)>);
     let mut by_package: BTreeMap<String, Seen> = BTreeMap::new();
     for &(src, n) in tally {
         let Some(owner) = owner_cached(out, &map.sources[src as usize], cache) else {
@@ -743,28 +846,28 @@ fn unit_owner(
         entry.0 += n;
         if n > entry.1 {
             entry.1 = n;
-            entry.2 = Some(owner);
+            entry.2 = Some((owner, src));
         }
     }
     let Some((_, (n, _, owner))) = by_package.into_iter().max_by_key(|(_, (n, _, _))| *n) else {
         return UnitOwner::Unowned;
     };
     match owner {
-        Some(owner) if n as f64 >= PURITY * total as f64 => UnitOwner::Owned(owner),
+        Some((owner, src)) if n as f64 >= PURITY * total as f64 => UnitOwner::Owned(owner, src),
         _ => UnitOwner::Mixed,
     }
 }
 
-/// The stamp a finished build leaves: the recipe and the entry it was
-/// built from.
+/// The stamp a finished build leaves: the recipe version, the recipe and
+/// the entry it was built from.
 const BUILD_STAMP: &str = ".recipe";
 
 /// Build `entry` into `out` unless a build of the same entry under the
 /// current recipe is already there (the literal shard reads the same
 /// builds).
-fn ensure_build(recipe: &Recipe, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
+fn ensure_build(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(dir.join(entry)).map_err(|e| format!("{entry}: {e}"))?;
-    let want = format!("{RECIPE_VERSION}\n{text}");
+    let want = format!("{RECIPE_VERSION}\n{}\n{text}", recipe.recipe.spelling());
     let stamp = out.join(BUILD_STAMP);
     if std::fs::read_to_string(&stamp).is_ok_and(|s| s == want) {
         return Ok(());
@@ -774,12 +877,12 @@ fn ensure_build(recipe: &Recipe, dir: &Path, entry: &str, out: &Path) -> Result<
 }
 
 /// The module shard of one slice: both entries built and fingerprinted.
-fn module_shard(dir: &Path, recipe: &Recipe, inputs: &ShardInputs) -> Shard {
+fn module_shard(dir: &Path, recipe: &RecipeBuild, inputs: &ShardInputs) -> Shard {
     let mut shard = Shard::new(inputs);
     for (tag, entry) in ENTRIES {
-        let out = dir.join("build").join(recipe.slice.name()).join(tag);
+        let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
         let result = ensure_build(recipe, dir, entry, &out)
-            .and_then(|()| fingerprint_bundle(recipe.slice, &out, &mut shard));
+            .and_then(|()| fingerprint_bundle(recipe.recipe, &out, &mut shard));
         let status = match result {
             Ok(()) => "ok".to_string(),
             Err(e) => e,
@@ -799,9 +902,9 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
     missing.sort_by_key(|i| i.kind == ShardKind::Literals);
     for inputs in missing {
         if inputs.kind == ShardKind::Literals {
-            for recipe in &cfg.slices {
+            for recipe in &cfg.recipes {
                 for (tag, entry) in ENTRIES {
-                    let out = dir.join("build").join(recipe.slice.name()).join(tag);
+                    let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
                     // a failed build contributes no files; the module
                     // shard records the error
                     let _ = ensure_build(recipe, &dir, entry, &out);
@@ -810,14 +913,14 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
         }
         let shard = match inputs.kind {
             ShardKind::Literals => {
-                let slices: Vec<IndexSlice> = cfg.slices.iter().map(|r| r.slice).collect();
+                let slices: Vec<Recipe> = cfg.recipes.iter().map(|r| r.recipe).collect();
                 literal_shard(&dir, inputs, &slices)
             }
-            ShardKind::Modules(slice) => {
+            ShardKind::Modules(want) => {
                 let recipe = cfg
-                    .slices
+                    .recipes
                     .iter()
-                    .find(|r| r.slice == slice)
+                    .find(|r| r.recipe == want)
                     .ok_or("no recipe for slice")?;
                 module_shard(&dir, recipe, inputs)
             }

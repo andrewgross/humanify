@@ -6,10 +6,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use humanify_core::libindex::IndexSlice;
+use humanify_core::libindex::recipe::{Recipe, RecipeBundler};
 use humanify_index::asof::{VersionPolicy, parse_as_of};
 use humanify_index::build::{BuildConfig, run};
-use humanify_index::recipe::Recipe;
+use humanify_index::recipe::RecipeBuild;
 
 #[derive(Parser)]
 #[command(
@@ -49,13 +49,17 @@ enum Command {
         /// The index directory to write (not needed with --dry-run).
         #[arg(long)]
         out: Option<PathBuf>,
-        /// Bundler slices to build: `bun`, `esbuild` (comma-separated).
-        #[arg(long, default_value = "bun,esbuild")]
-        slices: String,
-        /// The Bun binary (the bun slice).
+        /// A build recipe = one index slice (repeatable, at least one; no
+        /// default): `<bun|esbuild>:target=<bun|node>,format=<cjs|esm>[,minify]`,
+        /// e.g. `bun:target=bun,format=cjs,minify`. The first recipe of a
+        /// bundler is its default slice (for bundles that do not record
+        /// their target).
+        #[arg(long = "recipe", required = true)]
+        recipes: Vec<String>,
+        /// The Bun binary (Bun recipes).
         #[arg(long, default_value = "bun")]
         bun: PathBuf,
-        /// The esbuild binary (the esbuild slice).
+        /// The esbuild binary (esbuild recipes).
         #[arg(long, default_value = "esbuild")]
         esbuild: PathBuf,
         /// Parallel package builds (at most 4).
@@ -85,7 +89,7 @@ fn main() {
         store,
         work,
         out,
-        slices,
+        recipes,
         bun,
         esbuild,
         jobs,
@@ -97,14 +101,17 @@ fn main() {
         let as_of = parse_as_of(&as_of)?;
         let specs = std::fs::read_to_string(&packages)
             .map_err(|e| format!("{}: {e}", packages.display()))?;
-        let mut recipes = Vec::new();
-        for name in slices.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-            let slice = IndexSlice::from_name(name).ok_or(format!("unknown slice {name}"))?;
-            let bin = match slice {
-                IndexSlice::Bun => bun.clone(),
-                IndexSlice::Esbuild => esbuild.clone(),
+        let mut builds: Vec<RecipeBuild> = Vec::new();
+        for text in &recipes {
+            let recipe = Recipe::parse(text)?;
+            if builds.iter().any(|b| b.recipe == recipe) {
+                return Err(format!("--recipe {text} given twice"));
+            }
+            let bin = match recipe.bundler {
+                RecipeBundler::Bun => bun.clone(),
+                RecipeBundler::Esbuild => esbuild.clone(),
             };
-            recipes.push(Recipe { slice, bin });
+            builds.push(RecipeBuild { recipe, bin });
         }
         if out.is_none() && !dry_run {
             return Err("--out is required unless --dry-run".into());
@@ -118,7 +125,7 @@ fn main() {
             store: abs(store)?,
             work: abs(work)?,
             out: out.map(abs).transpose()?,
-            slices: recipes,
+            recipes: builds,
             jobs,
             offline,
             pinned: match &pinned {

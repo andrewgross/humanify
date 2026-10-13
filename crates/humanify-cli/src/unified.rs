@@ -345,7 +345,7 @@ fn pipeline_body(
             }
         }
     };
-    let library = load_library_index(config, &toolchain, renderer)?;
+    let library = load_library_index(&bundled_code, config, &toolchain, renderer)?;
     let ph = phase("unpack+vendor");
     let mut unpacked = unpack_bundle(
         &bundled_code,
@@ -676,7 +676,7 @@ fn count_claims(report: &serde_json::Value) -> usize {
 }
 
 /// What the library decision opened for this run: the index slice, its
-/// id, and — `report` with no slice for the detected bundler — the loud
+/// id, and — `report` with no slice for the bundle's recipe — the loud
 /// warning's text (the run goes on with path/banner detection).
 #[derive(Default)]
 struct LibraryLoad {
@@ -685,19 +685,20 @@ struct LibraryLoad {
     recipe_missing: Option<String>,
 }
 
-/// `--library-matching report`: open the index's slice for the detected
-/// bundler. The index itself was checked before any work
+/// `--library-matching report`: open the index's slice for the recipe the
+/// bundle was built with (`libindex::recipe`: read once off the bundle and
+/// the toolchain; the slice chosen in one place, `choose_slice`). The
+/// index's stamps were checked before any work
 /// (`Config::library_index_problem`); a missing slice is a WARNING, not a
 /// refusal — report changes no output byte, so a run that cannot look up
-/// has lost only its report. (Today's index is one slice per bundler —
-/// `units.<bun|esbuild>.jsonl`; exp097's recipe slices replace that
-/// lookup, not this rule.)
+/// has lost only its report.
 fn load_library_index(
+    code: &str,
     config: &Config,
     toolchain: &Toolchain,
     renderer: &mut dyn ProgressRenderer,
 ) -> Result<LibraryLoad, Crash> {
-    use humanify_core::libindex::{IndexSlice, format::Manifest};
+    use humanify_core::libindex::lookup::LoadError;
     if config.library.matching != LibraryMatching::Report {
         return Ok(LibraryLoad::default());
     }
@@ -706,37 +707,26 @@ fn load_library_index(
         .index_dir()
         .expect("report needs an index (checked at the parse point)")
         .map_err(Crash)?;
-    let text = read_utf8(&dir.join("manifest.json").display().to_string())?;
-    let id = {
-        use sha2::{Digest, Sha256};
-        format!("{:x}", Sha256::digest(text.as_bytes()))
-    };
-    let slice = IndexSlice::for_bundler(toolchain.bundler)
-        .filter(|s| dir.join(format!("units.{}.jsonl", s.name())).is_file());
-    let Some(slice) = slice else {
-        let has: Vec<String> = serde_json::from_str::<Manifest>(&text)
-            .map(|m| m.slices.into_iter().map(|s| s.slice).collect())
-            .unwrap_or_default();
-        let warning = format!(
-            "WARNING: library index {id} has no slice for the detected bundler {} (has: {}) — \
-             library matching reports path/banner detection only",
-            enum_name(toolchain.bundler),
-            has.join(", ")
-        );
-        renderer.message(&warning);
-        return Ok(LibraryLoad {
-            index: None,
-            index_id: Some(id),
-            recipe_missing: Some(warning),
-        });
-    };
-    let index = LibraryIndex::load(&dir, slice)
-        .map_err(|e| Crash(format!("library index {}: {e}", dir.display())))?;
-    Ok(LibraryLoad {
-        index_id: Some(index.id.clone()),
-        index: Some(index),
-        recipe_missing: None,
-    })
+    let recipe =
+        humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
+    match LibraryIndex::load(&dir, &recipe) {
+        Ok(index) => Ok(LibraryLoad {
+            index_id: Some(index.id.clone()),
+            index: Some(index),
+            recipe_missing: None,
+        }),
+        Err(LoadError::NoSlice { id, why }) => {
+            let warning =
+                format!("WARNING: {why} — library matching reports path/banner detection only");
+            renderer.message(&warning);
+            Ok(LibraryLoad {
+                index: None,
+                index_id: Some(id),
+                recipe_missing: Some(warning),
+            })
+        }
+        Err(LoadError::Unusable(e)) => Err(Crash(format!("library index {}: {e}", dir.display()))),
+    }
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved

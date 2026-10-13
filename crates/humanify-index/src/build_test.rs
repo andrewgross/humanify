@@ -3,6 +3,7 @@
 
 use super::build::{BuildConfig, parse_package_spec, plan};
 use super::shard::{Shard, write_shard};
+use crate::bun_node;
 
 fn temp(tag: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("humanify-index-plan-{tag}-{}", std::process::id()));
@@ -27,7 +28,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         store: root.join("store"),
         work: root.join("work"),
         out: None,
-        slices: Vec::new(),
+        recipes: Vec::new(),
         jobs: 1,
         offline: true,
         policy: Default::default(),
@@ -96,7 +97,6 @@ fn a_shard_already_in_the_store_is_reused() {
 fn unit_rows_are_attributed_through_the_sourcemap() {
     use crate::build::unit_rows;
     use crate::sourcemap::SourceMap;
-    use humanify_core::libindex::IndexSlice;
     let root = std::env::temp_dir().join(format!("humanify-index-units-{}", std::process::id()));
     let write = |rel: &str, text: &str| {
         let p = root.join(rel);
@@ -123,7 +123,7 @@ fn unit_rows_are_attributed_through_the_sourcemap() {
             .chain(col(app.len()).map(|c| (1, c, 1)))
             .collect(),
     };
-    let (rows, notes) = unit_rows(IndexSlice::Bun, &code, &map, &root.join("out"));
+    let (rows, notes) = unit_rows(bun_node(), &code, &map, &root.join("out"));
     assert_eq!(notes.unowned, 1, "the app entry's statement");
     assert!(!rows.is_empty());
     assert!(
@@ -143,7 +143,6 @@ fn unit_rows_are_attributed_through_the_sourcemap() {
 fn a_unit_spanning_several_files_of_one_package_is_that_packages() {
     use crate::build::unit_rows;
     use crate::sourcemap::SourceMap;
-    use humanify_core::libindex::IndexSlice;
     let root = std::env::temp_dir().join(format!("humanify-index-units2-{}", std::process::id()));
     let write = |rel: &str, text: &str| {
         let p = root.join(rel);
@@ -168,12 +167,7 @@ fn a_unit_spanning_several_files_of_one_package_is_that_packages() {
             .map(|c| (0, c, u32::from(c >= half)))
             .collect(),
     };
-    let (rows, notes) = unit_rows(
-        IndexSlice::Bun,
-        &format!("{lib}\n"),
-        &map,
-        &root.join("out"),
-    );
+    let (rows, notes) = unit_rows(bun_node(), &format!("{lib}\n"), &map, &root.join("out"));
     assert_eq!(notes.mixed_spans, 0);
     assert!(
         !rows.is_empty() && rows.iter().all(|r| r.owner == "dep"),
@@ -211,10 +205,10 @@ fn fake_install(tag: &str) -> std::path::PathBuf {
     );
     // "AAAA": line 0 col 0 → source 0 (used.js); listed.js has no segment.
     write(
-        "build/bun/req/out.js.map",
+        "build/bun-node-cjs-min/req/out.js.map",
         r#"{"version":3,"sources":["../../../node_modules/dep/used.js","../../../node_modules/dep/listed.js"],"mappings":"AAAA"}"#,
     );
-    write("build/bun/req/out.js", "x\n");
+    write("build/bun-node-cjs-min/req/out.js", "x\n");
     root
 }
 
@@ -222,7 +216,6 @@ fn fake_install(tag: &str) -> std::path::PathBuf {
 fn the_literal_shard_holds_only_files_a_build_contains() {
     use crate::build::literal_shard;
     use crate::shard::{ShardInputs, ShardKind};
-    use humanify_core::libindex::IndexSlice;
     let root = fake_install("lits-bundled");
     let inputs = ShardInputs {
         kind: ShardKind::Literals,
@@ -232,7 +225,7 @@ fn the_literal_shard_holds_only_files_a_build_contains() {
         recipe: "test".into(),
         fingerprint: "test".into(),
     };
-    let shard = literal_shard(&root, &inputs, &[IndexSlice::Bun]);
+    let shard = literal_shard(&root, &inputs, &[bun_node()]);
     let files: Vec<&str> = shard.literals.iter().map(|l| l.file.as_str()).collect();
     assert_eq!(
         files,
@@ -256,7 +249,6 @@ fn a_source_file_credited_to_two_modules_labels_neither() {
     // labelled.
     use crate::build::fingerprint_bundle;
     use crate::shard::{Shard, ShardInputs, ShardKind};
-    use humanify_core::libindex::IndexSlice;
     let root = std::env::temp_dir().join(format!("humanify-index-multi-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let write = |rel: &str, text: &str| {
@@ -295,7 +287,7 @@ fn a_source_file_credited_to_two_modules_labels_neither() {
     write("out/out.js", &code);
     write("out/out.js.map", &map.to_string());
     let inputs = ShardInputs {
-        kind: ShardKind::Modules(IndexSlice::Bun),
+        kind: ShardKind::Modules(bun_node()),
         package: "dep".into(),
         version: "1.2.3".into(),
         bundler: Some("bun@test".into()),
@@ -303,7 +295,7 @@ fn a_source_file_credited_to_two_modules_labels_neither() {
         fingerprint: "test".into(),
     };
     let mut shard = Shard::new(&inputs);
-    fingerprint_bundle(IndexSlice::Bun, &root.join("out"), &mut shard).expect("fingerprint");
+    fingerprint_bundle(bun_node(), &root.join("out"), &mut shard).expect("fingerprint");
     let files: Vec<&str> = shard.modules.iter().map(|m| m.file.as_str()).collect();
     assert_eq!(files, ["b.js"], "{:?}", shard.notes);
     assert_eq!(shard.notes.multi_module_files, 1);
@@ -345,7 +337,6 @@ fn a_work_directory_reached_through_a_symlink_keeps_its_bundled_literals() {
     // the walk sees the path it was given. Both are canonicalised.
     use crate::build::literal_shard;
     use crate::shard::{ShardInputs, ShardKind};
-    use humanify_core::libindex::IndexSlice;
     let real = fake_install("lits-real");
     let link = real.with_file_name(format!(
         "{}-link",
@@ -360,7 +351,7 @@ fn a_work_directory_reached_through_a_symlink_keeps_its_bundled_literals() {
         .to_string_lossy()
         .into_owned();
     std::fs::write(
-        real.join("build/bun/req/out.js.map"),
+        real.join("build/bun-node-cjs-min/req/out.js.map"),
         format!(
             r#"{{"version":3,"sources":["../../../../{name}/node_modules/dep/used.js"],"mappings":"AAAA"}}"#
         ),
@@ -374,9 +365,177 @@ fn a_work_directory_reached_through_a_symlink_keeps_its_bundled_literals() {
         recipe: "test".into(),
         fingerprint: "test".into(),
     };
-    let shard = literal_shard(&link, &inputs, &[IndexSlice::Bun]);
+    let shard = literal_shard(&link, &inputs, &[bun_node()]);
     let files: Vec<&str> = shard.literals.iter().map(|l| l.file.as_str()).collect();
     assert_eq!(files, ["used.js"]);
     std::fs::remove_file(&link).ok();
     std::fs::remove_dir_all(&real).ok();
+}
+
+#[test]
+fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
+    // exp097 step 3: a published file that pre-bundles OTHER packages
+    // ("sponge": prettier's index.mjs) would name their code as its own.
+    // Evidence, each read off the file: a bundler module marker naming
+    // another package's node_modules path, or a vendored directory. The
+    // package's own files keep their rows — its own minified build too
+    // (esquery's main IS dist/esquery.min.js: a file NAME is not evidence).
+    use crate::build::unit_rows;
+    use crate::sourcemap::SourceMap;
+    let root = std::env::temp_dir().join(format!("humanify-index-sponge-{}", std::process::id()));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/sp/package.json",
+        r#"{"name":"sp","version":"3.0.0"}"#,
+    );
+    write(
+        "node_modules/sp/index.mjs",
+        "// node_modules/other-pkg/lib/parse.js\nvar parse = 1;\n",
+    );
+    write(
+        "node_modules/sp/own.js",
+        "// src/own.ts\nexport const own = 1;\n",
+    );
+    write("node_modules/sp/vendor/copy.js", "var copy = 1;\n");
+    write("node_modules/sp/dist/sp.min.js", "var m = 1;\n");
+    let stmt = |n: &str| {
+        format!(
+            "var {n}=function(t){{return t.split(\",\").map(function(e){{return e.trim().toLowerCase()}})}};"
+        )
+    };
+    let lines = [stmt("a"), stmt("b"), stmt("c"), stmt("d")];
+    let code = lines.join("\n") + "\n";
+    let col = |n: usize| (0..n as u32).step_by(4);
+    let map = SourceMap {
+        sources: vec![
+            "../node_modules/sp/index.mjs".into(),
+            "../node_modules/sp/own.js".into(),
+            "../node_modules/sp/vendor/copy.js".into(),
+            "../node_modules/sp/dist/sp.min.js".into(),
+        ],
+        segments: lines
+            .iter()
+            .enumerate()
+            .flat_map(|(i, l)| col(l.len()).map(move |c| (i as u32, c, i as u32)))
+            .collect(),
+    };
+    let (rows, notes) = unit_rows(bun_node(), &code, &map, &root.join("out"));
+    let files: std::collections::BTreeSet<&str> = rows.iter().map(|r| r.file.as_str()).collect();
+    assert_eq!(
+        files,
+        ["dist/sp.min.js", "own.js"].into_iter().collect(),
+        "{rows:?}"
+    );
+    assert_eq!(
+        notes.sponge_unit_files,
+        [
+            ("bundler-marker".to_string(), 1),
+            ("vendored-path".to_string(), 1)
+        ]
+        .into_iter()
+        .collect(),
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_module_marker_names_its_package_in_every_bundlers_spelling() {
+    use crate::build::sponge_evidence;
+    use crate::sourcemap::Owner;
+    let dir = std::env::temp_dir().join(format!("humanify-index-markers-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let owner = Owner {
+        package: "@scope/own".into(),
+        version: "1.0.0".into(),
+        file: "dist/index.mjs".into(),
+    };
+    let check = |text: &str| {
+        let p = dir.join("f.js");
+        std::fs::write(&p, text).unwrap();
+        sponge_evidence(&owner, &p)
+    };
+    assert_eq!(
+        check("//#region ../../node_modules/.pnpm/a@1/node_modules/@x/y/dist/i.js\n"),
+        Some("bundler-marker")
+    );
+    assert_eq!(
+        check("/***/ \"./node_modules/lodash/lodash.js\":\n"),
+        Some("bundler-marker")
+    );
+    assert_eq!(
+        check("// node_modules/@scope/own/src/a.js\n// src/b.ts\n"),
+        None,
+        "its own path"
+    );
+    assert_eq!(
+        check("var s = \"node_modules/x/y\";\n"),
+        None,
+        "not a comment"
+    );
+    assert_eq!(
+        check("/*!*** ./node_modules/x/lib/a.js ***!*/\n"),
+        Some("bundler-marker")
+    );
+    // prose that mentions a node_modules path is not a module marker
+    // (glob's common.js comments on ignoring node_modules)
+    assert_eq!(check("// ignore **/node_modules/** unless asked\n"), None);
+    assert_eq!(check("  // see node_modules/foo/README.md for why\n"), None);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
+    // The shard's notes say what the filter dropped (fingerprint_bundle
+    // carries unit_rows' sponge notes, not only its mixed spans).
+    use crate::build::fingerprint_bundle;
+    use crate::shard::{Shard, ShardInputs, ShardKind};
+    let root = std::env::temp_dir().join(format!(
+        "humanify-index-sponge-notes-{}",
+        std::process::id()
+    ));
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    write("node_modules/dep/vendor/copy.js", "x");
+    let stmt = "var parse=function(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase()})};";
+    let code = format!("{stmt}\n");
+    let segments: Vec<(u32, u32, u32)> = (0..stmt.len() as u32)
+        .step_by(4)
+        .map(|c| (0, c, 0))
+        .collect();
+    let map = serde_json::json!({
+        "version": 3,
+        "sources": ["../node_modules/dep/vendor/copy.js"],
+        "mappings": crate::sourcemap::encode_mappings(&segments),
+    });
+    write("out/out.js", &code);
+    write("out/out.js.map", &map.to_string());
+    let mut shard = Shard::new(&ShardInputs {
+        kind: ShardKind::Modules(bun_node()),
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: Some("bun@test".into()),
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    });
+    fingerprint_bundle(bun_node(), &root.join("out"), &mut shard).expect("fingerprint");
+    assert!(shard.units.is_empty(), "{:?}", shard.units);
+    assert_eq!(
+        shard.notes.sponge_unit_files.get("vendored-path"),
+        Some(&1),
+        "{:?}",
+        shard.notes
+    );
+    assert!(shard.notes.sponge_unit_rows > 0, "{:?}", shard.notes);
+    std::fs::remove_dir_all(&root).ok();
 }

@@ -66,14 +66,24 @@ fn self_index(code: &str, name: &str) -> PathBuf {
                 + "\n"
         })
         .collect();
-    std::fs::write(dir.join("units.bun.jsonl"), rows).unwrap();
+    std::fs::write(dir.join("units.bun-bun-cjs-min.jsonl"), rows).unwrap();
     std::fs::write(dir.join("literals.jsonl"), "").unwrap();
     let manifest = Manifest {
-        format: "humanify-library-index/1".into(),
+        format: humanify_core::libindex::format::INDEX_FORMAT.into(),
         as_of: "lab".into(),
         fingerprints: fingerprint_versions(),
         registry: Default::default(),
-        slices: vec![],
+        slices: vec![humanify_core::libindex::format::SliceRecord {
+            slice: "bun-bun-cjs-min".into(),
+            recipe: "bun:target=bun,format=cjs,minify".into(),
+            default_for_bundler: true,
+            bundler: "bun".into(),
+            version: "1.4.0".into(),
+            recipe_version: humanify_core::libindex::format::RECIPE_VERSION.into(),
+            published: None,
+            newest_at_as_of: None,
+            bundler_after_as_of: false,
+        }],
         packages: vec![],
         refused: vec![],
         shards: Default::default(),
@@ -118,7 +128,11 @@ fn the_rule_reaches_the_lookup_and_the_units_are_listed() {
         .expect("runs")
     };
     let structural = run("structural", true);
-    assert_eq!(structural["toolchain"]["slice"], "bun");
+    assert_eq!(structural["toolchain"]["slice"], "bun-bun-cjs-min");
+    assert_eq!(
+        structural["recipe"]["detected"], "bun:target=bun,format=cjs,minify",
+        "the fixture's `// @bun @bun-cjs` banner"
+    );
     assert_eq!(
         structural["detected"]["bundler"], "bun",
         "the detector's verdict"
@@ -218,7 +232,10 @@ fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
     };
     let doc = run(Some("esbuild")).expect("runs with the override");
     assert_eq!(doc["detected"]["bundler"], "bun");
-    assert_eq!(doc["toolchain"]["slice"], "esbuild");
+    assert_eq!(
+        doc["recipe"]["detected"],
+        "esbuild:target=?,format=?,minify"
+    );
     assert_eq!(doc["bundlerOverride"], "esbuild");
     assert!(
         run(Some("rollup-ish")).is_err(),
@@ -249,4 +266,27 @@ fn a_bundle_the_adapter_floors_reports_that_no_discovery_ran() {
             .is_some_and(|r| r.contains("no discovery ran")),
         "{doc}"
     );
+}
+
+#[test]
+fn a_bundle_whose_recipe_the_index_lacks_fails_the_instrument() {
+    // The fixture's index holds only its own target-bun slice; the same
+    // code without its banner is a --target node build: no slice, and the
+    // instrument refuses (a score without its index would read as a zero).
+    let full = fixture();
+    let ix = self_index(&full, "noslice");
+    let code = full.split_once('\n').expect("a pragma line").1;
+    let err = discover(
+        code,
+        &DiscoverArgs {
+            input: "plain",
+            library_index: ix.to_str(),
+            library: &rule("structural"),
+            bundler: Some("bun"),
+            unit_prints: false,
+            work_dir: None,
+        },
+    )
+    .expect_err("no slice for bun:target=node");
+    assert!(err.contains("no slice for recipe bun:target=node"), "{err}");
 }

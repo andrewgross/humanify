@@ -1,7 +1,7 @@
 //! The merge: shards of the selected versions → one index, each
 //! fingerprint stored once with its version ranges; byte-deterministic.
 
-use humanify_core::libindex::IndexSlice;
+use crate::bun_node;
 use humanify_core::libindex::format::{LiteralRow, ModuleRow};
 
 use super::merge::{MergeInput, merge};
@@ -9,7 +9,7 @@ use super::shard::{Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule};
 
 fn module_shard(version: &str, rows: &[(&str, &str, &str, &str)]) -> Shard {
     let mut s = Shard::new(&ShardInputs {
-        kind: ShardKind::Modules(IndexSlice::Bun),
+        kind: ShardKind::Modules(bun_node()),
         package: "ms".into(),
         version: version.into(),
         bundler: Some("bun@1.4.0".into()),
@@ -89,7 +89,7 @@ fn rows<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Vec<T> {
 #[test]
 fn a_fingerprint_is_stored_once_with_its_version_ranges() {
     let index = merge(&input(shards()));
-    let modules: Vec<ModuleRow> = rows(&index.files["modules.bun.jsonl"]);
+    let modules: Vec<ModuleRow> = rows(&index.files["modules.bun-node-cjs-min.jsonl"]);
     let ka_ms = modules
         .iter()
         .find(|r| r.key == "kA" && r.owner == "ms")
@@ -113,7 +113,7 @@ fn a_fingerprint_is_stored_once_with_its_version_ranges() {
 #[test]
 fn a_key_held_by_two_owners_is_kept_as_two_rows() {
     let index = merge(&input(shards()));
-    let modules: Vec<ModuleRow> = rows(&index.files["modules.bun.jsonl"]);
+    let modules: Vec<ModuleRow> = rows(&index.files["modules.bun-node-cjs-min.jsonl"]);
     let owners: Vec<&str> = modules
         .iter()
         .filter(|r| r.key == "kA")
@@ -125,7 +125,7 @@ fn a_key_held_by_two_owners_is_kept_as_two_rows() {
 #[test]
 fn stop_listed_helper_packages_leave_the_index() {
     let index = merge(&input(shards()));
-    let modules: Vec<ModuleRow> = rows(&index.files["modules.bun.jsonl"]);
+    let modules: Vec<ModuleRow> = rows(&index.files["modules.bun-node-cjs-min.jsonl"]);
     assert!(modules.iter().all(|r| r.owner != "tslib"));
     let versions: serde_json::Value =
         serde_json::from_slice(&index.files["versions.json"]).expect("json");
@@ -156,8 +156,15 @@ fn a_new_version_is_a_new_index_id() {
     assert_ne!(a.id, b.id);
     let manifest: serde_json::Value =
         serde_json::from_slice(&b.files["manifest.json"]).expect("json");
-    assert_eq!(manifest["format"], "humanify-library-index/1");
-    assert!(manifest["shards"].get("bun/ms@2.1.4").is_some());
+    assert_eq!(
+        manifest["format"],
+        humanify_core::libindex::format::INDEX_FORMAT
+    );
+    assert!(
+        manifest["shards"]
+            .get("bun-node-cjs-min/ms@2.1.4")
+            .is_some()
+    );
     assert!(manifest["data"].get("stoplists.json").is_some());
 }
 
@@ -184,7 +191,7 @@ fn unit_rows_merge_per_slice_with_the_smallest_module() {
     }];
     let files = merge(&input(vec![a, b, t])).files;
     let rows: Vec<humanify_core::libindex::format::UnitRow> =
-        std::str::from_utf8(&files["units.bun.jsonl"])
+        std::str::from_utf8(&files["units.bun-node-cjs-min.jsonl"])
             .unwrap()
             .lines()
             .map(|l| serde_json::from_str(l).unwrap())

@@ -718,6 +718,8 @@ fn discovery_report(
     );
     let mut report = DiscoveryReport::new(&graph, &found, request.list_units);
     report.index_id = request.index.map(|ix| ix.id.clone());
+    report.index_slice = request.index.map(|ix| ix.slice.clone());
+    report.index_slice_reason = request.index.map(|ix| ix.slice_reason.clone());
     if request.unit_prints {
         report.unit_rows = crate::libdetect::discovery::unit_rows(code, ingest, pieces, classified);
     }
