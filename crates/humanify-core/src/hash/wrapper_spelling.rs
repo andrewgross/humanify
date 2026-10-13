@@ -20,7 +20,7 @@
 //! - the statement hash (`crate::hash::statement_hash`: split inheritance,
 //!   statement twins, family permute) — there a safe arrow's node line
 //!   walks under the `FunctionExpression` token too (exp094b; every
-//!   [`crate::hash::statement_hash::STATEMENT_HASH_VERSION`] consumer).
+//!   [`crate::hash::forms::STATEMENT`] consumer).
 //!
 //! DIRECTION: only the ARROW's bytes change. A safe function expression's
 //! stream was ALREADY the unified spelling (oxc's ESTree gives both forms

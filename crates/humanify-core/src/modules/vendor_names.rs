@@ -434,7 +434,7 @@ pub struct BunModulesManifest {
     /// wrote.
     pub adapter: &'static str,
     /// Which function wrote the `structuralHash` bytes
-    /// (`super::FACTORY_HASH_VERSION`). Absent from every TS-written
+    /// (`hash::forms::MATCH_KEY`'s version). Absent from every TS-written
     /// manifest: those are re-keyed by content, never joined by hash
     /// (`unpack::bun::load_prior_vendor`, WP5.6e).
     #[serde(rename = "hashVersion")]

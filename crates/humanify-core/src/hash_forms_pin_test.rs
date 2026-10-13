@@ -22,14 +22,14 @@
 //! (and an eval), not a new pin.
 
 use std::collections::HashSet;
+
 use std::fmt::Write as _;
 
 use oxc_allocator::Allocator;
 use serde_json::Value;
 
-use crate::hash::serialize::{
-    LiteralPolicy, SymbolTables, canonical_serialize, canonical_serialize_privates_blinded,
-};
+use crate::hash::forms::{IDENTITY_KEY, MATCH_KEY, MATCH_KEY_PRIVATES_BLINDED, RENAME_SIGNATURE};
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::Ingest;
 use crate::matching_helpers_pin_test::{FUNCTION_TYPES, digest, fixture_pairs, with_side};
 
@@ -74,10 +74,11 @@ fn mapping_digest(mapping: &[(String, Option<oxc_semantic::SymbolId>, String)]) 
     digest(&rows.join("\u{1}"))
 }
 
-/// Run one section over every fixture side and assert its digest; with
-/// `HUMANIFY_PIN_PRINT=1` the digest is printed instead of asserted (how
-/// the constants below were recorded), and `HUMANIFY_PIN_DUMP=<dir>`
-/// also writes the section's lines there (to diff a red pin).
+/// Run one section over every fixture side and assert its digest; a red
+/// pin also writes the section's lines to `<temp dir>/humanify-pin-<section>.txt`
+/// (to diff against a base run's). The core never reads the environment
+/// (`env_guard`), so the test has no switches: the constants below were
+/// recorded from the failure message of an empty pin.
 fn pin(section: &str, expected: &str, mut lines: impl FnMut(&str, &mut String)) {
     let mut out = String::new();
     for (name, a, b) in fixture_pairs() {
@@ -86,12 +87,12 @@ fn pin(section: &str, expected: &str, mut lines: impl FnMut(&str, &mut String)) 
         lines(&b, &mut out);
     }
     let got = digest(&out);
-    if std::env::var("HUMANIFY_PIN_PRINT").is_ok() {
-        println!("PIN {section} {got} ({} bytes)", out.len());
-        if let Ok(dir) = std::env::var("HUMANIFY_PIN_DUMP") {
-            let _ = std::fs::write(format!("{dir}/{section}.txt"), &out);
-        }
-        return;
+    if got != expected {
+        // The lines behind the digest, to diff against a base run's.
+        let _ = std::fs::write(
+            std::env::temp_dir().join(format!("humanify-pin-{section}.txt")),
+            &out,
+        );
     }
     assert_eq!(got, expected, "{section}");
 }
@@ -103,10 +104,10 @@ fn pin(section: &str, expected: &str, mut lines: impl FnMut(&str, &mut String)) 
 fn canonical_lines(text: &str, out: &mut String) {
     with_side(text, |_, tables, json| {
         for piece in pieces(json) {
-            let mk = canonical_serialize(piece, tables, LiteralPolicy::MatchKey);
-            let vb = canonical_serialize(piece, tables, LiteralPolicy::Verbatim);
-            let mkb = canonical_serialize_privates_blinded(piece, tables, LiteralPolicy::MatchKey);
-            let vbb = canonical_serialize_privates_blinded(piece, tables, LiteralPolicy::Verbatim);
+            let mk = canonical_serialize(piece, tables, &MATCH_KEY);
+            let vb = canonical_serialize(piece, tables, &IDENTITY_KEY);
+            let mkb = canonical_serialize(piece, tables, &MATCH_KEY_PRIVATES_BLINDED);
+            let vbb = canonical_serialize(piece, tables, &RENAME_SIGNATURE);
             let _ = writeln!(
                 out,
                 "{} {} {} {} {} {} {}",
@@ -193,7 +194,7 @@ fn toolchain_of(code: &str) -> crate::toolchain::Toolchain {
 fn modules_lines(text: &str, out: &mut String) {
     let tc = toolchain_of(text);
     // The factory records' structural hash (the vendor manifest's
-    // `structuralHash`, stamped FACTORY_HASH_VERSION).
+    // `structuralHash`, stamped with the MATCH_KEY form's version).
     let alloc = Allocator::default();
     let ingest = Ingest::parse_unambiguous(&alloc, text);
     let semantic = ingest.semantic();
@@ -266,10 +267,6 @@ fn whole_file_identity_forms_are_pinned() {
             crate::naming::driver::validate::describe_structural_divergence(&a, &a),
         );
     }
-    if std::env::var("HUMANIFY_PIN_PRINT").is_ok() {
-        println!("PIN files {} ({} bytes)", digest(&out), out.len());
-        return;
-    }
     assert_eq!(digest(&out), PIN_FILES, "files");
 }
 
@@ -307,15 +304,16 @@ type Section = fn(&str, &mut String);
 
 /// The one-off FULL-corpus run (docs/matching-architecture.md §7, step 2):
 /// every section over every `.js` file under each directory (or file) named
-/// in `HUMANIFY_PIN_CORPUS` (`:`-separated; e.g. a humanified release
+/// one per line in `<temp dir>/humanify-pin-corpus.txt` (e.g. a humanified release
 /// tree — the RAW release bundle carries lone-surrogate escapes its JSON
 /// round trip refuses), one digest line per file and section, then one
 /// total per section. Run on the base commit and on the refactor and diff
 /// the two outputs.
 #[test]
-#[ignore = "one-off: needs HUMANIFY_PIN_CORPUS (real release trees)"]
+#[ignore = "one-off: needs <temp dir>/humanify-pin-corpus.txt (real release trees)"]
 fn full_corpus_digests() {
-    let corpus = std::env::var("HUMANIFY_PIN_CORPUS").expect("HUMANIFY_PIN_CORPUS");
+    let list = std::env::temp_dir().join("humanify-pin-corpus.txt");
+    let corpus = std::fs::read_to_string(&list).expect("the corpus list file");
     let sections: [(&str, Section); 6] = [
         ("canonical", canonical_lines as Section),
         ("statement", statement_lines as Section),
@@ -325,7 +323,7 @@ fn full_corpus_digests() {
         ("units", units_lines as Section),
     ];
     let mut files = Vec::new();
-    for root in corpus.split(':') {
+    for root in corpus.lines().filter(|l| !l.trim().is_empty()) {
         js_files(std::path::Path::new(root), &mut files);
     }
     files.sort();
@@ -365,8 +363,8 @@ fn version_stamps_are_pinned() {
     let v = crate::libindex::format::fingerprint_versions();
     let got = format!(
         "statement={} factory={} module={} literals={} units={}",
-        crate::hash::statement_hash::STATEMENT_HASH_VERSION,
-        crate::modules::FACTORY_HASH_VERSION,
+        crate::hash::forms::STATEMENT.version,
+        crate::hash::forms::MATCH_KEY.version,
         v.module,
         v.literals,
         v.units

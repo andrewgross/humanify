@@ -10,9 +10,9 @@
 //! rename-invariant serializer the function structural hash runs under
 //! (`hashAndMapPath(path, false)`: binding identifiers slotted, strings
 //! blurred, numbers exact, property names and free identifiers verbatim —
-//! [`LiteralPolicy::MatchKey`]). The Rust
+//! [`MATCH_KEY`]). The Rust
 //! equivalent is `hash::serialize::canonical_serialize` under
-//! `LiteralPolicy::MatchKey` over the statement's oxc ESTree JSON — NOT the
+//! `hash::forms::MATCH_KEY` over the statement's oxc ESTree JSON — NOT the
 //! split's `statement_hash` (that walk masks property names too and keeps
 //! literals verbatim, a different equivalence relation for a different
 //! consumer). Digests are never compared across sides; only equality within
@@ -35,7 +35,8 @@ use oxc_span::{GetSpan, Span};
 use serde_json::Value;
 
 use crate::graph::UnifiedGraph;
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::MATCH_KEY;
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 
 /// TS `MAX_ENCLOSING_STMT_LINES` (:29): enclosing statements above this loc
 /// span carry too much unrelated code (and cost too much to hash) to serve
@@ -364,7 +365,7 @@ fn wanted_statement_hashes(
         statement_usability(Some(Span::new(key.0, key.1)), line_starts).usable()
     });
     let hashes = crate::par::map_ordered(&found, |(_, node)| {
-        canonical_serialize(node, tables, LiteralPolicy::MatchKey).hash
+        canonical_serialize(node, tables, &MATCH_KEY).hash
     });
     found.into_iter().map(|(key, _)| key).zip(hashes).collect()
 }

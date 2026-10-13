@@ -3,7 +3,7 @@
 
 use super::{AlignSwitches, align_emission_order, align_file_statements, alignment_key};
 use crate::emit::load_order::LoadOrderFacts;
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
+use crate::hash::forms::STATEMENT;
 use crate::place::ledger::StableSplitLedger;
 
 fn pure(n: usize) -> Vec<LoadOrderFacts> {
@@ -91,7 +91,7 @@ fn emission_order_is_identity_without_a_usable_prior() {
     );
     assert_eq!(perm, vec![0, 1], "a v1 ledger must not align the emission");
     let good = StableSplitLedger {
-        hash_version: Some(STATEMENT_HASH_VERSION),
+        hash_version: Some(STATEMENT.version),
         ..prior
     };
     let perm = align_emission_order(

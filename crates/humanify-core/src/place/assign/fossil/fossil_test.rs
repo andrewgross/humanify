@@ -3,7 +3,7 @@
 //! these sizes), hashes are the Rust statement hash (same partition).
 
 use super::{FossilAssignment, FossilOptions, assign_fossil};
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
+use crate::hash::forms::STATEMENT;
 use crate::place::ledger::{FossilLedgerModule, StableSplitLedger};
 use crate::place::trail::PlacementTrail;
 use crate::twins::statement_inventory_with_values;
@@ -64,7 +64,7 @@ fn assign(b: &Body, prior: Option<&StableSplitLedger>) -> FossilAssignment {
 fn ledger(modules: Vec<FossilLedgerModule>) -> StableSplitLedger {
     StableSplitLedger {
         version: 1,
-        hash_version: Some(STATEMENT_HASH_VERSION),
+        hash_version: Some(STATEMENT.version),
         fossil_modules: Some(modules),
         ..StableSplitLedger::default()
     }

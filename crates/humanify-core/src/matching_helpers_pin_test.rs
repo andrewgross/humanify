@@ -21,7 +21,8 @@ use oxc_allocator::Allocator;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::{IDENTITY_KEY, MATCH_KEY};
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::Ingest;
 
 /// Every committed e2e fixture bundle, as (fixture, v1.0.0 text, v1.1.0
@@ -130,8 +131,8 @@ fn canonical_and_content_lines(text: &str, out: &mut String) {
         let mut units = Vec::new();
         nodes_of(json, &UNIT_TYPES, &mut units);
         for unit in units {
-            let mk = canonical_serialize(unit, tables, LiteralPolicy::MatchKey);
-            let vb = canonical_serialize(unit, tables, LiteralPolicy::Verbatim);
+            let mk = canonical_serialize(unit, tables, &MATCH_KEY);
+            let vb = canonical_serialize(unit, tables, &IDENTITY_KEY);
             let shingles = crate::matching::statement_align::content_shingles(tables, unit);
             let joined: Vec<&str> = shingles.iter().map(String::as_str).collect();
             let _ = writeln!(

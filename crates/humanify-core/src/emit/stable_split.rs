@@ -5,13 +5,13 @@
 //! pipeline (`humanify <input> --split`) calls [`stable_split`].
 //!
 //! The statement hashes are the Rust's own (`hash::statement_hash`,
-//! `hashVersion` [`STATEMENT_HASH_VERSION`]); the TS-byte injection that
+//! `hashVersion` = the [`STATEMENT`] form's version); the TS-byte injection that
 //! bridged the migration ended at WP5.6e (00-control §3).
 
 use humanify_model::js::{JsObject, JsValue};
 use oxc_allocator::Allocator;
 
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
+use crate::hash::forms::STATEMENT;
 use crate::ingest::Ingest;
 use crate::place::assign::namer::{SplitNamer, TreeReviser};
 use crate::place::declared::declared_names;
@@ -250,10 +250,7 @@ fn build_ledger(
     ledger.insert("hashes", str_list(&input.hashes));
     ledger.insert("emitHashes", str_list(emit_hashes));
     ledger.insert("emitNames", opt_str_list(emit_names));
-    ledger.insert(
-        "hashVersion",
-        JsValue::Number(STATEMENT_HASH_VERSION as f64),
-    );
+    ledger.insert("hashVersion", JsValue::Number(STATEMENT.version as f64));
     ledger
 }
 

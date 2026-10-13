@@ -12,6 +12,7 @@ use oxc_ast::AstKind;
 use oxc_span::Span;
 
 use crate::graph::UnifiedGraph;
+use crate::hash::forms::ALIGN_EXACT;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
@@ -977,7 +978,7 @@ fn member_expression_tokens_follow_babel_field_order() {
     // MemberExpression: babel field order object, computed, property —
     // the `computed:` scalar sits BETWEEN the object and the property
     // token, not after it.
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&member, None, "");
     let computed = tok
         .parts
@@ -997,7 +998,7 @@ fn member_expression_tokens_follow_babel_field_order() {
 
     // AssignmentExpression: operator, left, right — the operator precedes
     // the children, not the alphabetical tail after them.
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&assignment, None, "");
     let operator = tok
         .parts
@@ -1011,7 +1012,7 @@ fn member_expression_tokens_follow_babel_field_order() {
     );
 
     // UnaryExpression: operator, prefix, argument.
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&unary, None, "");
     let operator = tok
         .parts
@@ -1091,7 +1092,7 @@ fn parenthesized_and_bool_null_literals_match_babel_shapes() {
     let logical = walk(&program, "LogicalExpression")
         .cloned()
         .expect("no logical expression");
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&logical, None, "");
     assert!(
         !tok.parts
@@ -1130,7 +1131,7 @@ fn parenthesized_and_bool_null_literals_match_babel_shapes() {
     })
     .cloned()
     .expect("no null literal");
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&null_lit, None, "");
     assert_eq!(
         tok.parts,
@@ -1145,7 +1146,7 @@ fn parenthesized_and_bool_null_literals_match_babel_shapes() {
     })
     .cloned()
     .expect("no boolean literal");
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&bool_lit, None, "");
     assert_eq!(
         tok.parts,
@@ -1242,7 +1243,7 @@ fn object_property_and_method_nodes_match_babel_shapes() {
     assert_eq!(props.len(), 3, "plain, method, getter");
 
     // Plain property: babel's ObjectProperty — NO kind token.
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&props[0], None, "properties");
     assert_eq!(
         tok.parts,
@@ -1268,7 +1269,7 @@ fn object_property_and_method_nodes_match_babel_shapes() {
 
     // Method: babel's ObjectMethod — the function fields flat, kind
     // translated from oxc's "init".
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&props[1], None, "properties");
     assert_eq!(
         tok.parts,
@@ -1326,7 +1327,7 @@ fn object_property_and_method_nodes_match_babel_shapes() {
     // Getter: babel's ObjectMethod with kind "get" and method FALSE (oxc
     // says method: false here too, but the flag must come from the KIND —
     // oxc setters carry method: true where babel says false).
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&props[2], None, "properties");
     assert_eq!(
         &tok.parts[..11],
@@ -1392,7 +1393,7 @@ fn arrow_expression_flag_is_not_emitted() {
     assert_eq!(arrows.len(), 2, "bare-body and block-body arrows");
 
     // Bare body: the body value inlines; no expression flag.
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&arrows[0], None, "");
     assert_eq!(
         tok.parts,
@@ -1421,7 +1422,7 @@ fn arrow_expression_flag_is_not_emitted() {
     );
 
     // Block body: block carries body then directives: [].
-    let mut tok = Tokenizer::new(&tables, true);
+    let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
     tok.serialize_value(&arrows[1], None, "");
     assert_eq!(
         tok.parts,
@@ -1798,7 +1799,7 @@ fn optional_chain_nodes_match_babel_shapes() {
         ],
     ];
     for (i, init) in inits.iter().enumerate() {
-        let mut tok = Tokenizer::new(&tables, true);
+        let mut tok = Tokenizer::new(&tables, &ALIGN_EXACT);
         tok.serialize_value(init, None, "");
         assert_eq!(
             tok.parts,

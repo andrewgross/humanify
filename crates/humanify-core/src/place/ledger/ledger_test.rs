@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 
 use super::{FossilLedgerModule, Rederived, StableSplitLedger, rederive_stale_era_hashes};
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
+use crate::hash::forms::STATEMENT;
 use crate::place::input::split_input;
 
 /// Five wrapper statements (the first only pads the wrapper past its
@@ -86,7 +86,7 @@ fn a_ts_era_ledger_is_rekeyed_class_for_class() {
         }
     );
     assert!(ledger.hashes_current());
-    assert_eq!(ledger.hash_version, Some(STATEMENT_HASH_VERSION));
+    assert_eq!(ledger.hash_version, Some(STATEMENT.version));
     assert_eq!(ledger.hashes.as_ref(), Some(&rust));
     assert_eq!(
         ledger.emit_hashes,
@@ -161,7 +161,7 @@ fn a_failed_rederivation_leaves_the_ledger_untouched_and_refused() {
 
 #[test]
 fn an_older_rust_era_ledger_is_rekeyed_from_the_prior_text() {
-    // exp094b bumped STATEMENT_HASH_VERSION: a ledger the PREVIOUS Rust
+    // exp094b bumped the STATEMENT form's version: a ledger the PREVIOUS Rust
     // era stamped (`hashVersion: 2`) is a stale era's, exactly like a
     // TS-era one, and the same prior-text bijection re-keys it — the
     // refusal must come from the version GATE, never from a silent
@@ -186,6 +186,6 @@ fn an_older_rust_era_ledger_is_rekeyed_from_the_prior_text() {
         }
     );
     assert!(ledger.hashes_current());
-    assert_eq!(ledger.hash_version, Some(STATEMENT_HASH_VERSION));
+    assert_eq!(ledger.hash_version, Some(STATEMENT.version));
     assert_eq!(ledger.hashes.as_ref(), Some(&rust));
 }

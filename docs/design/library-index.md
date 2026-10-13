@@ -281,8 +281,8 @@ stop-list file for the lookup.
 
 - **Flag:** `--library-index <dir>`. The run reads `manifest.json`,
   refuses an unknown `format`, and refuses an index whose fingerprint
-  versions differ from its own (`vendor-content-key/<FACTORY_HASH_VERSION>`,
-  `literals/<LITERALS_VERSION>`) — the same all-or-nothing rule as the vendor
+  versions differ from its own (`hash::forms::VENDOR_CONTENT.stamp()`,
+  `literals/<LIBRARY_LITERALS_VERSION>`, `LIBRARY_UNITS.stamp()`) — the same all-or-nothing rule as the vendor
   record's `hashVersion`, because a half-matching index would silently
   half-name.
 - **Lookup:** the toolchain's slice picks `modules.<slice>.jsonl`; the

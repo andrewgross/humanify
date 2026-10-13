@@ -41,7 +41,8 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::reference::ReferenceFlags;
 use serde_json::Value;
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::{IDENTITY_KEY, MATCH_KEY};
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 
 /// A function node in the graph (the FunctionNode's ported fields — the
 /// matching/naming phases add the rest).
@@ -342,7 +343,7 @@ fn entry_outputs(
         // The token stream (`parts`) is diagnostics only — dropped here,
         // on the pool (an outer function's stream contains every nested
         // one's; kept, they would total the bundle times its depth).
-        let out = canonical_serialize(row, tables, LiteralPolicy::MatchKey);
+        let out = canonical_serialize(row, tables, &MATCH_KEY);
         (
             out.hash,
             out.mapping,
@@ -1029,12 +1030,7 @@ fn binding_fingerprint_hash(
     tables: &crate::hash::serialize::SymbolTables,
 ) -> String {
     let subtree = crate::ingest::parse_estree_json(content_json);
-    crate::hash::serialize::canonical_serialize(
-        &subtree,
-        tables,
-        crate::hash::serialize::LiteralPolicy::Verbatim,
-    )
-    .hash
+    canonical_serialize(&subtree, tables, &IDENTITY_KEY).hash
 }
 
 /// Bindings per sequential-serialize / parallel-hash chunk (bounds the

@@ -48,9 +48,10 @@ use crate::babel_view::unparen;
 use crate::finish::scaffold::is_builtin_name;
 use crate::ingest::Ingest;
 
-/// The extractor's version: a change to any rule above is a new version
-/// (the index manifest records it; the pipeline refuses a mismatch).
-pub const LITERALS_VERSION: u32 = 1;
+// The extractor's version is `hash::forms::LIBRARY_LITERALS_VERSION` (the
+// one registry of persisted fingerprint stamps): a change to any rule above
+// is a new version (the index manifest records it; the pipeline refuses a
+// mismatch).
 
 /// Values longer than this many UTF-16 units are kept as a hash prefix.
 const LONG: usize = 120;

@@ -19,12 +19,13 @@
 //! - slots are keyed by the resolved SYMBOL (oxc's native identity — the
 //!   TS scheme's binding-keyed placeholder, made native);
 //! - free identifiers are verbatim (version-stable content);
-//! - literals per key family: numbers and bigints EXACT under every
-//!   policy; strings blurred (volatile semver/ISO/hex-digest classes,
-//!   length markers) under `MatchKey`, exact under `Verbatim`
-//!   ([`LiteralPolicy`] names the consumer families);
+//! - literals per form: numbers and bigints EXACT under every form;
+//!   strings blurred (volatile semver/ISO/hex-digest classes, length
+//!   markers) or exact as the form says (`hash::forms` names every form
+//!   and its consumers);
 //! - single-statement blocks at bare-statement positions unwrap;
-//! - class-private names stay verbatim (`P=#name`; the TS default mode).
+//! - class-private names stay verbatim (`P=#name`; the TS default mode)
+//!   or blind to `P=#`, as the form says.
 //!
 //! One walk produces hash + placeholder mapping; slot ordinals are assigned
 //! by first occurrence in the walk, so structurally identical functions get
@@ -38,30 +39,9 @@ use oxc_span::GetSpan;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-/// Which literal policy the walk runs under — WHICH hash family the
-/// serialized identity serves. Every policy keeps NUMBERS and bigints
-/// EXACT (exp093, 2026-09-29: the number-magnitude buckets bridged 0 of
-/// 64,061 real matched pairs — 60,466 function pairs on the 2.1.215->216
-/// walk, 3,595 on the exp092 corpus, 0 statement twins — while a bucket
-/// edge manufactured the only known miss, so `numeric_magnitude` is gone);
-/// a policy's one remaining choice is the STRINGS:
-///
-/// - `MatchKey`: strings blurred (the volatile semver/ISO/hex-digest
-///   classes, the `__STR_<len>__` length markers) — the CROSS-VERSION
-///   families. Consumers: the function fingerprints (graph.rs's
-///   MatchKey), the module/factory fingerprints (modules.rs's
-///   `factory_structural_hash`, which the vendor content re-key also
-///   hashes through), the statement-context hash
-///   (matching/statement_context.rs), the twin gates (twins/gates.rs).
-/// - `Verbatim`: strings exact — the SAME-RELEASE families. Consumers:
-///   the IdentityKey / declaration-body hash (graph.rs), the naming
-///   validators' masked streams (naming/driver/validate.rs), vendor
-///   inherit (finish/vendor_inherit.rs).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum LiteralPolicy {
-    MatchKey,
-    Verbatim,
-}
+use super::forms::{
+    CanonicalForm, Locals, Numbers, ParentNames, Privates, PropertyNames, Strings, Walk,
+};
 
 /// The symbol tables one walk consults: span start -> symbol for
 /// declarations and resolved references. Built once per semantic and
@@ -123,45 +103,35 @@ pub struct CanonicalOutput {
     pub parts: String,
 }
 
-/// Serialize one subtree to the canonical token stream and hash it.
-/// `root` is the ESTree JSON of the subtree.
+/// Serialize one subtree to the canonical token stream under `form` (a
+/// [`Walk::Canonical`] form from `hash::forms`) and hash it. `root` is the
+/// ESTree JSON of the subtree. The form's string, private-name and
+/// wrapper-spelling settings drive the walk; its free-name setting is the
+/// caller's (`hash::forms::FreeNames`).
 pub fn canonical_serialize(
     root: &Value,
     tables: &SymbolTables,
-    policy: LiteralPolicy,
+    form: &CanonicalForm,
 ) -> CanonicalOutput {
-    canonical_serialize_inner(root, tables, policy, false)
-}
-
-/// The twin gate's masked comparison substrate (TS `privateMaskedStreamsEqual`,
-/// statement-twin.ts :405): the canonical stream with every private token
-/// blinded to `P=#`. The blinding happens AT TOKEN EMISSION — never as a
-/// substring pass over the concatenated stream, where a string literal could
-/// carry the same text. Everything else (slots, literals) matches
-/// [`canonical_serialize`] byte for byte, so a masked-equal pair's mappings
-/// align.
-pub fn canonical_serialize_privates_blinded(
-    root: &Value,
-    tables: &SymbolTables,
-    policy: LiteralPolicy,
-) -> CanonicalOutput {
-    canonical_serialize_inner(root, tables, policy, true)
-}
-
-fn canonical_serialize_inner(
-    root: &Value,
-    tables: &SymbolTables,
-    policy: LiteralPolicy,
-    blind_privates: bool,
-) -> CanonicalOutput {
+    debug_assert!(
+        form.walk == Walk::Canonical
+            && form.locals == Locals::Slots
+            && form.numbers == Numbers::Exact
+            && form.property_names == PropertyNames::Verbatim
+            && form.parent_names == ParentNames::Oxc
+            && form.privates != Privates::Masked,
+        "{} is not a setting of the canonical walk",
+        form.name
+    );
     let mut state = State {
         tables,
         slot_by_symbol: HashMap::new(),
         label_slots: HashMap::new(),
         mapping: Vec::new(),
         counter: 0,
-        policy,
-        blind_privates,
+        keep_strings: form.strings == Strings::Exact,
+        blind_privates: form.privates == Privates::Blinded,
+        wrapper_spelling: form.wrapper_spelling,
         parts: String::with_capacity(4096),
     };
     serialize_value(root, None, "", &mut state);
@@ -178,8 +148,9 @@ struct State<'a> {
     label_slots: HashMap<String, String>,
     mapping: Vec<(String, Option<SymbolId>, String)>,
     counter: u32,
-    policy: LiteralPolicy,
+    keep_strings: bool,
     blind_privates: bool,
+    wrapper_spelling: bool,
     parts: String,
 }
 
@@ -247,8 +218,8 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
         return;
     }
 
-    // Literals: the policy classes.
-    if let Some(token) = literal_token(map, &node_type, state.policy == LiteralPolicy::Verbatim) {
+    // Literals: the form's classes.
+    if let Some(token) = literal_token(map, &node_type, state.keep_strings) {
         state.parts.push_str(&token);
         return;
     }
@@ -264,10 +235,11 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
     // exp094 (wrapper spelling): a SAFE arrow walks under the
     // FunctionExpression token, so the same code twice-spelled by the
     // packaging tool (arrow vs function expression) hashes equal under
-    // every MatchKey family. The ONE rule lives in `hash::wrapper_spelling`
-    // (the statement hash's arm reads it too, exp094b).
+    // every form with the rule on (the match-key family). The ONE rule
+    // lives in `hash::wrapper_spelling` (the statement hash's arm reads it
+    // too, exp094b).
     if node_type == "ArrowFunctionExpression"
-        && state.policy == LiteralPolicy::MatchKey
+        && state.wrapper_spelling
         && super::wrapper_spelling::arrow_serializes_as_function(map)
     {
         state.parts.push_str("FunctionExpression");
@@ -457,9 +429,10 @@ pub(crate) enum LiteralClass {
 }
 
 /// The literal class of one literal node, or None when not a literal
-/// (structural-hash.ts:712-741; numbers EXACT under every policy since
-/// exp093 — only the string classes follow `keep`). Booleans and null are
-/// None: babel's BooleanLiteral/NullLiteral are not literal-classed, and
+/// (structural-hash.ts:712-741; numbers EXACT under every form since
+/// exp093 — only the string classes follow `keep`, the form's `Strings`).
+/// Booleans and null are None: babel's BooleanLiteral/NullLiteral are not
+/// literal-classed, and
 /// each walk spells them its own way. The ONE owner for both walks (the
 /// canonical serializer here, `matching::statement_align`'s token walk).
 pub(crate) fn literal_class(
@@ -536,7 +509,7 @@ pub(crate) fn literal_class(
 
 /// Literal tokens (structural-hash.ts:685-741): the volatile class or the
 /// length marker — the STRING rules, untouched by exp093 (numbers are
-/// exact under every policy).
+/// exact under every form).
 pub(crate) fn volatile_literal_token(value: &str) -> Option<String> {
     if is_volatile_semver(value) {
         Some("__VOLATILE_SEMVER__".to_string())
@@ -574,7 +547,7 @@ pub(crate) fn template_element_token(raw: &str, keep: bool) -> String {
 // `numeric_magnitude` (structural-hash.ts:719-723) — DELETED by exp093
 // (2026-09-29): the magnitude buckets bridged 0 of 64,061 real matched
 // pairs while their edges manufactured the only known miss, so numbers
-// are exact under every [`LiteralPolicy`] now.
+// are exact under every form now.
 
 /// Bare-statement positions (structural-hash.ts:748-758).
 fn is_bare_statement_position(parent: Option<&Value>, key: &str) -> bool {
@@ -634,8 +607,11 @@ pub(crate) fn unwrappable_block<'a>(
 /// (output-validation.ts), which is not a hash this serializer produces;
 /// the per-class slot map this function used to consult was clobbered by
 /// every non-class child before a private token could read it (removed
-/// 2026-09-25 — it never changed a byte). Under `blind_privates` (the twin
-/// gate's masked stream) every private token reads `P=#`.
+/// 2026-09-25 — it never changed a byte). Under a `Privates::Blinded` form
+/// (the twin gate's masked stream, the library units, the rename
+/// signature) every private token reads `P=#` — at token emission, never
+/// as a substring pass over the stream, where a string literal could carry
+/// the same text.
 fn private_name_token(name: &str, state: &State<'_>) -> String {
     if state.blind_privates {
         return "P=#".to_string();

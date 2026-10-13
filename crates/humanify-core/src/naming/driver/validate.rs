@@ -27,7 +27,8 @@ use std::collections::BTreeSet;
 
 use oxc_allocator::Allocator;
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize_privates_blinded};
+use crate::hash::forms::RENAME_SIGNATURE;
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::Ingest;
 use crate::rename::validated::scopes::BabelScopes;
 
@@ -49,8 +50,7 @@ fn measure(text: &str) -> Option<Baseline> {
     let scopes = BabelScopes::build(semantic);
     let json = crate::ingest::program_estree_json(ingest.program);
     let tables = SymbolTables::build(semantic);
-    let signature =
-        canonical_serialize_privates_blinded(&json, &tables, LiteralPolicy::Verbatim).hash;
+    let signature = canonical_serialize(&json, &tables, &RENAME_SIGNATURE).hash;
     Some(Baseline {
         signature,
         free_names: scopes.globals.clone(),
@@ -114,7 +114,7 @@ fn signature_tokens(text: &str) -> Option<Vec<String>> {
     }
     let json = crate::ingest::program_estree_json(ingest.program);
     let tables = SymbolTables::build(ingest.semantic());
-    let parts = canonical_serialize_privates_blinded(&json, &tables, LiteralPolicy::Verbatim).parts;
+    let parts = canonical_serialize(&json, &tables, &RENAME_SIGNATURE).parts;
     let mut tokens = Vec::new();
     let mut cur = String::new();
     let mut chars = parts.chars();

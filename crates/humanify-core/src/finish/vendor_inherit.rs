@@ -9,7 +9,7 @@
 //! The key is the whole safety argument: the literal-PRESERVING,
 //! rename-invariant structural signature of the whole file (TS
 //! `computeStructuralSignature` on the Program — here the canonical
-//! serializer under [`LiteralPolicy::Verbatim`], the same family), never
+//! serializer under `hash::forms::IDENTITY_KEY`, the same family), never
 //! the manifest's blurred `structuralHash`. Require paths stay IN the key,
 //! so a match is drop-in bytes. A file that does not parse is never
 //! inherited.
@@ -21,7 +21,8 @@ use std::path::{Path, PathBuf};
 
 use oxc_allocator::Allocator;
 
-use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
+use crate::hash::forms::IDENTITY_KEY;
+use crate::hash::serialize::{SymbolTables, canonical_serialize};
 use crate::ingest::{Ingest, program_estree_json};
 
 /// The kill-switch name (`VENDOR_INHERIT_SWITCH`).
@@ -46,7 +47,7 @@ pub(crate) fn file_signature(code: &str) -> Option<String> {
     }
     let tables = SymbolTables::build(ingest.semantic());
     let json = program_estree_json(ingest.program);
-    Some(canonical_serialize(&json, &tables, LiteralPolicy::Verbatim).hash)
+    Some(canonical_serialize(&json, &tables, &IDENTITY_KEY).hash)
 }
 
 /// The text with every identifier-shaped run removed (`skeleton`): a

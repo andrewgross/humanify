@@ -5,6 +5,11 @@ side lives on the exp095 branches (`exp095-discovery-core`, `exp095-index-v2`,
 `exp095-match-misses`) and is not on main. The settings and the library index's
 life cycle are in [library-matching-config.md](./library-matching-config.md).
 
+Progress: step 1 (shared helpers) is on main; step 2 (hash forms as named,
+versioned settings: `hash/forms.rs`) is built on branch
+`refactor/matching-hash-forms` (2026-10-13). §2 below is the inventory as it
+stood BEFORE them.
+
 ## Totals first
 
 - **One question, two uses.** humanify asks "is this piece of code the same as
@@ -160,6 +165,10 @@ the cascade's function rows, `twins`, the split's statements, the library
 units.
 
 ### 3.2 One serializer, forms as named versioned settings
+
+DONE in step 2 as `crates/humanify-core/src/hash/forms.rs` (`CanonicalForm`,
+the `FORMS` registry; the as-built names and the three walks that stay three
+are in its module doc and `docs/responsibility.md`). The plan as written:
 
 One walk (`hash/serialize.rs` today) with a settings record. Each existing
 form becomes a named preset with its own version:

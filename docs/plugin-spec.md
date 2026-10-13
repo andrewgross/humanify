@@ -341,7 +341,8 @@ taste):
 - **Round-trips.** A vendor record or ledger a plugin writes is read back by
   the NEXT release's run (the prior). Its format is a cross-release
   contract: stamp versions and re-key old ones by content (as
-  `FACTORY_HASH_VERSION` does), never silently re-interpret them.
+  the factory hash's `hash::forms::MATCH_KEY` version does), never silently
+  re-interpret them.
 - **Selected once, from detection.** A piece should be chosen at the start
   of the run and passed down, never re-guessed deep inside a stage (I10 and
   I21 are what happens otherwise). Since 2026-10-04 the place is
@@ -482,7 +483,7 @@ module's body?
 - `modules::classify_bun_modules(...) -> BunModuleClassification` — every
   `var X = HELPER(factory)` in the bundle's top-level statements, with a
   content-blind structural hash per body (`factory_structural_hash`,
-  versioned by `FACTORY_HASH_VERSION`).
+  versioned by `hash::forms::MATCH_KEY`).
 - `unpack::bun::identify_bun_require` — the module `require` alias to
   rewrite in vendor bodies (Bun only, I11).
 

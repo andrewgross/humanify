@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use super::{PlacementSwitches, TierInput, assign_with_prior};
-use crate::hash::statement_hash::STATEMENT_HASH_VERSION;
+use crate::hash::forms::STATEMENT;
 use crate::place::ledger::StableSplitLedger;
 use crate::place::trail::PlacementTrail;
 use crate::twins::statement_inventory_with_values;
@@ -61,7 +61,7 @@ fn run(hash_version: Option<u64>) -> (usize, Vec<Option<String>>) {
 
 #[test]
 fn a_current_version_ledger_joins_by_hash() {
-    let (via_hash, misses) = run(Some(STATEMENT_HASH_VERSION));
+    let (via_hash, misses) = run(Some(STATEMENT.version));
     assert_eq!(via_hash, 3);
     assert!(misses.iter().all(Option::is_none));
 }
