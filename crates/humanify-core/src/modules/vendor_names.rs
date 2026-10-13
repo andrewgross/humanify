@@ -747,7 +747,7 @@ fn is_js_ws(b: u8) -> bool {
 ///
 /// The whole block truncated to `cap_chars` UTF-16 units.
 pub fn build_vendor_evidence(body: &str, hints: &[String], cap_chars: usize) -> String {
-    let tokens = super::vendor_pairing::lex_raw(body);
+    let tokens = super::lex::lex_raw(body);
     let urls = evidence_urls(body);
     let mut exports_props = super::identity::readers::export_names(&tokens);
     exports_props.truncate(10);

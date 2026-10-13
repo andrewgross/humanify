@@ -15,7 +15,7 @@
 //! `json-schema` from json-schema.org, `w3`, `canny`, `DepType` from a
 //! property chain, `golang`, `grpc-node` for `@grpc/grpc-js`).
 //!
-//! Strings are read from the TOKEN stream (`vendor_pairing::lex_raw`), so
+//! Strings are read from the TOKEN stream (`modules::lex::lex_raw`), so
 //! a reader never pairs a closing quote with the next opening one.
 
 use super::{ModuleProvenance, PathKind};

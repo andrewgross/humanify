@@ -6,10 +6,10 @@ use super::readers::{
     self, Claim, ModuleView, export_names, hint_repository, hint_version, parse_banner,
 };
 use super::{DeclaredPath, ModuleProvenance, PathKind};
-use crate::modules::vendor_pairing::lex_raw as vendor_pairing_lex;
+use crate::modules::lex::lex_raw;
 
 fn with<T>(body: &str, provenance: &ModuleProvenance, f: impl Fn(&ModuleView<'_>) -> T) -> T {
-    let tokens = vendor_pairing_lex(body);
+    let tokens = lex_raw(body);
     f(&ModuleView {
         body,
         tokens: &tokens,
@@ -336,12 +336,9 @@ fn a_version_constant_is_a_hint() {
 fn the_export_list_reads_the_renamed_exports_parameter() {
     let body = r#"(P,M)=>{Object.defineProperty(P,"__esModule",{value:!0});P.getSSOTokenFromFile=P.tokenIntercept=void 0;P.tokenIntercept=function(){};Object.defineProperty(P,"other",{get:()=>1});if(P.tokenIntercept==null)return}"#;
     assert_eq!(
-        export_names(&vendor_pairing_lex(body)),
+        export_names(&lex_raw(body)),
         vec!["getSSOTokenFromFile", "tokenIntercept", "other"]
     );
     let body = r#"function(e,t){t.exports.parse=function(){};t.exports.stringify=1}"#;
-    assert_eq!(
-        export_names(&vendor_pairing_lex(body)),
-        vec!["parse", "stringify"]
-    );
+    assert_eq!(export_names(&lex_raw(body)), vec!["parse", "stringify"]);
 }

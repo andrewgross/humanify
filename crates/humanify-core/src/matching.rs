@@ -464,21 +464,6 @@ pub enum EdgeNgramMode {
 /// close-match corroboration both gate on this constant.
 pub const SHINGLE_SIMILARITY_FLOOR: f64 = 0.5;
 
-/// TS `jaccardSimilarity` (:384): |A∩B| / |A∪B|; 1 when both empty, 0 when
-/// the union is somehow empty otherwise.
-pub fn jaccard_similarity(a: &BTreeSet<String>, b: &BTreeSet<String>) -> f64 {
-    if a.is_empty() && b.is_empty() {
-        return 1.0;
-    }
-    let intersection = a.intersection(b).count();
-    let union = a.len() + b.len() - intersection;
-    if union > 0 {
-        intersection as f64 / union as f64
-    } else {
-        0.0
-    }
-}
-
 // ---------------------------------------------------------------------------
 // buildFingerprintIndex (fingerprint-index.ts :91)
 // ---------------------------------------------------------------------------

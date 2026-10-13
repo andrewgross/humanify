@@ -352,3 +352,91 @@ mod wrapper_spelling {
         );
     }
 }
+
+// ── the shared walk helpers (matching unification step 1, 2026-10-13) ──
+//
+// `matching::statement_align`'s token walk used to carry KEEP-IN-SYNC
+// copies of these; both walks now call the one owner, with their ONE real
+// difference — which spelling of an object member the parent carries —
+// named as a parameter.
+
+use crate::hash::serialize::{LiteralClass, MemberNodeNames, identifier_role, literal_class};
+use serde_json::json;
+
+#[test]
+fn identifier_role_names_the_object_member_spelling_it_reads() {
+    let oxc_key = json!({"type": "Property", "computed": false});
+    let babel_key = json!({"type": "ObjectProperty", "computed": false});
+    let babel_method = json!({"type": "ObjectMethod", "computed": false});
+    // The canonical walk reads oxc's ESTree: `Property` keys are verbatim.
+    assert_eq!(
+        identifier_role(Some(&oxc_key), "key", MemberNodeNames::Oxc),
+        "verbatim"
+    );
+    assert_eq!(
+        identifier_role(Some(&babel_key), "key", MemberNodeNames::Oxc),
+        "slot"
+    );
+    // The content walk translates `Property` to babel's two nodes first.
+    assert_eq!(
+        identifier_role(Some(&babel_key), "key", MemberNodeNames::Babel),
+        "verbatim"
+    );
+    assert_eq!(
+        identifier_role(Some(&babel_method), "key", MemberNodeNames::Babel),
+        "verbatim"
+    );
+    assert_eq!(
+        identifier_role(Some(&oxc_key), "key", MemberNodeNames::Babel),
+        "slot"
+    );
+    // Everything else answers the same under both spellings.
+    for names in [MemberNodeNames::Oxc, MemberNodeNames::Babel] {
+        let member = json!({"type": "MemberExpression", "computed": false});
+        let computed = json!({"type": "MemberExpression", "computed": true});
+        let label = json!({"type": "BreakStatement"});
+        let meta = json!({"type": "MetaProperty"});
+        let spec = json!({"type": "ExportSpecifier"});
+        assert_eq!(
+            identifier_role(Some(&member), "property", names),
+            "verbatim"
+        );
+        assert_eq!(identifier_role(Some(&computed), "property", names), "slot");
+        assert_eq!(identifier_role(Some(&label), "label", names), "label");
+        assert_eq!(identifier_role(Some(&meta), "meta", names), "verbatim");
+        assert_eq!(identifier_role(Some(&spec), "exported", names), "verbatim");
+        assert_eq!(identifier_role(Some(&spec), "local", names), "slot");
+        assert_eq!(identifier_role(None, "key", names), "slot");
+    }
+}
+
+#[test]
+fn literal_class_keeps_the_template_tail_as_its_own_part() {
+    let template = json!({"type": "TemplateElement", "value": {"raw": "ab"}, "tail": true});
+    let map = template.as_object().unwrap();
+    assert_eq!(
+        literal_class(map, "TemplateElement", false),
+        Some(LiteralClass::Template {
+            element: "Q=2".to_string(),
+            tail: true
+        })
+    );
+    let string = json!({"type": "Literal", "value": "hello"});
+    assert_eq!(
+        literal_class(string.as_object().unwrap(), "Literal", true),
+        Some(LiteralClass::One("S=\"hello\"".to_string()))
+    );
+    // Booleans and null are NOT literal-classed: each walk spells them its
+    // own way (the canonical walk generically, the content walk as babel's
+    // node shapes).
+    let boolean = json!({"type": "Literal", "value": true, "raw": "true"});
+    assert_eq!(
+        literal_class(boolean.as_object().unwrap(), "Literal", true),
+        None
+    );
+    let null = json!({"type": "Literal", "value": null, "raw": "null"});
+    assert_eq!(
+        literal_class(null.as_object().unwrap(), "Literal", true),
+        None
+    );
+}

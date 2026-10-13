@@ -43,6 +43,7 @@ use identity::readers::{BannerInfo, parse_banner};
 pub mod helper_shape;
 pub mod identity;
 pub mod known_globals;
+pub mod lex;
 pub mod soundness;
 pub mod text_assets;
 pub mod vendor_content;

@@ -239,7 +239,7 @@ fn slug(name: &str) -> String {
 /// package or member wins; a later one naming the SAME package may add the
 /// version. Hints are every hint reader's answer.
 pub fn declare(body: &str, provenance: &ModuleProvenance) -> Declared {
-    let tokens = super::vendor_pairing::lex_raw(body);
+    let tokens = super::lex::lex_raw(body);
     let view = readers::ModuleView {
         body,
         tokens: &tokens,

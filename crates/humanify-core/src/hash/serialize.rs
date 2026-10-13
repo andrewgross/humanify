@@ -191,8 +191,9 @@ fn sha256_16(bytes: &[u8]) -> String {
 // --- the walk ---------------------------------------------------------------
 
 /// Keys skipped from the stream: identity and rename artifacts (the TS
-/// side's SERIALIZE_SKIP_KEYS, plus oxc's location aliases).
-const SKIP_KEYS: [&str; 8] = [
+/// side's SERIALIZE_SKIP_KEYS, plus oxc's location aliases). Shared with
+/// `matching::statement_align`'s token walk.
+pub(crate) const SKIP_KEYS: [&str; 8] = [
     "type",
     "loc",
     "start",
@@ -247,7 +248,7 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
     }
 
     // Literals: the policy classes.
-    if let Some(token) = literal_token(map, &node_type, state.policy) {
+    if let Some(token) = literal_token(map, &node_type, state.policy == LiteralPolicy::Verbatim) {
         state.parts.push_str(&token);
         return;
     }
@@ -291,9 +292,28 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
     state.parts.push('}');
 }
 
+/// Which spelling of an object member a walk's parents carry — the ONE
+/// difference between the two walks that share [`identifier_role`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MemberNodeNames {
+    /// oxc's ESTree as serialized: object members (properties, methods,
+    /// destructuring keys) are all `Property` — this walk's input.
+    Oxc,
+    /// babel's names: `matching::statement_align`'s token walk translates
+    /// oxc's `Property` into `ObjectProperty` / `ObjectMethod` before it
+    /// walks the children (an untranslatable `Property` keeps oxc's name
+    /// there, and its key is a slot).
+    Babel,
+}
+
 /// The identifier-role rules (structural-hash.ts:554-590) over the ESTree
 /// parent/key context. `computed` flips the member/key rules to slot.
-fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
+/// `names` says which object-member spelling the parent carries.
+pub(crate) fn identifier_role(
+    parent: Option<&Value>,
+    key: &str,
+    names: MemberNodeNames,
+) -> &'static str {
     let Some(parent) = parent else {
         return "slot";
     };
@@ -315,14 +335,18 @@ fn identifier_role(parent: Option<&Value>, key: &str) -> &'static str {
     // here, and a list keyed on them silently disabled the verbatim rule —
     // a shorthand destructuring key (a binding reference) then fell through
     // to the slot arm while TS hashes it verbatim.
-    let positional = matches!(
-        (ptype, key),
-        ("MemberExpression", "property")
-            | ("OptionalMemberExpression", "property")
-            | ("Property", "key")
-            | ("MethodDefinition", "key")
-            | ("PropertyDefinition", "key")
-    );
+    let object_member = match names {
+        MemberNodeNames::Oxc => ptype == "Property",
+        MemberNodeNames::Babel => matches!(ptype, "ObjectMethod" | "ObjectProperty"),
+    };
+    let positional = (object_member && key == "key")
+        || matches!(
+            (ptype, key),
+            ("MemberExpression", "property")
+                | ("OptionalMemberExpression", "property")
+                | ("MethodDefinition", "key")
+                | ("PropertyDefinition", "key")
+        );
     if positional && !computed {
         return "verbatim";
     }
@@ -353,7 +377,7 @@ fn serialize_identifier(
     state: &mut State<'_>,
 ) {
     let name = node.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    match identifier_role(parent, key) {
+    match identifier_role(parent, key, MemberNodeNames::Oxc) {
         "verbatim" => {
             state.parts.push_str("I=");
             state.parts.push_str(name);
@@ -407,14 +431,43 @@ fn serialize_identifier(
 }
 
 /// The literal token for one literal node, or None when not a literal
-/// (structural-hash.ts:712-741; numbers EXACT under every policy since
-/// exp093 — only the string classes still follow `keep`).
+/// (structural-hash.ts:712-741): this walk's spelling of [`literal_class`],
+/// a template element as ONE part (the hash concatenates the parts, so
+/// the merge is byte-identical to the TS's two pushes).
 fn literal_token(
     map: &serde_json::Map<String, Value>,
     node_type: &str,
-    policy: LiteralPolicy,
+    keep: bool,
 ) -> Option<String> {
-    let keep = policy == LiteralPolicy::Verbatim;
+    Some(match literal_class(map, node_type, keep)? {
+        LiteralClass::One(token) => token,
+        LiteralClass::Template { element, tail } => format!("{element},tail={tail}"),
+    })
+}
+
+/// A literal node's class token(s).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum LiteralClass {
+    /// One token: `S=`, `N=`, `B=`, `R=`.
+    One(String),
+    /// A template element: the TS pushes `templateElementToken(...)` and
+    /// `,tail=${tail}` as TWO parts — the token walk keeps that boundary
+    /// (its k-gram windows sit on it), the hash walk concatenates.
+    Template { element: String, tail: bool },
+}
+
+/// The literal class of one literal node, or None when not a literal
+/// (structural-hash.ts:712-741; numbers EXACT under every policy since
+/// exp093 — only the string classes follow `keep`). Booleans and null are
+/// None: babel's BooleanLiteral/NullLiteral are not literal-classed, and
+/// each walk spells them its own way. The ONE owner for both walks (the
+/// canonical serializer here, `matching::statement_align`'s token walk).
+pub(crate) fn literal_class(
+    map: &serde_json::Map<String, Value>,
+    node_type: &str,
+    keep: bool,
+) -> Option<LiteralClass> {
+    use LiteralClass::One;
     match node_type {
         // oxc's ESTree emits the STANDARD name "Literal" for every literal
         // (babel names StringLiteral/NumericLiteral/BigIntLiteral/
@@ -435,14 +488,14 @@ fn literal_token(
                     .and_then(|r| r.get("flags"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                return Some(format!("R={pattern}/{flags}"));
+                return Some(One(format!("R={pattern}/{flags}")));
             }
             if let Some(bigint) = map.get("bigint").and_then(|v| v.as_str()) {
-                return Some(format!("B={bigint}"));
+                return Some(One(format!("B={bigint}")));
             }
             match map.get("value") {
-                Some(Value::String(v)) => Some(string_literal_token(v, keep)),
-                Some(Value::Number(n)) => Some(format!("N={n}")),
+                Some(Value::String(v)) => Some(One(string_literal_token(v, keep))),
+                Some(Value::Number(n)) => Some(One(format!("N={n}"))),
                 // Booleans and null are NOT literal-classed in the TS
                 // either (babel's BooleanLiteral/NullLiteral fall through
                 // to the generic walk) — None keeps that parity.
@@ -451,20 +504,20 @@ fn literal_token(
         }
         "StringLiteral" | "DirectiveLiteral" => {
             let value = map.get("value")?.as_str()?;
-            Some(string_literal_token(value, keep))
+            Some(One(string_literal_token(value, keep)))
         }
         "NumericLiteral" => {
             let value = map.get("value")?.as_f64()?;
-            Some(format!("N={value}"))
+            Some(One(format!("N={value}")))
         }
         "BigIntLiteral" => {
             let value = map.get("value")?.as_str()?;
-            Some(format!("B={value}"))
+            Some(One(format!("B={value}")))
         }
         "RegExpLiteral" => {
             let pattern = map.get("pattern")?.as_str()?;
             let flags = map.get("flags")?.as_str()?;
-            Some(format!("R={pattern}/{flags}"))
+            Some(One(format!("R={pattern}/{flags}")))
         }
         "TemplateElement" => {
             let raw = map
@@ -472,7 +525,10 @@ fn literal_token(
                 .and_then(|v| v.get("raw"))
                 .and_then(|v| v.as_str())?;
             let tail = map.get("tail").and_then(|v| v.as_bool()).unwrap_or(false);
-            Some(format!("{},tail={tail}", template_element_token(raw, keep)))
+            Some(LiteralClass::Template {
+                element: template_element_token(raw, keep),
+                tail,
+            })
         }
         _ => None,
     }
@@ -543,8 +599,9 @@ fn is_bare_statement_position(parent: Option<&Value>, key: &str) -> bool {
 
 /// A single-statement block at a bare position unwraps — unless the lone
 /// statement is scoping-relevant (let/const/class/function), where the
-/// braces change where the binding lives.
-fn unwrappable_block<'a>(
+/// braces change where the binding lives. Shared with
+/// `matching::statement_align`'s token walk.
+pub(crate) fn unwrappable_block<'a>(
     node: &'a serde_json::Map<String, Value>,
     parent: Option<&Value>,
     key: &str,
@@ -589,7 +646,8 @@ fn private_name_token(name: &str, state: &State<'_>) -> String {
 /// The stream's string escaping: JSON-safe, matching Node's `JSON.stringify`
 /// semantics for the BMP (the corpus is BMP-only; the supplementary-plane
 /// fixture is planted before the converter's green means anything — 11 OQ2).
-fn json_escape(s: &str) -> String {
+/// Shared with `matching::statement_align`'s token walk.
+pub(crate) fn json_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for c in s.chars() {

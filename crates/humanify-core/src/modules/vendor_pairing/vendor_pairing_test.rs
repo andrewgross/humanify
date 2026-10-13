@@ -5,45 +5,6 @@ fn idf_of(prior: &[ModuleFeatures]) -> HashMap<String, f64> {
 }
 
 #[test]
-fn the_lexer_masks_minified_names_and_keeps_strings_regexes_and_numbers() {
-    let toks =
-        lex("var aB=function(q){return /a\\/b[/]c/g.test(q)?0x1F:1.5e3}// gone\n/* gone */`t${x}`");
-    assert_eq!(
-        toks,
-        vec![
-            "var",
-            "I",
-            "=",
-            "function",
-            "(",
-            "I",
-            ")",
-            "{",
-            "return",
-            "/a\\/b[/]c/g",
-            ".",
-            "I",
-            "(",
-            "I",
-            ")",
-            "?",
-            "0x1F",
-            ":",
-            "1.5e3",
-            "}",
-            "`t${x}`"
-        ]
-    );
-    // lib_<hash8>[_n] is the unpack's own minted name: masked too.
-    assert_eq!(
-        lex("lib_0123abcd lib_0123abcd_2 library"),
-        vec!["I", "I", "library"]
-    );
-    // After an identifier a `/` divides.
-    assert_eq!(lex("a/b/c"), vec!["I", "/", "I", "/", "I"]);
-}
-
-#[test]
 fn a_long_string_is_split_into_words_so_a_prose_edit_costs_only_its_words() {
     let prose = |w: &str| {
         module_features(&format!(

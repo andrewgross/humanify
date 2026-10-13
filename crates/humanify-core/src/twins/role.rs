@@ -193,7 +193,7 @@ fn content_agreement(
     let prior_shingles = prior.content_shingles.as_ref().filter(|s| !s.is_empty());
     let next_shingles = next.content_shingles.as_ref().filter(|s| !s.is_empty());
     if let (Some(a), Some(b)) = (prior_shingles, next_shingles) {
-        let similarity = crate::matching::jaccard_similarity(a, b);
+        let similarity = crate::similarity::jaccard(a, b);
         if similarity >= SINGLE_VOTE_CONTENT_FLOOR {
             return RoleAgreement::agree("shingle-overlap");
         }
@@ -259,13 +259,6 @@ pub const SKIP_KEYS: [&str; 8] = [
     "leadingComments",
     "trailingComments",
 ];
-
-/// The union of shingle sets a role gate computes on — the tests need the
-/// jaccard similarity of two `BindingRole`s (the TS test suite computes it
-/// directly).
-pub fn jaccard(a: &BTreeSet<String>, b: &BTreeSet<String>) -> f64 {
-    crate::matching::jaccard_similarity(a, b)
-}
 
 #[cfg(test)]
 mod role_test;
