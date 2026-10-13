@@ -22,7 +22,6 @@ pipeline. The few TS pieces the scorer needed from the deleted `src/` live in
 | `run-pipeline.ts`         | the ONE launcher of a scored run, and its manifest                                                                                                                                                  |
 | `build-bin.sh`            | building the binary for a shell instrument's leg                                                                                                                                                    |
 | `boot-gate.sh`            | the boot gate. FATAL when `bun` is missing                                                                                                                                                          |
-| `gate.sh`, `selfhop.sh`   | the draw-pinned A/B and the tree-level self-hop (the binary, built from this checkout)                                                                                                              |
 | `neutrality.sh`           | the byte-identity gate: each leg's binary built from its own commit                                                                                                                                 |
 
 Retired at the cutover (they drove the TS pipeline in-process, and git history

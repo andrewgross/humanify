@@ -338,6 +338,21 @@ Judge `reorder` **per hop**, not on the total: a big hop masks a regression on a
 small one, which is exactly how Lever B v1's 118→119 regression hid. Read `reloc`
 next to `relocSt` — only the latter is order-independent.
 
+## A pair whose run lost LLM answers is REFUSED (2026-10-12)
+
+The binary is fail-soft: an LLM call that fails after every retry leaves
+its names out and the run still exits 0. Rule 11 says the KPIs cannot tell
+a lost name from noise, so `run.sh` refuses such a pair: no `<v>.json`
+card (a stale one is removed), `providerErrors.refused: true` in
+`<v>-run-status.json`, a `!! … REFUSED` banner in the summary, and the
+command that re-runs the pair. It reads the scored leg's `--stats-json`
+`providerErrors` block (total + per namer) and the rebuilt base's one
+`WARNING: N LLM call(s) failed` line (the rebase launch is held
+byte-identical to the references, so it writes no stats). A binary from
+before 2026-10-12 writes no block: recorded as `scored: null`, unknown,
+and scored as before. Owner: `experiments/lib/invariants.ts`; tests:
+`experiments/lib/provider-errors.test.ts`.
+
 ## Self-hop: cold count in range, warm leg byte-identical
 
 `run.sh` ends every sweep by re-humanifying the last scored pair's `to` version
@@ -400,9 +415,11 @@ npm run eval -- score <label> --bin <workspace>/target/release/humanify
   manifest records the sha256 **as launched** and warns if it differs from the
   build, or if the build commit is not the run's. The dispatcher also refuses
   to add binary cards to a pre-cutover TS-scored label.
-- **`--heap-mb` / `NODE_OPTIONS` are INERT** for the binary, because it is not a
-  Node process. The run log says so, and the manifest's heap-headroom warning
-  does not fire for binary runs.
+- **No heap setting.** The binary is not a Node process, so the launches carry
+  no `NODE_OPTIONS` and the manifest records no heap. `--heap-mb` (inert) and
+  the heap-headroom warning were deleted in the config sweep (2026-10-13);
+  `--heap-mb` is refused upfront. Only the two Node analysis steps
+  (`analyze.ts`, `trail-report.ts`) get a fixed 64 GB heap.
 - **The matcher preflight is retired** with the TS matcher it tested (the
   cutover). Labels scored before it still carry `preflight-status.json`, and
   the summary still reads it for them.

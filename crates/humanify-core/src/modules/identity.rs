@@ -243,7 +243,7 @@ fn slug(name: &str) -> String {
 /// ([`readers::version_constant`]) does. Hints are every hint reader's
 /// answer.
 pub fn declare(body: &str, provenance: &ModuleProvenance) -> Declared {
-    let tokens = super::vendor_pairing::lex_raw(body);
+    let tokens = super::lex::lex_raw(body);
     let view = readers::ModuleView {
         body,
         tokens: &tokens,
@@ -316,7 +316,7 @@ pub struct AppDeclaration {
 pub fn scan_app_declarations(code: &str, statements: &[oxc_span::Span]) -> Vec<AppDeclaration> {
     let per_statement = crate::par::map_ordered(statements, |span| {
         let body = &code[span.start as usize..span.end as usize];
-        let tokens = super::vendor_pairing::lex_raw(body);
+        let tokens = super::lex::lex_raw(body);
         let provenance = ModuleProvenance::default();
         let view = readers::ModuleView {
             body,

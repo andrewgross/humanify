@@ -1,7 +1,7 @@
 # The library fingerprint index — an offline, as-of, reproducible builder
 
 STATUS: v1 BUILT 2026-10-11 on branch `exp095-index-builder` (exp095,
-finding #97). Nothing in a humanify run reads the index yet: this is the
+finding #98). Nothing in a humanify run reads the index yet: this is the
 builder and the format. The pipeline side (looking modules up, naming from
 it) is exp095 step 2 and later, and is described here only so the format
 serves it.

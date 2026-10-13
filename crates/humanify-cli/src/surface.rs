@@ -27,6 +27,10 @@ use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 // it is declared, parsed and listed like `--sequential`.
 // `--relaxed-levers` (the lever sizing knob) stays deliberately OUT of
 // the help; `--simulate-llm-latency <path>` (the pacing replay) is listed.
+// Config sweep 2026-10-13: `--profile` became `--perf-trace`, and the
+// positive `--naming-floor` / `--naming-floor-sweep` /
+// `--reconcile-prior-diff` (they only restated the default) were deleted;
+// RETIRED_FLAGS below refuses each old spelling, naming its replacement.
 
 /// package.json's version — the single source commander's `-V` prints.
 pub fn package_version() -> String {
@@ -57,7 +61,7 @@ fn names<T: serde::Serialize>(values: &[T]) -> String {
 
 /// The whole program: the pipeline command at the root, `env-reads` below.
 pub fn program() -> CliCommand {
-    CliCommand::new("humanify")
+    let root = CliCommand::new("humanify")
         .description("Unminify JavaScript using an OpenAI-compatible API")
         .version(&package_version())
         .enable_positional_options()
@@ -232,34 +236,21 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
-            "--reconcile-prior-diff",
-            "After generation, snap rename-noise diff hunks back to the prior version's names (default with --prior-version)",
-            None,
-        )
-        .option(
             "--no-reconcile-prior-diff",
-            "Disable the prior-diff reconcile pass",
-            None,
-        )
-        .option(
-            "--naming-floor",
-            "Close minted-token coverage gaps deterministically (class/function-expression inner-id derivation + decoration retry; default on)",
+            "Disable the prior-diff reconcile pass (on by default with --prior-version: \
+             after generation, snap rename-noise diff hunks back to the prior version's names)",
             None,
         )
         .option(
             "--no-naming-floor",
-            "Disable the deterministic naming floor",
-            None,
-        )
-        .option(
-            "--naming-floor-sweep",
-            "LLM-name the minted survivors the naming floor cannot derive (params/decls/vars; default on). \
-             Prior-aware with a prior version: prior names transfer deterministically and the LLM names only the residue",
+            "Disable the deterministic naming floor (on by default: closes minted-token \
+             coverage gaps by class/function-expression inner-id derivation + decoration retry)",
             None,
         )
         .option(
             "--no-naming-floor-sweep",
-            "Disable the LLM sweep of minted survivors",
+            "Disable the LLM sweep of minted survivors (on by default: LLM-names the \
+             params/decls/vars the naming floor cannot derive; prior names transfer first)",
             None,
         )
         .option(
@@ -305,12 +296,47 @@ pub fn program() -> CliCommand {
             None,
         )
         .option(
-            "--profile <path>",
-            "Write performance profile to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)",
+            "--perf-trace <path>",
+            "Write a performance trace to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)",
             None,
         )
-        .subcommand(env_reads_command())
+        .subcommand(env_reads_command());
+    RETIRED_FLAGS
+        .iter()
+        .filter(|(verb, _, _)| verb.is_none())
+        .fold(root, |c, (_, flag, note)| c.retired_option(flag, note))
 }
+
+/// Flags renamed or deleted by the config sweep (2026-10-13; no backwards
+/// compatibility): `(verb, old spelling, what to say instead)`, `None` for
+/// the pipeline program, `Some(verb)` for a clap stage verb (main.rs).
+/// The old spelling is refused, naming its replacement, never aliased.
+pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
+    (None, "--profile", "renamed: use --perf-trace"),
+    (
+        None,
+        "--naming-floor",
+        "removed: it restated the default (on); --no-naming-floor turns it off",
+    ),
+    (
+        None,
+        "--naming-floor-sweep",
+        "removed: it restated the default (on); --no-naming-floor-sweep turns it off",
+    ),
+    (
+        None,
+        "--reconcile-prior-diff",
+        "removed: it restated the default (on with --prior-version); \
+         --no-reconcile-prior-diff turns it off",
+    ),
+    (Some("detect"), "--profile", "renamed: use --perf-trace"),
+    (Some("unpack"), "--index", "renamed: use --bundle-order"),
+    (
+        Some("match"),
+        "--sequential",
+        "removed: it was inert and never changed the dump",
+    ),
+];
 
 /// The help `command` prints for `--help` and after a usage error:
 /// `"humanify"` names the pipeline program, anything else a subcommand.

@@ -89,21 +89,18 @@ Options:
                                  CommonJS module graph by default
   --prior-version <path>         Path to a prior humanified file for
                                  cross-version rename reuse
-  --reconcile-prior-diff         After generation, snap rename-noise diff hunks
-                                 back to the prior version's names (default with
-                                 --prior-version)
-  --no-reconcile-prior-diff      Disable the prior-diff reconcile pass
-  --naming-floor                 Close minted-token coverage gaps
-                                 deterministically (class/function-expression
-                                 inner-id derivation + decoration retry; default
-                                 on)
-  --no-naming-floor              Disable the deterministic naming floor
-  --naming-floor-sweep           LLM-name the minted survivors the naming floor
-                                 cannot derive (params/decls/vars; default on).
-                                 Prior-aware with a prior version: prior names
-                                 transfer deterministically and the LLM names
-                                 only the residue
-  --no-naming-floor-sweep        Disable the LLM sweep of minted survivors
+  --no-reconcile-prior-diff      Disable the prior-diff reconcile pass (on by
+                                 default with --prior-version: after generation,
+                                 snap rename-noise diff hunks back to the prior
+                                 version's names)
+  --no-naming-floor              Disable the deterministic naming floor (on by
+                                 default: closes minted-token coverage gaps by
+                                 class/function-expression inner-id derivation +
+                                 decoration retry)
+  --no-naming-floor-sweep        Disable the LLM sweep of minted survivors (on
+                                 by default: LLM-names the params/decls/vars the
+                                 naming floor cannot derive; prior names
+                                 transfer first)
   --split-ledger <path>          Prior split ledger for cross-release
                                  file-assignment inheritance (default:
                                  auto-discovered next to --prior-version)
@@ -126,7 +123,7 @@ Options:
                                  cold per-call latencies on a virtual clock and
                                  write the simulated LLM wall time to <path>
                                  (JSON)
-  --profile <path>               Write performance profile to JSON file (Chrome
+  --perf-trace <path>            Write a performance trace to JSON file (Chrome
                                  Trace Event format, viewable at
                                  chrome://tracing or ui.perfetto.dev)
   -h, --help                     display help for command

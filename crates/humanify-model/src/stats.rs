@@ -450,6 +450,28 @@ js_record! {
 }
 
 js_record! {
+    /// The `providerErrors` block (2026-10-12, concurrency audit R2 +
+    /// recommendation 1c): LLM calls that failed after every retry, the
+    /// run's total and per namer. Each one is a hole in the names — the run
+    /// is fail-soft and still exits 0 — so the eval refuses a card whose
+    /// run lost any (experiments/lib/invariants.ts). Counts are CALLS
+    /// (a batch is one call).
+    pub struct ProviderErrorStats {
+        total: f64 = "total",
+        /// The function/identifier waves and the sweeps (`outcome.errors`).
+        naming: f64 = "naming",
+        /// The module namer (`ModuleNamingReport::failed_calls`).
+        modules: f64 = "modules",
+        /// The vendor namer (`VendorNamingStats::batches_failed`).
+        vendor: f64 = "vendor",
+        /// The split's file/folder namer (`failed_batches`).
+        split: f64 = "split",
+        /// The split's tree reviser (one call per split).
+        tree_reviser: f64 = "treeReviser",
+    }
+}
+
+js_record! {
     /// The whole `--stats-json` object (writeEvalStats' literal, plus the
     /// 2026-09-29 `reask` and 2026-10-02 `waveGauges` additions — the
     /// deliberate post-cutover bumps, nested so the top level stays
@@ -491,6 +513,11 @@ js_record! {
         /// runs; ABSENT on runs without `--split` and on every earlier
         /// recorded scorecard — the `reask` precedent, verbatim.
         split_method: Option<SplitMethodStats> = "splitMethod",
+        /// The `providerErrors` block (2026-10-12). ALWAYS written on runs
+        /// from this writer (all-zero included); ABSENT on every earlier
+        /// recorded scorecard — the `reask` precedent, verbatim. Absent is
+        /// UNKNOWN to the eval, never zero.
+        provider_errors: Option<ProviderErrorStats> = "providerErrors",
     }
 }
 

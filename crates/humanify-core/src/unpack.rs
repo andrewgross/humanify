@@ -252,7 +252,7 @@ impl AdapterOutcome {
 }
 
 /// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —
-/// THE one dispatch site: the pipeline, the `unpack`, `libdetect` and
+/// THE one dispatch site: the pipeline, the `unpack`, `discover` and
 /// `match` verbs all come through here, so a registered adapter is run
 /// the same way everywhere.
 pub fn run_adapter(

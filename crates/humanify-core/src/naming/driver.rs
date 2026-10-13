@@ -178,6 +178,10 @@ pub struct NamingOutcome {
     /// `renameResult.priorCarry` — the split's tiers regime and the `-vv`
     /// `prior-match-map.json` read it (None without a prior).
     pub prior_carry: Option<crate::rename::transfer::carry::PriorCarry>,
+    /// Why the prior-diff reconcile did not run although it was due (its
+    /// `diff` failed or ran past its deadline) — see
+    /// [`NamingOutcome::reconcile_skipped_warning`].
+    pub reconcile_error: Option<String>,
     /// Cache misses / provider errors across every LLM pass.
     pub misses: usize,
     pub errors: usize,
@@ -293,6 +297,7 @@ pub fn run_naming<P: NameProvider>(
     let mut out = NamingOutcome {
         generated,
         reconcile: None,
+        reconcile_error: None,
         deferred_sweep: None,
         permute: None,
         code: None,
@@ -368,7 +373,7 @@ pub fn run_naming<P: NameProvider>(
                 || reconcile(prior, trail.clone()),
             );
             if verdict == validate::Verdict::Valid {
-                (verdict, spec, spec_trail)
+                (verdict, Some(spec), spec_trail)
             } else {
                 (verdict, None, trail)
             }
@@ -379,7 +384,7 @@ pub fn run_naming<P: NameProvider>(
             match prior.filter(|_| verdict == validate::Verdict::Valid) {
                 Some(prior) => {
                     let (trail, done) = reconcile(prior, trail);
-                    (verdict, done, trail)
+                    (verdict, Some(done), trail)
                 }
                 None => (verdict, None, trail),
             }
@@ -387,9 +392,13 @@ pub fn run_naming<P: NameProvider>(
     };
     out.output_valid = verdict == validate::Verdict::Valid;
     out.verdict = Some(verdict);
-    if let Some((run, stage)) = reconciled {
-        ledger_stages.extend(stage.map(|l| (generated.clone(), l)));
-        out.reconcile = Some(run);
+    match reconciled {
+        Some(Ok((run, stage))) => {
+            ledger_stages.extend(stage.map(|l| (generated.clone(), l)));
+            out.reconcile = Some(run);
+        }
+        Some(Err(error)) => out.reconcile_error = Some(error),
+        None => {}
     }
     let recon_code = out.reconcile.as_ref().and_then(|r| r.code.clone());
 
@@ -559,6 +568,14 @@ pub fn run_naming<P: NameProvider>(
     Ok(out)
 }
 
+/// [`NamingOutcome::reconcile_skipped_warning`]'s line for one error.
+fn reconcile_skipped_warning(error: &str) -> String {
+    format!(
+        "WARNING: the prior-diff reconcile did not run ({error}) — names it would have \
+restored from the prior are missing from this output; re-run it"
+    )
+}
+
 /// The prior-diff reconcile over the generated text: the trail it hands
 /// on, and — when it ran — its result and its rename-ledger stage.
 type ReconcileRun = (
@@ -573,15 +590,17 @@ fn reconcile_pass(
     profile: NameProfile,
     trail: StrategyTrail,
     ledger_walk: Option<crate::naming::reconcile::step::LedgerWalk>,
-) -> (StrategyTrail, Option<ReconcileRun>) {
+) -> (StrategyTrail, Result<ReconcileRun, String>) {
     match run_prior_diff_reconciliation(generated, prior, eligible, profile, trail, ledger_walk) {
         Ok(PriorDiffOutcome {
             result,
             code,
             trail,
             ledger,
-        }) => (trail, Some((PassRun { result, code }, ledger))),
-        Err((_, trail)) => (trail, None),
+        }) => (trail, Ok((PassRun { result, code }, ledger))),
+        // Kept, never dropped: the CLI prints it (audit R3 — a failed
+        // `diff` used to skip the whole pass in silence).
+        Err((error, trail)) => (trail, Err(error)),
     }
 }
 
@@ -825,6 +844,8 @@ impl NamingOutcome {
             toolchain: None,
             // The split's, set by the pipeline after it runs.
             split_method: None,
+            // Run-wide: the CLI fills it from every namer (unified.rs).
+            provider_errors: None,
             prompt_guard: Some(prompt_guard_stats(
                 &self.processor,
                 self.pre_sweep.as_ref(),
@@ -866,6 +887,15 @@ impl NamingOutcome {
     /// exactly what [`PriorStats`] already carries at that point; None
     /// when no prior ran or the prior bound anything at all. Observation
     /// only — nothing decides on this.
+    /// The loud line for a prior-diff reconcile that was due and did not
+    /// run (audit R3): the prior's names it would have restored are
+    /// missing, so the output differs from a run where it ran. Print-only.
+    pub fn reconcile_skipped_warning(&self) -> Option<String> {
+        self.reconcile_error
+            .as_deref()
+            .map(reconcile_skipped_warning)
+    }
+
     pub fn broken_prior_warning(&self) -> Option<String> {
         let p = self.prior.as_ref()?;
         let c = p.counts;

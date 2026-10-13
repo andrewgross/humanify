@@ -93,8 +93,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     let (work_dir, owned) = match args.work_dir {
         Some(dir) => (dir.to_string(), false),
         None => (
-            std::env::temp_dir()
-                .join(format!("humanify-discover-{}", std::process::id()))
+            humanify_core::scratch::temp_dir("humanify-discover")?
                 .display()
                 .to_string(),
             true,

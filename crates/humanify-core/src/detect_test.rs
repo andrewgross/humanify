@@ -256,12 +256,13 @@ fn bun_bundler_signals() {
 
 #[test]
 fn bun_bundler_requires_both_patterns() {
-    assert!(
-        detect_bun_bundler(
-            "var x = (I, A) => () => (A || I((A = {exports: {}}).exports, A), A.exports);"
-        )
-        .is_empty()
+    // The module helper alone is not Bun's Shape: it is the plain form
+    // esbuild writes too, so only the shared rank (spec I2).
+    let helper_alone = detect_bun_bundler(
+        "var x = (I, A) => () => (A || I((A = {exports: {}}).exports, A), A.exports);",
     );
+    assert_eq!(helper_alone.len(), 1);
+    assert_eq!(helper_alone[0].strength, Some(SignalStrength::SharedShape));
     assert!(
         detect_bun_bundler(
             r#"import{createRequire as X}from"node:module";var r=X(import.meta.url);var y=r("fs");"#
@@ -453,10 +454,17 @@ fn the_ranking_is_banner_runtime_name_shape_shared_helper_weak_token() {
     use SignalStrength as S;
     assert!(S::Banner > S::OwnRuntimeName);
     assert!(S::OwnRuntimeName > S::Shape);
-    assert!(S::Shape > S::SharedHelperName);
+    assert!(S::Shape > S::SharedShape);
+    assert!(S::SharedShape > S::SharedHelperName);
     assert!(S::SharedHelperName > S::WeakToken);
     assert_eq!(S::WeakToken.tier(), DetectionTier::Likely);
-    for s in [S::SharedHelperName, S::Shape, S::OwnRuntimeName, S::Banner] {
+    for s in [
+        S::SharedHelperName,
+        S::SharedShape,
+        S::Shape,
+        S::OwnRuntimeName,
+        S::Banner,
+    ] {
         assert_eq!(s.tier(), DetectionTier::Definitive);
     }
 }
@@ -559,4 +567,91 @@ fn a_conflict_serializes_with_its_candidates() {
         serde_json::to_string(&r.bundler).unwrap(),
         r#"{"type":"bun","tier":"definitive","conflict":{"resolution":"strength","candidates":[{"bundler":"bun","pattern":"// @bun banner","strength":"banner"},{"bundler":"esbuild","pattern":"__commonJS","strength":"shared-helper-name"}]}}"#
     );
+}
+
+// ---- layer 5: the module helper's SHAPE (spec I2) ---------------------------
+// `--minify` renames every esbuild helper, so the names above vanish; the
+// module helper's shape does not (`modules::helper_shape`). A form only
+// esbuild writes (the `try` guard of 0.28, the indirect `(0, cb[…])` call)
+// or the plain form beside esbuild's own `__export` names esbuild; the plain
+// form alone is written by both bundlers, and an unsure input is Bun's.
+
+/// The committed esbuild 0.27.2 `--bundle --minify --format=iife` build
+/// (test/e2e/fixtures/esbuild-minified): the plain helper + esbuild's
+/// `__export` (`{get:e[r],enumerable:!0}` — Bun's adds `configurable`).
+const REAL_ESBUILD_MINIFIED: &str =
+    include_str!("../../../test/e2e/fixtures/esbuild-minified/build/v1.0.0/build/index.js");
+
+/// esbuild 0.28.2 `--minify`: the guarded helper (shape lab, 2026-10-12).
+const ESBUILD_028_MINIFIED: &str = "var r=Object.defineProperty;var g=(n,e,o)=>()=>{if(o)throw o[0];try{return n&&(e=n(n=0)),e}catch(l){throw o=[l],l}};var a=(n,e)=>()=>{try{return e||n((e={exports:{}}).exports,e),e.exports}catch(o){throw e=0,o}},h=(n,e)=>{for(var o in e)r(n,o,{get:e[o],enumerable:!0})};var u=a(c=>{c.label=\"x\"});";
+
+/// wrangler 3.114.0's cli.js re-minified by esbuild 0.28.2 (experiments/095
+/// discovery, Results §5): the indirect function form, every helper joined.
+const WRANGLER_REMINIFIED: &str = "(function(){var cye=Object.create,fp=Object.defineProperty,UD=Object.getOwnPropertyNames,a=(e,t)=>fp(e,\"name\",{value:t,configurable:!0}),q=(e,t)=>function(){return e&&(t=(0,e[UD(e)[0]])(e=0)),t},ee=(e,t)=>function(){return t||(0,e[UD(e)[0]])((t={exports:{}}).exports,t),t.exports};var x=ee((t,n)=>{n.exports=1});})();";
+
+/// Bun 1.3.14 `build --target=node --format=cjs --minify`: no banner, no
+/// `createRequire` import — only the plain helper (shape lab, 2026-10-12).
+const BUN_MINIFIED_NO_BANNER: &str = "var{defineProperty:t,getOwnPropertyNames:p,getOwnPropertyDescriptor:i}=Object,b=Object.prototype.hasOwnProperty;var s,g=(e,n)=>()=>(n||e((n={exports:{}}).exports,n),n.exports);var h=(e)=>e;var y=(e,n)=>{for(var o in n)t(e,o,{get:n[o],enumerable:!0,configurable:!0,set:q.bind(n,o)})};var a=g((r)=>{r.label=\"cjsdep\"});";
+
+#[test]
+fn minified_esbuild_is_detected_by_its_helper_shapes() {
+    for (code, what) in [
+        (
+            REAL_ESBUILD_MINIFIED,
+            "0.27.2 --minify (plain helper + __export)",
+        ),
+        (ESBUILD_028_MINIFIED, "0.28.2 --minify (guarded helper)"),
+        (WRANGLER_REMINIFIED, "re-minified (indirect helper)"),
+    ] {
+        let r = detect_bundle(code);
+        assert_eq!(r.bundler.kind, BundlerType::Esbuild, "{what}");
+        assert_eq!(r.bundler.tier, DetectionTier::Definitive, "{what}");
+        let esbuild = detect_esbuild(code);
+        assert!(
+            esbuild
+                .iter()
+                .any(|s| s.strength == Some(SignalStrength::Shape)),
+            "{what}: an esbuild shape signal"
+        );
+    }
+}
+
+#[test]
+fn the_plain_helper_alone_is_bun_when_unsure() {
+    let r = detect_bundle(BUN_MINIFIED_NO_BANNER);
+    assert_eq!(r.bundler.kind, BundlerType::Bun);
+    assert_eq!(r.bundler.tier, DetectionTier::Definitive);
+    let bun = detect_bun_bundler(BUN_MINIFIED_NO_BANNER);
+    assert_eq!(bun.len(), 1);
+    assert_eq!(bun[0].strength, Some(SignalStrength::SharedShape));
+    // Bun's own `__export` (with `configurable`) is not esbuild's.
+    assert!(detect_esbuild(BUN_MINIFIED_NO_BANNER).is_empty());
+}
+
+#[test]
+fn an_esbuild_shape_outranks_the_shared_shape() {
+    // The 0.27.2 build carries the plain helper Bun writes too: both
+    // bundlers are named, and esbuild's own shape settles it.
+    let r = detect_bundle(REAL_ESBUILD_MINIFIED);
+    let conflict = r.bundler.conflict.expect("both bundlers named");
+    assert_eq!(conflict.resolution, ConflictResolution::Strength);
+    assert_eq!(conflict.candidates[0].bundler, BundlerType::Esbuild);
+    assert_eq!(conflict.candidates[1].bundler, BundlerType::Bun);
+    assert_eq!(conflict.candidates[1].strength, SignalStrength::SharedShape);
+}
+
+#[test]
+fn the_helper_shapes_leave_banner_and_unminified_verdicts_alone() {
+    // A Bun banner still returns the banner alone.
+    for build in REAL_BUN_BUILDS {
+        assert_eq!(detect_bun_bundler(build).len(), 1);
+        assert_eq!(detect_bundle(build).bundler.kind, BundlerType::Bun);
+    }
+    // Unminified esbuild: still esbuild (its helper names AND now its
+    // indirect helper shape), and no Bun signal.
+    let unminified =
+        include_str!("../../../test/e2e/fixtures/esbuild-cjs/build/v1.0.0/build/index.js");
+    let r = detect_bundle(unminified);
+    assert_eq!(r.bundler.kind, BundlerType::Esbuild);
+    assert!(detect_bun_bundler(unminified).is_empty());
 }

@@ -285,8 +285,13 @@ pub fn describe(plan: &Plan) -> String {
     out
 }
 
+/// `npm install` of one package (measured: tens of seconds; the deadline
+/// is for a registry that never answers).
+const INSTALL_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
 fn run_cmd(cmd: &mut Command) -> Result<(), String> {
-    let out = cmd.output().map_err(|e| e.to_string())?;
+    let out =
+        humanify_core::subprocess::run(cmd, None, INSTALL_DEADLINE).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {

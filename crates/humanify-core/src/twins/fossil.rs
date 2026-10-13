@@ -63,13 +63,17 @@ pub struct FossilExtract {
 }
 
 /// The helper's thunk shape: `(fn, res) => () => ...` — a two-parameter
-/// arrow whose body is a zero-arg thunk (:57).
+/// arrow whose body is a zero-arg thunk (:57). esbuild >= 0.28 adds a
+/// third parameter that keeps the first error, `(fn, res, err) => () =>
+/// { if (err) throw err[0]; try { … } catch … }`: accepted only with that
+/// guard as the thunk's FIRST statement, so a three-parameter memoizer is
+/// never one.
 fn thunk_of(init: &Value) -> Option<&Value> {
     if init.get("type").and_then(Value::as_str) != Some("ArrowFunctionExpression") {
         return None;
     }
     let params = init.get("params")?.as_array()?;
-    if params.len() != 2 {
+    if params.len() != 2 && params.len() != 3 {
         return None;
     }
     let body = unwrap_paren(init.get("body")?);
@@ -81,29 +85,58 @@ fn thunk_of(init: &Value) -> Option<&Value> {
     if !inner_params.is_empty() {
         return None;
     }
+    if params.len() == 3 {
+        let err = ident_name(params.get(2))?;
+        let first = unwrap_paren(body.get("body")?)
+            .get("body")?
+            .as_array()?
+            .first()?;
+        if first.get("type").and_then(Value::as_str) != Some("IfStatement")
+            || ident_name(first.get("test")) != Some(err)
+        {
+            return None;
+        }
+    }
     Some(body)
+}
+
+/// The statement lists a block-bodied thunk runs its work in: its own
+/// body, and the protected block of each `try` in it (esbuild >= 0.28
+/// wraps the init call in one). Empty for an expression-bodied thunk.
+fn thunk_statement_lists(thunk: &Value) -> Vec<&Vec<Value>> {
+    let Some(body) = thunk.get("body").map(unwrap_paren) else {
+        return Vec::new();
+    };
+    if body.get("type").and_then(Value::as_str) != Some("BlockStatement") {
+        return Vec::new();
+    }
+    let Some(stmts) = body.get("body").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let tried = stmts
+        .iter()
+        .filter(|s| s.get("type").and_then(Value::as_str) == Some("TryStatement"))
+        .filter_map(|s| s.get("block")?.get("body")?.as_array());
+    std::iter::once(stmts).chain(tried).collect()
 }
 
 /// The `(…, ident)` a helper thunk yields, whichever form it takes (:93):
 /// a SEQUENCE — the raw text's form, expression-bodied (bun) or returned
-/// (esbuild) — or esbuild's BEAUTIFIED restructing of the returned one
-/// (the stage-6 formatter unrolls `return fn && (…), res;` into
-/// `if (fn) { … } return res;`).
+/// (esbuild, inside a `try` from 0.28) — or esbuild's BEAUTIFIED restructing
+/// of the returned one (the stage-6 formatter unrolls `return fn && (…),
+/// res;` into `if (fn) { … } return res;`).
 fn thunk_result_sequence(thunk: &Value) -> Option<&Value> {
     let body = unwrap_paren(thunk.get("body")?);
     if body.get("type").and_then(Value::as_str) == Some("SequenceExpression") {
         return Some(body);
     }
-    if body.get("type").and_then(Value::as_str) != Some("BlockStatement") {
-        return None;
-    }
-    let ret = body
-        .get("body")?
-        .as_array()?
-        .iter()
-        .find(|s| s.get("type").and_then(Value::as_str) == Some("ReturnStatement"))?;
-    let arg = ret.get("argument")?;
-    (arg.get("type").and_then(Value::as_str) == Some("SequenceExpression")).then_some(arg)
+    thunk_statement_lists(thunk).into_iter().find_map(|stmts| {
+        let ret = stmts
+            .iter()
+            .find(|s| s.get("type").and_then(Value::as_str) == Some("ReturnStatement"))?;
+        let arg = ret.get("argument")?;
+        (arg.get("type").and_then(Value::as_str) == Some("SequenceExpression")).then_some(arg)
+    })
 }
 
 /// An ESTree Identifier's name (None for anything else).
@@ -155,25 +188,19 @@ fn is_esm_helper(d: &Value) -> bool {
     else {
         return false;
     };
-    let Some(body) = thunk.get("body").map(unwrap_paren) else {
-        return false;
-    };
-    let Some(stmts) = body.get("body").and_then(Value::as_array) else {
-        return false;
-    };
-    let Some((last, head)) = stmts.split_last() else {
-        return false;
-    };
-    if last.get("type").and_then(Value::as_str) != Some("ReturnStatement")
-        || ident_name(last.get("argument")) != Some(res_name)
-    {
-        return false;
-    }
     // The final return must name the second parameter, and SOME preceding
-    // statement must be an if-guard naming the first.
-    head.iter().any(|s| {
-        s.get("type").and_then(Value::as_str) == Some("IfStatement")
-            && ident_name(s.get("test")) == Some(fn_name)
+    // statement must be an if-guard naming the first — in the thunk's own
+    // body, or inside its `try` (esbuild >= 0.28).
+    thunk_statement_lists(thunk).into_iter().any(|stmts| {
+        let Some((last, head)) = stmts.split_last() else {
+            return false;
+        };
+        last.get("type").and_then(Value::as_str) == Some("ReturnStatement")
+            && ident_name(last.get("argument")) == Some(res_name)
+            && head.iter().any(|s| {
+                s.get("type").and_then(Value::as_str) == Some("IfStatement")
+                    && ident_name(s.get("test")) == Some(fn_name)
+            })
     })
 }
 

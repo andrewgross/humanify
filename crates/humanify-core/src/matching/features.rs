@@ -2,15 +2,16 @@
 //! (src/analysis/structural-hash.ts :278) with its collectors
 //! (`collectControlFlow` :176, `collectLiterals` :204, `collectPropertyAccess`
 //! :213, `collectCallPatterns` :225, `collectMemberCallee` :245), the CFG
-//! shape (`buildCfgShapeString` :427 + its encoders :328-404), and the
-//! KNOWN_GLOBALS set (:11-102).
+//! shape (`buildCfgShapeString` :427 + its encoders :328-404). The
+//! KNOWN_GLOBALS set (:11-102) is owned by `modules::known_globals` as the
+//! FINGERPRINT vocabulary ([`is_fingerprint_global`]).
 //!
-//! THE SET IS THE LOCAL ONE (:11), NOT the `src/analysis/known-globals.ts`
-//! module — that module (five environment sets, ~190 names) drives REPORTING
-//! of unreachable free references; the features walk consults the smaller
-//! browser/Node/built-in/library list defined inside structural-hash.ts
-//! (probed: `Bun.write('b')` is `*.write`, not `Bun.write` — `Bun` is in the
-//! reporting module but not here).
+//! THE SET IS structural-hash.ts's LOCAL ONE (:11), NOT the reporting
+//! environment sets (`src/analysis/known-globals.ts`, ~190 names) — the
+//! features walk consults the smaller browser/Node/built-in/library list
+//! (probed: `Bun.write('b')` is `*.write`, not `Bun.write` — `Bun` is a
+//! reporting global but not fingerprint vocabulary). Both live in
+//! `modules::known_globals`, with the relation declared there.
 //!
 //! The walk INPUT is the row's oxc ESTree JSON, not the oxc AST: the TS
 //! walks the babel AST via a generic `Object.keys` child walk (visitChildren
@@ -51,105 +52,7 @@ use serde_json::Value;
 
 use super::StructuralFeatures;
 use crate::hash::serialize::SymbolTables;
-
-/// TS `KNOWN_GLOBALS` (structural-hash.ts :11-102), verbatim — grouped by
-/// the source's comment banners. `$` is deliberately absent (:95-97): it is
-/// the first name in minifier alphabets, so treating it as jQuery would make
-/// features rename-variant across versions. A FROZEN fingerprint
-/// vocabulary, not an answer to "what does the module system hand the
-/// bundle" (that is `toolchain::COMMONJS_CONTEXT`): it names `require`,
-/// `__dirname` and `__filename` but not `exports`/`module`, and changing it
-/// changes every match key (toolchain review R21, declared).
-const KNOWN_GLOBALS: &[&str] = &[
-    // Browser APIs
-    "fetch",
-    "setTimeout",
-    "setInterval",
-    "clearTimeout",
-    "clearInterval",
-    "requestAnimationFrame",
-    "cancelAnimationFrame",
-    "alert",
-    "confirm",
-    "prompt",
-    "console",
-    "document",
-    "window",
-    "navigator",
-    "location",
-    "history",
-    "localStorage",
-    "sessionStorage",
-    "indexedDB",
-    "XMLHttpRequest",
-    "WebSocket",
-    "Worker",
-    "Blob",
-    "File",
-    "FileReader",
-    "URL",
-    "URLSearchParams",
-    "FormData",
-    "Headers",
-    "Request",
-    "Response",
-    "AbortController",
-    "CustomEvent",
-    "MutationObserver",
-    "IntersectionObserver",
-    "ResizeObserver",
-    "PerformanceObserver",
-    // Node.js
-    "require",
-    "process",
-    "Buffer",
-    "global",
-    "__dirname",
-    "__filename",
-    // Built-in constructors/objects
-    "Array",
-    "Object",
-    "String",
-    "Number",
-    "Boolean",
-    "Symbol",
-    "BigInt",
-    "Map",
-    "Set",
-    "WeakMap",
-    "WeakSet",
-    "Promise",
-    "Proxy",
-    "Reflect",
-    "JSON",
-    "Math",
-    "Date",
-    "RegExp",
-    "Error",
-    "TypeError",
-    "RangeError",
-    "SyntaxError",
-    "ReferenceError",
-    "URIError",
-    "EvalError",
-    "Function",
-    "eval",
-    "parseInt",
-    "parseFloat",
-    "isNaN",
-    "isFinite",
-    "encodeURI",
-    "decodeURI",
-    "encodeURIComponent",
-    "decodeURIComponent",
-    "atob",
-    "btoa",
-    // Common library patterns
-    "jQuery",
-    "React",
-    "Vue",
-    "angular",
-];
+use crate::modules::known_globals::is_fingerprint_global;
 
 /// TS `extractStructuralFeatures` (:278) over the ESTree JSON of a function
 /// row's subtree. The graph's features always come bound-aware (the TS's
@@ -317,7 +220,10 @@ fn switch_case_count(map: &serde_json::Map<String, Value>) -> usize {
 }
 
 /// TS `collectLiterals` (:204) over the oxc `"Literal"` nodes, with the
-/// directive exclusion from the module doc.
+/// directive exclusion from the module doc. The fingerprint's literals
+/// come from the AST, every length — not the text lexer's
+/// (`modules::lex`; docs/responsibility.md, "Which string literals does
+/// this code hold?").
 fn collect_literals(
     ntype: &str,
     map: &serde_json::Map<String, Value>,
@@ -386,7 +292,7 @@ fn collect_call_patterns(
         // leak its current name into the feature (:233-236).
         Some("Identifier") => {
             if let Some(name) = identifier_name(callee)
-                && KNOWN_GLOBALS.contains(&name)
+                && is_fingerprint_global(name)
                 && !is_bound(walk, callee)
             {
                 walk.features.external_calls.push(name.to_string());
@@ -412,7 +318,7 @@ fn collect_member_callee(callee: &Value, walk: &mut FeatureWalk<'_>) {
     let object = json_unparen(map.get("object").unwrap_or(&Value::Null));
     if type_of(object) == Some("Identifier")
         && let Some(obj_name) = identifier_name(object)
-        && KNOWN_GLOBALS.contains(&obj_name)
+        && is_fingerprint_global(obj_name)
         && !is_bound(walk, object)
     {
         walk.features

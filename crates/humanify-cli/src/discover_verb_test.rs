@@ -147,9 +147,10 @@ fn a_bad_rule_or_an_unreadable_index_fails_the_verb() {
 #[test]
 fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
     // The fixture without its `// @bun` pragma (Bun writes none for
-    // --target node: the exp096 held-out apps) reads as esbuild by its
-    // helper names: the pipeline's `--bundler` picks the toolchain, and
-    // the detector's own verdict is kept beside it.
+    // --target node: the exp096 held-out apps) reads as Bun by its module
+    // helper's shape (finding #96; before it, esbuild by helper names).
+    // The pipeline's `--bundler` picks the toolchain against that verdict,
+    // and the detector's own verdict is kept beside it.
     let full = fixture();
     let code = full.split_once('\n').expect("a pragma line").1;
     let run = |bundler| {
@@ -165,10 +166,10 @@ fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
             },
         )
     };
-    let doc = run(Some("bun")).expect("runs with the override");
-    assert_eq!(doc["detected"]["bundler"], "esbuild");
-    assert_eq!(doc["toolchain"]["slice"], "bun");
-    assert_eq!(doc["bundlerOverride"], "bun");
+    let doc = run(Some("esbuild")).expect("runs with the override");
+    assert_eq!(doc["detected"]["bundler"], "bun");
+    assert_eq!(doc["toolchain"]["slice"], "esbuild");
+    assert_eq!(doc["bundlerOverride"], "esbuild");
     assert!(
         run(Some("rollup-ish")).is_err(),
         "an unknown name fails loud"

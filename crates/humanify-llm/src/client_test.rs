@@ -42,6 +42,8 @@ fn provider(server: &StubServer, edit: impl FnOnce(&mut LlmConfig)) -> OpenAiCli
     OpenAiClient::new(config, None)
 }
 
+// concurrency: test harness: a private runtime drives this test's futures
+#[allow(clippy::disallowed_methods)]
 fn run<F: std::future::Future>(f: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -326,4 +328,68 @@ fn status_error_messages_match_the_sdk() {
         status_error(504, r#"{"detail":"x"}"#).message,
         "504 status code (no body)"
     );
+}
+
+// ---- the per-attempt timeout covers the WHOLE exchange (audit W2) ----
+
+/// A server that sends a 200's headers and the first bytes of the body,
+/// then stalls with the connection open (a half-open link, a wedged
+/// proxy). Returns its base URL.
+fn stalling_server() -> String {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let mut held = Vec::new();
+        for stream in listener.incoming().flatten() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    break;
+                }
+                let line = line.trim_end();
+                if line.is_empty() {
+                    break;
+                }
+                if let Some((k, v)) = line.split_once(':')
+                    && k.eq_ignore_ascii_case("content-length")
+                {
+                    len = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0u8; len];
+            let _ = reader.read_exact(&mut body);
+            let mut stream = stream;
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                  content-length: 1000\r\n\r\n{\"choi",
+            );
+            let _ = stream.flush();
+            // Never finish the body; keep the socket open.
+            held.push(stream);
+        }
+    });
+    url
+}
+
+/// The SDK cleared its AbortController once the headers arrived, so a
+/// body that never completes hung the call (and its rate-limiter slot)
+/// forever. The per-attempt timeout now bounds the body read too.
+#[test]
+fn a_body_that_stalls_after_the_headers_times_out() {
+    let url = stalling_server();
+    let mut config = LlmConfig::new(&url, "test-key", "test-model");
+    config.timeout_ms = 300;
+    config.sdk_max_retries = 0;
+    let client = OpenAiClient::new(config, None);
+    let call = make_request(&["a"]);
+    let outcome = run(async {
+        tokio::time::timeout(Duration::from_secs(10), client.suggest_all_names(&call)).await
+    });
+    let result = outcome.expect("the call hung on a stalled body");
+    let err = result.expect_err("a stalled body is an error");
+    assert_eq!(err.kind, LlmErrorKind::Timeout);
+    assert_eq!(err.message, "Request timed out.");
 }

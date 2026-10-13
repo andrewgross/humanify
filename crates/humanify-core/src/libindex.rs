@@ -1,6 +1,6 @@
 //! The library fingerprint index: what the pipeline and the offline index
 //! builder (`crates/humanify-index`) share (docs/design/library-index.md,
-//! exp095, finding #97).
+//! exp095, finding #98).
 //!
 //! The builder runs outside a humanify run — it installs and bundles npm
 //! packages — but every fingerprint it writes is computed HERE, by the

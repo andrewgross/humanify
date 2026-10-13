@@ -5,8 +5,8 @@
 //!   env-reads <path>`) — the commander grammar the harness drives
 //!   (contract 14 §1), parsed by `humanify_cli::commander` from the
 //!   declarations in `humanify_cli::surface`;
-//! - the stage VERBS below (`detect`, `unpack`, `libdetect`, `discover`,
-//!   `format`, `format-check`, `match`) — one pipeline stage run on its own, for
+//! - the stage VERBS below (`detect`, `unpack`, `discover`, `format`,
+//!   `format-check`, `match`) — one pipeline stage run on its own, for
 //!   inspection and for the gate (`format-check` replays the committed
 //!   formatter goldens, test/parity/format-goldens.json — the formatter's
 //!   frozen spec; `match` is the ground-truth harness's instrument). Parsed
@@ -15,7 +15,10 @@
 //!   passed as `./<name>`).
 //!
 //! The migration verbs that rebuilt one stage's rows from a TS dump for the
-//! parity gates were deleted at the cutover (docs/rust-port/19-cutover.md).
+//! parity gates were deleted at the cutover (docs/rust-port/19-cutover.md);
+//! `libdetect` (no caller) went in the config sweep, 2026-10-13. A renamed
+//! or deleted verb flag is refused naming its replacement
+//! (`surface::RETIRED_FLAGS`, checked before clap parses).
 
 /// mimalloc, not glibc malloc: the parallel stages allocate from many
 /// threads at once and glibc's arenas contend (00-control §3, 2026-09-24).
@@ -43,10 +46,10 @@ enum Command {
         /// The bundle to classify (read as UTF-8, invalid bytes replaced —
         /// the TS `readFileSync(path, "utf-8")`).
         input: String,
-        /// Write a Chrome trace-event profile (the TS `--profile` shape)
-        /// of the read + detection spans; the summary goes to stderr.
+        /// Write a Chrome trace-event performance trace of the read +
+        /// detection spans; the summary goes to stderr.
         #[arg(long)]
-        profile: Option<String>,
+        perf_trace: Option<String>,
         /// Also print, on a second line, the toolchain the run would
         /// resolve from this verdict with no `--bundler`/`--minifier` flag:
         /// the stats file's `selection` and `toolchain` blocks (every
@@ -97,7 +100,7 @@ enum Command {
         /// Write the extracted modules in BUNDLE order ({factoryVar,
         /// fileName, runtimeIdentifier}) as JSON here.
         #[arg(long)]
-        index: Option<String>,
+        bundle_order: Option<String>,
         /// Write the content carry (finding #90) as JSON here: candidates,
         /// prior leftovers, every carried module with its score, and the
         /// declared-identity carries (finding #95) with their keys.
@@ -136,24 +139,6 @@ enum Command {
         /// Write the JSON here (default: stdout).
         #[arg(long)]
         out: Option<String>,
-    },
-    /// WPB.3's library-detection gate: detect → select the unpack adapter →
-    /// unpack (or take a given file list) → select the library detector →
-    /// detect; prints the verdict as JSON: paths relative to the unpack
-    /// dir, region offsets in UTF-16 code units.
-    Libdetect {
-        /// The bundle.
-        input: String,
-        /// The unpack directory (written unless `--files` is given).
-        unpack_dir: String,
-        /// Use this unpack file list ([{path, metadata?}], JSON) instead of
-        /// unpacking — the Bun case, whose file names derive from the hash
-        /// bytes (00-control §3).
-        #[arg(long)]
-        files: Option<String>,
-        /// The webcrack shim script (scripts/webcrack-shim.ts).
-        #[arg(long)]
-        webcrack_shim: Option<String>,
     },
     /// WP5.6's native formatter (`core::format`): the stage-6 beautify of
     /// one file — Babel's `transform()` with the four stage-6 plugins and
@@ -204,10 +189,6 @@ enum Command {
         /// Write the dump here instead of stdout.
         #[arg(short = 'o', long)]
         out: Option<String>,
-        /// Accepted, now inert: the prior side is built once per run, so
-        /// there is no thread schedule to choose. Never changed the dump.
-        #[arg(long, default_value_t = false)]
-        sequential: bool,
         /// Force the bundler type (as the pipeline's flag).
         #[arg(long)]
         bundler: Option<String>,
@@ -235,19 +216,38 @@ fn is_stage_verb(arg: &str) -> bool {
         .any(|c| c.get_name() == arg)
 }
 
+/// A retired flag on a stage verb (`surface::RETIRED_FLAGS`, the one
+/// list): the refusal naming what replaced it, or None. `--flag=value`
+/// counts too; only the verb's own arguments are looked at.
+fn retired_verb_flag(argv: &[String]) -> Option<String> {
+    let (verb, rest) = argv.split_first()?;
+    rest.iter().find_map(|arg| {
+        let name = arg.split_once('=').map_or(arg.as_str(), |(n, _)| n);
+        humanify_cli::surface::RETIRED_FLAGS
+            .iter()
+            .find(|(v, flag, _)| *v == Some(verb.as_str()) && *flag == name)
+            .map(|(_, flag, note)| format!("unexpected argument '{flag}' ({note})"))
+    })
+}
+
 fn main() {
     let argv = humanify_cli::env::user_args();
     if !argv.first().is_some_and(|a| is_stage_verb(a)) {
         std::process::exit(humanify_cli::pipeline_main(&argv));
     }
+    if let Some(refusal) = retired_verb_flag(&argv) {
+        // clap's usage-error exit code, as an unknown argument gets.
+        eprintln!("error: {refusal}");
+        std::process::exit(2);
+    }
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Detect {
             input,
-            profile,
+            perf_trace,
             toolchain,
             split_method,
-        }) => run_detect(&input, profile.as_deref(), toolchain, split_method),
+        }) => run_detect(&input, perf_trace.as_deref(), toolchain, split_method),
         Some(Command::Unpack {
             input,
             out_dir,
@@ -257,7 +257,7 @@ fn main() {
             reasoning_effort,
             max_tokens,
             llm_log,
-            index,
+            bundle_order,
             carries,
             webcrack_shim,
         }) => {
@@ -272,7 +272,7 @@ fn main() {
                     reasoning_effort: Some(reasoning_effort),
                 },
                 llm_log,
-                index,
+                bundle_order,
                 carries,
                 webcrack_shim,
             };
@@ -281,23 +281,6 @@ fn main() {
                 std::process::exit(1);
             }
         }
-        Some(Command::Libdetect {
-            input,
-            unpack_dir,
-            files,
-            webcrack_shim,
-        }) => match run_libdetect(
-            &input,
-            &unpack_dir,
-            files.as_deref(),
-            webcrack_shim.as_deref(),
-        ) {
-            Ok(json) => println!("{json}"),
-            Err(e) => {
-                eprintln!("ERROR: {e}");
-                std::process::exit(1);
-            }
-        },
         Some(Command::Discover {
             input,
             library_index,
@@ -335,7 +318,6 @@ fn main() {
             input,
             prior_version,
             out,
-            sequential,
             bundler,
             minifier,
             work_dir,
@@ -345,7 +327,6 @@ fn main() {
             let args = humanify_cli::match_verb::MatchVerbArgs {
                 input: &input,
                 prior_version: &prior_version,
-                sequential,
                 bundler: bundler.as_deref(),
                 minifier: minifier.as_deref(),
                 webcrack_shim: webcrack_shim.as_deref(),
@@ -371,141 +352,13 @@ fn webcrack_shim(script: &str) -> humanify_core::unpack::webcrack::WebcrackShim 
     humanify_cli::unminify::webcrack_shim(std::path::Path::new(script))
 }
 
-/// `humanify libdetect`: the verdict as the TS probe's JSON.
-fn run_libdetect(
-    input: &str,
-    unpack_dir: &str,
-    files_json: Option<&str>,
-    shim_script: Option<&str>,
-) -> Result<String, String> {
-    use humanify_core::libdetect::detect_libraries;
-    use humanify_core::unpack::{AdapterRun, UnpackedFile, run_adapter};
-    use humanify_model::js::{JsObject, JsValue, stringify};
-    use std::path::Path;
-
-    let code = std::fs::read(input)
-        .map(|b| String::from_utf8_lossy(&b).into_owned())
-        .map_err(|e| format!("cannot read {input}: {e}"))?;
-    let dir = Path::new(unpack_dir);
-    let toolchain = humanify_core::toolchain::resolve_toolchain(
-        &humanify_core::detect::detect_bundle(&code),
-        None,
-        None,
-    );
-    let adapter = toolchain.unpack.piece;
-    let layout = toolchain.layout.piece;
-    let files: Vec<UnpackedFile> = match files_json {
-        Some(path) => {
-            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-            // The same `{files:[{path, metadata?}]}` contract the webcrack
-            // shim prints, on one line.
-            let wrapped = format!("{{\"files\":{}}}", text.replace('\n', ""));
-            humanify_core::unpack::webcrack::parse_shim_output(&wrapped)?.files
-        }
-        None => {
-            let shim = shim_script.map(webcrack_shim);
-            run_adapter(
-                adapter,
-                layout,
-                &code,
-                dir,
-                AdapterRun {
-                    webcrack_shim: shim.as_ref(),
-                    ..AdapterRun::new(
-                        toolchain.interop.piece,
-                        toolchain.module_wrappers.piece,
-                        toolchain.module_identity.piece,
-                    )
-                },
-            )?
-            .into_result()
-            .files
-        }
-    };
-    let detector = toolchain.library_detector.piece;
-    let result = detect_libraries(detector, &files)?;
-
-    let rel = |p: &Path| JsValue::str(humanify_core::libdetect::relative_posix(dir, p));
-    let regions_js = |text: &str, regions: &[humanify_core::libdetect::CommentRegion]| {
-        JsValue::Array(
-            regions
-                .iter()
-                .map(|r| {
-                    let mut o = JsObject::new();
-                    o.insert("libraryName", JsValue::str(&r.library_name));
-                    o.insert("startOffset", JsValue::Number(utf16(text, r.start)));
-                    o.insert(
-                        "endOffset",
-                        r.end
-                            .map_or(JsValue::Null, |e| JsValue::Number(utf16(text, e))),
-                    );
-                    JsValue::Object(o)
-                })
-                .collect(),
-        )
-    };
-    let mut library_files = Vec::new();
-    for (path, d) in &result.library_files {
-        let mut o = JsObject::new();
-        o.insert("isLibrary", JsValue::Bool(d.is_library));
-        o.insert_opt("libraryName", d.library_name.as_deref().map(JsValue::str));
-        o.insert_opt(
-            "detectedBy",
-            d.detected_by.map(|b| JsValue::str(b.as_str())),
-        );
-        o.insert_opt(
-            "moduleMetadata",
-            d.module_metadata.as_ref().map(|m| {
-                let mut mo = JsObject::new();
-                mo.insert("id", JsValue::str(&m.id));
-                mo.insert("modulePath", JsValue::str(&m.module_path));
-                mo.insert("isEntry", JsValue::Bool(m.is_entry));
-                JsValue::Object(mo)
-            }),
-        );
-        library_files.push(JsValue::Array(vec![rel(path), JsValue::Object(o)]));
-    }
-    let mut mixed_files = Vec::new();
-    for (path, m) in &result.mixed_files {
-        let text = std::fs::read(path)
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-            .map_err(|e| format!("{}: {e}", path.display()))?;
-        let mut o = JsObject::new();
-        o.insert("regions", regions_js(&text, &m.regions));
-        o.insert("libraryNames", JsValue::str_array(&m.library_names));
-        mixed_files.push(JsValue::Array(vec![rel(path), JsValue::Object(o)]));
-    }
-    let mut out = JsObject::new();
-    out.insert("adapter", JsValue::str(adapter.name()));
-    out.insert("detector", JsValue::str(detector.name()));
-    out.insert("libraryFiles", JsValue::Array(library_files));
-    out.insert(
-        "novelFiles",
-        JsValue::Array(result.novel_files.iter().map(|p| rel(p)).collect()),
-    );
-    out.insert("mixedFiles", JsValue::Array(mixed_files));
-    out.insert(
-        "inputRegions",
-        regions_js(
-            &code,
-            &humanify_core::libdetect::find_comment_regions(&code),
-        ),
-    );
-    Ok(stringify(&JsValue::Object(out)))
-}
-
-/// A byte offset as the JS string index the TS reports.
-fn utf16(text: &str, byte_at: usize) -> f64 {
-    humanify_core::detect::js_text::utf16_offset(text, byte_at) as f64
-}
-
 /// `humanify unpack`'s flags beyond the two paths.
 struct UnpackArgs {
     prior_version: Option<String>,
     llm_cache: Option<String>,
     key_params: humanify_model::llm::CacheKeyParams,
     llm_log: Option<String>,
-    index: Option<String>,
+    bundle_order: Option<String>,
     carries: Option<String>,
     webcrack_shim: Option<String>,
 }
@@ -636,7 +489,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         )
         .map_err(|e| format!("write {path}: {e}"))?;
     }
-    if let Some(path) = &args.index {
+    if let Some(path) = &args.bundle_order {
         let json = serde_json::to_string_pretty(&outcome.bundle_order).expect("json");
         std::fs::write(
             path,
@@ -675,7 +528,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
 }
 
 /// `humanify detect`: read like the TS pipeline (lossy UTF-8, BOM kept),
-/// classify, print one JSON line. With `--profile`, the read and the
+/// classify, print one JSON line. With `--perf-trace`, the read and the
 /// detection run inside spans shaped like the TS pipeline's
 /// (`file-io:read` {path, bytes} and `detection` {bundler}; the TS
 /// detection span's `adapter` key arrives with the unpack adapter
@@ -870,6 +723,73 @@ fn format_check_verb(path: &str, show: usize, plant: Option<&str>) {
 }
 
 use clap::CommandFactory;
+
+#[cfg(test)]
+mod retired_verb_flag_test {
+    use super::{Cli, is_stage_verb, retired_verb_flag};
+    use clap::Parser;
+
+    fn argv(a: &[&str]) -> Vec<String> {
+        a.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Config sweep 2026-10-13, no backwards compatibility: a renamed
+    /// verb flag's old spelling is refused, naming the new one; a deleted
+    /// one is refused saying so.
+    #[test]
+    fn a_retired_verb_flag_is_refused_naming_its_replacement() {
+        for (args, want) in [
+            (
+                &["detect", "in.js", "--profile", "p.json"][..],
+                "--perf-trace",
+            ),
+            (&["detect", "in.js", "--profile=p.json"][..], "--perf-trace"),
+            (
+                &["unpack", "in.js", "out", "--index", "i.json"][..],
+                "--bundle-order",
+            ),
+            (
+                &["match", "in.js", "--prior-version", "p.js", "--sequential"][..],
+                "removed",
+            ),
+        ] {
+            let msg = retired_verb_flag(&argv(args))
+                .unwrap_or_else(|| panic!("{args:?} was not refused"));
+            assert!(msg.contains(want), "{args:?}: {msg}");
+        }
+        // The pipeline's own flags are not the verbs' business.
+        assert_eq!(retired_verb_flag(&argv(&["in.js", "--index"])), None);
+        assert_eq!(
+            retired_verb_flag(&argv(&["unpack", "in.js", "out", "--carries", "c"])),
+            None
+        );
+    }
+
+    #[test]
+    fn the_new_verb_spellings_parse() {
+        assert!(Cli::try_parse_from(["humanify", "detect", "in.js", "--perf-trace", "p"]).is_ok());
+        assert!(
+            Cli::try_parse_from(["humanify", "unpack", "in", "out", "--bundle-order", "i"]).is_ok()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "humanify",
+                "match",
+                "in",
+                "--prior-version",
+                "p",
+                "--sequential"
+            ])
+            .is_err()
+        );
+    }
+
+    /// `libdetect` had no caller (config sweep 2026-10-13): no longer a verb.
+    #[test]
+    fn libdetect_is_not_a_verb() {
+        assert!(!is_stage_verb("libdetect"));
+    }
+}
 
 #[cfg(test)]
 mod help_golden_test {

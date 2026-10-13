@@ -42,6 +42,12 @@ fn quoted_run(chars: &[char], open: usize) -> Option<(String, usize)> {
 
 /// `literalsOf`: the distinct captures of
 /// `/"([^"\\\n]{12,})"|'([^'\\\n]{12,})'/g`, in first-seen order.
+///
+/// Deliberately NOT the text lexer (`modules::lex`, the owner of reading
+/// literals from text): this regex matches a quote inside a template or a
+/// comment and refuses a string with an escape, where the lexer does
+/// neither — a frozen answer the content anchor's verdicts depend on
+/// (docs/responsibility.md, "Which string literals does this code hold?").
 pub fn literals_of(text: &str) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();
     let mut out: Vec<String> = Vec::new();
@@ -86,7 +92,8 @@ pub fn tokens_of(text: &str) -> HashSet<&str> {
     out
 }
 
-/// `tokenOverlap`: the share of the larger token set both have.
+/// `tokenOverlap`: the share of the larger token set both have — neither
+/// a Jaccard nor a containment (`crate::similarity`), the TS's own ratio.
 fn token_overlap(a: &HashSet<&str>, b: &HashSet<&str>) -> f64 {
     let inter = b.iter().filter(|w| a.contains(*w)).count();
     inter as f64 / a.len().max(b.len()).max(1) as f64

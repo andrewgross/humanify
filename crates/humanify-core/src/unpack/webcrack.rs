@@ -8,9 +8,9 @@
 //! The command is configuration (the caller resolves where node and the
 //! shim live); core never reads the environment.
 
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
+use std::time::Duration;
 
 use super::{ModuleMetadata, UnpackResult, UnpackedFile};
 
@@ -23,7 +23,18 @@ pub struct WebcrackShim {
     pub args: Vec<String>,
     /// The working directory (the repo root, where `node_modules` resolves).
     pub cwd: Option<PathBuf>,
+    /// The deadline over the shim's whole run (start, stdin, output,
+    /// exit); the production value is [`WEBCRACK_DEADLINE`].
+    pub deadline: Duration,
 }
+
+/// The shim's deadline: 30 minutes. Measured 2026-10-12: a 2.9 MB,
+/// 3,000-module webpack 4 bundle takes 12 s end to end (`npx` start
+/// included), a 10 KB one 0.85 s; time grows about linearly with size, so
+/// a 20 MB bundle should take under 2 minutes. 30 minutes is 150x the
+/// largest measurement and >10x the extrapolation: only a webcrack that
+/// will never finish reaches it (docs/concurrency.md, "Subprocesses").
+pub const WEBCRACK_DEADLINE: Duration = Duration::from_secs(30 * 60);
 
 #[derive(serde::Deserialize)]
 struct ShimFile {
@@ -37,35 +48,22 @@ struct ShimOutput {
 }
 
 /// `WebcrackAdapter.unpack`: run the shim, return its files in the order it
-/// listed them. A non-zero exit or unparseable output is an error — the
-/// TS adapter throws the same way when webcrack does.
+/// listed them. A non-zero exit, unparseable output or a shim past its
+/// deadline (killed) is an error — the TS adapter throws the same way when
+/// webcrack does. The pipes and the deadline are [`crate::subprocess`]'s.
 pub fn unpack_webcrack(
     code: &str,
     out_dir: &Path,
     shim: &WebcrackShim,
 ) -> Result<UnpackResult, String> {
     let mut command = Command::new(&shim.program);
-    command
-        .args(&shim.args)
-        .arg(out_dir)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.args(&shim.args).arg(out_dir);
     if let Some(cwd) = &shim.cwd {
         command.current_dir(cwd);
     }
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("webcrack shim: cannot start {}: {e}", shim.program))?;
-    child
-        .stdin
-        .take()
-        .ok_or("webcrack shim: no stdin")?
-        .write_all(code.as_bytes())
-        .map_err(|e| format!("webcrack shim: write stdin: {e}"))?;
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("webcrack shim: {e}"))?;
+    let output =
+        crate::subprocess::run(&mut command, Some(code.as_bytes().to_vec()), shim.deadline)
+            .map_err(|e| format!("webcrack shim ({}): {e}", shim.program))?;
     if !output.status.success() {
         return Err(format!(
             "webcrack shim exited {}: {}",
@@ -97,3 +95,6 @@ pub fn parse_shim_output(stdout: &str) -> Result<UnpackResult, String> {
             .collect(),
     })
 }
+
+#[cfg(test)]
+mod webcrack_test;

@@ -69,6 +69,12 @@ iter_over_hash_type = "deny"
 # Reading the process environment outside humanify-cli's env module is the
 # TS kill-switch guard test in lint form (WP1.1).
 disallowed_methods = "deny"
+# Concurrency (docs/concurrency.md, "What clippy enforces"): no sync lock,
+# RefCell borrow or listed guard type held across an `.await` — the post's
+# central hazard on a one-thread runtime (audit R6, O5, O8).
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+await_holding_invalid_type = "deny"
 
 # Release ships without symbols; `profiling` carries them (05 §6 wins over
 # 08 §1 — decided 2026-09-19, see docs/rust-port/00-control.md).

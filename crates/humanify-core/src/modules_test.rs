@@ -542,6 +542,133 @@ fn known_globals_cover_the_historical_misses() {
     assert!(crate::modules::known_globals::known_globals(&[]).len() >= 100);
 }
 
+#[test]
+fn the_fingerprint_vocabulary_is_the_frozen_structural_hash_list() {
+    use crate::modules::known_globals::{
+        FINGERPRINT_EXTRA_GLOBALS, FINGERPRINT_HOST_GLOBALS, is_fingerprint_global, is_known_global,
+    };
+    // structural-hash.ts :11-102, verbatim — the list `matching::features`
+    // carried locally until 2026-10-13. Changing membership changes every
+    // match key's external calls.
+    let frozen = [
+        "fetch",
+        "setTimeout",
+        "setInterval",
+        "clearTimeout",
+        "clearInterval",
+        "requestAnimationFrame",
+        "cancelAnimationFrame",
+        "alert",
+        "confirm",
+        "prompt",
+        "console",
+        "document",
+        "window",
+        "navigator",
+        "location",
+        "history",
+        "localStorage",
+        "sessionStorage",
+        "indexedDB",
+        "XMLHttpRequest",
+        "WebSocket",
+        "Worker",
+        "Blob",
+        "File",
+        "FileReader",
+        "URL",
+        "URLSearchParams",
+        "FormData",
+        "Headers",
+        "Request",
+        "Response",
+        "AbortController",
+        "CustomEvent",
+        "MutationObserver",
+        "IntersectionObserver",
+        "ResizeObserver",
+        "PerformanceObserver",
+        "require",
+        "process",
+        "Buffer",
+        "global",
+        "__dirname",
+        "__filename",
+        "Array",
+        "Object",
+        "String",
+        "Number",
+        "Boolean",
+        "Symbol",
+        "BigInt",
+        "Map",
+        "Set",
+        "WeakMap",
+        "WeakSet",
+        "Promise",
+        "Proxy",
+        "Reflect",
+        "JSON",
+        "Math",
+        "Date",
+        "RegExp",
+        "Error",
+        "TypeError",
+        "RangeError",
+        "SyntaxError",
+        "ReferenceError",
+        "URIError",
+        "EvalError",
+        "Function",
+        "eval",
+        "parseInt",
+        "parseFloat",
+        "isNaN",
+        "isFinite",
+        "encodeURI",
+        "decodeURI",
+        "encodeURIComponent",
+        "decodeURIComponent",
+        "atob",
+        "btoa",
+        "jQuery",
+        "React",
+        "Vue",
+        "angular",
+    ];
+    let mut vocabulary: Vec<&str> = FINGERPRINT_HOST_GLOBALS
+        .iter()
+        .chain(FINGERPRINT_EXTRA_GLOBALS.iter())
+        .copied()
+        .collect();
+    vocabulary.sort_unstable();
+    let mut expected = frozen.to_vec();
+    expected.sort_unstable();
+    assert_eq!(vocabulary, expected);
+    for name in frozen {
+        assert!(is_fingerprint_global(name), "{name}");
+    }
+    // `$` is deliberately absent (minifier alphabets start with it), and a
+    // reporting-only global is not fingerprint vocabulary.
+    for name in ["$", "Bun", "exports", "module", "crypto", "globalThis"] {
+        assert!(!is_fingerprint_global(name), "{name}");
+    }
+    // The relation to the reporting sets, declared: every HOST name is a
+    // reporting global; every EXTRA name is not.
+    for name in FINGERPRINT_HOST_GLOBALS {
+        assert!(
+            is_known_global(name),
+            "host {name} must be a reporting global"
+        );
+    }
+    for name in FINGERPRINT_EXTRA_GLOBALS {
+        assert!(
+            !is_known_global(name),
+            "extra {name} is a reporting global now — move it to HOST"
+        );
+    }
+}
+
 // ── esbuild's module form (exp075) ───────────────────────────────────
 
 /// Real esbuild 0.27.2 output shapes (verified against a fresh build):

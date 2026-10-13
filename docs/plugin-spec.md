@@ -147,21 +147,28 @@ given).
 
 #### Stage 1 — detection (`crates/humanify-core/src/detect/`)
 
-| #   | where                                                   | what it assumes                                                                                           | belongs to           | status                   | sev    |
-| --- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------ | ------ |
-| I1  | `detect/signals.rs:168-221` (`detect_bun_bundler`)      | Bun = a `// @bun` first line, or a `{exports:{}}` marker plus a `createRequire` import                    | Bun                  | selected                 | Low    |
-| I2  | `detect/signals.rs:122-135` (`detect_esbuild`)          | esbuild = its helper NAMES appear (`__commonJS`, `__toESM`, `__toCommonJS`, `var __export`, `__require`)  | esbuild (unminified) | **wrong**                | High   |
-| I3  | `detect/signals.rs:283-306` (`detect_bun_minifier`)     | Bun's minifier = more than 10 names like `$aB` in the first 16K characters                                | Bun                  | harmless today, see note | Medium |
-| I4  | `detect/signals.rs:234-254` (`detect_terser`)           | terser = `void 0` or `!0` anywhere; always the lowest confidence                                          | terser               | harmless today, see note | Medium |
-| I5  | `detect/signals.rs:256-281` (`detect_esbuild_minifier`) | esbuild's minifier = a `// some/path.js` comment in the first 200 characters                              | esbuild              | harmless today, see note | Medium |
-| I6  | `detect.rs:26`                                          | every signal must sit in the first 16K characters                                                         | all                  | harmless                 | Low    |
-| I7  | `humanify-model/src/detection.rs:14-55`                 | `rollup` is a selectable bundler with no detector and no adapter; `parcel` is detected but has no adapter | rollup, parcel       | harmless (do-nothing)    | Low    |
+| #   | where                                                   | what it assumes                                                                                           | belongs to           | status                     | sev    |
+| --- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------- | -------------------------- | ------ |
+| I1  | `detect/signals.rs:168-221` (`detect_bun_bundler`)      | Bun = a `// @bun` first line, or a `{exports:{}}` marker plus a `createRequire` import                    | Bun                  | selected                   | Low    |
+| I2  | `detect/signals.rs` (`detect_esbuild`)                  | esbuild = its helper NAMES appear (`__commonJS`, `__toESM`, `__toCommonJS`, `var __export`, `__require`)  | esbuild (unminified) | **fixed 2026-10-12** (#96) | High   |
+| I3  | `detect/signals.rs:283-306` (`detect_bun_minifier`)     | Bun's minifier = more than 10 names like `$aB` in the first 16K characters                                | Bun                  | harmless today, see note   | Medium |
+| I4  | `detect/signals.rs:234-254` (`detect_terser`)           | terser = `void 0` or `!0` anywhere; always the lowest confidence                                          | terser               | harmless today, see note   | Medium |
+| I5  | `detect/signals.rs:256-281` (`detect_esbuild_minifier`) | esbuild's minifier = a `// some/path.js` comment in the first 200 characters                              | esbuild              | harmless today, see note   | Medium |
+| I6  | `detect.rs:26`                                          | every signal must sit in the first 16K characters                                                         | all                  | harmless                   | Low    |
+| I7  | `humanify-model/src/detection.rs:14-55`                 | `rollup` is a selectable bundler with no detector and no adapter; `parcel` is detected but has no adapter | rollup, parcel       | harmless (do-nothing)      | Low    |
 
 - **I2 example:** `esbuild --bundle --minify --format=iife` writes
   `var c=(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports)` — no
   `__commonJS` anywhere. No `// @bun` line and no `createRequire` import
   either, so detection says "unknown", and the run unpacks nothing.
   `--bundler esbuild` (or `bun`) as an override would work.
+  **Fixed 2026-10-12 (finding #96):** the module helper is read by SHAPE
+  (`modules::helper_shape`). A form only esbuild writes (0.28's `try`
+  guard, the unminified runtime's indirect `(0, cb[…])` call), or the plain
+  form beside esbuild's own `__export` registrar, is an esbuild `shape`
+  signal; the plain form alone is Bun's `shared-shape` (unsure → Bun). The
+  extraction also had to stop removing a factory's whole statement: a
+  minifier that joins declarations puts helpers and app bindings beside it.
 - **I3-I5 note:** today the minifier verdict is used for exactly one thing —
   adding swc's helper names to the never-rename list (I20). So a wrong
   minifier verdict costs nothing yet. It becomes **wrong** the moment the
@@ -404,8 +411,10 @@ the `createRequire` import (shape). Minifier: the `$aB` count (I3, noisy).
 An unminified Bun build also fires every esbuild helper name; the banner
 outranks them (`bun-bundle` e2e fixture).
 **esbuild today:** helper names (shared helper names — Bun writes them
-too) — unminified builds only (I2); the minifier signal actually detects an
-unminified build (I5).
+too), and since 2026-10-12 the module helper's shape (I2, finding #96):
+its guarded or indirect form, or the plain form beside esbuild's
+`__export` registrar; the minifier signal actually detects an unminified
+build (I5).
 **Fallback:** bundler `unknown` → the do-nothing adapter (the whole input as
 `index.js`); minifier `unknown` → today nothing changes, because only swc's
 list reads it.
@@ -1164,7 +1173,7 @@ positives), `toolchain_test::the_module_identity_source_follows_the_bundler`,
 `unpack_test::a_rewritten_grammar_keeps_its_file_and_identifier_by_its_declared_name`
 and its three neighbours.
 
-### P18 — Library index slice (stage 5) — PLANNED (exp095, finding #97)
+### P18 — Library index slice (stage 5) — PLANNED (exp095, finding #98)
 
 **Question:** which part of the library fingerprint index is a bundle's
 module looked up in? Structural fingerprints depend on the bundler (Bun vs
@@ -1252,6 +1261,11 @@ must leave Claude Code (Bun) output byte-identical: prove it with a **warm**
    (a declared known gap in `scripts/e2e.ts`: detected unknown →
    passthrough, no `vendor/`; with `--bundler esbuild` the same build
    extracts 26 vendor files and boots — the fix is detection alone).
+   **DONE 2026-10-12** (finding #96): detection by the module helper's
+   shape; the fixture is a passing case, joined by `esbuild-minified-0.28`,
+   `esbuild-minify-identifiers` and `esbuild-minified-esm`. Detection was
+   not ALL of it: a re-minified bundle joins declarations, which the
+   helper identification and the extraction had to learn.
 6. **Per-plugin interop helpers and lazy-init shapes** (I16-I18, I27), with
    a fixture that has CommonJS requiring an ES module. (Lazy-init: one
    recogniser, Bun's and esbuild's shapes, behind `ModuleWrapperGrammar` —

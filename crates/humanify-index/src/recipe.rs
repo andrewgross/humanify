@@ -50,6 +50,12 @@ pub fn is_sponge_file(path: &str) -> bool {
         .any(|t| name.contains(t))
 }
 
+/// `<bundler> --version` answers in milliseconds.
+const VERSION_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+/// One minified build of one package entry (seconds; generous for the
+/// largest packages).
+const BUILD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
 /// A slice's bundler binary.
 #[derive(Clone, Debug)]
 pub struct Recipe {
@@ -60,10 +66,12 @@ pub struct Recipe {
 impl Recipe {
     /// The bundler's `--version` (trimmed).
     pub fn bundler_version(&self) -> Result<String, String> {
-        let out = Command::new(&self.bin)
-            .arg("--version")
-            .output()
-            .map_err(|e| format!("{}: {e}", self.bin.display()))?;
+        let out = humanify_core::subprocess::run(
+            Command::new(&self.bin).arg("--version"),
+            None,
+            VERSION_DEADLINE,
+        )
+        .map_err(|e| format!("{}: {e}", self.bin.display()))?;
         let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if !out.status.success() || v.is_empty() {
             return Err(format!("{} --version failed", self.bin.display()));
@@ -109,7 +117,8 @@ impl Recipe {
                 }
             }
         }
-        let out = cmd.output().map_err(|e| e.to_string())?;
+        let out = humanify_core::subprocess::run(&mut cmd, None, BUILD_DEADLINE)
+            .map_err(|e| e.to_string())?;
         if !out.status.success() {
             return Err(format!(
                 "{}{}",

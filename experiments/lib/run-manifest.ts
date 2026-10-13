@@ -76,7 +76,6 @@ export interface RunManifest {
     model: string;
     reasoningEffort: string;
     concurrency: number;
-    heapMb: number;
     /** Kill switches set in the environment for THIS run. */
     killSwitches: string[];
     cache: {
@@ -130,8 +129,6 @@ export interface RunManifest {
 }
 
 const MANIFEST_SUFFIX = "-run.json";
-/** Warn above this fraction of the heap: an OOM is close, not hypothetical. */
-const HEAP_HEADROOM_WARN = 0.85;
 
 /**
  * Whether a prior path is a REBASED tree or the committed archive.
@@ -412,20 +409,6 @@ const WARNING_CHECKS: readonly WarningCheck[] = [
     say: (m) =>
       `the working tree was DIRTY at ${m.provenance.commit} — this run ` +
       `corresponds to no commit and cannot be reproduced from the sha.`
-  },
-  {
-    name: "heap-headroom",
-    // A binary is not a Node process: --heap-mb / NODE_OPTIONS set no limit
-    // on it, so "close to the heap" would be a warning about nothing.
-    fires: (m) =>
-      m.pipeline?.kind !== "rust-bin" &&
-      m.outcome.peakRssMb !== undefined &&
-      m.config.heapMb > 0 &&
-      m.outcome.peakRssMb >= m.config.heapMb * HEAP_HEADROOM_WARN,
-    say: (m) =>
-      `peak RSS ${m.outcome.peakRssMb} MB of a ${m.config.heapMb} MB heap ` +
-      `(${Math.round((100 * (m.outcome.peakRssMb ?? 0)) / m.config.heapMb)}%) ` +
-      `— the next bigger input OOMs. Raise EVAL_HEAP.`
   },
   {
     name: "bin-foreign-build",

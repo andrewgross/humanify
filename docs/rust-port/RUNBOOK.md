@@ -33,7 +33,7 @@ same commit (open decision 2 in `00-control.md`).
 oracle). `npm ci --ignore-scripts && npm rebuild esbuild @swc/core` — never
 fix `isolated-vm`. `bun` lives in `~/.bun/bin` and the boot gate is fatal
 without it. The boot gate pins `BOOT_GATE_MODEL` (default
-`claude-haiku-4-5-20251001`) because the API refuses the default model to
+`claude-opus-4-1` since 2026-09-28, `ae80cf71`; haiku-4-5 is refused) because the API refuses the default model to
 every CLI version this project walks.
 
 **LLM.** `http://<llm-host>:8000/v1` = `openai/gpt-oss-20b` (measurement
@@ -100,15 +100,15 @@ ln -s /Users/andrewgross/Development/humanify/node_modules <worktree>/node_modul
 
 ## 3. Gate commands
 
-| command                                                                  | what                                                                                                                                      | time      |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `npm run check`                                                          | THE gate, 11 stages: typecheck, lint, rust:fmt, rust:clippy, knip, knip:prod, census:clones (advisory), unit, rust:unit, fingerprint, e2e | ~35 s now |
-| `npm run check -- --only rust:fmt,rust:clippy,rust:unit`                 | PARTIAL, labelled so; for iteration only                                                                                                  | seconds   |
-| `cargo clippy --workspace --all-targets -- -D warnings`                  | what `rust:clippy` runs                                                                                                                   |           |
-| `cargo test --workspace`                                                 | what `rust:unit` runs                                                                                                                     |           |
-| `cargo run -p humanify-parity -- <verb> ...`                             | the differ (from WP0.3)                                                                                                                   |           |
-| `npm run eval -- neutrality <ref> [pair] --cache /work/neutrality-cache` | byte-identity, WARM only; read the baseline leg's cache-write count BEFORE the verdict line                                               | ~25 min   |
-| `npm run eval -- score <label>`                                          | cold 4-pair eval; not a parity-era instrument (used at 5b)                                                                                | ~1 h      |
+| command                                                                  | what                                                                                                                                                                             | time      |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `npm run check`                                                          | THE gate, 13 stages: typecheck, lint, rust:fmt, rust:clippy, knip, knip:prod, census:clones (advisory), census:concurrency, unit, rust:unit, rust:build, rust:format-golden, e2e | ~35 s now |
+| `npm run check -- --only rust:fmt,rust:clippy,rust:unit`                 | PARTIAL, labelled so; for iteration only                                                                                                                                         | seconds   |
+| `cargo clippy --workspace --all-targets -- -D warnings`                  | what `rust:clippy` runs                                                                                                                                                          |           |
+| `cargo test --workspace`                                                 | what `rust:unit` runs                                                                                                                                                            |           |
+| `cargo run -p humanify-parity -- <verb> ...`                             | the differ (from WP0.3)                                                                                                                                                          |           |
+| `npm run eval -- neutrality <ref> [pair] --cache /work/neutrality-cache` | byte-identity, WARM only; read the baseline leg's cache-write count BEFORE the verdict line                                                                                      | ~25 min   |
+| `npm run eval -- score <label>`                                          | cold 4-pair eval; not a parity-era instrument (used at 5b)                                                                                                                       | ~1 h      |
 
 Cargo's binaries in the gate resolve through PATH; the container's
 `~/.profile` and `~/.bashrc` export `~/.cargo/bin`. A shell that lacks it
@@ -124,7 +124,8 @@ that cannot run must not pass.
   until-loop; never a blocking sleep. Include an error-storm tripwire
   (`grep -ac 'Connection error'`) in any watcher on an LLM run.
 - `src/` is not edited while a neutrality candidate leg runs.
-- Heap: `--heap-mb 65536` is the default; 14 GB OOMs cold on 215→216.
+- Heap: none to set — the binary is not a Node process (`--heap-mb` was
+  inert and was deleted, config sweep 2026-10-13).
 - Every result that changes a number in a doc gets a dated note in that doc
   the same day (rule 9).
 

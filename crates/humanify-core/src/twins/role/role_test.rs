@@ -8,11 +8,11 @@ use oxc_allocator::Allocator;
 
 use super::{
     BindingRole, RoleSide, SINGLE_VOTE_CONTENT_FLOOR, binding_roles_agree, compute_binding_role,
-    jaccard,
 };
 use crate::graph::UnifiedGraph;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
+use crate::similarity::jaccard;
 
 /// Parse + graph + tables, handed to the assertions inside the scope that
 /// owns the arena (alternation_test.rs's `with_harness` pattern).

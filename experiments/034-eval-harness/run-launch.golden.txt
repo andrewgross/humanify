@@ -1,9 +1,9 @@
-humanify NODE_OPTIONS=--max-old-space-size=65536 :: <TMP>/inputs/claude-code-2.1.85/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.85-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.85-rebase.log 
-humanify NODE_OPTIONS=--max-old-space-size=65536 :: <TMP>/inputs/claude-code-2.1.118/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.118-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.118-rebase.log 
-humanify NODE_OPTIONS=--max-old-space-size=65536 :: <TMP>/inputs/claude-code-2.1.197/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.197-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.197-rebase.log 
-humanify NODE_OPTIONS=--max-old-space-size=65536 :: <TMP>/inputs/claude-code-2.1.215/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.215-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.215-rebase.log 
-humanify NODE_OPTIONS=--max-old-space-size=65536 :: <TMP>/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.216-selfhop --llm-cache <TMP>/work/<LABEL>/2.1.216-selfhop-cache --prior-version <TMP>/work/<LABEL>/2.1.216/.humanify/humanified.js 
-humanify NODE_OPTIONS=--max-old-space-size=65536 :: <TMP>/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.216-selfhop-warm --llm-cache <TMP>/work/<LABEL>/2.1.216-selfhop-warm-cache --prior-version <TMP>/work/<LABEL>/2.1.216/.humanify/humanified.js 
+humanify NODE_OPTIONS= :: <TMP>/inputs/claude-code-2.1.85/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.85-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.85-rebase.log 
+humanify NODE_OPTIONS= :: <TMP>/inputs/claude-code-2.1.118/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.118-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.118-rebase.log 
+humanify NODE_OPTIONS= :: <TMP>/inputs/claude-code-2.1.197/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.197-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.197-rebase.log 
+humanify NODE_OPTIONS= :: <TMP>/inputs/claude-code-2.1.215/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.215-rebased -vv --log-file <REPO>/experiments/034-eval-harness/results/<LABEL>/2.1.215-rebase.log 
+humanify NODE_OPTIONS= :: <TMP>/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.216-selfhop --llm-cache <TMP>/work/<LABEL>/2.1.216-selfhop-cache --prior-version <TMP>/work/<LABEL>/2.1.216/.humanify/humanified.js 
+humanify NODE_OPTIONS= :: <TMP>/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js --split --endpoint http://127.0.0.1:9/v1 --model openai/gpt-oss-20b --api-key local --reasoning-effort low -c 472 -o <TMP>/work/<LABEL>/2.1.216-selfhop-warm --llm-cache <TMP>/work/<LABEL>/2.1.216-selfhop-warm-cache --prior-version <TMP>/work/<LABEL>/2.1.216/.humanify/humanified.js 
 runcfg-2.1.119.json: {
   "pair": "2.1.118->2.1.119",
   "version": "2.1.119",
@@ -44,7 +44,6 @@ runcfg-2.1.119.json: {
   "model": "openai/gpt-oss-20b",
   "reasoningEffort": "low",
   "concurrency": 472,
-  "heapMb": 65536,
   "artifacts": [
     "<TMP>/work/<LABEL>/2.1.119/.humanify/humanified.js",
     "<TMP>/work/<LABEL>/2.1.119/.humanify/split-ledger.json",
@@ -102,7 +101,6 @@ runcfg-2.1.198.json: {
   "model": "openai/gpt-oss-20b",
   "reasoningEffort": "low",
   "concurrency": 472,
-  "heapMb": 65536,
   "artifacts": [
     "<TMP>/work/<LABEL>/2.1.198/.humanify/humanified.js",
     "<TMP>/work/<LABEL>/2.1.198/.humanify/split-ledger.json",
@@ -160,7 +158,6 @@ runcfg-2.1.216.json: {
   "model": "openai/gpt-oss-20b",
   "reasoningEffort": "low",
   "concurrency": 472,
-  "heapMb": 65536,
   "artifacts": [
     "<TMP>/work/<LABEL>/2.1.216/.humanify/humanified.js",
     "<TMP>/work/<LABEL>/2.1.216/.humanify/split-ledger.json",
@@ -218,7 +215,6 @@ runcfg-2.1.86.json: {
   "model": "openai/gpt-oss-20b",
   "reasoningEffort": "low",
   "concurrency": 472,
-  "heapMb": 65536,
   "artifacts": [
     "<TMP>/work/<LABEL>/2.1.86/.humanify/humanified.js",
     "<TMP>/work/<LABEL>/2.1.86/.humanify/split-ledger.json",

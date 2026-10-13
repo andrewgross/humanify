@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerates the four non-Bun-CJS e2e fixtures from ONE shared source,
+# Regenerates the seven non-Bun-CJS e2e fixtures from ONE shared source,
 # this directory's source/v<ver>/: bun-bundle's app (24 local CJS deps, the real
 # npm package ms@2.1.3, a CJS module requiring an ES module lazily, a
 # dynamic import, a deterministic stdout report) plus one Node builtin
@@ -10,8 +10,12 @@
 #   esbuild-cjs/       esbuild 0.27.2  --bundle --format=cjs --platform=node
 #   esbuild-esm/       esbuild 0.27.2  --bundle --format=esm --platform=node
 #   bun-esm-minified/  Bun 1.3.14      build --target=bun --format=esm --minify
+#   esbuild-minified-0.28/       esbuild 0.28.2  --bundle --minify --format=iife --platform=node
+#   esbuild-minify-identifiers/  esbuild 0.28.2  --bundle --minify-identifiers --format=iife --platform=node
+#   esbuild-minified-esm/        esbuild 0.28.2  --bundle --minify --format=esm --platform=node
 #
-# Tool versions are PINNED: esbuild through `npx esbuild@0.27.2`; Bun is
+# Tool versions are PINNED: esbuild through `npx esbuild@0.27.2` and
+# `npx esbuild@0.28.2` (0.28 guards its runtime helpers with `try`); Bun is
 # whatever `bun` is on PATH and the script refuses anything but 1.3.14.
 # Each version is built from a scratch copy, from INSIDE the version's
 # directory: both bundlers bake source paths relative to the working
@@ -24,8 +28,10 @@
 set -euo pipefail
 
 ESBUILD_VERSION=0.27.2
+ESBUILD_028_VERSION=0.28.2
 BUN_VERSION=1.3.14
-FIXTURES=(esbuild-minified esbuild-cjs esbuild-esm bun-esm-minified)
+FIXTURES=(esbuild-minified esbuild-cjs esbuild-esm bun-esm-minified
+  esbuild-minified-0.28 esbuild-minify-identifiers esbuild-minified-esm)
 
 app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 here="$(dirname "$app_dir")"
@@ -52,6 +58,11 @@ esbuild() {
     --log-level=warning "$@"
 }
 
+esbuild_028() {
+  npx -y "esbuild@$ESBUILD_028_VERSION" src/main.js --bundle --platform=node \
+    --log-level=warning "$@"
+}
+
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -72,6 +83,10 @@ for ver in 1.0.0 1.1.0; do
     esbuild --format=esm --outfile="$(out esbuild-esm)"
     "$bun_bin" build src/main.js --target=bun --format=esm --minify \
       --outfile="$(out bun-esm-minified)" >/dev/null
+    esbuild_028 --minify --format=iife --outfile="$(out esbuild-minified-0.28)"
+    esbuild_028 --minify-identifiers --format=iife \
+      --outfile="$(out esbuild-minify-identifiers)"
+    esbuild_028 --minify --format=esm --outfile="$(out esbuild-minified-esm)"
   )
 done
 

@@ -24,6 +24,9 @@ pub mod prior;
 pub mod profiling;
 pub mod propagation;
 pub mod rename;
+pub mod scratch;
+pub mod similarity;
+pub mod subprocess;
 pub mod toolchain;
 pub mod trail;
 pub mod twins;
@@ -46,6 +49,9 @@ mod libdetect_test;
 
 #[cfg(test)]
 mod matching_test;
+
+#[cfg(test)]
+mod matching_helpers_pin_test;
 
 #[cfg(test)]
 mod modules_test;

@@ -9,7 +9,8 @@
 //! The SDK layer (core.js `makeRequest`/`retryRequest`), reproduced because
 //! it is part of the retry/timeout envelope 02 §7 carries over:
 //! - `maxRetries` (default 2) retries UNDER the rate limiter's own retries;
-//! - the per-attempt timeout covers the request until response headers;
+//! - the per-attempt timeout covers the whole exchange, body included (the
+//!   SDK stopped at the response headers — audit 2026-10 W2);
 //! - a transport failure or timeout retries while retries remain, then
 //!   fails as "Connection error." / "Request timed out." (no status);
 //! - a non-2xx response retries when `x-should-retry` says so, else on
@@ -41,6 +42,14 @@ pub struct OpenAiClient {
     log: Option<LogSink>,
 }
 
+/// One attempt's response: status, headers, and the body text (None when
+/// reading it failed).
+struct Exchange {
+    status: u16,
+    headers: reqwest::header::HeaderMap,
+    text: Option<String>,
+}
+
 /// The SDK's `buildURL` for the path "/chat/completions".
 pub fn completions_url(base: &str) -> String {
     if base.ends_with('/') {
@@ -51,6 +60,8 @@ pub fn completions_url(base: &str) -> String {
 }
 
 impl OpenAiClient {
+    // concurrency: one pooled client; every attempt runs under ONE timeout_at deadline covering connect, send and body (audit W2, O12)
+    #[allow(clippy::disallowed_methods)]
     pub fn new(config: LlmConfig, log: Option<LogSink>) -> Self {
         OpenAiClient {
             http: reqwest::Client::new(),
@@ -89,9 +100,15 @@ impl OpenAiClient {
         stringify(&JsValue::Object(body))
     }
 
-    /// One HTTP attempt, bounded by the per-attempt timeout (headers only,
-    /// as the SDK's AbortController is cleared once fetch resolves).
-    async fn attempt(&self, body: &str) -> Result<reqwest::Response, LlmErrorKind> {
+    /// One HTTP attempt: the response's status, headers and body text, the
+    /// WHOLE exchange bounded by the per-attempt timeout. (The SDK cleared
+    /// its AbortController once the headers arrived, so a body that stalled
+    /// after them hung the call — and its rate-limiter slot — forever;
+    /// concurrency audit 2026-10, W2. A healthy server sends the body with
+    /// the headers, so this changes nothing a live run can observe short of
+    /// a stall.)
+    async fn attempt(&self, body: &str) -> Result<Exchange, LlmErrorKind> {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(self.config.timeout_ms);
         let send = self
             .http
             .post(&self.url)
@@ -100,11 +117,22 @@ impl OpenAiClient {
             .header("authorization", format!("Bearer {}", self.config.api_key))
             .body(body.to_string())
             .send();
-        match tokio::time::timeout(Duration::from_millis(self.config.timeout_ms), send).await {
-            Err(_) => Err(LlmErrorKind::Timeout),
-            Ok(Err(_)) => Err(LlmErrorKind::Connection),
-            Ok(Ok(response)) => Ok(response),
-        }
+        let response = match tokio::time::timeout_at(deadline, send).await {
+            Err(_) => return Err(LlmErrorKind::Timeout),
+            Ok(Err(_)) => return Err(LlmErrorKind::Connection),
+            Ok(Ok(response)) => response,
+        };
+        let status = response.status().as_u16();
+        let headers = response.headers().clone();
+        let text = match tokio::time::timeout_at(deadline, response.text()).await {
+            Err(_) => return Err(LlmErrorKind::Timeout),
+            Ok(text) => text.ok(),
+        };
+        Ok(Exchange {
+            status,
+            headers,
+            text,
+        })
     }
 
     /// The SDK's `makeRequest` loop: returns the 2xx response's body text.
@@ -126,23 +154,21 @@ impl OpenAiClient {
                     };
                     return Err(LlmError::new(kind, message));
                 }
-                Ok(response) => {
-                    let status = response.status().as_u16();
-                    if response.status().is_success() {
-                        return response.text().await.map_err(|_| {
+                Ok(exchange) => {
+                    let status = exchange.status;
+                    if (200..300).contains(&status) {
+                        return exchange.text.ok_or_else(|| {
                             LlmError::new(LlmErrorKind::Connection, "Connection error.")
                         });
                     }
-                    let headers = response.headers().clone();
-                    if remaining > 0 && should_retry(status, &headers) {
-                        let delay = retry_after(&headers)
+                    if remaining > 0 && should_retry(status, &exchange.headers) {
+                        let delay = retry_after(&exchange.headers)
                             .unwrap_or_else(|| default_retry_delay(retry_count));
                         tokio::time::sleep(delay).await;
                         remaining -= 1;
                         continue;
                     }
-                    let text = response.text().await.unwrap_or_default();
-                    return Err(status_error(status, &text));
+                    return Err(status_error(status, &exchange.text.unwrap_or_default()));
                 }
             }
         }

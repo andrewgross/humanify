@@ -15,6 +15,7 @@ pub mod match_verb;
 pub mod output_validation;
 pub mod pipeline_config;
 pub mod progress;
+pub mod provider_failures;
 pub mod report;
 pub mod settings;
 pub mod split_stage;

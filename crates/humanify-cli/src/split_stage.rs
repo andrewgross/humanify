@@ -185,6 +185,16 @@ pub struct SplitRecords {
     /// the post-split reconcile's trail rows (per split file) and the
     /// claims of it and the bundle carry.
     pub post_split: PostSplitRecords,
+    /// The split's LLM calls that failed after every retry: (file/folder
+    /// namer, tree reviser) — the run's `providerErrors`.
+    pub failed_calls: SplitFailedCalls,
+}
+
+/// The split namer's and the tree reviser's failed calls.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SplitFailedCalls {
+    pub namer: usize,
+    pub tree_reviser: usize,
 }
 
 /// The finishing passes' contribution to the run-wide recorders.
@@ -250,7 +260,7 @@ pub fn run_split(
     };
     let mut trail = PlacementTrail::default();
     let ph = humanify_core::profiling::phase("split:compute");
-    let (outcome, prior_present) =
+    let (outcome, prior_present, failed_calls) =
         split_before_commit(code, prior_carry, input, gate, &mut trail, renderer)
             .map_err(|e| format!("stable split failed before any tree was written: {e}"))?;
     drop(ph);
@@ -294,6 +304,7 @@ pub fn run_split(
         dump: Some(dump),
         method: method_record(&outcome.method),
         post_split,
+        failed_calls,
     })
 }
 
@@ -327,6 +338,7 @@ is written unsplit to {written}"
         dump: None,
         method: not_split_record(why),
         post_split: PostSplitRecords::default(),
+        failed_calls: SplitFailedCalls::default(),
     })
 }
 
@@ -338,7 +350,7 @@ fn split_before_commit(
     gate: InputGate<'_>,
     trail: &mut PlacementTrail,
     renderer: &mut dyn ProgressRenderer,
-) -> Result<(SplitOutcome, bool), String> {
+) -> Result<(SplitOutcome, bool, SplitFailedCalls), String> {
     let ph = humanify_core::profiling::phase("split:load-prior-ledger");
     let prior = load_prior_split_ledger(input, renderer)?;
     drop(ph);
@@ -385,6 +397,10 @@ fn split_before_commit(
         outcome.method.reason
     ));
     report_namer(&namer, renderer);
+    let failed_calls = SplitFailedCalls {
+        namer: namer.failed_batches,
+        tree_reviser: reviser.failed_calls,
+    };
     if let Some(reason) = &outcome.declined {
         renderer.message(&format!(
             "Runnable emit declined: {reason} — writing byte-exact review tree instead"
@@ -399,7 +415,7 @@ fn split_before_commit(
                 call: &call,
             });
     }
-    Ok((outcome, prior.is_some()))
+    Ok((outcome, prior.is_some(), failed_calls))
 }
 
 /// The split namer's batch outcome (finding #39: its failures used to be

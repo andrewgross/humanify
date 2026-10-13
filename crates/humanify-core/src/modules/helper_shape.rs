@@ -1,0 +1,359 @@
+//! The CommonJS module helper, recognised by its SHAPE — the one place
+//! that reads it out of a bundle's text without its name.
+//!
+//! Every Bun and esbuild build declares one helper that turns a module's
+//! factory into a lazy `require`:
+//!
+//! ```text
+//! Bun, esbuild <= 0.27 --minify   N=(A,B)=>()=>(B||A((B={exports:{}}).exports,B),B.exports)
+//! esbuild >= 0.28 --minify        N=(A,B)=>()=>{try{return B||A((B={exports:{}}).exports,B),B.exports}catch(o){throw B=0,o}}
+//! esbuild, unminified             __commonJS = (cb, mod) => function __require() {
+//!                                   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+//! a re-minified esbuild build     N=(A,B)=>function(){return B||(0,A[K(A)[0]])((B={exports:{}}).exports,B),B.exports}
+//! ```
+//!
+//! Minification renames the helper (`__commonJS` → `ee`) and may join it
+//! into one `var` with every other helper; `--minify-identifiers` alone
+//! keeps the spaced `{ exports: {} }`. What survives every form is the
+//! core `(B = {exports: {}}).exports, B)` inside a two-parameter arrow
+//! declared as `NAME = (A, B) =>`. [`find_module_helper`] reads exactly
+//! that, whitespace-tolerant, and names the DECLARATOR whose initializer
+//! holds it — not the first declarator of its statement (the frozen
+//! marker scan's leftmost rule, which names `cye` for wrangler's
+//! re-minified `var cye=Object.create,…,ee=(e,t)=>function(){…}`).
+//!
+//! The form also says which bundler wrote it, as far as text can
+//! ([`ModuleHelperShape::esbuild_only`]): Bun's runtime never writes the
+//! `try` guard (esbuild 0.28) or the `(0, cb[…])` indirect call
+//! (esbuild's unminified runtime); the plain arrow is written by both.
+//!
+//! The bundler's OTHER small runtime helpers are read by shape here too
+//! (library discovery's externals, `toolchain::InteropHelpers`):
+//! [`esbuild_runtime_shape`] (`__name`, `__publicField`, `__require`) and
+//! [`reexport_shape`] (`__reExport`). Bun's `__toESM` / `__toCommonJS`
+//! stay with the scope plan that rewrites references to them
+//! (`unpack::bun::scope::bun_helper_shape`).
+
+use oxc_ast::ast::Expression;
+use oxc_span::GetSpan;
+
+use super::IdentifiedHelper;
+
+/// How far before the marker the helper's `NAME = (A, B) =>` head may
+/// start: the longest form (unminified esbuild's, with `try`) puts ~120
+/// bytes between them; formatted text indents a little more.
+const HEAD_WINDOW: usize = 512;
+
+/// The module helper and the form it was written in.
+pub struct ModuleHelperShape {
+    pub helper: IdentifiedHelper,
+    /// The thunk guards the factory call with `try` (esbuild >= 0.28).
+    pub guarded: bool,
+    /// The factory is called indirectly, `(0, A[…])(…)` — esbuild's
+    /// unminified runtime (and a re-minified copy of it).
+    pub indirect: bool,
+}
+
+impl ModuleHelperShape {
+    /// A form only esbuild's runtime writes (Bun's runtime is the plain
+    /// arrow, which esbuild <= 0.27 also writes when minifying).
+    pub fn esbuild_only(&self) -> bool {
+        self.guarded || self.indirect
+    }
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || b >= 0x80
+}
+
+fn is_ws(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r')
+}
+
+/// Skip whitespace forward from `i`.
+fn skip_ws(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && is_ws(bytes[i]) {
+        i += 1;
+    }
+    i
+}
+
+/// Skip whitespace BACKWARD: the index just past the last non-space byte
+/// before `end`.
+fn skip_ws_back(bytes: &[u8], mut end: usize) -> usize {
+    while end > 0 && is_ws(bytes[end - 1]) {
+        end -= 1;
+    }
+    end
+}
+
+/// `pat` at `i` (after whitespace): the index past it.
+fn eat(bytes: &[u8], i: usize, pat: &[u8]) -> Option<usize> {
+    let i = skip_ws(bytes, i);
+    bytes.get(i..i + pat.len()).filter(|s| *s == pat)?;
+    Some(i + pat.len())
+}
+
+/// `pat` ending at `end` (before whitespace): the index where it starts.
+fn eat_back(bytes: &[u8], end: usize, pat: &[u8]) -> Option<usize> {
+    let end = skip_ws_back(bytes, end);
+    let start = end.checked_sub(pat.len())?;
+    (&bytes[start..end] == pat).then_some(start)
+}
+
+/// An identifier starting at `i` (after whitespace): (start, end).
+fn ident_at(bytes: &[u8], i: usize) -> Option<(usize, usize)> {
+    let start = skip_ws(bytes, i);
+    let mut end = start;
+    while end < bytes.len() && is_ident_byte(bytes[end]) {
+        end += 1;
+    }
+    (end > start && !bytes[start].is_ascii_digit()).then_some((start, end))
+}
+
+/// An identifier ending at `end` (before whitespace): (start, end).
+fn ident_back(bytes: &[u8], end: usize) -> Option<(usize, usize)> {
+    let end = skip_ws_back(bytes, end);
+    let mut start = end;
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    (start < end && !bytes[start].is_ascii_digit()).then_some((start, end))
+}
+
+/// The marker object `{ exports : { } }` starting at the `{` at `open`:
+/// the index past its closing brace.
+fn marker_end(bytes: &[u8], open: usize) -> Option<usize> {
+    let i = eat(bytes, open, b"{")?;
+    let i = eat(bytes, i, b"exports")?;
+    let i = eat(bytes, i, b":")?;
+    let i = eat(bytes, i, b"{")?;
+    let i = eat(bytes, i, b"}")?;
+    eat(bytes, i, b"}")
+}
+
+/// The CORE around one marker: `(B = {exports:{}}).exports, B)` — B's
+/// name, the index of the `(` that opens the group, and whether the call
+/// that receives it is indirect. `open` is the marker's `{`.
+fn marker_core(source: &str, open: usize) -> Option<(&str, usize, bool)> {
+    let bytes = source.as_bytes();
+    let after = marker_end(bytes, open)?;
+    let eq = eat_back(bytes, open, b"=")?;
+    let (b_start, b_end) = ident_back(bytes, eq)?;
+    let res = &source[b_start..b_end];
+    let group_open = eat_back(bytes, b_start, b"(")?;
+    // `(B={exports:{}}).exports,B)`
+    let i = eat(bytes, after, b")")?;
+    let i = eat(bytes, i, b".")?;
+    let i = eat(bytes, i, b"exports")?;
+    let i = eat(bytes, i, b",")?;
+    let (r_start, r_end) = ident_at(bytes, i)?;
+    if &source[r_start..r_end] != res {
+        return None;
+    }
+    eat(bytes, r_end, b")")?;
+    // The call receiving the group: `A(` (direct) or `(0, A[…])(`.
+    let call_open = eat_back(bytes, group_open, b"(")?;
+    let indirect = eat_back(bytes, call_open, b")").is_some();
+    Some((res, call_open, indirect))
+}
+
+/// A helper head `NAME = (P1, P2) =>` whose `=>` starts at `arrow`: the
+/// declaration's start (the `var`/`let`/`const` keyword or the joining
+/// comma), the name, and the two parameters.
+fn head_before_arrow(source: &str, arrow: usize) -> Option<(usize, &str, [&str; 2])> {
+    let bytes = source.as_bytes();
+    let close = eat_back(bytes, arrow, b")")?;
+    let (p2s, p2e) = ident_back(bytes, close)?;
+    let comma = eat_back(bytes, p2s, b",")?;
+    let (p1s, p1e) = ident_back(bytes, comma)?;
+    let open = eat_back(bytes, p1s, b"(")?;
+    let eq = eat_back(bytes, open, b"=")?;
+    // `==`, `!=`, `>=`, `+=`… are not a declarator's `=`.
+    if eq > 0 && b"=!<>+-*/%&|^?".contains(&bytes[eq - 1]) {
+        return None;
+    }
+    let (ns, ne) = ident_back(bytes, eq)?;
+    let decl_start = if let Some(c) = eat_back(bytes, ns, b",") {
+        c
+    } else {
+        // `var NAME` / `let NAME` / `const NAME`: at least one space, and
+        // the keyword word-bounded on its left.
+        let kw_end = skip_ws_back(bytes, ns);
+        if kw_end == ns {
+            return None;
+        }
+        let (ks, ke) = ident_back(bytes, kw_end)?;
+        if !matches!(&source[ks..ke], "var" | "let" | "const") {
+            return None;
+        }
+        ks
+    };
+    Some((
+        decl_start,
+        &source[ns..ne],
+        [&source[p1s..p1e], &source[p2s..p2e]],
+    ))
+}
+
+/// The helper declared around the marker at `open`, if this marker is a
+/// module helper's core.
+fn helper_around(source: &str, open: usize) -> Option<ModuleHelperShape> {
+    let bytes = source.as_bytes();
+    let (res, call_open, indirect) = marker_core(source, open)?;
+    let mut window = open.saturating_sub(HEAD_WINDOW);
+    while !source.is_char_boundary(window) {
+        window += 1;
+    }
+    // The nearest head first: a thunk's own `() =>` fails the head parse
+    // (no parameters) and the scan moves to the arrow before it.
+    let segment = &source[window..open];
+    for (rel, _) in segment.rmatch_indices("=>") {
+        let arrow = window + rel;
+        // A `;` between the head and the marker ends any helper: the
+        // marker belongs to a later statement.
+        if bytes[arrow..open].contains(&b';') {
+            return None;
+        }
+        let Some((decl_start, name, params)) = head_before_arrow(source, arrow) else {
+            continue;
+        };
+        if !params.contains(&res) {
+            return None;
+        }
+        let body = &source[arrow..call_open];
+        let guarded = body
+            .match_indices("try")
+            .any(|(i, _)| word_bounded(body.as_bytes(), i, 3));
+        return Some(ModuleHelperShape {
+            helper: IdentifiedHelper {
+                name: name.to_string(),
+                start_offset: decl_start as u32,
+            },
+            guarded,
+            indirect,
+        });
+    }
+    None
+}
+
+fn word_bounded(bytes: &[u8], at: usize, len: usize) -> bool {
+    (at == 0 || !is_ident_byte(bytes[at - 1]))
+        && bytes.get(at + len).is_none_or(|b| !is_ident_byte(*b))
+}
+
+/// esbuild's `__export` registrar, by shape: a property descriptor
+/// `{ get: A[B], enumerable: !0 }` (or `true`) that CLOSES there. Bun's
+/// registrar writes the same getter but always goes on with
+/// `configurable: !0, set: …`, and esbuild's other getters
+/// (`__copyProps`'s `get: () => from[key]`) are arrows — so this one
+/// descriptor is esbuild's own, minified or not.
+pub fn has_esbuild_export_registrar(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    source.match_indices("enumerable").any(|(at, _)| {
+        let tail = || -> Option<()> {
+            let i = eat(bytes, at + "enumerable".len(), b":")?;
+            let i = eat(bytes, i, b"!0").or_else(|| eat(bytes, i, b"true"))?;
+            eat(bytes, i, b"}")?;
+            Some(())
+        };
+        let head = || -> Option<()> {
+            let comma = eat_back(bytes, at, b",")?;
+            let close = eat_back(bytes, comma, b"]")?;
+            let (ks, _) = ident_back(bytes, close)?;
+            let open = eat_back(bytes, ks, b"[")?;
+            let (os, _) = ident_back(bytes, open)?;
+            let colon = eat_back(bytes, os, b":")?;
+            let get = eat_back(bytes, colon, b"get")?;
+            eat_back(bytes, get, b"{")?;
+            Some(())
+        };
+        word_bounded(bytes, at, "enumerable".len()) && tail().is_some() && head().is_some()
+    })
+}
+
+/// The module helper of a Bun or esbuild bundle, by shape: the FIRST
+/// marker (`{ exports: {} }`, any spacing) that sits in a helper's core,
+/// and the declarator that holds it. None when no marker does.
+pub fn find_module_helper(source: &str) -> Option<ModuleHelperShape> {
+    let bytes = source.as_bytes();
+    source.match_indices("exports").find_map(|(at, _)| {
+        let open = eat_back(bytes, at, b"{")?;
+        helper_around(source, open)
+    })
+}
+
+#[cfg(test)]
+mod helper_shape_test;
+
+/// The bundler's OTHER runtime helpers by SHAPE — the ones no vendored body
+/// is rewritten to, but which app and library code alike call, so library
+/// discovery treats them as runtime (`graph::references::BundlerFacts`):
+/// esbuild's `__name` (`(t,v)=>defProp(t,"name",{value:v,configurable:!0})`,
+/// written for `--keep-names`), `__publicField`
+/// (`(o,k,v)=>defNormal(o,typeof k!="symbol"?k+"":k,v)`) and `__require`
+/// (a call whose text keeps `Dynamic require of`, minified or not).
+pub(crate) fn esbuild_runtime_shape(code: &str, init: &Expression<'_>) -> Option<&'static str> {
+    /// esbuild's are under 400 bytes, minified or not.
+    const HELPER_TEXT_MAX: usize = 1024;
+    let span = init.span();
+    let text = &code[span.start as usize..span.end as usize];
+    if text.len() > HELPER_TEXT_MAX {
+        return None;
+    }
+    match init {
+        Expression::ArrowFunctionExpression(arrow)
+            if !arrow.r#async
+                && arrow.params.rest.is_none()
+                && !matches!(arrow.body, oxc_ast::ast::ArrowFunctionBody::FunctionBody(_)) =>
+        {
+            match arrow.params.items.len() {
+                2 if text.contains("\"name\"") && text.contains("configurable") => {
+                    Some(NAME_SETTER)
+                }
+                3 if text.contains("typeof") && text.contains("\"symbol\"") => {
+                    Some("__publicField")
+                }
+                _ => None,
+            }
+        }
+        Expression::CallExpression(_) if text.contains("Dynamic require of") => Some("__require"),
+        _ => None,
+    }
+}
+
+/// esbuild's `__name`: it also DEFINES its first argument (a
+/// namespace-filling helper in library discovery's graph).
+pub(crate) const NAME_SETTER: &str = "__name";
+
+/// The re-export copier (`__reExport`) by SHAPE: a small, synchronous
+/// three-parameter arrow that copies a module's exports except `"default"`
+/// onto its first argument (and its third). Bun's spells the loop out
+/// (`if(!has.call(e,o)&&o!=="default")defProp(e,o,{get:…,enumerable:!0})`);
+/// esbuild's is `(copy(e,t,"default"),r&&copy(r,t,"default"))`.
+/// `__toESM` also has three parameters and a `"default"`, and is told apart
+/// by its `__esModule` check.
+pub(crate) fn reexport_shape(code: &str, init: &Expression<'_>) -> bool {
+    /// Bun's is ~400 bytes minified, esbuild's ~150 unminified.
+    const HELPER_TEXT_MAX: usize = 1024;
+    let Expression::ArrowFunctionExpression(arrow) = init else {
+        return false;
+    };
+    let text = &code[arrow.span.start as usize..arrow.span.end as usize];
+    if arrow.r#async
+        || arrow.params.items.len() != 3
+        || arrow.params.rest.is_some()
+        || text.len() > HELPER_TEXT_MAX
+        || text.contains("__esModule")
+    {
+        return false;
+    }
+    if !matches!(arrow.body, oxc_ast::ast::ArrowFunctionBody::FunctionBody(_)) {
+        // esbuild: both calls hand "default" as the exception.
+        return text.matches("\"default\"").count() == 2;
+    }
+    let compact: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    compact.contains("!==\"default\"")
+        && compact.contains("{get:")
+        && compact.contains("enumerable")
+}

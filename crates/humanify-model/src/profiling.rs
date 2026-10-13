@@ -240,7 +240,7 @@ pub struct TraceEvent {
     pub args: Option<JsObject>,
 }
 
-/// The file `--profile` writes: `{ "traceEvents": [...] }`.
+/// The file `--perf-trace` writes: `{ "traceEvents": [...] }`.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TraceFile {

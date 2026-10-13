@@ -1,0 +1,22 @@
+{
+  "package": "esbuild-minify-identifiers",
+  "repo": "",
+  "sourceStrategy": {
+    "type": "local"
+  },
+  "entryPoints": ["index.js"],
+  "bundle": true,
+  "expect": {
+    "bundler": "esbuild",
+    "unpackAdapter": "esbuild",
+    "vendor": true,
+    "splitMethod": "fresh-grouping"
+  },
+  "versionPairs": [
+    {
+      "v1": "1.0.0",
+      "v2": "1.1.0",
+      "description": "A real esbuild 0.28.2 `--bundle --minify-identifiers --format=iife --platform=node` build of the shared node-app source (test/e2e/fixtures/node-app). `--minify-identifiers` alone: every helper renamed, but whitespace and syntax kept, so the module helper's marker is the SPACED `{ exports: {} }` \u2014 neither the tight marker scan nor the `__commonJS` name finds it; the helper SHAPE does (spec I2). v1.1.0 perturbs the last dep (adds tripled), the late module's output and the lazy stamp."
+    }
+  ]
+}

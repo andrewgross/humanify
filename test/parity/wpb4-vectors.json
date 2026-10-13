@@ -6267,41 +6267,6 @@
     {
       "opts": {
         "split": false,
-        "namingFloorSweep": true,
-        "namingFloor": false
-      },
-      "explicit": null,
-      "violations": [
-        "--naming-floor-sweep requires --naming-floor"
-      ]
-    },
-    {
-      "opts": {
-        "split": false,
-        "namingFloorSweep": true,
-        "namingFloor": false
-      },
-      "explicit": {
-        "namingFloorSweep": false
-      },
-      "violations": []
-    },
-    {
-      "opts": {
-        "split": false,
-        "namingFloorSweep": false,
-        "namingFloor": false
-      },
-      "explicit": {
-        "namingFloorSweep": true
-      },
-      "violations": [
-        "--naming-floor-sweep requires --naming-floor"
-      ]
-    },
-    {
-      "opts": {
-        "split": false,
         "bundler": "unknown"
       },
       "explicit": null,
@@ -6332,8 +6297,6 @@
         "split": false,
         "splitPure": true,
         "splitLedger": "x",
-        "namingFloorSweep": true,
-        "namingFloor": false,
         "bundler": "foobar",
         "minifier": "gzip"
       },
@@ -6341,7 +6304,6 @@
       "violations": [
         "--split-pure requires --split",
         "--split-ledger requires --split",
-        "--naming-floor-sweep requires --naming-floor",
         "--bundler must be one of: webpack, browserify, rollup, esbuild, parcel, bun (got \"foobar\")",
         "--minifier must be one of: terser, esbuild, swc, bun, none (got \"gzip\")"
       ]

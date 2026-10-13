@@ -375,7 +375,7 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
 
 /// The second un-attributed serial stretch (docs/perf-inventory.md item
 /// 3): `split:finish` was 40 s of serial work per with-prior hop with NO
-/// internal spans. A with-prior run under `--profile` must record a span
+/// internal spans. A with-prior run under `--perf-trace` must record a span
 /// per constituent that fires in this shape (the ledger read, the
 /// per-file reconcile, the desugar, the scaffold — this dead-port fixture
 /// carries a perfect prior, so the reconcile changes nothing; the apply
@@ -429,7 +429,7 @@ fn the_profile_names_the_split_finish_constituents() {
             "--split",
             "--prior-version",
             &prior.display().to_string(),
-            "--profile",
+            "--perf-trace",
             &prof,
             "-o",
             &out2,

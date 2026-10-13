@@ -40,8 +40,10 @@ use crate::babel_view::unparen;
 use crate::hash::serialize::{LiteralPolicy, SymbolTables, canonical_serialize};
 use identity::readers::{BannerInfo, parse_banner};
 
+pub mod helper_shape;
 pub mod identity;
 pub mod known_globals;
+pub mod lex;
 pub mod soundness;
 pub mod text_assets;
 pub mod vendor_content;
@@ -56,9 +58,8 @@ pub struct IdentifiedHelper {
 }
 
 /// esbuild's CJS runtime helper name — preserved verbatim in every
-/// unminified esbuild build (minified builds minify the name away and
-/// revert to bun's tight `{exports:{}}` marker, which
-/// [`identify_bun_cjs_factory`] reads).
+/// unminified esbuild build (minified builds minify the name away; the
+/// helper's shape, [`helper_shape::find_module_helper`], survives).
 pub const ESBUILD_CJS_HELPER: &str = "__commonJS";
 
 /// JS `\s` — the ASCII subset a minified bundle's markers use. (The TS
@@ -176,14 +177,21 @@ pub fn identify_esbuild_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
 }
 
 /// The CJS factory helper of EITHER bundler — the one owner of that
-/// question for every classification site: bun's tight `{exports:{}}`
-/// marker first (its behavior is the frozen WP1.5 surface), then
-/// esbuild's named `__commonJS` declaration (only reachable when bun's
-/// marker missed, which no real bun bundle does — bun emits the tight
-/// marker; an esbuild bundle reverts to it only once minified, and only
-/// after the esbuild name is gone too).
+/// question for every classification site: the helper by SHAPE first
+/// ([`helper_shape::find_module_helper`]: the declarator holding the
+/// `(B = {exports: {}}).exports, B)` core, in every form both bundlers
+/// write, minified or not), then bun's tight `{exports:{}}` marker with
+/// its leftmost-binding rule (the frozen WP1.5 surface), then esbuild's
+/// named `__commonJS` declaration. On every real bundle where the old
+/// scans were right the shape names the same binding; it is first
+/// because the marker scan names the FIRST declarator of a joined
+/// declaration (a re-minified esbuild build's `var cye=Object.create,…,
+/// ee=(e,t)=>…`) and the name scan needs a name `--minify` removes.
 pub fn identify_cjs_factory(source: &str) -> Option<IdentifiedHelper> {
-    identify_bun_cjs_factory(source).or_else(|| identify_esbuild_cjs_factory(source))
+    helper_shape::find_module_helper(source)
+        .map(|shape| shape.helper)
+        .or_else(|| identify_bun_cjs_factory(source))
+        .or_else(|| identify_esbuild_cjs_factory(source))
 }
 
 /// The byte offset of JS `Math.max(0, at - units)` for byte offset `at`:
@@ -388,11 +396,6 @@ pub struct FactoryRecord {
     /// prior manifest's label so an unchanged library's entry is
     /// byte-identical across hops (finding #71).
     pub name_origin: Option<NameSource>,
-    /// The CONTAINER statement's span (the whole `var …;` this declarator
-    /// lives in) — extraction splices that statement out of the runtime, so
-    /// this is how the runtime-statement ordinals of finding #60's bridge
-    /// records are computed (container ordinal minus removed statements).
-    pub decl_stmt_span: Span,
     /// The module's ORIGINAL source path, when the bundler kept it —
     /// esbuild's unminified form uses it as the factory object's key
     /// (exp075). Absent for bun and for ANY minified build. Since finding
@@ -843,7 +846,6 @@ pub fn classify_bun_modules<'a>(
                 name: None,
                 name_source: None,
                 name_origin: None,
-                decl_stmt_span: stmt_span,
                 source_path,
                 object_method,
                 exported_text: text_assets::exported_text(factory_fn),

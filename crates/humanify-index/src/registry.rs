@@ -36,11 +36,17 @@ pub fn load(dir: &Path, name: &str, offline: bool) -> Result<(Packument, String)
     Ok((Packument::from_json(&text)?, hex_sha256(&bytes)))
 }
 
+/// `npm view` of one packument (seconds; the deadline is for a registry
+/// that never answers).
+const VIEW_DEADLINE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 fn fetch(name: &str) -> Result<Packument, String> {
-    let out = Command::new("npm")
-        .args(["view", name, "time", "versions", "--json"])
-        .output()
-        .map_err(|e| format!("npm view {name}: {e}"))?;
+    let out = humanify_core::subprocess::run(
+        Command::new("npm").args(["view", name, "time", "versions", "--json"]),
+        None,
+        VIEW_DEADLINE,
+    )
+    .map_err(|e| format!("npm view {name}: {e}"))?;
     if !out.status.success() {
         return Err(format!(
             "npm view {name}: {}",

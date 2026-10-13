@@ -29,8 +29,6 @@ import {
  *     the rebased one reads ~3.7x worse for no reason. Already cost a re-score.
  *   - kill switch left on     -> a switch set for iteration and forgotten makes
  *     a run silently not-the-default, and nothing recorded it.
- *   - peak RSS near the heap  -> 14336 MB OOMed cold; the current 65536 is a
- *     guess because no run ever recorded what it used.
  */
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "runmanifest-"));
@@ -54,7 +52,6 @@ function base(over: Partial<RunManifest> = {}): RunManifest {
       model: "m",
       reasoningEffort: "low",
       concurrency: 32,
-      heapMb: 65536,
       killSwitches: [],
       cache: { enabled: false, entriesBefore: 0, entriesAfter: 0, written: 0 }
     },
@@ -343,21 +340,6 @@ describe("manifest warnings — the combinations that produced wrong numbers", (
     assert.ok(w.some((l) => l.includes("content-anchor")));
   });
 
-  it("flags peak RSS close to the heap ceiling before it OOMs", () => {
-    // 14336 MB OOMed cold and nobody saw it coming, because no run recorded
-    // what it used. A warning at 85% turns the next OOM into a prediction.
-    const w = manifestWarnings(
-      base({
-        config: { ...base().config, heapMb: 14336 },
-        outcome: { ...base().outcome, peakRssMb: 13000 }
-      })
-    );
-    assert.ok(
-      w.some((l) => /heap|memory|RSS/i.test(l)),
-      `expected a memory-headroom warning, got: ${JSON.stringify(w)}`
-    );
-  });
-
   it("flags a non-zero exit even when everything else looks fine", () => {
     const w = manifestWarnings(
       base({
@@ -399,13 +381,6 @@ describe("manifest warnings — a run scored by the Rust binary (--bin)", () => 
 
   it("says nothing about a clean binary built from the run's own commit", () => {
     assert.deepStrictEqual(manifestWarnings(binRun()), []);
-  });
-
-  it("never warns about heap headroom — --heap-mb is inert for a binary", () => {
-    const m = binRun();
-    m.config.heapMb = 100;
-    m.outcome.peakRssMb = 99_000;
-    assert.deepStrictEqual(manifestWarnings(m), []);
   });
 
   it("flags a binary built from ANOTHER commit than the run's", () => {

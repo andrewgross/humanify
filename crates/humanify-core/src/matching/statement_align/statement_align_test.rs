@@ -15,9 +15,7 @@ use crate::graph::UnifiedGraph;
 use crate::hash::serialize::SymbolTables;
 use crate::ingest::Ingest;
 
-use super::{
-    AlignSide, BodyAlignment, Tokenizer, compute_body_local_transfers, parse_json_unbounded,
-};
+use super::{AlignSide, BodyAlignment, Tokenizer, compute_body_local_transfers};
 
 /// TS `transferMap`: minified name → the prior name its binding inherits.
 fn transfer_map(a: &BodyAlignment) -> HashMap<String, String> {
@@ -83,8 +81,9 @@ fn with_fn_pair<T>(
         crate::toolchain::BundleLayout::SingleWrapperFunction,
     );
     let prior_program_json =
-        parse_json_unbounded(&prior_ingest.program.to_estree_json(false, true));
-    let next_program_json = parse_json_unbounded(&next_ingest.program.to_estree_json(false, true));
+        crate::ingest::parse_estree_json(&prior_ingest.program.to_estree_json(false, true));
+    let next_program_json =
+        crate::ingest::parse_estree_json(&next_ingest.program.to_estree_json(false, true));
 
     let (prior_row_json, prior_span) = top_level_fn_row(&prior_ingest, &prior_graph);
     let (next_row_json, next_span) = top_level_fn_row(&next_ingest, &next_graph);
@@ -128,7 +127,7 @@ fn top_level_fn_row(ingest: &Ingest<'_>, graph: &UnifiedGraph) -> (serde_json::V
         if matches!(nodes.get_node(parent).kind(), AstKind::Program(_))
             && let json = crate::graph::entry_subtree_json(nodes, node_id)
         {
-            return (parse_json_unbounded(&json), f.span);
+            return (crate::ingest::parse_estree_json(&json), f.span);
         }
     }
     panic!("no top-level function in fixture");
@@ -948,7 +947,7 @@ fn member_expression_tokens_follow_babel_field_order() {
     // The program's ESTree JSON (oxc) — the same substrate the Tokenizer
     // walks; the node shapes are what the TS's babel-parsed Object.keys
     // walk must mirror.
-    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+    let program = crate::ingest::parse_estree_json(&ingest.program.to_estree_json(false, true));
     let find_node = |ty: &str| {
         fn walk<'v>(v: &'v serde_json::Value, ty: &str) -> Option<&'v serde_json::Value> {
             if let Some(map) = v.as_object() {
@@ -1065,7 +1064,7 @@ fn parenthesized_and_bool_null_literals_match_babel_shapes() {
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
     let tables = SymbolTables::build(ingest.semantic());
-    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+    let program = crate::ingest::parse_estree_json(&ingest.program.to_estree_json(false, true));
 
     fn walk<'v>(v: &'v serde_json::Value, ty: &str) -> Option<&'v serde_json::Value> {
         if let Some(map) = v.as_object() {
@@ -1217,7 +1216,7 @@ fn object_property_and_method_nodes_match_babel_shapes() {
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
     let tables = SymbolTables::build(ingest.semantic());
-    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+    let program = crate::ingest::parse_estree_json(&ingest.program.to_estree_json(false, true));
 
     fn find_value(v: &serde_json::Value, ty: &str) -> Option<serde_json::Value> {
         if let Some(map) = v.as_object() {
@@ -1372,7 +1371,7 @@ fn arrow_expression_flag_is_not_emitted() {
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
     let tables = SymbolTables::build(ingest.semantic());
-    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+    let program = crate::ingest::parse_estree_json(&ingest.program.to_estree_json(false, true));
 
     fn collect(v: &serde_json::Value, ty: &str, out: &mut Vec<serde_json::Value>) {
         if let Some(map) = v.as_object() {
@@ -1502,7 +1501,7 @@ fn optional_chain_nodes_match_babel_shapes() {
     let ingest = Ingest::parse(&alloc, code, "prior.js");
     assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
     let tables = SymbolTables::build(ingest.semantic());
-    let program = parse_json_unbounded(&ingest.program.to_estree_json(false, true));
+    let program = crate::ingest::parse_estree_json(&ingest.program.to_estree_json(false, true));
 
     fn collect_inits(v: &serde_json::Value, out: &mut Vec<serde_json::Value>) {
         if let Some(map) = v.as_object() {

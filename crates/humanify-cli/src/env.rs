@@ -29,6 +29,7 @@ fn load_dotenv() {
 /// Read one environment variable, with an optional fallback (env.ts:31-34).
 /// The allow is the point: this module is the ONE reader the lint forbids
 /// everywhere else (the guard test is the dynamic layer, this is static).
+// env: the one environment reader (WP1.1); see the doc comment above.
 #[allow(clippy::disallowed_methods)]
 pub fn get(name: &str, fallback: Option<&str>) -> Option<String> {
     load_dotenv();
