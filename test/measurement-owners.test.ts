@@ -284,7 +284,8 @@ describe("measurement owners", () => {
     // names the script never assigns.
     const scripts = [
       "experiments/034-eval-harness/run.sh",
-      "experiments/lib/neutrality.sh"
+      "experiments/lib/neutrality.sh",
+      "experiments/096-library-matching-score/run.sh"
     ];
     // boot-gate.sh is excluded: its one ambient read, BOOT_GATE_MODEL, is
     // accepted as-is (owner decision, 2026-08-12; BOOT_GATE_SOFT was deleted

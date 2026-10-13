@@ -2,7 +2,8 @@
 <DATA>/truth/, write corpus.json with every sha256) and verify it.
 
 usage: <venv python> -I corpus.py freeze [--jobs N]      (once; rewrites corpus.json)
-       <venv python> -I corpus.py verify                 (every file's sha256 against corpus.json)
+       <venv python> -I corpus.py origins [--jobs N]     (the origin layer; rewrites origins.json, see origins.py)
+       <venv python> -I corpus.py verify                 (every file's sha256 against corpus.json + origins.json)
 
 The inputs are NOT committed (Claude Code is not ours to publish; the held-out bundles are large) — corpus.json
 records where each came from and its sha256, and the runner refuses a corpus file whose hash moved.
@@ -15,6 +16,10 @@ Ground truth per statement unit (labelled at score time, against whatever units 
               any rate), anything else = <app>.
               Version = the package.json beside the mapped file in the app's install (held-out, esbuild app), or
               the pnpm path (wrangler). Recorded per source at freeze time, so the installs may go away.
+  origins     (origins.py, a separate frozen layer: <DATA>/truth/<id>.origins.json.gz, shas in origins.json) per
+              mapped byte, the ORIGIN package when the shipping package carries a vendored / pre-bundled copy of
+              another package (a vendored directory in the path, or a bundler module marker in the shipped file).
+              Read from the frozen map's sources and sourcesContent only. Source-mapped entries only.
   sample      Claude Code 2.1.216: the exp095 negatives lane's 620-statement stratified random sample (labels.jsonl
               strata S0-S3, seed 95; blind second pass 124/124), with its strata sizes for the ratio estimator.
 """
@@ -183,6 +188,41 @@ def freeze(jobs):
     print(f"froze {len(manifest['entries'])} entries -> {lib096.MANIFEST}")
 
 
+def build_origins(entry):
+    """The origin layer of one source-mapped entry, aligned to its frozen truth segments (refused if the
+    re-decoded segments do not equal the frozen ones byte for byte)."""
+    import origins as O
+    truth = lib096.load_truth(entry)
+    js = lib096.corpus_path(entry, "bundle")
+    text = open(js, encoding="utf8").read()
+    smap = json.load(open(lib096.corpus_path(entry, "map")))
+    if "innerMap" in entry["files"]:
+        srcmap = json.load(open(lib096.corpus_path(entry, "innerMap")))
+        segs = O.segments(text, smap, (srcmap, 1))
+    else:
+        srcmap = smap
+        segs = O.segments(text, smap)
+    if [[s[0], s[1]] for s in segs] != truth["segments"]:
+        raise SystemExit(f"REFUSED: {entry['id']}: re-decoded segments differ from the frozen truth")
+    shippers = [s[0] for s in truth["sources"]]
+    names, kinds, runs = O.origin_runs(segs, O.Origins(srcmap["sources"], srcmap.get("sourcesContent"), shippers))
+    p = lib096.origins_path(entry)
+    write_gz_json(p, {"schema": O.SCHEMA, "names": names, "kinds": kinds, "runs": runs,
+                      "segments": len(segs)})
+    return entry["id"], sha256_file(p)
+
+
+def freeze_origins(jobs):
+    import origins as O
+    todo = [e for e in lib096.load_manifest()["entries"] if e["truth"]["method"] == "sourcemap"]
+    with multiprocessing.Pool(jobs) as pool:
+        shas = dict(pool.map(build_origins, todo, chunksize=1))
+    open(lib096.ORIGINS_MANIFEST, "w").write(dump({
+        "schema": O.SCHEMA, "corpusSha256": lib096.manifest_sha(),
+        "entries": {k: shas[k] for k in sorted(shas)}}))
+    print(f"froze the origin layer of {len(shas)} entries -> {lib096.ORIGINS_MANIFEST}")
+
+
 def verify():
     bad = 0
     for e in lib096.load_manifest()["entries"]:
@@ -194,12 +234,20 @@ def verify():
         if sha256_file(lib096.truth_path(e)) != e["truth"]["sha256"]:
             print("MOVED", e["id"], "truth")
             bad += 1
+    om = lib096.load_origins_manifest()
+    for e in lib096.load_manifest()["entries"]:
+        if e["truth"]["method"] == "sourcemap" and sha256_file(lib096.origins_path(e)) != om["entries"].get(e["id"]):
+            print("MOVED", e["id"], "origins")
+            bad += 1
     print("corpus OK" if not bad else f"corpus BROKEN: {bad} file(s)")
     return 1 if bad else 0
 
 
 if __name__ == "__main__":
+    JOBS = int(sys.argv[sys.argv.index("--jobs") + 1]) if "--jobs" in sys.argv else 12
     if sys.argv[1] == "freeze":
-        freeze(int(sys.argv[sys.argv.index("--jobs") + 1]) if "--jobs" in sys.argv else 12)
+        freeze(JOBS)
+    elif sys.argv[1] == "origins":
+        freeze_origins(JOBS)
     else:
         sys.exit(verify())

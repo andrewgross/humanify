@@ -38,7 +38,7 @@
  "noDiscovery": null,
  "reportSha256": "3b14709f9dce1a14a4eba9eb7f31e3c54e2f4bb7195944579f7bd9cbe8a0170c",
  "rule": "structural",
- "schema": "exp096-score/1",
+ "schema": "exp096-score/2",
  "set": "heldout",
  "statementBytes": {
   "<app>": 983,
@@ -52,12 +52,20 @@
  },
  "totals": {
   "appClaimedBytes": 0,
+  "copyBytes": 0,
   "libraryBytes": 372220,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 268182,
   "namedBytes": 268182,
+  "namedBytesShipperOnly": 268182,
   "recall": 0.720493,
+  "recallShipperOnly": 0.720493,
   "wrongFamilyBytes": 68,
+  "wrongFamilyBytesShipperOnly": 68,
   "wrongFamilyShare": 0.000253,
-  "wrongNameShare": 0.000253
+  "wrongFamilyShareShipperOnly": 0.000253,
+  "wrongNameShare": 0.000253,
+  "wrongNameShareShipperOnly": 0.000253
  },
  "truthMethod": "sourcemap"
 }
