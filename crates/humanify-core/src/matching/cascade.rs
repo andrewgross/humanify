@@ -382,6 +382,20 @@ pub struct MatchResult {
     pub pair_rejections: Vec<PairRejection>,
 }
 
+impl MatchResult {
+    /// Every match as a decision trail (`matching::rules::Decision`): the
+    /// fresh piece, the prior piece it was matched to, and the deciding
+    /// rule of the cross-version profile (the pair row's tier), with what
+    /// that rule reads.
+    pub fn decisions(&self) -> Vec<crate::matching::rules::Decision> {
+        let list = crate::matching::rules::cross_version();
+        self.pair_resolutions
+            .iter()
+            .map(|p| list.decide(p.fresh.clone(), p.prior.clone(), &p.tier))
+            .collect()
+    }
+}
+
 /// One observation row: prior → fresh with the tier that closed it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairResolution {
@@ -907,11 +921,12 @@ fn try_enclosing_statement_resolve(
 }
 
 /// The session ids of one structural-hash bucket, in bucket-insertion order
-/// (the TS `byStructuralHash.get(hash) ?? []`).
+/// (the TS `byStructuralHash.get(hash) ?? []`): the side's reference-store
+/// lookup (`matching::store`).
 fn bucket_session_ids<'g>(index: &FingerprintIndex<'g>, hash: &str) -> Vec<String> {
+    use crate::matching::store::ReferenceStore;
     index
-        .bucket(hash)
-        .unwrap_or(&[])
+        .candidates(hash)
         .iter()
         .map(|&i| index.entries[i].session_id.clone())
         .collect()
@@ -921,10 +936,167 @@ fn bucket_session_ids<'g>(index: &FingerprintIndex<'g>, hash: &str) -> Vec<Strin
 // resolveMatch (:597) + resolveDeepStages (:703)
 // ---------------------------------------------------------------------------
 
-/// TS `resolveMatch` (:597): the disambiguation cascade in order — identity,
-/// memberKey, enclosingStatement, depth gate, calleeShapes, callerShapes,
-/// then the deep stages. THE ORDER IS LOAD-BEARING; each ambiguous park uses
-/// the pool the FAILING stage narrowed to.
+/// What one resolve rung did with the pool it was handed.
+enum Step {
+    /// One candidate: the match, and the resolution it records.
+    Match(String, Resolution),
+    /// Stop: park the prior ambiguous with the pool this rung was handed
+    /// (a candidate rejected by stronger evidence must not win at a weaker
+    /// rung).
+    Park,
+    /// More than one candidate left: the next rung gets this pool.
+    Narrow(Vec<String>),
+    /// No evidence here: the next rung gets the same pool.
+    Pass,
+}
+
+/// What a rung may read and write: the prior piece, both sides, the match
+/// list (read by the enclosing-statement rung's bookkeeping; written only
+/// by the interpreter, or by the identity resolver it calls), the stats.
+struct RungCtx<'c, 's, 'a, 'g> {
+    old_id: &'c str,
+    old_fp: &'c super::FunctionFingerprint,
+    old_side: &'c Side<'a, 'g>,
+    new_side: &'c Side<'a, 'g>,
+    matches: &'c mut MatchMap,
+    stats: &'c mut ResolutionStats,
+    resolver: Option<AmbiguityResolver<'s>>,
+    max_cascade_depth: u8,
+}
+
+type Rung = fn(&mut RungCtx<'_, '_, '_, '_>, &[String]) -> Step;
+
+/// A filter rung's verdict: none left parks, one matches, more narrows.
+fn filtered(pool: Vec<String>, resolution: Resolution) -> Step {
+    match pool.len() {
+        0 => Step::Park,
+        1 => Step::Match(pool.into_iter().next().expect("one"), resolution),
+        _ => Step::Narrow(pool),
+    }
+}
+
+/// Caller-supplied identity resolution runs first — it carries evidence
+/// the fingerprint fields cannot (e.g. correspondence under an existing
+/// match result), which stays discriminating even when candidates wrap
+/// structurally identical code.
+fn rung_identity(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    if try_identity_resolve(c.old_id, pool, c.resolver, c.matches) {
+        let id = c.matches.get(c.old_id).cloned().expect("just inserted");
+        return Step::Match(id, Resolution::Identity);
+    }
+    Step::Pass
+}
+
+/// memberKey disambiguation: runs before callee shapes. Every candidate
+/// carrying a different memberKey than the old function is a
+/// contradiction: stop.
+fn rung_member_key(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    filtered(
+        filter_by_member_key(pool, c.old_fp.member_key(), c.new_side),
+        Resolution::MemberKey,
+    )
+}
+
+fn rung_enclosing_statement(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    match try_enclosing_statement_resolve(
+        c.old_id,
+        pool,
+        c.old_fp,
+        c.old_side,
+        c.new_side,
+        c.matches,
+        &mut c.stats.enclosing_stmt_abstain,
+    ) {
+        Some(id) => Step::Match(id, Resolution::EnclosingStatement),
+        None => Step::Pass,
+    }
+}
+
+/// Below depth 1 the shape rungs never run.
+fn rung_depth_gate(c: &mut RungCtx<'_, '_, '_, '_>, _pool: &[String]) -> Step {
+    if c.max_cascade_depth < 1 {
+        Step::Park
+    } else {
+        Step::Pass
+    }
+}
+
+/// calleeShapes: blurred callee structural shapes.
+fn rung_callee_shapes(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    filtered(
+        filter_by_callee_shapes(pool, c.old_fp.callee_shapes(), c.new_side),
+        Resolution::CalleeShapes,
+    )
+}
+
+/// callerShapes: blurred caller structural shapes (upstream context).
+fn rung_caller_shapes(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    filtered(
+        filter_by_caller_shapes(pool, c.old_fp.caller_shapes(), c.new_side),
+        Resolution::CallerShapes,
+    )
+}
+
+/// TS `resolveDeepStages` (:703)'s first half, depth 2: calleeHashes then
+/// twoHopShapes as ONE rung (a contradiction at either parks the pool the
+/// rung started from).
+fn rung_callee_hashes(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    if c.max_cascade_depth < 2 {
+        return Step::Pass;
+    }
+    match try_callee_hash_cascade(pool, c.old_fp, c.new_side) {
+        CalleeHashOutcome::Match { id, resolution } => Step::Match(
+            id,
+            match resolution {
+                MatchedResolution::CalleeHashes => Resolution::CalleeHashes,
+                _ => Resolution::TwoHopShapes,
+            },
+        ),
+        CalleeHashOutcome::Contradiction => Step::Park,
+        CalleeHashOutcome::Ambiguous { pool: narrowed } => Step::Narrow(narrowed),
+    }
+}
+
+/// shingleSimilarity: Jaccard similarity tiebreaker. A binding index has
+/// no `functions` map, so on the binding cascade the tier cannot run —
+/// COUNT that, so its zero is never read as "consulted, found nothing".
+fn rung_shingle_similarity(c: &mut RungCtx<'_, '_, '_, '_>, pool: &[String]) -> Step {
+    if c.new_side.index.kind != IndexKind::Functions {
+        c.stats.shingle_unconsultable += 1;
+    }
+    match try_shingle_resolve(c.old_id, pool, c.old_side, c.new_side) {
+        Some(id) => Step::Match(id, Resolution::ShingleSimilarity),
+        None => Step::Pass,
+    }
+}
+
+/// The cross-version profile's resolve rungs (`matching::rules::RESOLVE`,
+/// whose specs say what each reads), paired with their code, in the TS
+/// `resolveMatch` (:597) + `resolveDeepStages` (:703) order. THE ORDER IS
+/// LOAD-BEARING; `rules_test` holds this list and the spec list in step.
+const RESOLVE_RUNGS: [(&crate::matching::rules::RuleSpec, Rung); 8] = {
+    use crate::matching::rules::RESOLVE;
+    [
+        (&RESOLVE[0], rung_identity),
+        (&RESOLVE[1], rung_member_key),
+        (&RESOLVE[2], rung_enclosing_statement),
+        (&RESOLVE[3], rung_depth_gate),
+        (&RESOLVE[4], rung_callee_shapes),
+        (&RESOLVE[5], rung_caller_shapes),
+        (&RESOLVE[6], rung_callee_hashes),
+        (&RESOLVE[7], rung_shingle_similarity),
+    ]
+};
+
+#[cfg(test)]
+/// The names of the rungs [`resolve_match`] executes, in order.
+pub(crate) fn resolve_rung_names() -> Vec<&'static str> {
+    RESOLVE_RUNGS.iter().map(|(spec, _)| spec.name).collect()
+}
+
+/// TS `resolveMatch` (:597): the disambiguation cascade — the resolve
+/// rungs in order ([`RESOLVE_RUNGS`]). Each ambiguous park uses the pool
+/// the FAILING rung was handed; a match is inserted here, once.
 #[allow(clippy::too_many_arguments)]
 fn resolve_match(
     old_id: &str,
@@ -938,130 +1110,31 @@ fn resolve_match(
     stats: &mut ResolutionStats,
     resolver: Option<AmbiguityResolver<'_>>,
 ) -> Resolution {
-    // Caller-supplied identity resolution runs first — it carries evidence
-    // the fingerprint fields cannot (e.g. correspondence under an existing
-    // match result), which stays discriminating even when candidates wrap
-    // structurally identical code.
-    if try_identity_resolve(old_id, candidates, resolver, matches) {
-        return Resolution::Identity;
-    }
-
-    // memberKey disambiguation: runs before callee shapes.
-    let mk_candidates = filter_by_member_key(candidates, old_fp.member_key(), new_side);
-    if mk_candidates.is_empty() {
-        // Contradiction: every candidate carries a different memberKey than
-        // the old function. Stop — a candidate rejected by strong evidence
-        // must not win at a weaker stage.
-        ambiguous.insert(old_id.to_string(), candidates.to_vec());
-        return Resolution::Ambiguous;
-    }
-    if mk_candidates.len() == 1 {
-        matches.insert(old_id.to_string(), mk_candidates[0].clone());
-        return Resolution::MemberKey;
-    }
-
-    let stmt_match = try_enclosing_statement_resolve(
+    let mut ctx = RungCtx {
         old_id,
-        &mk_candidates,
         old_fp,
         old_side,
         new_side,
         matches,
-        &mut stats.enclosing_stmt_abstain,
-    );
-    if let Some(stmt_match) = stmt_match {
-        matches.insert(old_id.to_string(), stmt_match);
-        return Resolution::EnclosingStatement;
-    }
-
-    if max_cascade_depth < 1 {
-        ambiguous.insert(old_id.to_string(), mk_candidates);
-        return Resolution::Ambiguous;
-    }
-
-    // calleeShapes: blurred callee structural shapes.
-    let callee_shape_candidates =
-        filter_by_callee_shapes(&mk_candidates, old_fp.callee_shapes(), new_side);
-    if callee_shape_candidates.is_empty() {
-        ambiguous.insert(old_id.to_string(), mk_candidates);
-        return Resolution::Ambiguous;
-    }
-    if callee_shape_candidates.len() == 1 {
-        matches.insert(old_id.to_string(), callee_shape_candidates[0].clone());
-        return Resolution::CalleeShapes;
-    }
-
-    // callerShapes: blurred caller structural shapes (upstream context).
-    let caller_shape_candidates =
-        filter_by_caller_shapes(&callee_shape_candidates, old_fp.caller_shapes(), new_side);
-    if caller_shape_candidates.is_empty() {
-        ambiguous.insert(old_id.to_string(), callee_shape_candidates);
-        return Resolution::Ambiguous;
-    }
-    if caller_shape_candidates.len() == 1 {
-        matches.insert(old_id.to_string(), caller_shape_candidates[0].clone());
-        return Resolution::CallerShapes;
-    }
-
-    resolve_deep_stages(
-        old_id,
-        &caller_shape_candidates,
-        old_fp,
-        old_side,
-        new_side,
-        matches,
-        ambiguous,
-        max_cascade_depth,
         stats,
-    )
-}
-
-/// TS `resolveDeepStages` (:703): calleeHashes + twoHopShapes, then the
-/// shingle tiebreak.
-#[allow(clippy::too_many_arguments)]
-fn resolve_deep_stages(
-    old_id: &str,
-    candidates: &[String],
-    old_fp: &super::FunctionFingerprint,
-    old_side: &Side<'_, '_>,
-    new_side: &Side<'_, '_>,
-    matches: &mut MatchMap,
-    ambiguous: &mut AmbiguousMatches,
-    max_cascade_depth: u8,
-    stats: &mut ResolutionStats,
-) -> Resolution {
+        resolver,
+        max_cascade_depth,
+    };
     let mut pool = candidates.to_vec();
-    if max_cascade_depth >= 2 {
-        let outcome = try_callee_hash_cascade(&pool, old_fp, new_side);
-        match outcome {
-            CalleeHashOutcome::Match { id, resolution } => {
-                matches.insert(old_id.to_string(), id);
-                return match resolution {
-                    MatchedResolution::CalleeHashes => Resolution::CalleeHashes,
-                    _ => Resolution::TwoHopShapes,
-                };
+    for (_, rung) in RESOLVE_RUNGS {
+        match rung(&mut ctx, &pool) {
+            Step::Match(id, resolution) => {
+                ctx.matches.insert(old_id.to_string(), id);
+                return resolution;
             }
-            CalleeHashOutcome::Contradiction => {
+            Step::Park => {
                 ambiguous.insert(old_id.to_string(), pool);
                 return Resolution::Ambiguous;
             }
-            CalleeHashOutcome::Ambiguous { pool: narrowed } => {
-                pool = narrowed;
-            }
+            Step::Narrow(narrowed) => pool = narrowed,
+            Step::Pass => {}
         }
     }
-
-    // shingleSimilarity: Jaccard similarity tiebreaker. A binding index has
-    // no `functions` map, so on the binding cascade the tier cannot run —
-    // COUNT that, so its zero is never read as "consulted, found nothing".
-    if new_side.index.kind != IndexKind::Functions {
-        stats.shingle_unconsultable += 1;
-    }
-    if let Some(shingle_match) = try_shingle_resolve(old_id, &pool, old_side, new_side) {
-        matches.insert(old_id.to_string(), shingle_match);
-        return Resolution::ShingleSimilarity;
-    }
-
     // Still ambiguous.
     ambiguous.insert(old_id.to_string(), pool);
     Resolution::Ambiguous

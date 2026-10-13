@@ -60,8 +60,10 @@ pub mod features;
 pub mod match_map;
 pub mod matches_dump;
 pub mod member_key;
+pub mod rules;
 pub mod statement_align;
 pub mod statement_context;
+pub mod store;
 
 // ---------------------------------------------------------------------------
 // CalleeShape (function-fingerprint.ts :25-76)

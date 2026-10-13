@@ -10,12 +10,16 @@ use std::path::Path;
 use super::format::{LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
 use super::units::{StatementPrints, UnitPrint};
+use crate::matching::store::ReferenceStore;
 
-/// One indexed occurrence of a unit hash.
-#[derive(Clone, Copy, Debug)]
-struct UnitHit {
-    owner: u32,
-    module_bytes: u64,
+/// One indexed occurrence of a unit hash: the index store's piece
+/// (`matching::store`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnitHit {
+    /// The owner package's id (`LibraryIndex::package_name`).
+    pub owner: u32,
+    /// The smallest bundled module the unit was seen in (specificity).
+    pub module_bytes: u64,
 }
 
 /// A loaded index slice: its unit table and the literal table.
@@ -138,6 +142,16 @@ impl LibraryIndex {
         Ok(ix)
     }
 
+    /// Every indexed occurrence of `hash` (the store's `candidates`).
+    pub fn unit_hits(&self, hash: &str) -> &[UnitHit] {
+        self.units.get(hash).map_or(&[], Vec::as_slice)
+    }
+
+    /// An owner id's package name.
+    pub fn package_name(&self, owner: u32) -> &str {
+        &self.packages[owner as usize]
+    }
+
     /// Every indexed occurrence of `hash`: (owner, module bytes) — for
     /// diagnostics.
     pub fn occurrences(&self, hash: &str) -> Vec<(&str, u64)> {
@@ -151,9 +165,7 @@ impl LibraryIndex {
     /// The distinct owners holding `hash` in a module no bigger than the
     /// specificity rule allows; None when there are none or too many.
     fn look(&self, hash: &str, module_bytes: u64, rules: &LookupRules) -> Option<BTreeSet<u32>> {
-        let owners: BTreeSet<u32> = self
-            .units
-            .get(hash)?
+        let owners: BTreeSet<u32> = ReferenceStore::candidates(self, hash)
             .iter()
             .filter(|h| {
                 rules
