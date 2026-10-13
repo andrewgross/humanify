@@ -43,7 +43,6 @@ use humanify_model::detection::{
 };
 use humanify_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConfig};
 
-use crate::commander::OptionValues;
 use crate::kill_switches::{Switch, SwitchState};
 use crate::log::{debug_reset_output, debug_set_output, verbose};
 use crate::pipeline_config::enum_name;
@@ -52,63 +51,9 @@ use crate::settings::{Settings, SettingsInput, resolve_settings};
 use crate::unminify::{filter_libraries, report_vendor_naming, unpack_bundle};
 use crate::util::MAX_DEFAULT_MODULE_CONCURRENCY;
 
-/// The parsed options (TS `CommandOptions`): commander's values, typed.
-/// Value options stay strings, as commander hands them over; `settings`
-/// parses the numeric ones once.
-#[derive(Clone, Debug, Default)]
-pub struct CommandOptions {
-    pub endpoint: Option<String>,
-    pub api_key: Option<String>,
-    pub model: Option<String>,
-    pub output_dir: Option<String>,
-    pub verbose: i64,
-    pub concurrency: Option<String>,
-    pub retries: Option<String>,
-    pub timeout: Option<String>,
-    pub skip_libraries: Option<bool>,
-    pub split: bool,
-    pub log_file: Option<String>,
-    pub diagnostics: Option<String>,
-    /// `--library-index <dir>`: the library fingerprint index discovery
-    /// looks statement units up in (report-only, with `--diagnostics`).
-    pub library_index: Option<String>,
-    /// `--library-discovery-units`: list every unit in `libraryDiscovery`.
-    pub library_discovery_units: bool,
-    pub bundler: Option<String>,
-    pub minifier: Option<String>,
-    pub batch_size: Option<String>,
-    pub max_retries: Option<String>,
-    pub max_free_retries: Option<String>,
-    pub lane_threshold: Option<String>,
-    /// `--rename-retries <n>`: the name-conflict re-ask budget.
-    pub rename_retries: Option<String>,
-    /// `--perf-trace <path>`: the Chrome trace-event performance trace.
-    pub perf_trace: Option<String>,
-    pub prior_version: Option<String>,
-    pub reconcile_prior_diff: Option<bool>,
-    pub naming_floor: Option<bool>,
-    pub naming_floor_sweep: Option<bool>,
-    pub reasoning_effort: Option<String>,
-    pub disable: Option<String>,
-    pub probe: Option<String>,
-    pub max_tokens: Option<String>,
-    pub context_tokens: Option<String>,
-    pub module_concurrency: Option<String>,
-    pub llm_cache: Option<String>,
-    pub split_ledger: Option<String>,
-    pub split_pure: bool,
-    pub rename_ledger: Option<String>,
-    pub stats_json: Option<String>,
-    pub dump_artifacts: Option<String>,
-    /// `--dump-asks <path>`: the reason-labeled ask log.
-    pub dump_asks: Option<String>,
-    /// `--sequential`: the conservative naming schedule.
-    pub sequential: bool,
-    /// `--relaxed-levers <list>` (rust-only): a subset of the relaxed
-    /// levers; None = every lever.
-    pub relaxed_levers: Option<String>,
-    pub simulate_llm_latency: Option<String>,
-}
+/// The parsed options: declared (for clap) in `surface`, the one parse
+/// point.
+pub use crate::surface::CommandOptions;
 
 pub use humanify_core::fast::{FastTier, Levers};
 
@@ -137,76 +82,35 @@ impl CommandOptions {
 }
 
 impl CommandOptions {
-    pub fn from_values(v: &OptionValues) -> CommandOptions {
-        let s = |k: &str| v.str(k).map(str::to_string);
-        CommandOptions {
-            endpoint: s("endpoint"),
-            api_key: s("apiKey"),
-            model: s("model"),
-            output_dir: s("outputDir"),
-            verbose: v.get("verbose").and_then(|x| x.as_i64()).unwrap_or(0),
-            concurrency: s("concurrency"),
-            retries: s("retries"),
-            timeout: s("timeout"),
-            skip_libraries: v.bool("skipLibraries"),
-            split: v.bool("split").unwrap_or(false),
-            log_file: s("logFile"),
-            diagnostics: s("diagnostics"),
-            library_index: s("libraryIndex"),
-            library_discovery_units: v.bool("libraryDiscoveryUnits").unwrap_or(false),
-            bundler: s("bundler"),
-            minifier: s("minifier"),
-            batch_size: s("batchSize"),
-            max_retries: s("maxRetries"),
-            max_free_retries: s("maxFreeRetries"),
-            lane_threshold: s("laneThreshold"),
-            rename_retries: s("renameRetries"),
-            perf_trace: s("perfTrace"),
-            prior_version: s("priorVersion"),
-            reconcile_prior_diff: v.bool("reconcilePriorDiff"),
-            naming_floor: v.bool("namingFloor"),
-            naming_floor_sweep: v.bool("namingFloorSweep"),
-            reasoning_effort: s("reasoningEffort"),
-            disable: s("disable"),
-            probe: s("probe"),
-            max_tokens: s("maxTokens"),
-            context_tokens: s("contextTokens"),
-            module_concurrency: s("moduleConcurrency"),
-            llm_cache: s("llmCache"),
-            split_ledger: s("splitLedger"),
-            split_pure: v.bool("splitPure").unwrap_or(false),
-            rename_ledger: s("renameLedger"),
-            stats_json: s("statsJson"),
-            dump_artifacts: s("dumpArtifacts"),
-            dump_asks: s("dumpAsks"),
-            sequential: v.bool("sequential").unwrap_or(false),
-            relaxed_levers: s("relaxedLevers"),
-            simulate_llm_latency: s("simulateLlmLatency"),
-        }
-    }
-
-    fn settings_input(&self) -> SettingsInput {
+    pub(crate) fn settings_input(&self) -> SettingsInput {
+        // An unset negatable lever is None (the resolver's default, on);
+        // its `--no-` flag is Some(false).
+        let off = |no: bool| if no { Some(false) } else { None };
         SettingsInput {
-            endpoint: self.endpoint.clone(),
-            model: self.model.clone(),
+            endpoint: Some(self.endpoint.clone()),
+            model: Some(self.model.clone()),
             api_key: self.api_key.clone(),
-            timeout: self.timeout.clone(),
-            retries: self.retries.clone(),
-            concurrency: self.concurrency.clone(),
-            batch_size: self.batch_size.clone(),
-            max_retries: self.max_retries.clone(),
-            max_free_retries: self.max_free_retries.clone(),
-            lane_threshold: self.lane_threshold.clone(),
-            rename_retries: self.rename_retries.clone(),
+            timeout: Some(self.timeout),
+            retries: Some(self.retries),
+            concurrency: Some(self.concurrency),
+            batch_size: self.batch_size,
+            max_retries: self.max_retries,
+            max_free_retries: self.max_free_retries,
+            lane_threshold: self.lane_threshold,
+            rename_retries: self.rename_retries,
             llm_cache: self.llm_cache.clone(),
             reasoning_effort: self.reasoning_effort.clone(),
-            max_tokens: self.max_tokens.clone(),
-            context_tokens: self.context_tokens.clone(),
-            module_concurrency: self.module_concurrency.clone(),
-            skip_libraries: self.skip_libraries,
-            naming_floor: self.naming_floor,
-            naming_floor_sweep: self.naming_floor_sweep,
-            reconcile_prior_diff: self.reconcile_prior_diff,
+            max_tokens: self.max_tokens,
+            context_tokens: self.context_tokens,
+            module_concurrency: self.module_concurrency,
+            skip_libraries: match (self.skip_libraries, self.no_skip_libraries) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            },
+            naming_floor: off(self.no_naming_floor),
+            naming_floor_sweep: off(self.no_naming_floor_sweep),
+            reconcile_prior_diff: off(self.no_reconcile_prior_diff),
             prior_version: self.prior_version.clone(),
         }
     }
@@ -301,9 +205,8 @@ fn read_utf8(path: &str) -> Result<String, Crash> {
 }
 
 /// The action: `humanify <input> [options]`. Returns the process exit code.
-pub fn run(input: &str, values: &OptionValues) -> i32 {
-    let opts = CommandOptions::from_values(values);
-    let violations = check_flag_invariants(&opts);
+pub fn run(input: &str, opts: &CommandOptions) -> i32 {
+    let violations = check_flag_invariants(opts);
     if !violations.is_empty() {
         for m in violations {
             eprintln!("Error: {m}");
@@ -323,8 +226,8 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
                 return 1;
             }
         };
-    verbose().set_level(opts.verbose.clamp(0, 2) as u8);
-    let log_file = match open_log_file(&opts) {
+    verbose().set_level(opts.verbose.min(2));
+    let log_file = match open_log_file(opts) {
         Ok(f) => f,
         Err(msg) => {
             eprintln!("Error: {msg}");
@@ -361,7 +264,7 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
 
     let ended = run_pipeline(
         input,
-        &opts,
+        opts,
         &settings,
         &switches,
         &provider,
@@ -373,7 +276,7 @@ pub fn run(input: &str, values: &OptionValues) -> i32 {
     }
     report_memo(&provider, &mut *renderer);
     // The TS `finally`.
-    finalize_profile(&opts, input, &profiler, &mut *renderer);
+    finalize_profile(opts, input, &profiler, &mut *renderer);
     renderer.finish();
     if log_file.is_some() {
         crate::log::verbose().reset_output();
@@ -590,7 +493,7 @@ fn pipeline_body(
 
     // Stages 3-5: unpack (the Bun adapter names its vendor files inside),
     // then library detection picks the files the per-file stages process.
-    let out_dir = opts.output_dir.as_deref().unwrap_or("output");
+    let out_dir = opts.output_dir.as_str();
     let prior_path = opts
         .prior_version
         .as_deref()

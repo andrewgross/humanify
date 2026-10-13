@@ -1,30 +1,10 @@
 //! The small shared utilities of WP1.1's contents column, one file each in
-//! TS (`number-utils.ts`, `file-utils.ts`, `shared/regex.ts`,
+//! TS (`file-utils.ts`, `shared/regex.ts`,
 //! `utils/identifier-regex.ts`, `commands/default-args.ts`). The concurrency
 //! limiter is NOT here: it is a pipeline utility (its consumers are the
 //! processor and the sweep), so it ports into `humanify-core` with them.
 
-use std::path::{Path, PathBuf};
-
-/// Parse a numeric flag value exactly as the TS `parseNumber`
-/// (number-utils.ts): `parseInt(value, 10)` — skip leading JS whitespace,
-/// an optional sign, then the longest run of ASCII digits; no digits is
-/// NaN, and NaN is an error, never a silent default. The result is the JS
-/// number (so `12abc` is 12 and `1e3` is 1, as the TS resolves them).
-pub fn parse_number(value: &str) -> Result<f64, String> {
-    let rest = value.trim_start_matches(humanify_model::js::is_js_whitespace);
-    let (negative, rest) = match rest.as_bytes().first() {
-        Some(b'-') => (true, &rest[1..]),
-        Some(b'+') => (false, &rest[1..]),
-        _ => (false, rest),
-    };
-    let digits: &str = &rest[..rest.bytes().take_while(u8::is_ascii_digit).count()];
-    if digits.is_empty() {
-        return Err(format!("Invalid number: {value}"));
-    }
-    let magnitude: f64 = digits.parse().expect("ASCII digits parse as f64");
-    Ok(if negative { -magnitude } else { magnitude })
-}
+use std::path::Path;
 
 /// Crash loudly with a red message on stderr (cli-error.ts:1-4).
 pub fn err(message: &str) -> ! {
@@ -44,36 +24,6 @@ pub fn ensure_file_exists(filename: &Path) {
     if !filename.exists() {
         err(&format!("File {} not found", filename.display()));
     }
-}
-
-/// Recursively list JS files under `dir`, relative to `rootDir`, skipping
-/// `node_modules` AND `.humanify/` (pipeline metadata — the split ledger
-/// and `humanified.js` double-count the tree's code; file-utils.ts:20-38).
-/// Directory reads SORT before use (02 §5: host enumeration order never
-/// reaches a decision).
-pub fn list_js_files_recursive(dir: &Path, root_dir: &Path, exts: &[&str]) -> Vec<PathBuf> {
-    let mut results = Vec::new();
-    let mut entries: Vec<std::fs::DirEntry> = match std::fs::read_dir(dir) {
-        Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
-        Err(_) => return results,
-    };
-    entries.sort_by_key(|e| e.file_name());
-    for entry in entries {
-        let full = dir.join(entry.file_name());
-        if full.is_dir() {
-            let name = entry.file_name();
-            if name == "node_modules" || name == ".humanify" {
-                continue;
-            }
-            results.extend(list_js_files_recursive(&full, root_dir, exts));
-        } else if exts
-            .iter()
-            .any(|e| entry.file_name().to_string_lossy().ends_with(e))
-        {
-            results.push(full.strip_prefix(root_dir).unwrap_or(&full).to_path_buf());
-        }
-    }
-    results
 }
 
 /// Escape a string for literal use inside a regex pattern — the single

@@ -1,38 +1,35 @@
-//! The pipeline program's command surface — TS: `src/index.ts` (program
-//! name, description, version, positional options), `src/cli.ts`
-//! (help-after-error), `configureUnifiedCommand` (unified.ts:1469-1628) and
-//! `configureEnvReadsCommand` (env-reads.ts:26-59).
+//! The pipeline program's command surface: `humanify <input> [options]`,
+//! declared for clap — the parser the stage verbs (main.rs) already use, so
+//! the binary has ONE argument parser (config sweep step 3, 2026-10-13).
 //!
-//! Every flag string and default below is the TS literal, and the surface
-//! gate (`surface_test.rs`) compares them and a parse corpus against the
-//! real commander program the TS recorded. The DESCRIPTIONS are the
-//! binary's own since the cutover: the rendered help (which every usage
-//! error also prints) is pinned by a golden of this program's help,
-//! test/golden/help/<command>.txt, not by the TS's wording.
+//! It replaced a port of the npm `commander` 13 package, kept after the
+//! cutover only because the TS harness used to spawn the TS pipeline with
+//! commander's grammar. Its accidents are now refused, loudly, with exit 1
+//! (surface_test.rs holds one test per accident):
+//!
+//! - a value option no longer swallows the next flag (`--model --split`
+//!   set the model to "--split"); a value never starts with `-`;
+//! - a repeated option is refused (commander: last wins);
+//! - a short option's value must be a separate argument (`-c 472`, not
+//!   `-c5`); the only combined short form is the `-v` counter (`-vv`);
+//! - numbers are typed: a non-negative integer or a refusal (commander:
+//!   JavaScript `parseInt`, so `-c 12abc` ran at 12);
+//! - `--skip-libraries` with `--no-skip-libraries` is a conflict (both
+//!   still parse alone, until the library decision deletes them).
+//!
+//! Every launch the harness makes parses to the settings the commander
+//! port gave it (launch_parity_test.rs, captured from the port at
+//! 587e211f). Usage errors exit 1, never clap's default 2: the pipeline
+//! keeps exit 2 out of its contract. The rendered help is pinned by
+//! test/golden/help/humanify.txt.
 
+use clap::{CommandFactory, FromArgMatches, Parser};
 use serde_json::Value;
 
-use crate::commander::CliCommand;
 use crate::util::{DEFAULT_CONCURRENCY, DEFAULT_LLM_TIMEOUT_MS};
 use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
 
-// Rust-only options' history (the list the retired TS-surface corpus used
-// to check went with it): the TS inputs that left at the cutover were
-// `--beautified-input` and `--ts-library-functions` (WP5.6d) and
-// `--inject-ts-hashes` (WP5.6e, 2026-09-25); `--fast [tier]` left
-// 2026-09-28 when the naming schedule flipped to the relaxed tier by
-// default (docs/rust-port/20-fast-mode.md §defaults) and the old
-// conservative path became `--sequential`. `--rename-retries <n>` (the
-// collision re-ask budget, 2026-09-29) is Rust-only too, but user-facing:
-// it is declared, parsed and listed like `--sequential`.
-// `--relaxed-levers` (the lever sizing knob) stays deliberately OUT of
-// the help; `--simulate-llm-latency <path>` (the pacing replay) is listed.
-// Config sweep 2026-10-13: `--profile` became `--perf-trace`, and the
-// positive `--naming-floor` / `--naming-floor-sweep` /
-// `--reconcile-prior-diff` (they only restated the default) were deleted;
-// RETIRED_FLAGS below refuses each old spelling, naming its replacement.
-
-/// package.json's version — the single source commander's `-V` prints.
+/// package.json's version — the single source `-V` prints.
 pub fn package_version() -> String {
     let pkg: Value =
         serde_json::from_str(include_str!("../../../package.json")).expect("package.json is JSON");
@@ -40,10 +37,6 @@ pub fn package_version() -> String {
         .as_str()
         .expect("package.json has a version")
         .to_string()
-}
-
-fn s(v: &str) -> Option<Value> {
-    Some(Value::String(v.to_string()))
 }
 
 fn names<T: serde::Serialize>(values: &[T]) -> String {
@@ -59,252 +52,325 @@ fn names<T: serde::Serialize>(values: &[T]) -> String {
         .join(", ")
 }
 
-/// The whole program: the pipeline command at the root, `env-reads` below.
-pub fn program() -> CliCommand {
-    let root = CliCommand::new("humanify")
-        .description("Unminify JavaScript using an OpenAI-compatible API")
-        .version(&package_version())
-        .enable_positional_options()
-        .argument("<input>", "The input minified JavaScript file")
-        .option(
-            "--endpoint <url>",
-            "OpenAI-compatible API endpoint",
-            s("https://api.openai.com/v1"),
-        )
-        .option(
-            "--api-key <key>",
-            "API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)",
-            None,
-        )
-        .option("-m, --model <model>", "Model identifier", s("gpt-4o-mini"))
-        .option("-o, --output-dir <output>", "Output directory", s("output"))
-        .counter_option(
-            "-v, --verbose",
-            "Increase verbosity (-v for info, -vv for debug)",
-            0,
-        )
-        .option(
-            "-c, --concurrency <n>",
-            "Max concurrent function-lane LLM requests. Module-lane size is set \
-             separately via --module-concurrency; the global in-flight cap is their sum.",
-            s(&DEFAULT_CONCURRENCY.to_string()),
-        )
-        .option(
-            "--module-concurrency <n>",
-            "Max concurrent module-lane LLM requests (default derived from -c)",
-            None,
-        )
-        .option("--max-tokens <n>", "Per-request completion token budget", None)
-        .option(
-            "--context-tokens <n>",
-            "Model context window in tokens; sizes the batched split-naming \
-             prompts (default: 32768, the local measurement model's window)",
-            None,
-        )
-        .option(
-            "--disable <passes>",
-            "Comma-separated pass switches to turn OFF for ablation (unknown \
-             names are fatal and list the valid set)",
-            None,
-        )
-        .option(
-            "--probe <probes>",
-            "Comma-separated instrumentation probes to turn ON (unknown names \
-             are fatal and list the valid set)",
-            None,
-        )
-        .option(
-            "--retries <n>",
-            "Number of retry attempts for failed API calls",
-            s("3"),
-        )
-        .option(
-            "--timeout <ms>",
-            "LLM request timeout in milliseconds",
-            s(&DEFAULT_LLM_TIMEOUT_MS.to_string()),
-        )
-        .option(
-            "--llm-cache <dir>",
-            "Cache LLM responses on disk keyed by request content. \
-             Repeated prompts become deterministic \
-             across sessions and reruns are nearly free — it also pins \
-             answers against a server whose replies drift between runs.",
-            None,
-        )
-        .option(
-            "--reasoning-effort <level>",
-            "Reasoning effort for reasoning models: low, medium, or high \
-             (no env fallback; default: server-side default). \
-             'low' is ~8x faster on gpt-oss at equal name quality; only set it for \
-             reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it.",
-            None,
-        )
-        // Two declarations, as the TS now has (16-findings-queue #19: the
-        // old one-option pair made both spellings set false).
-        .option(
-            "--skip-libraries",
-            "Skip library code instead of processing it with the LLM (default: true)",
-            None,
-        )
-        .option("--no-skip-libraries", "Process library code with the LLM", None)
-        .option(
-            "--log-file <path>",
-            "Write debug logs to file (implies -vv)",
-            None,
-        )
-        .option(
-            "--diagnostics <path>",
-            "Write detailed rename diagnostics to JSON file",
-            None,
-        )
-        .option(
-            "--library-index <dir>",
-            "Library fingerprint index for --diagnostics' libraryDiscovery \
-             (report-only: names, moves and renames nothing)",
-            None,
-        )
-        .option(
-            "--library-discovery-units",
-            "List every claimed, vetoed, library-class and queued unit in \
-             --diagnostics' libraryDiscovery (default: totals and packages)",
-            None,
-        )
-        .option(
-            "--stats-json <path>",
-            "Write the deterministic match/rename breakdown as compact JSON \
-             (coverage + transfer stats + prior-match counts) for the eval harness",
-            None,
-        )
-        .option(
-            "--dump-artifacts <dir>",
-            "Write the span-keyed decision-record dump to this directory \
-             (instrumentation). Inert by construction: the run's decisions are \
-             unchanged (proven by neutrality).",
-            None,
-        )
-        .option(
-            "--dump-asks <path>",
-            "Write the reason-labeled ask log (one JSONL row per LLM ask: \
-             scope, identifiers, wave/round, WHY it was asked) to this path. \
-             Recording only — no decision reads it; off unless passed.",
-            None,
-        )
-        .option(
-            "--bundler <type>",
-            &format!("Force bundler type ({})", names(&SELECTABLE_BUNDLERS)),
-            None,
-        )
-        .option(
-            "--minifier <type>",
-            &format!("Force minifier type ({})", names(&SELECTABLE_MINIFIERS)),
-            None,
-        )
-        .option(
-            "--batch-size <n>",
-            "Identifiers per LLM batch (default: 25)",
-            None,
-        )
-        .option(
-            "--max-retries <n>",
-            "Per-identifier LLM call limit, initial + retries (default: 2; further conflicts resolve by suffixing)",
-            None,
-        )
-        .option(
-            "--rename-retries <n>",
-            "Name-conflict re-ask limit: how many times a rejected rename suggestion may be re-asked, each retry disclosing every failed suggestion (default: 2). Independent of --max-retries — a barrier/sweep collision re-ask consumes this budget, not the in-window call limit",
-            None,
-        )
-        .option(
-            "--max-free-retries <n>",
-            "Cross-lane collision retry limit (default: 100)",
-            None,
-        )
-        .option(
-            "--lane-threshold <n>",
-            "Min bindings to enable parallel lanes (default: 25)",
-            None,
-        )
-        .option(
-            "--split",
-            "Split output into a multi-file tree (src/ + vendor/ + run scaffold), \
-             emitted as a runnable CommonJS module graph by default",
-            None,
-        )
-        .option(
-            "--prior-version <path>",
-            "Path to a prior humanified file for cross-version rename reuse",
-            None,
-        )
-        .option(
-            "--no-reconcile-prior-diff",
-            "Disable the prior-diff reconcile pass (on by default with --prior-version: \
-             after generation, snap rename-noise diff hunks back to the prior version's names)",
-            None,
-        )
-        .option(
-            "--no-naming-floor",
-            "Disable the deterministic naming floor (on by default: closes minted-token \
-             coverage gaps by class/function-expression inner-id derivation + decoration retry)",
-            None,
-        )
-        .option(
-            "--no-naming-floor-sweep",
-            "Disable the LLM sweep of minted survivors (on by default: LLM-names the \
-             params/decls/vars the naming floor cannot derive; prior names transfer first)",
-            None,
-        )
-        .option(
-            "--split-ledger <path>",
-            "Prior split ledger for cross-release file-assignment inheritance \
-             (default: auto-discovered next to --prior-version)",
-            None,
-        )
-        .option(
-            "--split-pure",
-            "Emit the byte-exact review tree instead of the runnable CommonJS \
-             module graph (the --split default). Requires --split",
-            None,
-        )
-        .option(
-            "--rename-ledger <dir>",
-            "Write a replayable rename ledger (every rename keyed by byte position) \
-             + source snapshot + a standalone apply.mjs, so the LLM-rename output \
-             can be reproduced without re-running the model",
-            None,
-        )
-        .option(
-            "--sequential",
-            "The conservative naming schedule: the relaxed levers OFF (each \
-             naming window waits for the previous one and for its own \
-             shadowed-binding round), the byte-identical parallelization \
-             kept. The DEFAULT is the relaxed schedule (both levers on); \
-             --sequential ships the pre-2026-09-28 default's bytes at the \
-             same --batch-size — for debugging and comparison",
-            None,
-        )
-        // Rust-only, NOT in the help: a lever-sizing knob, not a user knob.
-        .hidden_option(
-            "--relaxed-levers <levers>",
-            "Comma-separated subset of the relaxed levers to turn on \
-             (default: every lever)",
-            None,
-        )
-        .option(
-            "--simulate-llm-latency <path>",
-            "Instrument: price this run's LLM schedule with cold per-call latencies \
-             on a virtual clock and write the simulated LLM wall time to <path> (JSON)",
-            None,
-        )
-        .option(
-            "--perf-trace <path>",
-            "Write a performance trace to JSON file (Chrome Trace Event format, viewable at chrome://tracing or ui.perfetto.dev)",
-            None,
-        )
-        .subcommand(env_reads_command());
-    RETIRED_FLAGS
-        .iter()
-        .filter(|(verb, _, _)| verb.is_none())
-        .fold(root, |c, (_, flag, note)| c.retired_option(flag, note))
+fn bundler_help() -> String {
+    format!("Force bundler type ({})", names(&SELECTABLE_BUNDLERS))
+}
+
+fn minifier_help() -> String {
+    format!("Force minifier type ({})", names(&SELECTABLE_MINIFIERS))
+}
+
+/// The pipeline program: the input and its options.
+#[derive(Parser, Debug)]
+#[command(
+    name = "humanify",
+    about = "Unminify JavaScript using an OpenAI-compatible API"
+)]
+struct PipelineCli {
+    #[arg(value_name = "input", help = "The input minified JavaScript file")]
+    input: String,
+    #[command(flatten)]
+    opts: CommandOptions,
+}
+
+/// The parsed options. Value options are typed here, once; `settings`
+/// resolves them against the environment.
+#[derive(clap::Args, Clone, Debug, Default)]
+pub struct CommandOptions {
+    #[arg(
+        long,
+        value_name = "url",
+        default_value = "https://api.openai.com/v1",
+        help = "OpenAI-compatible API endpoint"
+    )]
+    pub endpoint: String,
+    #[arg(
+        long,
+        value_name = "key",
+        help = "API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)"
+    )]
+    pub api_key: Option<String>,
+    #[arg(
+        short = 'm',
+        long,
+        value_name = "model",
+        default_value = "gpt-4o-mini",
+        help = "Model identifier"
+    )]
+    pub model: String,
+    #[arg(
+        short = 'o',
+        long,
+        value_name = "output",
+        default_value = "output",
+        help = "Output directory"
+    )]
+    pub output_dir: String,
+    #[arg(
+        short = 'v',
+        long,
+        action = clap::ArgAction::Count,
+        help = "Increase verbosity (-v for info, -vv for debug)"
+    )]
+    pub verbose: u8,
+    #[arg(
+        short = 'c',
+        long,
+        value_name = "n",
+        default_value_t = u64::from(DEFAULT_CONCURRENCY),
+        help = "Max concurrent function-lane LLM requests. Module-lane size is set \
+                separately via --module-concurrency; the global in-flight cap is their sum."
+    )]
+    pub concurrency: u64,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Max concurrent module-lane LLM requests (default derived from -c)"
+    )]
+    pub module_concurrency: Option<u64>,
+    #[arg(long, value_name = "n", help = "Per-request completion token budget")]
+    pub max_tokens: Option<u64>,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Model context window in tokens; sizes the batched split-naming \
+                prompts (default: 32768, the local measurement model's window)"
+    )]
+    pub context_tokens: Option<u64>,
+    #[arg(
+        long,
+        value_name = "passes",
+        help = "Comma-separated pass switches to turn OFF for ablation (unknown \
+                names are fatal and list the valid set)"
+    )]
+    pub disable: Option<String>,
+    #[arg(
+        long,
+        value_name = "probes",
+        help = "Comma-separated instrumentation probes to turn ON (unknown names \
+                are fatal and list the valid set)"
+    )]
+    pub probe: Option<String>,
+    #[arg(
+        long,
+        value_name = "n",
+        default_value_t = 3,
+        help = "Number of retry attempts for failed API calls"
+    )]
+    pub retries: u64,
+    #[arg(
+        long,
+        value_name = "ms",
+        default_value_t = DEFAULT_LLM_TIMEOUT_MS,
+        help = "LLM request timeout in milliseconds"
+    )]
+    pub timeout: u64,
+    #[arg(
+        long,
+        value_name = "dir",
+        help = "Cache LLM responses on disk keyed by request content. Repeated \
+                prompts become deterministic across sessions and reruns are nearly \
+                free — it also pins answers against a server whose replies drift \
+                between runs."
+    )]
+    pub llm_cache: Option<String>,
+    #[arg(
+        long,
+        value_name = "level",
+        help = "Reasoning effort for reasoning models: low, medium, or high (no env \
+                fallback; default: server-side default). 'low' is ~8x faster on \
+                gpt-oss at equal name quality; only set it for reasoning models — \
+                non-reasoning models (e.g. gpt-4o-mini) reject it."
+    )]
+    pub reasoning_effort: Option<String>,
+    // The two library spellings stay until the library decision (config
+    // sweep step 6) replaces both; together they are a conflict.
+    #[arg(
+        long,
+        conflicts_with = "no_skip_libraries",
+        help = "Skip library code instead of processing it with the LLM (the default)"
+    )]
+    pub skip_libraries: bool,
+    #[arg(long, help = "Process library code with the LLM")]
+    pub no_skip_libraries: bool,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Write debug logs to file (implies -vv)"
+    )]
+    pub log_file: Option<String>,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Write detailed rename diagnostics to JSON file"
+    )]
+    pub diagnostics: Option<String>,
+    /// The library fingerprint index discovery looks statement units up in
+    /// (report-only, with `--diagnostics`).
+    #[arg(
+        long,
+        value_name = "dir",
+        help = "Library fingerprint index for --diagnostics' libraryDiscovery \
+                (report-only: names, moves and renames nothing)"
+    )]
+    pub library_index: Option<String>,
+    #[arg(
+        long,
+        help = "List every claimed, vetoed, library-class and queued unit in \
+                --diagnostics' libraryDiscovery (default: totals and packages)"
+    )]
+    pub library_discovery_units: bool,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Write the deterministic match/rename breakdown as compact JSON \
+                (coverage + transfer stats + prior-match counts) for the eval harness"
+    )]
+    pub stats_json: Option<String>,
+    #[arg(
+        long,
+        value_name = "dir",
+        help = "Write the span-keyed decision-record dump to this directory \
+                (instrumentation). Inert by construction: the run's decisions are \
+                unchanged (proven by neutrality)."
+    )]
+    pub dump_artifacts: Option<String>,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Write the reason-labeled ask log (one JSONL row per LLM ask: scope, \
+                identifiers, wave/round, WHY it was asked) to this path. Recording \
+                only — no decision reads it; off unless passed."
+    )]
+    pub dump_asks: Option<String>,
+    #[arg(long, value_name = "type", help = bundler_help())]
+    pub bundler: Option<String>,
+    #[arg(long, value_name = "type", help = minifier_help())]
+    pub minifier: Option<String>,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Identifiers per LLM batch (default: 25)"
+    )]
+    pub batch_size: Option<u64>,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Per-identifier LLM call limit, initial + retries (default: 2; \
+                further conflicts resolve by suffixing)"
+    )]
+    pub max_retries: Option<u64>,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Name-conflict re-ask limit: how many times a rejected rename \
+                suggestion may be re-asked, each retry disclosing every failed \
+                suggestion (default: 2). Independent of --max-retries — a \
+                barrier/sweep collision re-ask consumes this budget, not the \
+                in-window call limit"
+    )]
+    pub rename_retries: Option<u64>,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Cross-lane collision retry limit (default: 100)"
+    )]
+    pub max_free_retries: Option<u64>,
+    #[arg(
+        long,
+        value_name = "n",
+        help = "Min bindings to enable parallel lanes (default: 25)"
+    )]
+    pub lane_threshold: Option<u64>,
+    #[arg(
+        long,
+        help = "Split output into a multi-file tree (src/ + vendor/ + run scaffold), \
+                emitted as a runnable CommonJS module graph by default"
+    )]
+    pub split: bool,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Path to a prior humanified file for cross-version rename reuse"
+    )]
+    pub prior_version: Option<String>,
+    #[arg(
+        long,
+        help = "Disable the prior-diff reconcile pass (on by default with \
+                --prior-version: after generation, snap rename-noise diff hunks back \
+                to the prior version's names)"
+    )]
+    pub no_reconcile_prior_diff: bool,
+    #[arg(
+        long,
+        help = "Disable the deterministic naming floor (on by default: closes \
+                minted-token coverage gaps by class/function-expression inner-id \
+                derivation + decoration retry)"
+    )]
+    pub no_naming_floor: bool,
+    #[arg(
+        long,
+        help = "Disable the LLM sweep of minted survivors (on by default: LLM-names \
+                the params/decls/vars the naming floor cannot derive; prior names \
+                transfer first)"
+    )]
+    pub no_naming_floor_sweep: bool,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Prior split ledger for cross-release file-assignment inheritance \
+                (default: auto-discovered next to --prior-version)"
+    )]
+    pub split_ledger: Option<String>,
+    #[arg(
+        long,
+        help = "Emit the byte-exact review tree instead of the runnable CommonJS \
+                module graph (the --split default). Requires --split"
+    )]
+    pub split_pure: bool,
+    #[arg(
+        long,
+        value_name = "dir",
+        help = "Write a replayable rename ledger (every rename keyed by byte \
+                position) + source snapshot + a standalone apply.mjs, so the \
+                LLM-rename output can be reproduced without re-running the model"
+    )]
+    pub rename_ledger: Option<String>,
+    #[arg(
+        long,
+        help = "The conservative naming schedule: the relaxed levers OFF (each naming \
+                window waits for the previous one and for its own shadowed-binding \
+                round), the byte-identical parallelization kept. The DEFAULT is the \
+                relaxed schedule (both levers on); --sequential ships the \
+                pre-2026-09-28 default's bytes at the same --batch-size — for \
+                debugging and comparison"
+    )]
+    pub sequential: bool,
+    // NOT in the help: a lever-sizing knob, not a user knob. None = every
+    // lever.
+    #[arg(
+        long,
+        value_name = "levers",
+        hide = true,
+        help = "Comma-separated subset of the relaxed levers to turn on (default: \
+                every lever)"
+    )]
+    pub relaxed_levers: Option<String>,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Instrument: price this run's LLM schedule with cold per-call \
+                latencies on a virtual clock and write the simulated LLM wall time \
+                to <path> (JSON)"
+    )]
+    pub simulate_llm_latency: Option<String>,
+    #[arg(
+        long,
+        value_name = "path",
+        help = "Write a performance trace to JSON file (Chrome Trace Event format, \
+                viewable at chrome://tracing or ui.perfetto.dev)"
+    )]
+    pub perf_trace: Option<String>,
 }
 
 /// Flags renamed or deleted by the config sweep (2026-10-13; no backwards
@@ -338,29 +404,100 @@ pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
     ),
 ];
 
-/// The help `command` prints for `--help` and after a usage error:
-/// `"humanify"` names the pipeline program, anything else a subcommand.
-pub fn help_text(command: &str) -> String {
-    let root = program();
-    if command == root.name {
-        return root.help_information(&[]);
-    }
-    root.commands
-        .iter()
-        .find(|c| c.name == command)
-        .unwrap_or_else(|| panic!("the program has no command {command}"))
-        .help_information(&[root.name.as_str()])
+/// A retired flag in `args` (`verb`'s own arguments; `None` = the
+/// pipeline's): the refusal naming what replaced it, or None. `--flag=value`
+/// counts too; nothing after `--` is a flag.
+pub fn retired_flag(verb: Option<&str>, args: &[String]) -> Option<String> {
+    args.iter().take_while(|a| *a != "--").find_map(|arg| {
+        let name = arg.split_once('=').map_or(arg.as_str(), |(n, _)| n);
+        RETIRED_FLAGS
+            .iter()
+            .find(|(v, flag, _)| *v == verb && *flag == name)
+            .map(|(_, flag, note)| format!("error: unexpected argument '{flag}' ({note})\n"))
+    })
 }
 
-/// `configureEnvReadsCommand`.
-fn env_reads_command() -> CliCommand {
-    CliCommand::new("env-reads")
-        .description("Inventory process.env / Bun.env / import.meta.env reads in a file or tree")
-        .argument("<path>", "A JS file, or a directory of JS files to scan")
-        .option("--markdown", "Emit the report as Markdown", None)
-        .option(
-            "-o, --output <file>",
-            "Write the report to a file instead of stdout",
-            None,
-        )
+/// A combined single-dash argument other than the `-v` counter (`-vv`):
+/// clap would read `-c5` as `-c 5` and `-vc 5` as `-v -c 5`; the harness
+/// writes neither, so both are refused rather than guessed at.
+fn attached_short(args: &[String]) -> Option<String> {
+    args.iter()
+        .take_while(|a| *a != "--")
+        .find(|a| {
+            a.len() > 2
+                && a.starts_with('-')
+                && !a.starts_with("--")
+                && !a[1..].bytes().all(|b| b == b'v')
+        })
+        .map(|a| {
+            format!(
+                "error: unexpected argument '{a}': a short option's value is a separate \
+                 argument (`-c 472`, not `-c472`), and only -v repeats (`-vv`)\n"
+            )
+        })
+}
+
+fn pipeline_command() -> clap::Command {
+    // The version is package.json's, read at run time (the crate's own is
+    // 0.0.0); clap wants it 'static, and there is one per process.
+    let version: &'static str = Box::leak(package_version().into_boxed_str());
+    PipelineCli::command().version(version)
+}
+
+/// The pipeline program's help, as `--help` prints it.
+pub fn help_text() -> String {
+    pipeline_command().render_help().to_string()
+}
+
+/// What the pipeline's argv parsed to: a run, or an exit (help, version,
+/// a usage error) with what to print where.
+#[derive(Debug)]
+pub enum PipelineParse {
+    Run {
+        input: String,
+        opts: Box<CommandOptions>,
+    },
+    Exit {
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
+}
+
+fn usage_error(stderr: String) -> PipelineParse {
+    PipelineParse::Exit {
+        code: 1,
+        stdout: String::new(),
+        stderr,
+    }
+}
+
+/// Parse the pipeline program's argv (no program name). Help and version
+/// go to stdout with exit 0; every usage error goes to stderr with exit 1.
+pub fn parse_pipeline(argv: &[String]) -> PipelineParse {
+    if let Some(refusal) = retired_flag(None, argv).or_else(|| attached_short(argv)) {
+        return usage_error(refusal);
+    }
+    let full = std::iter::once("humanify".to_string()).chain(argv.iter().cloned());
+    let parsed = pipeline_command()
+        .try_get_matches_from(full)
+        .and_then(|m| PipelineCli::from_arg_matches(&m));
+    match parsed {
+        Ok(cli) => PipelineParse::Run {
+            input: cli.input,
+            opts: Box::new(cli.opts),
+        },
+        Err(e) => {
+            use clap::error::ErrorKind;
+            let text = e.render().to_string();
+            match e.kind() {
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => PipelineParse::Exit {
+                    code: 0,
+                    stdout: text,
+                    stderr: String::new(),
+                },
+                _ => usage_error(text),
+            }
+        }
+    }
 }

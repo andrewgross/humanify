@@ -1,17 +1,17 @@
 //! The humanify binary.
 //!
 //! Two surfaces share the binary:
-//! - the PIPELINE program (`humanify <input> [options]`, `humanify
-//!   env-reads <path>`) — the commander grammar the harness drives
-//!   (contract 14 §1), parsed by `humanify_cli::commander` from the
-//!   declarations in `humanify_cli::surface`;
+//! - the PIPELINE program (`humanify <input> [options]`) — the surface the
+//!   harness drives, declared for clap in `humanify_cli::surface` (the
+//!   commander-13 port it used to be parsed by was deleted in config sweep
+//!   step 3, 2026-10-13; usage errors still exit 1 there);
 //! - the stage VERBS below (`detect`, `unpack`, `discover`, `format`,
 //!   `format-check`, `match`) — one pipeline stage run on its own, for
 //!   inspection and for the gate (`format-check` replays the committed
 //!   formatter goldens, test/parity/format-goldens.json — the formatter's
 //!   frozen spec; `match` is the ground-truth harness's instrument). Parsed
-//!   by clap. `argv[1]` naming a verb selects clap; anything else is the
-//!   pipeline's (so an input file literally named like a verb must be
+//!   by clap too, as their own command. `argv[1]` naming a verb selects
+//!   the verbs; anything else is the pipeline's (so an input file literally named like a verb must be
 //!   passed as `./<name>`).
 //!
 //! The migration verbs that rebuilt one stage's rows from a TS dump for the
@@ -217,17 +217,10 @@ fn is_stage_verb(arg: &str) -> bool {
 }
 
 /// A retired flag on a stage verb (`surface::RETIRED_FLAGS`, the one
-/// list): the refusal naming what replaced it, or None. `--flag=value`
-/// counts too; only the verb's own arguments are looked at.
+/// list): the refusal naming what replaced it, or None.
 fn retired_verb_flag(argv: &[String]) -> Option<String> {
     let (verb, rest) = argv.split_first()?;
-    rest.iter().find_map(|arg| {
-        let name = arg.split_once('=').map_or(arg.as_str(), |(n, _)| n);
-        humanify_cli::surface::RETIRED_FLAGS
-            .iter()
-            .find(|(v, flag, _)| *v == Some(verb.as_str()) && *flag == name)
-            .map(|(_, flag, note)| format!("unexpected argument '{flag}' ({note})"))
-    })
+    humanify_cli::surface::retired_flag(Some(verb.as_str()), rest)
 }
 
 fn main() {
@@ -237,7 +230,7 @@ fn main() {
     }
     if let Some(refusal) = retired_verb_flag(&argv) {
         // clap's usage-error exit code, as an unknown argument gets.
-        eprintln!("error: {refusal}");
+        eprint!("{refusal}");
         std::process::exit(2);
     }
     let cli = Cli::parse();
@@ -339,8 +332,7 @@ fn main() {
             }
         }
         None => {
-            // No subcommand: print help (commander's behavior with a
-            // required argument is the same shape).
+            // No subcommand: print help.
             Cli::command().print_help().expect("help should print");
         }
     }
@@ -797,8 +789,8 @@ mod help_golden_test {
 
     /// The match verb's rendered help, pinned by a golden generated
     /// deliberately with `humanify match --help > test/golden/help/match.txt`
-    /// (the commander surface's goldens are pinned by surface_test; the
-    /// clap verbs had no help pin — the instrument's surface is a contract
+    /// (the pipeline's help golden is pinned by surface_test; the clap
+    /// verbs had no help pin — the instrument's surface is a contract
     /// with the ground-truth harness, so it is pinned from the first day).
     #[test]
     fn match_help_matches_the_golden() {

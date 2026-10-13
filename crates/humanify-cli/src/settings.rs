@@ -12,11 +12,10 @@
 //! `kill_switches`), and `moduleConcurrency` when unset — its default is
 //! bundler-aware and the bundler is not detected yet.
 //!
-//! Numbers are JS numbers (`f64`) parsed with `parseInt(value, 10)`
-//! semantics (`util::parse_number`), because a harness argv like `-c 32`
-//! and a typo like `-c 12abc` must resolve exactly as the TS resolves them.
+//! Numbers arrive typed (non-negative integers, refused at the parse
+//! otherwise — config sweep step 3) and are held as JS numbers (`f64`).
 
-use crate::util::{DEFAULT_LLM_TIMEOUT_MS, parse_number};
+use crate::util::DEFAULT_LLM_TIMEOUT_MS;
 
 /// The CLI options this resolver reads (a subset of the parsed options).
 #[derive(Clone, Debug, Default)]
@@ -24,19 +23,19 @@ pub struct SettingsInput {
     pub endpoint: Option<String>,
     pub model: Option<String>,
     pub api_key: Option<String>,
-    pub timeout: Option<String>,
-    pub retries: Option<String>,
-    pub concurrency: Option<String>,
-    pub batch_size: Option<String>,
-    pub max_retries: Option<String>,
-    pub max_free_retries: Option<String>,
-    pub lane_threshold: Option<String>,
-    pub rename_retries: Option<String>,
+    pub timeout: Option<u64>,
+    pub retries: Option<u64>,
+    pub concurrency: Option<u64>,
+    pub batch_size: Option<u64>,
+    pub max_retries: Option<u64>,
+    pub max_free_retries: Option<u64>,
+    pub lane_threshold: Option<u64>,
+    pub rename_retries: Option<u64>,
     pub llm_cache: Option<String>,
     pub reasoning_effort: Option<String>,
-    pub max_tokens: Option<String>,
-    pub context_tokens: Option<String>,
-    pub module_concurrency: Option<String>,
+    pub max_tokens: Option<u64>,
+    pub context_tokens: Option<u64>,
+    pub module_concurrency: Option<u64>,
     pub skip_libraries: Option<bool>,
     pub naming_floor: Option<bool>,
     pub naming_floor_sweep: Option<bool>,
@@ -100,8 +99,9 @@ pub fn parse_reasoning_effort(value: Option<&str>) -> Result<Option<&'static str
     }
 }
 
-fn num(v: &Option<String>) -> Result<Option<f64>, String> {
-    v.as_deref().map(parse_number).transpose()
+/// A typed count as the JS number the settings hold.
+fn num(v: Option<u64>) -> Option<f64> {
+    v.map(|n| n as f64)
 }
 
 /// `resolveSettings(opts)` with the production environment (the ONE env
@@ -133,26 +133,25 @@ pub fn resolve_settings_with(
         (Some(e), Some(m)) if !e.is_empty() && !m.is_empty() => (e.to_string(), m.to_string()),
         _ => {
             return Err(
-                "endpoint and model must be supplied by the CLI layer (commander's \
-                 option defaults carry the env fallback); resolveSettings does not \
-                 re-derive them."
+                "endpoint and model must be supplied by the CLI layer (the option \
+                 defaults carry them); resolveSettings does not re-derive them."
                     .to_string(),
             );
         }
     };
 
-    let timeout = num(&opts.timeout)?.unwrap_or(DEFAULT_LLM_TIMEOUT_MS as f64);
-    let max_tokens = num(&opts.max_tokens)?;
-    let context_tokens = num(&opts.context_tokens)?;
+    let timeout = num(opts.timeout).unwrap_or(DEFAULT_LLM_TIMEOUT_MS as f64);
+    let max_tokens = num(opts.max_tokens);
+    let context_tokens = num(opts.context_tokens);
     let reasoning_effort = parse_reasoning_effort(opts.reasoning_effort.as_deref())?;
-    let concurrency = num(&opts.concurrency)?.unwrap_or(0.0);
-    let module_concurrency = num(&opts.module_concurrency)?;
-    let retry_attempts = num(&opts.retries)?;
-    let batch_size = num(&opts.batch_size)?;
-    let max_retries_per_identifier = num(&opts.max_retries)?;
-    let max_free_retries = num(&opts.max_free_retries)?;
-    let lane_threshold = num(&opts.lane_threshold)?;
-    let rename_retries = num(&opts.rename_retries)?;
+    let concurrency = num(opts.concurrency).unwrap_or(0.0);
+    let module_concurrency = num(opts.module_concurrency);
+    let retry_attempts = num(opts.retries);
+    let batch_size = num(opts.batch_size);
+    let max_retries_per_identifier = num(opts.max_retries);
+    let max_free_retries = num(opts.max_free_retries);
+    let lane_threshold = num(opts.lane_threshold);
+    let rename_retries = num(opts.rename_retries);
 
     Ok(Settings {
         endpoint,
