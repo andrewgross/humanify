@@ -350,7 +350,7 @@ mod helper_shape_test;
 
 /// The bundler's OTHER runtime helpers by SHAPE — the ones no vendored body
 /// is rewritten to, but which app and library code alike call, so library
-/// discovery treats them as runtime (`graph::references::BundlerFacts`):
+/// discovery treats them as runtime (`cut::units::BundlerFacts`):
 /// esbuild's `__name` (`(t,v)=>defProp(t,"name",{value:v,configurable:!0})`,
 /// written for `--keep-names`), `__publicField`
 /// (`(o,k,v)=>defNormal(o,typeof k!="symbol"?k+"":k,v)`) and `__require`

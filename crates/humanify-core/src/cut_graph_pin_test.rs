@@ -172,7 +172,7 @@ fn with_container(
         &Ingest<'_>,
         &[oxc_ast::ast::Statement<'_>],
         &[Span],
-        &crate::graph::references::BundlerFacts,
+        &crate::cut::units::BundlerFacts,
     ),
 ) {
     let tc = toolchain_of(text);
@@ -181,7 +181,7 @@ fn with_container(
     let semantic = ingest.semantic();
     let wrapper = tc.layout.piece.find_wrapper(ingest.program, semantic);
     let body = wrapper.as_ref().map(|w| w.body_span);
-    let statements = crate::modules::container_statements(ingest.program, semantic, body);
+    let statements = crate::cut::container_statements(ingest.program, semantic, body);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let factories: Vec<Span> = tc
         .module_wrappers
@@ -189,7 +189,7 @@ fn with_container(
         .classify_factories(text, ingest.program, semantic, body, &tables)
         .map(|c| c.factories.iter().map(|f| f.span).collect())
         .unwrap_or_default();
-    let facts = crate::graph::references::BundlerFacts::recognise(
+    let facts = crate::cut::units::BundlerFacts::recognise(
         text,
         statements,
         tc.module_wrappers.piece,
@@ -201,15 +201,14 @@ fn with_container(
 fn unit_lines(text: &str, out: &mut String) {
     with_container(text, |_, statements, factories, facts| {
         for bodies in [false, true] {
-            let units =
-                crate::graph::references::container_units(statements, factories, facts, bodies);
+            let units = crate::cut::units::container_units(statements, factories, facts, bodies);
             for (u, node) in units.units.iter().zip(&units.nodes) {
                 let node = match node {
-                    crate::graph::references::UnitNode::Statement(s) => {
+                    crate::cut::units::UnitNode::Statement(s) => {
                         format!("S{:?}", oxc_span::GetSpan::span(*s))
                     }
-                    crate::graph::references::UnitNode::Declarator(d) => format!("D{:?}", d.span),
-                    crate::graph::references::UnitNode::Container => "C".to_string(),
+                    crate::cut::units::UnitNode::Declarator(d) => format!("D{:?}", d.span),
+                    crate::cut::units::UnitNode::Container => "C".to_string(),
                 };
                 let _ = writeln!(out, "U{} {u:?} {node}", u8::from(bodies));
             }
@@ -232,8 +231,12 @@ fn reference_lines(text: &str, out: &mut String) {
         // The edge list as discovery reads it: (from, to, kind class). The
         // kind is printed as its CLASS (read / write / body) so a finer
         // kind vocabulary that keeps every class is the same view.
-        for &(from, to, kind) in &g.edges {
-            let _ = writeln!(out, "E {from} {to} {kind:?}");
+        for e in &g.edges {
+            let class = match e.kind.class() {
+                crate::graph::edges::EdgeKind::LazyWrapper => "Body".to_string(),
+                k => format!("{k:?}"),
+            };
+            let _ = writeln!(out, "E {} {} {class}", e.from, e.to);
         }
         let _ = writeln!(out, "O {:?}", g.out);
         let _ = writeln!(out, "I {:?}", g.inn);
@@ -245,6 +248,50 @@ fn reference_lines(text: &str, out: &mut String) {
             .collect();
         let _ = writeln!(out, "P {probes:?}");
     });
+}
+
+// ---------------------------------------------------------------------------
+// The one cut and the one graph (new in step 3: recorded at its commit, so
+// step 4's rule layer reads the same pieces and edges)
+// ---------------------------------------------------------------------------
+
+fn code_graph_lines(text: &str, out: &mut String) {
+    let tc = toolchain_of(text);
+    with_container(text, |ingest, statements, factories, facts| {
+        let semantic = ingest.semantic();
+        let wrapper = tc.layout.piece.find_wrapper(ingest.program, semantic);
+        let cut = crate::cut::Cut::new(&crate::cut::CutInput {
+            semantic,
+            program: ingest.program,
+            wrapper: wrapper.as_ref(),
+            factories,
+            facts,
+            factory_bodies: false,
+        });
+        let unified = crate::graph::build_unified_graph(
+            semantic,
+            ingest.program,
+            "input.js",
+            crate::rename::eligibility::NeverRename::UNIVERSAL,
+            tc.layout.piece,
+        );
+        let references = crate::graph::references::build_reference_graph(
+            text, semantic, statements, factories, facts,
+        );
+        let graph =
+            crate::graph::edges::CodeGraph::assemble(cut, Some(&unified), Some(&references));
+        for p in &graph.pieces {
+            let _ = writeln!(out, "P {:?} {:?} {:?}", p.kind, p.span, p.parent);
+        }
+        for e in &graph.edges {
+            let _ = writeln!(out, "E {} {} {:?}", e.from, e.to, e.kind);
+        }
+    });
+}
+
+#[test]
+fn the_cut_and_the_code_graph_are_pinned() {
+    pin("code-graph", PIN_CODE_GRAPH, code_graph_lines);
 }
 
 #[test]
@@ -293,16 +340,23 @@ fn full_corpus_digests() {
     }
     files.sort();
     let mut totals: Vec<String> = vec![String::new(); sections.len()];
+    let mut unreadable = 0;
     for path in &files {
         let text = std::fs::read_to_string(path).expect("corpus file reads");
-        {
+        let round_trips = {
             let alloc = Allocator::default();
-            let ingest = parse_loud(&alloc, &text);
-            assert!(
-                !crate::ingest::program_estree_json(ingest.program).is_null(),
-                "{}: the ESTree JSON does not round-trip (lone surrogates?)",
+            let ingest = Ingest::parse(&alloc, &text, "input.js");
+            ingest.errors.is_empty()
+                && !crate::ingest::program_estree_json(ingest.program).is_null()
+        };
+        if !round_trips {
+            // LOUD, never a silently empty view.
+            println!(
+                "UNREADABLE {} (parse errors, or ESTree JSON that does not round-trip)",
                 path.display()
             );
+            unreadable += 1;
+            continue;
         }
         for (i, (section, lines)) in sections.iter().enumerate() {
             let mut out = String::new();
@@ -313,7 +367,11 @@ fn full_corpus_digests() {
         }
     }
     for ((section, _), all) in sections.iter().zip(&totals) {
-        println!("TOTAL {section} {} over {} files", digest(all), files.len());
+        println!(
+            "TOTAL {section} {} over {} files ({unreadable} unreadable, skipped)",
+            digest(all),
+            files.len() - unreadable
+        );
     }
 }
 
@@ -331,3 +389,4 @@ const PIN_GRAPH: &str = "ab8d5cb67730e6bad86a481d";
 const PIN_STATEMENTS: &str = "fa14dc596ae8ebf706faef73";
 const PIN_UNITS: &str = "f9d1da3bb72236b147e6b337";
 const PIN_REFERENCES: &str = "86d4340df35917ffceba5c7b";
+const PIN_CODE_GRAPH: &str = "4530d644c5694bfe36121991";

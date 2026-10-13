@@ -52,7 +52,7 @@ pub fn collect_eval_with_taint(semantic: &Semantic<'_>) -> EvalWithTaint {
         // Walk up from the site, collecting every enclosing function's span
         // (the TS taintScopeChain's getFunctionParent chain) — via the one
         // owner of the enclosing-functions question.
-        for id in crate::graph::enclosing_function_node_ids(node.id(), nodes) {
+        for id in crate::cut::enclosing_function_node_ids(node.id(), nodes) {
             let span = nodes.get_node(id).span();
             if !tainted.contains(&span) {
                 tainted.push(span);

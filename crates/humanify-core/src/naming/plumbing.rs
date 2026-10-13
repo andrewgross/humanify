@@ -66,13 +66,8 @@ pub fn lazy_init_helpers_of(
     program_json: &serde_json::Value,
     wrapper_body: Option<oxc_span::Span>,
 ) -> HashSet<String> {
-    let body = match wrapper_body {
-        Some(span) => crate::twins::block_body_by_span(program_json, span),
-        None => program_json
-            .get("body")
-            .and_then(serde_json::Value::as_array),
-    };
-    body.map(|b| grammar.lazy_init_helpers(b))
+    crate::cut::container_statement_values(program_json, wrapper_body)
+        .map(|b| grammar.lazy_init_helpers(b))
         .unwrap_or_default()
 }
 

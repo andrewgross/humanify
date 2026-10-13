@@ -5,6 +5,7 @@
 
 pub mod artifact_dump;
 pub mod babel_view;
+pub mod cut;
 pub mod detect;
 pub mod emit;
 pub mod fast;
@@ -58,6 +59,9 @@ mod hash_forms_pin_test;
 
 #[cfg(test)]
 mod cut_graph_pin_test;
+
+#[cfg(test)]
+mod cut_test;
 
 #[cfg(test)]
 mod modules_test;
