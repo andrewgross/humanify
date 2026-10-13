@@ -176,7 +176,7 @@ fn content_tokens(node: &Value, tables: &SymbolTables, out: &mut BTreeSet<String
 
 /// Every statement-like unit of a RAW bundle — top-level statements,
 /// lazy-module bodies and bundled modules' factory bodies — with its
-/// prints (the index side's unit model: `graph::references::container_units`
+/// prints (the index side's unit model: `cut::units::container_units`
 /// with factory bodies; containers carry no print).
 pub fn bundle_unit_prints(
     code: &str,
@@ -184,19 +184,18 @@ pub fn bundle_unit_prints(
     layout: crate::toolchain::BundleLayout,
     grammar: crate::toolchain::ModuleWrapperGrammar,
     interop: crate::toolchain::InteropHelpers,
-) -> Vec<(crate::graph::references::Unit, StatementPrints)> {
+) -> Vec<(crate::cut::units::Unit, StatementPrints)> {
     let semantic = ingest.semantic();
     let wrapper = layout.find_wrapper(ingest.program, semantic);
     let body = wrapper.as_ref().map(|w| w.body_span);
-    let statements = crate::modules::container_statements(ingest.program, semantic, body);
+    let statements = crate::cut::container_statements(ingest.program, semantic, body);
     let tables = SymbolTables::build(semantic);
     let factories: Vec<Span> = grammar
         .classify_factories(code, ingest.program, semantic, body, &tables)
         .map(|c| c.factories.iter().map(|f| f.span).collect())
         .unwrap_or_default();
-    let facts =
-        crate::graph::references::BundlerFacts::recognise(code, statements, grammar, interop);
-    let units = crate::graph::references::container_units(statements, &factories, &facts, true);
+    let facts = crate::cut::units::BundlerFacts::recognise(code, statements, grammar, interop);
+    let units = crate::cut::units::container_units(statements, &factories, &facts, true);
     let prints = unit_prints(&units, &tables);
     units
         .units
@@ -209,10 +208,10 @@ pub fn bundle_unit_prints(
 /// The prints of every unit (None for a container), parallel to `units`.
 /// The AST is serialized on this thread; the hashing runs in parallel.
 pub fn unit_prints(
-    units: &crate::graph::references::ContainerUnits<'_>,
+    units: &crate::cut::units::ContainerUnits<'_>,
     tables: &SymbolTables,
 ) -> Vec<Option<StatementPrints>> {
-    use crate::graph::references::UnitNode;
+    use crate::cut::units::UnitNode;
     use oxc_estree::{CompactSerializer, ESTree};
     let texts: Vec<Option<String>> = units
         .nodes

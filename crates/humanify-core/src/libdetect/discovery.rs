@@ -40,7 +40,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::Serialize;
 
-use crate::graph::references::{ReferenceGraph, UnitKind};
+use crate::cut::units::UnitKind;
+use crate::graph::references::ReferenceGraph;
 use crate::libindex::families::PackageFamilies;
 
 /// What a seed claim stands on.
@@ -745,7 +746,53 @@ pub struct IndexLookup<'x> {
 /// index's own claims when `lookup` is given, then [`discover`]; then,
 /// with a targeted rule, a lookup of every queued region and a second
 /// [`discover`] with what it claimed.
+///
+/// The returned graph's edges carry their region scope
+/// ([`library_regions`]: each claimed package is a region) — the scope's
+/// producer. Nothing reads it yet (docs/matching-architecture.md §4).
 pub fn discover_in_bundle(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'_>,
+    pieces: BundlePieces,
+    factories: &[oxc_span::Span],
+    index_claims: &[(u32, String)],
+    lookup: Option<IndexLookup<'_>>,
+    options: DiscoveryOptions,
+) -> (ReferenceGraph, Discovery) {
+    let (mut graph, found) = discover_unscoped(
+        code,
+        ingest,
+        pieces,
+        factories,
+        index_claims,
+        lookup,
+        options,
+    );
+    graph.assign_scopes(&library_regions(&graph, &found));
+    (graph, found)
+}
+
+/// The library regions of a discovery: one region per claimed package
+/// (ids in package-name order), spanning its claimed units. A unit inside
+/// a claimed unit (a lazy body inside a claimed wrapper) is in that region
+/// by containment.
+pub fn library_regions(graph: &ReferenceGraph, found: &Discovery) -> crate::graph::edges::Regions {
+    let packages: BTreeSet<&str> = found.claims.values().map(|c| c.package.as_str()).collect();
+    let id: BTreeMap<&str, u32> = packages
+        .into_iter()
+        .enumerate()
+        .map(|(i, p)| (p, i as u32))
+        .collect();
+    crate::graph::edges::Regions::new(
+        found
+            .claims
+            .iter()
+            .map(|(&u, c)| (graph.units[u as usize].span, id[c.package.as_str()]))
+            .collect(),
+    )
+}
+
+fn discover_unscoped(
     code: &str,
     ingest: &crate::ingest::Ingest<'_>,
     pieces: BundlePieces,
@@ -772,7 +819,7 @@ pub fn discover_in_bundle(
         let found = discover(&graph, &seeds, &families, options);
         return (graph, found);
     };
-    let units = crate::graph::references::container_units(statements, factories, &facts, false);
+    let units = crate::cut::units::container_units(statements, factories, &facts, false);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables);
     let looker = Looker {
@@ -821,17 +868,17 @@ fn bundle_graph<'a>(
     factories: &[oxc_span::Span],
 ) -> (
     &'a [oxc_ast::ast::Statement<'a>],
-    crate::graph::references::BundlerFacts,
+    crate::cut::units::BundlerFacts,
     ReferenceGraph,
 ) {
     let semantic = ingest.semantic();
     let wrapper = pieces.layout.find_wrapper(ingest.program, semantic);
-    let statements = crate::modules::container_statements(
+    let statements = crate::cut::container_statements(
         ingest.program,
         semantic,
         wrapper.as_ref().map(|w| w.body_span),
     );
-    let facts = crate::graph::references::BundlerFacts::recognise(
+    let facts = crate::cut::units::BundlerFacts::recognise(
         code,
         statements,
         pieces.grammar,
@@ -899,10 +946,10 @@ pub fn unit_rows(
     pieces: BundlePieces,
     factories: &[oxc_span::Span],
 ) -> Vec<UnitRow> {
-    use crate::graph::references::UnitKind;
+    use crate::cut::units::UnitKind;
     let semantic = ingest.semantic();
     let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
-    let units = crate::graph::references::container_units(statements, factories, &facts, false);
+    let units = crate::cut::units::container_units(statements, factories, &facts, false);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables);
     let sizes = module_bytes(&graph);

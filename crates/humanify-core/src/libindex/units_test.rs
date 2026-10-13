@@ -70,7 +70,7 @@ fn nodes_and_content_tokens_are_counted() {
 
 #[test]
 fn a_bundles_units_include_module_bodies_and_skip_containers() {
-    use crate::graph::references::UnitKind;
+    use crate::cut::units::UnitKind;
     use crate::libindex::units::bundle_unit_prints;
     use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
     let code = "var x=(I,A)=>()=>(A||I((A={exports:{}}).exports,A),A.exports);\nvar b=(e,t)=>()=>(e&&(t=e(e=0)),t);\nvar mod_a=x((exports,module)=>{\n  function helper(){return \"a\"}\n  module.exports=helper;\n});\nvar N;\nvar I=b(()=>{\n  N=mod_a();\n});\nvar main=()=>(I(),N);\n";

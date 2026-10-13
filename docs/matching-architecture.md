@@ -5,10 +5,11 @@ side lives on the exp095 branches (`exp095-discovery-core`, `exp095-index-v2`,
 `exp095-match-misses`) and is not on main. The settings and the library index's
 life cycle are in [library-matching-config.md](./library-matching-config.md).
 
-Progress: step 1 (shared helpers) is on main; step 2 (hash forms as named,
-versioned settings: `hash/forms.rs`) is built on branch
-`refactor/matching-hash-forms` (2026-10-13). §2 below is the inventory as it
-stood BEFORE them.
+Progress: step 1 (shared helpers) and step 2 (hash forms as named,
+versioned settings: `hash/forms.rs`) are on main; step 3 (one cutter
+`cut.rs`, one graph `graph/edges.rs`, region scope plumbed) is built on
+branch `refactor/matching-cutter-graph` (2026-10-13). §2 below is the
+inventory as it stood BEFORE them.
 
 ## Totals first
 
@@ -244,6 +245,66 @@ now from one place.
 A profile's thresholds are not a separate file: they are the `[library]`
 section of humanify's ONE config file (`--config <file>`, built-in defaults
 compiled in; see [config-consolidation.md](./config-consolidation.md)).
+
+### 3.6 As built in step 3 (2026-10-13)
+
+**The cutter** is `crates/humanify-core/src/cut.rs` (+ `cut/units.rs`):
+
+| piece      | owner                                                                                             | consumers                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| module     | `container_statements` (AST), `container_statement_values` (ESTree JSON), same rule               | factory classification, discovery, index units; twins/split inventory, naming |
+| statement  | `cut::units::container_units` (+ `UnitLocator`, the one position → unit lookup)                   | reference graph, library units (index and bundle side)                        |
+| declarator | the same (one unit per declarator of a multi-declarator `var`)                                    | the same                                                                      |
+| function   | `function_pieces`, `is_function_piece`, `enclosing_function_piece`, `enclosing_function_node_ids` | function graph rows + scope parents, eval/with taint                          |
+| binding    | `container_scope`                                                                                 | function graph's module bindings                                              |
+
+`Cut::new` lays all five out as one `Piece` list (kind, span, parent). It is
+the node set of the one graph; pipeline consumers do NOT build it — each
+reads its own granularity from the owner functions, computed once as before
+(§8's lazy-per-kind rule). `enclosing_statement` (twins' row → statement
+assignment) also lives here. Two substrates stay two, as a named view: the
+twins' statement hash, the split and the naming plumbing walk the ESTree
+JSON, the graphs walk the AST; both select the container by the same rule.
+
+**The graph** is `crates/humanify-core/src/graph/edges.rs`: one `Edge`
+(from, to, `EdgeKind` ∈ Call / Read / Write / InitMutation / LazyWrapper,
+`scope: Option<EdgeScope>`) and one `CodeGraph` (the cut's pieces + every
+edge, joined by span). The two BUILDERS stay two, as named views, because
+folding them changes bytes: the function graph attributes a call to EVERY
+ancestor function (babel's recursive traverse) and its binding edges follow
+the TS 4a/4b/4d rules over babel's `referencePaths` (assignment targets
+dropped) — the cascade, propagation and alternation read those rows in
+stored order; the reference graph attributes at statement granularity over
+oxc's reference flags (writes kept) for discovery's fixpoint.
+`UnifiedGraph::edges()` and `ReferenceGraph.edges` both speak `Edge`. The
+reference graph's init-time definitional mutations are now their own kind
+(`InitMutation`); a pair a plain write already links stays one `Write`
+(one edge per pair and class), so the edge count and both adjacency lists
+discovery reads are unchanged.
+
+**Region scope.** `EdgeScope { from, to }` stores the two ends' region ids;
+`relative_to(region)` answers INSIDE / INTO / OUT-OF (an edge between two
+regions is OUT OF one and INTO the other). `Regions` maps laminar spans to
+region ids (innermost wins: containment). The producer is library
+discovery: `discover_in_bundle` assigns every reference-graph edge its
+scope from `library_regions` (one region per claimed package, its claimed
+units' spans). `CodeGraph::assign_scopes` does the same over the one graph
+when regions are known. **No rule reads scope in step 3.**
+
+**How step 4's rules read scope.** Each library-profile rule declares the
+scopes it may read, and the rule list refuses any rule that declares INTO:
+identity evidence for region R is the edges with `relative_to(R)` ∈
+{Inside, OutOf}, the OUT-OF end abstracted (the callee's package or "a
+runtime helper", never its local name). Comparison against the index is
+CONTAINMENT: an INSIDE edge of the bundle region absent from the index
+entry counts against the match; an index edge absent from the bundle (tree
+shaken) counts for nothing. INTO edges are read only by a post-claim
+consistency check (they should land on the package's exports). The
+cross-version profile keeps reading every edge, as today (vendor INSIDE-only
+is step 5, with an eval). Note the two graphs run on different texts in the
+pipeline (discovery: the RAW bundle at unpack; the cascade: the fresh
+pre-rename text), so a region known on one must be mapped by span through
+the unpack before the other can use it — step 4's store owns that map.
 
 ## 4. Graph evidence has a scope
 

@@ -200,23 +200,19 @@ pub fn statement_inventory_from_json(
     graph: Option<&UnifiedGraph>,
     retain_values: bool,
 ) -> Result<(SideInventory, Vec<Value>), String> {
-    let statement_values: Vec<&Value> = match wrapper_body {
-        Some(body_span) => {
-            let body = block_body_by_span(program_json, body_span).ok_or_else(|| {
-                format!(
-                    "wrapper detected (body span {}..{}) but that block is absent from the estree json",
-                    body_span.start, body_span.end
-                )
-            })?;
-            body.iter().collect()
-        }
-        None => program_json
-            .get("body")
-            .and_then(Value::as_array)
-            .ok_or("estree json program body missing")?
-            .iter()
-            .collect(),
-    };
+    let statement_values: Vec<&Value> = crate::cut::container_statement_values(
+        program_json,
+        wrapper_body,
+    )
+    .ok_or_else(|| match wrapper_body {
+        Some(body_span) => format!(
+            "wrapper detected (body span {}..{}) but that block is absent from the estree json",
+            body_span.start, body_span.end
+        ),
+        None => "estree json program body missing".to_string(),
+    })?
+    .iter()
+    .collect();
 
     let mut inventory = SideInventory {
         anchor,
@@ -265,13 +261,13 @@ pub fn statement_inventory_from_json(
     if let Some(graph) = graph {
         let spans = inventory.spans();
         for (i, f) in graph.functions.iter().enumerate() {
-            match statement_containing(&spans, f.span) {
+            match crate::cut::enclosing_statement(&spans, f.span) {
                 Some(idx) => inventory.fns_by_statement.entry(idx).or_default().push(i),
                 None => inventory.unassigned_functions += 1,
             }
         }
         for (j, b) in graph.module_bindings.iter().enumerate() {
-            match statement_containing(&spans, b.span) {
+            match crate::cut::enclosing_statement(&spans, b.span) {
                 Some(idx) => inventory
                     .bindings_by_statement
                     .entry(idx)
@@ -320,42 +316,4 @@ fn parse_unbounded(json: &str) -> Result<Value, String> {
     let mut de = serde_json::Deserializer::from_str(json);
     de.disable_recursion_limit();
     serde::Deserialize::deserialize(&mut de).map_err(|e| format!("estree json: {e}"))
-}
-
-/// The block statement whose span is `target`, as its body array — the
-/// wrapper-gate's body block, located in the serialization by the span the
-/// gate already computed. Iterative (the AST's depth).
-pub(crate) fn block_body_by_span(root: &Value, target: Span) -> Option<&Vec<Value>> {
-    let mut stack: Vec<&Value> = vec![root];
-    while let Some(value) = stack.pop() {
-        match value {
-            Value::Object(map) => {
-                if map.get("type").and_then(Value::as_str) == Some("BlockStatement")
-                    && map.get("start").and_then(Value::as_u64) == Some(u64::from(target.start))
-                    && map.get("end").and_then(Value::as_u64) == Some(u64::from(target.end))
-                {
-                    match map.get("body") {
-                        Some(body @ Value::Array(_)) => return body.as_array(),
-                        _ => return None,
-                    }
-                }
-                stack.extend(map.values());
-            }
-            Value::Array(items) => stack.extend(items),
-            _ => {}
-        }
-    }
-    None
-}
-
-/// The index of the statement containing `row` — the unique candidate is
-/// the last statement starting at or before the row (`partition_point`),
-/// since the statements are non-overlapping siblings.
-fn statement_containing(spans: &[Span], row: Span) -> Option<usize> {
-    let idx = spans.partition_point(|s| s.start <= row.start);
-    if idx == 0 {
-        return None;
-    }
-    let candidate = spans[idx - 1];
-    (candidate.start <= row.start && row.end <= candidate.end).then_some(idx - 1)
 }

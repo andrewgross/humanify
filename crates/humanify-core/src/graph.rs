@@ -27,8 +27,11 @@
 //! mapping carries symbol ids, so slots join to declaration spans by
 //! identity (scoping.symbol_span), never by name.
 
+pub mod edges;
 pub mod references;
 
+#[cfg(test)]
+mod edges_test;
 #[cfg(test)]
 mod references_test;
 
@@ -164,6 +167,56 @@ pub struct UnifiedGraph {
     /// `handleIdentifierCallee` shapes). The naming graph's call-site pass
     /// resolves callees through the SAME map (one owner of the question).
     pub function_by_symbol: HashMap<SymbolId, usize>,
+}
+
+impl UnifiedGraph {
+    /// The function graph's edges in the one vocabulary
+    /// ([`edges::Edge`]): node `i < functions.len()` is function row `i`,
+    /// the rest are the module-binding rows in order. A function's
+    /// internal callees are CALL edges; a binding's dependencies (4a/4b)
+    /// and its callers (4d: function → binding) are READ edges. A derived
+    /// view: the rows stay the store the cascade reads in order.
+    pub fn edges(&self) -> Vec<edges::Edge> {
+        let fn_by_span: HashMap<(u32, u32), u32> = self
+            .functions
+            .iter()
+            .enumerate()
+            .map(|(i, f)| ((f.span.start, f.span.end), i as u32))
+            .collect();
+        let base = self.functions.len() as u32;
+        let binding_by_span: HashMap<(u32, u32), u32> = self
+            .module_bindings
+            .iter()
+            .enumerate()
+            .map(|(j, b)| ((b.span.start, b.span.end), base + j as u32))
+            .collect();
+        let key = |s: &Span| (s.start, s.end);
+        let mut out = Vec::new();
+        for (i, f) in self.functions.iter().enumerate() {
+            for callee in &f.internal_callees {
+                if let Some(&to) = fn_by_span.get(&key(callee)) {
+                    out.push(edges::Edge::new(i as u32, to, edges::EdgeKind::Call));
+                }
+            }
+        }
+        for (j, b) in self.module_bindings.iter().enumerate() {
+            let me = base + j as u32;
+            for dep in &b.internal_callees {
+                let to = binding_by_span
+                    .get(&key(dep))
+                    .or_else(|| fn_by_span.get(&key(dep)));
+                if let Some(&to) = to {
+                    out.push(edges::Edge::new(me, to, edges::EdgeKind::Read));
+                }
+            }
+            for caller in &b.callers {
+                if let Some(&from) = fn_by_span.get(&key(caller)) {
+                    out.push(edges::Edge::new(from, me, edges::EdgeKind::Read));
+                }
+            }
+        }
+        out
+    }
 }
 
 /// The function's NAME binding identifier: the id of declarations and
@@ -352,38 +405,6 @@ fn entry_outputs(
     })
 }
 
-/// Every ancestor function of a node, as NODE IDS — the ONE owner of the
-/// "which functions enclose this node" question (docs/responsibility.md).
-/// Consumers map ids to whatever identity they need (the graph maps to
-/// entry indices; the eval/with taint records the spans).
-pub(crate) fn enclosing_function_node_ids(node_id: NodeId, nodes: &AstNodes<'_>) -> Vec<NodeId> {
-    let mut out = Vec::new();
-    let mut prev = node_id;
-    let mut parent_id = nodes.parent_id(prev);
-    while parent_id != prev {
-        if is_graph_entry_kind(&nodes.get_node(parent_id).kind()) {
-            out.push(parent_id);
-        }
-        prev = parent_id;
-        parent_id = nodes.parent_id(parent_id);
-    }
-    out
-}
-
-/// babel's `Function` alias — the node kinds whose parent-stop semantics
-/// both the taint walk (getFunctionParent) and the edge attribution use:
-/// FunctionDeclaration | FunctionExpression | ObjectMethod |
-/// ArrowFunctionExpression | ClassMethod | ClassPrivateMethod. oxc's
-/// object methods are ObjectProperty with method=true or a Get/Set kind.
-fn is_graph_entry_kind(kind: &AstKind<'_>) -> bool {
-    match kind {
-        AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) => true,
-        AstKind::MethodDefinition(_) => true,
-        AstKind::ObjectProperty(p) => p.method || p.kind != oxc_ast::ast::PropertyKind::Init,
-        _ => false,
-    }
-}
-
 /// Every ancestor function of a node, as entry indices (the recursive-
 /// traverse edge semantics: the wrapper contains the whole bundle, so it
 /// accumulates every call's edge).
@@ -392,7 +413,7 @@ fn function_ancestors(
     nodes: &AstNodes<'_>,
     idx_by_node: &HashMap<NodeId, usize>,
 ) -> Vec<usize> {
-    enclosing_function_node_ids(node.id(), nodes)
+    crate::cut::enclosing_function_node_ids(node.id(), nodes)
         .into_iter()
         .filter_map(|id| idx_by_node.get(&id).copied())
         .collect()
@@ -626,8 +647,8 @@ fn build_function_graph_with_json(
 
     // --- pass 3: scope nesting -----------------------------------------
     for (i, entry) in entries.iter().enumerate() {
-        let node = nodes.get_node(entry.node_id);
-        if let Some(parent_idx) = nearest_function_ancestor(node, nodes, &idx_by_node)
+        if let Some(parent_idx) =
+            crate::cut::enclosing_function_piece(entry.node_id, nodes, &idx_by_node)
             && parent_idx != i
         {
             functions[i].scope_parent = Some(entries[parent_idx].span);
@@ -1092,15 +1113,7 @@ fn build_module_bindings(
     // The container scope: the layout's wrapper's own scope when a wrapper
     // exists, else the program's (the TS targetScope).
     let wrapper = layout.find_wrapper(program, semantic);
-    let container_scope = wrapper.as_ref().map_or_else(
-        || container_scope_of_program(scoping, nodes),
-        |w| {
-            (0..scoping.scopes_len())
-                .map(oxc_semantic::ScopeId::new)
-                .find(|sid| nodes.get_node(scoping.get_node_id(*sid)).span() == w.span)
-        },
-    );
-    let Some(container_scope) = container_scope else {
+    let Some(container_scope) = crate::cut::container_scope(semantic, wrapper.as_ref()) else {
         return Vec::new();
     };
 
@@ -1450,18 +1463,6 @@ pub(crate) fn nearest_row_function_from_ref(
     None
 }
 
-/// The program's own scope (the TS programScope): the scope whose node is
-/// the program node (the node iterator's root).
-fn container_scope_of_program(
-    scoping: &oxc_semantic::Scoping,
-    nodes: &AstNodes<'_>,
-) -> Option<oxc_semantic::ScopeId> {
-    let program_id = nodes.iter().next()?.id();
-    (0..scoping.scopes_len())
-        .map(oxc_semantic::ScopeId::new)
-        .find(|sid| scoping.get_node_id(*sid) == program_id)
-}
-
 /// The shouldSkipBinding skips (the third-party factory-body skip went
 /// with the naming-time factory scan, finding #80).
 fn should_skip_binding(kind: &AstKind<'_>) -> bool {
@@ -1534,94 +1535,23 @@ fn function_node_for_symbol(
     function_by_symbol.get(&symbol).copied()
 }
 
-/// Pass 1: collect every graph-entry function.
-///
-/// babel's `Function` alias = FunctionDeclaration | FunctionExpression |
-/// ObjectMethod | ArrowFunctionExpression | ClassMethod |
-/// ClassPrivateMethod. oxc splits the method forms: class methods are
-/// MethodDefinition; OBJECT methods (and getters/setters) are
-/// ObjectProperty with method=true or a Get/Set kind, whose value is a
-/// plain Function node — the METHOD node is the row (babel's span starts
-/// at the key; the inner Function node would be a duplicate).
+/// Pass 1: the function rows — the cutter's function pieces
+/// ([`crate::cut::function_pieces`]), in node order.
 fn collect_function_entries(nodes: &AstNodes<'_>) -> (Vec<FnEntry>, HashMap<NodeId, usize>) {
-    let mut entries: Vec<FnEntry> = Vec::new();
-    let mut idx_by_node: HashMap<NodeId, usize> = HashMap::new();
-    for node in nodes.iter() {
-        let entry_kind: Option<Span> = match node.kind() {
-            AstKind::Function(_) | AstKind::ArrowFunctionExpression(_) => {
-                // A method's inner function is NOT a graph node: babel sees
-                // ONE ClassMethod/ObjectMethod node (span from the key); its
-                // oxc Function node starts at the params and would be a
-                // duplicate row.
-                let parent_id = nodes.parent_id(node.id());
-                let is_method_inner = match nodes.get_node(parent_id).kind() {
-                    AstKind::MethodDefinition(_) => true,
-                    AstKind::ObjectProperty(p) => {
-                        p.method || p.kind != oxc_ast::ast::PropertyKind::Init
-                    }
-                    _ => false,
-                };
-                if is_method_inner {
-                    continue;
-                }
-                Some(node.span())
-            }
-            AstKind::MethodDefinition(_) => Some(node.span()),
-            AstKind::ObjectProperty(p)
-                if p.method || p.kind != oxc_ast::ast::PropertyKind::Init =>
-            {
-                Some(node.span())
-            }
-            _ => None,
-        };
-        let Some(span) = entry_kind else {
-            continue;
-        };
-        let entry = FnEntry {
-            node_id: node.id(),
+    let (pieces, idx_by_node) = crate::cut::function_pieces(nodes);
+    let entries = pieces
+        .into_iter()
+        .map(|(node_id, span)| FnEntry {
+            node_id,
             span,
-            name_binding: function_name_binding(node.kind()),
+            name_binding: function_name_binding(nodes.get_node(node_id).kind()),
             hash: String::new(),
             slots: Vec::new(),
             slot_id_spans: Vec::new(),
             features: Default::default(),
-        };
-        idx_by_node.insert(node.id(), entries.len());
-        entries.push(entry);
-    }
+        })
+        .collect();
     (entries, idx_by_node)
-}
-
-/// The nearest enclosing function of a node, by parent walk.
-fn nearest_function_ancestor(
-    node: &AstNode<'_>,
-    nodes: &AstNodes<'_>,
-    idx_by_node: &HashMap<NodeId, usize>,
-) -> Option<usize> {
-    // parent_id is a plain NodeId (the root self-parents, which
-    // terminates the walk).
-    let mut prev = node.id();
-    let mut parent_id = nodes.parent_id(prev);
-    while parent_id != prev {
-        let parent = nodes.get_node(parent_id);
-        // The same entry-kind rule as pass 1 (methods are function nodes
-        // in babel's scope chain too). A method's INNER function is the
-        // same scope as its MethodDefinition but was not collected (the
-        // method node is the row) — keep walking to the collected entry.
-        if is_graph_entry_kind(&parent.kind()) {
-            match idx_by_node.get(&parent_id).copied() {
-                Some(idx) => return Some(idx),
-                None => {
-                    prev = parent_id;
-                    parent_id = nodes.parent_id(parent_id);
-                    continue;
-                }
-            }
-        }
-        prev = parent_id;
-        parent_id = nodes.parent_id(parent_id);
-    }
-    None
 }
 
 /// The graph's rows in the `--dump-artifacts` catalog (functions.json and

@@ -6,7 +6,8 @@ use std::collections::HashSet;
 
 use oxc_allocator::Allocator;
 
-use crate::graph::references::{BundlerFacts, ReferenceGraph, build_reference_graph};
+use crate::cut::units::BundlerFacts;
+use crate::graph::references::{ReferenceGraph, build_reference_graph};
 use crate::ingest::Ingest;
 use crate::libdetect::discovery::{Discovery, DiscoveryOptions, Evidence, Rule, Seed, discover};
 use crate::libindex::families::PackageFamilies;
@@ -382,6 +383,23 @@ fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
         "under the main floor; found by the targeted lookup of a region calling zod"
     );
     assert_eq!(claim("var app"), None);
+    // The scope producer: every edge carries its ends' regions (zod is
+    // region 0), read relative to a region.
+    use crate::graph::edges::Scope;
+    let unit = |head: &str| {
+        (0..graph.units.len() as u32)
+            .find(|&u| code[graph.units[u as usize].span.start as usize..].starts_with(head))
+            .unwrap()
+    };
+    let scope = |from: &str, to: &str| {
+        let (a, b) = (unit(from), unit(to));
+        let e = graph.edges.iter().find(|e| e.from == a && e.to == b);
+        e.and_then(|e| e.scope).and_then(|s| s.relative_to(0))
+    };
+    assert!(graph.edges.iter().all(|e| e.scope.is_some()));
+    assert_eq!(scope("var small", "var lib"), Some(Scope::Inside));
+    assert_eq!(scope("var app", "var small"), Some(Scope::Into));
+    assert_eq!(scope("var app", "var other"), None, "app code: no region");
 }
 
 #[test]
