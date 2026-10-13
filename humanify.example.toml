@@ -6,10 +6,10 @@
 #
 # A key left out keeps its default. Unknown keys, wrong types, out-of-range
 # values and retired keys are refused before any work, naming the key. The
-# operational flags (input, -o, --prior-version, --endpoint, --model,
-# --config, -v) may also be given on the command line; a flag and this
-# file that DISAGREE are refused, naming both. The API key is never a
-# setting: it is read from HUMANIFY_API_KEY only.
+# operational flags (input, -o, --prior-version, --endpoint, --model, -v,
+# --config, --library-matching, --library-index) may also be given on the
+# command line; a flag and this file that DISAGREE are refused, naming
+# both. The API key is never a setting: it is read from HUMANIFY_API_KEY.
 
 [io]
 # Output directory.
@@ -62,6 +62,66 @@ lane_threshold = 25
 naming_floor = true
 # The LLM sweep of minted survivors (needs naming_floor).
 naming_floor_sweep = true
+
+[library]
+# What library matching does: "off" (path/banner detection only), "report" (also the index lookup + graph discovery, written to .humanify/library-report.json; output bytes unchanged), "names" (refused until an eval passes it).
+# matching = "off"   (usually the flag --library-matching)
+# The library fingerprint index: its directory, or its id (resolved under index_store).
+# index =   (unset: no index; required unless matching is "off", refused with "off"; usually the flag --library-index)
+# Where index ids live (<index_store>/<id>/manifest.json).
+# index_store =   (unset: an index id cannot be resolved: pass the index directory)
+# Library code with no index name: "leave" (library files not model-named, library functions in mixed files frozen with the <library>_<name> prefix) or "model" (the model names everything).
+unnamed = "leave"
+# List every claimed, vetoed, library-class and queued unit in the report (default: totals and packages).
+report_units = false
+
+[library.lookup]
+# AST nodes a statement needs to be looked up.
+min_nodes = 30
+# Content tokens a whole statement needs to be looked up.
+min_content = 3
+# Content tokens a function needs to be looked up.
+min_function_content = 0
+# Fraction of a statement's units the index must cover.
+cover = 0.5
+# Most packages a unit may match and still claim.
+max_packages = 3
+# A claim under `strong` nodes needs another claim of its package within this many units (0: none).
+support = 10
+# Node count at which a claim needs no support.
+strong = 100
+# Refuse an index module much bigger than the query's module (factor x + slack).
+specificity = true
+# Specificity: the index module may be at most this many times the query's.
+specificity_factor = 4
+# Specificity: plus this many bytes.
+specificity_slack = 4096
+# Require the literal rule to agree (same package family); false = the structural rule.
+agreement = true
+# Literals a module needs for the literal rule.
+min_literals = 6
+# The literal rule's score floor (bits).
+literal_score = 20.0
+# The literal rule's cover floor.
+literal_cover = 0.9
+# The literal rule's margin over the runner-up (bits).
+literal_margin = 10.0
+
+[library.lookup.targeted]
+# The targeted round's node floor (the other rules are the lookup's).
+min_nodes = 20
+# The targeted round's neighbour support (0: the region's own calls are the context).
+support = 0
+
+[library.discovery]
+# Content floor a down-class start needs.
+closure_floor = 30
+# Largest region queued for a targeted index lookup, bytes.
+queue_cap_bytes = 256000
+# Fixpoint round limit.
+max_rounds = 50
+# What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
+veto_support = "without-module"
 
 [unpack]
 # Force the bundler verdict.

@@ -123,7 +123,11 @@ on the command line or in the config file.
 Only the operational options are flags: the input, `-o, --output-dir`,
 `--prior-version` (the previous release's `.humanify/humanified.js`: names,
 file layout and vendor names carry across versions), `--endpoint`,
-`--model`, `-v`/`-vv`, and `--config <file>`. Everything else is a key in
+`--model`, `-v`/`-vv`, `--config <file>`, and the library decision
+(`--library-matching off|report|names`, default off, with
+`--library-index <dir>` for `report`, which writes
+`.humanify/library-report.json` and changes no other output byte; `names`
+is refused until an eval passes it). Everything else is a key in
 the TOML config file; [`humanify.example.toml`](./humanify.example.toml)
 lists every key with its default and meaning (it is generated from the
 binary's own key registry, so it cannot drift). For example:

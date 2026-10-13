@@ -1,9 +1,9 @@
 # Config consolidation: one parse point, one typed config, one file
 
 Status: DESIGN + INVENTORY, 2026-10-13 (main @ `872dff10`). Sweep steps 1-4
-landed on main (`df6ace2a`); **step 5 (the `--config` file) is done** on
-branch `cleanup/config-sweep-5-6` — §5 records what changed. Steps 6-8 are
-not built. Asked for by Andrew: "we will need several sweeps of our code and evals
+landed on main (`df6ace2a`); **steps 5 (the `--config` file) and 6 (the
+one library decision) are done** on branch `cleanup/config-sweep-5-6` — §5
+records what changed. Steps 7-8 are not built. Asked for by Andrew: "we will need several sweeps of our code and evals
 to clean up old flags and make sure config is parsed in ONE place and used
 downstream." Rule applied throughout: no backwards compatibility — an old
 spelling is deleted, not aliased.
@@ -442,15 +442,48 @@ vs "http://b/v1" (cfg.toml)`), agreeing ones are recorded as
    captured effective settings, and every re-recorded golden launch
    resolves to a captured launch's settings.
 
-6. **One library decision** (N). Delete `--skip-libraries` /
+6. **DONE 2026-10-13. One library decision** (N). Delete `--skip-libraries` /
    `--no-skip-libraries`; add `--library-matching off|report|names`
    (default off) and `[library] unnamed = "leave"|"model"`. Neutrality on
    the default; an e2e run proves `unnamed = "model"` equals today's
    `--no-skip-libraries` byte for byte. **Refusal tests, red first:**
    missing index; unreadable index; each version mismatch; `names` with no
    matching slice (refused); `report` with no matching slice (WARNING line
+
    - `recipeMissing` in diagnostics, output identical to `off`); a mode
      other than off without an index; an index with mode `off`.
+
+   What landed: flags `--library-matching off|report|names` (default
+   off) and `--library-index <dir|id>` (also keys `library.matching`,
+   `library.index`; an id resolves under `library.index_store`). Moved to
+   keys and refused as flags: `--skip-libraries` → `library.unnamed =
+"leave"` (the default), `--no-skip-libraries` → `unnamed = "model"`,
+   `--library-discovery-units` → `library.report_units`; the `discover`
+   verb's `--rule` → `[library.lookup] agreement` (false = structural).
+   The lookup rules (`[library.lookup]`: min_nodes, min_content,
+   min_function_content, cover, max_packages, support, strong,
+   specificity + factor + slack, agreement, min_literals, literal_score,
+   literal_cover, literal_margin; `[library.lookup.targeted]` min_nodes,
+   support) and discovery's options (`[library.discovery]` closure_floor,
+   queue_cap_bytes, max_rounds, veto_support) are keys whose defaults
+   ARE the code's (`LookupRules::default()`, `DiscoveryOptions::default()`,
+   the targeted constants now named in `libdetect::discovery`); a test
+   holds them equal. Behaviour: `off` opens no index and runs no discovery
+   (before, `--diagnostics` alone ran discovery without an index — that
+   diagnostics section is gone in `off`); `report` runs discovery with the
+   index and WRITES `.humanify/library-report.json` (mode, index id,
+   `recipeMissing`, the discovery report) with or without diagnostics,
+   plus one stderr line and a `libraryMatching` block in the diagnostics;
+   no other output byte moves (pipeline test, off vs report, with and
+   without a slice). Refused before any work: `names`; `report` without
+   an index; an index with `off`; a missing directory, unreadable or
+   non-index manifest, or any stamp mismatch (format, module, units,
+   literals — the loader checked only units and literals). A detected
+   bundler with no slice is a WARNING + `recipeMissing`, the run going on
+   with path/banner detection — implemented against today's one-slice-
+   per-bundler index (`units.<bun|esbuild>.jsonl`), since exp097's recipe
+   slices are not on main; its loader replaces the lookup, not the rule.
+
 7. **Harness: one run config** (G). `eval.ts` validates once and writes the
    run config JSON plus the binary's `config.toml` per launch; `run.sh` and
    `neutrality.sh` read them instead of re-parsing argv; launches pass only

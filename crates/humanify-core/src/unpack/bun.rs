@@ -700,9 +700,7 @@ fn discovery_report(
     grammar: crate::toolchain::ModuleWrapperGrammar,
     classified: &[oxc_span::Span],
 ) -> Option<crate::libdetect::discovery::DiscoveryReport> {
-    use crate::libdetect::discovery::{
-        BundlePieces, DiscoveryOptions, DiscoveryReport, discover_in_bundle,
-    };
+    use crate::libdetect::discovery::{BundlePieces, DiscoveryReport, discover_in_bundle};
     let request = options.library_discovery?;
     let pieces = BundlePieces {
         layout: options.layout,
@@ -716,7 +714,7 @@ fn discovery_report(
         classified,
         &[],
         request.lookup(),
-        DiscoveryOptions::default(),
+        request.options,
     );
     let mut report = DiscoveryReport::new(&graph, &found, request.list_units);
     report.index_id = request.index.map(|ix| ix.id.clone());

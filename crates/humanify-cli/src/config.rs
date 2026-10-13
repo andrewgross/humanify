@@ -242,14 +242,167 @@ impl Naming {
     }
 }
 
-/// Library code: whether it is skipped, and the report-only discovery's
-/// index. (The library decision, sweep step 6, replaces `skip_libraries`.)
+/// `--library-matching` (docs/library-matching-config.md §2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LibraryMatching {
+    /// Path/banner detection only; the index is never opened.
+    Off,
+    /// Also the index lookup and graph discovery, REPORTED (the run's
+    /// output bytes are `off`'s).
+    Report,
+    /// Index claims may name code — refused until an eval passes it.
+    Names,
+}
+
+/// `library.unnamed`: what library code with no index name gets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Unnamed {
+    /// Today's default (was `--skip-libraries`): library files are not
+    /// model-named; library functions in mixed files are frozen and get
+    /// the deterministic `<library>_<name>` prefix.
+    Leave,
+    /// Was `--no-skip-libraries`: no file filter, no freeze, no prefix
+    /// pass — the model names everything.
+    Model,
+}
+
+/// The ONE library decision (config sweep step 6): what matching does, the
+/// index, what unnamed library code gets, and the lookup's and
+/// discovery's tunables.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Library {
-    pub skip_libraries: bool,
+    pub matching: LibraryMatching,
+    /// The index as given (a directory or an id).
     pub index: Option<String>,
-    pub discovery_units: bool,
+    pub index_store: Option<String>,
+    pub unnamed: Unnamed,
+    pub report_units: bool,
+    pub lookup: LibraryLookup,
+    pub discovery: LibraryDiscovery,
+}
+
+impl Library {
+    /// Library code is left out of model naming (`unnamed = "leave"`).
+    pub fn skips_libraries(&self) -> bool {
+        self.unnamed == Unnamed::Leave
+    }
+
+    /// The lookup's rules.
+    pub fn rules(&self) -> humanify_core::libindex::lookup::LookupRules {
+        let l = &self.lookup;
+        humanify_core::libindex::lookup::LookupRules {
+            min_nodes: l.min_nodes,
+            min_content: l.min_content,
+            min_function_content: l.min_function_content,
+            cover: l.cover,
+            max_packages: l.max_packages,
+            support: l.support,
+            strong: l.strong,
+            specificity: l.specificity,
+            agreement: l.agreement,
+            min_literals: l.min_literals,
+            literal_score: l.literal_score,
+            literal_cover: l.literal_cover,
+            literal_margin: l.literal_margin,
+        }
+    }
+
+    /// The fixpoint's tunables.
+    pub fn discovery_options(&self) -> humanify_core::libdetect::discovery::DiscoveryOptions {
+        let d = &self.discovery;
+        humanify_core::libdetect::discovery::DiscoveryOptions {
+            closure_floor: d.closure_floor,
+            queue_cap: d.queue_cap_bytes,
+            max_rounds: d.max_rounds,
+            veto_support: d.veto_support,
+        }
+    }
+
+    /// Discovery's request for a run: the index (if any) and every tunable.
+    pub fn discovery_request<'x>(
+        &self,
+        index: Option<&'x humanify_core::libindex::lookup::LibraryIndex>,
+    ) -> humanify_core::libdetect::discovery::DiscoveryRequest<'x> {
+        humanify_core::libdetect::discovery::DiscoveryRequest {
+            list_units: self.report_units,
+            index,
+            rules: Some(self.rules()),
+            targeted: Some((self.lookup.targeted_min_nodes, self.lookup.targeted_support)),
+            options: self.discovery_options(),
+            unit_prints: false,
+        }
+    }
+
+    /// The index directory `index` names: a directory as given, else an id
+    /// under `index_store`. Err: why it cannot be resolved.
+    pub fn index_dir(&self) -> Option<Result<std::path::PathBuf, String>> {
+        let given = self.index.as_deref()?;
+        let p = std::path::Path::new(given);
+        if p.is_dir() {
+            return Some(Ok(p.to_path_buf()));
+        }
+        let is_id = given.len() == 64 && given.bytes().all(|b| b.is_ascii_hexdigit());
+        Some(match (&self.index_store, is_id) {
+            (Some(store), true) => {
+                let dir = std::path::Path::new(store).join(given);
+                if dir.is_dir() {
+                    Ok(dir)
+                } else {
+                    Err(format!(
+                        "library index {given}: no such index under library.index_store \
+                         ({store})"
+                    ))
+                }
+            }
+            (None, true) => Err(format!(
+                "library index {given}: an index id needs library.index_store (or pass the \
+                 index directory)"
+            )),
+            _ => Err(format!("library index {given}: no such directory")),
+        })
+    }
+}
+
+/// `[library.lookup]` + `[library.lookup.targeted]`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryLookup {
+    pub min_nodes: u32,
+    pub min_content: u32,
+    pub min_function_content: u32,
+    pub cover: f64,
+    pub max_packages: usize,
+    pub support: usize,
+    pub strong: u32,
+    pub specificity: Option<(u64, u64)>,
+    pub agreement: bool,
+    pub min_literals: usize,
+    pub literal_score: f64,
+    pub literal_cover: f64,
+    pub literal_margin: f64,
+    pub targeted_min_nodes: u32,
+    pub targeted_support: usize,
+}
+
+/// `[library.discovery]`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryDiscovery {
+    pub closure_floor: u32,
+    pub queue_cap_bytes: u32,
+    pub max_rounds: u32,
+    #[serde(serialize_with = "serialize_veto")]
+    pub veto_support: humanify_core::libdetect::discovery::VetoSupport,
+}
+
+fn serialize_veto<S: serde::Serializer>(
+    v: &humanify_core::libdetect::discovery::VetoSupport,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    s.serialize_str(keys::veto_support_name(*v))
 }
 
 /// Forced toolchain verdicts (detection decides when unset).
@@ -350,6 +503,8 @@ fn flag_values(opts: &CommandOptions) -> Vec<FlagValue> {
         text("llm.endpoint", &opts.endpoint),
         text("llm.model", &opts.model),
         text("matching.prior_version", &opts.prior_version),
+        text("library.matching", &opts.library_matching),
+        text("library.index", &opts.library_index),
         (opts.verbose > 0).then(|| ("diagnostics.verbosity", Val::Int(u64::from(opts.verbose)))),
     ]
     .into_iter()
@@ -357,11 +512,90 @@ fn flag_values(opts: &CommandOptions) -> Vec<FlagValue> {
     .collect()
 }
 
+/// The `[library]` section, resolved.
+fn library_of(r: &Resolved) -> Library {
+    let n = |k: &str| r.int(k).expect("defaulted");
+    let veto = match r.text("library.discovery.veto_support").as_deref() {
+        Some("all-rules") => humanify_core::libdetect::discovery::VetoSupport::AllRules,
+        _ => humanify_core::libdetect::discovery::VetoSupport::WithoutModule,
+    };
+    Library {
+        matching: parse_enum(r.text("library.matching")).expect("a checked choice"),
+        index: r.text("library.index"),
+        index_store: r.text("library.index_store"),
+        unnamed: parse_enum(r.text("library.unnamed")).expect("a checked choice"),
+        report_units: r.flag_on("library.report_units"),
+        lookup: LibraryLookup {
+            min_nodes: n("library.lookup.min_nodes") as u32,
+            min_content: n("library.lookup.min_content") as u32,
+            min_function_content: n("library.lookup.min_function_content") as u32,
+            cover: r.float("library.lookup.cover"),
+            max_packages: n("library.lookup.max_packages") as usize,
+            support: n("library.lookup.support") as usize,
+            strong: n("library.lookup.strong") as u32,
+            specificity: r.flag_on("library.lookup.specificity").then(|| {
+                (
+                    n("library.lookup.specificity_factor"),
+                    n("library.lookup.specificity_slack"),
+                )
+            }),
+            agreement: r.flag_on("library.lookup.agreement"),
+            min_literals: n("library.lookup.min_literals") as usize,
+            literal_score: r.float("library.lookup.literal_score"),
+            literal_cover: r.float("library.lookup.literal_cover"),
+            literal_margin: r.float("library.lookup.literal_margin"),
+            targeted_min_nodes: n("library.lookup.targeted.min_nodes") as u32,
+            targeted_support: n("library.lookup.targeted.support") as usize,
+        },
+        discovery: LibraryDiscovery {
+            closure_floor: n("library.discovery.closure_floor") as u32,
+            queue_cap_bytes: n("library.discovery.queue_cap_bytes") as u32,
+            max_rounds: n("library.discovery.max_rounds") as u32,
+            veto_support: veto,
+        },
+    }
+}
+
+/// The library section a file alone configures (no flags, no API key):
+/// the `discover` verb's tunables.
+pub fn library_from_file(file: Option<&ConfigFile>) -> Result<Library, Vec<String>> {
+    let (r, errors) = file::resolve(&[], file);
+    if errors.is_empty() {
+        Ok(library_of(&r))
+    } else {
+        Err(errors)
+    }
+}
+
+/// The library decision's rules (docs/library-matching-config.md §2).
+fn library_violations(r: &Resolved) -> Vec<String> {
+    let mode = r.text("library.matching").unwrap_or_default();
+    let index = r.text("library.index").is_some();
+    let mut out = Vec::new();
+    match (mode.as_str(), index) {
+        ("names", _) => out.push(
+            "--library-matching names is refused until an eval passes it \
+             (docs/library-matching-config.md §2): use --library-matching report"
+                .to_string(),
+        ),
+        ("report", false) => {
+            out.push("--library-matching report needs --library-index <dir|id>".to_string())
+        }
+        ("off", true) => out.push(
+            "--library-index given with --library-matching off: the index would be \
+             silently ignored — pass --library-matching report, or drop the index"
+                .to_string(),
+        ),
+        _ => {}
+    }
+    out
+}
+
 /// The rules between settings, after each value is accepted on its own:
 /// one message per violation.
 pub fn cross_key_violations(r: &Resolved) -> Vec<String> {
     let split = r.flag_on("split.enabled");
-    let mut out = Vec::new();
+    let mut out = library_violations(r);
     if r.flag_on("split.pure") && !split {
         out.push("split.pure requires split.enabled".to_string());
     }
@@ -435,13 +669,7 @@ impl Config {
                 prior_version: r.text("matching.prior_version"),
             },
             naming: Config::naming(&r, schedule),
-            library: Library {
-                // The two spellings conflict at the parse (clap); unset is
-                // skip.
-                skip_libraries: !opts.no_skip_libraries,
-                index: opts.library_index.clone(),
-                discovery_units: opts.library_discovery_units,
-            },
+            library: library_of(&r),
             unpack: Unpack {
                 bundler: parse_enum(r.text("unpack.bundler")),
                 minifier: parse_enum(r.text("unpack.minifier")),
@@ -506,6 +734,20 @@ impl Config {
         }
     }
 
+    /// With library matching on, the index must be there, readable, and
+    /// built with this binary's format and fingerprint versions — checked
+    /// before any work (its recipe slice needs detection, later).
+    pub fn library_index_problem(&self) -> Option<String> {
+        if self.library.matching == LibraryMatching::Off {
+            return None;
+        }
+        let dir = match self.library.index_dir()? {
+            Ok(d) => d,
+            Err(e) => return Some(e),
+        };
+        library_index_stale(&dir).err()
+    }
+
     /// The run's record: the whole resolved config, the API key redacted.
     pub fn record(&self) -> serde_json::Value {
         serde_json::to_value(self).expect("a config serializes")
@@ -527,7 +769,47 @@ impl Config {
         if let Some(p) = &self.split.ledger {
             file("split.ledger", p, &mut out);
         }
+        out.extend(self.library_index_problem());
         out
+    }
+}
+
+/// The index at `dir` is readable and built with this binary's format and
+/// fingerprint stamps: its manifest, else why not (naming both versions
+/// and the rebuild).
+pub fn library_index_stale(dir: &std::path::Path) -> Result<(), String> {
+    use humanify_core::libindex::format::{INDEX_FORMAT, Manifest, fingerprint_versions};
+    let shown = dir.display();
+    let text = std::fs::read_to_string(dir.join("manifest.json"))
+        .map_err(|e| format!("library index {shown}: manifest.json unreadable: {e}"))?;
+    let m: Manifest = serde_json::from_str(&text).map_err(|e| {
+        format!("library index {shown}: manifest.json is not an index manifest: {e}")
+    })?;
+    let ours = fingerprint_versions();
+    let mut stale = Vec::new();
+    if m.format != INDEX_FORMAT {
+        stale.push(format!(
+            "format {} (this binary reads {INDEX_FORMAT})",
+            m.format
+        ));
+    }
+    for (what, theirs, mine) in [
+        ("module", &m.fingerprints.module, &ours.module),
+        ("units", &m.fingerprints.units, &ours.units),
+        ("literals", &m.fingerprints.literals, &ours.literals),
+    ] {
+        if theirs != mine {
+            stale.push(format!("{what} {theirs} (this binary reads {mine})"));
+        }
+    }
+    if stale.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "library index {shown}: built with {} — rebuild it with this binary's \
+             humanify-index",
+            stale.join(", ")
+        ))
     }
 }
 

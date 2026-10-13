@@ -543,7 +543,7 @@ warm_self_hop() {
     echo "!! WARM SELF-HOP DID NOT RUN for $TO (see $RESULTS/$TO-selfhop-warm.stdout)"
     return
   fi
-  local ex=(--exclude=placement-stats.json --exclude=stage-hashes.json)
+  local ex=(--exclude=placement-stats.json --exclude=stage-hashes.json --exclude=library-report.json)
   files=$(diff -rq "${ex[@]}" "$SELF_OUT" "$out" 2>/dev/null | wc -l | tr -d ' ')
   lines=$(diff -rN "${ex[@]}" "$SELF_OUT" "$out" 2>/dev/null | grep -cE '^[<>]')
   identical=false; [[ "$files" == "0" ]] && identical=true

@@ -501,8 +501,8 @@ const HEADER: &str = "\
 #
 # A key left out keeps its default. Unknown keys, wrong types, out-of-range
 # values and retired keys are refused before any work, naming the key. The
-# operational flags (input, -o, --prior-version, --endpoint, --model,
-# --config, -v) may also be given on the command line; a flag and this
-# file that DISAGREE are refused, naming both. The API key is never a
-# setting: it is read from HUMANIFY_API_KEY only.
+# operational flags (input, -o, --prior-version, --endpoint, --model, -v,
+# --config, --library-matching, --library-index) may also be given on the
+# command line; a flag and this file that DISAGREE are refused, naming
+# both. The API key is never a setting: it is read from HUMANIFY_API_KEY.
 ";

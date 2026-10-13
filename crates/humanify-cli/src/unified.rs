@@ -33,7 +33,6 @@ use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use humanify_core::libdetect::discovery::DiscoveryRequest;
 use humanify_core::libindex::lookup::LibraryIndex;
 use humanify_core::naming::driver::{NamingConfig, NamingInput, NamingOutcome, run_naming};
 use humanify_core::naming::waves::processor::DEFAULT_PROMPT_WINDOW;
@@ -43,7 +42,7 @@ use humanify_llm::LlmClient;
 use humanify_llm::provider::{LiveOptions, LiveStack};
 use humanify_model::llm::{CacheKeyParams, LlmConfig, NameProvider, RateLimitConfig};
 
-use crate::config::Config;
+use crate::config::{Config, LibraryMatching};
 use crate::kill_switches::Switch;
 use crate::log::{debug_reset_output, debug_set_output, verbose};
 use crate::pipeline_config::enum_name;
@@ -346,7 +345,7 @@ fn pipeline_body(
             }
         }
     };
-    let library_index = load_library_index(config, &toolchain, renderer);
+    let library = load_library_index(config, &toolchain, renderer)?;
     let ph = phase("unpack+vendor");
     let mut unpacked = unpack_bundle(
         &bundled_code,
@@ -356,22 +355,17 @@ fn pipeline_body(
         &mut dispatch_log,
         prior_path,
         switches.switch_on(Switch::ManifestPriorOrder),
-        // Report-only: discovery's rows go to the diagnostics, nowhere else.
-        outputs
-            .diagnostics_file
-            .is_some()
-            .then_some(DiscoveryRequest {
-                list_units: config.library.discovery_units,
-                index: library_index.as_ref(),
-                ..DiscoveryRequest::default()
-            }),
+        // `--library-matching report`: discovery runs, its rows go to the
+        // library report (and the diagnostics), nowhere else.
+        (config.library.matching == LibraryMatching::Report)
+            .then(|| config.library.discovery_request(library.index.as_ref())),
         profiler,
         renderer,
     )?;
     drop(ph);
     let ph = phase("library-detection");
     let unpacked_files = std::mem::take(&mut unpacked.files);
-    let (files_to_process, mixed_files) = if config.library.skip_libraries {
+    let (files_to_process, mixed_files) = if config.library.skips_libraries() {
         let filtered = filter_libraries(
             unpacked_files,
             toolchain.library_detector.piece,
@@ -492,8 +486,10 @@ fn pipeline_body(
             content_carry: unpacked.content_carry.as_ref(),
             app_declarations: &unpacked.app_declarations,
             library_discovery: unpacked.library_discovery.as_ref(),
+            library: &library,
         };
         reports.write_diagnostics(renderer)?;
+        reports.write_library_report(renderer)?;
         if let Some(dest) = &outputs.stats_json {
             write_stats_json(
                 dest,
@@ -654,6 +650,8 @@ struct RunReports<'a> {
     /// rule, round and evidence, the vetoed seeds, library class, the
     /// candidate queue.
     library_discovery: Option<&'a humanify_core::libdetect::discovery::DiscoveryReport>,
+    /// What the library decision opened (report mode).
+    library: &'a LibraryLoad,
 }
 
 /// What `--dump-artifacts` reads beyond the naming outcome.
@@ -668,31 +666,77 @@ struct DumpContext<'a> {
     module_wrappers: humanify_core::toolchain::ModuleWrapperGrammar,
 }
 
-/// `--library-index`, read for library discovery when `--diagnostics` asks
-/// for it. Report-only: an index that cannot be read is said so, and
-/// discovery runs without it.
+/// Claimed units in a serialized discovery report (`claims`, any shape).
+fn count_claims(report: &serde_json::Value) -> usize {
+    match &report["claims"] {
+        serde_json::Value::Array(a) => a.len(),
+        serde_json::Value::Object(o) => o.len(),
+        _ => 0,
+    }
+}
+
+/// What the library decision opened for this run: the index slice, its
+/// id, and — `report` with no slice for the detected bundler — the loud
+/// warning's text (the run goes on with path/banner detection).
+#[derive(Default)]
+struct LibraryLoad {
+    index: Option<LibraryIndex>,
+    index_id: Option<String>,
+    recipe_missing: Option<String>,
+}
+
+/// `--library-matching report`: open the index's slice for the detected
+/// bundler. The index itself was checked before any work
+/// (`Config::library_index_problem`); a missing slice is a WARNING, not a
+/// refusal — report changes no output byte, so a run that cannot look up
+/// has lost only its report. (Today's index is one slice per bundler —
+/// `units.<bun|esbuild>.jsonl`; exp097's recipe slices replace that
+/// lookup, not this rule.)
 fn load_library_index(
     config: &Config,
     toolchain: &Toolchain,
     renderer: &mut dyn ProgressRenderer,
-) -> Option<LibraryIndex> {
+) -> Result<LibraryLoad, Crash> {
+    use humanify_core::libindex::{IndexSlice, format::Manifest};
+    if config.library.matching != LibraryMatching::Report {
+        return Ok(LibraryLoad::default());
+    }
     let dir = config
         .library
-        .index
-        .as_deref()
-        .filter(|_| config.diagnostics.diagnostics_file.is_some())?;
-    let read = humanify_core::libindex::IndexSlice::for_bundler(toolchain.bundler)
-        .ok_or_else(|| "the index has no slice for this bundler".to_string())
-        .and_then(|slice| LibraryIndex::load(Path::new(dir), slice));
-    match read {
-        Ok(index) => Some(index),
-        Err(e) => {
-            renderer.message(&format!(
-                "Library index not read ({e}): library discovery runs without it"
-            ));
-            None
-        }
-    }
+        .index_dir()
+        .expect("report needs an index (checked at the parse point)")
+        .map_err(Crash)?;
+    let text = read_utf8(&dir.join("manifest.json").display().to_string())?;
+    let id = {
+        use sha2::{Digest, Sha256};
+        format!("{:x}", Sha256::digest(text.as_bytes()))
+    };
+    let slice = IndexSlice::for_bundler(toolchain.bundler)
+        .filter(|s| dir.join(format!("units.{}.jsonl", s.name())).is_file());
+    let Some(slice) = slice else {
+        let has: Vec<String> = serde_json::from_str::<Manifest>(&text)
+            .map(|m| m.slices.into_iter().map(|s| s.slice).collect())
+            .unwrap_or_default();
+        let warning = format!(
+            "WARNING: library index {id} has no slice for the detected bundler {} (has: {}) — \
+             library matching reports path/banner detection only",
+            enum_name(toolchain.bundler),
+            has.join(", ")
+        );
+        renderer.message(&warning);
+        return Ok(LibraryLoad {
+            index: None,
+            index_id: Some(id),
+            recipe_missing: Some(warning),
+        });
+    };
+    let index = LibraryIndex::load(&dir, slice)
+        .map_err(|e| Crash(format!("library index {}: {e}", dir.display())))?;
+    Ok(LibraryLoad {
+        index_id: Some(index.id.clone()),
+        index: Some(index),
+        recipe_missing: None,
+    })
 }
 
 /// meta.json's `flags` (unified.ts writeDumpArtifacts' call): the resolved
@@ -707,7 +751,7 @@ fn dump_flags(config: &Config, toolchain: &Toolchain) -> humanify_model::js::JsV
     f.insert("minifier", JsValue::str(enum_name(toolchain.minifier)));
     f.insert(
         "skipLibraries",
-        JsValue::Bool(config.library.skip_libraries),
+        JsValue::Bool(config.library.skips_libraries()),
     );
     f.insert(
         "reconcilePriorDiff",
@@ -780,6 +824,41 @@ fn short_sha(
 }
 
 impl RunReports<'_> {
+    /// The library decision's record: the mode, the index id, and a
+    /// missing recipe slice (`recipeMissing`, the warning's text).
+    fn library_matching_block(&self) -> serde_json::Value {
+        serde_json::json!({
+            "matching": "report",
+            "indexId": self.library.index_id,
+            "recipeMissing": self.library.recipe_missing,
+        })
+    }
+
+    /// `--library-matching report` writes its report whether or not
+    /// diagnostics are asked for: `.humanify/library-report.json`, a
+    /// diagnostics-only sidecar (no decision reads it; neutrality excludes
+    /// it), plus one line on stderr.
+    fn write_library_report(&self, renderer: &mut dyn ProgressRenderer) -> Result<(), Crash> {
+        if self.config.library.matching != LibraryMatching::Report {
+            return Ok(());
+        }
+        let mut doc = self.library_matching_block();
+        doc["libraryDiscovery"] =
+            serde_json::to_value(self.library_discovery).expect("serializable");
+        let claimed = self.library_discovery.map_or(0, |r| {
+            serde_json::to_value(r).ok().map_or(0, |v| count_claims(&v))
+        });
+        let path = Path::new(&self.config.io.output_dir).join(crate::writers::LIBRARY_REPORT_PATH);
+        crate::writers::write_json_file(&path, &doc)
+            .map_err(|e| Crash(node_fs_error(&e, "open", &path.display().to_string())))?;
+        renderer.message(&format!(
+            "Library matching (report): {claimed} claimed unit(s); index {}; written to {}",
+            self.library.index_id.as_deref().unwrap_or("-"),
+            path.display()
+        ));
+        Ok(())
+    }
+
     /// `--diagnostics` (buildDiagnosticsReport + writeDiagnosticsFile):
     /// the naming stage's report with the split's placement trail after
     /// the strategy trail; indent 2 and a trailing newline.
@@ -850,6 +929,13 @@ impl RunReports<'_> {
             with_placement.insert(
                 "libraryDiscovery",
                 JsValue::parse(&json).expect("serde_json writes JSON"),
+            );
+        }
+        if self.config.library.matching == LibraryMatching::Report {
+            let block = self.library_matching_block().to_string();
+            with_placement.insert(
+                "libraryMatching",
+                JsValue::parse(&block).expect("serde_json writes JSON"),
             );
         }
         std::fs::write(
@@ -1345,7 +1431,7 @@ fn naming_config(config: &Config, toolchain: &Toolchain) -> NamingConfig {
         layout: toolchain.layout.piece,
         module_wrappers: toolchain.module_wrappers.piece,
         name_profile: toolchain.name_profile.piece,
-        skip_libraries: config.library.skip_libraries,
+        skip_libraries: config.library.skips_libraries(),
         reconcile_prior_diff: config.matching.reconcile_prior_diff,
         naming_floor: config.naming.naming_floor,
         naming_floor_sweep: config.naming.naming_floor_sweep,

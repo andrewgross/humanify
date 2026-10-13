@@ -235,7 +235,18 @@ fn every_key_without_a_flag_was_a_flag_that_moved_or_is_new() {
     // The registry and the moved list agree: a setting no flag sets is in
     // the moved list (the harness spells its old flag) — nothing silently
     // lost its spelling.
-    for k in KEYS.iter().filter(|k| k.flag.is_none()) {
+    // New in step 6, never flags: the index store, and the lookup's and
+    // discovery's tunables (constants in code and the lab's environment
+    // variables until then; docs/library-matching-config.md §1.3).
+    let new_keys = |d: &str| {
+        d == "library.index_store"
+            || d.starts_with("library.lookup.")
+            || d.starts_with("library.discovery.")
+    };
+    for k in KEYS
+        .iter()
+        .filter(|k| k.flag.is_none() && !new_keys(&k.dotted()))
+    {
         assert!(
             MOVED_FLAGS.iter().any(|(_, key, _)| *key == k.dotted()),
             "{} has no flag and no moved-from flag",

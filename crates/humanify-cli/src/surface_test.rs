@@ -102,24 +102,26 @@ fn a_count_is_no_longer_a_flag() {
     refusal(&["in.js", "--batch-size", "7"], "naming.batch_size");
 }
 
-/// `--skip-libraries` (restates the default) and `--no-skip-libraries`
-/// keep their effect until the library decision (sweep step 6) deletes
-/// both; passing BOTH was last-wins and is now a conflict.
+/// The library decision (config sweep step 6): `--skip-libraries` and
+/// `--no-skip-libraries` are ONE setting now, `[library] unnamed`; both
+/// spellings (and `--library-discovery-units`) are refused naming it.
 #[test]
-fn the_two_skip_libraries_spellings_conflict() {
-    let skip = |a: &[&str]| {
-        crate::config::Config::build("in.js", &parse_opts(a), None, |_| Some("k".to_string()))
-            .expect("valid")
-            .library
-            .skip_libraries
-    };
-    assert!(skip(&["in.js"]));
-    assert!(skip(&["in.js", "--skip-libraries"]));
-    assert!(!skip(&["in.js", "--no-skip-libraries"]));
-    refusal(
-        &["in.js", "--skip-libraries", "--no-skip-libraries"],
-        "--skip-libraries",
+fn the_skip_libraries_spellings_moved_to_one_setting() {
+    let skip = refusal(&["in.js", "--skip-libraries"], "--skip-libraries");
+    assert!(
+        skip.contains("moved: set library.unnamed = \"leave\""),
+        "{skip}"
     );
+    let model = refusal(&["in.js", "--no-skip-libraries"], "--no-skip-libraries");
+    assert!(
+        model.contains("moved: set library.unnamed = \"model\""),
+        "{model}"
+    );
+    let units = refusal(
+        &["in.js", "--library-discovery-units"],
+        "--library-discovery-units",
+    );
+    assert!(units.contains("library.report_units"), "{units}");
 }
 
 /// An unknown option, a missing or extra input, a boolean given a value:

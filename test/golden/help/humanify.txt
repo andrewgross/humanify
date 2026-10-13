@@ -12,9 +12,7 @@ Options:
       --endpoint <url>           OpenAI-compatible API endpoint (default: https://api.openai.com/v1). The API key is read from HUMANIFY_API_KEY (the environment or a .env file), never from a flag
   -m, --model <model>            Model identifier (default: gpt-4o-mini)
   -v, --verbose...               Increase verbosity (-v for info, -vv for debug)
-      --skip-libraries           Skip library code instead of processing it with the LLM (the default)
-      --no-skip-libraries        Process library code with the LLM
-      --library-index <dir>      Library fingerprint index for the diagnostics' libraryDiscovery (report-only: names, moves and renames nothing)
-      --library-discovery-units  List every claimed, vetoed, library-class and queued unit in the diagnostics' libraryDiscovery (default: totals and packages)
+      --library-matching <mode>  Library matching: off (path/banner detection only, the default), report (also the library index lookup + graph discovery, reported; output unchanged), names (refused until an eval passes it)
+      --library-index <dir|id>   The library fingerprint index (a directory, or an id under library.index_store); required unless --library-matching is off, refused with off
   -h, --help                     Print help
   -V, --version                  Print version

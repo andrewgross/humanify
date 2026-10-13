@@ -14,12 +14,14 @@
 //!   `-c5`); the only combined short form is the `-v` counter (`-vv`);
 //! - numbers are typed: a non-negative integer or a refusal (commander:
 //!   JavaScript `parseInt`, so `-c 12abc` ran at 12);
-//! - `--skip-libraries` with `--no-skip-libraries` is a conflict (both
-//!   still parse alone, until the library decision deletes them).
+//! - `--skip-libraries` with `--no-skip-libraries` was a conflict; both are
+//!   gone since the library decision (config sweep step 6: `[library]
+//!   unnamed`).
 //!
 //! Config sweep step 5 (2026-10-13): only the OPERATIONAL flags are flags
 //! — the input, `-o`, `--prior-version`, `--endpoint`, `--model`,
-//! `--config`, `-v` (and, until step 6, the library spellings). Every other
+//! `--config`, `-v`, and the ONE library decision (`--library-matching`,
+//! `--library-index`, step 6). Every other
 //! setting is a key in the `--config` TOML file; its old flag is refused
 //! naming the key ([`MOVED_FLAGS`]).
 //!
@@ -109,31 +111,22 @@ pub struct CommandOptions {
         help = "Increase verbosity (-v for info, -vv for debug)"
     )]
     pub verbose: u8,
-    // The two library spellings stay until the library decision (config
-    // sweep step 6) replaces both; together they are a conflict.
     #[arg(
         long,
-        conflicts_with = "no_skip_libraries",
-        help = "Skip library code instead of processing it with the LLM (the default)"
+        value_name = "mode",
+        help = "Library matching: off (path/banner detection only, the default), report \
+                (also the library index lookup + graph discovery, reported; output \
+                unchanged), names (refused until an eval passes it)"
     )]
-    pub skip_libraries: bool,
-    #[arg(long, help = "Process library code with the LLM")]
-    pub no_skip_libraries: bool,
-    /// The library fingerprint index discovery looks statement units up in
-    /// (report-only, with diagnostics).
+    pub library_matching: Option<String>,
     #[arg(
         long,
-        value_name = "dir",
-        help = "Library fingerprint index for the diagnostics' libraryDiscovery \
-                (report-only: names, moves and renames nothing)"
+        value_name = "dir|id",
+        help = "The library fingerprint index (a directory, or an id under \
+                library.index_store); required unless --library-matching is off, \
+                refused with off"
     )]
     pub library_index: Option<String>,
-    #[arg(
-        long,
-        help = "List every claimed, vetoed, library-class and queued unit in the \
-                diagnostics' libraryDiscovery (default: totals and packages)"
-    )]
-    pub library_discovery_units: bool,
 }
 
 /// Flags MOVED into the config file (config sweep step 5, 2026-10-13; no
@@ -183,6 +176,11 @@ pub const MOVED_FLAGS: &[(&str, &str, &str)] = &[
     ("--split-ledger", "split.ledger", ""),
     ("--perf-trace", "perf.perf_trace", ""),
     ("--simulate-llm-latency", "perf.simulate_llm_latency", ""),
+    // The library decision (config sweep step 6): one setting, not two
+    // flags (docs/library-matching-config.md §2).
+    ("--skip-libraries", "library.unnamed", "\"leave\""),
+    ("--no-skip-libraries", "library.unnamed", "\"model\""),
+    ("--library-discovery-units", "library.report_units", "true"),
 ];
 
 /// The refusal for a moved flag.
@@ -229,6 +227,12 @@ pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
          matching.reconcile_prior_diff = false in --config turns it off",
     ),
     (Some("detect"), "--profile", "renamed: use --perf-trace"),
+    (
+        Some("discover"),
+        "--rule",
+        "moved: set library.lookup.agreement in a --config file (false = the structural \
+         rule)",
+    ),
     (Some("unpack"), "--index", "renamed: use --bundle-order"),
     (
         Some("match"),

@@ -14,6 +14,10 @@ use super::{
     DEFAULT_MODULE_CONCURRENCY, DEFAULT_OUTPUT_DIR, default_retries,
 };
 use crate::pipeline_config::enum_name;
+use humanify_core::libdetect::discovery::{
+    DiscoveryOptions, TARGETED_MIN_NODES, TARGETED_SUPPORT, VetoSupport,
+};
+use humanify_core::libindex::lookup::LookupRules;
 
 const ANY: u64 = u64::MAX;
 /// The ceiling of a setting held as a u32.
@@ -54,6 +58,70 @@ fn levers() -> Vec<String> {
 fn bundlers() -> Vec<String> {
     SELECTABLE_BUNDLERS.iter().map(|b| enum_name(*b)).collect()
 }
+fn library_modes() -> Vec<String> {
+    ["off", "report", "names"].map(String::from).to_vec()
+}
+fn unnamed_modes() -> Vec<String> {
+    ["leave", "model"].map(String::from).to_vec()
+}
+fn veto_supports() -> Vec<String> {
+    ["without-module", "all-rules"].map(String::from).to_vec()
+}
+/// The `library.discovery.veto_support` spelling of a rule.
+pub fn veto_support_name(v: VetoSupport) -> &'static str {
+    match v {
+        VetoSupport::WithoutModule => "without-module",
+        VetoSupport::AllRules => "all-rules",
+    }
+}
+fn rules() -> LookupRules {
+    LookupRules::default()
+}
+fn discovery() -> DiscoveryOptions {
+    DiscoveryOptions::default()
+}
+fn float(x: f64) -> Option<Val> {
+    Some(Val::Float(x))
+}
+
+/// A library tuning integer (`[library.lookup]`, `[library.discovery]`).
+const fn lib_int(
+    section: &'static str,
+    name: &'static str,
+    min: u64,
+    max: u64,
+    default: fn() -> Option<Val>,
+    doc: &'static str,
+) -> Key {
+    Key {
+        section,
+        name,
+        kind: Kind::Int { min, max },
+        flag: None,
+        default,
+        unset: "",
+        doc,
+    }
+}
+
+/// A library tuning number.
+const fn lib_float(
+    name: &'static str,
+    max: f64,
+    default: fn() -> Option<Val>,
+    doc: &'static str,
+) -> Key {
+    Key {
+        section: "library.lookup",
+        name,
+        kind: Kind::Float { min: 0.0, max },
+        flag: None,
+        default,
+        unset: "",
+        doc,
+    }
+}
+
 fn minifiers() -> Vec<String> {
     SELECTABLE_MINIFIERS.iter().map(|m| enum_name(*m)).collect()
 }
@@ -281,6 +349,225 @@ pub static KEYS: &[Key] = &[
         default: on,
         unset: "",
         doc: "The LLM sweep of minted survivors (needs naming_floor).",
+    },
+    // [library] (config sweep step 6, docs/library-matching-config.md §2)
+    Key {
+        section: "library",
+        name: "matching",
+        kind: Kind::Choice(library_modes),
+        flag: Some("--library-matching"),
+        default: || text("off"),
+        unset: "",
+        doc: "What library matching does: \"off\" (path/banner detection only), \"report\" \
+              (also the index lookup + graph discovery, written to \
+              .humanify/library-report.json; output bytes unchanged), \"names\" (refused \
+              until an eval passes it).",
+    },
+    Key {
+        section: "library",
+        name: "index",
+        kind: Kind::Text,
+        flag: Some("--library-index"),
+        default: none,
+        unset: "no index; required unless matching is \"off\", refused with \"off\"",
+        doc: "The library fingerprint index: its directory, or its id (resolved under \
+              index_store).",
+    },
+    unset_text(
+        "library",
+        "index_store",
+        "an index id cannot be resolved: pass the index directory",
+        "Where index ids live (<index_store>/<id>/manifest.json).",
+    ),
+    Key {
+        section: "library",
+        name: "unnamed",
+        kind: Kind::Choice(unnamed_modes),
+        flag: None,
+        default: || text("leave"),
+        unset: "",
+        doc: "Library code with no index name: \"leave\" (library files not model-named, \
+              library functions in mixed files frozen with the <library>_<name> prefix) or \
+              \"model\" (the model names everything).",
+    },
+    Key {
+        section: "library",
+        name: "report_units",
+        kind: Kind::Bool,
+        flag: None,
+        default: off,
+        unset: "",
+        doc: "List every claimed, vetoed, library-class and queued unit in the report \
+              (default: totals and packages).",
+    },
+    // [library.lookup]: the index lookup's rules (libindex::lookup::LookupRules).
+    lib_int(
+        "library.lookup",
+        "min_nodes",
+        1,
+        U32,
+        || int(u64::from(rules().min_nodes)),
+        "AST nodes a statement needs to be looked up.",
+    ),
+    lib_int(
+        "library.lookup",
+        "min_content",
+        0,
+        U32,
+        || int(u64::from(rules().min_content)),
+        "Content tokens a whole statement needs to be looked up.",
+    ),
+    lib_int(
+        "library.lookup",
+        "min_function_content",
+        0,
+        U32,
+        || int(u64::from(rules().min_function_content)),
+        "Content tokens a function needs to be looked up.",
+    ),
+    lib_float(
+        "cover",
+        1.0,
+        || float(rules().cover),
+        "Fraction of a statement's units the index must cover.",
+    ),
+    lib_int(
+        "library.lookup",
+        "max_packages",
+        1,
+        U32,
+        || int(rules().max_packages as u64),
+        "Most packages a unit may match and still claim.",
+    ),
+    lib_int(
+        "library.lookup",
+        "support",
+        0,
+        U32,
+        || int(rules().support as u64),
+        "A claim under `strong` nodes needs another claim of its package within this many \
+         units (0: none).",
+    ),
+    lib_int(
+        "library.lookup",
+        "strong",
+        0,
+        U32,
+        || int(u64::from(rules().strong)),
+        "Node count at which a claim needs no support.",
+    ),
+    Key {
+        section: "library.lookup",
+        name: "specificity",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(rules().specificity.is_some())),
+        unset: "",
+        doc: "Refuse an index module much bigger than the query's module (factor x + slack).",
+    },
+    lib_int(
+        "library.lookup",
+        "specificity_factor",
+        1,
+        U32,
+        || int(rules().specificity.map_or(4, |s| s.0)),
+        "Specificity: the index module may be at most this many times the query's.",
+    ),
+    lib_int(
+        "library.lookup",
+        "specificity_slack",
+        0,
+        ANY,
+        || int(rules().specificity.map_or(4096, |s| s.1)),
+        "Specificity: plus this many bytes.",
+    ),
+    Key {
+        section: "library.lookup",
+        name: "agreement",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(rules().agreement)),
+        unset: "",
+        doc: "Require the literal rule to agree (same package family); false = the \
+              structural rule.",
+    },
+    lib_int(
+        "library.lookup",
+        "min_literals",
+        0,
+        U32,
+        || int(rules().min_literals as u64),
+        "Literals a module needs for the literal rule.",
+    ),
+    lib_float(
+        "literal_score",
+        f64::MAX,
+        || float(rules().literal_score),
+        "The literal rule's score floor (bits).",
+    ),
+    lib_float(
+        "literal_cover",
+        1.0,
+        || float(rules().literal_cover),
+        "The literal rule's cover floor.",
+    ),
+    lib_float(
+        "literal_margin",
+        f64::MAX,
+        || float(rules().literal_margin),
+        "The literal rule's margin over the runner-up (bits).",
+    ),
+    // [library.lookup.targeted]: the second round, on queued regions.
+    lib_int(
+        "library.lookup.targeted",
+        "min_nodes",
+        1,
+        U32,
+        || int(u64::from(TARGETED_MIN_NODES)),
+        "The targeted round's node floor (the other rules are the lookup's).",
+    ),
+    lib_int(
+        "library.lookup.targeted",
+        "support",
+        0,
+        U32,
+        || int(TARGETED_SUPPORT as u64),
+        "The targeted round's neighbour support (0: the region's own calls are the context).",
+    ),
+    // [library.discovery]: the graph fixpoint (libdetect::discovery::DiscoveryOptions).
+    lib_int(
+        "library.discovery",
+        "closure_floor",
+        0,
+        U32,
+        || int(u64::from(discovery().closure_floor)),
+        "Content floor a down-class start needs.",
+    ),
+    lib_int(
+        "library.discovery",
+        "queue_cap_bytes",
+        0,
+        U32,
+        || int(u64::from(discovery().queue_cap)),
+        "Largest region queued for a targeted index lookup, bytes.",
+    ),
+    lib_int(
+        "library.discovery",
+        "max_rounds",
+        1,
+        U32,
+        || int(u64::from(discovery().max_rounds)),
+        "Fixpoint round limit.",
+    ),
+    Key {
+        section: "library.discovery",
+        name: "veto_support",
+        kind: Kind::Choice(veto_supports),
+        flag: None,
+        default: || text(veto_support_name(discovery().veto_support)),
+        unset: "",
+        doc: "What may support a seed against the isolation veto: \"without-module\" or \
+              \"all-rules\" (the lab prototype's).",
     },
     // [unpack]
     Key {

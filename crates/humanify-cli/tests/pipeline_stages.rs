@@ -313,13 +313,161 @@ fn skip_libraries_off_processes_every_unpacked_file() {
     let s = Scratch::new("no-skip");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--no-skip-libraries", "-o", &out]);
+    let o = run_with(
+        &s.0,
+        &[&input, "-o", &out],
+        &["library.unnamed = \"model\""],
+    );
     let err = stderr(&o);
     // Native stage 6 runs per file: all three unpacked files are formatted
     // and named (the single-file limit of the TS-text era is gone).
     assert_eq!(o.status.code(), Some(0), "{err}");
     for i in 1..=3 {
         assert!(err.contains(&format!("Processing file {i}/3")), "{err}");
+    }
+}
+
+/// A library index directory: a manifest with this build's stamps, and
+/// (`slice`) an empty `units.bun.jsonl` + `literals.jsonl`.
+fn library_index(dir: &Path, slice: bool) -> String {
+    use humanify_core::libindex::format::{INDEX_FORMAT, fingerprint_versions};
+    std::fs::create_dir_all(dir).unwrap();
+    let slices = if slice {
+        serde_json::json!([{"slice": "bun", "bundler": "bun", "version": "1", "published": null,
+            "newestAtAsOf": null, "bundlerAfterAsOf": false}])
+    } else {
+        serde_json::json!([])
+    };
+    let manifest = serde_json::json!({
+        "format": INDEX_FORMAT, "asOf": "2026-10-11", "fingerprints": fingerprint_versions(),
+        "registry": {"earliestFetch": null, "latestFetch": null, "packuments": {}},
+        "slices": slices, "packages": [], "refused": [], "shards": {}, "tables": {}, "data": {}
+    });
+    std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
+    if slice {
+        std::fs::write(dir.join("units.bun.jsonl"), "").unwrap();
+        std::fs::write(dir.join("literals.jsonl"), "").unwrap();
+    }
+    dir.display().to_string()
+}
+
+/// Config sweep step 6: `--library-matching report` runs discovery and
+/// WRITES its report (`.humanify/library-report.json`) without
+/// `--diagnostics`, and changes no other output byte against `off`. A
+/// detected bundler the index has no slice for is a loud WARNING, recorded
+/// as `recipeMissing`, and the run goes on.
+#[test]
+fn library_matching_report_writes_its_report_and_changes_nothing_else() {
+    let s = Scratch::new("lib-report");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let off_dir = s.0.join("off");
+    let off = run(&s.0, &[&input, "-o", off_dir.to_str().unwrap()]);
+    assert_eq!(off.status.code(), Some(0), "{}", stderr(&off));
+    assert!(
+        !off_dir.join(".humanify/library-report.json").exists(),
+        "off reports nothing"
+    );
+    for (tag, slice) in [("with-slice", true), ("no-slice", false)] {
+        let ix = library_index(&s.0.join(format!("ix-{tag}")), slice);
+        let out = s.0.join(tag);
+        let o = run(
+            &s.0,
+            &[
+                &input,
+                "-o",
+                out.to_str().unwrap(),
+                "--library-matching",
+                "report",
+                "--library-index",
+                &ix,
+            ],
+        );
+        let err = stderr(&o);
+        assert_eq!(o.status.code(), Some(0), "{tag}: {err}");
+        let report: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(out.join(".humanify/library-report.json")).expect("written"),
+        )
+        .unwrap();
+        assert_eq!(report["matching"], "report");
+        assert_eq!(
+            report["indexId"].as_str().map(str::len),
+            Some(64),
+            "{report}"
+        );
+        assert!(err.contains("Library matching (report): "), "{err}");
+        if slice {
+            assert!(report["recipeMissing"].is_null(), "{report}");
+            assert!(report["libraryDiscovery"].is_object(), "{report}");
+        } else {
+            let w = report["recipeMissing"].as_str().expect("recorded");
+            assert!(
+                w.starts_with("WARNING: library index ") && w.contains("no slice"),
+                "{w}"
+            );
+            assert!(err.contains(w), "the warning is on stderr: {err}");
+        }
+        let mut got = snapshot(&out);
+        got.remove(".humanify/library-report.json");
+        assert_eq!(
+            got,
+            snapshot(&off_dir),
+            "{tag}: report changed an output byte"
+        );
+    }
+}
+
+/// Library matching refusals happen before any work: the output
+/// directory is never created.
+#[test]
+fn a_refused_library_decision_creates_nothing() {
+    let s = Scratch::new("lib-refused");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let out = s.out().display().to_string();
+    let stale = s.0.join("stale");
+    library_index(&stale, true);
+    let m = std::fs::read_to_string(stale.join("manifest.json")).unwrap();
+    std::fs::write(stale.join("manifest.json"), m.replace("units/", "units/0")).unwrap();
+    for (args, want) in [
+        (
+            vec!["--library-matching", "names", "--library-index", "x"],
+            "refused until an eval",
+        ),
+        (
+            vec!["--library-matching", "report"],
+            "needs --library-index",
+        ),
+        (vec!["--library-index", "x"], "--library-matching off"),
+        (
+            vec![
+                "--library-matching",
+                "report",
+                "--library-index",
+                "/nonexistent/ix",
+            ],
+            "no such directory",
+        ),
+        (
+            vec![
+                "--library-matching",
+                "report",
+                "--library-index",
+                stale.to_str().unwrap(),
+            ],
+            "this binary reads units/",
+        ),
+        (
+            vec!["--no-skip-libraries"],
+            "moved: set library.unnamed = \"model\"",
+        ),
+    ] {
+        let o = run(
+            &s.0,
+            &[&[input.as_str(), "-o", &out][..], &args[..]].concat(),
+        );
+        let err = stderr(&o);
+        assert_eq!(o.status.code(), Some(1), "{args:?}: {err}");
+        assert!(err.contains(want), "{args:?} must say {want:?}: {err}");
+        assert!(!s.out().exists(), "{args:?} created the output");
     }
 }
 

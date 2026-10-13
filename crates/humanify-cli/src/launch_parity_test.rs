@@ -141,6 +141,12 @@ fn to_config(argv: &[String]) -> Launch {
             .push(format!("{} = {literal}", key.name));
         i += 1;
     }
+    // Step 6: an index was read only for the diagnostics' report — today
+    // that is `--library-matching report` (an index with matching off is
+    // refused as a conflict).
+    if kept.iter().any(|a| a == "--library-index") {
+        kept.extend(["--library-matching".to_string(), "report".to_string()]);
+    }
     let toml: String = sections
         .iter()
         .map(|(s, lines)| format!("[{s}]\n{}\n", lines.join("\n")))
@@ -255,7 +261,7 @@ fn settings_json(c: &Config) -> Value {
         "maxFreeRetries": g.max_free_retries.map(f64::from),
         "laneThreshold": n(g.lane_threshold as f64),
         "renameRetries": n(g.rename_retries as f64),
-        "skipLibraries": c.library.skip_libraries,
+        "skipLibraries": c.library.skips_libraries(),
         "namingFloor": g.naming_floor,
         "namingFloorSweep": g.naming_floor_sweep,
         "reconcilePriorDiff": c.matching.reconcile_prior_diff,
@@ -312,7 +318,7 @@ pub(crate) fn record(input: &str, opts: &CommandOptions, file: Option<&ConfigFil
         "logFile": d.log_file,
         "diagnostics": d.diagnostics_file,
         "libraryIndex": c.library.index,
-        "libraryDiscoveryUnits": c.library.discovery_units,
+        "libraryDiscoveryUnits": c.library.report_units,
         "perfTrace": c.perf.perf_trace,
         "renameLedger": d.rename_ledger,
         "statsJson": d.stats_json,

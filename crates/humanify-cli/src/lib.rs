@@ -66,6 +66,8 @@ mod kill_switches_test;
 #[cfg(test)]
 mod launch_parity_test;
 #[cfg(test)]
+mod library_config_test;
+#[cfg(test)]
 mod match_verb_test;
 #[cfg(test)]
 mod surface_test;

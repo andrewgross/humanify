@@ -67,7 +67,8 @@ fn every_naming_default_is_the_one_named_default() {
     assert_eq!(c.naming.tunables(), WaveTunables::default());
     assert_eq!(c.naming.schedule, FastTier::Relaxed(Levers::all()));
     assert!(c.naming.naming_floor && c.naming.naming_floor_sweep);
-    assert!(c.library.skip_libraries);
+    assert!(c.library.skips_libraries());
+    assert_eq!(c.library.matching, crate::config::LibraryMatching::Off);
     assert!(
         !c.matching.reconcile_prior_diff,
         "no prior: nothing to reconcile"
@@ -111,9 +112,9 @@ fn the_levers_default_on_and_the_sweep_depends_on_the_floor() {
     );
     assert!(!off.matching.reconcile_prior_diff);
     assert!(
-        !config(&["in.js", "--no-skip-libraries"])
+        !with_file(&["in.js"], "[library]\nunnamed = \"model\"\n")
             .library
-            .skip_libraries
+            .skips_libraries()
     );
 }
 
