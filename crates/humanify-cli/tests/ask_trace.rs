@@ -152,15 +152,8 @@ fn run(
     cmd.current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
-        .args([
-            input,
-            "--api-key",
-            "k",
-            "--model",
-            "stub-model",
-            "--retries",
-            "0",
-        ])
+        .env("HUMANIFY_API_KEY", "k")
+        .args([input, "--model", "stub-model", "--retries", "0"])
         .arg("--endpoint")
         .arg(endpoint)
         .arg("-o")

@@ -40,8 +40,9 @@ fn provider_errors_are_reported_at_the_default_verbosity() {
         .current_dir(&s.0)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env("HUMANIFY_API_KEY", "k")
         .arg(&input)
-        .args(["--api-key", "k", "--model", "stub-model", "-c", "4"])
+        .args(["--model", "stub-model", "-c", "4"])
         .args(["--retries", "0", "--endpoint", &dead_endpoint()])
         .arg("-o")
         .arg(s.0.join("out"))
@@ -133,16 +134,9 @@ fn run_failing(fixture: &str) -> FailedRun {
         .current_dir(&s.0)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env("HUMANIFY_API_KEY", "k")
         .arg(&input)
-        .args([
-            "--split",
-            "--api-key",
-            "k",
-            "--model",
-            "stub-model",
-            "-c",
-            "16",
-        ])
+        .args(["--split", "--model", "stub-model", "-c", "16"])
         .args(["--retries", "0", "--endpoint", &endpoint])
         .arg("--stats-json")
         .arg(&stats)

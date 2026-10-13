@@ -2463,6 +2463,14 @@
           }
         ]
       }
+    },
+    {
+      "name": "config",
+      "optional": true,
+      "nullable": false,
+      "type": {
+        "kind": "any"
+      }
     }
   ]
 }

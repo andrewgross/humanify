@@ -114,6 +114,11 @@ source "$HERE/llm-endpoint.sh"
 ENDPOINT=$(resolve_llm_endpoint "$ENDPOINT_OVERRIDE" "$REPO") || exit 2
 MODELNAME=$(jq -r .llm.model "$CFG")
 APIKEY=$(jq -r .llm.apiKey "$CFG")
+# The binary reads its API key from HUMANIFY_API_KEY only (config sweep
+# step 4, 2026-10-13: `--api-key` was retired — a secret never goes on a
+# command line, which the launch record would keep). Exported once; every
+# launch below inherits it.
+export HUMANIFY_API_KEY="$APIKEY"
 EFFORT=$(jq -r .llm.reasoningEffort "$CFG")
 CONC=$(jq -r .llm.concurrency "$CFG")
 source "$HERE/build-bin.sh"
@@ -207,7 +212,7 @@ run_leg() {
     {
       echo "# neutrality per-leg cmd: $CMD_TEMPLATE"
       "${LEG_ARR[@]}" "$INPUT" --split \
-        --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+        --endpoint "$ENDPOINT" --model "$MODELNAME" \
         --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
         --llm-cache "$CACHE" --prior-version "$PRIOR"
     } > "$WORK/neutrality-$LABEL.stdout" 2>&1
@@ -217,7 +222,7 @@ run_leg() {
     BIN=$(build_humanify "$SRCDIR" "$WORK/neutrality-$LABEL.build.log") || return 1
     echo "    binary: $BIN"
     "$BIN" "$INPUT" --split \
-      --endpoint "$ENDPOINT" --model "$MODELNAME" --api-key "$APIKEY" \
+      --endpoint "$ENDPOINT" --model "$MODELNAME" \
       --reasoning-effort "$EFFORT" -c "$CONC" -o "$OUT" \
       --llm-cache "$CACHE" --prior-version "$PRIOR" \
       > "$WORK/neutrality-$LABEL.stdout" 2>&1

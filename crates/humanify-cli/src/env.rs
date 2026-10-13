@@ -10,8 +10,12 @@
 //! History carried over verbatim: generation 1 of the kill switches WERE
 //! env vars read inline at 14 sites with three incompatible predicates;
 //! generation 2 (2026-08-12) deleted the env vars entirely. The env module
-//! exists for exactly two reads today — the API-key fallbacks — and it is
-//! the only module allowed to grow another.
+//! exists for exactly one read today — the API key, `HUMANIFY_API_KEY`,
+//! asked for once by the configuration owner (`crate::config`; the
+//! `OPENAI_API_KEY` fallback and `--api-key` were retired 2026-10-13) — and
+//! it is the only module allowed to grow another. `tests/env_guard.rs`
+//! fails a read anywhere else, and a call into this module from anywhere
+//! but the parse point.
 
 use std::sync::OnceLock;
 

@@ -6,21 +6,20 @@ Arguments:
   <input>  The input minified JavaScript file
 
 Options:
-      --endpoint <url>               OpenAI-compatible API endpoint [default: https://api.openai.com/v1]
-      --api-key <key>                API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)
-  -m, --model <model>                Model identifier [default: gpt-4o-mini]
-  -o, --output-dir <output>          Output directory [default: output]
+      --endpoint <url>               OpenAI-compatible API endpoint (default: https://api.openai.com/v1). The API key is read from HUMANIFY_API_KEY (the environment or a .env file), never from a flag
+  -m, --model <model>                Model identifier (default: gpt-4o-mini)
+  -o, --output-dir <output>          Output directory (default: output)
   -v, --verbose...                   Increase verbosity (-v for info, -vv for debug)
-  -c, --concurrency <n>              Max concurrent function-lane LLM requests. Module-lane size is set separately via --module-concurrency; the global in-flight cap is their sum. [default: 50]
-      --module-concurrency <n>       Max concurrent module-lane LLM requests (default derived from -c)
-      --max-tokens <n>               Per-request completion token budget
+  -c, --concurrency <n>              Max concurrent function-lane LLM requests (default: 50). Module-lane size is set separately via --module-concurrency; the global in-flight cap is their sum.
+      --module-concurrency <n>       Max concurrent module-lane LLM requests (default: 40)
+      --max-tokens <n>               Per-request completion token budget (default: 6000)
       --context-tokens <n>           Model context window in tokens; sizes the batched split-naming prompts (default: 32768, the local measurement model's window)
       --disable <passes>             Comma-separated pass switches to turn OFF for ablation (unknown names are fatal and list the valid set)
       --probe <probes>               Comma-separated instrumentation probes to turn ON (unknown names are fatal and list the valid set)
-      --retries <n>                  Number of retry attempts for failed API calls [default: 3]
-      --timeout <ms>                 LLM request timeout in milliseconds [default: 300000]
+      --retries <n>                  Number of retry attempts for failed API calls (default: 3)
+      --timeout <ms>                 LLM request timeout in milliseconds (default: 300000)
       --llm-cache <dir>              Cache LLM responses on disk keyed by request content. Repeated prompts become deterministic across sessions and reruns are nearly free — it also pins answers against a server whose replies drift between runs.
-      --reasoning-effort <level>     Reasoning effort for reasoning models: low, medium, or high (no env fallback; default: server-side default). 'low' is ~8x faster on gpt-oss at equal name quality; only set it for reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it.
+      --reasoning-effort <level>     Reasoning effort for reasoning models: low, medium, or high (default: server-side default). 'low' is ~8x faster on gpt-oss at equal name quality; only set it for reasoning models — non-reasoning models (e.g. gpt-4o-mini) reject it. [possible values: low, medium, high]
       --skip-libraries               Skip library code instead of processing it with the LLM (the default)
       --no-skip-libraries            Process library code with the LLM
       --log-file <path>              Write debug logs to file (implies -vv)

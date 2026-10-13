@@ -365,8 +365,13 @@ async function runBinary(
 ): Promise<string> {
   const child = spawn(
     BIN,
-    [...args, "--endpoint", endpoint, "--api-key", "e2e", "--retries", "0"],
-    { stdio: ["ignore", "ignore", "pipe"] }
+    [...args, "--endpoint", endpoint, "--retries", "0"],
+    {
+      stdio: ["ignore", "ignore", "pipe"],
+      // The binary's API key comes from HUMANIFY_API_KEY only (config
+      // sweep step 4); the stub accepts any.
+      env: { ...process.env, HUMANIFY_API_KEY: "e2e" }
+    }
   );
   let stderr = "";
   child.stderr.on("data", (c) => {

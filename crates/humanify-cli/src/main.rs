@@ -82,15 +82,17 @@ enum Command {
         /// misses fail the batch). Without it the LLM pass is skipped.
         #[arg(long)]
         llm_cache: Option<String>,
-        /// The vendor namer's model. The default is the local model the
-        /// measurements run on (part of the cache key, so it must match the
-        /// cache being replayed); name your own server's model otherwise.
-        #[arg(long, default_value = "openai/gpt-oss-20b")]
+        /// The vendor namer's model — part of the cache key, so it must
+        /// match the cache being replayed (the eval's local model is
+        /// `openai/gpt-oss-20b`). One default with the pipeline's
+        /// (`humanify_cli::config::DEFAULT_MODEL`).
+        #[arg(long, default_value = humanify_cli::config::DEFAULT_MODEL)]
         model: String,
-        /// Reasoning effort sent with the vendor namer's requests (the
-        /// local model's measured setting; part of the cache key too).
-        #[arg(long, default_value = "low")]
-        reasoning_effort: String,
+        /// Reasoning effort sent with the vendor namer's requests (part of
+        /// the cache key too; the eval runs `low`). Unset, like the
+        /// pipeline's: the server's default.
+        #[arg(long, value_enum)]
+        reasoning_effort: Option<humanify_cli::config::ReasoningEffort>,
         #[arg(long)]
         max_tokens: Option<u64>,
         /// Write the vendor LLM batches (keys, evidence, proposals) + stats
@@ -262,7 +264,7 @@ fn main() {
                     // The TS passes a literal 0 (unified.ts buildProvider).
                     temperature: Some(0.0),
                     max_tokens,
-                    reasoning_effort: Some(reasoning_effort),
+                    reasoning_effort: reasoning_effort.map(|e| e.name().to_string()),
                 },
                 llm_log,
                 bundle_order,

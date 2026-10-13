@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
+use crate::config::check_flag_invariants;
 use crate::output_validation::{
     FreeNameMeasure, OutputParseFailure, OutputSemanticFailure, ParserError, build_excerpt,
     compare_semantics, describe_parse_error, format_divergence,
@@ -19,7 +20,7 @@ use crate::progress::{LineRenderer, ProgressRenderer, TtyRenderer};
 use crate::report::{
     report_internal_errors, report_parse_failures, report_semantic_failures, report_vendor_naming,
 };
-use crate::unified::{CommandOptions, check_flag_invariants};
+use crate::surface::CommandOptions;
 use crate::writers::{PlacementStats, StageHashes, stage_fingerprint};
 use humanify_model::jsshape::JsType;
 

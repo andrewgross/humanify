@@ -67,6 +67,7 @@ fn run(dir: &Path, args: &[&str]) -> Output {
         .current_dir(dir)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env("HUMANIFY_API_KEY", "k")
         .args(args)
         .args(["--endpoint", "http://127.0.0.1:9/v1", "--retries", "0"])
         .output()
@@ -82,7 +83,7 @@ fn a_bun_run_writes_the_vendor_tree_then_formats_and_names_runtime_js() {
     let s = Scratch::new("bun-format");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let o = run(&s.0, &[&input, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(!err.contains("NOT YET PORTED"), "{err}");
@@ -129,7 +130,7 @@ fn a_run_with_the_formatted_text_goes_end_to_end_through_the_split() {
     let minified: String = wrapped.lines().map(str::trim).collect::<Vec<_>>().join("");
     let input = s.write("bundle.js", &minified);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "--split", "-o", &out]);
+    let o = run(&s.0, &[&input, "--split", "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(err.contains("Split complete: written to"), "{err}");
@@ -176,7 +177,7 @@ fn the_ts_input_options_are_gone() {
         "--ts-library-functions",
         "--inject-ts-hashes",
     ] {
-        let o = run(&s.0, &[&input, "--api-key", "k", flag, &input]);
+        let o = run(&s.0, &[&input, flag, &input]);
         let err = stderr(&o);
         assert_eq!(o.status.code(), Some(1), "{flag}: {err}");
         assert!(
@@ -202,7 +203,7 @@ fn a_mixed_file_freezes_only_its_library_functions() {
     text.push_str("/*! tinylib v1.2.3 */var libFn=function(z){return z*2};console.log(libFn(3));");
     let input = s.write("fresh.js", &text);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let o = run(&s.0, &[&input, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     assert!(
@@ -222,7 +223,7 @@ fn a_plain_script_passes_through_as_index_js() {
     let s = Scratch::new("passthrough");
     let input = s.write("plain.js", PLAIN);
     let out = s.out().display().to_string();
-    let o = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let o = run(&s.0, &[&input, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     // Formatted (Babel prints no trailing newline) and named — the dead
@@ -241,10 +242,7 @@ fn a_failed_vendor_batch_is_counted_not_fatal() {
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
     let cache = s.0.join("cache").display().to_string();
-    let o = run(
-        &s.0,
-        &[&input, "--api-key", "k", "--llm-cache", &cache, "-o", &out],
-    );
+    let o = run(&s.0, &[&input, "--llm-cache", &cache, "-o", &out]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     let manifest: serde_json::Value = serde_json::from_str(
@@ -274,6 +272,7 @@ fn unpack_verb_counts_carries_from_run_state_not_the_manifest() {
         cmd.current_dir(&s.0)
             .env_clear()
             .env("PATH", "/usr/bin:/bin")
+            .env("HUMANIFY_API_KEY", "k")
             .args(["unpack", &input, out]);
         if let Some(p) = prior {
             cmd.args(["--prior-version", p]);
@@ -298,10 +297,7 @@ fn skip_libraries_off_processes_every_unpacked_file() {
     let s = Scratch::new("no-skip");
     let input = s.write("bundle.js", BUN_BUNDLE);
     let out = s.out().display().to_string();
-    let o = run(
-        &s.0,
-        &[&input, "--api-key", "k", "--no-skip-libraries", "-o", &out],
-    );
+    let o = run(&s.0, &[&input, "--no-skip-libraries", "-o", &out]);
     let err = stderr(&o);
     // Native stage 6 runs per file: all three unpacked files are formatted
     // and named (the single-file limit of the TS-text era is gone).
@@ -324,7 +320,7 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
     let out = s.out().display().to_string();
     // Baseline: the same run without a prior, whose shipped text is a
     // genuinely bound prior for the second pass.
-    let base = run(&s.0, &[&input, "--api-key", "k", "-o", &out]);
+    let base = run(&s.0, &[&input, "-o", &out]);
     assert_eq!(base.status.code(), Some(0), "{}", stderr(&base));
     let prior = s.out().join("index.js").display().to_string();
     // The incident's shape: a small non-empty file that is NOT this
@@ -334,8 +330,6 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
         &s.0,
         &[
             &input,
-            "--api-key",
-            "k",
             "--prior-version",
             &stub,
             "-o",
@@ -357,8 +351,6 @@ fn a_useless_prior_warns_on_stderr_and_a_bound_prior_stays_quiet() {
         &s.0,
         &[
             &input,
-            "--api-key",
-            "k",
             "--prior-version",
             &prior,
             "-o",
@@ -402,7 +394,7 @@ fn the_profile_names_the_split_finish_constituents() {
     let v1 = s.write("v1.js", &variant("aaaa", "greet"));
     let v2 = s.write("v2.js", &variant("bbbb", "hail"));
     let out1 = s.0.join("tree-v1").display().to_string();
-    let o = run(&s.0, &[&v1, "--api-key", "k", "--split", "-o", &out1]);
+    let o = run(&s.0, &[&v1, "--split", "-o", &out1]);
     let err = stderr(&o);
     assert_eq!(o.status.code(), Some(0), "{err}");
     // The printed gauges (finding #66), pinned on the FRESH run (the
@@ -424,8 +416,6 @@ fn the_profile_names_the_split_finish_constituents() {
         &s.0,
         &[
             &v2,
-            "--api-key",
-            "k",
             "--split",
             "--prior-version",
             &prior.display().to_string(),
@@ -497,14 +487,7 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
     let out = s.out().display().to_string();
     let first = run(
         &s.0,
-        &[
-            &fixture.display().to_string(),
-            "--api-key",
-            "k",
-            "--split",
-            "-o",
-            &out,
-        ],
+        &[&fixture.display().to_string(), "--split", "-o", &out],
     );
     let err = stderr(&first);
     assert_eq!(first.status.code(), Some(0), "{err}");
@@ -524,7 +507,7 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
 
     // A different bundle with no vendor modules at all, into the SAME folder.
     let input = s.write("plain-wrapper.js", &wrapped());
-    let second = run(&s.0, &[&input, "--api-key", "k", "--split", "-o", &out]);
+    let second = run(&s.0, &[&input, "--split", "-o", &out]);
     let err = stderr(&second);
     assert_eq!(second.status.code(), Some(0), "{err}");
     // On main the finish re-parsed the earlier run's (already re-linked)
@@ -547,4 +530,61 @@ fn a_rerun_into_the_same_folder_never_relinks_the_earlier_runs_vendor_files() {
         err.contains("WARNING") && err.contains("not written by this run"),
         "the leftovers are reported:\n{err}"
     );
+}
+
+/// Config sweep step 4: a refused configuration — a bad value, a missing
+/// API key, a missing prior — exits 1 naming every problem, and NOTHING
+/// has been created: no output tree, no log file, no cache directory.
+#[test]
+fn a_refused_configuration_creates_nothing() {
+    let s = Scratch::new("refused");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let out = s.out().display().to_string();
+    let side_effects = ["out", "cache", "run.log"];
+    let common = [
+        input.as_str(),
+        "-o",
+        &out,
+        "--llm-cache",
+        "cache",
+        "--log-file",
+        "run.log",
+    ];
+    let bad_value = run(&s.0, &[&common[..], &["-c", "0", "--split-pure"]].concat());
+    let err = stderr(&bad_value);
+    assert_eq!(bad_value.status.code(), Some(1), "{err}");
+    assert!(
+        err.contains("Error: --split-pure requires --split"),
+        "{err}"
+    );
+    assert!(
+        err.contains("Error: --concurrency must be at least 1 (got 0)"),
+        "{err}"
+    );
+    let no_key = Command::new(env!("CARGO_BIN_EXE_humanify"))
+        .current_dir(&s.0)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .args(common)
+        .output()
+        .unwrap();
+    assert_eq!(no_key.status.code(), Some(1));
+    assert!(
+        stderr(&no_key).contains("Error: API key required: set HUMANIFY_API_KEY"),
+        "{}",
+        stderr(&no_key)
+    );
+    let no_prior = run(
+        &s.0,
+        &[&common[..], &["--prior-version", "missing.js"]].concat(),
+    );
+    assert_eq!(no_prior.status.code(), Some(1));
+    assert!(
+        stderr(&no_prior).contains("Error: --prior-version file not found: missing.js"),
+        "{}",
+        stderr(&no_prior)
+    );
+    for p in side_effects {
+        assert!(!s.0.join(p).exists(), "{p} was created by a refused run");
+    }
 }

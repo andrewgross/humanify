@@ -55,17 +55,3 @@ pub fn identifier_regex_pattern(name: &str) -> String {
     let escaped = name.replace('$', "\\$");
     format!("(?<![A-Za-z0-9_$]){escaped}(?![A-Za-z0-9_$])")
 }
-
-/// The run defaults (commands/default-args.ts) — one source each.
-pub const DEFAULT_CONCURRENCY: u32 = 50;
-
-/// LLM request timeout. One number, because it was three (the CLI default,
-/// the provider fallback, and a hard-coded experiment copy).
-pub const DEFAULT_LLM_TIMEOUT_MS: u64 = 300_000;
-
-/// The module-lane width the LLM rate limiter's outer bound is sized by
-/// (when `--module-concurrency` is unset). It was the wider entry of a
-/// per-bundler lane table (esbuild 40, others 20) whose per-bundler lookup
-/// nothing called (docs/plugin-spec.md I24): the table was deleted
-/// 2026-10-04, keeping the one value anything read.
-pub const MAX_DEFAULT_MODULE_CONCURRENCY: u32 = 40;

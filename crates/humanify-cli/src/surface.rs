@@ -26,8 +26,12 @@
 use clap::{CommandFactory, FromArgMatches, Parser};
 use serde_json::Value;
 
-use crate::util::{DEFAULT_CONCURRENCY, DEFAULT_LLM_TIMEOUT_MS};
+use crate::config::{
+    API_KEY_VAR, DEFAULT_CONCURRENCY, DEFAULT_CONTEXT_TOKENS, DEFAULT_ENDPOINT, DEFAULT_MODEL,
+    DEFAULT_MODULE_CONCURRENCY, DEFAULT_OUTPUT_DIR, ReasoningEffort, default_retries,
+};
 use humanify_model::detection::{SELECTABLE_BUNDLERS, SELECTABLE_MINIFIERS};
+use humanify_model::llm::{DEFAULT_LLM_TIMEOUT_MS, DEFAULT_MAX_TOKENS};
 
 /// package.json's version — the single source `-V` prints.
 pub fn package_version() -> String {
@@ -52,6 +56,55 @@ fn names<T: serde::Serialize>(values: &[T]) -> String {
         .join(", ")
 }
 
+fn endpoint_help() -> String {
+    format!(
+        "OpenAI-compatible API endpoint (default: {DEFAULT_ENDPOINT}). The API key is read \
+         from {API_KEY_VAR} (the environment or a .env file), never from a flag"
+    )
+}
+
+fn model_help() -> String {
+    format!("Model identifier (default: {DEFAULT_MODEL})")
+}
+
+fn output_help() -> String {
+    format!("Output directory (default: {DEFAULT_OUTPUT_DIR})")
+}
+
+fn concurrency_help() -> String {
+    format!(
+        "Max concurrent function-lane LLM requests (default: {DEFAULT_CONCURRENCY}). \
+         Module-lane size is set separately via --module-concurrency; the global in-flight \
+         cap is their sum."
+    )
+}
+
+fn module_concurrency_help() -> String {
+    format!("Max concurrent module-lane LLM requests (default: {DEFAULT_MODULE_CONCURRENCY})")
+}
+
+fn max_tokens_help() -> String {
+    format!("Per-request completion token budget (default: {DEFAULT_MAX_TOKENS})")
+}
+
+fn context_tokens_help() -> String {
+    format!(
+        "Model context window in tokens; sizes the batched split-naming prompts (default: \
+         {DEFAULT_CONTEXT_TOKENS}, the local measurement model's window)"
+    )
+}
+
+fn retries_help() -> String {
+    format!(
+        "Number of retry attempts for failed API calls (default: {})",
+        default_retries()
+    )
+}
+
+fn timeout_help() -> String {
+    format!("LLM request timeout in milliseconds (default: {DEFAULT_LLM_TIMEOUT_MS})")
+}
+
 fn bundler_help() -> String {
     format!("Force bundler type ({})", names(&SELECTABLE_BUNDLERS))
 }
@@ -73,39 +126,18 @@ struct PipelineCli {
     opts: CommandOptions,
 }
 
-/// The parsed options. Value options are typed here, once; `settings`
-/// resolves them against the environment.
+/// The parsed options, exactly as given: `None`/`false` is "not given".
+/// No default lives here — `crate::config` owns every default, resolves
+/// and validates the options ONCE into the run's `Config`, and nothing
+/// else reads these fields.
 #[derive(clap::Args, Clone, Debug, Default)]
 pub struct CommandOptions {
-    #[arg(
-        long,
-        value_name = "url",
-        default_value = "https://api.openai.com/v1",
-        help = "OpenAI-compatible API endpoint"
-    )]
-    pub endpoint: String,
-    #[arg(
-        long,
-        value_name = "key",
-        help = "API key (flag > HUMANIFY_API_KEY > OPENAI_API_KEY env vars)"
-    )]
-    pub api_key: Option<String>,
-    #[arg(
-        short = 'm',
-        long,
-        value_name = "model",
-        default_value = "gpt-4o-mini",
-        help = "Model identifier"
-    )]
-    pub model: String,
-    #[arg(
-        short = 'o',
-        long,
-        value_name = "output",
-        default_value = "output",
-        help = "Output directory"
-    )]
-    pub output_dir: String,
+    #[arg(long, value_name = "url", help = endpoint_help())]
+    pub endpoint: Option<String>,
+    #[arg(short = 'm', long, value_name = "model", help = model_help())]
+    pub model: Option<String>,
+    #[arg(short = 'o', long, value_name = "output", help = output_help())]
+    pub output_dir: Option<String>,
     #[arg(
         short = 'v',
         long,
@@ -113,29 +145,13 @@ pub struct CommandOptions {
         help = "Increase verbosity (-v for info, -vv for debug)"
     )]
     pub verbose: u8,
-    #[arg(
-        short = 'c',
-        long,
-        value_name = "n",
-        default_value_t = u64::from(DEFAULT_CONCURRENCY),
-        help = "Max concurrent function-lane LLM requests. Module-lane size is set \
-                separately via --module-concurrency; the global in-flight cap is their sum."
-    )]
-    pub concurrency: u64,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Max concurrent module-lane LLM requests (default derived from -c)"
-    )]
-    pub module_concurrency: Option<u64>,
-    #[arg(long, value_name = "n", help = "Per-request completion token budget")]
+    #[arg(short = 'c', long, value_name = "n", help = concurrency_help())]
+    pub concurrency: Option<u32>,
+    #[arg(long, value_name = "n", help = module_concurrency_help())]
+    pub module_concurrency: Option<u32>,
+    #[arg(long, value_name = "n", help = max_tokens_help())]
     pub max_tokens: Option<u64>,
-    #[arg(
-        long,
-        value_name = "n",
-        help = "Model context window in tokens; sizes the batched split-naming \
-                prompts (default: 32768, the local measurement model's window)"
-    )]
+    #[arg(long, value_name = "n", help = context_tokens_help())]
     pub context_tokens: Option<u64>,
     #[arg(
         long,
@@ -151,20 +167,10 @@ pub struct CommandOptions {
                 are fatal and list the valid set)"
     )]
     pub probe: Option<String>,
-    #[arg(
-        long,
-        value_name = "n",
-        default_value_t = 3,
-        help = "Number of retry attempts for failed API calls"
-    )]
-    pub retries: u64,
-    #[arg(
-        long,
-        value_name = "ms",
-        default_value_t = DEFAULT_LLM_TIMEOUT_MS,
-        help = "LLM request timeout in milliseconds"
-    )]
-    pub timeout: u64,
+    #[arg(long, value_name = "n", help = retries_help())]
+    pub retries: Option<u32>,
+    #[arg(long, value_name = "ms", help = timeout_help())]
+    pub timeout: Option<u64>,
     #[arg(
         long,
         value_name = "dir",
@@ -177,12 +183,12 @@ pub struct CommandOptions {
     #[arg(
         long,
         value_name = "level",
-        help = "Reasoning effort for reasoning models: low, medium, or high (no env \
-                fallback; default: server-side default). 'low' is ~8x faster on \
+        help = "Reasoning effort for reasoning models: low, medium, or high (default: \
+                server-side default). 'low' is ~8x faster on \
                 gpt-oss at equal name quality; only set it for reasoning models — \
                 non-reasoning models (e.g. gpt-4o-mini) reject it."
     )]
-    pub reasoning_effort: Option<String>,
+    pub reasoning_effort: Option<ReasoningEffort>,
     // The two library spellings stay until the library decision (config
     // sweep step 6) replaces both; together they are a conflict.
     #[arg(
@@ -252,14 +258,14 @@ pub struct CommandOptions {
         value_name = "n",
         help = "Identifiers per LLM batch (default: 25)"
     )]
-    pub batch_size: Option<u64>,
+    pub batch_size: Option<usize>,
     #[arg(
         long,
         value_name = "n",
         help = "Per-identifier LLM call limit, initial + retries (default: 2; \
                 further conflicts resolve by suffixing)"
     )]
-    pub max_retries: Option<u64>,
+    pub max_retries: Option<u32>,
     #[arg(
         long,
         value_name = "n",
@@ -269,19 +275,19 @@ pub struct CommandOptions {
                 barrier/sweep collision re-ask consumes this budget, not the \
                 in-window call limit"
     )]
-    pub rename_retries: Option<u64>,
+    pub rename_retries: Option<usize>,
     #[arg(
         long,
         value_name = "n",
         help = "Cross-lane collision retry limit (default: 100)"
     )]
-    pub max_free_retries: Option<u64>,
+    pub max_free_retries: Option<u32>,
     #[arg(
         long,
         value_name = "n",
         help = "Min bindings to enable parallel lanes (default: 25)"
     )]
-    pub lane_threshold: Option<u64>,
+    pub lane_threshold: Option<usize>,
     #[arg(
         long,
         help = "Split output into a multi-file tree (src/ + vendor/ + run scaffold), \
@@ -379,6 +385,12 @@ pub struct CommandOptions {
 /// The old spelling is refused, naming its replacement, never aliased.
 pub const RETIRED_FLAGS: &[(Option<&str>, &str, &str)] = &[
     (None, "--profile", "renamed: use --perf-trace"),
+    (
+        None,
+        "--api-key",
+        "removed: set HUMANIFY_API_KEY in the environment — a secret never goes on the \
+         command line",
+    ),
     (
         None,
         "--naming-floor",
