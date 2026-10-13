@@ -64,3 +64,6 @@ experiments/*/results/*
 
 # Rust workspace build output (rust-port migration)
 /target/
+
+# python bytecode (experiment lab scripts)
+__pycache__/
