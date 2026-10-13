@@ -1,0 +1,54 @@
+{
+ "bundleSha256": "47941e9bfc7f7e4ac0d6ef1001c8b344addedc7eb41f2a8244527ed8cbbf20c2",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": false,
+ "entry": "heldout-cli_conventional-changelog-writer-c3ddfd",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyShare": 0.0
+ },
+ "label": "integ2-structural",
+ "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran)",
+ "missBytes": {
+  "no-discovery": 6099
+ },
+ "noDiscovery": "the bun adapter unpacked no bundled module (the one-file floor): no discovery ran",
+ "reportSha256": "572496f9ae45d06bec34c1faaa3ec08ea88db83397d0a840fbcb4ccc5b21ef01",
+ "rule": "structural",
+ "schema": "exp096-score/1",
+ "set": "heldout",
+ "statementBytes": {},
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "libraryBytes": 6099,
+  "namedBytes": 0,
+  "recall": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyShare": 0.0,
+  "wrongNameShare": 0.0
+ },
+ "truthMethod": "sourcemap"
+}

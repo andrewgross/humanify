@@ -53,9 +53,17 @@
 
     The detector's own verdict moves on 59 cards (the runner passes `--bundler`, so nothing scored follows it):
     54 held-out bundles `unknown` -> `bun`; wrangler, held-out wrangler, todometer and task-master-ai `unknown` ->
-    `esbuild`; held-out renovate `bun` -> `unknown`. `manifest_sha` now hashes the corpus manifest's canonical spelling: the commit
+    `esbuild`; held-out renovate `bun` -> `unknown`. **Fixed by `fix/detect-bun-target-node` (merged, labels `integ2-*`, commit `5205b0f0`):** renovate's prologue holds Bun's own `__export` registrar (`configurable` + `set`) AND a later esbuild-shaped one; main read esbuild on ANY esbuild-shaped registrar, which contradicted Bun's shape -> `unknown`. The fix reads the FIRST registrar of the runtime prologue: the detection census is 108/108 (88 Bun, 20 esbuild: this corpus, the e2e fixtures, the 8 eval-pair Claude Code inputs). Every scored field of `integ2-*` equals `integ-*`. `manifest_sha` now hashes the corpus manifest's canonical spelling: the commit
     hook had re-spelled `corpus.json`, so the file's bytes no longer matched the labels' `corpusSha256`.
 
+  - **OPEN (next library lane): a matcher gap the unpack fix exposed.** Once main recognised task-master-ai's
+    1,997 lazy esbuild (`__esm`) modules, its recall fell 31.7% -> 29.1% (structural; 20.1% -> 18.4% agreement)
+    and its wrong-family share ROSE 13.5% -> 20.9% (structural). The unpack is more correct; the matching is not
+    ready for it: discovery now sees lazy-module init-body statements (`LazyBody` units, 17,646 -> 23,995
+    statements) that the index's units do not line up with. Investigate lazy-module statements vs index units
+    before reading esbuild numbers.
+  - **OPEN (config sweep):** `--library-discovery-units` is not one of the six operational flags
+    (`docs/config-consolidation.md`); it must become a config setting in the next sweep step.
   - **Run cost:** 70 bundles in about 80 s at 4 in flight. Claude Code takes 11 s and 1.4 GB. Peak memory is
     2.4 GB. Most of a small bundle's time goes to loading the index (440 MB on disk).
 
