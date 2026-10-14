@@ -1,10 +1,10 @@
 {
  "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
  "claimedBytes": {
-  "family": 179440,
+  "family": 179283,
   "foreign": 23428,
-  "right": 1202793,
-  "unmapped": 5801,
+  "right": 1201779,
+  "unmapped": 6972,
   "wrongFamily": 14072
  },
  "detected": {
@@ -26,16 +26,17 @@
  "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.245015,
+  "f05": 0.448256,
+  "f1": 0.245343,
   "namedBytes": 687592,
   "precision": 0.99917,
-  "recall": 0.139627
+  "recall": 0.13984
  },
  "label": "exp108-k2-guards-agreement",
  "missBytes": {
-  "a": 470198,
-  "b": 948849,
-  "c": 117989,
+  "a": 469321,
+  "b": 946431,
+  "c": 114966,
   "d-absent": 154896,
   "d-file": 20074,
   "d-variant": 81,
@@ -49,14 +50,14 @@
  "noDiscovery": null,
  "reportSha256": "071f56b78c4c54cb76aa3055707125d7a5b01da676615b290a9c19f71484608c",
  "rule": "agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "esbuild-app",
  "statementBytes": {
   "<foreign>": 80010,
-  "<self>": 1114916,
-  "<unmapped>": 9472,
+  "<self>": 1114888,
+  "<unmapped>": 16989,
   "copy": 263253,
-  "library": 4924477
+  "library": 4916988
  },
  "toolchain": {
   "adapter": "esbuild",
@@ -67,17 +68,19 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 263253,
-  "f1": 0.437361,
-  "f1ShipperOnly": 0.437361,
-  "libraryBytes": 4924477,
+  "f05": 0.657804,
+  "f05ShipperOnly": 0.657804,
+  "f1": 0.437591,
+  "f1ShipperOnly": 0.437591,
+  "libraryBytes": 4916988,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 1382233,
-  "namedBytes": 1382233,
-  "namedBytesShipperOnly": 1382233,
-  "precision": 0.989922,
-  "precisionShipperOnly": 0.989922,
-  "recall": 0.280686,
-  "recallShipperOnly": 0.280686,
+  "namedAsShipperBytes": 1381062,
+  "namedBytes": 1381062,
+  "namedBytesShipperOnly": 1381062,
+  "precision": 0.989914,
+  "precisionShipperOnly": 0.989914,
+  "recall": 0.280876,
+  "recallShipperOnly": 0.280876,
   "wrongFamilyBytes": 14072,
   "wrongFamilyBytesShipperOnly": 14072
  },

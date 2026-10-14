@@ -25,16 +25,17 @@
  "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.082132,
+  "f05": 0.17995,
+  "f1": 0.08244,
   "namedBytes": 31648,
   "precision": 0.850981,
-  "recall": 0.043148
+  "recall": 0.043318
  },
  "label": "exp108-k2-structural",
  "missBytes": {
-  "a": 146938,
+  "a": 144068,
   "b": 136475,
-  "c": 51306,
+  "c": 51298,
   "d-absent": 72341,
   "d-file": 146376,
   "d-variant": 17063,
@@ -48,13 +49,13 @@
  "noDiscovery": null,
  "reportSha256": "4302f3cd3dffa923443c041eb3a62813df863a25a55d3f860de198b8d45257e8",
  "rule": "structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "wrangler",
  "statementBytes": {
-  "<app>": 845410,
-  "<unmapped>": 12841,
+  "<app>": 845382,
+  "<unmapped>": 15747,
   "copy": 4709,
-  "library": 733474
+  "library": 730596
  },
  "toolchain": {
   "adapter": "esbuild",
@@ -65,17 +66,19 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 4709,
-  "f1": 0.309424,
-  "f1ShipperOnly": 0.308483,
-  "libraryBytes": 733474,
+  "f05": 0.522591,
+  "f05ShipperOnly": 0.521005,
+  "f1": 0.310445,
+  "f1ShipperOnly": 0.309502,
+  "libraryBytes": 730596,
   "namedAsOriginBytes": 411,
   "namedAsShipperBytes": 134870,
   "namedBytes": 135281,
   "namedBytesShipperOnly": 134870,
   "precision": 0.959896,
   "precisionShipperOnly": 0.95698,
-  "recall": 0.184439,
-  "recallShipperOnly": 0.183878,
+  "recall": 0.185165,
+  "recallShipperOnly": 0.184603,
   "wrongFamilyBytes": 5652,
   "wrongFamilyBytesShipperOnly": 6063
  },

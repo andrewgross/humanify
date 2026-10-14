@@ -2,10 +2,10 @@
  "bundleSha256": "ee5446d63b73915d2d9e1e93742530f8996db7f14fedc947656c1b255f53de81",
  "claimedBytes": {
   "family": 10599,
-  "right": 196377,
+  "right": 196250,
   "self": 78917,
-  "unmapped": 146,
-  "wrongFamily": 531
+  "unmapped": 293,
+  "wrongFamily": 511
  },
  "detected": {
   "bundler": "bun",
@@ -26,14 +26,15 @@
  "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.809342,
+  "f05": 0.914999,
+  "f1": 0.811527,
   "namedBytes": 182919,
   "precision": 1.0,
-  "recall": 0.679744
+  "recall": 0.682832
  },
  "label": "exp108-k2-guards-structural",
  "missBytes": {
-  "c": 23834,
+  "c": 22744,
   "d-file": 15700,
   "e-ambig": 5032,
   "e-spec": 274,
@@ -44,12 +45,12 @@
  "noDiscovery": null,
  "reportSha256": "28752f62266eb504dddd8e749dd5efb4ab1b4f12ca2732bb5752af6d5d433001",
  "rule": "structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<self>": 135507,
-  "<unmapped>": 5024,
-  "library": 269100
+  "<self>": 132363,
+  "<unmapped>": 9385,
+  "library": 267883
  },
  "toolchain": {
   "adapter": "bun",
@@ -60,19 +61,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f1": 0.86854,
-  "f1ShipperOnly": 0.86854,
-  "libraryBytes": 269100,
+  "f05": 0.942517,
+  "f05ShipperOnly": 0.942517,
+  "f1": 0.870498,
+  "f1ShipperOnly": 0.870498,
+  "libraryBytes": 267883,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 206976,
-  "namedBytes": 206976,
-  "namedBytesShipperOnly": 206976,
-  "precision": 0.997441,
-  "precisionShipperOnly": 0.997441,
-  "recall": 0.769142,
-  "recallShipperOnly": 0.769142,
-  "wrongFamilyBytes": 531,
-  "wrongFamilyBytesShipperOnly": 531
+  "namedAsShipperBytes": 206849,
+  "namedBytes": 206849,
+  "namedBytesShipperOnly": 206849,
+  "precision": 0.997536,
+  "precisionShipperOnly": 0.997536,
+  "recall": 0.772162,
+  "recallShipperOnly": 0.772162,
+  "wrongFamilyBytes": 511,
+  "wrongFamilyBytesShipperOnly": 511
  },
  "truthMethod": "sourcemap"
 }

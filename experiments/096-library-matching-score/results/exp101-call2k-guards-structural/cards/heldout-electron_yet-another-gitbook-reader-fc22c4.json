@@ -1,8 +1,9 @@
 {
  "bundleSha256": "aa965b341bccf3f22a209259b3d99786effe2b1833d58b0ea3cf233b66662180",
  "claimedBytes": {
-  "right": 274877,
-  "wrongFamily": 454
+  "right": 274386,
+  "unmapped": 502,
+  "wrongFamily": 443
  },
  "detected": {
   "bundler": "bun",
@@ -23,28 +24,28 @@
  "indexId": "6edf4f3d7860d03cc2ed419318780d3844a929ed89d4e428b7055aa2d6203435",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.801387,
-  "f1": 0.61744,
+  "f05": 0.801822,
+  "f1": 0.618086,
   "namedBytes": 223443,
   "precision": 1.0,
-  "recall": 0.446592
+  "recall": 0.447268
  },
  "label": "exp101-call2k-guards-structural",
  "missBytes": {
-  "a": 205933,
-  "b": 112,
-  "c": 14180,
+  "a": 205817,
+  "b": 101,
+  "c": 14042,
   "e-veto": 5227
  },
  "noDiscovery": null,
  "reportSha256": "2c501e3adcadabbf7f8b01a598294d2cf7dcfeeb62e83f05c4fb68ea1ab3fb82",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
   "<app>": 4120,
-  "<unmapped>": 11547,
-  "library": 500329
+  "<unmapped>": 12303,
+  "library": 499573
  },
  "toolchain": {
   "adapter": "bun",
@@ -55,21 +56,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f05": 0.858104,
-  "f05ShipperOnly": 0.858104,
-  "f1": 0.708756,
-  "f1ShipperOnly": 0.708756,
-  "libraryBytes": 500329,
+  "f05": 0.858052,
+  "f05ShipperOnly": 0.858052,
+  "f1": 0.70864,
+  "f1ShipperOnly": 0.70864,
+  "libraryBytes": 499573,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 274877,
-  "namedBytes": 274877,
-  "namedBytesShipperOnly": 274877,
-  "precision": 0.998351,
-  "precisionShipperOnly": 0.998351,
-  "recall": 0.549392,
-  "recallShipperOnly": 0.549392,
-  "wrongFamilyBytes": 454,
-  "wrongFamilyBytesShipperOnly": 454
+  "namedAsShipperBytes": 274386,
+  "namedBytes": 274386,
+  "namedBytesShipperOnly": 274386,
+  "precision": 0.998388,
+  "precisionShipperOnly": 0.998388,
+  "recall": 0.549241,
+  "recallShipperOnly": 0.549241,
+  "wrongFamilyBytes": 443,
+  "wrongFamilyBytesShipperOnly": 443
  },
  "truthMethod": "sourcemap"
 }

@@ -27,18 +27,15 @@
   "recall": 0.0
  },
  "label": "exp102-ec2-structural",
- "missBytes": {
-  "a": 135
- },
+ "missBytes": {},
  "noDiscovery": null,
  "reportSha256": "1fb9e111aeacff8f5a87a061e23a612ea9d7cc436763adea71ce730e5d451db3",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 23,
-  "<unmapped>": 2667,
-  "library": 135
+  "<app>": 18,
+  "<unmapped>": 2807
  },
  "toolchain": {
   "adapter": "bun",
@@ -53,7 +50,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 135,
+  "libraryBytes": 0,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

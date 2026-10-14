@@ -27,18 +27,15 @@
   "recall": 0.0
  },
  "label": "ix-v2-agreement",
- "missBytes": {
-  "a": 135
- },
+ "missBytes": {},
  "noDiscovery": null,
  "reportSha256": "1331f7ab18955298ba4c374249a677c6c011ade25b0a41f884ebeea76f179c58",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 23,
-  "<unmapped>": 2667,
-  "library": 135
+  "<app>": 18,
+  "<unmapped>": 2807
  },
  "toolchain": {
   "adapter": "bun",
@@ -53,7 +50,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 135,
+  "libraryBytes": 0,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

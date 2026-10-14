@@ -3,7 +3,8 @@
  "claimedBytes": {
   "family": 368,
   "right": 520372,
-  "self": 33379,
+  "self": 33374,
+  "unmapped": 5,
   "wrongFamily": 117
  },
  "detected": {
@@ -39,11 +40,12 @@
  "noDiscovery": null,
  "reportSha256": "d3f1781bbefb81fb2efa9502c5e36b6963668eb51d6f42118a8b35dbbc594f7d",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 23,
-  "<self>": 40368,
+  "<app>": 18,
+  "<self>": 40353,
+  "<unmapped>": 20,
   "library": 549901
  },
  "toolchain": {

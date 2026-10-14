@@ -38,6 +38,9 @@ Scorer 4 (exp104 truth audit): families also joined by npm metadata (families_li
 <unmapped> (truth_audit `carried`), dependency-gated named vendored copies as origins (truth_audit `copies`).
 Scorer 5 (exp106): rollup `?commonjs-*` virtual ids are <unmapped>; a source reached through an installed package's
 own source map keeps that package, never <app> (truth_audit.patch_sources).
+Scorer 6 (exp107): the source map decoded as the spec writes it (decoder.py: UTF-16 generated columns, one-field
+segments = unmapped), at score time from the frozen bundle and map (truth_audit.redecode); a carried unit with
+nothing to check is <unmapped> (truth_audit carried_verdict).
 Claude Code is scored on the labelled sample: byte shares are the stratified ratio estimate (strata sizes from the
 negatives lane), counts are sample units.
 """
@@ -75,7 +78,14 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    @angular/compiler's map out of node_modules) keeps that package instead of <app> (frozen layer chained.json).
 #    Same reports, re-scored; both rules off reproduces scorer 4's cards (verify_s4.py). Also F0.5 (`f05`, beta 0.5:
 #    precision over recall) beside precision / recall / F1 in every prf() block — the campaign's headline metric.
-SCORER_VERSION = "exp096-score/5"
+# 6: the exp107 decoder (decoder.py, truth_audit.redecode): generated columns read as UTF-16 code units (scorer 4
+#    read code points: an emoji on a minified line moved every later mapping on it), and one-field segments kept as
+#    unmapped (the bundler's own glue is no longer credited to the mapping before it); a unit with no mapping of its
+#    own and too few tokens to check against the source it was carried from is <unmapped> (truth_audit
+#    carried_verdict, `unverified`). Same reports, re-scored; the decoder rules off reproduce scorer 4's segments
+#    exactly (experiments/107-zero-app-claims/verify_decoder.py); all three off reproduces scorer 5's cards
+#    (verify_s5.py). Built on 5: patch_sources (5) first, then redecode (6).
+SCORER_VERSION = "exp096-score/6"
 
 
 def r6(x):
@@ -501,6 +511,8 @@ def main():
         report = doc["libraryDiscovery"]
         slice_ = doc["toolchain"]["slice"]
         truth = truth_audit.patch_sources(entry, lib096.load_truth(entry), chm)
+        origins = lib096.load_origins(entry, om) if entry["truth"]["method"] == "sourcemap" else None
+        truth, origins = truth_audit.redecode(entry, truth, origins)
         if report is None:
             body = score_floor(entry, truth)
         else:
@@ -512,8 +524,8 @@ def main():
             if truth["method"] == "sample":
                 body = score_sample(entry, report, truth, indexes[slice_], pipeline["rule"])
             else:
-                body = score_map(entry, report, truth, indexes[slice_], pipeline["rule"],
-                                 lib096.load_origins(entry, om), truth_audit.Audit(entry, truth, cm))
+                body = score_map(entry, report, truth, indexes[slice_], pipeline["rule"], origins,
+                                 truth_audit.Audit(entry, truth, cm))
         card = {"schema": SCORER_VERSION, "label": label, "entry": entry["id"], "set": entry["set"],
                 "truthMethod": truth["method"], "bundleSha256": entry["files"]["bundle"]["sha256"],
                 "indexId": pipeline["indexId"], "rule": pipeline["rule"], "toolchain": doc["toolchain"],

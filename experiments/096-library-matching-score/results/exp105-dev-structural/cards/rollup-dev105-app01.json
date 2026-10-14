@@ -1,9 +1,9 @@
 {
  "bundleSha256": "867711284666b8aa24e354d47a104beef20ba734b54c06ff85b6707c2810bcb9",
  "claimedBytes": {
-  "right": 220298,
-  "unmapped": 87,
-  "wrongFamily": 228
+  "right": 220207,
+  "unmapped": 319,
+  "wrongFamily": 87
  },
  "detected": {
   "bundler": "rollup",
@@ -24,28 +24,28 @@
  "indexId": "2cbffa3b3f7e1f58d02b2874c6a0a2d079a8b7f9849a09a127313b88eba6cfec",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.995832,
-  "f1": 0.989646,
+  "f05": 0.996141,
+  "f1": 0.990407,
   "namedBytes": 218976,
   "precision": 1.0,
-  "recall": 0.979504
+  "recall": 0.980996
  },
  "label": "exp105-dev-structural",
  "missBytes": {
   "a": 1595,
-  "c": 449,
+  "c": 200,
   "e-veto": 1211,
   "unit-model": 5
  },
  "noDiscovery": null,
  "reportSha256": "2342b9a6ec0396d6cdd391d86fe31b71c02834d80b35697e2632c21342a4e701",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "dev-rollup",
  "statementBytes": {
   "<app>": 932,
-  "<unmapped>": 1007,
-  "library": 223558
+  "<unmapped>": 1347,
+  "library": 223218
  },
  "toolchain": {
   "adapter": "passthrough",
@@ -56,21 +56,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f05": 0.996227,
-  "f05ShipperOnly": 0.996227,
-  "f1": 0.992146,
-  "f1ShipperOnly": 0.992146,
-  "libraryBytes": 223558,
+  "f05": 0.996958,
+  "f05ShipperOnly": 0.996958,
+  "f1": 0.993015,
+  "f1ShipperOnly": 0.993015,
+  "libraryBytes": 223218,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 220298,
-  "namedBytes": 220298,
-  "namedBytesShipperOnly": 220298,
-  "precision": 0.998966,
-  "precisionShipperOnly": 0.998966,
-  "recall": 0.985418,
-  "recallShipperOnly": 0.985418,
-  "wrongFamilyBytes": 228,
-  "wrongFamilyBytesShipperOnly": 228
+  "namedAsShipperBytes": 220207,
+  "namedBytes": 220207,
+  "namedBytesShipperOnly": 220207,
+  "precision": 0.999605,
+  "precisionShipperOnly": 0.999605,
+  "recall": 0.986511,
+  "recallShipperOnly": 0.986511,
+  "wrongFamilyBytes": 87,
+  "wrongFamilyBytesShipperOnly": 87
  },
  "truthMethod": "sourcemap"
 }
