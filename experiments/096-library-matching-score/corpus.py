@@ -2,8 +2,11 @@
 <DATA>/truth/, write corpus.json with every sha256) and verify it.
 
 usage: <venv python> -I corpus.py freeze [--jobs N]      (once; rewrites corpus.json)
-       <venv python> -I corpus.py origins [--jobs N]     (the origin layer; rewrites origins.json, see origins.py)
-       <venv python> -I corpus.py verify                 (every file's sha256 against corpus.json + origins.json)
+       <venv python> -I corpus.py origins [--jobs N] [--corpus dev|test]   (the origin layer; rewrites origins.json
+                                                         or origins-test.json, see origins.py)
+       <venv python> -I corpus.py verify [--corpus dev|test]   (every file's sha256 against the manifest + origins)
+The `test` corpus (exp100's frozen test split, corpus-test.json) is frozen by experiments/100-test-split/scripts/
+freeze_test.py; `freeze` here builds the dev corpus only.
 
 The inputs are NOT committed (Claude Code is not ours to publish; the held-out bundles are large) — corpus.json
 records where each came from and its sha256, and the runner refuses a corpus file whose hash moved.
@@ -32,7 +35,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib096  # noqa: E402
-from lib096 import DATA, dump, sha256_file, write_gz_json  # noqa: E402
+from lib096 import dump, sha256_file, write_gz_json  # noqa: E402
 
 E = "/work/exp095-index-v2-data/eval"
 NEG = "/work/exp095-library-fingerprints/negatives"
@@ -45,6 +48,11 @@ def sources_table(smap_sources, base, app_pkg, version_of):
     import truth as T
     out = []
     for src in smap_sources:
+        if src.startswith("\0"):
+            # a bundler-generated module with no file (rollup's `\0commonjsHelpers.js`, webpack's runtime, spelled
+            # "\0webpack/..." by exp100's webpack recipe): no package wrote it, so it is never judged
+            out.append(["<unmapped>", None, src])
+            continue
         if re.match(r"^(https?|webpack):", src):
             # a URL (`https://raw.githubusercontent.com/...`, `webpack://pkg/...`): esbuild CHAINS a package's own
             # source map, so this is library code whose package the path cannot say — never app code
@@ -85,7 +93,9 @@ def pnpm_version(root, pkg):
 
 
 def map_truth(js, app_pkg, version_of, base, inner=None):
-    import truth as T
+    # origins.segments: truth.segments' output exactly, but linear on long non-ASCII lines (truth.py re-encodes the
+    # line prefix per mapping: hours on a terser-minified Electron bundle). build_origins re-checks the equality.
+    import origins as T
     text = open(js, encoding="utf8").read()
     smap = json.load(open(js + ".map"))
     if inner:
@@ -167,7 +177,7 @@ def freeze(jobs):
     manifest = {"schema": "exp096-corpus/1", "entries": []}
     work = []
     for entry, files, how in entries():
-        d = os.path.join(DATA, "corpus", entry["id"])
+        d = os.path.join(lib096.DATA, "corpus", entry["id"])
         os.makedirs(d, exist_ok=True)
         entry["files"] = {}
         for role, src in files.items():
@@ -244,10 +254,14 @@ def verify():
 
 
 if __name__ == "__main__":
-    JOBS = int(sys.argv[sys.argv.index("--jobs") + 1]) if "--jobs" in sys.argv else 12
-    if sys.argv[1] == "freeze":
+    ARGV = lib096.corpus_flag(sys.argv)
+    JOBS = int(ARGV[ARGV.index("--jobs") + 1]) if "--jobs" in ARGV else 12
+    if ARGV[1] == "freeze":
+        if lib096.CORPUS != "dev":
+            raise SystemExit("REFUSED: `freeze` builds the dev corpus; the test corpus is frozen by exp100's "
+                             "freeze_test.py")
         freeze(JOBS)
-    elif sys.argv[1] == "origins":
+    elif ARGV[1] == "origins":
         freeze_origins(JOBS)
     else:
         sys.exit(verify())
