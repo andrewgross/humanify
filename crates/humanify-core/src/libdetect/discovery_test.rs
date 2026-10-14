@@ -803,3 +803,64 @@ fn evidence_conflict_drops_an_index_seed_another_family_covers_more_of() {
     let (_, _, rows) = run_indexed_with(code, &held, vec![], on);
     assert_eq!(claim_of(&rows, "var dep"), None);
 }
+
+/// exp107: webpack's module table is ONE statement holding every module
+/// (`var e={101(e){…},202(e){…}}`). Bun's rule that the statements before a
+/// module are its hoisted declarations would put the table in its FIRST
+/// module's group, and MODULE then filled the whole table as that module's
+/// package. A statement holding two or more modules is their container: in
+/// no module's group.
+#[test]
+fn a_statement_holding_several_modules_is_no_module_s_member() {
+    use crate::libdetect::discovery::{BundlePieces, discover_in_bundle};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = "(()=>{var e={101(e){e.exports=function(){return 1}},202(e){e.exports=function(){return 2}}},t={};function n(r){var o=t[r];if(void 0!==o)return o.exports;var i=t[r]={exports:{}};return e[r](i,i.exports,n),i.exports}var o=n(101);module.exports=o})();";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::WebpackBootstrap,
+        grammar: ModuleWrapperGrammar::Webpack,
+        interop: InteropHelpers::Bun,
+    };
+    let seed = code.find("e.exports=function(){return 1}").unwrap() as u32;
+    let (graph, found) = discover_in_bundle(
+        code,
+        &ingest,
+        pieces,
+        &[],
+        &[(seed, "P".to_string())],
+        None,
+        DiscoveryOptions::default(),
+    );
+    let unit = |head: &str| {
+        (0..graph.units.len() as u32)
+            .find(|&u| {
+                let s = graph.units[u as usize].span;
+                code[s.start as usize..s.end as usize].starts_with(head)
+            })
+            .unwrap_or_else(|| {
+                let all: Vec<&str> = graph
+                    .units
+                    .iter()
+                    .map(|u| &code[u.span.start as usize..u.span.end as usize])
+                    .collect();
+                panic!("no unit starts with {head:?}: {all:?}")
+            })
+    };
+    let claimed = |head: &str| {
+        found
+            .claims
+            .get(&unit(head))
+            .map(|c| (c.package.clone(), c.rule))
+    };
+    assert_eq!(
+        claimed("e.exports=function(){return 1}"),
+        Some(("P".into(), Rule::Seed))
+    );
+    assert_eq!(
+        claimed("e={101"),
+        None,
+        "the module table is no module's code"
+    );
+}
