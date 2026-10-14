@@ -381,6 +381,14 @@ pub fn unpack_bun(
     mut options: BunUnpackOptions<'_>,
 ) -> Result<BunUnpackOutcome, String> {
     fs::create_dir_all(out_dir).map_err(|e| format!("mkdir {}: {e}", out_dir.display()))?;
+    // The one-file floor still runs library discovery when asked (exp105):
+    // a bundle no module helper wraps is still a bundle of statements.
+    let floor_pieces = crate::libdetect::discovery::BundlePieces {
+        layout: options.layout,
+        grammar: options.module_wrappers,
+        interop: options.interop,
+    };
+    let floor_request = options.library_discovery;
     let floor = |code: &str| -> Result<BunUnpackOutcome, String> {
         Ok(BunUnpackOutcome {
             result: write_passthrough(code, out_dir)?,
@@ -394,7 +402,7 @@ pub fn unpack_bun(
             content_carry: None,
             declared_carry: None,
             app_declarations: Vec::new(),
-            library_discovery: None,
+            library_discovery: discover_raw(code, floor_pieces, floor_request),
         })
     };
 
@@ -700,13 +708,44 @@ fn discovery_report(
     grammar: crate::toolchain::ModuleWrapperGrammar,
     classified: &[oxc_span::Span],
 ) -> Option<crate::libdetect::discovery::DiscoveryReport> {
-    use crate::libdetect::discovery::{BundlePieces, DiscoveryReport, discover_in_bundle};
-    let request = options.library_discovery?;
-    let pieces = BundlePieces {
+    let pieces = crate::libdetect::discovery::BundlePieces {
         layout: options.layout,
         grammar,
         interop: options.interop,
     };
+    discovery_over(code, ingest, pieces, classified, options.library_discovery?)
+}
+
+/// Library discovery over a bundle no module helper wraps (exp105): the
+/// one-file floor of this adapter, the passthrough adapter, webcrack's
+/// input — rollup's scope-hoisted output, webpack's module table and
+/// entry scopes (cut by the run's grammar), a helper-less esbuild or Bun
+/// build. The RAW bundle is parsed here; a text that does not parse runs
+/// none (None), like the vendor flow's regex floor.
+pub fn discover_raw(
+    code: &str,
+    pieces: crate::libdetect::discovery::BundlePieces,
+    request: Option<crate::libdetect::discovery::DiscoveryRequest<'_>>,
+) -> Option<crate::libdetect::discovery::DiscoveryReport> {
+    let request = request?;
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, code);
+    if !ingest.errors.is_empty() {
+        return None;
+    }
+    discovery_over(code, &ingest, pieces, &[], request)
+}
+
+/// The discovery report over a parsed bundle, `classified` its CommonJS
+/// modules (external units).
+fn discovery_over(
+    code: &str,
+    ingest: &Ingest<'_>,
+    pieces: crate::libdetect::discovery::BundlePieces,
+    classified: &[oxc_span::Span],
+    request: crate::libdetect::discovery::DiscoveryRequest<'_>,
+) -> Option<crate::libdetect::discovery::DiscoveryReport> {
+    use crate::libdetect::discovery::{DiscoveryReport, discover_in_bundle};
     let (graph, found) = discover_in_bundle(
         code,
         ingest,

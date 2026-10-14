@@ -246,3 +246,151 @@ fn the_unit_model_cannot_change_under_a_constant_version() {
          A changed model needs a NEW `LIBRARY_UNITS` version and a new UNIT_MODEL_PINS row"
     );
 }
+
+/// exp105: the unit rows of a real bundle under the toolchain its bundler
+/// resolves (the builder's path): (first 12 chars, kind).
+fn bundler_unit_rows(
+    code: &str,
+    bundler: humanify_model::detection::BundlerType,
+) -> Vec<(String, &'static str)> {
+    use crate::cut::units::UnitKind;
+    use crate::libindex::units::bundle_unit_prints;
+    let toolchain = crate::toolchain::resolve_toolchain(
+        &crate::detect::detect_bundle(code),
+        Some(bundler),
+        None,
+    );
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse_unambiguous(&allocator, code);
+    assert!(ingest.errors.is_empty());
+    bundle_unit_prints(
+        code,
+        &ingest,
+        toolchain.layout.piece,
+        toolchain.module_wrappers.piece,
+        toolchain.interop.piece,
+    )
+    .iter()
+    .map(|(u, _)| {
+        let kind = match u.kind {
+            UnitKind::Statement => "stmt",
+            UnitKind::LazyBody { .. } => "lazy-body",
+            UnitKind::FactoryBody { .. } => "factory-body",
+            _ => "container",
+        };
+        (
+            code[u.span.start as usize..u.span.end as usize]
+                .chars()
+                .take(12)
+                .collect(),
+            kind,
+        )
+    })
+    .collect()
+}
+
+const WEBPACK5_FIXTURE: &str =
+    include_str!("../../../../test/fixtures/bundlers/webpack5-terser.js.fixture");
+const ROLLUP4_FIXTURE: &str =
+    include_str!("../../../../test/fixtures/bundlers/rollup4-terser.js.fixture");
+
+#[test]
+fn a_webpack_bundle_s_modules_are_lazy_modules_whose_statements_are_units() {
+    let rows = bundler_unit_rows(
+        WEBPACK5_FIXTURE,
+        humanify_model::detection::BundlerType::Webpack,
+    );
+    let has = |text: &str, kind: &str| rows.iter().any(|(t, k)| t == text && *k == kind);
+    // the module table's entry (ms): its body's statements
+    assert!(has("var s=1e3,r=", "lazy-body"), "{rows:?}");
+    assert!(has("function i(e", "lazy-body"), "{rows:?}");
+    assert!(has("e.exports=fu", "lazy-body"), "{rows:?}");
+    // the CommonJS wrapper (escape-html) inside the concatenated entry
+    assert!(has("var r=/[\"'&<", "lazy-body"), "{rows:?}");
+    // the concatenated entry IIFE (p-limit, the app) is a scope: its
+    // statements are cut like hoisted ones (as Bun's and rollup's are)
+    assert!(has("class a{valu", "stmt"), "{rows:?}");
+    assert!(has("async functi", "stmt"), "{rows:?}");
+    // the split declarator beside the wrapper keeps its own unit
+    assert!(has("s=r(585)", "stmt"), "{rows:?}");
+    // the bootstrap's own statements (the runtime)
+    assert!(has("function r(t", "stmt"), "{rows:?}");
+    // nothing is one giant statement any more
+    assert!(
+        !rows.iter().any(|(t, _)| t.starts_with("(()=>{var e=")),
+        "{rows:?}"
+    );
+}
+
+#[test]
+fn a_rollup_bundle_s_guarded_require_functions_are_lazy_modules() {
+    let rows = bundler_unit_rows(
+        ROLLUP4_FIXTURE,
+        humanify_model::detection::BundlerType::Rollup,
+    );
+    let has = |text: &str, kind: &str| rows.iter().any(|(t, k)| t == text && *k == kind);
+    // ms, an IIFE in a declarator; escape-html, an IIFE as a call's argument
+    assert!(has("var e=1e3,s=", "lazy-body"), "{rows:?}");
+    assert!(has("var e=/[\"'&<", "lazy-body"), "{rows:?}");
+    // the hoisted ES modules: plain statements
+    assert!(has("class u{valu", "stmt"), "{rows:?}");
+    assert!(has("function e(e", "stmt"), "{rows:?}");
+}
+
+/// exp105's pins for the webpack and rollup unit models (their own slices:
+/// a change to what a webpack or rollup unit is moves this digest and
+/// needs a new `LIBRARY_UNITS` version, exactly like the rows above).
+/// Kept apart so adding the two grammars moved no Bun or esbuild pin.
+const BUNDLER_UNIT_MODEL_PINS: &[(u64, &str)] = &[(
+    3,
+    "bb93c851e60169807ad859bc95d2c1b7fa1f224b43a1dc7a8568c9f467c204cb",
+)];
+
+#[test]
+fn the_webpack_and_rollup_unit_models_cannot_change_under_a_constant_version() {
+    use crate::libindex::units::bundle_unit_prints;
+    use humanify_model::detection::BundlerType;
+    use sha2::{Digest, Sha256};
+    let mut lines = String::new();
+    for (name, code, bundler) in [
+        ("webpack5-terser", WEBPACK5_FIXTURE, BundlerType::Webpack),
+        ("rollup4-terser", ROLLUP4_FIXTURE, BundlerType::Rollup),
+    ] {
+        let toolchain = crate::toolchain::resolve_toolchain(
+            &crate::detect::detect_bundle(code),
+            Some(bundler),
+            None,
+        );
+        let allocator = Allocator::default();
+        let ingest = Ingest::parse_unambiguous(&allocator, code);
+        for (unit, prints) in bundle_unit_prints(
+            code,
+            &ingest,
+            toolchain.layout.piece,
+            toolchain.module_wrappers.piece,
+            toolchain.interop.piece,
+        ) {
+            for p in std::iter::once(&prints.whole).chain(&prints.functions) {
+                lines.push_str(&format!(
+                    "{name} {:?} {}..{} {} {} {}\n",
+                    unit.kind, p.span.start, p.span.end, p.hash, p.nodes, p.content
+                ));
+            }
+        }
+    }
+    let digest: String = Sha256::digest(lines.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    let version = crate::hash::forms::LIBRARY_UNITS.version;
+    let pinned: Vec<&str> = BUNDLER_UNIT_MODEL_PINS
+        .iter()
+        .filter(|(v, _)| *v == version)
+        .map(|(_, d)| *d)
+        .collect();
+    assert_eq!(
+        pinned,
+        vec![digest.as_str()],
+        "the webpack/rollup unit model's digest is {digest}; units/{version} pins {pinned:?}"
+    );
+}

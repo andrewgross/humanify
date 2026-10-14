@@ -105,37 +105,49 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     };
     std::fs::create_dir_all(&work_dir).map_err(|e| format!("mkdir {work_dir}: {e}"))?;
     let adapter = toolchain.unpack.piece;
-    let outcome = humanify_core::unpack::run_adapter(
-        adapter,
-        toolchain.layout.piece,
-        code,
-        Path::new(&work_dir),
-        humanify_core::unpack::AdapterRun {
-            library_discovery: Some(humanify_core::libdetect::discovery::DiscoveryRequest {
-                list_units: true,
-                unit_prints: args.unit_prints,
-                ..args.library.discovery_request(index.as_ref())
-            }),
-            ..humanify_core::unpack::AdapterRun::new(
-                toolchain.interop.piece,
-                toolchain.module_wrappers.piece,
-                toolchain.module_identity.piece,
-            )
-        },
-    );
+    let run = humanify_core::unpack::AdapterRun {
+        library_discovery: Some(humanify_core::libdetect::discovery::DiscoveryRequest {
+            list_units: true,
+            unit_prints: args.unit_prints,
+            ..args.library.discovery_request(index.as_ref())
+        }),
+        ..humanify_core::unpack::AdapterRun::new(
+            toolchain.interop.piece,
+            toolchain.module_wrappers.piece,
+            toolchain.module_identity.piece,
+        )
+    };
+    // A vendor-record adapter runs discovery inside its flow; the others
+    // (webcrack for webpack, passthrough for rollup or an unknown bundler)
+    // run it on the raw bundle before they unpack — the same call, made
+    // here without unpacking (the verb needs no file of theirs, and
+    // webcrack's subprocess has nothing to add to discovery).
+    let report = if adapter.vendor_record_stamp().is_some() {
+        let outcome = humanify_core::unpack::run_adapter(
+            adapter,
+            toolchain.layout.piece,
+            code,
+            Path::new(&work_dir),
+            run,
+        );
+        outcome.map(|o| o.library_discovery().cloned())
+    } else {
+        Ok(humanify_core::unpack::discover_without_vendor_record(
+            code,
+            toolchain.layout.piece,
+            &run,
+        ))
+    };
     if owned {
         let _ = std::fs::remove_dir_all(&work_dir);
     }
-    // The adapter's no-module floor (the whole input as one file) runs no
-    // discovery — nor does the pipeline on such a bundle: said, not failed,
-    // so a score can count it as "discovery never ran".
-    let report = match outcome? {
-        humanify_core::unpack::AdapterOutcome::VendorRecord(o) => o.library_discovery,
-        humanify_core::unpack::AdapterOutcome::Files(_) => None,
-    };
+    // A bundle that does not parse runs no discovery — nor does the
+    // pipeline on it: said, not failed, so a score can count it as
+    // "discovery never ran".
+    let report = report?;
     let no_discovery = report.is_none().then(|| {
         format!(
-            "the {} adapter unpacked no bundled module (the one-file floor): no discovery ran",
+            "the {} adapter ran no library discovery (the input does not parse)",
             adapter.name()
         )
     });

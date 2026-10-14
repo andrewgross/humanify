@@ -18,20 +18,32 @@ use humanify_model::detection::{BundlerType, MinifierType};
 pub enum RecipeBundler {
     Bun,
     Esbuild,
+    /// webpack 5 + its production minifier (terser) — exp105.
+    Webpack,
+    /// rollup 4 + node-resolve + commonjs + json + terser — exp105.
+    Rollup,
 }
+
+/// Every recipe bundler.
+const RECIPE_BUNDLERS: [RecipeBundler; 4] = [
+    RecipeBundler::Bun,
+    RecipeBundler::Esbuild,
+    RecipeBundler::Webpack,
+    RecipeBundler::Rollup,
+];
 
 impl RecipeBundler {
     pub fn name(self) -> &'static str {
         match self {
             RecipeBundler::Bun => "bun",
             RecipeBundler::Esbuild => "esbuild",
+            RecipeBundler::Webpack => "webpack",
+            RecipeBundler::Rollup => "rollup",
         }
     }
 
     fn from_name(name: &str) -> Option<RecipeBundler> {
-        [RecipeBundler::Bun, RecipeBundler::Esbuild]
-            .into_iter()
-            .find(|b| b.name() == name)
+        RECIPE_BUNDLERS.into_iter().find(|b| b.name() == name)
     }
 
     /// The pipeline's bundler type (the builder hands it to
@@ -41,17 +53,17 @@ impl RecipeBundler {
         match self {
             RecipeBundler::Bun => BundlerType::Bun,
             RecipeBundler::Esbuild => BundlerType::Esbuild,
+            RecipeBundler::Webpack => BundlerType::Webpack,
+            RecipeBundler::Rollup => BundlerType::Rollup,
         }
     }
 
     /// The recipe bundler a run's bundler is looked up under; None: no
     /// index slice can exist for it.
     pub fn for_bundler(bundler: BundlerType) -> Option<RecipeBundler> {
-        match bundler {
-            BundlerType::Bun => Some(RecipeBundler::Bun),
-            BundlerType::Esbuild => Some(RecipeBundler::Esbuild),
-            _ => None,
-        }
+        RECIPE_BUNDLERS
+            .into_iter()
+            .find(|b| b.bundler_type() == bundler)
     }
 }
 
@@ -102,7 +114,7 @@ impl Recipe {
     pub fn parse(text: &str) -> Result<Recipe, String> {
         let bad = |why: &str| {
             format!(
-                "--recipe {text:?}: {why} (form: <bun|esbuild>:target=<bun|node>,format=<cjs|esm>[,minify])"
+                "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify])"
             )
         };
         let (bundler, rest) = text.split_once(':').ok_or_else(|| bad("no `:`"))?;
@@ -124,8 +136,11 @@ impl Recipe {
             format: format.ok_or_else(|| bad("no format"))?,
             minify,
         };
-        if recipe.bundler == RecipeBundler::Esbuild && recipe.target == Target::Bun {
-            return Err(bad("esbuild has no bun platform"));
+        if recipe.bundler != RecipeBundler::Bun && recipe.target == Target::Bun {
+            return Err(bad(&format!(
+                "{} has no bun platform",
+                recipe.bundler.name()
+            )));
         }
         Ok(recipe)
     }

@@ -244,9 +244,10 @@ fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
 }
 
 #[test]
-fn a_bundle_the_adapter_floors_reports_that_no_discovery_ran() {
-    // No module the unpacker recognises: the one-file floor, where the
-    // pipeline runs no discovery either. Said, never an error or a zero.
+fn a_bundle_no_module_helper_wraps_is_discovered_statement_by_statement() {
+    // No module the unpacker recognises: the one-file floor. Its
+    // statements are still the bundle's (exp105: rollup's scope-hoisted
+    // output, a helper-less build): discovery runs over them.
     let doc = discover(
         "var a = function (e) { return e + 1; };\nvar b = a(2);\n",
         &DiscoverArgs {
@@ -259,13 +260,78 @@ fn a_bundle_the_adapter_floors_reports_that_no_discovery_ran() {
         },
     )
     .expect("runs");
+    assert!(doc["noDiscovery"].is_null(), "{doc}");
+    assert_eq!(
+        doc["libraryDiscovery"]["unitRows"].as_array().map(Vec::len),
+        Some(2),
+        "{doc}"
+    );
+}
+
+#[test]
+fn a_bundle_that_does_not_parse_reports_that_no_discovery_ran() {
+    let doc = discover(
+        "var a = function (e { return e + 1; };\n",
+        &DiscoverArgs {
+            input: "broken",
+            library_index: None,
+            library: &rule("agreement"),
+            bundler: Some("rollup"),
+            unit_prints: true,
+            work_dir: None,
+        },
+    )
+    .expect("runs");
     assert!(doc["libraryDiscovery"].is_null());
     assert!(
         doc["noDiscovery"]
             .as_str()
-            .is_some_and(|r| r.contains("no discovery ran")),
+            .is_some_and(|r| r.contains("no library discovery")),
         "{doc}"
     );
+}
+
+#[test]
+fn webpack_and_rollup_bundles_are_discovered_with_their_own_grammar() {
+    // exp105: webpack's adapter is webcrack (a subprocess the verb never
+    // needs) and rollup has none: discovery runs on the raw bundle, cut by
+    // the bundler's grammar — every module body's statements are units.
+    for (code, bundler, body) in [
+        (
+            include_str!("../../../test/fixtures/bundlers/webpack5-terser.js.fixture"),
+            "webpack",
+            "LazyBody",
+        ),
+        (
+            include_str!("../../../test/fixtures/bundlers/rollup4-terser.js.fixture"),
+            "rollup",
+            "LazyBody",
+        ),
+    ] {
+        for forced in [Some(bundler), None] {
+            let doc = discover(
+                code,
+                &DiscoverArgs {
+                    input: bundler,
+                    library_index: None,
+                    library: &rule("structural"),
+                    bundler: forced,
+                    unit_prints: true,
+                    work_dir: None,
+                },
+            )
+            .expect("runs");
+            assert_eq!(doc["toolchain"]["bundler"], bundler, "{forced:?}");
+            assert!(doc["noDiscovery"].is_null(), "{doc}");
+            let rows = doc["libraryDiscovery"]["unitRows"]
+                .as_array()
+                .expect("unit rows");
+            assert!(
+                rows.iter().any(|r| r["kind"] == body),
+                "{bundler}: module bodies are units"
+            );
+        }
+    }
 }
 
 #[test]

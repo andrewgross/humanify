@@ -62,6 +62,16 @@ enum Command {
         /// The esbuild binary (esbuild recipes).
         #[arg(long, default_value = "esbuild")]
         esbuild: PathBuf,
+        /// The webpack recipe script (webpack recipes): a copy of
+        /// `crates/humanify-index/recipes/webpack-build.cjs` beside an
+        /// install of webpack, run with `node`.
+        #[arg(long)]
+        webpack: Option<PathBuf>,
+        /// The rollup recipe script (rollup recipes): a copy of
+        /// `crates/humanify-index/recipes/rollup-build.mjs` beside an
+        /// install of rollup and its plugins, run with `node`.
+        #[arg(long)]
+        rollup: Option<PathBuf>,
         /// Parallel package builds (at most 4).
         #[arg(long, default_value_t = 2)]
         jobs: usize,
@@ -92,6 +102,8 @@ fn main() {
         recipes,
         bun,
         esbuild,
+        webpack,
+        rollup,
         jobs,
         policy,
         offline,
@@ -107,9 +119,18 @@ fn main() {
             if builds.iter().any(|b| b.recipe == recipe) {
                 return Err(format!("--recipe {text} given twice"));
             }
+            // the scripts run inside each install: absolute, like every path
+            let script = |given: &Option<PathBuf>, flag: &str| {
+                let p = given
+                    .clone()
+                    .ok_or(format!("--recipe {text} needs --{flag} <recipe script>"))?;
+                std::path::absolute(&p).map_err(|e| format!("{}: {e}", p.display()))
+            };
             let bin = match recipe.bundler {
                 RecipeBundler::Bun => bun.clone(),
                 RecipeBundler::Esbuild => esbuild.clone(),
+                RecipeBundler::Webpack => script(&webpack, "webpack")?,
+                RecipeBundler::Rollup => script(&rollup, "rollup")?,
             };
             builds.push(RecipeBuild { recipe, bin });
         }

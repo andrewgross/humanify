@@ -235,10 +235,15 @@ impl<'n> AdapterRun<'n> {
 }
 
 /// What the adapter produced: a vendor-record adapter's full outcome, or
-/// the plain file list.
+/// the plain file list (with library discovery over the raw bundle when
+/// the run asked for it — exp105: webpack and rollup bundles reach no
+/// vendor-record adapter).
 pub enum AdapterOutcome {
     VendorRecord(Box<bun::BunUnpackOutcome>),
-    Files(UnpackResult),
+    Files {
+        result: UnpackResult,
+        library_discovery: Option<Box<crate::libdetect::discovery::DiscoveryReport>>,
+    },
 }
 
 impl AdapterOutcome {
@@ -246,9 +251,40 @@ impl AdapterOutcome {
     pub fn into_result(self) -> UnpackResult {
         match self {
             AdapterOutcome::VendorRecord(o) => o.result,
-            AdapterOutcome::Files(r) => r,
+            AdapterOutcome::Files { result, .. } => result,
         }
     }
+
+    /// The library discovery report, when the run asked for one and the
+    /// adapter ran it.
+    pub fn library_discovery(&self) -> Option<&crate::libdetect::discovery::DiscoveryReport> {
+        match self {
+            AdapterOutcome::VendorRecord(o) => o.library_discovery.as_ref(),
+            AdapterOutcome::Files {
+                library_discovery, ..
+            } => library_discovery.as_deref(),
+        }
+    }
+}
+
+/// Library discovery over the RAW bundle with the run's pieces, for the
+/// adapters that unpack no vendor record (webcrack, passthrough): the
+/// discovery a vendor-record adapter runs inside its flow, run before
+/// the adapter touches the bundle (`bun::discover_raw`).
+pub fn discover_without_vendor_record(
+    code: &str,
+    layout: crate::toolchain::BundleLayout,
+    run: &AdapterRun<'_>,
+) -> Option<crate::libdetect::discovery::DiscoveryReport> {
+    bun::discover_raw(
+        code,
+        crate::libdetect::discovery::BundlePieces {
+            layout,
+            grammar: run.module_wrappers,
+            interop: run.interop,
+        },
+        run.library_discovery,
+    )
 }
 
 /// Run the selected adapter (`adapter.unpack(code, outputDir, options)`) —
@@ -282,14 +318,28 @@ pub fn run_adapter(
                 },
             )?)))
         }
-        UnpackAdapter::Webcrack => webcrack::unpack_webcrack(
-            code,
-            out_dir,
-            run.webcrack_shim
-                .ok_or("the webcrack adapter needs its subprocess shim")?,
-        )
-        .map(AdapterOutcome::Files),
-        UnpackAdapter::Passthrough => write_passthrough(code, out_dir).map(AdapterOutcome::Files),
+        UnpackAdapter::Webcrack => {
+            let library_discovery =
+                discover_without_vendor_record(code, layout, &run).map(Box::new);
+            let result = webcrack::unpack_webcrack(
+                code,
+                out_dir,
+                run.webcrack_shim
+                    .ok_or("the webcrack adapter needs its subprocess shim")?,
+            )?;
+            Ok(AdapterOutcome::Files {
+                result,
+                library_discovery,
+            })
+        }
+        UnpackAdapter::Passthrough => {
+            let library_discovery =
+                discover_without_vendor_record(code, layout, &run).map(Box::new);
+            Ok(AdapterOutcome::Files {
+                result: write_passthrough(code, out_dir)?,
+                library_discovery,
+            })
+        }
     }
 }
 

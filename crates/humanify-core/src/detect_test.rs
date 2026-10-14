@@ -747,3 +747,139 @@ fn a_webpack_bootstrap_with_a_bundled_dependency_stays_webpack() {
     let r = detect_bundle(code);
     assert_eq!(r.bundler.kind, BundlerType::Webpack);
 }
+
+// ---- exp105: minified webpack 5 and rollup, by SHAPE ---------------------------
+
+/// Real builds of one tiny app with the index builder's recipes
+/// (test/fixtures/bundlers/README.md).
+const WEBPACK5_TERSER: &str =
+    include_str!("../../../test/fixtures/bundlers/webpack5-terser.js.fixture");
+const ROLLUP4_TERSER: &str =
+    include_str!("../../../test/fixtures/bundlers/rollup4-terser.js.fixture");
+
+fn verdict(code: &str) -> (BundlerType, DetectionTier) {
+    let r = detect_bundle(code);
+    (r.bundler.kind, r.bundler.tier)
+}
+
+#[test]
+fn a_minified_webpack_5_build_is_webpack_by_its_module_table() {
+    // terser renames every runtime name: nothing but the shape is left
+    assert!(!WEBPACK5_TERSER.contains("__webpack_require__"));
+    assert_eq!(
+        verdict(WEBPACK5_TERSER),
+        (BundlerType::Webpack, DetectionTier::Definitive)
+    );
+    let s = detect_webpack(WEBPACK5_TERSER);
+    assert!(s.iter().all(|s| s.strength == Some(SignalStrength::Shape)));
+}
+
+#[test]
+fn every_module_table_form_opens_a_webpack_bootstrap() {
+    for code in [
+        // methods (webpack 5.100+), arrows, functions, a one-parameter arrow
+        "(()=>{var e={585(e){e.exports=1}},t={};",
+        "(()=>{var e={123:(e,t,r)=>{\"use strict\";t.a=1}},t={};",
+        "!function(){var e={7:function(e,t,r){e.exports=2}};",
+        "(()=>{\"use strict\";var e={9:e=>{e.exports=3}};",
+        "#!/usr/bin/env node\n/*! For license information please see out.js.LICENSE.txt */\n(()=>{var e={1(e){}}})();",
+        "(function(){var e={42:function(e){e.exports=4}};",
+    ] {
+        assert_eq!(
+            verdict(code),
+            (BundlerType::Webpack, DetectionTier::Definitive),
+            "{code}"
+        );
+    }
+}
+
+#[test]
+fn webpack_s_require_function_and_definer_are_shapes_too() {
+    // webpack 4: the runtime comes first, the modules are its argument
+    let v4 = "!function(e){var t={};function n(r){if(t[r])return t[r].exports;var o=t[r]={i:r,l:!1,exports:{}};return e[r].call(o.exports,o,o.exports,n),o.l=!0,o.exports}n.m=e}([function(e,t){e.exports=1}]);";
+    assert_eq!(
+        verdict(v4),
+        (BundlerType::Webpack, DetectionTier::Definitive)
+    );
+    // webpack 5 with every module concatenated: no table, the definer stays
+    let flat = "(()=>{\"use strict\";var e={d:(t,o)=>{for(var n in o)e.o(o,n)&&!e.o(t,n)&&Object.defineProperty(t,n,{enumerable:!0,get:o[n]})},o:(e,t)=>Object.prototype.hasOwnProperty.call(e,t)};var t={};e.d(t,{a:()=>r});const r=1;module.exports=t})();";
+    assert_eq!(
+        verdict(flat),
+        (BundlerType::Webpack, DetectionTier::Definitive)
+    );
+}
+
+#[test]
+fn an_object_of_functions_that_is_not_a_bootstrap_is_not_webpack() {
+    for code in [
+        // not the first statement: an app's own lookup table
+        "var a=1;var e={1(e){return e}};",
+        // string keys
+        "(()=>{var e={a(e){return e}}})();",
+        // a plain IIFE
+        "(()=>{var e=1;console.log(e)})();",
+        PLAIN,
+    ] {
+        assert_eq!(verdict(code).0, BundlerType::Unknown, "{code}");
+    }
+}
+
+#[test]
+fn a_minified_rollup_build_is_rollup_by_the_commonjs_plugin_s_shapes() {
+    assert_eq!(
+        verdict(ROLLUP4_TERSER),
+        (BundlerType::Rollup, DetectionTier::Definitive)
+    );
+}
+
+#[test]
+fn the_commonjs_plugin_s_helpers_and_guards_name_rollup() {
+    for code in [
+        // getDefaultExportFromCjs, minified and as rollup writes it
+        "\"use strict\";function e(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,\"default\")?e.default:e}",
+        "'use strict';\nfunction getDefaultExportFromCjs (x) {\n\treturn x && x.__esModule && Object.prototype.hasOwnProperty.call(x, 'default') ? x['default'] : x;\n}\n",
+        // commonjsGlobal
+        "var c=\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof self?self:{};",
+        "var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};",
+        // two guarded require functions
+        "var r,t,s,n;var a=function(){if(t)return r;t=1;return r=1}(),b=function(){if(n)return s;n=1;return s=2}();",
+        "var ms, hasRequiredMs;\nfunction requireMs () {\n\tif (hasRequiredMs) return ms;\n\thasRequiredMs = 1;\n\treturn ms = 1;\n}\nvar x, hasRequiredX;\nfunction requireX () {\n\tif (hasRequiredX) return x;\n\thasRequiredX = 1;\n\treturn x = 2;\n}\n",
+    ] {
+        assert_eq!(
+            verdict(code),
+            (BundlerType::Rollup, DetectionTier::Definitive),
+            "{code}"
+        );
+    }
+}
+
+#[test]
+fn one_guard_alone_proves_nothing() {
+    let once = "var r,t;function a(){if(t)return r;t=1;return r=1}";
+    assert_eq!(verdict(once).0, BundlerType::Unknown);
+}
+
+#[test]
+fn rollup_s_shapes_inside_another_bundler_s_output_are_not_rollup() {
+    // a Bun bundle that hoisted a rollup-built dist: the module helper says
+    // this is not rollup's output, whatever its modules hold
+    let bun = format!(
+        "{BUN}function e(e){{return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,\"default\")?e.default:e}}"
+    );
+    assert_eq!(verdict(&bun).0, BundlerType::Bun);
+    // a webpack bundle whose first module is rollup output
+    let wp = "(()=>{var e={1(e){function t(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,\"default\")?e.default:e}e.exports=t}}})();";
+    assert_eq!(verdict(wp).0, BundlerType::Webpack);
+}
+
+#[test]
+fn the_real_bun_and_esbuild_builds_keep_their_verdicts() {
+    for build in REAL_BUN_BUILDS {
+        let s = detect_bundle(build).signals;
+        assert!(
+            !s.iter()
+                .any(|s| matches!(s.bundler, Some(BundlerType::Webpack | BundlerType::Rollup))),
+            "a Bun build named webpack or rollup"
+        );
+    }
+}

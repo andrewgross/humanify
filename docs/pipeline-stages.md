@@ -123,8 +123,12 @@ is chosen ONCE, at stage 1, by `humanify_core::toolchain::resolve_toolchain`
 handed to the stages that need it as a value (`Toolchain`): the unpack
 adapter, the vendor record's stamp, the library detector, the never-rename
 lists, the name profile, the module-layout record, the per-bundler tuning,
-and four slots that hold today's only implementation (the module wrapper
-grammar, the interop helpers, the bundle layout, which unpacked file is
+the module wrapper grammar and the bundle layout (exp105, 2026-10-14: Bun
+and esbuild share one grammar; webpack's — its module table, its `.cw()`
+CommonJS wrapper, its entry IIFEs as scopes — and rollup's — the commonjs
+plugin's guarded require functions — are their own, and webpack's bootstrap
+IIFE is its own layout; `modules::inline_modules`), and two slots that hold
+today's only implementation (the interop helpers, which unpacked file is
 the app). No stage below it compares bundler or minifier names. Each choice
 and its reason (flag / detected / fallback / only-implementation) is
 written to the `--stats-json` `toolchain` block and logged at `-vv`, so a

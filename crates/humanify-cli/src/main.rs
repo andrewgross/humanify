@@ -418,7 +418,7 @@ fn run_unpack(input: &str, out_dir: &str, args: UnpackArgs) -> Result<(), String
         },
     )? {
         AdapterOutcome::VendorRecord(outcome) => outcome,
-        AdapterOutcome::Files(result) => {
+        AdapterOutcome::Files { result, .. } => {
             println!(
                 "unpack: adapter={} files={}",
                 adapter.name(),

@@ -15,7 +15,8 @@ use humanify_model::detection::{
 use crate::modules::helper_shape::{ExportRegistrar, find_module_helper, first_export_registrar};
 
 use super::js_text::{
-    contains_word, eat, eat_quote, is_line_terminator, is_word_boundary, js_prefix, skip_js_space,
+    contains_word, count_shapes, eat, eat_quote, eat_shape, is_line_terminator, is_word_boundary,
+    js_prefix, skip_js_space, skip_preamble,
 };
 
 /// A bundler signal; its tier follows from its strength
@@ -74,9 +75,18 @@ fn match_patterns(
 // ---- webpack.ts ---------------------------------------------------------------
 
 /// `/__webpack_require__/`, `/__webpack_modules__/`, `/webpackChunk/` —
-/// webpack's own runtime names.
+/// webpack's own runtime names. Then the runtime's SHAPES, which survive a
+/// minifier that renames every one of those names (exp105: webpack 5's
+/// production build keeps none of them): the bootstrap opening on its
+/// module table ([`opens_with_module_table`]), the require function's
+/// call of a module (`M[id](module, module.exports, require)`, webpack 4's
+/// `.call(module.exports, …)` form too) and webpack 5's export definer
+/// (`for (k in d) R.o(d, k) && !R.o(e, k) && …`) — each a [`Shape`]
+/// signal. `code` is the runtime prologue (`detect::detect_bundle`).
+///
+/// [`Shape`]: SignalStrength::Shape
 pub fn detect_webpack(code: &str) -> Vec<DetectionSignal> {
-    match_patterns(
+    let mut signals = match_patterns(
         code,
         "webpack",
         BundlerType::Webpack,
@@ -85,6 +95,155 @@ pub fn detect_webpack(code: &str) -> Vec<DetectionSignal> {
             (|c| c.contains("__webpack_require__"), "__webpack_require__"),
             (|c| c.contains("__webpack_modules__"), "__webpack_modules__"),
             (|c| c.contains("webpackChunk"), "webpackChunk"),
+        ],
+    );
+    signals.extend(match_patterns(
+        code,
+        "webpack",
+        BundlerType::Webpack,
+        SignalStrength::Shape,
+        &[
+            (
+                opens_with_module_table,
+                "bootstrap opening on a module table (webpack's module shape)",
+            ),
+            (
+                |c| {
+                    WEBPACK_MODULE_CALLS
+                        .iter()
+                        .any(|p| count_shapes(c, p, 1) > 0)
+                },
+                "require function calling M[id](module, module.exports, require)",
+            ),
+            (
+                |c| count_shapes(c, WEBPACK_DEFINER, 1) > 0,
+                "export definer for (k in d) R.o(d,k) && !R.o(e,k)",
+            ),
+        ],
+    ));
+    signals
+}
+
+/// webpack's require function calls a module as `(module, module.exports,
+/// require)` — webpack 5's direct call and the `.call(module.exports, …)`
+/// form (webpack 4, and 5's non-arrow output).
+const WEBPACK_MODULE_CALLS: [&str; 2] = [
+    "]( $m , $m .exports , $r )",
+    "].call( $m .exports , $m , $m .exports , $r )",
+];
+
+/// webpack 5's `__webpack_require__.d` (define getters for an ES module's
+/// exports), minified: the own-property helper `.o` asked twice.
+const WEBPACK_DEFINER: &str = "for ( var $k in $d ) $r .o( $d , $k ) && ! $r .o( $e , $k )";
+
+/// Does the program open on webpack's bootstrap — an IIFE whose first
+/// statement declares the MODULE TABLE: an object whose first key is a
+/// module id (a number) and whose value is the module function
+/// (`123(e,t,n){`, `123:(e,t,n)=>{`, `123:function(e){`, `123:e=>{`)?
+/// Position matters: an app's own object of functions is never the first
+/// thing in the file, and a bundled copy of a webpack build never opens
+/// the bundle that holds it.
+fn opens_with_module_table(code: &str) -> bool {
+    let at = skip_preamble(code);
+    let Some(at) = ["( ( ) => {", "( function ( ) {", "! function ( ) {"]
+        .iter()
+        .find_map(|p| eat_shape(code, at, p))
+    else {
+        return false;
+    };
+    let strict = skip_js_space(code, at);
+    let at = ["\"use strict\"", "'use strict'"]
+        .iter()
+        .find_map(|d| eat(code, strict, d))
+        .map_or(at, |end| eat_shape(code, end, ";").unwrap_or(end));
+    let Some(at) = ["var $e = {", "let $e = {", "const $e = {"]
+        .iter()
+        .find_map(|p| eat_shape(code, at, p))
+    else {
+        return false;
+    };
+    let at = skip_js_space(code, at);
+    let digits = code[at..].bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return false;
+    }
+    let at = at + digits;
+    // a method `id(params){`, or `id:` + a function value
+    if let Some(after) = eat_params(code, at) {
+        return eat_shape(code, after, "{").is_some();
+    }
+    let Some(at) = eat_shape(code, at, ":") else {
+        return false;
+    };
+    if let Some(after) = eat_shape(code, at, "function") {
+        return eat_params(code, after).is_some();
+    }
+    let arrow = eat_params(code, at).or_else(|| eat_shape(code, at, "$p"));
+    arrow.is_some_and(|after| eat_shape(code, after, "=>").is_some())
+}
+
+/// A module function's parameter list: `(` up to three identifiers `)`.
+fn eat_params(code: &str, at: usize) -> Option<usize> {
+    ["( )", "( $a )", "( $a , $b )", "( $a , $b , $c )"]
+        .iter()
+        .find_map(|p| eat_shape(code, at, p))
+}
+
+// ---- rollup -------------------------------------------------------------------
+
+/// The commonjs plugin's guarded require function (`function requireX()
+/// { if (hasRequiredX) return x; hasRequiredX = 1; … }`).
+const ROLLUP_REQUIRE_GUARD: &str = "if ( $f ) return $m ; $f = 1";
+
+/// The commonjs plugin's `getDefaultExportFromCjs` (and its siblings that
+/// read `default` the same way).
+const ROLLUP_DEFAULT_EXPORT: &str =
+    ".__esModule && Object.prototype.hasOwnProperty.call( $e , \"default\"|'default' )";
+
+/// The commonjs plugin's `commonjsGlobal`, minified and as written.
+const ROLLUP_COMMONJS_GLOBAL: [&str; 2] = [
+    "\"undefined\" != typeof globalThis ? globalThis : \"undefined\" != typeof window ? window : \"undefined\" != typeof global ? global : \"undefined\" != typeof self ? self : { }",
+    "typeof globalThis !== 'undefined'|\"undefined\" ? globalThis : typeof window !== 'undefined'|\"undefined\" ? window : typeof global !== 'undefined'|\"undefined\" ? global : typeof self !== 'undefined'|\"undefined\" ? self : { }",
+];
+
+/// Rollup writes NO runtime: a scope-hoisted bundle is its modules'
+/// statements, renamed. What it does write, when the app pulls in
+/// CommonJS, is `@rollup/plugin-commonjs`'s helpers and guards — each a
+/// [`Shape`] signal: two guarded require functions (one is a pattern
+/// hand-written code can have), `getDefaultExportFromCjs`'s read of
+/// `default`, `commonjsGlobal`'s globalThis/window/global/self chain. A
+/// rollup build of pure ES modules carries none of them and stays unknown
+/// (the fallback). Text that holds another bundler's runtime — a module
+/// helper (Bun, esbuild) or webpack's — is not rollup's output, whatever
+/// its bundled code holds (a dependency built with rollup): nothing.
+///
+/// [`Shape`]: SignalStrength::Shape
+pub fn detect_rollup(code: &str) -> Vec<DetectionSignal> {
+    if find_module_helper(code).is_some() || !detect_webpack(code).is_empty() {
+        return Vec::new();
+    }
+    match_patterns(
+        code,
+        "rollup",
+        BundlerType::Rollup,
+        SignalStrength::Shape,
+        &[
+            (
+                |c| count_shapes(c, ROLLUP_REQUIRE_GUARD, 2) == 2,
+                "commonjs plugin's guarded require functions (if (r) return m; r = 1)",
+            ),
+            (
+                |c| count_shapes(c, ROLLUP_DEFAULT_EXPORT, 1) > 0,
+                "commonjs plugin's getDefaultExportFromCjs",
+            ),
+            (
+                |c| {
+                    ROLLUP_COMMONJS_GLOBAL
+                        .iter()
+                        .any(|p| count_shapes(c, p, 1) > 0)
+                },
+                "commonjs plugin's commonjsGlobal",
+            ),
         ],
     )
 }

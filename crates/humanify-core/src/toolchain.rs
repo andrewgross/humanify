@@ -125,15 +125,27 @@ pub struct Chosen<T> {
 /// grammar per file (finding #80, review R2, spec I10) — a factory the
 /// unpack kept in the app is app code. A second grammar (webpack's module
 /// table, rollup's) is a second variant here.
+///
+/// exp105 added two: webpack's (`Webpack`: the module table, the CommonJS
+/// wrapper `.cw(fn)`, the entry IIFEs) and rollup's (`Rollup`: the
+/// commonjs plugin's guarded require functions) — module bodies written
+/// INLINE, with no module helper (`modules::inline_modules`). Neither has
+/// a helper's factories nor `__esm` inits; their modules reach the stages
+/// only through the statement cut ([`Self::statement_modules`],
+/// [`Self::declarator_modules`]), which makes each body a lazy module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ModuleWrapperGrammar {
     BunAndEsbuild,
+    Webpack,
+    Rollup,
 }
 
 impl ModuleWrapperGrammar {
     pub fn name(self) -> &'static str {
         match self {
             ModuleWrapperGrammar::BunAndEsbuild => "bun+esbuild",
+            ModuleWrapperGrammar::Webpack => "webpack",
+            ModuleWrapperGrammar::Rollup => "rollup",
         }
     }
 
@@ -143,6 +155,53 @@ impl ModuleWrapperGrammar {
     pub fn identify_factory_helper(self, source: &str) -> Option<crate::modules::IdentifiedHelper> {
         match self {
             ModuleWrapperGrammar::BunAndEsbuild => crate::modules::identify_cjs_factory(source),
+            ModuleWrapperGrammar::Webpack | ModuleWrapperGrammar::Rollup => None,
+        }
+    }
+
+    /// The module bodies this grammar writes INLINE in one container
+    /// statement (rollup's guarded require declarations): each with the
+    /// span of the node that wraps it.
+    pub fn statement_modules<'a>(
+        self,
+        stmt: &'a oxc_ast::ast::Statement<'a>,
+    ) -> Vec<crate::modules::inline_modules::InlineModule<'a>> {
+        match self {
+            ModuleWrapperGrammar::BunAndEsbuild | ModuleWrapperGrammar::Webpack => Vec::new(),
+            ModuleWrapperGrammar::Rollup => {
+                crate::modules::inline_modules::rollup_statement_modules(stmt)
+            }
+        }
+    }
+
+    /// The SCOPES this grammar writes inline in one container statement —
+    /// not modules: wrappers whose statements are cut like the
+    /// container's own (webpack's entry IIFEs, which hold concatenated,
+    /// scope-hoisted modules).
+    pub fn statement_scopes<'a>(
+        self,
+        stmt: &'a oxc_ast::ast::Statement<'a>,
+    ) -> Vec<crate::modules::inline_modules::InlineModule<'a>> {
+        match self {
+            ModuleWrapperGrammar::Webpack => {
+                crate::modules::inline_modules::webpack_statement_scopes(stmt)
+            }
+            ModuleWrapperGrammar::BunAndEsbuild | ModuleWrapperGrammar::Rollup => Vec::new(),
+        }
+    }
+
+    /// The module bodies this grammar writes INLINE in one declarator
+    /// (webpack's module table and CommonJS wrapper, rollup's guarded
+    /// require IIFEs).
+    pub fn declarator_modules<'a>(
+        self,
+        d: &'a oxc_ast::ast::VariableDeclarator<'a>,
+    ) -> Vec<crate::modules::inline_modules::InlineModule<'a>> {
+        use crate::modules::inline_modules as inline;
+        match self {
+            ModuleWrapperGrammar::BunAndEsbuild => Vec::new(),
+            ModuleWrapperGrammar::Webpack => inline::webpack_declarator_modules(d),
+            ModuleWrapperGrammar::Rollup => inline::rollup_declarator_modules(d),
         }
     }
 
@@ -165,6 +224,7 @@ impl ModuleWrapperGrammar {
                 wrapper_body,
                 tables,
             ),
+            ModuleWrapperGrammar::Webpack | ModuleWrapperGrammar::Rollup => None,
         }
     }
 
@@ -177,6 +237,7 @@ impl ModuleWrapperGrammar {
     ) -> Option<crate::modules::FactoryArg<'a>> {
         match self {
             ModuleWrapperGrammar::BunAndEsbuild => crate::modules::factory_arg_function(arg),
+            ModuleWrapperGrammar::Webpack | ModuleWrapperGrammar::Rollup => None,
         }
     }
 
@@ -193,6 +254,7 @@ impl ModuleWrapperGrammar {
             ModuleWrapperGrammar::BunAndEsbuild => {
                 crate::twins::fossil::lazy_init_helper_names(body)
             }
+            ModuleWrapperGrammar::Webpack | ModuleWrapperGrammar::Rollup => HashSet::new(),
         }
     }
 
@@ -365,15 +427,21 @@ impl InteropHelpers {
 /// unpack's classification, the split and its runnable emit, the finish's
 /// bundle carry — review R1/R9/R5, 2026-10-04); a second layout (an ES
 /// module's own top level) is a second variant here.
+///
+/// exp105 added webpack's: [`BundleLayout::WebpackBootstrap`], the
+/// bootstrap IIFE that holds the module table and the runtime, whatever
+/// its binding count (webpack's declares a handful).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BundleLayout {
     SingleWrapperFunction,
+    WebpackBootstrap,
 }
 
 impl BundleLayout {
     pub fn name(self) -> &'static str {
         match self {
             BundleLayout::SingleWrapperFunction => "single-wrapper-function",
+            BundleLayout::WebpackBootstrap => "webpack-bootstrap",
         }
     }
 
@@ -391,6 +459,10 @@ impl BundleLayout {
             BundleLayout::SingleWrapperFunction => {
                 crate::modules::wrapper::find_wrapper_function(program, semantic)
             }
+            BundleLayout::WebpackBootstrap => {
+                crate::modules::wrapper::find_webpack_bootstrap(program, semantic)
+                    .or_else(|| crate::modules::wrapper::find_wrapper_function(program, semantic))
+            }
         }
     }
 
@@ -404,7 +476,7 @@ impl BundleLayout {
         semantic: &oxc_semantic::Semantic<'_>,
     ) -> Option<crate::modules::wrapper::WrapperFunction> {
         match self {
-            BundleLayout::SingleWrapperFunction => {
+            BundleLayout::SingleWrapperFunction | BundleLayout::WebpackBootstrap => {
                 crate::modules::wrapper::recognize_wrapper_function(program, semantic)
             }
         }
@@ -415,7 +487,7 @@ impl BundleLayout {
     /// under this layout, else why not.
     pub fn original_bundle_binding_count(self, original: &str) -> Result<usize, String> {
         match self {
-            BundleLayout::SingleWrapperFunction => {
+            BundleLayout::SingleWrapperFunction | BundleLayout::WebpackBootstrap => {
                 crate::modules::wrapper::original_bundle_binding_count(original)
             }
         }
@@ -429,6 +501,8 @@ impl BundleLayout {
     pub fn wrapper_parameter_roles(self) -> &'static [ContextName] {
         match self {
             BundleLayout::SingleWrapperFunction => &COMMONJS_CONTEXT,
+            // the bootstrap IIFE takes no parameters
+            BundleLayout::WebpackBootstrap => &[],
         }
     }
 }
@@ -656,6 +730,8 @@ pub fn resolve_toolchain(
         &mut toolchain.name_profile.reason,
         &mut toolchain.tuning.reason,
         &mut toolchain.module_identity.reason,
+        &mut toolchain.module_wrappers.reason,
+        &mut toolchain.layout.reason,
     ] {
         *reason = settled(*reason);
     }
@@ -776,9 +852,25 @@ fn resolve_pieces(
         never_rename,
         name_profile,
         tuning,
-        module_wrappers: only(ModuleWrapperGrammar::BunAndEsbuild),
+        module_wrappers: match bundler {
+            BundlerType::Webpack => Chosen {
+                piece: ModuleWrapperGrammar::Webpack,
+                reason: bundler_reason,
+            },
+            BundlerType::Rollup => Chosen {
+                piece: ModuleWrapperGrammar::Rollup,
+                reason: bundler_reason,
+            },
+            _ => only(ModuleWrapperGrammar::BunAndEsbuild),
+        },
         interop: only(InteropHelpers::Bun),
-        layout: only(BundleLayout::SingleWrapperFunction),
+        layout: match bundler {
+            BundlerType::Webpack => Chosen {
+                piece: BundleLayout::WebpackBootstrap,
+                reason: bundler_reason,
+            },
+            _ => only(BundleLayout::SingleWrapperFunction),
+        },
         app_file: only(AppFile::LastProcessed),
     }
 }
