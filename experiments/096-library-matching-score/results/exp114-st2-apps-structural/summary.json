@@ -1,0 +1,76 @@
+{
+ "bars": {
+  "appBarPassed": true,
+  "appClaimedBytes": 0,
+  "precisionBar": 0.998,
+  "precisionBarPassed": {
+   "apps-esbuild": false
+  }
+ },
+ "config": {
+  "binarySha256": "c9c8d5b9e3e92f9e4b5b8abadb6b3d3ae6326c87834c9709c3dd89872a673aec",
+  "buildCommit": "ce110cb773bca44e9b5194f4e7e28bfbd61a5258",
+  "chainedSha256": "6260ae974e5d1d50e535ded285d7d45e83fef13919af8458b61ebe74e0e1628f",
+  "copiesSha256": "aeb5a27e9ebf936e0bb3c90c2f5999e0e59937e3c26e45391a063d1bd56323ca",
+  "corpus": "apps",
+  "corpusSha256": "98b06b6770a0a73eb0fea4afd294511d4d4fa5e60cfaafe0a55b35ff3ef23e6f",
+  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "indexBytes": 4646716206,
+  "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+  "originsSha256": "8872eb35102a3cff989b46b2d288fbdc500e955eb6ae3b25993aed2a03e1556b",
+  "rule": "structural",
+  "sets": [
+   "apps-esbuild"
+  ],
+  "settings": [
+   "library.discovery.shadow_ties=true"
+  ]
+ },
+ "label": "exp114-st2-apps-structural",
+ "schema": "exp096-score/6",
+ "sets": {
+  "apps-esbuild": {
+   "appClaimedBytes": 0,
+   "bundlerDetected": 38,
+   "copyBytes": 1770002,
+   "discoveryRan": 39,
+   "entries": 39,
+   "exploratoryNames": {
+    "bindings": 156430,
+    "bindingsSameVersion": 144808,
+    "bindingsVersionKnown": 156396,
+    "exactBytes": 14888283,
+    "exactUnits": 13574,
+    "sameVersionShare": 0.925906
+   },
+   "f05": 0.967041,
+   "f05ShipperOnly": 0.954854,
+   "f1": 0.939626,
+   "f1ShipperOnly": 0.927785,
+   "libraryBytes": 25643725,
+   "missShares": {
+    "a": 0.029319,
+    "b": 0.018253,
+    "c": 0.008408,
+    "d-absent": 0.023093,
+    "d-file": 0.000774,
+    "d-variant": 3e-06,
+    "e-ambig": 0.001663,
+    "e-other": 0.002795,
+    "e-support": 0.000497,
+    "e-veto": 0.000837,
+    "f": 0.017126
+   },
+   "namedAsOriginBytes": 289953,
+   "namedAsShipperBytes": 22718418,
+   "namedBytes": 23008371,
+   "precision": 0.986224,
+   "precisionShipperOnly": 0.973796,
+   "recall": 0.897232,
+   "recallShipperOnly": 0.885925,
+   "selfOriginBytes": 10183,
+   "selfOtherBytes": 857,
+   "wrongFamilyBytes": 321381
+  }
+ }
+}

@@ -155,6 +155,10 @@ banner_names = "known"         # exp106 matcher hygiene (experiments/106-matcher
 derived_families = true        # exp106: one family = npm-metadata links (families-derived.json)
 payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence
 helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
+context_presence = 0.0         # exp114: off; a package seen only in index modules bigger
+context_presence_slack = 0     #   than the bundle's groups is no seed (experiments/114-dev-precision)
+shadow_ties = false            # exp114: off; a package whose seeds are all ties goes to its rival
+presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
 ```
 
 To reproduce a pre-exp109 run, set the old values back explicitly:
