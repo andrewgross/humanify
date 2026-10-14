@@ -44,6 +44,9 @@ pub struct LibraryIndex {
     /// Per file, its literal ids, sorted.
     file_literals: Vec<Vec<u32>>,
     literal_packages: u32,
+    /// Every package name the index knows: its owners, and (loaded) the
+    /// packages its manifest records registry metadata or builds for.
+    known: BTreeSet<String>,
 }
 
 impl LibraryIndex {
@@ -94,7 +97,45 @@ impl LibraryIndex {
         }
         ix.package_df = holders.iter().map(|h| h.len() as u32).collect();
         ix.literal_packages = ix.file_owner.iter().collect::<BTreeSet<_>>().len() as u32;
+        ix.known = ix.packages.iter().cloned().collect();
         ix
+    }
+
+    /// Does the index know package `name` (an owner, or a package its
+    /// manifest records)?
+    pub fn knows(&self, name: &str) -> bool {
+        self.known.contains(name)
+    }
+
+    /// Every package name the index knows.
+    pub fn known_names(&self) -> &BTreeSet<String> {
+        &self.known
+    }
+
+    /// `name` as a package the index knows, in npm's spelling: itself, its
+    /// lower case, or the ONE known scoped package `@s/n` it spells as
+    /// `s-n` (a banner's `noble-curves` is `@noble/curves`). None when no
+    /// known package, or more than one, answers to it.
+    pub fn resolve_known(&self, name: &str) -> Option<String> {
+        if self.known.contains(name) {
+            return Some(name.to_string());
+        }
+        let lower = name.to_ascii_lowercase();
+        if self.known.contains(&lower) {
+            return Some(lower);
+        }
+        let mut hits = self.known.iter().filter(|k| {
+            k.strip_prefix('@')
+                .and_then(|rest| rest.split_once('/'))
+                .is_some_and(|(scope, base)| {
+                    lower.len() == scope.len() + 1 + base.len()
+                        && lower.starts_with(scope)
+                        && lower.as_bytes()[scope.len()] == b'-'
+                        && lower.ends_with(base)
+                })
+        });
+        let first = hits.next()?;
+        hits.next().is_none().then(|| first.clone())
     }
 
     /// Load `dir`'s slice for the bundle's `recipe` (`units.<slice>.jsonl`)
@@ -136,6 +177,10 @@ impl LibraryIndex {
             .map(|l| serde_json::from_str(l).map_err(|_| parse(l, "literals")))
             .collect::<Result<_, _>>()?;
         let mut ix = LibraryIndex::from_rows(units, literals);
+        ix.known
+            .extend(manifest.registry.packuments.keys().cloned());
+        ix.known
+            .extend(manifest.packages.iter().map(|p| p.name.clone()));
         ix.id = id;
         ix.slice = slice;
         ix.slice_reason = reason.to_string();
@@ -466,12 +511,12 @@ pub struct UnitClaim {
 }
 
 /// The claims of `queries` (statement units, in statement order) under
-/// `rules`; `family` decides agreement.
+/// `rules`; `same` (one package family?) decides agreement.
 pub fn claim_units(
     index: &LibraryIndex,
     queries: &[UnitQuery<'_>],
     rules: LookupRules,
-    family: &dyn Fn(&str) -> String,
+    same: &dyn Fn(&str, &str) -> bool,
 ) -> Vec<UnitClaim> {
     let mut previous = None;
     let structural: Vec<Option<(u32, u32)>> = queries
@@ -509,7 +554,7 @@ pub fn claim_units(
                 continue;
             };
             let named = &index.packages[l as usize];
-            if family(named) != family(package) {
+            if !same(named, package) {
                 continue;
             }
             claim.package = named.clone();

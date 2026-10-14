@@ -130,6 +130,14 @@ evidence_conflict = false
 literal_conflict = false
 # Refuse a propagated claim on a unit another package family's prints also cover when the claimed family's prints cover less than this share of it (exp102; 0 = off).
 contested_cover = 0.0
+# Which names a kept /*! banner may seed: "any" (the banner reader's) or "known" (with an index, only a package the index knows, in npm's spelling; exp106).
+banner_names = "any"
+# An index seed of fewer nodes cannot be supported against the isolation veto by its own propagation: it needs independent corroboration (exp106; 0 = off).
+self_support_max_nodes = 0
+# An index print at least this many package families hold is emitted helper code: a unit such prints cover half of is no seed and no propagated claim (exp106; 0 = off).
+helper_families = 0
+# Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
+derived_families = false
 
 [unpack]
 # Force the bundler verdict.

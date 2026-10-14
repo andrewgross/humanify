@@ -245,3 +245,30 @@ fn the_exp102_precision_guards_are_keys_default_off() {
         .expect_err("a share over 1 is refused");
     assert!(err.iter().any(|e| e.contains("contested_cover")), "{err:?}");
 }
+
+#[test]
+fn the_exp106_hygiene_keys_default_off() {
+    use humanify_core::libdetect::discovery::BannerNames;
+    let off = build(&["in.js"], "").unwrap();
+    let o = off.library.discovery_options();
+    assert_eq!(o.banner_names, BannerNames::Any);
+    assert_eq!(o.self_support_max_nodes, 0);
+    assert_eq!(o.helper_families, 0);
+    assert!(!o.derived_families);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\nbanner_names = \"known\"\nself_support_max_nodes = 400\nhelper_families = 4\nderived_families = true\n",
+    )
+    .unwrap();
+    let o = on.library.discovery_options();
+    assert_eq!(o.banner_names, BannerNames::Known);
+    assert_eq!(o.self_support_max_nodes, 400);
+    assert_eq!(o.helper_families, 4);
+    assert!(o.derived_families);
+    let err = ConfigFile::check(
+        "cfg.toml",
+        "[library.discovery]\nbanner_names = \"maybe\"\n",
+    )
+    .expect_err("an unknown choice is refused");
+    assert!(err.iter().any(|e| e.contains("banner_names")), "{err:?}");
+}

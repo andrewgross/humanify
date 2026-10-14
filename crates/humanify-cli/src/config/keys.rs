@@ -15,7 +15,7 @@ use super::{
 };
 use crate::pipeline_config::enum_name;
 use humanify_core::libdetect::discovery::{
-    DiscoveryOptions, TARGETED_MIN_NODES, TARGETED_SUPPORT, VetoSupport,
+    BannerNames, DiscoveryOptions, TARGETED_MIN_NODES, TARGETED_SUPPORT, VetoSupport,
 };
 use humanify_core::libindex::lookup::LookupRules;
 
@@ -72,6 +72,16 @@ pub fn veto_support_name(v: VetoSupport) -> &'static str {
     match v {
         VetoSupport::WithoutModule => "without-module",
         VetoSupport::AllRules => "all-rules",
+    }
+}
+fn banner_names() -> Vec<String> {
+    ["any", "known"].map(String::from).to_vec()
+}
+/// The `library.discovery.banner_names` spelling of a choice.
+pub fn banner_names_name(v: BannerNames) -> &'static str {
+    match v {
+        BannerNames::Any => "any",
+        BannerNames::Known => "known",
     }
 }
 fn rules() -> LookupRules {
@@ -610,6 +620,44 @@ pub static KEYS: &[Key] = &[
         doc: "Refuse a propagated claim on a unit another package family's prints also cover \
               when the claimed family's prints cover less than this share of it (exp102; \
               0 = off).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "banner_names",
+        kind: Kind::Choice(banner_names),
+        flag: None,
+        default: || text(banner_names_name(discovery().banner_names)),
+        unset: "",
+        doc: "Which names a kept /*! banner may seed: \"any\" (the banner reader's) or \"known\" \
+              (with an index, only a package the index knows, in npm's spelling; exp106).",
+    },
+    lib_int(
+        "library.discovery",
+        "self_support_max_nodes",
+        0,
+        U32,
+        || int(u64::from(discovery().self_support_max_nodes)),
+        "An index seed of fewer nodes cannot be supported against the isolation veto by its \
+         own propagation: it needs independent corroboration (exp106; 0 = off).",
+    ),
+    lib_int(
+        "library.discovery",
+        "helper_families",
+        0,
+        U32,
+        || int(u64::from(discovery().helper_families)),
+        "An index print at least this many package families hold is emitted helper code: a unit \
+         such prints cover half of is no seed and no propagated claim (exp106; 0 = off).",
+    ),
+    Key {
+        section: "library.discovery",
+        name: "derived_families",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().derived_families)),
+        unset: "",
+        doc: "Join package families by the npm-metadata links (libindex/families-derived.json, \
+              among the index's packages) wherever discovery asks \"one family?\" (exp106).",
     },
     // [unpack]
     Key {

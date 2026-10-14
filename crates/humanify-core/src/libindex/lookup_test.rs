@@ -55,6 +55,10 @@ fn family(p: &str) -> String {
     p.split('/').next().unwrap_or(p).to_string()
 }
 
+fn same(a: &str, b: &str) -> bool {
+    family(a) == family(b)
+}
+
 fn claims(
     index: &LibraryIndex,
     prints: &[StatementPrints],
@@ -70,7 +74,7 @@ fn claims(
             text: "",
         })
         .collect();
-    claim_units(index, &queries, rules, &family)
+    claim_units(index, &queries, rules, &same)
         .into_iter()
         .map(|c| (c.unit, c.package))
         .collect()
@@ -180,7 +184,8 @@ fn agreement_needs_the_literal_rule_to_name_the_same_family() {
             p.to_string()
         }
     };
-    let got = claim_units(&index, &queries, LookupRules::default(), &family);
+    let same = |a: &str, b: &str| family(a) == family(b);
+    let got = claim_units(&index, &queries, LookupRules::default(), &same);
     assert_eq!(got.len(), 1, "zod's structural claim is refused: {got:?}");
     assert_eq!(
         (got[0].unit, got[0].package.as_str()),

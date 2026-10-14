@@ -29,3 +29,36 @@ fn families_follow_the_shipped_rules() {
     assert_ne!(f.family("@aws-sdk/client-s3"), f.family("@azure/identity"));
     assert_eq!(f.family("ink"), "ink");
 }
+
+#[test]
+fn derived_links_join_packages_pairwise_never_through_a_scope() {
+    let links = [
+        ("mimic-fn", "mimic-function"),
+        ("tweetnacl", "@openpgp/tweetnacl"),
+        ("jsdoc", "@openpgp/jsdoc"),
+        ("a", "b"),
+        ("b", "c"),
+    ];
+    let f = PackageFamilies::shipped()
+        .with_links(links.iter().map(|(a, b)| (a.to_string(), b.to_string())));
+    assert!(f.same("mimic-fn", "mimic-function"));
+    assert!(f.same("tweetnacl", "@openpgp/tweetnacl"));
+    // one scope is one family without any link
+    assert!(f.same("@openpgp/tweetnacl", "@openpgp/jsdoc"));
+    // a chain of links counts; a chain THROUGH a scope family does not
+    assert!(f.same("a", "c"));
+    assert!(!f.same("tweetnacl", "jsdoc"));
+    // the listed families still hold, and unlinked packages stay apart
+    assert!(f.same("minimatch", "glob"));
+    assert!(!f.same("react", "react-dom"));
+    let plain = PackageFamilies::shipped();
+    assert!(!plain.same("mimic-fn", "mimic-function"));
+    assert!(plain.same("minimatch", "glob"));
+}
+
+#[test]
+fn the_shipped_derived_links_parse_and_join_a_known_rename() {
+    let f = PackageFamilies::shipped().with_shipped_links();
+    assert!(f.link_count() > 0);
+    assert!(f.same("mimic-fn", "mimic-function"));
+}

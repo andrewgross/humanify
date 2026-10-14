@@ -137,6 +137,10 @@ veto_support = "without-module"
 evidence_conflict = false      # exp102 precision guards on propagated claims,
 literal_conflict = false       # all off by default (experiments/102-precision)
 contested_cover = 0.0
+banner_names = "any"           # exp106 matcher hygiene, all off by default
+self_support_max_nodes = 0     # (experiments/106-matcher-hygiene)
+helper_families = 0
+derived_families = false
 ```
 
 **Missing or stale index — fail loud, before any work.** With

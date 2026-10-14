@@ -803,3 +803,97 @@ fn evidence_conflict_drops_an_index_seed_another_family_covers_more_of() {
     let (_, _, rows) = run_indexed_with(code, &held, vec![], on);
     assert_eq!(claim_of(&rows, "var dep"), None);
 }
+
+// ---- exp106 matcher hygiene ----------------------------------------------
+
+/// Two banners: one names `noble-curves` (npm has `@noble/curves`), one a
+/// name no index knows. `held` rows only make names known (unspecific:
+/// they seed nothing).
+const BANNERS: &str = "/*! noble-curves v1.2.0 */\nvar lib = function (t) { return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length); };\n/*! no-such-package v1.0.0 */\nvar other = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").slice(0, e.length); };\nvar known = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16)].join(\",\"); };\nvar app = () => lib(\"a\") + other(\"b\") + known(1);\n";
+
+#[test]
+fn banner_names_known_keeps_only_names_the_index_knows_resolved_to_npm_spelling() {
+    use crate::libdetect::discovery::BannerNames;
+    let held = [Held::whole("var known", "@noble/curves").unspecific()];
+    let (_, _, rows) = run_indexed_with(BANNERS, &held, vec![], DiscoveryOptions::default());
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("noble-curves".into(), Rule::Seed))
+    );
+    assert_eq!(
+        claim_of(&rows, "var other"),
+        Some(("no-such-package".into(), Rule::Seed))
+    );
+    let on = DiscoveryOptions {
+        banner_names: BannerNames::Known,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(BANNERS, &held, vec![], on);
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("@noble/curves".into(), Rule::Seed)),
+        "scope-name spelling resolves to the one known scoped package"
+    );
+    assert_eq!(
+        claim_of(&rows, "var other"),
+        None,
+        "an unknown name is no seed"
+    );
+}
+
+#[test]
+fn a_small_seed_cannot_support_itself_through_its_own_claims() {
+    // lib's only neighbour is tiny, claimed by DOWN from lib alone. lib is
+    // held by P only (not ambiguous): by default its own propagation is
+    // support; under the self-support floor a seed smaller than the floor
+    // needs independent evidence and is vetoed.
+    let code = "var lib = function (t) { return t.split(\",\").map(tiny).filter(Boolean).join(\"|\").concat(t.length); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
+    let held = [Held::whole("var lib", "P")];
+    let with = |n: u32| DiscoveryOptions {
+        self_support_max_nodes: n,
+        ..DiscoveryOptions::default()
+    };
+    let (_, found, rows) = run_indexed_with(code, &held, vec![], with(0));
+    assert!(found.vetoed.is_empty());
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    let (_, found, rows) = run_indexed_with(code, &held, vec![], with(10_000));
+    assert_eq!(found.vetoed.len(), 1);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), None);
+    // A seed at or over the floor keeps its own support.
+    let (_, found, _) = run_indexed_with(code, &held, vec![], with(5));
+    assert!(found.vetoed.is_empty());
+}
+
+#[test]
+fn helper_prints_held_by_many_families_seed_and_carry_nothing() {
+    // lib's whole statement is P's alone, but its function (nearly all of
+    // it) is held by four families: emitted helper code (a tsc / Babel
+    // helper every package that needs it inlines). Under the helper floor
+    // it is no seed. dep's function likewise, so DOWN from a real P seed
+    // (root) does not take it.
+    let code = "var root = function (r) { return [r.a, r.b, r.c, r.d].map(lib).map(dep).map(more).filter(Boolean).join(\";\").concat(r.length); };\nvar more = function (m) { return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); };\nvar lib = function (t) { return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar app = () => root(\"a\");\n";
+    let mut held = vec![
+        Held::whole("var root", "P"),
+        Held::whole("var more", "P"),
+        Held::whole("var lib", "P"),
+    ];
+    for q in ["Q1", "Q2", "Q3", "P"] {
+        held.push(Held::function("var lib", q).unspecific());
+        held.push(Held::function("var dep", q).unspecific());
+    }
+    let with = |n: u32| DiscoveryOptions {
+        helper_families: n,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(0));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(4));
+    assert_eq!(claim_of(&rows, "var root"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    // Held by fewer families than the floor: not a helper.
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(5));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
