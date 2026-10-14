@@ -681,6 +681,40 @@ pub static KEYS: &[Key] = &[
         doc: "Join package families by the npm-metadata links (libindex/families-derived.json, \
               among the index's packages) wherever discovery asks \"one family?\" (exp106).",
     },
+    Key {
+        section: "library.discovery",
+        name: "context_presence",
+        kind: Kind::Float {
+            min: 0.0,
+            max: 100.0,
+        },
+        flag: None,
+        default: || float(discovery().context_presence),
+        unset: "",
+        doc: "A package every index seed of which sits in a module group its index holds that \
+              code only in modules at least this many times the group's bytes (plus \
+              context_presence_slack) is no seed: its copy lives in a dist that inlines the \
+              code's origin (exp114; 0 = off).",
+    },
+    lib_int(
+        "library.discovery",
+        "context_presence_slack",
+        0,
+        u32::MAX as u64,
+        || int(discovery().context_presence_slack),
+        "The context-presence slack in bytes (exp114).",
+    ),
+    Key {
+        section: "library.discovery",
+        name: "shadow_ties",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().shadow_ties)),
+        unset: "",
+        doc: "A package whose every index seed is a tie with another family that has a seed of \
+              its own in the bundle is that family's shadow: its tied seeds become the rival's, \
+              the rest are dropped (exp114).",
+    },
     // [unpack]
     Key {
         section: "unpack",
