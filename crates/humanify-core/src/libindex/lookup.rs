@@ -9,6 +9,7 @@ use std::path::Path;
 
 use super::format::{LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
+use super::table::{self, LiteralTable, Source, UnitTable};
 use super::units::{StatementPrints, UnitPrint};
 use crate::matching::store::ReferenceStore;
 
@@ -22,8 +23,8 @@ pub struct UnitHit {
     pub module_bytes: u64,
 }
 
-/// A loaded index slice: its unit table and the literal table.
-#[derive(Default)]
+/// An opened index slice: its unit table and the literal table, read on
+/// demand ([`super::table`]: nothing is parsed into a map on load).
 pub struct LibraryIndex {
     /// sha256 of the manifest (the id a run records); empty when built
     /// from rows.
@@ -32,77 +33,38 @@ pub struct LibraryIndex {
     /// empty when built from rows.
     pub slice: String,
     pub slice_reason: String,
+    /// Every owner package, sorted: an owner id is its position.
     packages: Vec<String>,
-    package_ids: HashMap<String, u32>,
-    units: HashMap<String, Vec<UnitHit>>,
-    literal_ids: HashMap<String, u32>,
-    /// literal → files holding it.
-    postings: Vec<Vec<u32>>,
-    /// literal → how many packages hold it.
-    package_df: Vec<u32>,
-    file_owner: Vec<u32>,
-    /// Per file, its literal ids, sorted.
-    file_literals: Vec<Vec<u32>>,
-    literal_packages: u32,
+    units: UnitTable,
+    literals: LiteralTable,
 }
 
 impl LibraryIndex {
-    fn package(&mut self, name: &str) -> u32 {
-        if let Some(&id) = self.package_ids.get(name) {
-            return id;
-        }
-        let id = self.packages.len() as u32;
-        self.packages.push(name.to_string());
-        self.package_ids.insert(name.to_string(), id);
-        id
-    }
-
-    /// An index from its rows (the loader's and the tests' constructor).
+    /// An index from its rows, through the same tables a run reads (the
+    /// tests' constructor).
     pub fn from_rows(units: Vec<UnitRow>, literals: Vec<LiteralRow>) -> LibraryIndex {
-        let mut ix = LibraryIndex::default();
-        for r in units {
-            let owner = ix.package(&r.owner);
-            ix.units.entry(r.hash).or_default().push(UnitHit {
-                owner,
-                module_bytes: r.module_bytes,
-            });
+        let packages = table::package_table(&[&units], &literals);
+        let units = UnitTable::encode(&units, &packages).expect("unit hashes are unit keys");
+        LibraryIndex {
+            id: String::new(),
+            slice: String::new(),
+            slice_reason: String::new(),
+            units: UnitTable::open(Source::Memory(units)).expect("an encoded unit table opens"),
+            literals: LiteralTable::open(Source::Memory(LiteralTable::encode(
+                &literals, &packages,
+            )))
+            .expect("an encoded literal table opens"),
+            packages,
         }
-        let mut holders: Vec<BTreeSet<u32>> = Vec::new();
-        for r in literals {
-            let owner = ix.package(&r.owner);
-            let file = ix.file_owner.len() as u32;
-            ix.file_owner.push(owner);
-            let mut ids: Vec<u32> = r
-                .lits
-                .iter()
-                .map(|l| {
-                    let next = ix.literal_ids.len() as u32;
-                    *ix.literal_ids.entry(l.clone()).or_insert(next)
-                })
-                .collect();
-            ids.sort_unstable();
-            ids.dedup();
-            for &id in &ids {
-                if id as usize >= ix.postings.len() {
-                    ix.postings.resize(id as usize + 1, Vec::new());
-                    holders.resize(id as usize + 1, BTreeSet::new());
-                }
-                ix.postings[id as usize].push(file);
-                holders[id as usize].insert(owner);
-            }
-            ix.file_literals.push(ids);
-        }
-        ix.package_df = holders.iter().map(|h| h.len() as u32).collect();
-        ix.literal_packages = ix.file_owner.iter().collect::<BTreeSet<_>>().len() as u32;
-        ix
     }
 
-    /// Load `dir`'s slice for the bundle's `recipe` (`units.<slice>.jsonl`)
-    /// and `literals.jsonl`, refusing an index any of whose compatibility
+    /// Open `dir`'s slice for the bundle's `recipe` (`units.<slice>.bin`)
+    /// and the literal table, refusing an index any of whose compatibility
     /// stamps differs from this build's ([`Manifest::check_compatible`]: a
     /// half-matching index would silently half-claim). The slice is chosen
     /// in ONE place, [`super::recipe::choose_slice`]; an index with no
-    /// slice for the recipe is [`LoadError::NoSlice`].
+    /// slice for the recipe is [`LoadError::NoSlice`]. Only the tables'
+    /// headers and fences are read here.
     pub fn load(
         dir: &Path,
         recipe: &super::recipe::DetectedRecipe,
@@ -123,28 +85,28 @@ impl LibraryIndex {
                 id: id.clone(),
             })?;
         let slice = chosen.slice_name();
-        let rows = |name: &str| -> Result<Vec<String>, String> {
-            Ok(read(name)?.lines().map(String::from).collect())
-        };
-        let parse = |line: &str, name: &str| format!("{name}: {line:.60}");
-        let units: Vec<UnitRow> = rows(&format!("units.{slice}.jsonl"))?
-            .iter()
-            .map(|l| serde_json::from_str(l).map_err(|_| parse(l, "units")))
-            .collect::<Result<_, _>>()?;
-        let literals: Vec<LiteralRow> = rows("literals.jsonl")?
-            .iter()
-            .map(|l| serde_json::from_str(l).map_err(|_| parse(l, "literals")))
-            .collect::<Result<_, _>>()?;
-        let mut ix = LibraryIndex::from_rows(units, literals);
-        ix.id = id;
-        ix.slice = slice;
-        ix.slice_reason = reason.to_string();
-        Ok(ix)
+        let packages: Vec<String> = serde_json::from_str(&read(table::PACKAGES_FILE)?)
+            .map_err(|e| format!("{}: {e}", table::PACKAGES_FILE))?;
+        let open = |name: &str| Source::open(&dir.join(name)).map_err(|e| format!("{name}: {e}"));
+        let units_name = table::units_file(&slice);
+        let units =
+            UnitTable::open(open(&units_name)?).map_err(|e| format!("{units_name}: {e}"))?;
+        let literals = LiteralTable::open(open(table::LITERALS_FILE)?)
+            .map_err(|e| format!("{}: {e}", table::LITERALS_FILE))?;
+        Ok(LibraryIndex {
+            id,
+            slice,
+            slice_reason: reason.to_string(),
+            packages,
+            units,
+            literals,
+        })
     }
 
-    /// Every indexed occurrence of `hash` (the store's `candidates`).
-    pub fn unit_hits(&self, hash: &str) -> &[UnitHit] {
-        self.units.get(hash).map_or(&[], Vec::as_slice)
+    /// Every indexed occurrence of `hash`, in row order (the store's
+    /// `candidates`).
+    pub fn unit_hits(&self, hash: &str) -> Vec<UnitHit> {
+        self.units.hits(hash)
     }
 
     /// An owner id's package name.
@@ -160,11 +122,10 @@ impl LibraryIndex {
     /// Every indexed occurrence of `hash`: (owner, module bytes) — for
     /// diagnostics.
     pub fn occurrences(&self, hash: &str) -> Vec<(&str, u64)> {
-        self.units.get(hash).map_or_else(Vec::new, |hits| {
-            hits.iter()
-                .map(|h| (self.packages[h.owner as usize].as_str(), h.module_bytes))
-                .collect()
-        })
+        self.unit_hits(hash)
+            .iter()
+            .map(|h| (self.packages[h.owner as usize].as_str(), h.module_bytes))
+            .collect()
     }
 
     /// The distinct owners holding `hash` in a module no bigger than the
@@ -187,10 +148,12 @@ impl LibraryIndex {
         (!owners.is_empty() && owners.len() <= rules.max_packages).then_some(owners)
     }
 
-    fn weight(&self, literal: &str) -> f64 {
-        let n = f64::from(self.literal_packages.max(1));
-        let w = match self.literal_ids.get(literal) {
-            Some(&id) => (n / f64::from(self.package_df[id as usize].max(1))).log2(),
+    /// A query literal's weight in bits, by its id when the index holds
+    /// it.
+    fn weight(&self, literal: &str, id: Option<u32>) -> f64 {
+        let n = f64::from(self.literals.literal_packages().max(1));
+        let w = match id {
+            Some(id) => (n / f64::from(self.literals.package_df(id).max(1))).log2(),
             None => n.log2() + 1.0,
         };
         if is_wordy(literal) {
@@ -210,11 +173,12 @@ impl LibraryIndex {
         Some(
             lits.iter()
                 .filter(|l| l.as_bytes().get(1) == Some(&b'#'))
-                .filter_map(|l| self.literal_ids.get(l))
-                .map(|&id| {
-                    self.postings[id as usize]
-                        .iter()
-                        .map(|&f| self.file_owner[f as usize])
+                .filter_map(|l| self.literals.resolve(l))
+                .map(|id| {
+                    self.literals
+                        .postings(id)
+                        .into_iter()
+                        .map(|f| self.literals.file_owner(f))
                         .collect()
                 })
                 .collect(),
@@ -231,7 +195,10 @@ impl LibraryIndex {
         }
         let mut weighted: Vec<(f64, Option<u32>)> = lits
             .iter()
-            .map(|l| (self.weight(l), self.literal_ids.get(l).copied()))
+            .map(|l| {
+                let id = self.literals.resolve(l);
+                (self.weight(l, id), id)
+            })
             .collect();
         let total: f64 = weighted.iter().map(|w| w.0).sum();
         // A file reaching the cover, or the margin below a file that does,
@@ -242,7 +209,7 @@ impl LibraryIndex {
         let mut carried = 0.0;
         for &(w, id) in &weighted {
             if let Some(id) = id {
-                candidates.extend(&self.postings[id as usize]);
+                candidates.extend(self.literals.postings(id));
             }
             carried += w;
             if carried > need {
@@ -255,13 +222,13 @@ impl LibraryIndex {
             .collect();
         let mut best: HashMap<u32, f64> = HashMap::new();
         for f in candidates {
-            let held = &self.file_literals[f as usize];
+            let held = self.literals.file_literals(f);
             let score: f64 = query
                 .iter()
                 .filter(|(id, _)| held.binary_search(id).is_ok())
                 .map(|&(_, w)| w)
                 .sum();
-            let e = best.entry(self.file_owner[f as usize]).or_insert(0.0);
+            let e = best.entry(self.literals.file_owner(f)).or_insert(0.0);
             *e = e.max(score);
         }
         let mut ranked: Vec<(u32, f64)> = best.into_iter().collect();

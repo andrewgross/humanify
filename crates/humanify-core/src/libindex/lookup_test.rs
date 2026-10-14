@@ -7,9 +7,15 @@ use crate::libindex::format::{LiteralRow, UnitRow};
 use crate::libindex::lookup::{LibraryIndex, LookupRules, UnitQuery, claim_units};
 use crate::libindex::units::{StatementPrints, UnitPrint};
 
+/// A test name's unit hash (16 hex digits, the only spelling an index
+/// holds).
+fn hx(name: &str) -> String {
+    format!("{:016x}", crate::libindex::table::literal_key(name))
+}
+
 fn row(hash: &str, owner: &str, nodes: u32, module_bytes: u64) -> UnitRow {
     UnitRow {
-        hash: hash.into(),
+        hash: hx(hash),
         owner: owner.into(),
         file: "index.js".into(),
         nodes,
@@ -31,7 +37,7 @@ fn lits(owner: &str, file: &str, l: &[&str]) -> LiteralRow {
 fn print(hash: &str, nodes: u32, at: u32) -> UnitPrint {
     UnitPrint {
         span: Span::new(at, at + nodes),
-        hash: hash.into(),
+        hash: hx(hash),
         nodes,
         content: 5,
     }
@@ -232,12 +238,15 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
         )
         .unwrap();
     };
-    std::fs::write(
-        dir.join("units.bun-bun-cjs-min.jsonl"),
-        serde_json::to_string(&row("a", "zod", 150, 10)).unwrap() + "\n",
-    )
-    .unwrap();
-    std::fs::write(dir.join("literals.jsonl"), "").unwrap();
+    let units = [(
+        "bun-bun-cjs-min".to_string(),
+        vec![row("a", "zod", 150, 10)],
+    )]
+    .into_iter()
+    .collect();
+    for (name, bytes) in crate::libindex::table::lookup_files(&units, &[]).unwrap() {
+        std::fs::write(dir.join(name), bytes).unwrap();
+    }
     let target_bun = detect_recipe(
         "// @bun @bun-cjs\nvar a;",
         BundlerType::Bun,
@@ -259,6 +268,12 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
     match LibraryIndex::load(&dir, &target_node) {
         Err(LoadError::NoSlice { why, .. }) => assert!(why.contains("bun:target=node"), "{why}"),
         other => panic!("a target-node bundle has no slice here: {:?}", other.err()),
+    }
+    // the lookup tables are the index: one missing is an unusable index
+    std::fs::remove_file(dir.join(crate::libindex::table::LITERALS_FILE)).unwrap();
+    match LibraryIndex::load(&dir, &target_bun) {
+        Err(LoadError::Unusable(e)) => assert!(e.contains("literals.bin"), "{e}"),
+        other => panic!("no literal table: {:?}", other.err()),
     }
     std::fs::remove_dir_all(&dir).ok();
 }
