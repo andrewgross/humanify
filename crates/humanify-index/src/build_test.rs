@@ -33,6 +33,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         offline: true,
         policy: Default::default(),
         pinned: Vec::new(),
+        merge_only: false,
     }
 }
 
@@ -91,6 +92,43 @@ fn a_shard_already_in_the_store_is_reused() {
     assert_eq!(second.tasks[0].reused, vec![inputs]);
     assert!(second.tasks[0].missing.is_empty());
     assert_eq!(second.tasks[1].missing.len(), 1);
+}
+
+#[test]
+fn merge_only_builds_nothing_and_merges_what_the_store_holds() {
+    use super::shard::ShardLiteral;
+    let mut cfg = config("merge-only", "2020-12-01T23:59:59.999Z");
+    cfg.merge_only = true;
+    let out = cfg.store.parent().unwrap().join("ix");
+    cfg.out = Some(out.clone());
+    let first = plan(&cfg).expect("plan");
+    // the literal shard of ms@2.1.2 only; the other three versions have none
+    let mut shard = Shard::new(&first.tasks[0].missing[0]);
+    shard.literals.push(ShardLiteral {
+        owner: "ms".into(),
+        version: "2.1.2".into(),
+        file: "index.js".into(),
+        lits: vec!["S:ms".into()],
+    });
+    write_shard(&cfg.store, &shard).expect("write");
+    let id = super::build::run(&cfg, false).expect("merges");
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(out.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(id.len(), 64);
+    assert_eq!(manifest["packages"].as_array().unwrap().len(), 1);
+    let no_shard: Vec<&str> = manifest["refused"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["reason"] == "no-shard")
+        .map(|r| r["version"].as_str().unwrap())
+        .collect();
+    assert_eq!(no_shard, ["2.1.1", "1.0.0", "0.7.3"]);
+    assert!(out.join("literals.bin").exists());
+    assert!(
+        !cfg.work.exists(),
+        "merge-only never installs or bundles anything"
+    );
 }
 
 #[test]

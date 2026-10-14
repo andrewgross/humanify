@@ -73,6 +73,11 @@ enum Command {
         /// Never fetch: every packument must already be in --registry.
         #[arg(long)]
         offline: bool,
+        /// Build no shard: merge the shards the store already holds (a
+        /// version with none is refused `no-shard`). A re-merge after a
+        /// build, without retrying the builds that failed.
+        #[arg(long)]
+        merge_only: bool,
         /// Print the plan (versions, refusals, shards to build or reuse)
         /// and stop.
         #[arg(long)]
@@ -95,6 +100,7 @@ fn main() {
         jobs,
         policy,
         offline,
+        merge_only,
         dry_run,
     } = Cli::parse().command;
     let result = (|| -> Result<String, String> {
@@ -128,6 +134,7 @@ fn main() {
             recipes: builds,
             jobs,
             offline,
+            merge_only,
             pinned: match &pinned {
                 Some(p) => std::fs::read_to_string(p)
                     .map_err(|e| format!("{}: {e}", p.display()))?

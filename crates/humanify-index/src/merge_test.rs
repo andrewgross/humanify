@@ -4,7 +4,7 @@
 use crate::bun_node;
 use humanify_core::libindex::format::{LiteralFileRow, ModuleRow};
 
-use super::merge::{MergeInput, merge};
+use super::merge::{MergeMeta, Merger, merge};
 use super::shard::{Shard, ShardInputs, ShardKind, ShardLiteral, ShardModule};
 
 fn module_shard(version: &str, rows: &[(&str, &str, &str, &str)]) -> Shard {
@@ -70,11 +70,10 @@ fn shards() -> Vec<Shard> {
     ]
 }
 
-fn input(shards: Vec<Shard>) -> MergeInput {
-    MergeInput {
+fn meta() -> MergeMeta {
+    MergeMeta {
         as_of: "2026-10-11T23:59:59.999Z".into(),
-        shards,
-        ..MergeInput::default()
+        ..MergeMeta::default()
     }
 }
 
@@ -88,7 +87,7 @@ fn rows<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Vec<T> {
 
 #[test]
 fn a_fingerprint_is_stored_once_with_its_version_ranges() {
-    let index = merge(input(shards())).expect("merges");
+    let index = merge(meta(), shards()).expect("merges");
     let modules: Vec<ModuleRow> = rows(&index.files["modules.bun-node-cjs-min.jsonl"]);
     let ka_ms = modules
         .iter()
@@ -112,7 +111,7 @@ fn a_fingerprint_is_stored_once_with_its_version_ranges() {
 
 #[test]
 fn a_key_held_by_two_owners_is_kept_as_two_rows() {
-    let index = merge(input(shards())).expect("merges");
+    let index = merge(meta(), shards()).expect("merges");
     let modules: Vec<ModuleRow> = rows(&index.files["modules.bun-node-cjs-min.jsonl"]);
     let owners: Vec<&str> = modules
         .iter()
@@ -124,7 +123,7 @@ fn a_key_held_by_two_owners_is_kept_as_two_rows() {
 
 #[test]
 fn stop_listed_helper_packages_leave_the_index() {
-    let index = merge(input(shards())).expect("merges");
+    let index = merge(meta(), shards()).expect("merges");
     let modules: Vec<ModuleRow> = rows(&index.files["modules.bun-node-cjs-min.jsonl"]);
     assert!(modules.iter().all(|r| r.owner != "tslib"));
     let versions: serde_json::Value =
@@ -138,10 +137,10 @@ fn stop_listed_helper_packages_leave_the_index() {
 
 #[test]
 fn the_same_shards_in_any_order_give_the_same_bytes_and_id() {
-    let a = merge(input(shards())).expect("merges");
+    let a = merge(meta(), shards()).expect("merges");
     let mut reversed = shards();
     reversed.reverse();
-    let b = merge(input(reversed)).expect("merges");
+    let b = merge(meta(), reversed).expect("merges");
     assert_eq!(a.files, b.files);
     assert_eq!(a.id, b.id);
     assert_eq!(a.id.len(), 64);
@@ -149,10 +148,10 @@ fn the_same_shards_in_any_order_give_the_same_bytes_and_id() {
 
 #[test]
 fn a_new_version_is_a_new_index_id() {
-    let a = merge(input(shards())).expect("merges");
+    let a = merge(meta(), shards()).expect("merges");
     let mut more = shards();
     more.push(module_shard("2.1.4", &[("ms", "2.1.4", "index.js", "kA")]));
-    let b = merge(input(more)).expect("merges");
+    let b = merge(meta(), more).expect("merges");
     assert_ne!(a.id, b.id);
     let manifest: serde_json::Value =
         serde_json::from_slice(&b.files["manifest.json"]).expect("json");
@@ -193,7 +192,7 @@ fn unit_rows_merge_per_slice_with_the_smallest_module() {
         owner: "tslib".into(),
         ..unit("2.1.0", HT, 10)
     }];
-    let files = merge(input(vec![a, b, t])).expect("merges").files;
+    let files = merge(meta(), vec![a, b, t]).expect("merges").files;
     let rows: Vec<humanify_core::libindex::format::UnitRow> =
         std::str::from_utf8(&files["units.bun-node-cjs-min.jsonl"])
             .unwrap()
@@ -241,7 +240,7 @@ fn the_lookup_tables_answer_what_the_row_tables_say() {
         module_bytes: 900,
     }];
     shards.push(u);
-    let files = merge(input(shards)).expect("merges").files;
+    let files = merge(meta(), shards).expect("merges").files;
     assert!(
         !files.contains_key("literals.jsonl"),
         "the literal sets live in the lookup table only"
@@ -268,4 +267,36 @@ fn the_lookup_tables_answer_what_the_row_tables_say() {
         "file 1: the S:b set, 2.0.0-2.1.3"
     );
     assert_eq!(literals.resolve("S:z"), None);
+}
+
+#[test]
+fn the_streaming_merge_refuses_a_shard_out_of_label_order() {
+    // a unit group keeps the FIRST shard's nodes and content: the order is
+    // part of the bytes, so it is checked, never assumed
+    let mut m = Merger::default();
+    m.add(module_shard("2.0.0", &[])).expect("first");
+    let err = m.add(module_shard("1.0.0", &[])).unwrap_err();
+    assert!(err.contains("out of label order"), "{err}");
+}
+
+#[test]
+fn a_unit_group_keeps_the_first_shards_nodes_whatever_order_the_list_had() {
+    use super::shard::ShardUnit;
+    let shard = |v: &str, nodes: u32| {
+        let mut s = module_shard(v, &[]);
+        s.units = vec![ShardUnit {
+            owner: "ms".into(),
+            version: v.into(),
+            file: "index.js".into(),
+            hash: H1.into(),
+            nodes,
+            content: 5,
+            module_bytes: 100,
+        }];
+        s
+    };
+    let a = merge(meta(), vec![shard("2.0.0", 41), shard("1.0.0", 40)]).expect("merges");
+    let rows: Vec<humanify_core::libindex::format::UnitRow> =
+        rows(&a.files["units.bun-node-cjs-min.jsonl"]);
+    assert_eq!(rows[0].nodes, 40, "label order: 1.0.0 first");
 }
