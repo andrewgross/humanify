@@ -174,6 +174,23 @@ impl ModuleWrapperGrammar {
         }
     }
 
+    /// The number literals the unit prints read as one number (their
+    /// start offsets): webpack's module ids
+    /// (`modules::inline_modules::webpack_module_id_literals`); none for
+    /// the other grammars.
+    pub fn blurred_literals(
+        self,
+        statements: &[oxc_ast::ast::Statement<'_>],
+        semantic: &oxc_semantic::Semantic<'_>,
+    ) -> HashSet<u32> {
+        match self {
+            ModuleWrapperGrammar::Webpack => {
+                crate::modules::inline_modules::webpack_module_id_literals(statements, semantic)
+            }
+            ModuleWrapperGrammar::BunAndEsbuild | ModuleWrapperGrammar::Rollup => HashSet::new(),
+        }
+    }
+
     /// The SCOPES this grammar writes inline in one container statement —
     /// not modules: wrappers whose statements are cut like the
     /// container's own (webpack's entry IIFEs, which hold concatenated,

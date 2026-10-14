@@ -841,6 +841,9 @@ fn the_commonjs_plugin_s_helpers_and_guards_name_rollup() {
         // commonjsGlobal
         "var c=\"undefined\"!=typeof globalThis?globalThis:\"undefined\"!=typeof window?window:\"undefined\"!=typeof global?global:\"undefined\"!=typeof self?self:{};",
         "var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};",
+        // rollup's own interop for a namespace import (_interopNamespaceDefault)
+        "\"use strict\";var e=require(\"node:os\");function a(e){var t=Object.create(null);return e&&Object.keys(e).forEach(function(n){if(\"default\"!==n){var r=Object.getOwnPropertyDescriptor(e,n);Object.defineProperty(t,n,r.get?r:{enumerable:!0,get:function(){return e[n]}})}}),t.default=e,Object.freeze(t)}",
+        "'use strict';\nfunction _interopNamespaceDefault(e) {\n\tvar n = Object.create(null);\n\tif (e) {\n\t\tObject.keys(e).forEach(function (k) {\n\t\t\tif (k !== 'default') {\n",
         // two guarded require functions
         "var r,t,s,n;var a=function(){if(t)return r;t=1;return r=1}(),b=function(){if(n)return s;n=1;return s=2}();",
         "var ms, hasRequiredMs;\nfunction requireMs () {\n\tif (hasRequiredMs) return ms;\n\thasRequiredMs = 1;\n\treturn ms = 1;\n}\nvar x, hasRequiredX;\nfunction requireX () {\n\tif (hasRequiredX) return x;\n\thasRequiredX = 1;\n\treturn x = 2;\n}\n",

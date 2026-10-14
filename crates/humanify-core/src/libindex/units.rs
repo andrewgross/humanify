@@ -203,7 +203,8 @@ pub fn bundle_unit_prints(
         .unwrap_or_default();
     let facts = crate::cut::units::BundlerFacts::recognise(code, statements, grammar, interop);
     let units = crate::cut::units::container_units(statements, &factories, &facts, true);
-    let prints = unit_prints(&units, &tables);
+    let blurred = grammar.blurred_literals(statements, semantic);
+    let prints = unit_prints(&units, &tables, &blurred);
     units
         .units
         .into_iter()
@@ -214,9 +215,13 @@ pub fn bundle_unit_prints(
 
 /// The prints of every unit (None for a container), parallel to `units`.
 /// The AST is serialized on this thread; the hashing runs in parallel.
+/// `blurred`: the start offsets of number literals read as `0` (the run's
+/// grammar's `blurred_literals`: webpack's module ids, exp105; empty for
+/// every other bundler, whose prints are unchanged).
 pub fn unit_prints(
     units: &crate::cut::units::ContainerUnits<'_>,
     tables: &SymbolTables,
+    blurred: &std::collections::HashSet<u32>,
 ) -> Vec<Option<StatementPrints>> {
     use crate::cut::units::UnitNode;
     use oxc_estree::{CompactSerializer, ESTree};
@@ -234,7 +239,34 @@ pub fn unit_prints(
         })
         .collect();
     crate::par::map_ordered(&texts, |text| {
-        let json = crate::ingest::parse_estree_json(text.as_deref()?);
+        let mut json = crate::ingest::parse_estree_json(text.as_deref()?);
+        if !blurred.is_empty() {
+            blur_numbers(&mut json, blurred);
+        }
         Some(statement_prints(&json, tables))
     })
+}
+
+/// Every number literal starting at a `blurred` offset reads as `0`.
+fn blur_numbers(node: &mut Value, blurred: &std::collections::HashSet<u32>) {
+    match node {
+        Value::Object(map) => {
+            let start = map.get("start").and_then(Value::as_u64);
+            let is_number = map.get("type").and_then(Value::as_str) == Some("Literal")
+                && map.get("value").is_some_and(Value::is_number);
+            if is_number && start.is_some_and(|s| blurred.contains(&(s as u32))) {
+                map.insert("value".into(), Value::from(0));
+                map.insert("raw".into(), Value::from("0"));
+            }
+            for v in map.values_mut() {
+                blur_numbers(v, blurred);
+            }
+        }
+        Value::Array(items) => {
+            for v in items {
+                blur_numbers(v, blurred);
+            }
+        }
+        _ => {}
+    }
 }

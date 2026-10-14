@@ -206,14 +206,22 @@ const ROLLUP_COMMONJS_GLOBAL: [&str; 2] = [
     "typeof globalThis !== 'undefined'|\"undefined\" ? globalThis : typeof window !== 'undefined'|\"undefined\" ? window : typeof global !== 'undefined'|\"undefined\" ? global : typeof self !== 'undefined'|\"undefined\" ? self : { }",
 ];
 
+/// rollup's own interop for a CommonJS output's namespace import of an
+/// external (`_interopNamespaceDefault`), minified and as written.
+const ROLLUP_INTEROP_NAMESPACE: [&str; 2] = [
+    "Object.create( null ) ; return $e && Object.keys( $e ).forEach( function ( $k ) { if ( \"default\" !== $k )",
+    "Object.create( null ) ; if ( $e ) { Object.keys( $e ).forEach( function ( $k ) { if ( $k !== 'default'|\"default\" )",
+];
+
 /// Rollup writes NO runtime: a scope-hoisted bundle is its modules'
-/// statements, renamed. What it does write, when the app pulls in
-/// CommonJS, is `@rollup/plugin-commonjs`'s helpers and guards — each a
-/// [`Shape`] signal: two guarded require functions (one is a pattern
-/// hand-written code can have), `getDefaultExportFromCjs`'s read of
-/// `default`, `commonjsGlobal`'s globalThis/window/global/self chain. A
-/// rollup build of pure ES modules carries none of them and stays unknown
-/// (the fallback). Text that holds another bundler's runtime — a module
+/// statements, renamed. What it does write is interop: its own
+/// `_interopNamespaceDefault` (a CommonJS output's namespace import of an
+/// external — a Node builtin, say) and, when the app pulls in CommonJS,
+/// `@rollup/plugin-commonjs`'s helpers and guards — each a [`Shape`]
+/// signal: two guarded require functions (one is a pattern hand-written
+/// code can have), `getDefaultExportFromCjs`'s read of `default`,
+/// `commonjsGlobal`'s globalThis/window/global/self chain. A rollup build
+/// with none of them stays unknown (the fallback). Text that holds another bundler's runtime — a module
 /// helper (Bun, esbuild) or webpack's — is not rollup's output, whatever
 /// its bundled code holds (a dependency built with rollup): nothing.
 ///
@@ -243,6 +251,14 @@ pub fn detect_rollup(code: &str) -> Vec<DetectionSignal> {
                         .any(|p| count_shapes(c, p, 1) > 0)
                 },
                 "commonjs plugin's commonjsGlobal",
+            ),
+            (
+                |c| {
+                    ROLLUP_INTEROP_NAMESPACE
+                        .iter()
+                        .any(|p| count_shapes(c, p, 1) > 0)
+                },
+                "rollup's _interopNamespaceDefault",
             ),
         ],
     )

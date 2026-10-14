@@ -1516,7 +1516,8 @@ fn discover_unscoped(
     };
     let units = crate::cut::units::container_units(statements, factories, &facts, false);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
-    let prints = crate::libindex::units::unit_prints(&units, &tables);
+    let blurred = facts.grammar.blurred_literals(statements, semantic);
+    let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);
     let looker = Looker {
         code,
         graph: &graph,
@@ -1681,7 +1682,8 @@ pub fn unit_rows(
     let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
     let units = crate::cut::units::container_units(statements, factories, &facts, false);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
-    let prints = crate::libindex::units::unit_prints(&units, &tables);
+    let blurred = facts.grammar.blurred_literals(statements, semantic);
+    let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);
     let sizes = module_bytes(&graph);
     let mut bindings = vec![0u32; graph.units.len()];
     let scoping = semantic.scoping();

@@ -138,6 +138,88 @@ fn arrow_body<'a>(a: &'a ArrowFunctionExpression<'a>) -> Option<&'a [Statement<'
     }
 }
 
+/// The module-id literals of a webpack bootstrap's container: the first
+/// argument of every call of a REQUIRE binding with a number — the
+/// bootstrap's require function (a top-level function that hands itself to
+/// a module call, `M[id](m, m.exports, r)`) and each table module's third
+/// parameter. webpack's ids hash the module's path into a range sized by
+/// the build's module count, so the same module has another id in an app
+/// than in an index build of its package (exp105): the unit prints read
+/// these as one number (`libindex::units::unit_prints`).
+pub fn webpack_module_id_literals(
+    statements: &[Statement<'_>],
+    semantic: &oxc_semantic::Semantic<'_>,
+) -> std::collections::HashSet<u32> {
+    use oxc_ast::AstKind;
+    let scoping = semantic.scoping();
+    let nodes = semantic.nodes();
+    // a reference's call: (the call, the reference's argument position)
+    let call_of = |rid: oxc_syntax::reference::ReferenceId| {
+        let node = nodes.get_node(scoping.get_reference(rid).node_id());
+        match nodes.parent_kind(node.id()) {
+            AstKind::CallExpression(c) => Some((c, node.span())),
+            _ => None,
+        }
+    };
+    let mut requires = Vec::new();
+    for s in statements {
+        match s {
+            Statement::FunctionDeclaration(f) if f.params.items.len() == 1 => {
+                let Some(symbol) = f.id.as_ref().and_then(|id| id.symbol_id.get()) else {
+                    continue;
+                };
+                let hands_itself = scoping.get_resolved_reference_ids(symbol).iter().any(|&r| {
+                    call_of(r).is_some_and(|(c, span)| {
+                        c.arguments.len() == 3 && c.arguments[2].span() == span
+                    })
+                });
+                if hands_itself {
+                    requires.push(symbol);
+                }
+            }
+            Statement::VariableDeclaration(v) => {
+                for d in &v.declarations {
+                    let Some(Expression::ObjectExpression(o)) = d.init.as_ref().map(unparen) else {
+                        continue;
+                    };
+                    if module_table(&o.properties).is_empty() {
+                        continue;
+                    }
+                    for p in &o.properties {
+                        let ObjectPropertyKind::ObjectProperty(p) = p else {
+                            continue;
+                        };
+                        let params = match unparen(&p.value) {
+                            Expression::FunctionExpression(f) => &f.params,
+                            Expression::ArrowFunctionExpression(a) => &a.params,
+                            _ => continue,
+                        };
+                        if let Some(oxc_ast::ast::BindingPattern::BindingIdentifier(id)) =
+                            params.items.get(2).map(|p| &p.pattern)
+                            && let Some(symbol) = id.symbol_id.get()
+                        {
+                            requires.push(symbol);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = std::collections::HashSet::new();
+    for symbol in requires {
+        for &r in scoping.get_resolved_reference_ids(symbol) {
+            if let Some((c, span)) = call_of(r)
+                && unparen(&c.callee).span() == span
+                && let Some(Argument::NumericLiteral(n)) = c.arguments.first()
+            {
+                out.insert(n.span.start);
+            }
+        }
+    }
+    out
+}
+
 // ---- rollup -------------------------------------------------------------------
 
 /// A guarded require function's body: no parameters, and it opens with

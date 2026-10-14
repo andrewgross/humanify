@@ -341,9 +341,11 @@ fn a_rollup_bundle_s_guarded_require_functions_are_lazy_modules() {
 /// a change to what a webpack or rollup unit is moves this digest and
 /// needs a new `LIBRARY_UNITS` version, exactly like the rows above).
 /// Kept apart so adding the two grammars moved no Bun or esbuild pin.
+/// (The row was re-pinned once on the exp105 branch, before any index
+/// held a webpack or rollup slice: webpack's module ids blurred.)
 const BUNDLER_UNIT_MODEL_PINS: &[(u64, &str)] = &[(
     3,
-    "bb93c851e60169807ad859bc95d2c1b7fa1f224b43a1dc7a8568c9f467c204cb",
+    "6f6762668259fc470ac77ca8cab7940ca4bac8e0452875347ac2b7a6178072ff",
 )];
 
 #[test]
@@ -393,4 +395,50 @@ fn the_webpack_and_rollup_unit_models_cannot_change_under_a_constant_version() {
         vec![digest.as_str()],
         "the webpack/rollup unit model's digest is {digest}; units/{version} pins {pinned:?}"
     );
+}
+
+/// exp105: webpack's module ids are hashes of the module's path into a
+/// range sized by the BUILD's module count, so one module has one id in
+/// an index build of its package and another in an app: the units read
+/// every id a require call names as one number (`n(585)` = `n(40585)`).
+#[test]
+fn webpack_module_ids_do_not_reach_a_unit_print() {
+    let build = |a: &str, b: &str| {
+        format!(
+            "(()=>{{var e={{{a}(e,t,n){{var r=n({b});e.exports=function(e){{return r(e)+\"some string content here\"+e.length}}}},{b}(e){{e.exports=function(e){{return [e,2,3].map(t=>t*e)}}}}}},t={{}};function n(r){{var o=t[r];if(void 0!==o)return o.exports;var i=t[r]={{exports:{{}}}};return e[r](i,i.exports,n),i.exports}}var o=n({a});module.exports=o}})();"
+        )
+    };
+    let prints = |code: &str| {
+        use crate::libindex::units::bundle_unit_prints;
+        let toolchain = crate::toolchain::resolve_toolchain(
+            &crate::detect::detect_bundle(code),
+            Some(humanify_model::detection::BundlerType::Webpack),
+            None,
+        );
+        let allocator = Allocator::default();
+        let ingest = Ingest::parse_unambiguous(&allocator, code);
+        let mut out: Vec<String> = bundle_unit_prints(
+            code,
+            &ingest,
+            toolchain.layout.piece,
+            toolchain.module_wrappers.piece,
+            toolchain.interop.piece,
+        )
+        .iter()
+        .flat_map(|(u, p)| {
+            std::iter::once(&p.whole)
+                .chain(&p.functions)
+                .map(move |p| format!("{:?} {}", u.kind, p.hash))
+        })
+        .collect();
+        out.sort();
+        out
+    };
+    let small = prints(&build("585", "123"));
+    let large = prints(&build("40585", "71123"));
+    assert!(!small.is_empty());
+    assert_eq!(small, large);
+    // a number that is not a module id still counts
+    let other = prints(&build("585", "123").replace("map(t=>t*e)", "map(t=>t*7)"));
+    assert_ne!(small, other);
 }
