@@ -163,11 +163,11 @@ pub struct DiscoveryOptions {
     pub contested_cover: f64,
     /// Which banner names seed (exp106; default [`BannerNames::Any`]).
     pub banner_names: BannerNames,
-    /// The self-support floor (exp106; 0 = off): an index seed whose whole
-    /// print has fewer nodes cannot be supported against the isolation
-    /// veto by claims made only through its own propagation — a small seed
-    /// needs independent corroboration before what it grew counts.
-    pub self_support_max_nodes: u32,
+    /// The lone-seed floor (exp106; 0 = off): an index seed whose whole
+    /// print has fewer nodes, and that no other seed of its package family
+    /// in the bundle corroborates, is dropped (vetoed) before the fixpoint:
+    /// nothing propagates from one small print alone.
+    pub lone_seed_max_nodes: u32,
     /// The helper floor (exp106; 0 = off): an index print held by at least
     /// this many package families is emitted helper code (a tsc / Babel /
     /// bundler helper every package that needs it inlines), no package's
@@ -191,7 +191,7 @@ impl Default for DiscoveryOptions {
             literal_conflict: false,
             contested_cover: 0.0,
             banner_names: BannerNames::Any,
-            self_support_max_nodes: 0,
+            lone_seed_max_nodes: 0,
             helper_families: 0,
             derived_families: false,
         }
@@ -1136,7 +1136,6 @@ fn isolated(
     seeds: &[Seed],
     families: &PackageFamilies,
     containment: Option<&Containment<'_>>,
-    self_support_max_nodes: u32,
 ) -> BTreeSet<u32> {
     let view = RoundView {
         st,
@@ -1154,20 +1153,39 @@ fn isolated(
         let Some(p) = view.package_of(seed.unit) else {
             continue;
         };
-        // An ambiguous seed (more than one family) or a small one (under
-        // the self-support floor) cannot vouch for itself.
-        let needs_corroboration = containment.is_some_and(|c| {
-            c.families_accepting(seed.unit) > 1
-                || (self_support_max_nodes > 0 && c.whole_nodes(seed.unit) < self_support_max_nodes)
-        });
+        let ambiguous = containment.is_some_and(|c| c.families_accepting(seed.unit) > 1);
         let supported = view.has_inside_neighbour(seed.unit, |w, q| {
-            !(needs_corroboration && view.derives_only_from(w, seed.unit)) && same(p, q)
+            !(ambiguous && view.derives_only_from(w, seed.unit)) && same(p, q)
         });
         if !supported {
             out.insert(seed.unit);
         }
     }
     out
+}
+
+/// The lone-seed floor ([`DiscoveryOptions::lone_seed_max_nodes`]): the
+/// index seeds smaller than `floor` nodes that no OTHER seed of their
+/// family (any evidence, anywhere in the bundle) corroborates. One small
+/// print is weak evidence on its own (a 480-byte function a fork copied
+/// from another project), and everything propagated from it would rest on
+/// it alone.
+fn lone_small_seeds(
+    seeds: &[Seed],
+    families: &PackageFamilies,
+    containment: &Containment<'_>,
+    floor: u32,
+) -> BTreeSet<u32> {
+    seeds
+        .iter()
+        .filter(|s| s.evidence.is_index() && containment.whole_nodes(s.unit) < floor)
+        .filter(|s| {
+            !seeds
+                .iter()
+                .any(|o| o.unit != s.unit && families.same(&o.package, &s.package))
+        })
+        .map(|s| s.unit)
+        .collect()
 }
 
 /// One seed per unit: a declaration or banner beats an index claim; among
@@ -1409,17 +1427,17 @@ pub fn discover_with(
         .collect();
     let mut active = settle_seeds(graph, seeds);
     let mut vetoed = Vec::new();
+    if let (Some(c), n @ 1..) = (containment, options.lone_seed_max_nodes) {
+        let lone = lone_small_seeds(&active, families, c, n);
+        let (gone, kept): (Vec<Seed>, Vec<Seed>) =
+            active.into_iter().partition(|s| lone.contains(&s.unit));
+        vetoed.extend(gone);
+        active = kept;
+    }
     let (st, rounds) = loop {
         let (st, rounds) = fixpoint(graph, &groups, &active, options.max_rounds, all, guard);
         let drop = match options.veto_support {
-            VetoSupport::AllRules => isolated(
-                &st,
-                &groups,
-                &active,
-                families,
-                containment,
-                options.self_support_max_nodes,
-            ),
+            VetoSupport::AllRules => isolated(&st, &groups, &active, families, containment),
             VetoSupport::WithoutModule => {
                 let (support, _) = fixpoint(
                     graph,
@@ -1429,14 +1447,7 @@ pub fn discover_with(
                     &without_module,
                     guard,
                 );
-                isolated(
-                    &support,
-                    &groups,
-                    &active,
-                    families,
-                    containment,
-                    options.self_support_max_nodes,
-                )
+                isolated(&support, &groups, &active, families, containment)
             }
         };
         if drop.is_empty() {

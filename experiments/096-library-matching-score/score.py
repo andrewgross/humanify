@@ -34,6 +34,8 @@ origins.py). A claim is RIGHT when it names the shipper or the origin (or a memb
                       collision renames). No name is read from the index: it stores none today.
 Scorer 4 (exp104 truth audit): families also joined by npm metadata (families_lib), units the map never mapped
 <unmapped> (truth_audit `carried`), dependency-gated named vendored copies as origins (truth_audit `copies`).
+Scorer 5 (exp106): rollup `?commonjs-*` virtual ids are <unmapped>; a source reached through an installed package's
+own source map keeps that package, never <app> (truth_audit.patch_sources).
 Claude Code is scored on the labelled sample: byte shares are the stratified ratio estimate (strata sizes from the
 negatives lane), counts are sample units.
 """
@@ -66,7 +68,11 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    by npm metadata (families_lib: one repository, renamed-to, GitHub fork under a scope); a unit the source map
 #    never mapped and the previous mapping's source does not contain is <unmapped> (truth_audit: carried); a
 #    dependency-gated, named vendored copy gets an origin (truth_audit: copies). Same reports, re-scored.
-SCORER_VERSION = "exp096-score/4"
+# 5: the exp106 source-table corrections (truth_audit.patch_sources): a rollup `?commonjs-*` virtual id is
+#    <unmapped> (bundler glue), and a source reached through an installed package's OWN source map (esbuild chained
+#    @angular/compiler's map out of node_modules) keeps that package instead of <app> (frozen layer chained.json).
+#    Same reports, re-scored; both rules off reproduces scorer 4's cards (verify_s4.py).
+SCORER_VERSION = "exp096-score/5"
 
 
 def r6(x):
@@ -471,6 +477,9 @@ def main():
     cm = truth_audit.load_copies_manifest()
     if cm["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the copies layer was frozen for another corpus manifest")
+    chm = truth_audit.load_chained_manifest()
+    if chm["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the chained-sources layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -484,7 +493,7 @@ def main():
         doc = json.load(open(rp))
         report = doc["libraryDiscovery"]
         slice_ = doc["toolchain"]["slice"]
-        truth = lib096.load_truth(entry)
+        truth = truth_audit.patch_sources(entry, lib096.load_truth(entry), chm)
         if report is None:
             body = score_floor(entry, truth)
         else:
@@ -518,6 +527,7 @@ def main():
         "config": {**{k: pipeline[k] for k in ("indexId", "indexBytes", "rule", "buildCommit", "binarySha256",
                                                "corpusSha256")}, "originsSha256": lib096.origins_sha(),
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
+                   "chainedSha256": truth_audit.chained_sha(),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": "test"} if test else {})},
         "bars": {"appClaimedBytes": app_total, "appBarPassed": app_total == 0,

@@ -1,6 +1,23 @@
 {
   "about": "exp104: package-family LINKS derived mechanically from npm registry metadata (never from claims or scores).",
-  "forkCandidatesWithoutGithubData": [],
+  "forkCandidatesWithoutGithubData": [
+    "@ant-design/create-react-context",
+    "@apollo/protobufjs",
+    "@changesets/format",
+    "@containerbase/base",
+    "@cypress/request",
+    "@devexpress/error-stack-parser",
+    "@eslint-community/eslint-utils",
+    "@expo/sudo-prompt",
+    "@gar/promise-retry",
+    "@lezer/yaml",
+    "@ljharb/through",
+    "@npmcli/package-json",
+    "@shikijs/vscode-textmate",
+    "@sindresorhus/slugify",
+    "@storybook/global",
+    "@xhmikosr/bin-wrapper"
+  ],
   "forkCheck": {
     "busboy / @fastify/busboy": "NOT derived: {'busboy': 'github.com/mscdex/busboy', '@fastify/busboy': 'github.com/fastify/busboy'}",
     "colors / @colors/colors": "NOT derived: {'colors': 'github.com/marak/colors.js', '@colors/colors': 'github.com/dabh/colors.js'}",
@@ -436,6 +453,12 @@
       "rule": "rename"
     },
     {
+      "a": "redux-devtools-instrument",
+      "b": "@redux-devtools/instrument",
+      "evidence": "@redux-devtools/instrument",
+      "rule": "rename"
+    },
+    {
       "a": "require-uncached",
       "b": "import-fresh",
       "evidence": "import-fresh",
@@ -838,6 +861,12 @@
       "rule": "repo"
     },
     {
+      "a": "@apidevtools/json-schema-ref-parser",
+      "b": "json-schema-ref-parser",
+      "evidence": "github.com/apidevtools/json-schema-ref-parser",
+      "rule": "repo"
+    },
+    {
       "a": "@apollo/client",
       "b": "apollo-cache",
       "evidence": "github.com/apollographql/apollo-client",
@@ -865,6 +894,48 @@
       "a": "@apollo/client",
       "b": "graphql-anywhere",
       "evidence": "github.com/apollographql/apollo-client",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/usage-reporting-protobuf",
+      "b": "apollo-server-express",
+      "evidence": "github.com/apollographql/apollo-server",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/utils.dropunuseddefinitions",
+      "b": "@apollo/utils.keyvaluecache",
+      "evidence": "github.com/apollographql/apollo-utils",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/utils.dropunuseddefinitions",
+      "b": "@apollo/utils.printwithreducedwhitespace",
+      "evidence": "github.com/apollographql/apollo-utils",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/utils.dropunuseddefinitions",
+      "b": "@apollo/utils.removealiases",
+      "evidence": "github.com/apollographql/apollo-utils",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/utils.dropunuseddefinitions",
+      "b": "@apollo/utils.sortast",
+      "evidence": "github.com/apollographql/apollo-utils",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/utils.dropunuseddefinitions",
+      "b": "@apollo/utils.stripsensitiveliterals",
+      "evidence": "github.com/apollographql/apollo-utils",
+      "rule": "repo"
+    },
+    {
+      "a": "@apollo/utils.dropunuseddefinitions",
+      "b": "@apollo/utils.usagereporting",
+      "evidence": "github.com/apollographql/apollo-utils",
       "rule": "repo"
     },
     {
@@ -923,7 +994,25 @@
     },
     {
       "a": "@ark/attest",
+      "b": "@ark/schema",
+      "evidence": "github.com/arktypeio/arktype",
+      "rule": "repo"
+    },
+    {
+      "a": "@ark/attest",
+      "b": "@ark/util",
+      "evidence": "github.com/arktypeio/arktype",
+      "rule": "repo"
+    },
+    {
+      "a": "@ark/attest",
       "b": "@arktype/attest",
+      "evidence": "github.com/arktypeio/arktype",
+      "rule": "repo"
+    },
+    {
+      "a": "@ark/attest",
+      "b": "arkregex",
       "evidence": "github.com/arktypeio/arktype",
       "rule": "repo"
     },
@@ -943,6 +1032,30 @@
       "a": "@assemblyscript/loader",
       "b": "assemblyscript",
       "evidence": "github.com/assemblyscript/assemblyscript",
+      "rule": "repo"
+    },
+    {
+      "a": "@astrojs/compiler-binding",
+      "b": "@astrojs/compiler-rs",
+      "evidence": "github.com/withastro/compiler-rs",
+      "rule": "repo"
+    },
+    {
+      "a": "@astrojs/internal-helpers",
+      "b": "@astrojs/markdown-satteri",
+      "evidence": "github.com/withastro/astro",
+      "rule": "repo"
+    },
+    {
+      "a": "@astrojs/internal-helpers",
+      "b": "@astrojs/prism",
+      "evidence": "github.com/withastro/astro",
+      "rule": "repo"
+    },
+    {
+      "a": "@astrojs/internal-helpers",
+      "b": "@astrojs/telemetry",
+      "evidence": "github.com/withastro/astro",
       "rule": "repo"
     },
     {
@@ -1068,6 +1181,12 @@
     {
       "a": "@aws-sdk/checksums",
       "b": "@aws-sdk/client-sagemaker",
+      "evidence": "github.com/aws/aws-sdk-js-v3",
+      "rule": "repo"
+    },
+    {
+      "a": "@aws-sdk/checksums",
+      "b": "@aws-sdk/client-signin",
       "evidence": "github.com/aws/aws-sdk-js-v3",
       "rule": "repo"
     },
@@ -1360,55 +1479,73 @@
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
+      "b": "@azure/app-configuration",
+      "evidence": "github.com/azure/azure-sdk-for-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@azure/abort-controller",
       "b": "@azure/core-client",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
       "b": "@azure/core-rest-pipeline",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
       "b": "@azure/core-tracing",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
+      "b": "@azure/core-util",
+      "evidence": "github.com/azure/azure-sdk-for-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@azure/abort-controller",
       "b": "@azure/cosmos",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
       "b": "@azure/data-tables",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
       "b": "@azure/identity",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
       "b": "@azure/keyvault-secrets",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
+      "b": "@azure/logger",
+      "evidence": "github.com/azure/azure-sdk-for-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@azure/abort-controller",
       "b": "@azure/storage-blob",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
     },
     {
-      "a": "@azure/app-configuration",
+      "a": "@azure/abort-controller",
       "b": "@typespec/ts-http-runtime",
       "evidence": "github.com/azure/azure-sdk-for-js",
       "rule": "repo"
@@ -1482,6 +1619,12 @@
     {
       "a": "@babel/cli",
       "b": "@babel/helper-create-regexp-features-plugin",
+      "evidence": "github.com/babel/babel",
+      "rule": "repo"
+    },
+    {
+      "a": "@babel/cli",
+      "b": "@babel/helper-environment-visitor",
       "evidence": "github.com/babel/babel",
       "rule": "repo"
     },
@@ -2435,6 +2578,12 @@
     },
     {
       "a": "@babel/cli",
+      "b": "babel-plugin-syntax-trailing-function-commas",
+      "evidence": "github.com/babel/babel",
+      "rule": "repo"
+    },
+    {
+      "a": "@babel/cli",
       "b": "babel-plugin-transform-async-generator-functions",
       "evidence": "github.com/babel/babel",
       "rule": "repo"
@@ -2806,20 +2955,86 @@
       "rule": "repo"
     },
     {
-      "a": "@changesets/changelog-github",
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/assemble-release-plan",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/changelog-github",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
       "b": "@changesets/cli",
       "evidence": "github.com/changesets/changesets",
       "rule": "repo"
     },
     {
-      "a": "@changesets/changelog-github",
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/config",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/errors",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/get-dependents-graph",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
       "b": "@changesets/get-github-info",
       "evidence": "github.com/changesets/changesets",
       "rule": "repo"
     },
     {
-      "a": "@changesets/changelog-github",
+      "a": "@changesets/apply-release-plan",
       "b": "@changesets/get-release-plan",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/git",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/parse",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/pre",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/read",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/should-skip-package",
+      "evidence": "github.com/changesets/changesets",
+      "rule": "repo"
+    },
+    {
+      "a": "@changesets/apply-release-plan",
+      "b": "@changesets/write",
       "evidence": "github.com/changesets/changesets",
       "rule": "repo"
     },
@@ -3016,127 +3231,133 @@
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
+      "b": "@conventional-changelog/template",
+      "evidence": "github.com/conventional-changelog/conventional-changelog",
+      "rule": "repo"
+    },
+    {
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-angular",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-atom",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-cli",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-codemirror",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-conventionalcommits",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-core",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-ember",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-eslint",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-express",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-jquery",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-jshint",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-preset-loader",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-changelog-writer",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-commits-filter",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-commits-parser",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "conventional-recommended-bump",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "git-raw-commits",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "git-semver-tags",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "gulp-conventional-changelog",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
     },
     {
-      "a": "@conventional-changelog/template",
+      "a": "@conventional-changelog/git-client",
       "b": "standard-changelog",
       "evidence": "github.com/conventional-changelog/conventional-changelog",
       "rule": "repo"
@@ -3898,6 +4119,12 @@
       "rule": "repo"
     },
     {
+      "a": "@electron/asar",
+      "b": "asar",
+      "evidence": "github.com/electron/asar",
+      "rule": "repo"
+    },
+    {
       "a": "@element-plus/icons-svg",
       "b": "@element-plus/icons-vue",
       "evidence": "github.com/element-plus/element-plus-icons",
@@ -4066,6 +4293,18 @@
       "rule": "repo"
     },
     {
+      "a": "@envelop/core",
+      "b": "@envelop/instrumentation",
+      "evidence": "github.com/graphql-hive/graphql-yoga",
+      "rule": "repo"
+    },
+    {
+      "a": "@envelop/core",
+      "b": "@envelop/types",
+      "evidence": "github.com/graphql-hive/graphql-yoga",
+      "rule": "repo"
+    },
+    {
       "a": "@esbuild/aix-ppc64",
       "b": "@esbuild/android-arm",
       "evidence": "github.com/evanw/esbuild",
@@ -4223,6 +4462,12 @@
     },
     {
       "a": "@eslint/compat",
+      "b": "@eslint/config-array",
+      "evidence": "github.com/eslint/rewrite",
+      "rule": "repo"
+    },
+    {
+      "a": "@eslint/compat",
       "b": "@eslint/config-helpers",
       "evidence": "github.com/eslint/rewrite",
       "rule": "repo"
@@ -4230,6 +4475,12 @@
     {
       "a": "@eslint/compat",
       "b": "@eslint/core",
+      "evidence": "github.com/eslint/rewrite",
+      "rule": "repo"
+    },
+    {
+      "a": "@eslint/compat",
+      "b": "@eslint/object-schema",
       "evidence": "github.com/eslint/rewrite",
       "rule": "repo"
     },
@@ -4252,25 +4503,121 @@
       "rule": "repo"
     },
     {
-      "a": "@expo/env",
+      "a": "@expo/config",
+      "b": "@expo/config-plugins",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/env",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/image-utils",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/inline-modules",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/json-file",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/metro-config",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/metro-file-map",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/osascript",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/package-manager",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
       "b": "@expo/plist",
       "evidence": "github.com/expo/expo",
       "rule": "repo"
     },
     {
-      "a": "@expo/env",
+      "a": "@expo/config",
+      "b": "@expo/prebuild-config",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/require-utils",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/router-server",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/schema-utils",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "@expo/xcpretty",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
       "b": "eslint-config-universe",
       "evidence": "github.com/expo/expo",
       "rule": "repo"
     },
     {
-      "a": "@expo/env",
+      "a": "@expo/config",
       "b": "expo-module-scripts",
       "evidence": "github.com/expo/expo",
       "rule": "repo"
     },
     {
-      "a": "@expo/env",
+      "a": "@expo/config",
+      "b": "expo-modules-autolinking",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
+      "b": "expo-server",
+      "evidence": "github.com/expo/expo",
+      "rule": "repo"
+    },
+    {
+      "a": "@expo/config",
       "b": "expo-sqlite",
       "evidence": "github.com/expo/expo",
       "rule": "repo"
@@ -4313,6 +4660,12 @@
     },
     {
       "a": "@floating-ui/core",
+      "b": "@floating-ui/devtools",
+      "evidence": "github.com/floating-ui/floating-ui",
+      "rule": "repo"
+    },
+    {
+      "a": "@floating-ui/core",
       "b": "@floating-ui/dom",
       "evidence": "github.com/floating-ui/floating-ui",
       "rule": "repo"
@@ -4336,14 +4689,494 @@
       "rule": "repo"
     },
     {
-      "a": "@fluentui/eslint-plugin",
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/dom-utilities",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/eslint-plugin",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/keyboard-keys",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/priority-overflow",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-accordion",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-aria",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-avatar",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-badge",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-breadcrumb",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-button",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-card",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-carousel",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-checkbox",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-color-picker",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-combobox",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
       "b": "@fluentui/react-component-event-listener",
       "evidence": "github.com/microsoft/fluentui",
       "rule": "repo"
     },
     {
-      "a": "@fluentui/eslint-plugin",
+      "a": "@fluentui/date-time-utilities",
       "b": "@fluentui/react-component-ref",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-components",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-compose",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-context-selector",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-dialog",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-divider",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-drawer",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-field",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-focus",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-image",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-infolabel",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-input",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-jsx-runtime",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-label",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-link",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-list",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-menu",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-message-bar",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-motion",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-motion-components-preview",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-nav",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-overflow",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-persona",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-popover",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-portal",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-positioning",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-progress",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-provider",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-radio",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-rating",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-search",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-select",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-shared-contexts",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-skeleton",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-slider",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-spinbutton",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-spinner",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-stylesheets",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-swatch-picker",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-switch",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-table",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-tabs",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-tabster",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-tag-picker",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-tags",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-teaching-popover",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-text",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-textarea",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-theme",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-theme-provider",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-toast",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-toolbar",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-tooltip",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-tree",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-utilities",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/react-window-provider",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@fluentui/theme",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/foundation",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/icons",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/merge-styles",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/react-hooks",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/set-version",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/styling",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "@uifabric/utilities",
+      "evidence": "github.com/microsoft/fluentui",
+      "rule": "repo"
+    },
+    {
+      "a": "@fluentui/date-time-utilities",
+      "b": "office-ui-fabric-react",
       "evidence": "github.com/microsoft/fluentui",
       "rule": "repo"
     },
@@ -4373,6 +5206,18 @@
     },
     {
       "a": "@fontsource-variable/inter",
+      "b": "@fontsource/dm-sans",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
+      "b": "@fontsource/ibm-plex-mono",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
       "b": "@fontsource/maple-mono",
       "evidence": "github.com/fontsource/font-files",
       "rule": "repo"
@@ -4380,6 +5225,12 @@
     {
       "a": "@fontsource-variable/inter",
       "b": "@fontsource/noto-serif",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
+      "b": "@fontsource/roboto",
       "evidence": "github.com/fontsource/font-files",
       "rule": "repo"
     },
@@ -4403,6 +5254,18 @@
     },
     {
       "a": "@formatjs/ecma402-abstract",
+      "b": "@formatjs/intl",
+      "evidence": "github.com/formatjs/formatjs",
+      "rule": "repo"
+    },
+    {
+      "a": "@formatjs/ecma402-abstract",
+      "b": "@formatjs/intl-localematcher",
+      "evidence": "github.com/formatjs/formatjs",
+      "rule": "repo"
+    },
+    {
+      "a": "@formatjs/ecma402-abstract",
       "b": "intl-messageformat",
       "evidence": "github.com/formatjs/formatjs",
       "rule": "repo"
@@ -4416,6 +5279,18 @@
     {
       "a": "@fortawesome/fontawesome-free",
       "b": "@fortawesome/fontawesome-svg-core",
+      "evidence": "github.com/fortawesome/font-awesome",
+      "rule": "repo"
+    },
+    {
+      "a": "@fortawesome/fontawesome-free",
+      "b": "@fortawesome/free-brands-svg-icons",
+      "evidence": "github.com/fortawesome/font-awesome",
+      "rule": "repo"
+    },
+    {
+      "a": "@fortawesome/fontawesome-free",
+      "b": "@fortawesome/free-regular-svg-icons",
       "evidence": "github.com/fortawesome/font-awesome",
       "rule": "repo"
     },
@@ -4624,15 +5499,141 @@
       "rule": "repo"
     },
     {
-      "a": "@graphql-tools/merge",
+      "a": "@graphql-codegen/core",
+      "b": "@graphql-codegen/plugin-helpers",
+      "evidence": "github.com/dotansimha/graphql-code-generator",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-hive/signal",
+      "b": "@graphql-tools/batch-execute",
+      "evidence": "github.com/graphql-hive/gateway",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-hive/signal",
+      "b": "@graphql-tools/delegate",
+      "evidence": "github.com/graphql-hive/gateway",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-hive/signal",
+      "b": "@graphql-tools/executor-common",
+      "evidence": "github.com/graphql-hive/gateway",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-hive/signal",
+      "b": "@graphql-tools/executor-graphql-ws",
+      "evidence": "github.com/graphql-hive/gateway",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-hive/signal",
+      "b": "@graphql-tools/executor-http",
+      "evidence": "github.com/graphql-hive/gateway",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-hive/signal",
+      "b": "@graphql-tools/wrap",
+      "evidence": "github.com/graphql-hive/gateway",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/code-file-loader",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/executor",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/executor-legacy-ws",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/git-loader",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/github-loader",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/graphql-file-loader",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/graphql-tag-pluck",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/import",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/json-file-loader",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/load",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/merge",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
       "b": "@graphql-tools/schema",
       "evidence": "github.com/ardatan/graphql-tools",
       "rule": "repo"
     },
     {
-      "a": "@graphql-tools/merge",
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "@graphql-tools/url-loader",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
       "b": "@graphql-tools/utils",
       "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@graphql-tools/apollo-engine-loader",
+      "b": "cross-inspect",
+      "evidence": "github.com/ardatan/graphql-tools",
+      "rule": "repo"
+    },
+    {
+      "a": "@griffel/core",
+      "b": "@griffel/react",
+      "evidence": "github.com/microsoft/griffel",
       "rule": "repo"
     },
     {
@@ -4668,6 +5669,12 @@
     {
       "a": "@headlessui/react",
       "b": "@headlessui/tailwindcss",
+      "evidence": "github.com/tailwindlabs/headlessui",
+      "rule": "repo"
+    },
+    {
+      "a": "@headlessui/react",
+      "b": "@headlessui/vue",
       "evidence": "github.com/tailwindlabs/headlessui",
       "rule": "repo"
     },
@@ -5176,6 +6183,12 @@
       "rule": "repo"
     },
     {
+      "a": "@humanfs/core",
+      "b": "@humanfs/node",
+      "evidence": "github.com/humanwhocodes/humanfs",
+      "rule": "repo"
+    },
+    {
       "a": "@huolala-tech/page-spy-base",
       "b": "@huolala-tech/page-spy-browser",
       "evidence": "github.com/huolalatech/page-spy",
@@ -5227,6 +6240,12 @@
       "a": "@hutson/eslint-config",
       "b": "semantic-release-gitlab",
       "evidence": "gitlab.com/hyper-expanse/open-source",
+      "rule": "repo"
+    },
+    {
+      "a": "@hypnosphi/create-react-context",
+      "b": "create-react-context",
+      "evidence": "github.com/thejameskyle/create-react-context",
       "rule": "repo"
     },
     {
@@ -6431,6 +7450,12 @@
     },
     {
       "a": "@jest/console",
+      "b": "jest-get-type",
+      "evidence": "github.com/jestjs/jest",
+      "rule": "repo"
+    },
+    {
+      "a": "@jest/console",
       "b": "jest-haste-map",
       "evidence": "github.com/jestjs/jest",
       "rule": "repo"
@@ -7240,6 +8265,30 @@
       "rule": "repo"
     },
     {
+      "a": "@manypkg/find-root",
+      "b": "@manypkg/get-packages",
+      "evidence": "github.com/thinkmill/manypkg",
+      "rule": "repo"
+    },
+    {
+      "a": "@manypkg/find-root",
+      "b": "@manypkg/tools",
+      "evidence": "github.com/thinkmill/manypkg",
+      "rule": "repo"
+    },
+    {
+      "a": "@mapbox/node-pre-gyp",
+      "b": "node-pre-gyp",
+      "evidence": "github.com/mapbox/node-pre-gyp",
+      "rule": "repo"
+    },
+    {
+      "a": "@material-ui/core",
+      "b": "@material-ui/icons",
+      "evidence": "github.com/mui-org/material-ui",
+      "rule": "repo"
+    },
+    {
       "a": "@material-ui/core",
       "b": "@material-ui/styles",
       "evidence": "github.com/mui-org/material-ui",
@@ -7588,8 +8637,26 @@
       "rule": "repo"
     },
     {
+      "a": "@messageformat/core",
+      "b": "@messageformat/parser",
+      "evidence": "github.com/messageformat/messageformat",
+      "rule": "repo"
+    },
+    {
+      "a": "@messageformat/core",
+      "b": "@messageformat/runtime",
+      "evidence": "github.com/messageformat/messageformat",
+      "rule": "repo"
+    },
+    {
       "a": "@microsoft/api-documenter",
       "b": "@microsoft/api-extractor",
+      "evidence": "github.com/microsoft/rushstack",
+      "rule": "repo"
+    },
+    {
+      "a": "@microsoft/api-documenter",
+      "b": "@microsoft/load-themed-styles",
       "evidence": "github.com/microsoft/rushstack",
       "rule": "repo"
     },
@@ -7650,6 +8717,12 @@
     {
       "a": "@mui/core-downloads-tracker",
       "b": "@mui/icons-material",
+      "evidence": "github.com/mui/material-ui",
+      "rule": "repo"
+    },
+    {
+      "a": "@mui/core-downloads-tracker",
+      "b": "@mui/lab",
       "evidence": "github.com/mui/material-ui",
       "rule": "repo"
     },
@@ -7756,6 +8829,12 @@
       "rule": "repo"
     },
     {
+      "a": "@node-rs/crc32",
+      "b": "@node-rs/xxhash-linux-x64-gnu",
+      "evidence": "github.com/napi-rs/node-rs",
+      "rule": "repo"
+    },
+    {
       "a": "@nodelib/fs.macchiato",
       "b": "@nodelib/fs.scandir",
       "evidence": "github.com/nodelib/nodelib",
@@ -7774,6 +8853,48 @@
       "rule": "repo"
     },
     {
+      "a": "@npmcli/arborist",
+      "b": "libnpmaccess",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@npmcli/arborist",
+      "b": "libnpmhook",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@npmcli/arborist",
+      "b": "libnpmorg",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@npmcli/arborist",
+      "b": "libnpmpublish",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@npmcli/arborist",
+      "b": "libnpmsearch",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@npmcli/arborist",
+      "b": "libnpmteam",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@npmcli/arborist",
+      "b": "npm",
+      "evidence": "github.com/npm/cli",
+      "rule": "repo"
+    },
+    {
       "a": "@nuxt/kit",
       "b": "@nuxt/schema",
       "evidence": "github.com/nuxt/nuxt",
@@ -7788,6 +8909,12 @@
     {
       "a": "@opentelemetry/api",
       "b": "@opentelemetry/api-logs",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
+      "b": "@opentelemetry/configuration",
       "evidence": "github.com/open-telemetry/opentelemetry-js",
       "rule": "repo"
     },
@@ -7817,6 +8944,12 @@
     },
     {
       "a": "@opentelemetry/api",
+      "b": "@opentelemetry/exporter-logs-otlp-proto",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
       "b": "@opentelemetry/exporter-metrics-otlp-grpc",
       "evidence": "github.com/open-telemetry/opentelemetry-js",
       "rule": "repo"
@@ -7824,6 +8957,18 @@
     {
       "a": "@opentelemetry/api",
       "b": "@opentelemetry/exporter-metrics-otlp-http",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
+      "b": "@opentelemetry/exporter-metrics-otlp-proto",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
+      "b": "@opentelemetry/exporter-prometheus",
       "evidence": "github.com/open-telemetry/opentelemetry-js",
       "rule": "repo"
     },
@@ -7842,6 +8987,12 @@
     {
       "a": "@opentelemetry/api",
       "b": "@opentelemetry/exporter-trace-otlp-proto",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
+      "b": "@opentelemetry/exporter-zipkin",
       "evidence": "github.com/open-telemetry/opentelemetry-js",
       "rule": "repo"
     },
@@ -7872,6 +9023,18 @@
     {
       "a": "@opentelemetry/api",
       "b": "@opentelemetry/otlp-transformer",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
+      "b": "@opentelemetry/propagator-b3",
+      "evidence": "github.com/open-telemetry/opentelemetry-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@opentelemetry/api",
+      "b": "@opentelemetry/propagator-jaeger",
       "evidence": "github.com/open-telemetry/opentelemetry-js",
       "rule": "repo"
     },
@@ -8225,6 +9388,12 @@
     },
     {
       "a": "@oxc-project/types",
+      "b": "oxc-transform",
+      "evidence": "github.com/oxc-project/oxc",
+      "rule": "repo"
+    },
+    {
+      "a": "@oxc-project/types",
       "b": "oxfmt",
       "evidence": "github.com/oxc-project/oxc",
       "rule": "repo"
@@ -8239,6 +9408,12 @@
       "a": "@oxc-project/types",
       "b": "oxlint-plugin-eslint",
       "evidence": "github.com/oxc-project/oxc",
+      "rule": "repo"
+    },
+    {
+      "a": "@oxc-resolver/binding-linux-x64-gnu",
+      "b": "oxc-resolver",
+      "evidence": "github.com/oxc-project/oxc-resolver",
       "rule": "repo"
     },
     {
@@ -8585,6 +9760,12 @@
     },
     {
       "a": "@pnpm/catalogs.protocol-parser",
+      "b": "@pnpm/deps.graph-sequencer",
+      "evidence": "github.com/pnpm/pnpm",
+      "rule": "repo"
+    },
+    {
+      "a": "@pnpm/catalogs.protocol-parser",
       "b": "@pnpm/error",
       "evidence": "github.com/pnpm/pnpm",
       "rule": "repo"
@@ -8686,6 +9867,12 @@
       "rule": "repo"
     },
     {
+      "a": "@popperjs/core",
+      "b": "@sxzz/popperjs-es",
+      "evidence": "github.com/popperjs/popper-core",
+      "rule": "repo"
+    },
+    {
       "a": "@posthog/browser-common",
       "b": "@posthog/core",
       "evidence": "github.com/posthog/posthog-js",
@@ -8740,9 +9927,21 @@
       "rule": "repo"
     },
     {
+      "a": "@prisma/cli-engine",
+      "b": "prisma",
+      "evidence": "github.com/prisma/prisma-cli",
+      "rule": "repo"
+    },
+    {
       "a": "@prisma/client",
       "b": "@prisma/driver-adapter-utils",
       "evidence": "github.com/prisma/prisma",
+      "rule": "repo"
+    },
+    {
+      "a": "@prisma/orm-framework",
+      "b": "@prisma/orm-toolchain",
+      "evidence": "github.com/prisma/orm",
       "rule": "repo"
     },
     {
@@ -8831,13 +10030,31 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-accessible-icon",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-accordion",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-alert-dialog",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-arrow",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-aspect-ratio",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
@@ -8879,6 +10096,12 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-context-menu",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-dialog",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
@@ -8897,6 +10120,12 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-dropdown-menu",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-focus-guards",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
@@ -8909,7 +10138,55 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-form",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-hover-card",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-id",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-label",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-menu",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-menubar",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-navigation-menu",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-one-time-password-field",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-password-toggle-field",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
@@ -8945,6 +10222,24 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-progress",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-radio-group",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-roving-focus",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-scroll-area",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
@@ -8957,13 +10252,61 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-separator",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-slider",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-slot",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-switch",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-tabs",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-toast",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-toggle",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-toggle-group",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-toolbar",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-tooltip",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
@@ -8987,6 +10330,12 @@
     },
     {
       "a": "@radix-ui/number",
+      "b": "@radix-ui/react-use-escape-keydown",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
       "b": "@radix-ui/react-use-is-hydrated",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
@@ -8994,6 +10343,12 @@
     {
       "a": "@radix-ui/number",
       "b": "@radix-ui/react-use-layout-effect",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "@radix-ui/react-use-previous",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
@@ -9018,6 +10373,12 @@
     {
       "a": "@radix-ui/number",
       "b": "@radix-ui/rect",
+      "evidence": "github.com/radix-ui/primitives",
+      "rule": "repo"
+    },
+    {
+      "a": "@radix-ui/number",
+      "b": "radix-ui",
       "evidence": "github.com/radix-ui/primitives",
       "rule": "repo"
     },
@@ -9226,9 +10587,123 @@
       "rule": "repo"
     },
     {
+      "a": "@reach/auto-id",
+      "b": "@reach/descendants",
+      "evidence": "github.com/reach/reach-ui",
+      "rule": "repo"
+    },
+    {
+      "a": "@reach/auto-id",
+      "b": "@reach/tabs",
+      "evidence": "github.com/reach/reach-ui",
+      "rule": "repo"
+    },
+    {
+      "a": "@reach/auto-id",
+      "b": "@reach/utils",
+      "evidence": "github.com/reach/reach-ui",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-dnd/asap",
+      "b": "@react-dnd/invariant",
+      "evidence": "github.com/react-dnd/react-dnd",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-dnd/asap",
+      "b": "@react-dnd/shallowequal",
+      "evidence": "github.com/react-dnd/react-dnd",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-dnd/asap",
+      "b": "dnd-core",
+      "evidence": "github.com/react-dnd/react-dnd",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-dnd/asap",
+      "b": "react-dnd",
+      "evidence": "github.com/react-dnd/react-dnd",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-dnd/asap",
+      "b": "react-dnd-html5-backend",
+      "evidence": "github.com/react-dnd/react-dnd",
+      "rule": "repo"
+    },
+    {
       "a": "@react-email/components",
       "b": "react-email",
       "evidence": "github.com/resend/react-email",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-leaflet/core",
+      "b": "react-leaflet",
+      "evidence": "github.com/paullecam/react-leaflet",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-native/debugger-frontend",
+      "b": "@react-native/debugger-shell",
+      "evidence": "github.com/react/react-native",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-native/debugger-frontend",
+      "b": "@react-native/dev-middleware",
+      "evidence": "github.com/react/react-native",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-native/debugger-frontend",
+      "b": "@react-native/normalize-colors",
+      "evidence": "github.com/react/react-native",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-native/debugger-frontend",
+      "b": "react-native",
+      "evidence": "github.com/react/react-native",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-spring/animated",
+      "b": "@react-spring/core",
+      "evidence": "github.com/pmndrs/react-spring",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-spring/animated",
+      "b": "@react-spring/rafz",
+      "evidence": "github.com/pmndrs/react-spring",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-spring/animated",
+      "b": "@react-spring/shared",
+      "evidence": "github.com/pmndrs/react-spring",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-spring/animated",
+      "b": "@react-spring/types",
+      "evidence": "github.com/pmndrs/react-spring",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-spring/animated",
+      "b": "@react-spring/web",
+      "evidence": "github.com/pmndrs/react-spring",
+      "rule": "repo"
+    },
+    {
+      "a": "@react-spring/animated",
+      "b": "react-spring",
+      "evidence": "github.com/pmndrs/react-spring",
       "rule": "repo"
     },
     {
@@ -9246,6 +10721,12 @@
     {
       "a": "@redux-devtools/app",
       "b": "@redux-devtools/core",
+      "evidence": "github.com/reduxjs/redux-devtools",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-devtools/app",
+      "b": "@redux-devtools/extension",
       "evidence": "github.com/reduxjs/redux-devtools",
       "rule": "repo"
     },
@@ -9343,6 +10824,42 @@
       "a": "@redux-devtools/app",
       "b": "redux-devtools",
       "evidence": "github.com/reduxjs/redux-devtools",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-devtools/app",
+      "b": "redux-devtools-instrument",
+      "evidence": "github.com/reduxjs/redux-devtools",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-saga/core",
+      "b": "@redux-saga/deferred",
+      "evidence": "github.com/redux-saga/redux-saga",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-saga/core",
+      "b": "@redux-saga/delay-p",
+      "evidence": "github.com/redux-saga/redux-saga",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-saga/core",
+      "b": "@redux-saga/is",
+      "evidence": "github.com/redux-saga/redux-saga",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-saga/core",
+      "b": "@redux-saga/symbols",
+      "evidence": "github.com/redux-saga/redux-saga",
+      "rule": "repo"
+    },
+    {
+      "a": "@redux-saga/core",
+      "b": "redux-saga",
+      "evidence": "github.com/redux-saga/redux-saga",
       "rule": "repo"
     },
     {
@@ -9887,6 +11404,18 @@
     },
     {
       "a": "@sentry-internal/eslint-config-sdk",
+      "b": "@sentry-internal/feedback",
+      "evidence": "github.com/getsentry/sentry-javascript",
+      "rule": "repo"
+    },
+    {
+      "a": "@sentry-internal/eslint-config-sdk",
+      "b": "@sentry-internal/replay-canvas",
+      "evidence": "github.com/getsentry/sentry-javascript",
+      "rule": "repo"
+    },
+    {
+      "a": "@sentry-internal/eslint-config-sdk",
       "b": "@sentry-internal/tracing",
       "evidence": "github.com/getsentry/sentry-javascript",
       "rule": "repo"
@@ -9942,6 +11471,12 @@
     {
       "a": "@sentry-internal/eslint-config-sdk",
       "b": "@sentry/opentelemetry",
+      "evidence": "github.com/getsentry/sentry-javascript",
+      "rule": "repo"
+    },
+    {
+      "a": "@sentry-internal/eslint-config-sdk",
+      "b": "@sentry/replay",
       "evidence": "github.com/getsentry/sentry-javascript",
       "rule": "repo"
     },
@@ -10048,7 +11583,43 @@
       "rule": "repo"
     },
     {
-      "a": "@shikijs/vitepress-twoslash",
+      "a": "@shikijs/core",
+      "b": "@shikijs/engine-oniguruma",
+      "evidence": "github.com/shikijs/shiki",
+      "rule": "repo"
+    },
+    {
+      "a": "@shikijs/core",
+      "b": "@shikijs/langs",
+      "evidence": "github.com/shikijs/shiki",
+      "rule": "repo"
+    },
+    {
+      "a": "@shikijs/core",
+      "b": "@shikijs/primitive",
+      "evidence": "github.com/shikijs/shiki",
+      "rule": "repo"
+    },
+    {
+      "a": "@shikijs/core",
+      "b": "@shikijs/themes",
+      "evidence": "github.com/shikijs/shiki",
+      "rule": "repo"
+    },
+    {
+      "a": "@shikijs/core",
+      "b": "@shikijs/types",
+      "evidence": "github.com/shikijs/shiki",
+      "rule": "repo"
+    },
+    {
+      "a": "@shikijs/core",
+      "b": "@shikijs/vitepress-twoslash",
+      "evidence": "github.com/shikijs/shiki",
+      "rule": "repo"
+    },
+    {
+      "a": "@shikijs/core",
       "b": "shiki",
       "evidence": "github.com/shikijs/shiki",
       "rule": "repo"
@@ -10057,6 +11628,36 @@
       "a": "@shinnn/eslint-config",
       "b": "@shinnn/eslint-config-node",
       "evidence": "github.com/shinnn/eslint-config",
+      "rule": "repo"
+    },
+    {
+      "a": "@sigstore/bundle",
+      "b": "@sigstore/core",
+      "evidence": "github.com/sigstore/sigstore-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@sigstore/bundle",
+      "b": "@sigstore/sign",
+      "evidence": "github.com/sigstore/sigstore-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@sigstore/bundle",
+      "b": "@sigstore/tuf",
+      "evidence": "github.com/sigstore/sigstore-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@sigstore/bundle",
+      "b": "@sigstore/verify",
+      "evidence": "github.com/sigstore/sigstore-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@sigstore/bundle",
+      "b": "sigstore",
+      "evidence": "github.com/sigstore/sigstore-js",
       "rule": "repo"
     },
     {
@@ -10069,6 +11670,12 @@
       "a": "@simple-git/args-pathspec",
       "b": "simple-git",
       "evidence": "github.com/steveukx/git-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@simple-libs/child-process-utils",
+      "b": "@simple-libs/stream-utils",
+      "evidence": "github.com/trigensoftware/simple-libs",
       "rule": "repo"
     },
     {
@@ -10768,7 +12375,13 @@
       "rule": "repo"
     },
     {
-      "a": "@swc-node/jest",
+      "a": "@swc-node/core",
+      "b": "@swc-node/jest",
+      "evidence": "github.com/swc-project/swc-node",
+      "rule": "repo"
+    },
+    {
+      "a": "@swc-node/core",
       "b": "@swc-node/register",
       "evidence": "github.com/swc-project/swc-node",
       "rule": "repo"
@@ -10777,6 +12390,12 @@
       "a": "@swc/cli",
       "b": "@swc/jest",
       "evidence": "github.com/swc-project/pkgs",
+      "rule": "repo"
+    },
+    {
+      "a": "@swc/core",
+      "b": "@swc/core-linux-x64-gnu",
+      "evidence": "github.com/swc-project/swc",
       "rule": "repo"
     },
     {
@@ -11227,6 +12846,18 @@
       "a": "@tsdown/css",
       "b": "tsdown",
       "evidence": "github.com/rolldown/tsdown",
+      "rule": "repo"
+    },
+    {
+      "a": "@tufjs/canonical-json",
+      "b": "@tufjs/models",
+      "evidence": "github.com/theupdateframework/tuf-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@tufjs/canonical-json",
+      "b": "tuf-js",
+      "evidence": "github.com/theupdateframework/tuf-js",
       "rule": "repo"
     },
     {
@@ -14831,6 +16462,12 @@
     },
     {
       "a": "@vue/compat",
+      "b": "@vue/reactivity-transform",
+      "evidence": "github.com/vuejs/core",
+      "rule": "repo"
+    },
+    {
+      "a": "@vue/compat",
       "b": "@vue/runtime-core",
       "evidence": "github.com/vuejs/core",
       "rule": "repo"
@@ -15071,6 +16708,12 @@
     },
     {
       "a": "@webassemblyjs/ast",
+      "b": "@webassemblyjs/helper-module-context",
+      "evidence": "github.com/xtuc/webassemblyjs",
+      "rule": "repo"
+    },
+    {
+      "a": "@webassemblyjs/ast",
       "b": "@webassemblyjs/helper-numbers",
       "evidence": "github.com/xtuc/webassemblyjs",
       "rule": "repo"
@@ -15202,7 +16845,25 @@
       "rule": "repo"
     },
     {
-      "a": "@whatwg-node/fetch",
+      "a": "@whatwg-node/disposablestack",
+      "b": "@whatwg-node/fetch",
+      "evidence": "github.com/ardatan/whatwg-node",
+      "rule": "repo"
+    },
+    {
+      "a": "@whatwg-node/disposablestack",
+      "b": "@whatwg-node/node-fetch",
+      "evidence": "github.com/ardatan/whatwg-node",
+      "rule": "repo"
+    },
+    {
+      "a": "@whatwg-node/disposablestack",
+      "b": "@whatwg-node/promise-helpers",
+      "evidence": "github.com/ardatan/whatwg-node",
+      "rule": "repo"
+    },
+    {
+      "a": "@whatwg-node/disposablestack",
       "b": "@whatwg-node/server",
       "evidence": "github.com/ardatan/whatwg-node",
       "rule": "repo"
@@ -15941,7 +17602,25 @@
     },
     {
       "a": "camel-case",
+      "b": "is-lower-case",
+      "evidence": "github.com/blakeembrey/change-case",
+      "rule": "repo"
+    },
+    {
+      "a": "camel-case",
+      "b": "is-upper-case",
+      "evidence": "github.com/blakeembrey/change-case",
+      "rule": "repo"
+    },
+    {
+      "a": "camel-case",
       "b": "lower-case",
+      "evidence": "github.com/blakeembrey/change-case",
+      "rule": "repo"
+    },
+    {
+      "a": "camel-case",
+      "b": "lower-case-first",
       "evidence": "github.com/blakeembrey/change-case",
       "rule": "repo"
     },
@@ -15978,6 +17657,12 @@
     {
       "a": "camel-case",
       "b": "snake-case",
+      "evidence": "github.com/blakeembrey/change-case",
+      "rule": "repo"
+    },
+    {
+      "a": "camel-case",
+      "b": "swap-case",
       "evidence": "github.com/blakeembrey/change-case",
       "rule": "repo"
     },
@@ -16336,6 +18021,30 @@
       "rule": "repo"
     },
     {
+      "a": "discord-rpc",
+      "b": "discord-rpc-patch",
+      "evidence": "github.com/discordjs/rpc",
+      "rule": "repo"
+    },
+    {
+      "a": "drizzle-kit",
+      "b": "drizzle-orm",
+      "evidence": "github.com/drizzle-team/drizzle-orm",
+      "rule": "repo"
+    },
+    {
+      "a": "embla-carousel",
+      "b": "embla-carousel-autoplay",
+      "evidence": "github.com/davidjerleke/embla-carousel",
+      "rule": "repo"
+    },
+    {
+      "a": "embla-carousel",
+      "b": "embla-carousel-fade",
+      "evidence": "github.com/davidjerleke/embla-carousel",
+      "rule": "repo"
+    },
+    {
       "a": "emoji-datasource",
       "b": "emoji-datasource-twitter",
       "evidence": "github.com/iamcal/emoji-data",
@@ -16493,6 +18202,18 @@
     },
     {
       "a": "flow-bin",
+      "b": "flow-enums-runtime",
+      "evidence": "github.com/facebook/flow",
+      "rule": "repo"
+    },
+    {
+      "a": "flow-bin",
+      "b": "flow-estree",
+      "evidence": "github.com/facebook/flow",
+      "rule": "repo"
+    },
+    {
+      "a": "flow-bin",
       "b": "flow-parser",
       "evidence": "github.com/facebook/flow",
       "rule": "repo"
@@ -16585,6 +18306,12 @@
       "a": "helmet",
       "b": "x-xss-protection",
       "evidence": "github.com/helmetjs/helmet",
+      "rule": "repo"
+    },
+    {
+      "a": "hermes-estree",
+      "b": "hermes-parser",
+      "evidence": "github.com/facebook/hermes",
       "rule": "repo"
     },
     {
@@ -16691,6 +18418,18 @@
     },
     {
       "a": "just-curry-it",
+      "b": "just-diff",
+      "evidence": "github.com/angus-c/just",
+      "rule": "repo"
+    },
+    {
+      "a": "just-curry-it",
+      "b": "just-diff-apply",
+      "evidence": "github.com/angus-c/just",
+      "rule": "repo"
+    },
+    {
+      "a": "just-curry-it",
       "b": "just-flatten-it",
       "evidence": "github.com/angus-c/just",
       "rule": "repo"
@@ -16708,6 +18447,12 @@
       "rule": "repo"
     },
     {
+      "a": "launder",
+      "b": "sanitize-html",
+      "evidence": "github.com/apostrophecms/apostrophe",
+      "rule": "repo"
+    },
+    {
       "a": "legacy-javascript",
       "b": "lighthouse",
       "evidence": "github.com/googlechrome/lighthouse",
@@ -16717,42 +18462,6 @@
       "a": "legacy-javascript",
       "b": "lighthouse-logger",
       "evidence": "github.com/googlechrome/lighthouse",
-      "rule": "repo"
-    },
-    {
-      "a": "libnpmaccess",
-      "b": "libnpmhook",
-      "evidence": "github.com/npm/cli",
-      "rule": "repo"
-    },
-    {
-      "a": "libnpmaccess",
-      "b": "libnpmorg",
-      "evidence": "github.com/npm/cli",
-      "rule": "repo"
-    },
-    {
-      "a": "libnpmaccess",
-      "b": "libnpmpublish",
-      "evidence": "github.com/npm/cli",
-      "rule": "repo"
-    },
-    {
-      "a": "libnpmaccess",
-      "b": "libnpmsearch",
-      "evidence": "github.com/npm/cli",
-      "rule": "repo"
-    },
-    {
-      "a": "libnpmaccess",
-      "b": "libnpmteam",
-      "evidence": "github.com/npm/cli",
-      "rule": "repo"
-    },
-    {
-      "a": "libnpmaccess",
-      "b": "npm",
-      "evidence": "github.com/npm/cli",
       "rule": "repo"
     },
     {
@@ -16973,7 +18682,19 @@
     },
     {
       "a": "lodash",
+      "b": "lodash.forin",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
       "b": "lodash.get",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
+      "b": "lodash.groupby",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
     },
@@ -17076,6 +18797,12 @@
     {
       "a": "lodash",
       "b": "lodash.istypedarray",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
+      "b": "lodash.isundefined",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
     },
@@ -17267,6 +18994,12 @@
     },
     {
       "a": "lodash",
+      "b": "lodash.uniqueid",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
       "b": "lodash.upperfirst",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
@@ -17317,6 +19050,72 @@
       "a": "metascraper",
       "b": "metascraper-title",
       "evidence": "github.com/microlinkhq/metascraper",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-cache",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-cache-key",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-config",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-core",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-file-map",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-resolver",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-source-map",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-symbolicate",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-transform-plugins",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "metro-transform-worker",
+      "evidence": "github.com/react/metro",
+      "rule": "repo"
+    },
+    {
+      "a": "metro",
+      "b": "ob1",
+      "evidence": "github.com/react/metro",
       "rule": "repo"
     },
     {
@@ -17476,9 +19275,27 @@
       "rule": "repo"
     },
     {
+      "a": "mobx",
+      "b": "mobx-react-lite",
+      "evidence": "github.com/mobxjs/mobx",
+      "rule": "repo"
+    },
+    {
       "a": "monaco-editor",
       "b": "monaco-editor-webpack-plugin",
       "evidence": "github.com/microsoft/monaco-editor",
+      "rule": "repo"
+    },
+    {
+      "a": "node-gyp-build",
+      "b": "node-gyp-build-optional-packages",
+      "evidence": "github.com/prebuild/node-gyp-build",
+      "rule": "repo"
+    },
+    {
+      "a": "oas-kit-common",
+      "b": "reftools",
+      "evidence": "github.com/mermade/oas-kit",
       "rule": "repo"
     },
     {
@@ -17509,6 +19326,12 @@
       "a": "omi",
       "b": "reactive-signal",
       "evidence": "github.com/tencent/omi",
+      "rule": "repo"
+    },
+    {
+      "a": "onnxruntime-common",
+      "b": "onnxruntime-node",
+      "evidence": "github.com/microsoft/onnxruntime",
       "rule": "repo"
     },
     {
@@ -17556,6 +19379,12 @@
     {
       "a": "pg",
       "b": "pg-connection-string",
+      "evidence": "github.com/brianc/node-postgres",
+      "rule": "repo"
+    },
+    {
+      "a": "pg",
+      "b": "pg-cursor",
       "evidence": "github.com/brianc/node-postgres",
       "rule": "repo"
     },
@@ -17628,6 +19457,12 @@
     {
       "a": "pouchdb",
       "b": "pouchdb-generate-replication-id",
+      "evidence": "github.com/pouchdb/pouchdb",
+      "rule": "repo"
+    },
+    {
+      "a": "pouchdb",
+      "b": "pouchdb-mapreduce-utils",
       "evidence": "github.com/pouchdb/pouchdb",
       "rule": "repo"
     },
@@ -17753,6 +19588,12 @@
     },
     {
       "a": "react",
+      "b": "react-reconciler",
+      "evidence": "github.com/react/react",
+      "rule": "repo"
+    },
+    {
+      "a": "react",
       "b": "react-test-renderer",
       "evidence": "github.com/react/react",
       "rule": "repo"
@@ -17821,12 +19662,6 @@
       "a": "react-cosmos-config",
       "b": "react-cosmos-voyager2",
       "evidence": "github.com/react-cosmos/react-cosmos-classic",
-      "rule": "repo"
-    },
-    {
-      "a": "react-dnd",
-      "b": "react-dnd-html5-backend",
-      "evidence": "github.com/react-dnd/react-dnd",
       "rule": "repo"
     },
     {
@@ -17927,7 +19762,97 @@
     },
     {
       "a": "remark-lint",
+      "b": "remark-lint-blockquote-indentation",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-checkbox-character-style",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
       "b": "remark-lint-code-block-style",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-emphasis-marker",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-fenced-code-marker",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-hard-break-spaces",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-heading-style",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-link-title-style",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-list-item-bullet-indent",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-list-item-indent",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-no-blockquote-without-marker",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-no-consecutive-blank-lines",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-no-duplicate-definitions",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-no-heading-content-indent",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-no-shortcut-reference-image",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-no-shortcut-reference-link",
       "evidence": "github.com/remarkjs/remark-lint",
       "rule": "repo"
     },
@@ -17939,7 +19864,37 @@
     },
     {
       "a": "remark-lint",
+      "b": "remark-lint-no-unused-definitions",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-ordered-list-marker-style",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
       "b": "remark-lint-ordered-list-marker-value",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-rule-style",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-strong-marker",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "remark-lint-table-cell-padding",
       "evidence": "github.com/remarkjs/remark-lint",
       "rule": "repo"
     },
@@ -17964,6 +19919,12 @@
     {
       "a": "remark-lint",
       "b": "remark-preset-lint-recommended",
+      "evidence": "github.com/remarkjs/remark-lint",
+      "rule": "repo"
+    },
+    {
+      "a": "remark-lint",
+      "b": "unified-lint-rule",
       "evidence": "github.com/remarkjs/remark-lint",
       "rule": "repo"
     },
@@ -18064,6 +20025,12 @@
       "rule": "repo"
     },
     {
+      "a": "typeface-lato",
+      "b": "typeface-roboto",
+      "evidence": "github.com/kyleamathews/typefaces",
+      "rule": "repo"
+    },
+    {
       "a": "undici",
       "b": "undici-types",
       "evidence": "github.com/nodejs/undici",
@@ -18095,6 +20062,12 @@
     },
     {
       "a": "vscode-jsonrpc",
+      "b": "vscode-languageserver",
+      "evidence": "github.com/microsoft/vscode-languageserver-node",
+      "rule": "repo"
+    },
+    {
+      "a": "vscode-jsonrpc",
       "b": "vscode-languageserver-protocol",
       "evidence": "github.com/microsoft/vscode-languageserver-node",
       "rule": "repo"
@@ -18112,7 +20085,73 @@
       "rule": "repo"
     },
     {
-      "a": "workbox-precaching",
+      "a": "workbox-background-sync",
+      "b": "workbox-broadcast-update",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-cacheable-response",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-core",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-expiration",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-google-analytics",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-navigation-preload",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-precaching",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-range-requests",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-routing",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-strategies",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
+      "b": "workbox-streams",
+      "evidence": "github.com/googlechrome/workbox",
+      "rule": "repo"
+    },
+    {
+      "a": "workbox-background-sync",
       "b": "workbox-webpack-plugin",
       "evidence": "github.com/googlechrome/workbox",
       "rule": "repo"
@@ -18374,7 +20413,12 @@
       "@ngtools/webpack"
     ],
     "github.com/angular/components": ["@angular/cdk", "@angular/material"],
-    "github.com/angus-c/just": ["just-curry-it", "just-flatten-it"],
+    "github.com/angus-c/just": [
+      "just-curry-it",
+      "just-diff",
+      "just-diff-apply",
+      "just-flatten-it"
+    ],
     "github.com/ant-design/ant-design-icons": [
       "@ant-design/icons",
       "@ant-design/icons-react",
@@ -18397,6 +20441,10 @@
       "@anthropic-ai/sdk",
       "@anthropic-ai/vertex-sdk"
     ],
+    "github.com/apidevtools/json-schema-ref-parser": [
+      "@apidevtools/json-schema-ref-parser",
+      "json-schema-ref-parser"
+    ],
     "github.com/apollographql/apollo-client": [
       "@apollo/client",
       "apollo-cache",
@@ -18412,6 +20460,20 @@
       "apollo-link-http",
       "apollo-link-http-common"
     ],
+    "github.com/apollographql/apollo-server": [
+      "@apollo/usage-reporting-protobuf",
+      "apollo-server-express"
+    ],
+    "github.com/apollographql/apollo-utils": [
+      "@apollo/utils.dropunuseddefinitions",
+      "@apollo/utils.keyvaluecache",
+      "@apollo/utils.printwithreducedwhitespace",
+      "@apollo/utils.removealiases",
+      "@apollo/utils.sortast",
+      "@apollo/utils.stripsensitiveliterals",
+      "@apollo/utils.usagereporting"
+    ],
+    "github.com/apostrophecms/apostrophe": ["launder", "sanitize-html"],
     "github.com/appium/appium": [
       "@appium/base-driver",
       "@appium/logger",
@@ -18427,12 +20489,28 @@
       "@applitools/monitoring-commons"
     ],
     "github.com/ardatan/graphql-tools": [
+      "@graphql-tools/apollo-engine-loader",
+      "@graphql-tools/code-file-loader",
+      "@graphql-tools/executor",
+      "@graphql-tools/executor-legacy-ws",
+      "@graphql-tools/git-loader",
+      "@graphql-tools/github-loader",
+      "@graphql-tools/graphql-file-loader",
+      "@graphql-tools/graphql-tag-pluck",
+      "@graphql-tools/import",
+      "@graphql-tools/json-file-loader",
+      "@graphql-tools/load",
       "@graphql-tools/merge",
       "@graphql-tools/schema",
-      "@graphql-tools/utils"
+      "@graphql-tools/url-loader",
+      "@graphql-tools/utils",
+      "cross-inspect"
     ],
     "github.com/ardatan/whatwg-node": [
+      "@whatwg-node/disposablestack",
       "@whatwg-node/fetch",
+      "@whatwg-node/node-fetch",
+      "@whatwg-node/promise-helpers",
       "@whatwg-node/server"
     ],
     "github.com/arethetypeswrong/arethetypeswrong.github.io": [
@@ -18449,7 +20527,10 @@
     ],
     "github.com/arktypeio/arktype": [
       "@ark/attest",
+      "@ark/schema",
+      "@ark/util",
       "@arktype/attest",
+      "arkregex",
       "arktype"
     ],
     "github.com/asg017/sqlite-vec": [
@@ -18492,6 +20573,7 @@
       "@aws-sdk/client-rds-data",
       "@aws-sdk/client-s3",
       "@aws-sdk/client-sagemaker",
+      "@aws-sdk/client-signin",
       "@aws-sdk/client-sso",
       "@aws-sdk/client-sso-oidc",
       "@aws-sdk/client-sts",
@@ -18541,14 +20623,17 @@
       "@aws-sdk/xml-builder"
     ],
     "github.com/azure/azure-sdk-for-js": [
+      "@azure/abort-controller",
       "@azure/app-configuration",
       "@azure/core-client",
       "@azure/core-rest-pipeline",
       "@azure/core-tracing",
+      "@azure/core-util",
       "@azure/cosmos",
       "@azure/data-tables",
       "@azure/identity",
       "@azure/keyvault-secrets",
+      "@azure/logger",
       "@azure/storage-blob",
       "@typespec/ts-http-runtime"
     ],
@@ -18569,6 +20654,7 @@
       "@babel/helper-compilation-targets",
       "@babel/helper-create-class-features-plugin",
       "@babel/helper-create-regexp-features-plugin",
+      "@babel/helper-environment-visitor",
       "@babel/helper-fixtures",
       "@babel/helper-globals",
       "@babel/helper-member-expression-to-functions",
@@ -18727,6 +20813,7 @@
       "babel-plugin-syntax-decorators",
       "babel-plugin-syntax-dynamic-import",
       "babel-plugin-syntax-jsx",
+      "babel-plugin-syntax-trailing-function-commas",
       "babel-plugin-transform-async-generator-functions",
       "babel-plugin-transform-async-to-generator",
       "babel-plugin-transform-class-properties",
@@ -18837,13 +20924,17 @@
       "constant-case",
       "dot-case",
       "header-case",
+      "is-lower-case",
+      "is-upper-case",
       "lower-case",
+      "lower-case-first",
       "no-case",
       "param-case",
       "pascal-case",
       "path-case",
       "sentence-case",
       "snake-case",
+      "swap-case",
       "title-case",
       "upper-case",
       "upper-case-first"
@@ -18853,6 +20944,7 @@
       "pg",
       "pg-cloudflare",
       "pg-connection-string",
+      "pg-cursor",
       "pg-native",
       "pg-pool",
       "pg-protocol",
@@ -18878,10 +20970,21 @@
       "happy-dom"
     ],
     "github.com/changesets/changesets": [
+      "@changesets/apply-release-plan",
+      "@changesets/assemble-release-plan",
       "@changesets/changelog-github",
       "@changesets/cli",
+      "@changesets/config",
+      "@changesets/errors",
+      "@changesets/get-dependents-graph",
       "@changesets/get-github-info",
-      "@changesets/get-release-plan"
+      "@changesets/get-release-plan",
+      "@changesets/git",
+      "@changesets/parse",
+      "@changesets/pre",
+      "@changesets/read",
+      "@changesets/should-skip-package",
+      "@changesets/write"
     ],
     "github.com/chevrotain/chevrotain": [
       "@chevrotain/gast",
@@ -18953,6 +21056,7 @@
       "commitlint"
     ],
     "github.com/conventional-changelog/conventional-changelog": [
+      "@conventional-changelog/git-client",
       "@conventional-changelog/template",
       "conventional-changelog",
       "conventional-changelog-angular",
@@ -19113,6 +21217,11 @@
     ],
     "github.com/cucumber/cucumber-js": ["@cucumber/cucumber", "cucumber"],
     "github.com/date-fns/date-fns": ["@date-fns/tz", "date-fns"],
+    "github.com/davidjerleke/embla-carousel": [
+      "embla-carousel",
+      "embla-carousel-autoplay",
+      "embla-carousel-fade"
+    ],
     "github.com/dcodeio/esm2umd": ["@leichtgewicht/esm2umd", "esm2umd"],
     "github.com/dcodeio/long.js": ["@xtuc/long", "long"],
     "github.com/dcodeio/protobuf.js": [
@@ -19628,12 +21737,17 @@
       "@discordjs/rest",
       "@discordjs/util"
     ],
+    "github.com/discordjs/rpc": ["discord-rpc", "discord-rpc-patch"],
     "github.com/dmtrkovalenko/date-io": [
       "@date-io/core",
       "@date-io/date-fns",
       "@date-io/dayjs",
       "@date-io/luxon",
       "@date-io/moment"
+    ],
+    "github.com/dotansimha/graphql-code-generator": [
+      "@graphql-codegen/core",
+      "@graphql-codegen/plugin-helpers"
     ],
     "github.com/dotenvx/dotenvx": [
       "@dotenvx/dotenvx",
@@ -19646,6 +21760,7 @@
     ],
     "github.com/dperini/nwsapi": ["@asamuzakjp/nwsapi", "nwsapi"],
     "github.com/dqbd/tiktoken": ["js-tiktoken", "tiktoken"],
+    "github.com/drizzle-team/drizzle-orm": ["drizzle-kit", "drizzle-orm"],
     "github.com/dsherret/ts-morph": ["@ts-morph/common", "ts-morph"],
     "github.com/dubzzz/fast-check": [
       "@fast-check/jest",
@@ -19678,6 +21793,7 @@
       "@molunerfinn/vite-plugin-electron-renderer",
       "vite-plugin-electron-renderer"
     ],
+    "github.com/electron/asar": ["@electron/asar", "asar"],
     "github.com/electron/forge": [
       "@electron-forge/maker-base",
       "@electron-forge/shared-types"
@@ -19738,8 +21854,10 @@
     "github.com/eslint/js": ["eslint-scope", "eslint-visitor-keys", "espree"],
     "github.com/eslint/rewrite": [
       "@eslint/compat",
+      "@eslint/config-array",
       "@eslint/config-helpers",
       "@eslint/core",
+      "@eslint/object-schema",
       "@eslint/plugin-kit"
     ],
     "github.com/evanw/esbuild": [
@@ -19772,10 +21890,26 @@
       "esbuild"
     ],
     "github.com/expo/expo": [
+      "@expo/config",
+      "@expo/config-plugins",
       "@expo/env",
+      "@expo/image-utils",
+      "@expo/inline-modules",
+      "@expo/json-file",
+      "@expo/metro-config",
+      "@expo/metro-file-map",
+      "@expo/osascript",
+      "@expo/package-manager",
       "@expo/plist",
+      "@expo/prebuild-config",
+      "@expo/require-utils",
+      "@expo/router-server",
+      "@expo/schema-utils",
+      "@expo/xcpretty",
       "eslint-config-universe",
       "expo-module-scripts",
+      "expo-modules-autolinking",
+      "expo-server",
       "expo-sqlite"
     ],
     "github.com/facebook/create-react-app": [
@@ -19809,9 +21943,12 @@
     ],
     "github.com/facebook/flow": [
       "flow-bin",
+      "flow-enums-runtime",
+      "flow-estree",
       "flow-parser",
       "flow-remove-types"
     ],
+    "github.com/facebook/hermes": ["hermes-estree", "hermes-parser"],
     "github.com/facebook/react": [
       "babel-plugin-react-compiler",
       "create-react-class",
@@ -19829,6 +21966,7 @@
     "github.com/feross/ieee754": ["@xtuc/ieee754", "ieee754"],
     "github.com/floating-ui/floating-ui": [
       "@floating-ui/core",
+      "@floating-ui/devtools",
       "@floating-ui/dom",
       "@floating-ui/react",
       "@floating-ui/react-dom",
@@ -19840,20 +21978,27 @@
       "@fontsource-variable/noto-sans-sc",
       "@fontsource-variable/rubik",
       "@fontsource/dm-mono",
+      "@fontsource/dm-sans",
+      "@fontsource/ibm-plex-mono",
       "@fontsource/maple-mono",
-      "@fontsource/noto-serif"
+      "@fontsource/noto-serif",
+      "@fontsource/roboto"
     ],
     "github.com/formatjs/formatjs": [
       "@formatjs/ecma402-abstract",
       "@formatjs/fast-memoize",
       "@formatjs/icu-messageformat-parser",
       "@formatjs/icu-skeleton-parser",
+      "@formatjs/intl",
+      "@formatjs/intl-localematcher",
       "intl-messageformat",
       "react-intl"
     ],
     "github.com/fortawesome/font-awesome": [
       "@fortawesome/fontawesome-free",
       "@fortawesome/fontawesome-svg-core",
+      "@fortawesome/free-brands-svg-icons",
+      "@fortawesome/free-regular-svg-icons",
       "@fortawesome/free-solid-svg-icons",
       "font-awesome"
     ],
@@ -19864,6 +22009,8 @@
     ],
     "github.com/getsentry/sentry-javascript": [
       "@sentry-internal/eslint-config-sdk",
+      "@sentry-internal/feedback",
+      "@sentry-internal/replay-canvas",
       "@sentry-internal/tracing",
       "@sentry/apm",
       "@sentry/browser",
@@ -19874,6 +22021,7 @@
       "@sentry/node",
       "@sentry/node-core",
       "@sentry/opentelemetry",
+      "@sentry/replay",
       "@sentry/server-utils",
       "@sentry/types",
       "@sentry/typescript",
@@ -19922,13 +22070,38 @@
       "lighthouse-logger"
     ],
     "github.com/googlechrome/workbox": [
+      "workbox-background-sync",
+      "workbox-broadcast-update",
+      "workbox-cacheable-response",
+      "workbox-core",
+      "workbox-expiration",
+      "workbox-google-analytics",
+      "workbox-navigation-preload",
       "workbox-precaching",
+      "workbox-range-requests",
+      "workbox-routing",
+      "workbox-strategies",
+      "workbox-streams",
       "workbox-webpack-plugin"
     ],
     "github.com/googlecloudplatform/opentelemetry-operations-js": [
       "@google-cloud/opentelemetry-cloud-monitoring-exporter",
       "@google-cloud/opentelemetry-cloud-trace-exporter",
       "@google-cloud/opentelemetry-resource-util"
+    ],
+    "github.com/graphql-hive/gateway": [
+      "@graphql-hive/signal",
+      "@graphql-tools/batch-execute",
+      "@graphql-tools/delegate",
+      "@graphql-tools/executor-common",
+      "@graphql-tools/executor-graphql-ws",
+      "@graphql-tools/executor-http",
+      "@graphql-tools/wrap"
+    ],
+    "github.com/graphql-hive/graphql-yoga": [
+      "@envelop/core",
+      "@envelop/instrumentation",
+      "@envelop/types"
     ],
     "github.com/graphql/graphql-js": ["@types/graphql", "graphql"],
     "github.com/gregberge/react-merge-refs": ["react-merge-refs", "std-mocks"],
@@ -20048,6 +22221,7 @@
       "@hono/zod-openapi",
       "@hono/zod-validator"
     ],
+    "github.com/humanwhocodes/humanfs": ["@humanfs/core", "@humanfs/node"],
     "github.com/huolalatech/page-spy": [
       "@huolala-tech/page-spy-base",
       "@huolala-tech/page-spy-browser",
@@ -20182,6 +22356,7 @@
       "jest-each",
       "jest-environment-jsdom",
       "jest-environment-node",
+      "jest-get-type",
       "jest-haste-map",
       "jest-jasmine2",
       "jest-leak-detector",
@@ -20268,6 +22443,7 @@
     "github.com/koajs/bodyparser": ["@koa/bodyparser", "koa-bodyparser"],
     "github.com/koajs/cors": ["@koa/cors", "kcors"],
     "github.com/koajs/router": ["@koa/router", "koa-router"],
+    "github.com/kyleamathews/typefaces": ["typeface-lato", "typeface-roboto"],
     "github.com/langchain-ai/langchainjs": [
       "@langchain/anthropic",
       "@langchain/cohere",
@@ -20336,7 +22512,9 @@
       "lodash.flatten",
       "lodash.flattendeep",
       "lodash.foreach",
+      "lodash.forin",
       "lodash.get",
+      "lodash.groupby",
       "lodash.identity",
       "lodash.includes",
       "lodash.intersection",
@@ -20354,6 +22532,7 @@
       "lodash.isplainobject",
       "lodash.isstring",
       "lodash.istypedarray",
+      "lodash.isundefined",
       "lodash.kebabcase",
       "lodash.keys",
       "lodash.keysin",
@@ -20385,6 +22564,7 @@
       "lodash.truncate",
       "lodash.union",
       "lodash.uniq",
+      "lodash.uniqueid",
       "lodash.upperfirst",
       "lodash.without",
       "lodash.zip"
@@ -20451,6 +22631,7 @@
       "@mantine/styles",
       "@mantine/utils"
     ],
+    "github.com/mapbox/node-pre-gyp": ["@mapbox/node-pre-gyp", "node-pre-gyp"],
     "github.com/material-components/material-components-web": [
       "@material/animation",
       "@material/auto-init",
@@ -20521,7 +22702,13 @@
     ],
     "github.com/medikoo/es5-ext": ["es5-ext", "ext"],
     "github.com/medium/phantomjs": ["phantomjs", "phantomjs-prebuilt"],
+    "github.com/mermade/oas-kit": ["oas-kit-common", "reftools"],
     "github.com/mermaid-js/mermaid": ["@mermaid-js/parser", "mermaid"],
+    "github.com/messageformat/messageformat": [
+      "@messageformat/core",
+      "@messageformat/parser",
+      "@messageformat/runtime"
+    ],
     "github.com/microlinkhq/metascraper": [
       "metascraper",
       "metascraper-description",
@@ -20561,13 +22748,98 @@
       "micromark-util-events-to-acorn"
     ],
     "github.com/microsoft/fluentui": [
+      "@fluentui/date-time-utilities",
+      "@fluentui/dom-utilities",
       "@fluentui/eslint-plugin",
+      "@fluentui/keyboard-keys",
+      "@fluentui/priority-overflow",
+      "@fluentui/react",
+      "@fluentui/react-accordion",
+      "@fluentui/react-aria",
+      "@fluentui/react-avatar",
+      "@fluentui/react-badge",
+      "@fluentui/react-breadcrumb",
+      "@fluentui/react-button",
+      "@fluentui/react-card",
+      "@fluentui/react-carousel",
+      "@fluentui/react-checkbox",
+      "@fluentui/react-color-picker",
+      "@fluentui/react-combobox",
       "@fluentui/react-component-event-listener",
-      "@fluentui/react-component-ref"
+      "@fluentui/react-component-ref",
+      "@fluentui/react-components",
+      "@fluentui/react-compose",
+      "@fluentui/react-context-selector",
+      "@fluentui/react-dialog",
+      "@fluentui/react-divider",
+      "@fluentui/react-drawer",
+      "@fluentui/react-field",
+      "@fluentui/react-focus",
+      "@fluentui/react-image",
+      "@fluentui/react-infolabel",
+      "@fluentui/react-input",
+      "@fluentui/react-jsx-runtime",
+      "@fluentui/react-label",
+      "@fluentui/react-link",
+      "@fluentui/react-list",
+      "@fluentui/react-menu",
+      "@fluentui/react-message-bar",
+      "@fluentui/react-motion",
+      "@fluentui/react-motion-components-preview",
+      "@fluentui/react-nav",
+      "@fluentui/react-overflow",
+      "@fluentui/react-persona",
+      "@fluentui/react-popover",
+      "@fluentui/react-portal",
+      "@fluentui/react-positioning",
+      "@fluentui/react-progress",
+      "@fluentui/react-provider",
+      "@fluentui/react-radio",
+      "@fluentui/react-rating",
+      "@fluentui/react-search",
+      "@fluentui/react-select",
+      "@fluentui/react-shared-contexts",
+      "@fluentui/react-skeleton",
+      "@fluentui/react-slider",
+      "@fluentui/react-spinbutton",
+      "@fluentui/react-spinner",
+      "@fluentui/react-stylesheets",
+      "@fluentui/react-swatch-picker",
+      "@fluentui/react-switch",
+      "@fluentui/react-table",
+      "@fluentui/react-tabs",
+      "@fluentui/react-tabster",
+      "@fluentui/react-tag-picker",
+      "@fluentui/react-tags",
+      "@fluentui/react-teaching-popover",
+      "@fluentui/react-text",
+      "@fluentui/react-textarea",
+      "@fluentui/react-theme",
+      "@fluentui/react-theme-provider",
+      "@fluentui/react-toast",
+      "@fluentui/react-toolbar",
+      "@fluentui/react-tooltip",
+      "@fluentui/react-tree",
+      "@fluentui/react-utilities",
+      "@fluentui/react-window-provider",
+      "@fluentui/theme",
+      "@uifabric/foundation",
+      "@uifabric/icons",
+      "@uifabric/merge-styles",
+      "@uifabric/react-hooks",
+      "@uifabric/set-version",
+      "@uifabric/styling",
+      "@uifabric/utilities",
+      "office-ui-fabric-react"
     ],
+    "github.com/microsoft/griffel": ["@griffel/core", "@griffel/react"],
     "github.com/microsoft/monaco-editor": [
       "monaco-editor",
       "monaco-editor-webpack-plugin"
+    ],
+    "github.com/microsoft/onnxruntime": [
+      "onnxruntime-common",
+      "onnxruntime-node"
     ],
     "github.com/microsoft/playwright": [
       "@playwright/experimental-ct-react",
@@ -20578,7 +22850,8 @@
     ],
     "github.com/microsoft/rushstack": [
       "@microsoft/api-documenter",
-      "@microsoft/api-extractor"
+      "@microsoft/api-extractor",
+      "@microsoft/load-themed-styles"
     ],
     "github.com/microsoft/typescript": [
       "@types/typescript",
@@ -20601,6 +22874,7 @@
     ],
     "github.com/microsoft/vscode-languageserver-node": [
       "vscode-jsonrpc",
+      "vscode-languageserver",
       "vscode-languageserver-protocol",
       "vscode-languageserver-textdocument",
       "vscode-languageserver-types"
@@ -20612,7 +22886,7 @@
       "emojibase-test-utils"
     ],
     "github.com/mishoo/uglifyjs2": ["@sheetjs/uglify-js", "uglify-es"],
-    "github.com/mobxjs/mobx": ["mobx", "mobx-react"],
+    "github.com/mobxjs/mobx": ["mobx", "mobx-react", "mobx-react-lite"],
     "github.com/modelcontextprotocol/typescript-sdk": [
       "@modelcontextprotocol/client",
       "@modelcontextprotocol/core",
@@ -20647,6 +22921,7 @@
     "github.com/mscdex/ssh2": ["@electerm/ssh2", "ssh2"],
     "github.com/mui-org/material-ui": [
       "@material-ui/core",
+      "@material-ui/icons",
       "@material-ui/styles",
       "@material-ui/system",
       "@material-ui/types",
@@ -20656,6 +22931,7 @@
     "github.com/mui/material-ui": [
       "@mui/core-downloads-tracker",
       "@mui/icons-material",
+      "@mui/lab",
       "@mui/material",
       "@mui/material-pigment-css",
       "@mui/private-theming",
@@ -20667,7 +22943,11 @@
     "github.com/mui/mui-x": ["@mui/x-date-pickers", "@mui/x-internals"],
     "github.com/mxxii/selderee": ["@selderee/plugin-htmlparser2", "selderee"],
     "github.com/napi-rs/napi-rs": ["@napi-rs/cli", "@napi-rs/wasm-runtime"],
-    "github.com/napi-rs/node-rs": ["@node-rs/crc32", "@node-rs/xxhash"],
+    "github.com/napi-rs/node-rs": [
+      "@node-rs/crc32",
+      "@node-rs/xxhash",
+      "@node-rs/xxhash-linux-x64-gnu"
+    ],
     "github.com/nearform/graphql-hooks": [
       "graphql-hooks",
       "graphql-hooks-memcache",
@@ -20689,6 +22969,7 @@
       "@nodelib/fs.walk"
     ],
     "github.com/npm/cli": [
+      "@npmcli/arborist",
       "libnpmaccess",
       "libnpmhook",
       "libnpmorg",
@@ -20704,20 +22985,27 @@
     "github.com/open-telemetry/opentelemetry-js": [
       "@opentelemetry/api",
       "@opentelemetry/api-logs",
+      "@opentelemetry/configuration",
       "@opentelemetry/context-async-hooks",
       "@opentelemetry/core",
       "@opentelemetry/exporter-logs-otlp-grpc",
       "@opentelemetry/exporter-logs-otlp-http",
+      "@opentelemetry/exporter-logs-otlp-proto",
       "@opentelemetry/exporter-metrics-otlp-grpc",
       "@opentelemetry/exporter-metrics-otlp-http",
+      "@opentelemetry/exporter-metrics-otlp-proto",
+      "@opentelemetry/exporter-prometheus",
       "@opentelemetry/exporter-trace-otlp-grpc",
       "@opentelemetry/exporter-trace-otlp-http",
       "@opentelemetry/exporter-trace-otlp-proto",
+      "@opentelemetry/exporter-zipkin",
       "@opentelemetry/instrumentation",
       "@opentelemetry/instrumentation-http",
       "@opentelemetry/otlp-exporter-base",
       "@opentelemetry/otlp-grpc-exporter-base",
       "@opentelemetry/otlp-transformer",
+      "@opentelemetry/propagator-b3",
+      "@opentelemetry/propagator-jaeger",
       "@opentelemetry/resources",
       "@opentelemetry/sdk-logs",
       "@opentelemetry/sdk-metrics",
@@ -20781,11 +23069,16 @@
       "@oxlint/binding-win32-x64-msvc",
       "oxc-minify",
       "oxc-parser",
+      "oxc-transform",
       "oxfmt",
       "oxlint",
       "oxlint-plugin-eslint"
     ],
     "github.com/oxc-project/oxc-node": ["@oxc-node/cli", "@oxc-node/core"],
+    "github.com/oxc-project/oxc-resolver": [
+      "@oxc-resolver/binding-linux-x64-gnu",
+      "oxc-resolver"
+    ],
     "github.com/palantir/blueprint": [
       "@blueprintjs/colors",
       "@blueprintjs/core",
@@ -20836,6 +23129,10 @@
       "@parcel/watcher-win32-arm64",
       "@parcel/watcher-win32-x64"
     ],
+    "github.com/paullecam/react-leaflet": [
+      "@react-leaflet/core",
+      "react-leaflet"
+    ],
     "github.com/paulmillr/noble-hashes": ["@noble/hashes", "noble-hashes"],
     "github.com/peculiarventures/asn1-schema": [
       "@peculiar/asn1-cms",
@@ -20864,12 +23161,22 @@
       "@pika/plugin-standard-pkg",
       "@pika/plugin-ts-standard-pkg"
     ],
+    "github.com/pmndrs/react-spring": [
+      "@react-spring/animated",
+      "@react-spring/core",
+      "@react-spring/rafz",
+      "@react-spring/shared",
+      "@react-spring/types",
+      "@react-spring/web",
+      "react-spring"
+    ],
     "github.com/pnpm/pnpm": [
       "@pnpm/catalogs.protocol-parser",
       "@pnpm/catalogs.resolver",
       "@pnpm/catalogs.types",
       "@pnpm/config.env-replace",
       "@pnpm/constants",
+      "@pnpm/deps.graph-sequencer",
       "@pnpm/error",
       "@pnpm/find-workspace-dir",
       "@pnpm/find-workspace-packages",
@@ -20885,6 +23192,7 @@
       "find-packages",
       "pnpm"
     ],
+    "github.com/popperjs/popper-core": ["@popperjs/core", "@sxzz/popperjs-es"],
     "github.com/posthog/posthog-js": [
       "@posthog/browser-common",
       "@posthog/core",
@@ -20907,15 +23215,22 @@
       "pouchdb-collections",
       "pouchdb-errors",
       "pouchdb-generate-replication-id",
+      "pouchdb-mapreduce-utils",
       "pouchdb-md5",
       "pouchdb-promise",
       "pouchdb-utils"
     ],
     "github.com/preactjs/signals": ["@preact/signals", "@preact/signals-core"],
+    "github.com/prebuild/node-gyp-build": [
+      "node-gyp-build",
+      "node-gyp-build-optional-packages"
+    ],
+    "github.com/prisma/orm": ["@prisma/orm-framework", "@prisma/orm-toolchain"],
     "github.com/prisma/prisma": [
       "@prisma/client",
       "@prisma/driver-adapter-utils"
     ],
+    "github.com/prisma/prisma-cli": ["@prisma/cli-engine", "prisma"],
     "github.com/protobufjs/protobuf.js": [
       "@protobufjs/utf8",
       "protobufjs",
@@ -20945,44 +23260,77 @@
     "github.com/radix-ui/primitives": [
       "@radix-ui/number",
       "@radix-ui/primitive",
+      "@radix-ui/react-accessible-icon",
       "@radix-ui/react-accordion",
+      "@radix-ui/react-alert-dialog",
       "@radix-ui/react-arrow",
+      "@radix-ui/react-aspect-ratio",
       "@radix-ui/react-avatar",
       "@radix-ui/react-checkbox",
       "@radix-ui/react-collapsible",
       "@radix-ui/react-collection",
       "@radix-ui/react-compose-refs",
       "@radix-ui/react-context",
+      "@radix-ui/react-context-menu",
       "@radix-ui/react-dialog",
       "@radix-ui/react-direction",
       "@radix-ui/react-dismissable-layer",
+      "@radix-ui/react-dropdown-menu",
       "@radix-ui/react-focus-guards",
       "@radix-ui/react-focus-scope",
+      "@radix-ui/react-form",
+      "@radix-ui/react-hover-card",
       "@radix-ui/react-id",
+      "@radix-ui/react-label",
+      "@radix-ui/react-menu",
+      "@radix-ui/react-menubar",
+      "@radix-ui/react-navigation-menu",
+      "@radix-ui/react-one-time-password-field",
+      "@radix-ui/react-password-toggle-field",
       "@radix-ui/react-popover",
       "@radix-ui/react-popper",
       "@radix-ui/react-portal",
       "@radix-ui/react-presence",
       "@radix-ui/react-primitive",
+      "@radix-ui/react-progress",
+      "@radix-ui/react-radio-group",
+      "@radix-ui/react-roving-focus",
       "@radix-ui/react-scroll-area",
       "@radix-ui/react-select",
+      "@radix-ui/react-separator",
+      "@radix-ui/react-slider",
       "@radix-ui/react-slot",
+      "@radix-ui/react-switch",
+      "@radix-ui/react-tabs",
       "@radix-ui/react-toast",
+      "@radix-ui/react-toggle",
+      "@radix-ui/react-toggle-group",
+      "@radix-ui/react-toolbar",
+      "@radix-ui/react-tooltip",
       "@radix-ui/react-use-callback-ref",
       "@radix-ui/react-use-controllable-state",
       "@radix-ui/react-use-effect-event",
+      "@radix-ui/react-use-escape-keydown",
       "@radix-ui/react-use-is-hydrated",
       "@radix-ui/react-use-layout-effect",
+      "@radix-ui/react-use-previous",
       "@radix-ui/react-use-rect",
       "@radix-ui/react-use-size",
       "@radix-ui/react-visually-hidden",
-      "@radix-ui/rect"
+      "@radix-ui/rect",
+      "radix-ui"
     ],
     "github.com/rannn505/child-shell": [
       "accumulate-stream",
       "child-shell",
       "node-bash",
       "trim-buffer"
+    ],
+    "github.com/reach/reach-ui": [
+      "@reach/auto-id",
+      "@reach/descendants",
+      "@reach/tabs",
+      "@reach/utils"
     ],
     "github.com/react-component/cascader": [
       "@rc-component/cascader",
@@ -21084,21 +23432,59 @@
       "react-cosmos-voyager",
       "react-cosmos-voyager2"
     ],
-    "github.com/react-dnd/react-dnd": ["react-dnd", "react-dnd-html5-backend"],
+    "github.com/react-dnd/react-dnd": [
+      "@react-dnd/asap",
+      "@react-dnd/invariant",
+      "@react-dnd/shallowequal",
+      "dnd-core",
+      "react-dnd",
+      "react-dnd-html5-backend"
+    ],
+    "github.com/react/metro": [
+      "metro",
+      "metro-cache",
+      "metro-cache-key",
+      "metro-config",
+      "metro-core",
+      "metro-file-map",
+      "metro-resolver",
+      "metro-source-map",
+      "metro-symbolicate",
+      "metro-transform-plugins",
+      "metro-transform-worker",
+      "ob1"
+    ],
     "github.com/react/react": [
       "react",
       "react-devtools-core",
       "react-dom",
       "react-is",
+      "react-reconciler",
       "react-test-renderer",
       "scheduler",
       "use-sync-external-store"
     ],
+    "github.com/react/react-native": [
+      "@react-native/debugger-frontend",
+      "@react-native/debugger-shell",
+      "@react-native/dev-middleware",
+      "@react-native/normalize-colors",
+      "react-native"
+    ],
     "github.com/redis/node-redis": ["@redis/client", "redis"],
+    "github.com/redux-saga/redux-saga": [
+      "@redux-saga/core",
+      "@redux-saga/deferred",
+      "@redux-saga/delay-p",
+      "@redux-saga/is",
+      "@redux-saga/symbols",
+      "redux-saga"
+    ],
     "github.com/reduxjs/redux-devtools": [
       "@redux-devtools/app",
       "@redux-devtools/chart-monitor",
       "@redux-devtools/core",
+      "@redux-devtools/extension",
       "@redux-devtools/inspector-monitor",
       "@redux-devtools/inspector-monitor-test-tab",
       "@redux-devtools/inspector-monitor-trace-tab",
@@ -21114,7 +23500,8 @@
       "map2tree",
       "react-base16-styling",
       "react-json-tree",
-      "redux-devtools"
+      "redux-devtools",
+      "redux-devtools-instrument"
     ],
     "github.com/reg-viz/reg-suit": [
       "reg-notify-github-plugin",
@@ -21140,13 +23527,34 @@
     ],
     "github.com/remarkjs/remark-lint": [
       "remark-lint",
+      "remark-lint-blockquote-indentation",
+      "remark-lint-checkbox-character-style",
       "remark-lint-code-block-style",
+      "remark-lint-emphasis-marker",
+      "remark-lint-fenced-code-marker",
+      "remark-lint-hard-break-spaces",
+      "remark-lint-heading-style",
+      "remark-lint-link-title-style",
+      "remark-lint-list-item-bullet-indent",
+      "remark-lint-list-item-indent",
+      "remark-lint-no-blockquote-without-marker",
+      "remark-lint-no-consecutive-blank-lines",
+      "remark-lint-no-duplicate-definitions",
+      "remark-lint-no-heading-content-indent",
+      "remark-lint-no-shortcut-reference-image",
+      "remark-lint-no-shortcut-reference-link",
       "remark-lint-no-undefined-references",
+      "remark-lint-no-unused-definitions",
+      "remark-lint-ordered-list-marker-style",
       "remark-lint-ordered-list-marker-value",
+      "remark-lint-rule-style",
+      "remark-lint-strong-marker",
+      "remark-lint-table-cell-padding",
       "remark-lint-table-pipe-alignment",
       "remark-preset-lint-consistent",
       "remark-preset-lint-markdown-style-guide",
-      "remark-preset-lint-recommended"
+      "remark-preset-lint-recommended",
+      "unified-lint-rule"
     ],
     "github.com/remarkjs/remark-math": ["remark-html-katex", "remark-math"],
     "github.com/remix-run/react-router": [
@@ -21303,12 +23711,29 @@
       "serialport"
     ],
     "github.com/shadcn-ui/ui": ["@shadcn/registry", "shadcn"],
-    "github.com/shikijs/shiki": ["@shikijs/vitepress-twoslash", "shiki"],
+    "github.com/shikijs/shiki": [
+      "@shikijs/core",
+      "@shikijs/engine-oniguruma",
+      "@shikijs/langs",
+      "@shikijs/primitive",
+      "@shikijs/themes",
+      "@shikijs/types",
+      "@shikijs/vitepress-twoslash",
+      "shiki"
+    ],
     "github.com/shinnn/eslint-config": [
       "@shinnn/eslint-config",
       "@shinnn/eslint-config-node"
     ],
     "github.com/shouldjs/should.js": ["@types/should", "should"],
+    "github.com/sigstore/sigstore-js": [
+      "@sigstore/bundle",
+      "@sigstore/core",
+      "@sigstore/sign",
+      "@sigstore/tuf",
+      "@sigstore/verify",
+      "sigstore"
+    ],
     "github.com/sindresorhus/globby": ["@types/globby", "globby"],
     "github.com/sindresorhus/indent-string": [
       "@types/indent-string",
@@ -21491,15 +23916,21 @@
     "github.com/swc-project/pkgs": ["@swc/cli", "@swc/jest"],
     "github.com/swc-project/swc": [
       "@swc/core",
+      "@swc/core-linux-x64-gnu",
       "@swc/css",
       "@swc/helpers",
       "@swc/html",
       "@swc/wasm"
     ],
-    "github.com/swc-project/swc-node": ["@swc-node/jest", "@swc-node/register"],
+    "github.com/swc-project/swc-node": [
+      "@swc-node/core",
+      "@swc-node/jest",
+      "@swc-node/register"
+    ],
     "github.com/tailwindlabs/headlessui": [
       "@headlessui/react",
-      "@headlessui/tailwindcss"
+      "@headlessui/tailwindcss",
+      "@headlessui/vue"
     ],
     "github.com/tailwindlabs/heroicons": ["@heroicons/react", "@heroicons/vue"],
     "github.com/tailwindlabs/tailwindcss": [
@@ -21561,6 +23992,20 @@
       "eslint-config-th0r",
       "eslint-config-th0r-react"
     ],
+    "github.com/thejameskyle/create-react-context": [
+      "@hypnosphi/create-react-context",
+      "create-react-context"
+    ],
+    "github.com/theupdateframework/tuf-js": [
+      "@tufjs/canonical-json",
+      "@tufjs/models",
+      "tuf-js"
+    ],
+    "github.com/thinkmill/manypkg": [
+      "@manypkg/find-root",
+      "@manypkg/get-packages",
+      "@manypkg/tools"
+    ],
     "github.com/thysultan/stylis.js": ["stylis", "stylis-rule-sheet"],
     "github.com/tktcorporation/clip-filepaths": [
       "clip-filepaths",
@@ -21591,6 +24036,10 @@
       "@emnapi/core",
       "@emnapi/runtime",
       "emnapi"
+    ],
+    "github.com/trigensoftware/simple-libs": [
+      "@simple-libs/child-process-utils",
+      "@simple-libs/stream-utils"
     ],
     "github.com/tsconfig/bases": [
       "@tsconfig/node10",
@@ -21833,6 +24282,7 @@
       "@vue/compiler-sfc",
       "@vue/compiler-ssr",
       "@vue/reactivity",
+      "@vue/reactivity-transform",
       "@vue/runtime-core",
       "@vue/runtime-dom",
       "@vue/server-renderer",
@@ -21924,6 +24374,16 @@
       "@wessberg/rollup-plugin-ts",
       "rollup-plugin-ts"
     ],
+    "github.com/withastro/astro": [
+      "@astrojs/internal-helpers",
+      "@astrojs/markdown-satteri",
+      "@astrojs/prism",
+      "@astrojs/telemetry"
+    ],
+    "github.com/withastro/compiler-rs": [
+      "@astrojs/compiler-binding",
+      "@astrojs/compiler-rs"
+    ],
     "github.com/wonderinventions/node-webrtc": [
       "@roamhq/wrtc",
       "@roamhq/wrtc-darwin-arm64",
@@ -21957,6 +24417,7 @@
       "@webassemblyjs/floating-point-hex-parser",
       "@webassemblyjs/helper-api-error",
       "@webassemblyjs/helper-buffer",
+      "@webassemblyjs/helper-module-context",
       "@webassemblyjs/helper-numbers",
       "@webassemblyjs/helper-wasm-bytecode",
       "@webassemblyjs/helper-wasm-section",
@@ -22016,7 +24477,7 @@
     ]
   },
   "schema": "exp104-families/1",
-  "universe": 10530,
-  "withMetadata": 10395,
-  "withRepository": 10082
+  "universe": 11410,
+  "withMetadata": 11275,
+  "withRepository": 10932
 }

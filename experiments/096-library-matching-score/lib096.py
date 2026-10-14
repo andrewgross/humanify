@@ -16,9 +16,11 @@ MISSES = os.path.join(REPO, "experiments/095-library-fingerprints/misses/scripts
 # not for tuning lanes); a test label commits its summary (per-set aggregates) only.
 CORPORA = {
     "dev": {"manifest": os.path.join(HERE, "corpus.json"), "origins": os.path.join(HERE, "origins.json"),
-            "copies": os.path.join(HERE, "copies.json"), "data": "/work/exp096-data"},
+            "copies": os.path.join(HERE, "copies.json"), "chained": os.path.join(HERE, "chained.json"),
+            "data": "/work/exp096-data"},
     "test": {"manifest": os.path.join(HERE, "corpus-test.json"), "origins": os.path.join(HERE, "origins-test.json"),
-             "copies": os.path.join(HERE, "copies-test.json"), "data": "/work/exp100-test-data/frozen"},
+             "copies": os.path.join(HERE, "copies-test.json"), "chained": os.path.join(HERE, "chained-test.json"),
+             "data": "/work/exp100-test-data/frozen"},
 }
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"

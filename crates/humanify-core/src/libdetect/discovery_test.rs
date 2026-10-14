@@ -842,15 +842,15 @@ fn banner_names_known_keeps_only_names_the_index_knows_resolved_to_npm_spelling(
 }
 
 #[test]
-fn a_small_seed_cannot_support_itself_through_its_own_claims() {
-    // lib's only neighbour is tiny, claimed by DOWN from lib alone. lib is
-    // held by P only (not ambiguous): by default its own propagation is
-    // support; under the self-support floor a seed smaller than the floor
-    // needs independent evidence and is vetoed.
-    let code = "var lib = function (t) { return t.split(\",\").map(tiny).filter(Boolean).join(\"|\").concat(t.length); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
+fn a_lone_small_seed_needs_another_seed_of_its_family() {
+    // lib is the bundle's ONLY seed of P, and it supports itself through
+    // tiny (DOWN from lib alone). Under the lone-seed floor a seed smaller
+    // than the floor with no other seed of its family in the bundle is
+    // dropped; a second P seed anywhere (far, unconnected) corroborates it.
+    let code = "var lib = function (t) { return t.split(\",\").map(tiny).filter(Boolean).join(\"|\").concat(t.length); };\nvar tiny = (x) => x + 1;\nvar far = function (m) { return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); };\nvar app = () => lib(\"a\") + far(2);\n";
     let held = [Held::whole("var lib", "P")];
     let with = |n: u32| DiscoveryOptions {
-        self_support_max_nodes: n,
+        lone_seed_max_nodes: n,
         ..DiscoveryOptions::default()
     };
     let (_, found, rows) = run_indexed_with(code, &held, vec![], with(0));
@@ -860,9 +860,14 @@ fn a_small_seed_cannot_support_itself_through_its_own_claims() {
     assert_eq!(found.vetoed.len(), 1);
     assert_eq!(claim_of(&rows, "var lib"), None);
     assert_eq!(claim_of(&rows, "var tiny"), None);
-    // A seed at or over the floor keeps its own support.
+    // At or over the floor: kept.
     let (_, found, _) = run_indexed_with(code, &held, vec![], with(5));
     assert!(found.vetoed.is_empty());
+    // A second seed of P's family corroborates it.
+    let two = [Held::whole("var lib", "P"), Held::whole("var far", "P")];
+    let (_, _, rows) = run_indexed_with(code, &two, vec![], with(10_000));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
 }
 
 #[test]
