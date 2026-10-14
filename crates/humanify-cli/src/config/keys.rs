@@ -661,6 +661,16 @@ pub static KEYS: &[Key] = &[
     ),
     Key {
         section: "library.discovery",
+        name: "specific_rivals",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().specific_rivals)),
+        unset: "",
+        doc: "Read another family's prints in evidence_conflict / contested_cover under the \
+              lookup's specificity rule: a sponge's unspecific print is no rival (exp106).",
+    },
+    Key {
+        section: "library.discovery",
         name: "derived_families",
         kind: Kind::Bool,
         flag: None,

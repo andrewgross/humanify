@@ -141,6 +141,7 @@ contested_cover = 0.0
 banner_names = "any"           # exp106 matcher hygiene (experiments/106-matcher-hygiene),
 helper_families = 0            # all off by default
 payload_min_bytes = 0
+specific_rivals = false
 derived_families = false
 ```
 

@@ -903,3 +903,35 @@ fn a_data_payload_is_not_claimed_by_propagation_without_its_own_evidence() {
     let (_, _, rows) = run_indexed_with(code, &held, vec![], with(100_000));
     assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
 }
+
+#[test]
+fn specific_rivals_only_a_sponge_s_unspecific_print_is_no_conflict() {
+    // CONFLICT: Q holds dep's whole print, but only in a module far bigger
+    // than any query's (a sponge bundling P's code). With rivals read
+    // under the lookup's specificity rule, that is no evidence against P.
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let on = DiscoveryOptions {
+        evidence_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    let specific = DiscoveryOptions {
+        specific_rivals: true,
+        ..on
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], specific);
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    // A specific rival still conflicts.
+    let rival = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::whole("var dep", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(CONFLICT, &rival, vec![], specific);
+    assert_ne!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}

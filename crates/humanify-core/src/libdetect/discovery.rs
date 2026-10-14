@@ -177,6 +177,12 @@ pub struct DiscoveryOptions {
     /// says nothing about whose payload it is
     /// ([`Containment::unbacked_payload`]).
     pub payload_min_bytes: u32,
+    /// Read another family's evidence in the conflict guards
+    /// (`evidence_conflict`, `contested_cover`) under the lookup's
+    /// specificity rule (exp106; default off): a print another family holds
+    /// only in a module far bigger than the query's (a sponge package
+    /// bundling the claimed package's code) is no rival.
+    pub specific_rivals: bool,
     /// Join the package families by the metadata-derived links
     /// (`libindex/families-derived.json`, restricted to the index's
     /// packages) wherever discovery asks "one family?" (exp106).
@@ -196,6 +202,7 @@ impl Default for DiscoveryOptions {
             banner_names: BannerNames::Any,
             helper_families: 0,
             payload_min_bytes: 0,
+            specific_rivals: false,
             derived_families: false,
         }
     }
@@ -739,6 +746,9 @@ pub struct Containment<'c> {
     /// Per index owner, its base family (read once): a key for counting
     /// and covering, joined by `families.same` where links apply.
     owner_family: Vec<String>,
+    /// Rivals' prints count only under the specificity rule
+    /// ([`DiscoveryOptions::specific_rivals`]).
+    specific_rivals: bool,
 }
 
 /// The cover key of the claimed package's own family (see
@@ -770,7 +780,14 @@ impl<'c> Containment<'c> {
                 .iter()
                 .map(|p| families.family(p))
                 .collect(),
+            specific_rivals: false,
         }
+    }
+
+    /// Read rivals under the specificity rule ([`DiscoveryOptions::specific_rivals`]).
+    pub fn with_specific_rivals(mut self, on: bool) -> Self {
+        self.specific_rivals = on;
+        self
     }
 
     fn name(&self, owner: u32) -> &str {
@@ -912,13 +929,20 @@ impl<'c> Containment<'c> {
             &prints.functions,
             UNIT_ROW_MIN_NODES,
             |hash| {
+                let query = self.module_bytes[u as usize];
                 crate::matching::store::ReferenceStore::candidates(self.index, hash)
                     .iter()
-                    .map(|hit| {
+                    .filter_map(|hit| {
                         if self.owner_is(hit.owner, package) {
-                            OWN
+                            Some(OWN)
+                        } else if self.specific_rivals
+                            && self.rules.specificity.is_some_and(|(factor, slack)| {
+                                hit.module_bytes > factor * query + slack
+                            })
+                        {
+                            None
                         } else {
-                            self.owner_family[hit.owner as usize].as_str()
+                            Some(self.owner_family[hit.owner as usize].as_str())
                         }
                     })
                     .collect()
@@ -1708,7 +1732,8 @@ fn discover_unscoped(
         &looker.module_bytes,
         lookup.rules,
         &families,
-    );
+    )
+    .with_specific_rivals(options.specific_rivals);
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
     // The evidence-conflict guard reads index seeds too: the lookup picks
     // the best package under its specificity and package-count filters; a

@@ -328,6 +328,7 @@ impl Library {
             banner_names: d.banner_names,
             helper_families: d.helper_families,
             payload_min_bytes: d.payload_min_bytes,
+            specific_rivals: d.specific_rivals,
             derived_families: d.derived_families,
         }
     }
@@ -415,6 +416,7 @@ pub struct LibraryDiscovery {
     pub banner_names: humanify_core::libdetect::discovery::BannerNames,
     pub helper_families: u32,
     pub payload_min_bytes: u32,
+    pub specific_rivals: bool,
     pub derived_families: bool,
 }
 
@@ -589,6 +591,7 @@ fn library_of(r: &Resolved) -> Library {
             },
             helper_families: n("library.discovery.helper_families") as u32,
             payload_min_bytes: n("library.discovery.payload_min_bytes") as u32,
+            specific_rivals: r.flag_on("library.discovery.specific_rivals"),
             derived_families: r.flag_on("library.discovery.derived_families"),
         },
     }
