@@ -2,6 +2,24 @@
 
 ## STATUS (2026-10-14)
 
+- **Scorer 4: the exp104 truth audit** (`experiments/104-truth-audit/README.md`). There are three mechanical truth
+  corrections, all measured in both directions and hand-checked:
+
+  - **carried:** a unit the source map never mapped is `<unmapped>`. This removed 9.4 MB of lighthouse locale
+    tables from the held-out library denominator, so held-out recall rises about 7.5 points with no new names.
+  - **copies:** dependency-gated, named vendored copies get an origin (`copies.json`, `copies-test.json`).
+  - **families:** families are joined by npm metadata (`families-derived.json`: one repository, renamed-to, GitHub
+    fork).
+
+  On every ledgered label, right->wrong is 0. All labels were re-scored (31 dev, 2 test). With the rules switched
+  off, the scorer reproduces scorer 3's cards byte for byte.
+
+- **A second corpus: exp100's FROZEN test split (`corpus-test.json`, `--corpus test`).** It holds 55 new apps
+  chosen by rule (none was in exp095's 360-app selection corpus or the 67 held-out apps), built with Bun,
+  esbuild, webpack and rollup: 191 bundles in the sets `test-bun`, `test-esbuild`, `test-webpack` and
+  `test-rollup`. This dev corpus (`corpus.json`) and every committed label are unchanged. A test label commits
+  per-set aggregates only, and the leaderboard refuses to mix it with dev labels. Tuning lanes never run or read
+  it. See `experiments/100-test-split/README.md`.
 - **Scorer 3: precision / recall / F1 (2026-10-14, Andrew: "more standard").** Same bytes, same judge: precision =
   named ÷ (named + wrong family + app claimed), recall unchanged, F1 = 2PR ÷ (P + R). The wrong-family and
   wrong-name shares are gone; the bar is precision ≥ 99.8% (app claimed stays a hard 0). Every committed label was

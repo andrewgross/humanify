@@ -10,9 +10,42 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "../.."))
 MISSES = os.path.join(REPO, "experiments/095-library-fingerprints/misses/scripts")
-DATA = "/work/exp096-data"  # the frozen corpus, truth and raw reports (not committed)
-MANIFEST = os.path.join(HERE, "corpus.json")
-ORIGINS_MANIFEST = os.path.join(HERE, "origins.json")
+# Two corpora, never mixed in one label. `dev` is the corpus every tuning lane reads (Claude Code, the 67 held-out
+# apps, wrangler, the esbuild app). `test` is exp100's FROZEN test split: new apps chosen by rule, built with four
+# bundlers, scored only to judge — its per-bundle cards and raw reports stay under its own data dir (not committed,
+# not for tuning lanes); a test label commits its summary (per-set aggregates) only.
+CORPORA = {
+    "dev": {"manifest": os.path.join(HERE, "corpus.json"), "origins": os.path.join(HERE, "origins.json"),
+            "copies": os.path.join(HERE, "copies.json"), "data": "/work/exp096-data"},
+    "test": {"manifest": os.path.join(HERE, "corpus-test.json"), "origins": os.path.join(HERE, "origins-test.json"),
+             "copies": os.path.join(HERE, "copies-test.json"), "data": "/work/exp100-test-data/frozen"},
+}
+INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
+CORPUS = "dev"
+DATA = CORPORA[CORPUS]["data"]  # the frozen corpus, truth and raw reports (not committed)
+MANIFEST = CORPORA[CORPUS]["manifest"]
+ORIGINS_MANIFEST = CORPORA[CORPUS]["origins"]
+
+
+def use(corpus):
+    """Point every path at one corpus (`dev`, the default, or `test`). Callers read lib096.DATA / MANIFEST /
+    ORIGINS_MANIFEST at call time, never a copy imported before this ran."""
+    global CORPUS, DATA, MANIFEST, ORIGINS_MANIFEST
+    if corpus not in CORPORA:
+        raise SystemExit(f"unknown corpus {corpus!r} — valid: {', '.join(CORPORA)}")
+    CORPUS = corpus
+    DATA, MANIFEST, ORIGINS_MANIFEST = (CORPORA[corpus][k] for k in ("data", "manifest", "origins"))
+
+
+def corpus_flag(argv):
+    """`--corpus dev|test` from an argv (default dev), applied with use(); returns argv without it."""
+    if "--corpus" not in argv:
+        return list(argv)
+    i = argv.index("--corpus")
+    if i + 1 >= len(argv):
+        raise SystemExit("--corpus needs a value: dev|test")
+    use(argv[i + 1])
+    return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv
 VENV_PY = "/work/exp095-library-fingerprints/scale/.venv/bin/python"
 

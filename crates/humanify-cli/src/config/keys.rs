@@ -580,6 +580,37 @@ pub static KEYS: &[Key] = &[
         doc: "What may support a seed against the isolation veto: \"without-module\" or \
               \"all-rules\" (the lab prototype's).",
     },
+    Key {
+        section: "library.discovery",
+        name: "evidence_conflict",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().evidence_conflict)),
+        unset: "",
+        doc: "Refuse an index seed or a propagated claim when another package family's index \
+              prints cover more of the unit than the claimed family's (exp102).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "literal_conflict",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().literal_conflict)),
+        unset: "",
+        doc: "Refuse a propagated claim when the unit carries a long literal the index ties \
+              only to other package families (exp102).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "contested_cover",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().contested_cover),
+        unset: "",
+        doc: "Refuse a propagated claim on a unit another package family's prints also cover \
+              when the claimed family's prints cover less than this share of it (exp102; \
+              0 = off).",
+    },
     // [unpack]
     Key {
         section: "unpack",

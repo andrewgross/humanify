@@ -35,6 +35,34 @@ describe("eval library argument parsing", () => {
     ]);
   });
 
+  it("passes --corpus test through, and refuses an unknown corpus", () => {
+    const r = libraryArgs([
+      "test-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "agreement",
+      "--corpus",
+      "test"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.slice(-2), ["--corpus", "test"]);
+    assert.match(
+      String(
+        libraryArgs([
+          "lbl",
+          "--index",
+          "/ix",
+          "--rule",
+          "agreement",
+          "--corpus",
+          "heldout"
+        ])
+      ),
+      /--corpus dev\|test/
+    );
+  });
+
   it("requires a label, --index and a known --rule", () => {
     assert.match(String(libraryArgs([])), /usage/);
     assert.match(
@@ -44,6 +72,61 @@ describe("eval library argument parsing", () => {
     assert.match(
       String(libraryArgs(["lbl", "--index", "/ix", "--rule", "loose"])),
       /agreement\|structural/
+    );
+  });
+
+  it("passes --pipeline-set [library] settings through, in order", () => {
+    const r = libraryArgs([
+      "lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--pipeline-set",
+      "library.discovery.max_rounds=7",
+      "--pipeline-set",
+      "library.lookup.cover=0.6"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.slice(5), [
+      "--pipeline-set",
+      "library.discovery.max_rounds=7",
+      "--pipeline-set",
+      "library.lookup.cover=0.6"
+    ]);
+  });
+
+  it("refuses a --pipeline-set the verb cannot read, or the rule's own key", () => {
+    const base = ["lbl", "--index", "/ix", "--rule", "agreement"];
+    assert.match(
+      String(libraryArgs([...base, "--pipeline-set", "split.enabled=true"])),
+      /only \[library\.\*\] keys/
+    );
+    assert.match(
+      String(
+        libraryArgs([
+          ...base,
+          "--pipeline-set",
+          "library.lookup.agreement=false"
+        ])
+      ),
+      /library\.lookup\.agreement/
+    );
+    assert.match(
+      String(libraryArgs([...base, "--pipeline-set", "nodots"])),
+      /--pipeline-set/
+    );
+    assert.match(
+      String(
+        libraryArgs([
+          ...base,
+          "--pipeline-set",
+          "library.lookup.cover=0.6",
+          "--pipeline-set",
+          "library.lookup.cover=0.7"
+        ])
+      ),
+      /set twice/
     );
   });
 
