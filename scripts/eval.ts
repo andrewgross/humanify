@@ -451,6 +451,7 @@ const LIBRARY_FLAGS: Record<string, FlagKind> = {
   "--commit": "value",
   "--jobs": "value",
   "--cpus": "value",
+  "--corpus": "value",
   "--force-mixed": "bool",
   // `[library]` settings for the discover verb's --config file, in order
   // (e.g. `library.discovery.max_rounds=7`); run.py writes them beside the
@@ -478,6 +479,10 @@ export function libraryArgs(args: string[]): string[] | string {
   const rule = parsed.flags["--rule"];
   if (rule !== "agreement" && rule !== "structural") {
     return "--rule agreement|structural is required";
+  }
+  const corpus = parsed.flags["--corpus"];
+  if (corpus !== undefined && corpus !== "dev" && corpus !== "test") {
+    return "--corpus dev|test (dev = corpus.json; test = exp100's frozen test split)";
   }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
@@ -734,13 +739,15 @@ const VERBS: Verb[] = [
   {
     name: "library",
     usage:
-      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--force-mixed] [--pipeline-set library.<key>=value]...",
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
       "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
       "(experiments/096-library-matching-score/corpus.json: Claude Code 2.1.216, 67 held-out apps, wrangler, an " +
       "esbuild app; every input content-addressed), and writes one card per bundle + a summary under that " +
-      "experiment's results/<label>. Compare labels with `library-leaderboard`.",
+      "experiment's results/<label>. `--corpus test` scores exp100's FROZEN test split instead (new apps chosen " +
+      "by rule, built with Bun, esbuild, webpack and rollup; corpus-test.json): its cards stay out of git and only " +
+      "the per-set summary is committed. Compare labels with `library-leaderboard`.",
     proves:
       "how much library code the index names on THESE bundles (recall: the shipping package OR, for a vendored / " +
       "pre-bundled copy, its origin package), that no app code was claimed (the hard bar), precision / recall / F1 over " +

@@ -35,6 +35,34 @@ describe("eval library argument parsing", () => {
     ]);
   });
 
+  it("passes --corpus test through, and refuses an unknown corpus", () => {
+    const r = libraryArgs([
+      "test-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "agreement",
+      "--corpus",
+      "test"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.slice(-2), ["--corpus", "test"]);
+    assert.match(
+      String(
+        libraryArgs([
+          "lbl",
+          "--index",
+          "/ix",
+          "--rule",
+          "agreement",
+          "--corpus",
+          "heldout"
+        ])
+      ),
+      /--corpus dev\|test/
+    );
+  });
+
   it("requires a label, --index and a known --rule", () => {
     assert.match(String(libraryArgs([])), /usage/);
     assert.match(
