@@ -658,8 +658,9 @@ pub static KEYS: &[Key] = &[
         0,
         U32,
         || int(u64::from(discovery().payload_min_bytes)),
-        "A propagated unit of at least this many bytes, nine tenths string literal (a wasm \
-         blob, a data table), needs the claimed family's own index evidence (exp106; 0 = off).",
+        "A propagated unit of at least this many bytes of its own (a module wrapper is not its \
+         body), nine tenths string literal (a wasm blob, a data table), needs the claimed \
+         family's own index evidence or a base64 payload naming it (exp106, exp113; 0 = off).",
     ),
     Key {
         section: "library.discovery",

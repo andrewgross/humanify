@@ -153,7 +153,7 @@ contested_cover = 0.05
 specific_rivals = true         # exp106: the two conflict guards read rivals under specificity
 banner_names = "known"         # exp106 matcher hygiene (experiments/106-matcher-hygiene)
 derived_families = true        # exp106: one family = npm-metadata links (families-derived.json)
-payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence
+payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence (exp113: own bytes; a base64 payload naming the package is its own)
 helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
 ```
 
