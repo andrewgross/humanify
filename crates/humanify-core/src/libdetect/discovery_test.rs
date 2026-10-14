@@ -1104,3 +1104,34 @@ fn shadow_ties_give_a_package_with_only_ambiguous_seeds_to_the_rival_the_bundle_
     let (_, _, rows) = run_indexed_with(SHADOW, &bigger, vec![], on);
     assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
 }
+
+/// GROUPED with a caller of lib, `user`, that is Q's: with P dropped, Q's
+/// DOWN would take lib and dep (Q's build holds them, unspecific).
+const FENCED: &str = "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\nvar lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar user = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), lib(String(k))].join(\",\"); };\nvar x;\nvar init_m = __esm(() => { x = user(1); });\nvar app = () => init_m();\n";
+
+#[test]
+fn presence_fence_names_neither_the_dropped_package_nor_its_rival() {
+    let held = [
+        held_at("var lib", "P", 3000),
+        Held::whole("var dep", "P").unspecific(),
+        held_at("var user", "Q", 100),
+        Held::whole("var lib", "Q").unspecific(),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let drop = DiscoveryOptions {
+        context_presence: 1.5,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(FENCED, &held, vec![], drop);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Down)));
+    // Fenced: the code P's seeds stood on is ambiguous between the shipper
+    // and the origin; nothing names it.
+    let fence = DiscoveryOptions {
+        presence_fence: true,
+        ..drop
+    };
+    let (_, found, rows) = run_indexed_with(FENCED, &held, vec![], fence);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert!(found.claims.values().all(|c| !c.package.starts_with('<')));
+}

@@ -321,13 +321,15 @@ fn the_exp114_presence_keys_default_off_and_set() {
     assert_eq!(o.context_presence, 0.0);
     assert_eq!(o.context_presence_slack, 0);
     assert!(!o.shadow_ties);
+    assert!(!o.presence_fence);
     let on = build(
         &["in.js"],
-        "[library.discovery]\ncontext_presence = 1.5\ncontext_presence_slack = 16384\nshadow_ties = true\n",
+        "[library.discovery]\ncontext_presence = 1.5\ncontext_presence_slack = 16384\nshadow_ties = true\npresence_fence = true\n",
     )
     .unwrap();
     let o = on.library.discovery_options();
     assert_eq!(o.context_presence, 1.5);
     assert_eq!(o.context_presence_slack, 16384);
     assert!(o.shadow_ties);
+    assert!(o.presence_fence);
 }

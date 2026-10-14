@@ -158,6 +158,7 @@ helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neut
 context_presence = 0.0         # exp114: off; a package seen only in index modules bigger
 context_presence_slack = 0     #   than the bundle's groups is no seed (experiments/114-dev-precision)
 shadow_ties = false            # exp114: off; a package whose seeds are all ties goes to its rival
+presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
 ```
 
 To reproduce a pre-exp109 run, set the old values back explicitly:

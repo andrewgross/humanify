@@ -148,6 +148,8 @@ context_presence = 0.0
 context_presence_slack = 0
 # A package whose every index seed is a tie with another family that has a seed of its own in the bundle is that family's shadow: its tied seeds become the rival's, the rest are dropped (exp114).
 shadow_ties = false
+# What context_presence / shadow_ties drop is claimed by no one, the dropped package nor a rival propagating into it: the code is ambiguous between a shipper and its origin, so name neither (exp114).
+presence_fence = false
 
 [unpack]
 # Force the bundler verdict.

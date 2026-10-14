@@ -210,6 +210,11 @@ pub struct DiscoveryOptions {
     /// bigger than the package's own (the origin is the smaller context: a
     /// sponge with its own seeds must not absorb a real origin's ties).
     pub shadow_ties: bool,
+    /// Fence what the presence rules drop (exp114; default off): a dropped
+    /// seed's unit is claimed by no one — neither the package nor a rival
+    /// propagating into it — instead of left open (the code is ambiguous
+    /// between a shipper and its origin; name neither).
+    pub presence_fence: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -230,6 +235,7 @@ impl Default for DiscoveryOptions {
             context_presence: 0.0,
             context_presence_slack: 0,
             shadow_ties: false,
+            presence_fence: false,
         }
     }
 }
@@ -1374,6 +1380,7 @@ fn presence(
         .map(|(_, &k)| k)
         .collect();
     let mut keep: Vec<Option<Seed>> = seeds.into_iter().map(Some).collect();
+    let mut dropped_units: Vec<u32> = Vec::new();
     if options.context_presence > 0.0 {
         let mut present: BTreeSet<usize> = declared.clone();
         let mut judged: BTreeSet<usize> = BTreeSet::new();
@@ -1396,14 +1403,48 @@ fn presence(
         }
         for (slot, &k) in keep.iter_mut().zip(&keys) {
             if judged.contains(&k) && !present.contains(&k) {
-                *slot = None;
+                dropped_units.extend(slot.take().map(|s| s.unit));
             }
         }
     }
+    let before: Vec<u32> = keep.iter().flatten().map(|s| s.unit).collect();
     if options.shadow_ties {
         shadow_ties(&mut keep, &keys, &declared, graph, containment, &mut key_of);
     }
-    keep.into_iter().flatten().collect()
+    let mut out: Vec<Seed> = keep.into_iter().flatten().collect();
+    if options.presence_fence {
+        let kept: BTreeSet<u32> = out.iter().map(|s| s.unit).collect();
+        let all: BTreeSet<u32> = before.into_iter().chain(dropped_units).collect();
+        out.extend(
+            all.into_iter()
+                .filter(|u| !kept.contains(u))
+                .map(|unit| Seed {
+                    unit,
+                    package: FENCE.to_string(),
+                    evidence: Evidence::Declared {
+                        reader: FENCE.to_string(),
+                    },
+                }),
+        );
+    }
+    out
+}
+
+/// The package a fenced unit is claimed as while the fixpoint runs
+/// ([`DiscoveryOptions::presence_fence`]); [`unfence`] removes every
+/// claim of it after.
+const FENCE: &str = "<fence>";
+
+/// `found` without the fence's claims (see [`FENCE`]).
+fn unfence(mut found: Discovery) -> Discovery {
+    found.claims.retain(|_, c| c.package != FENCE);
+    found.library_class.retain(|_, p| p != FENCE);
+    found.boundary.remove(FENCE);
+    for q in &mut found.queue {
+        q.uses.retain(|p| p != FENCE);
+    }
+    found.queue.retain(|q| !q.uses.is_empty());
+    found
 }
 
 /// [`DiscoveryOptions::shadow_ties`] over the kept seeds (see [`presence`]).
@@ -1990,14 +2031,14 @@ fn discover_unscoped(
             options,
         )
     };
-    let found = discover_with(
+    let found = unfence(discover_with(
         &graph,
         &present(&seeds),
         &families,
         options,
         profile,
         Some(&containment),
-    );
+    ));
     let Some(targeted) = lookup.targeted else {
         return (graph, found);
     };
@@ -2021,14 +2062,14 @@ fn discover_unscoped(
         return (graph, found);
     }
     seeds.extend(more);
-    let found = discover_with(
+    let found = unfence(discover_with(
         &graph,
         &present(&seeds),
         &families,
         options,
         profile,
         Some(&containment),
-    );
+    ));
     (graph, found)
 }
 

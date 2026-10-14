@@ -715,6 +715,17 @@ pub static KEYS: &[Key] = &[
               its own in the bundle is that family's shadow: its tied seeds become the rival's, \
               the rest are dropped (exp114).",
     },
+    Key {
+        section: "library.discovery",
+        name: "presence_fence",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().presence_fence)),
+        unset: "",
+        doc: "What context_presence / shadow_ties drop is claimed by no one, the dropped package \
+              nor a rival propagating into it: the code is ambiguous between a shipper and its \
+              origin, so name neither (exp114).",
+    },
     // [unpack]
     Key {
         section: "unpack",
