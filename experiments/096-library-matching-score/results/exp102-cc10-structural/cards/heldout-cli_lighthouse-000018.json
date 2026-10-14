@@ -1,0 +1,78 @@
+{
+ "bundleSha256": "8b5b7a9a7ee743bf1f8a64f9e7f00fc41ea7ed853898aa3c0206f5ff066a2fa0",
+ "claimedBytes": {
+  "family": 12505,
+  "origin": 75623,
+  "right": 180150,
+  "wrongFamily": 14590
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_lighthouse-000018",
+ "exploratory": {
+  "names": {
+   "bindings": 2809,
+   "bindingsSameVersion": 2809,
+   "bindingsVersionKnown": 2809,
+   "exactBytes": 150092,
+   "exactUnits": 161,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "4d1db97507a8b2c298a8fc646aa2b6630fce0717855af88ba47a0f2ee27a9a54",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f1": 0.040624,
+  "namedBytes": 230468,
+  "precision": 0.966242,
+  "recall": 0.020748
+ },
+ "label": "exp102-cc10-structural",
+ "missBytes": {
+  "a": 10822905,
+  "c": 7027,
+  "d-file": 8697,
+  "e-spec": 171,
+  "e-support": 176,
+  "e-veto": 597,
+  "f": 345
+ },
+ "noDiscovery": null,
+ "reportSha256": "19dcde60e5aaaea589695d71f1092a538a7cd9c1149f89d9a6ea49b68af60fb2",
+ "rule": "structural",
+ "schema": "exp096-score/3",
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 4796176,
+  "<unmapped>": 74,
+  "copy": 121791,
+  "library": 11108196
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "bun",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 121791,
+  "f1": 0.047103,
+  "f1ShipperOnly": 0.033827,
+  "libraryBytes": 11108196,
+  "namedAsOriginBytes": 75623,
+  "namedAsShipperBytes": 192655,
+  "namedBytes": 268278,
+  "namedBytesShipperOnly": 192655,
+  "precision": 0.948421,
+  "precisionShipperOnly": 0.681077,
+  "recall": 0.024151,
+  "recallShipperOnly": 0.017344,
+  "wrongFamilyBytes": 14590,
+  "wrongFamilyBytesShipperOnly": 90213
+ },
+ "truthMethod": "sourcemap"
+}

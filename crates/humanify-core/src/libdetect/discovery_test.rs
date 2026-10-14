@@ -493,6 +493,56 @@ type ClaimRows = Vec<(String, Option<(String, Rule)>)>;
 /// head, that statement's whole print under the listed owners (structural
 /// rule, no neighbour support).
 fn run_indexed(code: &str, held: &[(&str, &[&str])]) -> (ReferenceGraph, Discovery, ClaimRows) {
+    let rows: Vec<Held<'_>> = held
+        .iter()
+        .flat_map(|(head, owners)| owners.iter().map(move |o| Held::whole(head, o)))
+        .collect();
+    run_indexed_with(code, &rows, vec![], DiscoveryOptions::default())
+}
+
+/// One index row of a test index: statement `head`'s whole print, or its
+/// largest function's, under `owner`, seen in a module of `module_bytes`.
+#[derive(Clone, Copy)]
+struct Held<'h> {
+    head: &'h str,
+    owner: &'h str,
+    function: bool,
+    module_bytes: u64,
+}
+
+impl<'h> Held<'h> {
+    fn whole(head: &'h str, owner: &'h str) -> Held<'h> {
+        Held {
+            head,
+            owner,
+            function: false,
+            module_bytes: 500,
+        }
+    }
+
+    fn function(head: &'h str, owner: &'h str) -> Held<'h> {
+        Held {
+            function: true,
+            ..Held::whole(head, owner)
+        }
+    }
+
+    /// Seen only in a module far bigger than any query's: the lookup's
+    /// specificity rule never seeds from it, the index still holds it.
+    fn unspecific(self) -> Held<'h> {
+        Held {
+            module_bytes: 100_000_000,
+            ..self
+        }
+    }
+}
+
+fn run_indexed_with(
+    code: &str,
+    held: &[Held<'_>],
+    literals: Vec<crate::libindex::format::LiteralRow>,
+    options: DiscoveryOptions,
+) -> (ReferenceGraph, Discovery, ClaimRows) {
     use crate::libdetect::discovery::{BundlePieces, IndexLookup, discover_in_bundle};
     use crate::libindex::format::UnitRow;
     use crate::libindex::lookup::{LibraryIndex, LookupRules};
@@ -513,24 +563,30 @@ fn run_indexed(code: &str, held: &[(&str, &[&str])]) -> (ReferenceGraph, Discove
         pieces.interop,
     );
     let mut rows = Vec::new();
-    for (head, owners) in held {
+    for h in held {
         let (_, p) = prints
             .iter()
-            .find(|(u, _)| code[u.span.start as usize..].starts_with(head))
-            .unwrap_or_else(|| panic!("no unit {head:?}"));
-        for owner in *owners {
-            rows.push(UnitRow {
-                hash: p.whole.hash.clone(),
-                owner: (*owner).into(),
-                file: "index.js".into(),
-                nodes: p.whole.nodes,
-                content: p.whole.content,
-                module_bytes: 500,
-                versions: vec![("1.0.0".into(), "1.0.0".into())],
-            });
-        }
+            .find(|(u, _)| code[u.span.start as usize..].starts_with(h.head))
+            .unwrap_or_else(|| panic!("no unit {:?}", h.head));
+        let print = if h.function {
+            p.functions
+                .iter()
+                .max_by_key(|f| f.nodes)
+                .unwrap_or_else(|| panic!("{:?} has no function", h.head))
+        } else {
+            &p.whole
+        };
+        rows.push(UnitRow {
+            hash: print.hash.clone(),
+            owner: h.owner.into(),
+            file: "index.js".into(),
+            nodes: print.nodes,
+            content: print.content,
+            module_bytes: h.module_bytes,
+            versions: vec![("1.0.0".into(), "1.0.0".into())],
+        });
     }
-    let index = LibraryIndex::from_rows(rows, vec![]);
+    let index = LibraryIndex::from_rows(rows, literals);
     let rules = LookupRules {
         agreement: false,
         support: 0,
@@ -547,7 +603,7 @@ fn run_indexed(code: &str, held: &[(&str, &[&str])]) -> (ReferenceGraph, Discove
             rules,
             targeted: None,
         }),
-        DiscoveryOptions::default(),
+        options,
     );
     let rows = graph
         .units
@@ -617,4 +673,133 @@ fn the_boundary_check_counts_into_edges_after_the_claims() {
     // app calls lib and dep: two INTO edges landing on two P units.
     let b = found.boundary.get("P").copied().unwrap_or_default();
     assert_eq!((b.into_edges, b.into_units), (2, 2));
+}
+
+/// dep's whole print is one family's; one nested function of it is
+/// another's: the unit's own evidence says the first.
+const CONFLICT: &str = "var lib = function (t) { return t.split(\",\").map(dep).map(tiny).filter(Boolean).join(\"|\").concat(t.length, t.length); };\nvar tiny = (x) => x + 1;\nvar dep = function (e) { var inner = function (z) { return z.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, z.length); }; return [inner(e), e.length, e.indexOf(\"x\"), e.lastIndexOf(\"y\"), e.charAt(0)].join(\"\"); };\nvar app = () => lib(\"a\");\n";
+
+#[test]
+fn evidence_conflict_refuses_a_propagated_unit_another_family_covers_more_of() {
+    // lib seeds P. dep: P's build holds only its nested `inner`, Q's holds
+    // the whole statement (seen only in a big module, so it seeds
+    // nothing). Containment passes (P holds a print of dep); the conflict
+    // guard does not: Q's evidence covers more of dep than P's. (Every dep
+    // row is unspecific, so dep is no seed of its own.)
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let on = DiscoveryOptions {
+        evidence_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    // A tie (a fork holding the same print) is no conflict: DOWN takes it.
+    let tie = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::function("var dep", "Q").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(CONFLICT, &tie, vec![], on);
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
+
+/// tbl is a table under the index's row floor: one long string, which no
+/// unit print can speak for — only the literal table can.
+const TABLE: &str = "var lib = function (t) { return t.split(\",\").map(tbl).map(tiny).filter(Boolean).join(\"|\").concat(t.length, t.length); };\nvar tiny = (x) => x + 1;\nvar tbl = (i) => \"!}.&u%}'&}*'~!6*)%&,~!J~!J~%L~y<~!R,~~%Lu~~#GD~~#|)1#%}^%}2%+#.##%##%}&%##%'#%##&%#%#'%#&#%#&#'#%%#&#%##%#)%''%&%#%#'%#%%#%%}%%%#%#&(23#%%#\".charCodeAt(i);\nvar app = () => lib(\"a\");\n";
+
+fn literal_row(owner: &str, statement: &str) -> crate::libindex::format::LiteralRow {
+    use crate::libindex::literals::{LiteralMode, code_literals};
+    crate::libindex::format::LiteralRow {
+        owner: owner.into(),
+        file: "index.js".into(),
+        lits: code_literals(statement, LiteralMode::Bundled)
+            .expect("parses")
+            .into_iter()
+            .collect(),
+        versions: vec![("1.0.0".into(), "1.0.0".into())],
+    }
+}
+
+#[test]
+fn literal_conflict_refuses_a_propagated_unit_whose_long_literal_is_another_family_s() {
+    let tbl = TABLE.lines().find(|l| l.starts_with("var tbl")).unwrap();
+    let held = [Held::whole("var lib", "P")];
+    let on = DiscoveryOptions {
+        literal_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    // Q's files hold tbl's long string; P's do not.
+    let q_only = || vec![literal_row("Q", tbl)];
+    let (_, _, rows) = run_indexed_with(TABLE, &held, q_only(), DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var tbl"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(TABLE, &held, q_only(), on);
+    assert_eq!(claim_of(&rows, "var tbl"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    // P's files hold it too, or nobody's do: no conflict.
+    for lits in [vec![literal_row("Q", tbl), literal_row("P", tbl)], vec![]] {
+        let (_, _, rows) = run_indexed_with(TABLE, &held, lits, on);
+        assert_eq!(claim_of(&rows, "var tbl"), Some(("P".into(), Rule::Down)));
+    }
+}
+
+#[test]
+fn contested_cover_refuses_a_big_unit_claimed_through_a_thin_shared_print() {
+    // dep's nested `inner` is held by P and Q alike; the rest of dep is
+    // nobody's. Under the contested-cover floor (P's cover / dep's nodes),
+    // a unit another family also speaks for is refused; over it, or with
+    // nobody else speaking, DOWN takes it.
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::function("var dep", "Q").unspecific(),
+    ];
+    let with = |floor: f64| DiscoveryOptions {
+        contested_cover: floor,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], with(0.0));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], with(0.99));
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], with(0.01));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let uncontested = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(CONFLICT, &uncontested, vec![], with(0.99));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
+
+#[test]
+fn evidence_conflict_drops_an_index_seed_another_family_covers_more_of() {
+    // lib and dep seed as P (dep through its nested `inner` (the lookup's function
+    // cover; Q's whole-print row is too unspecific for the lookup to read) and
+    // support each other.
+    // The index still says Q holds all of dep: with the guard on, the seed
+    // is dropped like a propagated claim would be.
+    let code = "var lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length, t.length); };\nvar dep = function (e) { var inner = function (z) { return z.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, z.length).concat([z.length, z.charAt(0)]); }; return inner(e); };\nvar app = () => lib(\"a\");\n";
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P"),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    let on = DiscoveryOptions {
+        evidence_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var dep"), None);
 }

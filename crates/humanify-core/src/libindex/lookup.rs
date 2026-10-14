@@ -200,6 +200,27 @@ impl LibraryIndex {
         }
     }
 
+    /// Per LONG literal of `text` (a value over the extractor's length
+    /// cap, kept as a hash: `S#`, `P#`, `R#`) that the literal table holds,
+    /// the owners of the files holding it. A long literal is identity
+    /// evidence: it does not recur by chance (a generated table, a long
+    /// message). None when the text does not parse.
+    pub(crate) fn long_literal_owners(&self, text: &str) -> Option<Vec<BTreeSet<u32>>> {
+        let lits = code_literals(text, LiteralMode::Bundled)?;
+        Some(
+            lits.iter()
+                .filter(|l| l.as_bytes().get(1) == Some(&b'#'))
+                .filter_map(|l| self.literal_ids.get(l))
+                .map(|&id| {
+                    self.postings[id as usize]
+                        .iter()
+                        .map(|&f| self.file_owner[f as usize])
+                        .collect()
+                })
+                .collect(),
+        )
+    }
+
     /// The literal rule on one text: (package, score) when the best file's
     /// package reaches the score and cover thresholds with a margin over
     /// the next package.

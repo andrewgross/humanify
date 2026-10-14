@@ -124,6 +124,12 @@ queue_cap_bytes = 256000
 max_rounds = 50
 # What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
 veto_support = "without-module"
+# Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
+evidence_conflict = false
+# Refuse a propagated claim when the unit carries a long literal the index ties only to other package families (exp102).
+literal_conflict = false
+# Refuse a propagated claim on a unit another package family's prints also cover when the claimed family's prints cover less than this share of it (exp102; 0 = off).
+contested_cover = 0.0
 
 [unpack]
 # Force the bundler verdict.

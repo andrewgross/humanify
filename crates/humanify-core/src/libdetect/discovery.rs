@@ -136,6 +136,19 @@ pub struct DiscoveryOptions {
     pub queue_cap: u32,
     pub max_rounds: u32,
     pub veto_support: VetoSupport,
+    /// The evidence-conflict guard (exp102; default off): an index seed or
+    /// a propagated unit another family's index prints cover more of than
+    /// the claimed family's is refused ([`Containment::outweighed`]).
+    pub evidence_conflict: bool,
+    /// The literal-conflict guard (exp102; default off): a propagated
+    /// unit carrying a long literal the index's literal table ties only to
+    /// other families is refused ([`Containment::literal_contradicts`]).
+    pub literal_conflict: bool,
+    /// The contested-cover floor (exp102; 0 = off): a propagated unit
+    /// another family's prints also speak for, of which the claimed
+    /// family's prints cover less than this share, is refused
+    /// ([`Containment::contested_thin`]).
+    pub contested_cover: f64,
 }
 
 impl Default for DiscoveryOptions {
@@ -145,6 +158,9 @@ impl Default for DiscoveryOptions {
             queue_cap: 256_000,
             max_rounds: 50,
             veto_support: VetoSupport::WithoutModule,
+            evidence_conflict: false,
+            literal_conflict: false,
+            contested_cover: 0.0,
         }
     }
 }
@@ -672,6 +688,12 @@ impl LibraryProfile {
 /// lacks (tree-shaken).
 pub struct Containment<'c> {
     index: &'c crate::libindex::lookup::LibraryIndex,
+    /// The bundle and each graph unit's span (the literal guard reads a
+    /// unit's text).
+    code: &'c str,
+    spans: Vec<oxc_span::Span>,
+    /// Per unit, the families holding each of its long literals (read once).
+    long_literals: std::cell::RefCell<HashMap<u32, Vec<BTreeSet<String>>>>,
     prints: &'c [Option<crate::libindex::units::StatementPrints>],
     module_bytes: &'c [u64],
     rules: crate::libindex::lookup::LookupRules,
@@ -682,6 +704,8 @@ pub struct Containment<'c> {
 impl<'c> Containment<'c> {
     pub fn new(
         index: &'c crate::libindex::lookup::LibraryIndex,
+        code: &'c str,
+        graph: &ReferenceGraph,
         prints: &'c [Option<crate::libindex::units::StatementPrints>],
         module_bytes: &'c [u64],
         rules: crate::libindex::lookup::LookupRules,
@@ -689,6 +713,9 @@ impl<'c> Containment<'c> {
     ) -> Containment<'c> {
         Containment {
             index,
+            code,
+            spans: graph.units.iter().map(|u| u.span).collect(),
+            long_literals: std::cell::RefCell::default(),
             prints,
             module_bytes,
             rules,
@@ -746,15 +773,157 @@ impl<'c> Containment<'c> {
             });
         !held_by_family
     }
+
+    /// Does the literal table contradict unit `u` being `family`'s? Its
+    /// long literals (identity evidence: a generated table, a long
+    /// message — see `LibraryIndex::long_literal_owners`) that the table
+    /// ties to at most [`LITERAL_IDENTITY_FAMILIES`] families are read; when
+    /// there are some and none is held by `family`, the unit carries
+    /// another package's identity. The unit print cannot say this for a
+    /// table: one huge string is a handful of nodes, under the row floor.
+    fn literal_contradicts(&self, u: u32, family: &str) -> bool {
+        let mut cache = self.long_literals.borrow_mut();
+        let held = cache.entry(u).or_insert_with(|| {
+            let span = self.spans[u as usize];
+            let text = &self.code[span.start as usize..span.end as usize];
+            self.index
+                .long_literal_owners(text)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|owners| {
+                    owners
+                        .into_iter()
+                        .map(|o| self.family_of(o).to_string())
+                        .collect::<BTreeSet<String>>()
+                })
+                .filter(|f| f.len() <= LITERAL_IDENTITY_FAMILIES)
+                .collect()
+        });
+        !held.is_empty() && !held.iter().any(|f| f.contains(family))
+    }
+
+    /// Per family, the nodes of unit `u` its index prints cover
+    /// ([`family_cover`] at the row floor), and `u`'s nodes; None for a
+    /// unit with no prints.
+    fn covers(&self, u: u32) -> Option<(BTreeMap<&str, u32>, u32)> {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return None;
+        };
+        let cover = family_cover(
+            &prints.whole,
+            &prints.functions,
+            UNIT_ROW_MIN_NODES,
+            |hash| {
+                crate::matching::store::ReferenceStore::candidates(self.index, hash)
+                    .iter()
+                    .map(|hit| self.family_of(hit.owner))
+                    .collect()
+            },
+        );
+        Some((cover, prints.whole.nodes))
+    }
+
+    /// Does another family's evidence outweigh `family`'s on unit `u`?
+    /// Per family, the nodes of `u` its index prints cover — the whole
+    /// print when the family holds it, else its largest non-overlapping
+    /// function prints (the structural rule's scoring, every print at or
+    /// over the row floor, no specificity or package-count filter): a
+    /// propagated claim is refused when some other family covers strictly
+    /// more. Containment asks "can P's build hold this?"; this asks "does
+    /// the unit's own evidence point elsewhere?" — a module of package Q
+    /// that one nested helper shared with P would otherwise let DOWN take
+    /// as P's. A tie (a fork holding the same prints) is no conflict.
+    fn outweighed(&self, u: u32, family: &str) -> bool {
+        let Some((cover, _)) = self.covers(u) else {
+            return false;
+        };
+        let own = cover.get(family).copied().unwrap_or(0);
+        cover.iter().any(|(f, &n)| *f != family && n > own)
+    }
+
+    /// Is unit `u` contested and `family`'s claim on it thin? Another
+    /// family's prints also cover part of it, and `family`'s cover less
+    /// than `floor` of its nodes: a big unit (a whole module of Q) taken
+    /// through one small helper P shares with it. Uncontested, a thin
+    /// cover is version drift and DOWN may keep it.
+    fn contested_thin(&self, u: u32, family: &str, floor: f64) -> bool {
+        let Some((cover, nodes)) = self.covers(u) else {
+            return false;
+        };
+        let own = cover.get(family).copied().unwrap_or(0);
+        let contested = cover.iter().any(|(f, &n)| *f != family && n > 0);
+        contested && f64::from(own) < floor * f64::from(nodes)
+    }
+}
+
+/// A long literal held by more families than this is no package's
+/// identity (a licence line, a shared message).
+const LITERAL_IDENTITY_FAMILIES: usize = 3;
+
+/// Per family, the nodes of a unit its held prints cover: the whole
+/// print's nodes when the family holds it, else the sum over its largest
+/// non-overlapping held function prints (prints under `floor` nodes are
+/// not in the index and count for nothing). `holders` names the families
+/// holding a hash.
+fn family_cover<'f>(
+    whole: &crate::libindex::units::UnitPrint,
+    functions: &[crate::libindex::units::UnitPrint],
+    floor: u32,
+    holders: impl Fn(&str) -> BTreeSet<&'f str>,
+) -> BTreeMap<&'f str, u32> {
+    let mut cover: BTreeMap<&str, u32> = BTreeMap::new();
+    let whole_held = if whole.nodes >= floor {
+        holders(&whole.hash)
+    } else {
+        BTreeSet::new()
+    };
+    for f in &whole_held {
+        cover.insert(f, whole.nodes);
+    }
+    let mut hits: Vec<(&crate::libindex::units::UnitPrint, BTreeSet<&str>)> = functions
+        .iter()
+        .filter(|p| p.nodes >= floor)
+        .map(|p| (p, holders(&p.hash)))
+        .filter(|(_, h)| !h.is_empty())
+        .collect();
+    hits.sort_by_key(|(p, _)| std::cmp::Reverse(p.nodes));
+    let mut taken: BTreeMap<&str, Vec<(u32, u32)>> = BTreeMap::new();
+    for (p, families) in hits {
+        let (s, e) = (p.span.start, p.span.end);
+        for f in families {
+            if whole_held.contains(f) {
+                continue;
+            }
+            let spans = taken.entry(f).or_default();
+            if spans.iter().any(|&(a, b)| !(e <= a || s >= b)) {
+                continue;
+            }
+            spans.push((s, e));
+            *cover.entry(f).or_default() += p.nodes;
+        }
+    }
+    cover
+}
+
+/// The guards on every propagated claim when an index is at hand:
+/// containment, and the evidence-conflict guard when the run asks for it.
+#[derive(Clone, Copy)]
+struct Guard<'c, 'x> {
+    containment: &'c Containment<'x>,
+    families: &'c PackageFamilies,
+    evidence_conflict: bool,
+    literal_conflict: bool,
+    contested_cover: f64,
 }
 
 /// One fixpoint round: every rule's proposals in rule order (first wins
-/// per unit), each checked by containment when an index is at hand.
+/// per unit), each checked by the guards when an index is at hand.
 fn round(
     st: &State<'_>,
     groups: &Groups,
     rules: &[LibraryRule],
-    guard: Option<(&Containment<'_>, &PackageFamilies)>,
+    guard: Option<Guard<'_, '_>>,
 ) -> Vec<(u32, u32, Rule, &'static str)> {
     let mut found = Vec::new();
     let mut family: HashMap<u32, String> = HashMap::new();
@@ -767,11 +936,16 @@ fn round(
         let mut proposed = Vec::new();
         (r.propose)(&view, &mut proposed);
         for (u, p) in proposed {
-            if let Some((c, families)) = guard {
+            if let Some(g) = guard {
                 let f = family
                     .entry(p)
-                    .or_insert_with(|| families.family(&st.packages[p as usize]));
-                if c.contradicts(u, f) {
+                    .or_insert_with(|| g.families.family(&st.packages[p as usize]));
+                if g.containment.contradicts(u, f)
+                    || (g.evidence_conflict && g.containment.outweighed(u, f))
+                    || (g.literal_conflict && g.containment.literal_contradicts(u, f))
+                    || (g.contested_cover > 0.0
+                        && g.containment.contested_thin(u, f, g.contested_cover))
+                {
                     continue;
                 }
             }
@@ -790,7 +964,7 @@ fn fixpoint<'g>(
     seeds: &[Seed],
     max_rounds: u32,
     rules: &[LibraryRule],
-    guard: Option<(&Containment<'_>, &PackageFamilies)>,
+    guard: Option<Guard<'_, '_>>,
 ) -> (State<'g>, Vec<RoundStats>) {
     let mut st = State {
         graph,
@@ -1101,7 +1275,13 @@ pub fn discover_with(
     containment: Option<&Containment<'_>>,
 ) -> Discovery {
     let groups = module_groups(graph);
-    let guard = containment.map(|c| (c, families));
+    let guard = containment.map(|c| Guard {
+        containment: c,
+        families,
+        evidence_conflict: options.evidence_conflict,
+        literal_conflict: options.literal_conflict,
+        contested_cover: options.contested_cover,
+    });
     let all = &profile.propagation[..];
     let without_module: Vec<LibraryRule> = all
         .iter()
@@ -1346,13 +1526,26 @@ fn discover_unscoped(
     };
     let containment = Containment::new(
         lookup.index,
+        code,
+        &graph,
         &prints,
         &looker.module_bytes,
         lookup.rules,
         &families,
     );
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
-    seeds.extend(looker.claims(lookup.index, &everything, lookup.rules, Evidence::Index));
+    // The evidence-conflict guard reads index seeds too: the lookup picks
+    // the best package under its specificity and package-count filters; a
+    // unit the index as a whole gives to another family more is no seed.
+    let unconflicted = |s: &Seed| {
+        !(options.evidence_conflict && containment.outweighed(s.unit, &families.family(&s.package)))
+    };
+    seeds.extend(
+        looker
+            .claims(lookup.index, &everything, lookup.rules, Evidence::Index)
+            .into_iter()
+            .filter(unconflicted),
+    );
     let found = discover_with(
         &graph,
         &seeds,
@@ -1377,7 +1570,8 @@ fn discover_unscoped(
             looker
                 .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
                 .into_iter()
-                .filter(|s| used.contains(&families.family(&s.package))),
+                .filter(|s| used.contains(&families.family(&s.package)))
+                .filter(unconflicted),
         );
     }
     if more.is_empty() {

@@ -226,3 +226,22 @@ fn the_lab_knobs_are_keys_with_todays_values() {
     let spec = build(&["in.js"], "[library.lookup]\nspecificity = false\n").unwrap();
     assert!(spec.library.rules().specificity.is_none());
 }
+
+#[test]
+fn the_exp102_precision_guards_are_keys_default_off() {
+    let off = build(&["in.js"], "").unwrap();
+    assert!(!off.library.discovery_options().evidence_conflict);
+    assert!(!off.library.discovery_options().literal_conflict);
+    assert_eq!(off.library.discovery_options().contested_cover, 0.0);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\nevidence_conflict = true\nliteral_conflict = true\ncontested_cover = 0.05\n",
+    )
+    .unwrap();
+    assert!(on.library.discovery_options().evidence_conflict);
+    assert!(on.library.discovery_options().literal_conflict);
+    assert_eq!(on.library.discovery_options().contested_cover, 0.05);
+    let err = ConfigFile::check("cfg.toml", "[library.discovery]\ncontested_cover = 1.5\n")
+        .expect_err("a share over 1 is refused");
+    assert!(err.iter().any(|e| e.contains("contested_cover")), "{err:?}");
+}
