@@ -11,12 +11,12 @@ TEST split (campaign lane T) is the judge before any default flip.
 Held-out wrong-family bytes, structural rule: **388,512 -> 184,508 (-204,004, -52.5%)** for **-985 named
 bytes** (recall 23.91% -> 23.90%). Precision, before -> after all three guards:
 
-| set | structural P | structural R | structural F1 | agreement P | agreement R | agreement F1 |
-|---|---|---|---|---|---|---|
-| held-out 67 | 96.08 -> **98.10** | 23.91 -> 23.90 | 38.29 -> 38.44 | 96.13 -> **97.12** | 18.51 -> 18.51 | 31.05 -> 31.10 |
+| set                      | structural P       | structural R   | structural F1  | agreement P        | agreement R    | agreement F1   |
+| ------------------------ | ------------------ | -------------- | -------------- | ------------------ | -------------- | -------------- |
+| held-out 67              | 96.08 -> **98.10** | 23.91 -> 23.90 | 38.29 -> 38.44 | 96.13 -> **97.12** | 18.51 -> 18.51 | 31.05 -> 31.10 |
 | task-master-ai (esbuild) | 97.90 -> **98.91** | 40.47 -> 40.47 | 57.27 -> 57.44 | 98.97 -> **99.02** | 28.34 -> 28.34 | 44.06 -> 44.06 |
-| wrangler | 95.05 -> **96.26** | 14.56 -> 14.56 | 25.26 -> 25.30 | 100.0 -> 100.0 | 10.38 -> 10.38 | 18.80 -> 18.80 |
-| Claude Code 2.1.216 | 100.0 -> 100.0 | 70.64 -> 70.64 | 82.80 -> 82.80 | 100.0 -> 100.0 | 61.87 -> 61.87 | 76.44 -> 76.44 |
+| wrangler                 | 95.05 -> **96.26** | 14.56 -> 14.56 | 25.26 -> 25.30 | 100.0 -> 100.0     | 10.38 -> 10.38 | 18.80 -> 18.80 |
+| Claude Code 2.1.216      | 100.0 -> 100.0     | 70.64 -> 70.64 | 82.80 -> 82.80 | 100.0 -> 100.0     | 61.87 -> 61.87 | 76.44 -> 76.44 |
 
 App code claimed: 0 bytes on every set, every label. Labels: `exp102-ctl2-structural` / `step4f-agreement`
 (before), `exp102-final-structural` / `exp102-final-agreement` (after: all three guards,
@@ -26,14 +26,14 @@ App code claimed: 0 bytes on every set, every label. Labels: `exp102-ctl2-struct
 
 `wrongfam.py` decomposes a label's wrong-family claims by mechanism. Held-out, structural, 388.5 KB:
 
-| cause | bytes |
-|---|---|
-| propagation from seeds that were themselves wrong | 179,859 |
-| propagation overreaching from a right seed region | 126,133 |
-| index seed, whole print, one family holds it | 39,209 |
-| index seed, function cover, one family | 19,390 |
-| declared / banner seeds (no index) | 13,790 |
-| index seed shared by several families, queue seeds, small nested cover | 10,131 |
+| cause                                                                  | bytes   |
+| ---------------------------------------------------------------------- | ------- |
+| propagation from seeds that were themselves wrong                      | 179,859 |
+| propagation overreaching from a right seed region                      | 126,133 |
+| index seed, whole print, one family holds it                           | 39,209  |
+| index seed, function cover, one family                                 | 19,390  |
+| declared / banner seeds (no index)                                     | 13,790  |
+| index seed shared by several families, queue seeds, small nested cover | 10,131  |
 
 Propagation (DOWN / MODULE / GLUE) made 79% of the wrong bytes. Read per unit, it fell into three
 shapes, each a generic gap in the guards:
@@ -51,11 +51,11 @@ shapes, each a generic gap in the guards:
 
 Each refuses a claim; none names anything. A refused propagated unit also stops propagation through it.
 
-| key | rule | what it reads |
-|---|---|---|
-| `evidence_conflict = true` | an index seed or propagated claim of P is refused when another family's index prints cover **strictly more** of the unit than P's (per family: the whole print if held, else its largest non-overlapping function prints; prints at or over the row floor; no specificity or package-count filter). A tie (a fork holding the same prints) is not a conflict. | the index unit table |
-| `literal_conflict = true` | a propagated claim of P is refused when the unit carries **long literals** (values over the extractor's 120-unit cap, kept as `S#`/`P#`/`R#` hashes: generated tables, long messages) that the index's literal table holds, held by at most 3 families, and none by P's family. | the index literal table |
-| `contested_cover = <share>` | a propagated claim of P is refused when the unit is **contested** (another family's prints cover part of it) and P's prints cover less than `<share>` of its nodes. Uncontested thin cover (version drift of the right package) is kept. | the index unit table |
+| key                         | rule                                                                                                                                                                                                                                                                                                                                                          | what it reads           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| `evidence_conflict = true`  | an index seed or propagated claim of P is refused when another family's index prints cover **strictly more** of the unit than P's (per family: the whole print if held, else its largest non-overlapping function prints; prints at or over the row floor; no specificity or package-count filter). A tie (a fork holding the same prints) is not a conflict. | the index unit table    |
+| `literal_conflict = true`   | a propagated claim of P is refused when the unit carries **long literals** (values over the extractor's 120-unit cap, kept as `S#`/`P#`/`R#` hashes: generated tables, long messages) that the index's literal table holds, held by at most 3 families, and none by P's family.                                                                               | the index literal table |
+| `contested_cover = <share>` | a propagated claim of P is refused when the unit is **contested** (another family's prints cover part of it) and P's prints cover less than `<share>` of its nodes. Uncontested thin cover (version drift of the right package) is kept.                                                                                                                      | the index unit table    |
 
 Tests (red first): `libdetect/discovery_test.rs`
 `evidence_conflict_refuses_a_propagated_unit_another_family_covers_more_of`,
@@ -66,18 +66,18 @@ Tests (red first): `libdetect/discovery_test.rs`
 
 ## 3. Each guard alone (bytes vs the before labels)
 
-| label | set | wrong family removed | named removed | P before -> after |
-|---|---|---|---|---|
-| `exp102-ec2-structural` (evidence_conflict) | held-out | -71,119 | -727 | 96.08 -> 96.77 |
-| | task-master-ai | -772 | 0 | 97.90 -> 97.94 |
-| | wrangler | -1,433 | 0 | 95.05 -> 96.26 |
-| `exp102-ec2-agreement` | held-out | -21,532 | -802 | 96.13 -> 96.40 |
-| | task-master-ai | -772 | 0 | 98.97 -> 99.02 |
-| `exp102-lc-structural` (literal_conflict) | held-out | -56,616 | -88 | 96.08 -> 96.63 |
-| | task-master-ai | -313 | 0 | 97.90 -> 97.92 |
-| `exp102-lc-agreement` | held-out | -56,616 | 0 | 96.13 -> 96.85 |
-| `exp102-cconly-structural` (contested_cover 0.05) | held-out | -135,990 | -170 | 96.08 -> 97.41 |
-| | task-master-ai | -19,721 | -15 | 97.90 -> 98.86 |
+| label                                             | set            | wrong family removed | named removed | P before -> after |
+| ------------------------------------------------- | -------------- | -------------------- | ------------- | ----------------- |
+| `exp102-ec2-structural` (evidence_conflict)       | held-out       | -71,119              | -727          | 96.08 -> 96.77    |
+|                                                   | task-master-ai | -772                 | 0             | 97.90 -> 97.94    |
+|                                                   | wrangler       | -1,433               | 0             | 95.05 -> 96.26    |
+| `exp102-ec2-agreement`                            | held-out       | -21,532              | -802          | 96.13 -> 96.40    |
+|                                                   | task-master-ai | -772                 | 0             | 98.97 -> 99.02    |
+| `exp102-lc-structural` (literal_conflict)         | held-out       | -56,616              | -88           | 96.08 -> 96.63    |
+|                                                   | task-master-ai | -313                 | 0             | 97.90 -> 97.92    |
+| `exp102-lc-agreement`                             | held-out       | -56,616              | 0             | 96.13 -> 96.85    |
+| `exp102-cconly-structural` (contested_cover 0.05) | held-out       | -135,990             | -170          | 96.08 -> 97.41    |
+|                                                   | task-master-ai | -19,721              | -15           | 97.90 -> 98.86    |
 
 CC is byte-unchanged under every label; wrangler moves only through the evidence-conflict seed check.
 Agreement is untouched by `contested_cover` (its seeds never reach those units).
@@ -87,15 +87,15 @@ Agreement is untouched by `contested_cover` (its seeds never reach those units).
 All three guards, structural, held-out: removed 204,004 B wrong, 1,055 B right (plus 70 B newly right);
 task-master-ai 20,806 B wrong, 15 B right; wrangler 1,433 B wrong, 0 right.
 
-| removed claim (claimed <- truth) | bytes | guard | verdict |
-|---|---|---|---|
-| uglify-js <- terser (html-minifier-terser; terser 5.51 is newer than any indexed terser) | 117,028 | evidence (59 KB) + contested (56 KB) | wrong, removed |
-| parse5 <- entities (decode tables, 3 apps) | 55,677 | literal | wrong, removed |
-| @hono/node-server <- MCP (task-master-ai x2) | 38,683 | contested | wrong, removed |
-| css-select <- node-html-parser | 10,235 | evidence | wrong, removed |
-| confbox <- jsonc-parser (wrangler seed) | 1,426 | evidence (seed) | wrong, removed |
-| zod-to-json-schema, eventsource-parser, micromark*, raw-body, stubborn-fs | ~3,000 | mixed | wrong, removed |
-| micromark seed (466) + module (26), rxjs (origin, 305), @hono/node-server (origin 170, right 15), parse5 / entities (88) | ~1,070 | mixed | RIGHT, lost |
+| removed claim (claimed <- truth)                                                                                         | bytes   | guard                                | verdict        |
+| ------------------------------------------------------------------------------------------------------------------------ | ------- | ------------------------------------ | -------------- |
+| uglify-js <- terser (html-minifier-terser; terser 5.51 is newer than any indexed terser)                                 | 117,028 | evidence (59 KB) + contested (56 KB) | wrong, removed |
+| parse5 <- entities (decode tables, 3 apps)                                                                               | 55,677  | literal                              | wrong, removed |
+| @hono/node-server <- MCP (task-master-ai x2)                                                                             | 38,683  | contested                            | wrong, removed |
+| css-select <- node-html-parser                                                                                           | 10,235  | evidence                             | wrong, removed |
+| confbox <- jsonc-parser (wrangler seed)                                                                                  | 1,426   | evidence (seed)                      | wrong, removed |
+| zod-to-json-schema, eventsource-parser, micromark\*, raw-body, stubborn-fs                                               | ~3,000  | mixed                                | wrong, removed |
+| micromark seed (466) + module (26), rxjs (origin, 305), @hono/node-server (origin 170, right 15), parse5 / entities (88) | ~1,070  | mixed                                | RIGHT, lost    |
 
 The right claims lost are 0.01% of held-out named bytes. Agreement: removed 78,148 B wrong (parse5 /
 entities 55.7 KB, d3-delaunay <- delaunator 10.6 KB, css-select <- node-html-parser 10.6 KB, ...),
