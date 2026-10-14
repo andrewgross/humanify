@@ -780,3 +780,26 @@ fn contested_cover_refuses_a_big_unit_claimed_through_a_thin_shared_print() {
     let (_, _, rows) = run_indexed_with(CONFLICT, &uncontested, vec![], with(0.99));
     assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
 }
+
+#[test]
+fn evidence_conflict_drops_an_index_seed_another_family_covers_more_of() {
+    // lib and dep seed as P (dep through its nested `inner` (the lookup's function
+    // cover; Q's whole-print row is too unspecific for the lookup to read) and
+    // support each other.
+    // The index still says Q holds all of dep: with the guard on, the seed
+    // is dropped like a propagated claim would be.
+    let code = "var lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length, t.length); };\nvar dep = function (e) { var inner = function (z) { return z.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, z.length).concat([z.length, z.charAt(0)]); }; return inner(e); };\nvar app = () => lib(\"a\");\n";
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P"),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    let on = DiscoveryOptions {
+        evidence_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+}

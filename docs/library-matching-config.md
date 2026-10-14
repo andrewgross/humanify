@@ -134,6 +134,9 @@ closure_floor = 30
 queue_cap_bytes = 256000
 max_rounds = 50
 veto_support = "without-module"
+evidence_conflict = false      # exp102 precision guards on propagated claims,
+literal_conflict = false       # all off by default (experiments/102-precision)
+contested_cover = 0.0
 ```
 
 **Missing or stale index — fail loud, before any work.** With

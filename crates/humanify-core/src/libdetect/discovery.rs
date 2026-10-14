@@ -136,9 +136,9 @@ pub struct DiscoveryOptions {
     pub queue_cap: u32,
     pub max_rounds: u32,
     pub veto_support: VetoSupport,
-    /// The evidence-conflict guard (exp102; default off): a propagated
-    /// unit another family's index prints cover more of than the claimed
-    /// family's is refused ([`Containment::outweighed`]).
+    /// The evidence-conflict guard (exp102; default off): an index seed or
+    /// a propagated unit another family's index prints cover more of than
+    /// the claimed family's is refused ([`Containment::outweighed`]).
     pub evidence_conflict: bool,
     /// The literal-conflict guard (exp102; default off): a propagated
     /// unit carrying a long literal the index's literal table ties only to
@@ -1534,7 +1534,18 @@ fn discover_unscoped(
         &families,
     );
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
-    seeds.extend(looker.claims(lookup.index, &everything, lookup.rules, Evidence::Index));
+    // The evidence-conflict guard reads index seeds too: the lookup picks
+    // the best package under its specificity and package-count filters; a
+    // unit the index as a whole gives to another family more is no seed.
+    let unconflicted = |s: &Seed| {
+        !(options.evidence_conflict && containment.outweighed(s.unit, &families.family(&s.package)))
+    };
+    seeds.extend(
+        looker
+            .claims(lookup.index, &everything, lookup.rules, Evidence::Index)
+            .into_iter()
+            .filter(unconflicted),
+    );
     let found = discover_with(
         &graph,
         &seeds,
@@ -1559,7 +1570,8 @@ fn discover_unscoped(
             looker
                 .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
                 .into_iter()
-                .filter(|s| used.contains(&families.family(&s.package))),
+                .filter(|s| used.contains(&families.family(&s.package)))
+                .filter(unconflicted),
         );
     }
     if more.is_empty() {

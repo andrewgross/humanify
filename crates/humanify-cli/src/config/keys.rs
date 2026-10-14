@@ -587,8 +587,8 @@ pub static KEYS: &[Key] = &[
         flag: None,
         default: || Some(Val::Bool(discovery().evidence_conflict)),
         unset: "",
-        doc: "Refuse a propagated claim when another package family's index prints cover \
-              more of the unit than the claimed family's (exp102).",
+        doc: "Refuse an index seed or a propagated claim when another package family's index \
+              prints cover more of the unit than the claimed family's (exp102).",
     },
     Key {
         section: "library.discovery",
