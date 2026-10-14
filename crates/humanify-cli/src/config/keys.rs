@@ -600,6 +600,17 @@ pub static KEYS: &[Key] = &[
         doc: "Refuse a propagated claim when the unit carries a long literal the index ties \
               only to other package families (exp102).",
     },
+    Key {
+        section: "library.discovery",
+        name: "contested_cover",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().contested_cover),
+        unset: "",
+        doc: "Refuse a propagated claim on a unit another package family's prints also cover \
+              when the claimed family's prints cover less than this share of it (exp102; \
+              0 = off).",
+    },
     // [unpack]
     Key {
         section: "unpack",

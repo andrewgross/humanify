@@ -144,6 +144,11 @@ pub struct DiscoveryOptions {
     /// unit carrying a long literal the index's literal table ties only to
     /// other families is refused ([`Containment::literal_contradicts`]).
     pub literal_conflict: bool,
+    /// The contested-cover floor (exp102; 0 = off): a propagated unit
+    /// another family's prints also speak for, of which the claimed
+    /// family's prints cover less than this share, is refused
+    /// ([`Containment::contested_thin`]).
+    pub contested_cover: f64,
 }
 
 impl Default for DiscoveryOptions {
@@ -155,6 +160,7 @@ impl Default for DiscoveryOptions {
             veto_support: VetoSupport::WithoutModule,
             evidence_conflict: false,
             literal_conflict: false,
+            contested_cover: 0.0,
         }
     }
 }
@@ -796,20 +802,13 @@ impl<'c> Containment<'c> {
         !held.is_empty() && !held.iter().any(|f| f.contains(family))
     }
 
-    /// Does another family's evidence outweigh `family`'s on unit `u`?
-    /// Per family, the nodes of `u` its index prints cover — the whole
-    /// print when the family holds it, else its largest non-overlapping
-    /// function prints (the structural rule's scoring, every print at or
-    /// over the row floor, no specificity or package-count filter): a
-    /// propagated claim is refused when some other family covers strictly
-    /// more. Containment asks "can P's build hold this?"; this asks "does
-    /// the unit's own evidence point elsewhere?" — a module of package Q
-    /// that one nested helper shared with P would otherwise let DOWN take
-    /// as P's. A tie (a fork holding the same prints) is no conflict.
-    fn outweighed(&self, u: u32, family: &str) -> bool {
+    /// Per family, the nodes of unit `u` its index prints cover
+    /// ([`family_cover`] at the row floor), and `u`'s nodes; None for a
+    /// unit with no prints.
+    fn covers(&self, u: u32) -> Option<(BTreeMap<&str, u32>, u32)> {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
-            return false;
+            return None;
         };
         let cover = family_cover(
             &prints.whole,
@@ -822,8 +821,39 @@ impl<'c> Containment<'c> {
                     .collect()
             },
         );
+        Some((cover, prints.whole.nodes))
+    }
+
+    /// Does another family's evidence outweigh `family`'s on unit `u`?
+    /// Per family, the nodes of `u` its index prints cover — the whole
+    /// print when the family holds it, else its largest non-overlapping
+    /// function prints (the structural rule's scoring, every print at or
+    /// over the row floor, no specificity or package-count filter): a
+    /// propagated claim is refused when some other family covers strictly
+    /// more. Containment asks "can P's build hold this?"; this asks "does
+    /// the unit's own evidence point elsewhere?" — a module of package Q
+    /// that one nested helper shared with P would otherwise let DOWN take
+    /// as P's. A tie (a fork holding the same prints) is no conflict.
+    fn outweighed(&self, u: u32, family: &str) -> bool {
+        let Some((cover, _)) = self.covers(u) else {
+            return false;
+        };
         let own = cover.get(family).copied().unwrap_or(0);
         cover.iter().any(|(f, &n)| *f != family && n > own)
+    }
+
+    /// Is unit `u` contested and `family`'s claim on it thin? Another
+    /// family's prints also cover part of it, and `family`'s cover less
+    /// than `floor` of its nodes: a big unit (a whole module of Q) taken
+    /// through one small helper P shares with it. Uncontested, a thin
+    /// cover is version drift and DOWN may keep it.
+    fn contested_thin(&self, u: u32, family: &str, floor: f64) -> bool {
+        let Some((cover, nodes)) = self.covers(u) else {
+            return false;
+        };
+        let own = cover.get(family).copied().unwrap_or(0);
+        let contested = cover.iter().any(|(f, &n)| *f != family && n > 0);
+        contested && f64::from(own) < floor * f64::from(nodes)
     }
 }
 
@@ -884,6 +914,7 @@ struct Guard<'c, 'x> {
     families: &'c PackageFamilies,
     evidence_conflict: bool,
     literal_conflict: bool,
+    contested_cover: f64,
 }
 
 /// One fixpoint round: every rule's proposals in rule order (first wins
@@ -912,6 +943,8 @@ fn round(
                 if g.containment.contradicts(u, f)
                     || (g.evidence_conflict && g.containment.outweighed(u, f))
                     || (g.literal_conflict && g.containment.literal_contradicts(u, f))
+                    || (g.contested_cover > 0.0
+                        && g.containment.contested_thin(u, f, g.contested_cover))
                 {
                     continue;
                 }
@@ -1247,6 +1280,7 @@ pub fn discover_with(
         families,
         evidence_conflict: options.evidence_conflict,
         literal_conflict: options.literal_conflict,
+        contested_cover: options.contested_cover,
     });
     let all = &profile.propagation[..];
     let without_module: Vec<LibraryRule> = all

@@ -323,6 +323,7 @@ impl Library {
             veto_support: d.veto_support,
             evidence_conflict: d.evidence_conflict,
             literal_conflict: d.literal_conflict,
+            contested_cover: d.contested_cover,
         }
     }
 
@@ -403,6 +404,7 @@ pub struct LibraryDiscovery {
     pub veto_support: humanify_core::libdetect::discovery::VetoSupport,
     pub evidence_conflict: bool,
     pub literal_conflict: bool,
+    pub contested_cover: f64,
 }
 
 fn serialize_veto<S: serde::Serializer>(
@@ -561,6 +563,7 @@ fn library_of(r: &Resolved) -> Library {
             veto_support: veto,
             evidence_conflict: r.flag_on("library.discovery.evidence_conflict"),
             literal_conflict: r.flag_on("library.discovery.literal_conflict"),
+            contested_cover: r.float("library.discovery.contested_cover"),
         },
     }
 }

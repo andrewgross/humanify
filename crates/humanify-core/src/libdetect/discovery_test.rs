@@ -750,3 +750,33 @@ fn literal_conflict_refuses_a_propagated_unit_whose_long_literal_is_another_fami
         assert_eq!(claim_of(&rows, "var tbl"), Some(("P".into(), Rule::Down)));
     }
 }
+
+#[test]
+fn contested_cover_refuses_a_big_unit_claimed_through_a_thin_shared_print() {
+    // dep's nested `inner` is held by P and Q alike; the rest of dep is
+    // nobody's. Under the contested-cover floor (P's cover / dep's nodes),
+    // a unit another family also speaks for is refused; over it, or with
+    // nobody else speaking, DOWN takes it.
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::function("var dep", "Q").unspecific(),
+    ];
+    let with = |floor: f64| DiscoveryOptions {
+        contested_cover: floor,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], with(0.0));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], with(0.99));
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], with(0.01));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let uncontested = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(CONFLICT, &uncontested, vec![], with(0.99));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
