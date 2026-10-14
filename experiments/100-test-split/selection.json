@@ -1,0 +1,1327 @@
+{
+  "candidates": [
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:react-email",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6009,
+      "version": "6.11.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:jsdoc",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6043,
+      "version": "4.0.5"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:ts-node-dev",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6077,
+      "version": "2.0.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:mqtt",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6103,
+      "version": "5.16.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:nitro",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6144,
+      "version": "3.0.260903-beta"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:@cucumber/cucumber",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6217,
+      "version": "13.3.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:@sveltejs/kit",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6255,
+      "version": "3.0.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:@storybook/test-runner",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6317,
+      "version": "0.26.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:listhen",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6365,
+      "version": "1.10.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:svelte-check",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6414,
+      "version": "4.7.6"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:dependency-cruiser",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6462,
+      "version": "18.6.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:@sentry/react-native",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6497,
+      "version": "8.30.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:gulp-cli",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6558,
+      "version": "3.1.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:npm-run-all2",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6568,
+      "version": "9.0.3"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:jayson",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6772,
+      "version": "5.0.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:expo-updates",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6776,
+      "version": "57.0.26"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:depcheck",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6846,
+      "version": "1.4.7"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:browserify",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6865,
+      "version": "17.0.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:start-server-and-test",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6866,
+      "version": "3.0.13"
+    },
+    {
+      "built": {
+        "bun": false,
+        "esbuild": false,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "cli:jest-expo",
+      "inTestSet": false,
+      "install": false,
+      "kind": "cli",
+      "rank": 6874,
+      "version": "57.0.6"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:firebase-functions",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6888,
+      "version": "7.4.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:mochawesome-report-generator",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 6907,
+      "version": "6.3.2"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:source-map-explorer",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7019,
+      "version": "2.5.3"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:sandbox",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7046,
+      "version": "4.8.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:ndjson",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7053,
+      "version": "2.0.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:style-dictionary",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7057,
+      "version": "5.6.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:protobufjs-cli",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7097,
+      "version": "2.7.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:pretty-quick",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7102,
+      "version": "4.2.2"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "cli:superstatic",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7117,
+      "version": "11.0.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:@google-cloud/functions-framework",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7132,
+      "version": "5.0.5"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:nitropack",
+      "inTestSet": true,
+      "install": true,
+      "kind": "cli",
+      "rank": 7173,
+      "version": "2.13.4"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:swagger-jsdoc",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7180,
+      "version": "6.3.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:nuxt",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7243,
+      "version": "4.6.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:newrelic",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7263,
+      "version": "14.8.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:mjml",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7375,
+      "version": "5.4.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:commitizen",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7384,
+      "version": "4.3.2"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:@vscode/vsce",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7455,
+      "version": "4.0.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:openclaw",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7544,
+      "version": "2026.10.3"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:@react-router/dev",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7553,
+      "version": "8.4.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "cli:@tailwindcss/cli",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7578,
+      "version": "4.3.3"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:mjml-cli",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7581,
+      "version": "5.4.1"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "cli:postcss-cli",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7682,
+      "version": "12.0.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:isomorphic-git",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7831,
+      "version": "1.44.2"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:browser-pack",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7847,
+      "version": "6.1.0"
+    },
+    {
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "cli:module-deps",
+      "inTestSet": false,
+      "install": true,
+      "kind": "cli",
+      "rank": 7863,
+      "version": "6.2.3"
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-microsoft__playwright",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "microsoft/playwright",
+      "stars": 97657
+    },
+    {
+      "branch": "canary",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "electron:gh-toeverything__affine",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "toeverything/AFFiNE",
+      "stars": 73488
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-agalwood__motrix",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "agalwood/Motrix",
+      "stars": 56706
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-lyswhut__lx-music-desktop",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "lyswhut/lx-music-desktop",
+      "stars": 54423
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-upscayl__upscayl",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "upscayl/upscayl",
+      "stars": 50542
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-pear-devs__pear-desktop",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "pear-devs/pear-desktop",
+      "stars": 33751
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-webadderallorg__recordly",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "webadderallorg/Recordly",
+      "stars": 33670
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-qier222__yesplaymusic",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "qier222/YesPlayMusic",
+      "stars": 33383
+    },
+    {
+      "branch": "dev",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-molunerfinn__picgo",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "Molunerfinn/PicGo",
+      "stars": 27338
+    },
+    {
+      "branch": "smart_core",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-mihomo-party-org__clash-party",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "mihomo-party-org/clash-party",
+      "stars": 26815
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-electron-react-boilerplate__electron-react-boilerplate",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "electron-react-boilerplate/electron-react-boilerplate",
+      "stars": 24255
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-pavlobu__deskreen",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "pavlobu/deskreen",
+      "stars": 21563
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-ai-shifu__chatall",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "ai-shifu/ChatALL",
+      "stars": 16508
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-electerm__electerm",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "electerm/electerm",
+      "stars": 15349
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-hunlongyu__zy-player",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "Hunlongyu/ZY-Player",
+      "stars": 14509
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "electron:gh-bitwarden__clients",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "bitwarden/clients",
+      "stars": 13978
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-luin__medis",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "luin/medis",
+      "stars": 11724
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-reactide__reactide",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "reactide/reactide",
+      "stars": 10488
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-aandrew-me__ytdownloader",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "aandrew-me/ytDownloader",
+      "stars": 10486
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-jhen0409__react-native-debugger",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "jhen0409/react-native-debugger",
+      "stars": 10436
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-getgridea__gridea",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "getgridea/gridea",
+      "stars": 10230
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-rubickcenter__rubick",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "rubickCenter/rubick",
+      "stars": 10031
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-hiram-wong__zyfun",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "Hiram-Wong/zyfun",
+      "stars": 9016
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-maotoumao__musicfreedesktop",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "maotoumao/MusicFreeDesktop",
+      "stars": 8961
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-dice2o__binggpt",
+      "inTestSet": true,
+      "install": true,
+      "kind": "electron",
+      "repo": "dice2o/BingGPT",
+      "stars": 8882
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-harnessmd__munder-difflin",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "HarnessMD/munder-difflin",
+      "stars": 8732
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-cerebroapp__cerebro",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "cerebroapp/cerebro",
+      "stars": 8564
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-felixrieseberg__macintosh.js",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "felixrieseberg/macintosh.js",
+      "stars": 8499
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": false,
+        "esbuild": false,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-galaxy-s10__billd-desk",
+      "inTestSet": false,
+      "install": false,
+      "kind": "electron",
+      "repo": "galaxy-s10/billd-desk",
+      "stars": 8488
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-marshallofsound__google-play-music-desktop-player-unofficial-",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-",
+      "stars": 8195
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-electron__fiddle",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "electron/fiddle",
+      "stars": 7777
+    },
+    {
+      "branch": "master",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-ganeshrvel__openmtp",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "ganeshrvel/openmtp",
+      "stars": 7531
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": false
+      },
+      "id": "electron:gh-sindresorhus__caprine",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "sindresorhus/caprine",
+      "stars": 7397
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-eutropicai__final2x",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "EutropicAI/Final2x",
+      "stars": 7375
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-electron__forge",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "electron/forge",
+      "stars": 7155
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-masscodeio__masscode",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "massCodeIO/massCode",
+      "stars": 7068
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-luckjiawei__frpc-desktop",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "luckjiawei/frpc-desktop",
+      "stars": 6929
+    },
+    {
+      "branch": "develop",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-purocean__yn",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "purocean/yn",
+      "stars": 6765
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-laofeng-mouse__flyingmouse-format",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "LaoFeng-mouse/flyingmouse-format",
+      "stars": 6651
+    },
+    {
+      "branch": "development",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-ytmdesktop__ytmdesktop",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "ytmdesktop/ytmdesktop",
+      "stars": 6611
+    },
+    {
+      "branch": "trunk",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-hovancik__stretchly",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "hovancik/stretchly",
+      "stars": 6598
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": false,
+        "esbuild": false,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-binaricat__netcatty",
+      "inTestSet": false,
+      "install": false,
+      "kind": "electron",
+      "repo": "binaricat/Netcatty",
+      "stars": 6570
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": true,
+        "webpack": true
+      },
+      "id": "electron:gh-moekoemusic__moekoemusic",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "MoeKoeMusic/MoeKoeMusic",
+      "stars": 6534
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": true
+      },
+      "id": "electron:gh-op7418__codepilot",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "op7418/CodePilot",
+      "stars": 6498
+    },
+    {
+      "branch": "main",
+      "built": {
+        "bun": true,
+        "esbuild": true,
+        "rollup": false,
+        "webpack": false
+      },
+      "id": "electron:gh-kando-menu__kando",
+      "inTestSet": false,
+      "install": true,
+      "kind": "electron",
+      "repo": "kando-menu/kando",
+      "stars": 6442
+    }
+  ],
+  "frozen": "2026-10-14",
+  "inputs": {
+    "excludedCliNames": 5830,
+    "excludedRepos": 369,
+    "githubResults": 1000,
+    "npmTopLength": 15916,
+    "npmTopSha256": "ea09d0501925517cc2bd4d28b34375c4d23026dcd44bd76545b7482d2d9eae28"
+  },
+  "rule": {
+    "cli": "npm-high-impact top-download list (exp095's frozen npm-top.json), ranks 6,001+: not @types/, latest manifest has a bin, not deprecated, >= 5 dependencies; candidates in rank order; the first 30 whose install and Bun build succeed",
+    "electron": "GitHub search `topic:electron fork:false archived:false` sorted by stars (first 1,000 results, ties by name, fetched 2026-10-14), minus all 614 electron/apps catalog repos and every exp095 app: a root package.json, electron in (dev)dependencies, >= 3 runtime library dependencies (exp095 corpus.py rule); candidates in star order; the first 25 whose install and Bun build succeed",
+    "excluded": "every app exp095's selection tried (its 360-app corpus: the 338 bundled apps, which hold the 67 held-out apps, and the 22 that failed) and every app its log dropped, by npm name or GitHub repo"
+  },
+  "schema": "exp100-selection/1",
+  "take": {
+    "cli": 30,
+    "electron": 25
+  }
+}

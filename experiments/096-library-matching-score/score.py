@@ -1,6 +1,8 @@
 """exp096: score one label's discovery reports — one CARD per (label, corpus entry), one summary per label.
 
-usage: <venv python> -I score.py <label>
+usage: <venv python> -I score.py <label> [--corpus dev|test]
+       (the corpus must be the one the label ran on: pipeline.json's `corpus`, absent = dev. A TEST label's cards
+       stay under the test data dir, beside its reports, and its committed summary holds per-set aggregates only)
 reads  <DATA>/results/<label>/reports/<id>.json   (`humanify discover --unit-prints` output)
        <DATA>/results/<label>/pipeline.json        (the runner's config: index dir, rule, binary)
 writes experiments/096-library-matching-score/results/<label>/cards/<id>.json and summary.json (DETERMINISTIC:
@@ -41,7 +43,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lib096  # noqa: E402
-from lib096 import DATA, HERE, dump  # noqa: E402
+from lib096 import HERE, INDEX_CACHE, dump  # noqa: E402
 
 import mmlib  # noqa: E402  (the misses lane: index table, structural-rule emulation)
 
@@ -391,7 +393,7 @@ def score_floor(entry, truth):
 
 def load_index(index_dir, slice_, index_id):
     mmlib.IX = index_dir
-    mmlib.MM = os.path.join(DATA, "cache", "ix-" + index_id[:16])
+    mmlib.MM = os.path.join(INDEX_CACHE, "ix-" + index_id[:16])
     os.makedirs(mmlib.MM, exist_ok=True)
     return mmlib.Index(slice_)
 
@@ -434,9 +436,13 @@ def aggregate(cards):
 
 
 def main():
-    label = sys.argv[1]
-    run_dir = os.path.join(DATA, "results", label)
+    argv = lib096.corpus_flag(sys.argv)
+    label = argv[1]
+    run_dir = os.path.join(lib096.DATA, "results", label)
     pipeline = json.load(open(os.path.join(run_dir, "pipeline.json")))
+    if pipeline.get("corpus", "dev") != lib096.CORPUS:
+        raise SystemExit(f"REFUSED: the label ran on the {pipeline.get('corpus', 'dev')} corpus — pass --corpus")
+    test = lib096.CORPUS == "test"
     manifest = lib096.load_manifest()
     if pipeline["corpusSha256"] != lib096.manifest_sha():
         raise SystemExit("REFUSED: the label ran on another corpus manifest")
@@ -444,7 +450,10 @@ def main():
     if om["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: origins.json was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
-    os.makedirs(os.path.join(out_dir, "cards"), exist_ok=True)
+    # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
+    cards_dir = os.path.join(run_dir if test else out_dir, "cards")
+    os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(cards_dir, exist_ok=True)
     indexes = {}
     cards = collections.defaultdict(list)
     timing = {}
@@ -472,19 +481,21 @@ def main():
                 "indexId": pipeline["indexId"], "rule": pipeline["rule"], "toolchain": doc["toolchain"],
                 "detected": doc["detected"], "discoveryRan": report is not None,
                 "noDiscovery": doc.get("noDiscovery"), "reportSha256": lib096.sha256_file(rp), **body}
-        open(os.path.join(out_dir, "cards", entry["id"] + ".json"), "w").write(dump(card))
+        open(os.path.join(cards_dir, entry["id"] + ".json"), "w").write(dump(card))
         cards[entry["set"]].append(card)
         tp = os.path.join(run_dir, "reports", entry["id"] + ".run.json")
         if os.path.exists(tp):
             timing[entry["id"]] = json.load(open(tp))
-        print(f"{entry['id']:60s} P {body['totals']['precision']:.3f} R {body['totals']['recall']:.3f} F1 {body['totals']['f1']:.3f} app {body['totals']['appClaimedBytes']}",
+        if not test:
+            print(f"{entry['id']:60s} P {body['totals']['precision']:.3f} R {body['totals']['recall']:.3f} F1 {body['totals']['f1']:.3f} app {body['totals']['appClaimedBytes']}",
               flush=True)
     sets = aggregate(cards)
     app_total = sum(r["appClaimedBytes"] for r in sets.values())
     summary = {
         "schema": SCORER_VERSION, "label": label,
         "config": {**{k: pipeline[k] for k in ("indexId", "indexBytes", "rule", "buildCommit", "binarySha256",
-                                               "corpusSha256")}, "originsSha256": lib096.origins_sha()},
+                                               "corpusSha256")}, "originsSha256": lib096.origins_sha(),
+                   **({"corpus": "test"} if test else {})},
         "bars": {"appClaimedBytes": app_total, "appBarPassed": app_total == 0,
                  "precisionBar": PRECISION_BAR,
                  "precisionBarPassed": {s: r["precision"] >= PRECISION_BAR for s, r in sets.items()}},
@@ -497,7 +508,7 @@ def main():
                 "included); the cards and summary.json are the deterministic part",
         "totalWallSeconds": round(sum(walls), 1), "maxPeakRssMb": max((t["peakRssMb"] for t in timing.values()),
                                                                        default=0),
-        "perEntry": timing}))
+        **({} if test else {"perEntry": timing})}))
     print(dump(summary["bars"]))
 
 

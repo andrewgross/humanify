@@ -11,9 +11,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib096 import HERE  # noqa: E402
 
-SETS = ["cc", "heldout", "wrangler", "esbuild-app"]
+SETS = ["cc", "heldout", "wrangler", "esbuild-app", "test-bun", "test-esbuild", "test-webpack", "test-rollup"]
 SET_NAMES = {"cc": "Claude Code 2.1.216 (sample est.)", "heldout": "held-out apps (67, Bun)",
-             "wrangler": "wrangler (esbuild, re-minified)", "esbuild-app": "task-master-ai (esbuild)"}
+             "wrangler": "wrangler (esbuild, re-minified)", "esbuild-app": "task-master-ai (esbuild)",
+             "test-bun": "TEST split: new apps, Bun (the held-out recipe)",
+             "test-esbuild": "TEST split: the same apps, esbuild (the index's esbuild recipe)",
+             "test-webpack": "TEST split: the same apps, webpack + terser (not indexed)",
+             "test-rollup": "TEST split: the same apps, rollup + terser (not indexed)"}
 
 
 def load(label):
@@ -69,6 +73,8 @@ def main():
           "\nclaimed); bar: precision >= 99.8% and app claimed = 0. [shipper] = the old shipper-only truth; as origin ="
           "\nnamed bytes right only through the origin; deltas against the first label")
     for set_ in SETS:
+        if all(set_ not in s["sets"] for _, s, _ in rows):
+            continue  # the other corpus's sets (dev labels hold no test set, test labels no dev set)
         print(f"\n{SET_NAMES[set_]}")
         print(f"  {'label':{w}s}  precision (delta)  recall  (delta)      F1  (delta)  [shipper P/R]  as origin  "
               "app claimed  wrong fam KB  not indexed  version  too small  hash differs  guard  other pkg  "
