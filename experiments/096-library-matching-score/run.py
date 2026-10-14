@@ -2,7 +2,7 @@
 one claim rule, score it.
 
 usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST]
-                      [--corpus dev|test] [--force-mixed] [--pipeline-set library.<key>=value]...
+                      [--corpus dev|test] [--sets A,B] [--force-mixed] [--pipeline-set library.<key>=value]...
 
   --commit   build the binary from this commit in a detached worktree (default: this checkout's HEAD, which must
              be clean under crates/ and Cargo.*; a dirty tree would make the label describe code that did not run)
@@ -11,6 +11,8 @@ usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>]
   --pipeline-set  a `[library]` setting for the discover verb's --config file, repeatable, in order (written by
              THE config writer, experiments/lib/pipeline-config.ts, after the rule's own key; recorded in
              pipeline.json as `settings`, so a label is one configuration)
+  --sets     run and score only these sets of the corpus (comma-separated; recorded in pipeline.json, so the
+             summary holds only them): e.g. test-bun,test-esbuild for an index with no webpack or rollup slice
   --corpus   dev (default: corpus.json, the corpus tuning lanes read) or test (corpus-test.json: exp100's FROZEN test
              split; its reports and cards stay under its data dir, only the per-set summary is committed) or bundlers
              (corpus-bundlers.json: exp105's dev-side webpack and rollup builds). A label holds ONE corpus: name
@@ -43,7 +45,7 @@ def parse(argv):
     if not argv or argv[0].startswith("--"):
         raise SystemExit(__doc__)
     label, opts = argv[0], {"--jobs": "4", "--cpus": "0-15", "--rule": None, "--index": None, "--commit": None,
-                            "--corpus": "dev"}
+                            "--corpus": "dev", "--sets": None}
     force = False
     opts["--pipeline-set"] = []
     i = 1
@@ -125,6 +127,16 @@ def write_rule_config(run_dir, rule, settings):
     return path
 
 
+def selected(entries, sets):
+    """The manifest entries a label runs: every one, or those of the label's `sets` (each must exist)."""
+    if not sets:
+        return entries
+    unknown = set(sets) - {e["set"] for e in entries}
+    if unknown:
+        raise SystemExit(f"REFUSED: --sets names no set of this corpus: {', '.join(sorted(unknown))}")
+    return [e for e in entries if e["set"] in sets]
+
+
 def run_one(binary, entry, out_dir, opts, index_dir, config):
     """One `humanify discover` run in a child process; its wall time and peak memory measured from outside."""
     report = os.path.join(out_dir, entry["id"] + ".json")
@@ -166,10 +178,12 @@ def main():
         config["settings"] = opts["--pipeline-set"]
     if lib096.CORPUS != "dev":
         config["corpus"] = lib096.CORPUS  # absent = dev, so every dev label's pipeline.json is unchanged
+    if opts["--sets"]:
+        config["sets"] = sorted({x for x in opts["--sets"].split(",") if x})  # absent = every set
     guard(run_dir, config, force)
     open(os.path.join(run_dir, "pipeline.json"), "w").write(dump(config))
     rule_config = write_rule_config(run_dir, opts["--rule"], opts["--pipeline-set"])
-    entries = lib096.load_manifest()["entries"]
+    entries = selected(lib096.load_manifest()["entries"], config.get("sets"))
     # biggest first, so the long ones do not trail
     entries.sort(key=lambda e: -e["files"]["bundle"]["bytes"])
     t0 = time.monotonic()
