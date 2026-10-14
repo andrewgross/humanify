@@ -14,12 +14,14 @@ origins.py). A claim is RIGHT when it names the shipper or the origin (or a memb
   recall              library bytes claimed right / library bytes
   namedAsShipper/     the two halves of the named bytes, so nothing is hidden: claimed as the shipper's family,
    namedAsOrigin      and claimed as the origin's family (and not the shipper's)
-  *ShipperOnly        recall / wrongFamilyShare / wrongNameShare under the OLD truth (shipper only, scorer 1)
+  *ShipperOnly        precision / recall / f1 under the OLD truth (shipper only, scorer 1)
   copyBytes           library bytes whose unit has an origin (a recognisable copy), named or not
   appClaimedBytes     bytes of APP code (not from node_modules) claimed as any package — the hard bar: 0
-  wrongFamilyShare    claimed library bytes named as ANOTHER family / all claimed library bytes
-  wrongNameShare      (wrong family + app) / all claimed bytes — read against the ~0.2% bar exp095's scale lane
-                      measured for structural AND literal agreement
+  precision           named / (named + wrong family + app claimed): of the bytes a claim put a package name on
+                      and the truth can judge, the share named right. Claims on the app's own package code (self,
+                      selfOther, selfOrigin), unmapped and foreign bytes are neither: reported apart, not judged.
+                      Read against the bar: precision >= 99.8% (the ~0.2% wrong-name bar of exp095's scale lane)
+  f1                  2PR / (P + R), the harmonic mean of precision and recall
   misses              every library unit NOT named, one cause each (the exp095 misses lane's classifier,
                       decompose.classify, unchanged): a not indexed / b version missing / c too small /
                       d hash differs (d-file, d-variant, d-absent, d-nofile) / e guard refused (e-veto, e-agree,
@@ -45,12 +47,13 @@ import mmlib  # noqa: E402  (the misses lane: index table, structural-rule emula
 
 MISS_CLASSES = ["no-discovery", "a", "b", "c", "d-file", "d-variant", "d-absent", "d-nofile", "e-veto", "e-agree", "e-support",
                 "e-spec", "e-ambig", "e-other", "f", "unit-model"]
-WRONG_NAME_BAR = 0.002
+PRECISION_BAR = 0.998
 # truth labels that are not a library package: app code, the app's own package, no mapping, a chained URL source
 NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 # 2: origin-aware truth (origins.py): a claim naming a vendored copy's origin is right; the shipper-only shares
 #    are kept beside it (*ShipperOnly). Same reports, re-scored: scorer-1 cards are not comparable.
-SCORER_VERSION = "exp096-score/2"
+# 3: precision / recall / F1 replace the wrong-family and wrong-name shares (same bytes, standard measures).
+SCORER_VERSION = "exp096-score/3"
 
 
 def r6(x):
@@ -59,6 +62,16 @@ def r6(x):
 
 def share(n, d):
     return r6(n / d) if d else 0.0
+
+
+def prf(named, wrong_family, app, library, suffix=""):
+    """Precision, recall and F1 over bytes. True positives are the named bytes (recall's numerator); false
+    positives are bytes claimed as the wrong family or app code claimed as any package. Claims the truth cannot
+    judge (the app's own package, unmapped, foreign) are neither. Nothing claimed reads precision 0 (the usual
+    zero-division convention), so an empty set fails the bar rather than passing it vacuously."""
+    p = share(named, named + wrong_family + app)
+    r = share(named, library)
+    return {"precision" + suffix: p, "recall" + suffix: r, "f1" + suffix: share(2 * p * r, p + r)}
 
 
 # ---------------------------------------------------------------- the run's units, labelled by the truth
@@ -237,31 +250,25 @@ def score_map(entry, report, truth, ix, rule, origins):
     lib = total["library"]
     as_shipper = claimed["right"] + claimed["family"]
     named = as_shipper + claimed["origin"]
-    all_claimed = sum(claimed.values()) - claimed["unmapped"] - claimed["foreign"]
     old_named = old["right"] + old["family"]
     seed_named = seeds["right"] + seeds["family"] + seeds["origin"]
     return {
         "totals": {
             "libraryBytes": lib,
             "namedBytes": named,
-            "recall": share(named, lib),
+            **prf(named, claimed["wrongFamily"], claimed["app"], lib),
             "appClaimedBytes": claimed["app"],
             "wrongFamilyBytes": claimed["wrongFamily"],
-            "wrongFamilyShare": share(claimed["wrongFamily"], named + claimed["wrongFamily"]),
-            "wrongNameShare": share(claimed["wrongFamily"] + claimed["app"], all_claimed),
             "namedAsShipperBytes": as_shipper,
             "namedAsOriginBytes": claimed["origin"],
             "copyBytes": total["copy"],
             "namedBytesShipperOnly": old_named,
-            "recallShipperOnly": share(old_named, lib),
+            **prf(old_named, old["wrongFamily"], old["app"], lib, "ShipperOnly"),
             "wrongFamilyBytesShipperOnly": old["wrongFamily"],
-            "wrongFamilyShareShipperOnly": share(old["wrongFamily"], old_named + old["wrongFamily"]),
-            "wrongNameShareShipperOnly": share(old["wrongFamily"] + old["app"], all_claimed),
         },
         "statementBytes": {k: total[k] for k in sorted(total)},
         "claimedBytes": {k: claimed[k] for k in sorted(claimed)},
-        "indexSeeds": {"namedBytes": seed_named, "recall": share(seed_named, lib),
-                       "wrongFamilyShare": share(seeds["wrongFamily"], seed_named + seeds["wrongFamily"]),
+        "indexSeeds": {"namedBytes": seed_named, **prf(seed_named, seeds["wrongFamily"], seeds["app"], lib),
                        "appClaimedBytes": seeds["app"]},
         "missBytes": {k: misses[k] for k in MISS_CLASSES if misses[k]},
         "exploratory": {"names": names.block()},
@@ -317,8 +324,6 @@ def score_sample(entry, report, truth, ix, rule):
                 misses[decompose.classify(ix, u, t, p, vetoed, struct_claims, rule_name(rule))] += est(t)
     lib = total["library"]
     named = claimed["right"] + claimed["family"]
-    named_any = named + claimed["wrongFamily"]
-    all_claimed = sum(claimed.values())
     # every claimed exact unit of the whole bundle (names need no truth); the version share stays on the sample
     whole_names = Names()
     key = {(u["s"], u["e"]): u for u in st}
@@ -332,21 +337,17 @@ def score_sample(entry, report, truth, ix, rule):
         "totals": {
             "libraryBytes": round(lib),
             "namedBytes": round(named),
-            "recall": share(named, lib),
+            **prf(named, claimed["wrongFamily"], claimed["app"], lib),
             "appClaimedBytes": round(claimed["app"]),
             "appClaimedSampleUnits": units_claimed["app"],
             "wrongFamilyBytes": round(claimed["wrongFamily"]),
-            "wrongFamilyShare": share(claimed["wrongFamily"], named_any),
-            "wrongNameShare": share(claimed["wrongFamily"] + claimed["app"], all_claimed),
             # the sample truth is hand-labelled per unit (forks = app): no origin layer, both truths agree
             "namedAsShipperBytes": round(named),
             "namedAsOriginBytes": 0,
             "copyBytes": 0,
             "namedBytesShipperOnly": round(named),
-            "recallShipperOnly": share(named, lib),
+            **prf(named, claimed["wrongFamily"], claimed["app"], lib, "ShipperOnly"),
             "wrongFamilyBytesShipperOnly": round(claimed["wrongFamily"]),
-            "wrongFamilyShareShipperOnly": share(claimed["wrongFamily"], named_any),
-            "wrongNameShareShipperOnly": share(claimed["wrongFamily"] + claimed["app"], all_claimed),
         },
         "originTruth": "none: sample truth (hand-labelled units)",
         "estimate": "stratified ratio estimate from the 620-unit labelled sample (bytes are src-wide estimates)",
@@ -374,15 +375,13 @@ def score_floor(entry, truth):
         if srcs[src][0] not in NOT_LIBRARY:
             lib += end - off
     return {
-        "totals": {"libraryBytes": lib, "namedBytes": 0, "recall": 0.0, "appClaimedBytes": 0,
-                   "wrongFamilyBytes": 0, "wrongFamilyShare": 0.0, "wrongNameShare": 0.0,
+        "totals": {"libraryBytes": lib, "namedBytes": 0, **prf(0, 0, 0, lib), "appClaimedBytes": 0,
+                   "wrongFamilyBytes": 0,
                    "namedAsShipperBytes": 0, "namedAsOriginBytes": 0, "copyBytes": 0, "namedBytesShipperOnly": 0,
-                   "recallShipperOnly": 0.0,
-                   "wrongFamilyBytesShipperOnly": 0, "wrongFamilyShareShipperOnly": 0.0,
-                   "wrongNameShareShipperOnly": 0.0},
+                   **prf(0, 0, 0, lib, "ShipperOnly"), "wrongFamilyBytesShipperOnly": 0},
         "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran)",
         "statementBytes": {}, "claimedBytes": {},
-        "indexSeeds": {"namedBytes": 0, "recall": 0.0, "wrongFamilyShare": 0.0, "appClaimedBytes": 0},
+        "indexSeeds": {"namedBytes": 0, **prf(0, 0, 0, lib), "appClaimedBytes": 0},
         "missBytes": {"no-discovery": lib},
         "exploratory": {"names": Names().block()},
     }
@@ -406,11 +405,9 @@ def aggregate(cards):
             for k in ("libraryBytes", "namedBytes", "appClaimedBytes", "wrongFamilyBytes", "namedAsShipperBytes",
                       "namedAsOriginBytes", "copyBytes", "wrongFamilyBytesShipperOnly", "namedBytesShipperOnly"):
                 t[k] += c["totals"][k]
-            t["claimedBytes"] += sum(v for k, v in c["claimedBytes"].items() if k not in ("unmapped", "foreign"))
             mb.update(c["missBytes"])
             nm.update(c["exploratory"]["names"])
             cb.update(c["claimedBytes"])
-        named_any = t["namedBytes"] + t["wrongFamilyBytes"]
         nm.pop("sameVersionShare", None)
         nm.pop("versionScope", None)
         row = {
@@ -418,17 +415,12 @@ def aggregate(cards):
             "discoveryRan": sum(1 for c in cs if c["discoveryRan"]),
             "bundlerDetected": sum(1 for c in cs if c["detected"]["bundler"] == c["toolchain"]["bundler"]),
             "libraryBytes": t["libraryBytes"], "namedBytes": t["namedBytes"],
-            "recall": share(t["namedBytes"], t["libraryBytes"]),
-            "appClaimedBytes": t["appClaimedBytes"],
-            "wrongFamilyShare": share(t["wrongFamilyBytes"], named_any),
-            "wrongNameShare": share(t["wrongFamilyBytes"] + t["appClaimedBytes"], t["claimedBytes"]),
+            **prf(t["namedBytes"], t["wrongFamilyBytes"], t["appClaimedBytes"], t["libraryBytes"]),
+            "appClaimedBytes": t["appClaimedBytes"], "wrongFamilyBytes": t["wrongFamilyBytes"],
             "namedAsShipperBytes": t["namedAsShipperBytes"], "namedAsOriginBytes": t["namedAsOriginBytes"],
             "copyBytes": t["copyBytes"],
-            "recallShipperOnly": share(t["namedBytesShipperOnly"], t["libraryBytes"]),
-            "wrongFamilyShareShipperOnly": share(t["wrongFamilyBytesShipperOnly"],
-                                                 t["namedBytesShipperOnly"] + t["wrongFamilyBytesShipperOnly"]),
-            "wrongNameShareShipperOnly": share(t["wrongFamilyBytesShipperOnly"] + t["appClaimedBytes"],
-                                               t["claimedBytes"]),
+            **prf(t["namedBytesShipperOnly"], t["wrongFamilyBytesShipperOnly"], t["appClaimedBytes"],
+                  t["libraryBytes"], "ShipperOnly"),
             "selfOtherBytes": cb["selfOther"],
             "selfOriginBytes": cb["selfOrigin"],
             "missShares": {k: share(mb[k], t["libraryBytes"]) for k in MISS_CLASSES if mb[k]},
@@ -485,7 +477,7 @@ def main():
         tp = os.path.join(run_dir, "reports", entry["id"] + ".run.json")
         if os.path.exists(tp):
             timing[entry["id"]] = json.load(open(tp))
-        print(f"{entry['id']:60s} recall {body['totals']['recall']:.3f} app {body['totals']['appClaimedBytes']}",
+        print(f"{entry['id']:60s} P {body['totals']['precision']:.3f} R {body['totals']['recall']:.3f} F1 {body['totals']['f1']:.3f} app {body['totals']['appClaimedBytes']}",
               flush=True)
     sets = aggregate(cards)
     app_total = sum(r["appClaimedBytes"] for r in sets.values())
@@ -494,8 +486,8 @@ def main():
         "config": {**{k: pipeline[k] for k in ("indexId", "indexBytes", "rule", "buildCommit", "binarySha256",
                                                "corpusSha256")}, "originsSha256": lib096.origins_sha()},
         "bars": {"appClaimedBytes": app_total, "appBarPassed": app_total == 0,
-                 "wrongNameBar": WRONG_NAME_BAR,
-                 "wrongNameBarPassed": {s: r["wrongNameShare"] <= WRONG_NAME_BAR for s, r in sets.items()}},
+                 "precisionBar": PRECISION_BAR,
+                 "precisionBarPassed": {s: r["precision"] >= PRECISION_BAR for s, r in sets.items()}},
         "sets": sets,
     }
     open(os.path.join(out_dir, "summary.json"), "w").write(dump(summary))
