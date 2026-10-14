@@ -14,11 +14,16 @@ path = "src/main.rs"
 [dependencies]
 humanify-core = { path = "../humanify-core" }
 humanify-model = { path = "../humanify-model" }
+mimalloc.workspace = true
 oxc_allocator.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 clap.workspace = true
+
+[dev-dependencies]
+# its statistics, for the allocator test (main_test.rs)
+mimalloc = { workspace = true, features = ["extended"] }
 
 [lints]
 workspace = true

@@ -3,6 +3,12 @@
 //! the npm registry, installs and bundles packages, and writes an index
 //! directory a run can later be pointed at.
 
+/// mimalloc, not glibc malloc (exp111): glibc's per-thread arenas keep
+/// the peak of every large bundle a worker fingerprinted, so a long build
+/// ratchets up to the worst concurrent peak it ever met and stays there.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -178,3 +184,7 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "main_test.rs"]
+mod main_test;
