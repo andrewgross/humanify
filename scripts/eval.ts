@@ -480,6 +480,14 @@ export function libraryArgs(args: string[]): string[] | string {
   if (rule !== "agreement" && rule !== "structural") {
     return "--rule agreement|structural is required";
   }
+  const corpus = parsed.flags["--corpus"];
+  if (
+    corpus !== undefined &&
+    (typeof corpus !== "string" ||
+      !["dev", "test", "bundlers"].includes(corpus))
+  ) {
+    return "--corpus dev|test|bundlers (dev = corpus.json; test = exp100's frozen test split; bundlers = exp105's dev-side webpack and rollup builds)";
+  }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
   );
@@ -489,14 +497,6 @@ export function libraryArgs(args: string[]): string[] | string {
   }
   const setRefusal = settingsRefusal(LIBRARY_HARNESS_KEYS, sets);
   if (setRefusal) return setRefusal;
-  const corpus = parsed.flags["--corpus"];
-  if (
-    corpus !== undefined &&
-    (typeof corpus !== "string" ||
-      !["dev", "test", "bundlers"].includes(corpus))
-  ) {
-    return "--corpus dev|test|bundlers (dev = corpus.json; test = exp100's frozen test split; bundlers = exp105's dev-side webpack and rollup builds)";
-  }
   return [parsed.positional[0], ...parsed.given];
 }
 
