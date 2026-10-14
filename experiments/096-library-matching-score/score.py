@@ -32,6 +32,8 @@ origins.py). A claim is RIGHT when it names the shipper or the origin (or a memb
                       declare, and the share of those whose index rows hold the truth's exact version (the index
                       builds that version's npm source, so its names would be the author's, up to a bundler's
                       collision renames). No name is read from the index: it stores none today.
+Scorer 4 (exp104 truth audit): families also joined by npm metadata (families_lib), units the map never mapped
+<unmapped> (truth_audit `carried`), dependency-gated named vendored copies as origins (truth_audit `copies`).
 Claude Code is scored on the labelled sample: byte shares are the stratified ratio estimate (strata sizes from the
 negatives lane), counts are sample units.
 """
@@ -46,6 +48,11 @@ import lib096  # noqa: E402
 from lib096 import HERE, INDEX_CACHE, dump  # noqa: E402
 
 import mmlib  # noqa: E402  (the misses lane: index table, structural-rule emulation)
+import families_lib  # noqa: E402
+import truth_audit  # noqa: E402
+
+FAMILIES = families_lib.Families()
+same_family = FAMILIES.same
 
 MISS_CLASSES = ["no-discovery", "a", "b", "c", "d-file", "d-variant", "d-absent", "d-nofile", "e-veto", "e-agree", "e-support",
                 "e-spec", "e-ambig", "e-other", "f", "unit-model"]
@@ -55,7 +62,11 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 # 2: origin-aware truth (origins.py): a claim naming a vendored copy's origin is right; the shipper-only shares
 #    are kept beside it (*ShipperOnly). Same reports, re-scored: scorer-1 cards are not comparable.
 # 3: precision / recall / F1 replace the wrong-family and wrong-name shares (same bytes, standard measures).
-SCORER_VERSION = "exp096-score/3"
+# 4: the exp104 truth audit, three mechanical corrections (experiments/104-truth-audit/README.md): families joined
+#    by npm metadata (families_lib: one repository, renamed-to, GitHub fork under a scope); a unit the source map
+#    never mapped and the previous mapping's source does not contain is <unmapped> (truth_audit: carried); a
+#    dependency-gated, named vendored copy gets an origin (truth_audit: copies). Same reports, re-scored.
+SCORER_VERSION = "exp096-score/4"
 
 
 def r6(x):
@@ -96,11 +107,13 @@ def statement_units(units):
     return [u for u in units if u["k"] in ("Statement", "LazyBody") and not u["rt"]]
 
 
-def label_units(truth, units, origins=None):
+def label_units(truth, units, origins=None, audit=None):
     """truth.py label_units over the frozen segment table: majority mapped bytes; for a library label the
     version/file of the source holding most of its bytes. With the origin layer: `origin` = the package holding
     the MAJORITY of the label's own bytes by origin (no origin counts as a candidate too), when it is not the
-    label itself. Also for <self> units (a copy inside the app's own package)."""
+    label itself. Also for <self> units (a copy inside the app's own package). With the scorer-4 `audit`
+    (truth_audit.Audit): a carried unit is <unmapped> (`carriedFrom` keeps the old label), and a library unit with
+    no origin takes a frozen copy range's origin (`originEvidence` "copy")."""
     segs = truth["segments"]
     srcs = truth["sources"]
     offs = [s[0] for s in segs]
@@ -121,6 +134,9 @@ def label_units(truth, units, origins=None):
                     by_origin[srcs[segs[k][1]][0]][(r[1], r[2])] += b - a
             k += 1
         lab = votes.most_common(1)[0][0] if votes else "<unmapped>"
+        if audit is not None and lab != "<unmapped>" and audit.carried(s, e):
+            out[u["i"]] = {"label": "<unmapped>", "carriedFrom": lab}
+            continue
         row = {"label": lab}
         if lab not in NOT_LIBRARY:
             src = next(si for si, _ in files.most_common() if srcs[si][0] == lab)
@@ -129,6 +145,10 @@ def label_units(truth, units, origins=None):
             (oi, ki), _ = sorted(by_origin[lab].items(), key=lambda kv: (-kv[1], kv[0]))[0]
             if oi >= 0:
                 row.update(origin=origins["names"][oi], originEvidence=origins["kinds"][ki])
+        if audit is not None and lab not in NOT_LIBRARY and "origin" not in row:
+            co = audit.copy_origin(s, e, lab)
+            if co is not None:
+                row.update(origin=co[0], originEvidence="copy")
         out[u["i"]] = row
     return out
 
@@ -144,7 +164,7 @@ def judge(claimed, truth_label, app_pkg):
         return truth_label.strip("<>")
     if claimed == truth_label:
         return "right"
-    return "family" if mmlib.family(claimed) == mmlib.family(truth_label) else "wrongFamily"
+    return "family" if same_family(claimed, truth_label) else "wrongFamily"
 
 
 def judge_origin(claimed, row, app_pkg):
@@ -154,7 +174,7 @@ def judge_origin(claimed, row, app_pkg):
     old = judge(claimed, row["label"], app_pkg)
     origin = row.get("origin")
     if origin is not None and old in ("wrongFamily", "selfOther") \
-            and mmlib.family(claimed) == mmlib.family(origin):
+            and same_family(claimed, origin):
         return ("origin" if old == "wrongFamily" else "selfOrigin"), old
     return old, old
 
@@ -165,8 +185,7 @@ def exact_rows(ix, u, package):
     """The index rows that hold u's WHOLE hash under package's family (an exact unit match), or []."""
     if "w" not in u:
         return []
-    fam = mmlib.family(package)
-    return [r for r in ix.units.get(u["w"][0], ()) if mmlib.family(r[0]) == fam]
+    return [r for r in ix.units.get(u["w"][0], ()) if same_family(r[0], package)]
 
 
 def same_version(ix, rows, pkg, version):
@@ -207,11 +226,11 @@ def rule_name(rule):
     return {"agreement": "agree", "structural": "struct"}[rule]
 
 
-def score_map(entry, report, truth, ix, rule, origins):
+def score_map(entry, report, truth, ix, rule, origins, audit):
     units = run_units(report)
     by_i = {u["i"]: u for u in units}
     st = statement_units(units)
-    labels = label_units(truth, units, origins)
+    labels = label_units(truth, units, origins, audit)
     app_pkg = truth["appPackage"]
     key = {(u["s"], u["e"]): u["i"] for u in st}
     claims_all = report.get("claims", [])
@@ -309,14 +328,14 @@ def score_sample(entry, report, truth, ix, rule):
         if p is not None:
             if lib:
                 v = "right" if p == t["pkg"] else (
-                    "family" if mmlib.family(p) == mmlib.family(t["pkg"]) else "wrongFamily")
+                    "family" if same_family(p, t["pkg"]) else "wrongFamily")
             else:
                 v = {"<app>": "app"}.get(t["label"], t["label"].strip("<>"))
             claimed[v] += est(t)
             units_claimed[v] += 1
             if v in ("right", "family") and t["s"] in by_s:
                 names.add(ix, by_s[t["s"]], p, t)
-        if lib and not (p is not None and mmlib.family(p) == mmlib.family(t["pkg"])):
+        if lib and not (p is not None and same_family(p, t["pkg"])):
             u = by_s.get(t["s"])
             if u is None or "w" not in u:
                 misses["unit-model"] += est(t)
@@ -449,6 +468,9 @@ def main():
     om = lib096.load_origins_manifest()
     if om["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: origins.json was frozen for another corpus manifest")
+    cm = truth_audit.load_copies_manifest()
+    if cm["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the copies layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -475,7 +497,7 @@ def main():
                 body = score_sample(entry, report, truth, indexes[slice_], pipeline["rule"])
             else:
                 body = score_map(entry, report, truth, indexes[slice_], pipeline["rule"],
-                                 lib096.load_origins(entry, om))
+                                 lib096.load_origins(entry, om), truth_audit.Audit(entry, truth, cm))
         card = {"schema": SCORER_VERSION, "label": label, "entry": entry["id"], "set": entry["set"],
                 "truthMethod": truth["method"], "bundleSha256": entry["files"]["bundle"]["sha256"],
                 "indexId": pipeline["indexId"], "rule": pipeline["rule"], "toolchain": doc["toolchain"],
@@ -495,6 +517,7 @@ def main():
         "schema": SCORER_VERSION, "label": label,
         "config": {**{k: pipeline[k] for k in ("indexId", "indexBytes", "rule", "buildCommit", "binarySha256",
                                                "corpusSha256")}, "originsSha256": lib096.origins_sha(),
+                   "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": "test"} if test else {})},
         "bars": {"appClaimedBytes": app_total, "appBarPassed": app_total == 0,
