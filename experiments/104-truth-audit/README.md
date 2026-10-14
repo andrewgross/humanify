@@ -11,12 +11,12 @@ labels. No matcher or crates/ change.
 
 Totals first. Held-out (dev), P / R / F1 before -> after:
 
-| label                     | before                | after                 | wrong-family bytes  | library bytes (denominator) |
-| ------------------------- | --------------------- | --------------------- | ------------------- | --------------------------- |
-| `step4f-structural`       | 96.08 / 23.91 / 38.29 | 96.55 / 31.42 / 47.41 | 388,512 -> 341,181  | 39,794,971 -> 30,392,745    |
-| `step4f-agreement`        | 96.13 / 18.51 / 31.05 | 96.51 / 24.31 / 38.84 | 296,613 -> 266,998  | same                        |
-| `exp102-final-structural` | 98.10 / 23.90 / 38.44 | 98.58 / 31.41 / 47.64 | 184,508 -> 137,834  | same                        |
-| `exp102-final-agreement`  | 97.12 / 18.51 / 31.10 | 97.51 / 24.31 / 38.92 | 218,465 -> 188,850  | same                        |
+| label                     | before                | after                 | wrong-family bytes | library bytes (denominator) |
+| ------------------------- | --------------------- | --------------------- | ------------------ | --------------------------- |
+| `step4f-structural`       | 96.08 / 23.91 / 38.29 | 96.55 / 31.42 / 47.41 | 388,512 -> 341,181 | 39,794,971 -> 30,392,745    |
+| `step4f-agreement`        | 96.13 / 18.51 / 31.05 | 96.51 / 24.31 / 38.84 | 296,613 -> 266,998 | same                        |
+| `exp102-final-structural` | 98.10 / 23.90 / 38.44 | 98.58 / 31.41 / 47.64 | 184,508 -> 137,834 | same                        |
+| `exp102-final-agreement`  | 97.12 / 18.51 / 31.10 | 97.51 / 24.31 / 38.92 | 218,465 -> 188,850 | same                        |
 
 Named held-out bytes rose by only ~35 KB (structural). Across the 5 ledgered dev labels, **0 bytes went from
 right to wrong**; 2,936 B of right claims became unjudged (the `carried` rule, below).
@@ -76,7 +76,7 @@ The fork rule needs the GitHub check. Name equality alone linked unrelated code 
 `scopedForks`; those stay as given.
 
 npm's security placeholders are skipped. The judgement is **pairwise** (families.json's family OR linked). Folding
-the links into scope families transitively chained unrelated packages: tweetnacl ~ @openpgp/* ~ jsdoc.
+the links into scope families transitively chained unrelated packages: tweetnacl ~ @openpgp/\* ~ jsdoc.
 
 **One scope of the family notion is project-level.** Like the existing same-scope rule, `inquirer` is judged right
 on `@inquirer/ansi` code. The hand-check marks the 2 such draws.
@@ -105,11 +105,11 @@ or a newly linked family pair.
 
 ## Hand check (handcheck.json; seed 104; byte-weighted, 10 per rule + 10 carried-and-claimed)
 
-| stratum         | verdict                                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| carried (10)    | 10 correct: all lighthouse locale tables. The old label (trace_engine or lighthouse's own file) was wrong                      |
-| carried-claimed | 8 correct; 7 of them were RIGHT claims in fact (camelcase, get-east-asian-width, yoctocolors...) now unjudged; 2 debatable (bundler namespace glue for css-tree) |
-| copy (10)       | 10 correct (tweetnacl ×5, fflate ×3, lodash ×2)                                                                                |
+| stratum         | verdict                                                                                                                                                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| carried (10)    | 10 correct: all lighthouse locale tables. The old label (trace_engine or lighthouse's own file) was wrong                                                            |
+| carried-claimed | 8 correct; 7 of them were RIGHT claims in fact (camelcase, get-east-asian-width, yoctocolors...) now unjudged; 2 debatable (bundler namespace glue for css-tree)     |
+| copy (10)       | 10 correct (tweetnacl ×5, fflate ×3, lodash ×2)                                                                                                                      |
 | family (10)     | 10 correct as projects: rename ×3, fork ×2, micromark monorepo ×3. 2 of those are package-level wrong (umbrella `inquirer` on `@inquirer/ansi`; a micromark sibling) |
 
 What this costs: `carried` cannot say where unmapped code came from, so a right claim on it is no longer credited.
@@ -131,15 +131,15 @@ That is 2,936 B on dev. A follow-up could relabel a carried unit to the map sour
 The new test truth version is the copies layer `copies-test.json` (`exp104-copies/1`), together with the carried
 rule and the derived families. `origins-test.json` is unchanged.
 
-| label          | set          | P before -> after | R before -> after | F1 before -> after |
-| -------------- | ------------ | ----------------- | ----------------- | ------------------ |
+| label           | set          | P before -> after | R before -> after | F1 before -> after |
+| --------------- | ------------ | ----------------- | ----------------- | ------------------ |
 | test structural | test-bun     | 49.66 -> 52.72    | 13.13 -> 14.06    | 20.77 -> 22.20     |
-|                | test-esbuild | 48.08 -> 51.39    | 13.55 -> 14.56    | 21.14 -> 22.69     |
-|                | test-rollup  | 10.29 -> 9.91     | 0.07 -> 0.07      | 0.14 -> 0.14       |
-|                | test-webpack | 0 (no discovery)  | 0                 | 0                  |
-| test agreement | test-bun     | 55.87 -> 58.58    | 12.20 -> 12.89    | 20.02 -> 21.14     |
-|                | test-esbuild | 55.62 -> 58.94    | 11.22 -> 11.98    | 18.67 -> 19.91     |
-|                | test-rollup  | 18.57 -> 17.36    | 0.05 -> 0.05      | 0.10 -> 0.09       |
+|                 | test-esbuild | 48.08 -> 51.39    | 13.55 -> 14.56    | 21.14 -> 22.69     |
+|                 | test-rollup  | 10.29 -> 9.91     | 0.07 -> 0.07      | 0.14 -> 0.14       |
+|                 | test-webpack | 0 (no discovery)  | 0                 | 0                  |
+| test agreement  | test-bun     | 55.87 -> 58.58    | 12.20 -> 12.89    | 20.02 -> 21.14     |
+|                 | test-esbuild | 55.62 -> 58.94    | 11.22 -> 11.98    | 18.67 -> 19.91     |
+|                 | test-rollup  | 18.57 -> 17.36    | 0.05 -> 0.05      | 0.10 -> 0.09       |
 
 Test ledger, structural (ledger-test.json):
 
@@ -190,4 +190,4 @@ The miss classifier (decompose.py) keeps the matcher's families. It explains why
 - `verify_s3.py`: the rules switched off must reproduce scorer 3.
 
 Data is not committed: the registry cache is in /work/exp104-data/registry and the copies layers are in
-<DATA>/truth/*.copies.json.gz, with their shas in copies.json / copies-test.json.
+<DATA>/truth/\*.copies.json.gz, with their shas in copies.json / copies-test.json.

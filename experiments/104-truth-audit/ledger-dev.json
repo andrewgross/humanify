@@ -1,433 +1,115 @@
 {
- "exp102-ctl2-structural": {
-  "libraryBytes": {
-   "esbuild-app:new": 4924477,
-   "esbuild-app:old": 4933905,
-   "heldout:new": 30386646,
-   "heldout:old": 39788872,
-   "wrangler:new": 733474,
-   "wrangler:old": 745940
+  "exp102-ctl2-structural": {
+    "libraryBytes": {
+      "esbuild-app:new": 4924477,
+      "esbuild-app:old": 4933905,
+      "heldout:new": 30386646,
+      "heldout:old": 39788872,
+      "wrangler:new": 733474,
+      "wrangler:old": 745940
+    },
+    "transitions": [
+      ["esbuild-app", "carried", "NONE", "NONE", 7889],
+      ["esbuild-app", "carried", "WRONG", "UNJUDGED", 1539],
+      ["heldout", "carried", "GOOD", "UNJUDGED", 2936],
+      ["heldout", "carried", "NONE", "NONE", 13744091],
+      ["heldout", "carried", "WRONG", "UNJUDGED", 9014],
+      ["heldout", "copy", "NONE", "NONE", 284],
+      ["heldout", "copy", "WRONG", "GOOD", 29548],
+      ["heldout", "family:fork", "WRONG", "GOOD", 2533],
+      ["heldout", "family:rename", "WRONG", "GOOD", 2484],
+      ["heldout", "family:repo", "WRONG", "GOOD", 3752],
+      ["wrangler", "carried", "NONE", "NONE", 12466]
+    ]
   },
-  "transitions": [
-   [
-    "esbuild-app",
-    "carried",
-    "NONE",
-    "NONE",
-    7889
-   ],
-   [
-    "esbuild-app",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    1539
-   ],
-   [
-    "heldout",
-    "carried",
-    "GOOD",
-    "UNJUDGED",
-    2936
-   ],
-   [
-    "heldout",
-    "carried",
-    "NONE",
-    "NONE",
-    13744091
-   ],
-   [
-    "heldout",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    9014
-   ],
-   [
-    "heldout",
-    "copy",
-    "NONE",
-    "NONE",
-    284
-   ],
-   [
-    "heldout",
-    "copy",
-    "WRONG",
-    "GOOD",
-    29548
-   ],
-   [
-    "heldout",
-    "family:fork",
-    "WRONG",
-    "GOOD",
-    2533
-   ],
-   [
-    "heldout",
-    "family:rename",
-    "WRONG",
-    "GOOD",
-    2484
-   ],
-   [
-    "heldout",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    3752
-   ],
-   [
-    "wrangler",
-    "carried",
-    "NONE",
-    "NONE",
-    12466
-   ]
-  ]
- },
- "exp102-final-agreement": {
-  "libraryBytes": {
-   "esbuild-app:new": 4924477,
-   "esbuild-app:old": 4933905,
-   "heldout:new": 30386646,
-   "heldout:old": 39788872,
-   "wrangler:new": 733474,
-   "wrangler:old": 745940
+  "exp102-final-agreement": {
+    "libraryBytes": {
+      "esbuild-app:new": 4924477,
+      "esbuild-app:old": 4933905,
+      "heldout:new": 30386646,
+      "heldout:old": 39788872,
+      "wrangler:new": 733474,
+      "wrangler:old": 745940
+    },
+    "transitions": [
+      ["esbuild-app", "carried", "NONE", "NONE", 9261],
+      ["esbuild-app", "carried", "WRONG", "UNJUDGED", 167],
+      ["esbuild-app", "family:repo", "WRONG", "GOOD", 21],
+      ["heldout", "carried", "GOOD", "UNJUDGED", 2936],
+      ["heldout", "carried", "NONE", "NONE", 13747796],
+      ["heldout", "carried", "WRONG", "UNJUDGED", 5309],
+      ["heldout", "copy", "NONE", "NONE", 6936],
+      ["heldout", "copy", "WRONG", "GOOD", 23742],
+      ["heldout", "family:repo", "WRONG", "GOOD", 564],
+      ["wrangler", "carried", "NONE", "NONE", 12466]
+    ]
   },
-  "transitions": [
-   [
-    "esbuild-app",
-    "carried",
-    "NONE",
-    "NONE",
-    9261
-   ],
-   [
-    "esbuild-app",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    167
-   ],
-   [
-    "esbuild-app",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    21
-   ],
-   [
-    "heldout",
-    "carried",
-    "GOOD",
-    "UNJUDGED",
-    2936
-   ],
-   [
-    "heldout",
-    "carried",
-    "NONE",
-    "NONE",
-    13747796
-   ],
-   [
-    "heldout",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    5309
-   ],
-   [
-    "heldout",
-    "copy",
-    "NONE",
-    "NONE",
-    6936
-   ],
-   [
-    "heldout",
-    "copy",
-    "WRONG",
-    "GOOD",
-    23742
-   ],
-   [
-    "heldout",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    564
-   ],
-   [
-    "wrangler",
-    "carried",
-    "NONE",
-    "NONE",
-    12466
-   ]
-  ]
- },
- "exp102-final-structural": {
-  "libraryBytes": {
-   "esbuild-app:new": 4924477,
-   "esbuild-app:old": 4933905,
-   "heldout:new": 30386646,
-   "heldout:old": 39788872,
-   "wrangler:new": 733474,
-   "wrangler:old": 745940
+  "exp102-final-structural": {
+    "libraryBytes": {
+      "esbuild-app:new": 4924477,
+      "esbuild-app:old": 4933905,
+      "heldout:new": 30386646,
+      "heldout:old": 39788872,
+      "wrangler:new": 733474,
+      "wrangler:old": 745940
+    },
+    "transitions": [
+      ["esbuild-app", "carried", "NONE", "NONE", 7889],
+      ["esbuild-app", "carried", "WRONG", "UNJUDGED", 1539],
+      ["heldout", "carried", "GOOD", "UNJUDGED", 2936],
+      ["heldout", "carried", "NONE", "NONE", 13744091],
+      ["heldout", "carried", "WRONG", "UNJUDGED", 9014],
+      ["heldout", "copy", "NONE", "NONE", 284],
+      ["heldout", "copy", "WRONG", "GOOD", 29548],
+      ["heldout", "family:fork", "WRONG", "GOOD", 2533],
+      ["heldout", "family:rename", "WRONG", "GOOD", 2484],
+      ["heldout", "family:repo", "WRONG", "GOOD", 3095],
+      ["wrangler", "carried", "NONE", "NONE", 12466]
+    ]
   },
-  "transitions": [
-   [
-    "esbuild-app",
-    "carried",
-    "NONE",
-    "NONE",
-    7889
-   ],
-   [
-    "esbuild-app",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    1539
-   ],
-   [
-    "heldout",
-    "carried",
-    "GOOD",
-    "UNJUDGED",
-    2936
-   ],
-   [
-    "heldout",
-    "carried",
-    "NONE",
-    "NONE",
-    13744091
-   ],
-   [
-    "heldout",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    9014
-   ],
-   [
-    "heldout",
-    "copy",
-    "NONE",
-    "NONE",
-    284
-   ],
-   [
-    "heldout",
-    "copy",
-    "WRONG",
-    "GOOD",
-    29548
-   ],
-   [
-    "heldout",
-    "family:fork",
-    "WRONG",
-    "GOOD",
-    2533
-   ],
-   [
-    "heldout",
-    "family:rename",
-    "WRONG",
-    "GOOD",
-    2484
-   ],
-   [
-    "heldout",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    3095
-   ],
-   [
-    "wrangler",
-    "carried",
-    "NONE",
-    "NONE",
-    12466
-   ]
-  ]
- },
- "step4f-agreement": {
-  "libraryBytes": {
-   "esbuild-app:new": 4924477,
-   "esbuild-app:old": 4933905,
-   "heldout:new": 30386646,
-   "heldout:old": 39788872,
-   "wrangler:new": 733474,
-   "wrangler:old": 745940
+  "step4f-agreement": {
+    "libraryBytes": {
+      "esbuild-app:new": 4924477,
+      "esbuild-app:old": 4933905,
+      "heldout:new": 30386646,
+      "heldout:old": 39788872,
+      "wrangler:new": 733474,
+      "wrangler:old": 745940
+    },
+    "transitions": [
+      ["esbuild-app", "carried", "NONE", "NONE", 9261],
+      ["esbuild-app", "carried", "WRONG", "UNJUDGED", 167],
+      ["esbuild-app", "family:repo", "WRONG", "GOOD", 21],
+      ["heldout", "carried", "GOOD", "UNJUDGED", 2936],
+      ["heldout", "carried", "NONE", "NONE", 13747796],
+      ["heldout", "carried", "WRONG", "UNJUDGED", 5309],
+      ["heldout", "copy", "NONE", "NONE", 6936],
+      ["heldout", "copy", "WRONG", "GOOD", 23742],
+      ["heldout", "family:repo", "WRONG", "GOOD", 564],
+      ["wrangler", "carried", "NONE", "NONE", 12466]
+    ]
   },
-  "transitions": [
-   [
-    "esbuild-app",
-    "carried",
-    "NONE",
-    "NONE",
-    9261
-   ],
-   [
-    "esbuild-app",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    167
-   ],
-   [
-    "esbuild-app",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    21
-   ],
-   [
-    "heldout",
-    "carried",
-    "GOOD",
-    "UNJUDGED",
-    2936
-   ],
-   [
-    "heldout",
-    "carried",
-    "NONE",
-    "NONE",
-    13747796
-   ],
-   [
-    "heldout",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    5309
-   ],
-   [
-    "heldout",
-    "copy",
-    "NONE",
-    "NONE",
-    6936
-   ],
-   [
-    "heldout",
-    "copy",
-    "WRONG",
-    "GOOD",
-    23742
-   ],
-   [
-    "heldout",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    564
-   ],
-   [
-    "wrangler",
-    "carried",
-    "NONE",
-    "NONE",
-    12466
-   ]
-  ]
- },
- "step4f-structural": {
-  "libraryBytes": {
-   "esbuild-app:new": 4924477,
-   "esbuild-app:old": 4933905,
-   "heldout:new": 30386646,
-   "heldout:old": 39788872,
-   "wrangler:new": 733474,
-   "wrangler:old": 745940
-  },
-  "transitions": [
-   [
-    "esbuild-app",
-    "carried",
-    "NONE",
-    "NONE",
-    7889
-   ],
-   [
-    "esbuild-app",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    1539
-   ],
-   [
-    "heldout",
-    "carried",
-    "GOOD",
-    "UNJUDGED",
-    2936
-   ],
-   [
-    "heldout",
-    "carried",
-    "NONE",
-    "NONE",
-    13744091
-   ],
-   [
-    "heldout",
-    "carried",
-    "WRONG",
-    "UNJUDGED",
-    9014
-   ],
-   [
-    "heldout",
-    "copy",
-    "NONE",
-    "NONE",
-    284
-   ],
-   [
-    "heldout",
-    "copy",
-    "WRONG",
-    "GOOD",
-    29548
-   ],
-   [
-    "heldout",
-    "family:fork",
-    "WRONG",
-    "GOOD",
-    2533
-   ],
-   [
-    "heldout",
-    "family:rename",
-    "WRONG",
-    "GOOD",
-    2484
-   ],
-   [
-    "heldout",
-    "family:repo",
-    "WRONG",
-    "GOOD",
-    3752
-   ],
-   [
-    "wrangler",
-    "carried",
-    "NONE",
-    "NONE",
-    12466
-   ]
-  ]
- }
+  "step4f-structural": {
+    "libraryBytes": {
+      "esbuild-app:new": 4924477,
+      "esbuild-app:old": 4933905,
+      "heldout:new": 30386646,
+      "heldout:old": 39788872,
+      "wrangler:new": 733474,
+      "wrangler:old": 745940
+    },
+    "transitions": [
+      ["esbuild-app", "carried", "NONE", "NONE", 7889],
+      ["esbuild-app", "carried", "WRONG", "UNJUDGED", 1539],
+      ["heldout", "carried", "GOOD", "UNJUDGED", 2936],
+      ["heldout", "carried", "NONE", "NONE", 13744091],
+      ["heldout", "carried", "WRONG", "UNJUDGED", 9014],
+      ["heldout", "copy", "NONE", "NONE", 284],
+      ["heldout", "copy", "WRONG", "GOOD", 29548],
+      ["heldout", "family:fork", "WRONG", "GOOD", 2533],
+      ["heldout", "family:rename", "WRONG", "GOOD", 2484],
+      ["heldout", "family:repo", "WRONG", "GOOD", 3752],
+      ["wrangler", "carried", "NONE", "NONE", 12466]
+    ]
+  }
 }
