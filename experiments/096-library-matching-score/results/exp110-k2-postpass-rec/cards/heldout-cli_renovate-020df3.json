@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "1a0046f392192f8bbd8dccfa2362cfbe8bfee12129026d3e7cff4aa59945c474",
+ "claimedBytes": {
+  "family": 13144,
+  "origin": 41389,
+  "right": 2296316,
+  "selfOther": 107,
+  "unmapped": 598,
+  "wrongFamily": 109082
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_renovate-020df3",
+ "exploratory": {
+  "names": {
+   "bindings": 22039,
+   "bindingsSameVersion": 21872,
+   "bindingsVersionKnown": 22039,
+   "exactBytes": 1327432,
+   "exactUnits": 2672,
+   "sameVersionShare": 0.992423
+  }
+ },
+ "indexId": "586e5ef7629fb0cae53bc4d63709b5fc73f2a5d80ce6a4ac860b13784b08f3f4",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.498443,
+  "f1": 0.289159,
+  "namedBytes": 1539373,
+  "precision": 0.963201,
+  "recall": 0.170114
+ },
+ "label": "exp110-k2-postpass-rec",
+ "missBytes": {
+  "a": 5896928,
+  "c": 100819,
+  "d-absent": 28576,
+  "d-file": 546011,
+  "d-variant": 12528,
+  "e-ambig": 7034,
+  "e-other": 4248,
+  "e-support": 3140,
+  "e-veto": 4487,
+  "f": 94447
+ },
+ "noDiscovery": null,
+ "reportSha256": "a15b025d888b72c55e32c07d99ace4af0a427ec96d2536179f0fbc5dcadaf714",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 2228193,
+  "<unmapped>": 26201,
+  "copy": 116621,
+  "library": 9049067
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 116621,
+  "f05": 0.622287,
+  "f05ShipperOnly": 0.61133,
+  "f1": 0.408523,
+  "f1ShipperOnly": 0.401331,
+  "libraryBytes": 9049067,
+  "namedAsOriginBytes": 41389,
+  "namedAsShipperBytes": 2309460,
+  "namedBytes": 2350849,
+  "namedBytesShipperOnly": 2309460,
+  "precision": 0.955656,
+  "precisionShipperOnly": 0.938831,
+  "recall": 0.259789,
+  "recallShipperOnly": 0.255215,
+  "wrongFamilyBytes": 109082,
+  "wrongFamilyBytesShipperOnly": 150471
+ },
+ "truthMethod": "sourcemap"
+}

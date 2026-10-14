@@ -1,0 +1,22 @@
+{
+ "binarySha256": "c299343963b0915bf9786b975975b806db2d46079cb23108fda00fb54c517dee",
+ "buildCommit": "a7de41ed4a98d8f4baaa5dbdfbccd56c72459df6",
+ "corpus": "apps",
+ "corpusSha256": "98b06b6770a0a73eb0fea4afd294511d4d4fa5e60cfaafe0a55b35ff3ef23e6f",
+ "indexBytes": 1654168496,
+ "indexId": "2baeb1f34b757ee991dfb24ba2673e6869e7687f067660b1d257fc875b4ea54c",
+ "instrument": "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml",
+ "rule": "structural",
+ "sets": [
+  "apps-esbuild"
+ ],
+ "settings": [
+  "library.discovery.evidence_conflict=true",
+  "library.discovery.literal_conflict=true",
+  "library.discovery.contested_cover=0.05",
+  "library.discovery.specific_rivals=true",
+  "library.discovery.banner_names=known",
+  "library.discovery.derived_families=true",
+  "library.discovery.payload_min_bytes=4096"
+ ]
+}

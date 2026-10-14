@@ -1,0 +1,75 @@
+{
+ "bundleSha256": "a25f285b7707aca21442cf640baa30e23da5108ef9991ad6925d2cbc0e6bc8ba",
+ "claimedBytes": {
+  "family": 630,
+  "right": 68510,
+  "unmapped": 53,
+  "wrongFamily": 30
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_appium-12c815",
+ "exploratory": {
+  "names": {
+   "bindings": 991,
+   "bindingsSameVersion": 991,
+   "bindingsVersionKnown": 991,
+   "exactBytes": 65662,
+   "exactUnits": 103,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "2baeb1f34b757ee991dfb24ba2673e6869e7687f067660b1d257fc875b4ea54c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.965217,
+  "f1": 0.917353,
+  "namedBytes": 59528,
+  "precision": 1.0,
+  "recall": 0.847325
+ },
+ "label": "exp110-c2-pp2-rec",
+ "missBytes": {
+  "c": 942,
+  "e-support": 172
+ },
+ "noDiscovery": null,
+ "reportSha256": "15265fa18963e2e81322e0f0334e325b02ef228a0fd8445318db5416a275429a",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 18,
+  "<unmapped>": 488,
+  "library": 70254
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.996443,
+  "f05ShipperOnly": 0.996443,
+  "f1": 0.991795,
+  "f1ShipperOnly": 0.991795,
+  "libraryBytes": 70254,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 69140,
+  "namedBytes": 69140,
+  "namedBytesShipperOnly": 69140,
+  "precision": 0.999566,
+  "precisionShipperOnly": 0.999566,
+  "recall": 0.984143,
+  "recallShipperOnly": 0.984143,
+  "wrongFamilyBytes": 30,
+  "wrongFamilyBytesShipperOnly": 30
+ },
+ "truthMethod": "sourcemap"
+}

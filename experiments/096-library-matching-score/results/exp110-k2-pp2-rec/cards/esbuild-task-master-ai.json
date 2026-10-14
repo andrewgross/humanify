@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 98529,
+  "foreign": 79357,
+  "origin": 94563,
+  "right": 3060420,
+  "unmapped": 8255,
+  "wrongFamily": 111965
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 34816,
+   "bindingsSameVersion": 27239,
+   "bindingsVersionKnown": 33677,
+   "exactBytes": 2404902,
+   "exactUnits": 3989,
+   "sameVersionShare": 0.808831
+  }
+ },
+ "indexId": "02ce7b0228af233471722cf4e2d63499511ac42cb5836f5f3a8126c8ae8248d1",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.859777,
+  "f1": 0.719683,
+  "namedBytes": 2782910,
+  "precision": 0.987993,
+  "recall": 0.565979
+ },
+ "label": "exp110-k2-pp2-rec",
+ "missBytes": {
+  "a": 459780,
+  "b": 794226,
+  "c": 33208,
+  "d-absent": 91669,
+  "d-file": 17473,
+  "d-variant": 81,
+  "e-ambig": 6853,
+  "e-other": 21577,
+  "e-support": 3529,
+  "e-veto": 17120,
+  "f": 217960
+ },
+ "noDiscovery": null,
+ "reportSha256": "58a39d54e95c5cf36cbd164f4c3de7c1fab989edf48b308563cc3c0f727cec56",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80010,
+  "<self>": 1114888,
+  "<unmapped>": 16989,
+  "copy": 263253,
+  "library": 4916988
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 263253,
+  "f05": 0.885122,
+  "f05ShipperOnly": 0.859395,
+  "f1": 0.785638,
+  "f1ShipperOnly": 0.762804,
+  "libraryBytes": 4916988,
+  "namedAsOriginBytes": 94563,
+  "namedAsShipperBytes": 3158949,
+  "namedBytes": 3253512,
+  "namedBytesShipperOnly": 3158949,
+  "precision": 0.966731,
+  "precisionShipperOnly": 0.938633,
+  "recall": 0.661688,
+  "recallShipperOnly": 0.642456,
+  "wrongFamilyBytes": 111965,
+  "wrongFamilyBytesShipperOnly": 206528
+ },
+ "truthMethod": "sourcemap"
+}

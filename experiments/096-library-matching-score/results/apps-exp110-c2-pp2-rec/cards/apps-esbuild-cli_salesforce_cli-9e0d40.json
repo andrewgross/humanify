@@ -1,0 +1,75 @@
+{
+ "bundleSha256": "264017663684652ddae0c36d72d9d1b35255ab00082e440abcf9af2d06457200",
+ "claimedBytes": {
+  "right": 1959,
+  "wrongFamily": 2499
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_salesforce_cli-9e0d40",
+ "exploratory": {
+  "names": {
+   "bindings": 4,
+   "bindingsSameVersion": 4,
+   "bindingsVersionKnown": 4,
+   "exactBytes": 472,
+   "exactUnits": 2,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "2baeb1f34b757ee991dfb24ba2673e6869e7687f067660b1d257fc875b4ea54c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.307086,
+  "f1": 0.195655,
+  "namedBytes": 1801,
+  "precision": 0.495052,
+  "recall": 0.12192
+ },
+ "label": "apps-exp110-c2-pp2-rec",
+ "missBytes": {
+  "a": 11316,
+  "c": 881,
+  "d-file": 338,
+  "e-support": 278
+ },
+ "noDiscovery": null,
+ "reportSha256": "f53ad7307dbb006acadbab2ffa65dd46ce65bd417558e10145721b66a2add1f4",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<self>": 4046,
+  "<unmapped>": 62,
+  "library": 14772
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.300424,
+  "f05ShipperOnly": 0.300424,
+  "f1": 0.203744,
+  "f1ShipperOnly": 0.203744,
+  "libraryBytes": 14772,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 1959,
+  "namedBytes": 1959,
+  "namedBytesShipperOnly": 1959,
+  "precision": 0.439435,
+  "precisionShipperOnly": 0.439435,
+  "recall": 0.132616,
+  "recallShipperOnly": 0.132616,
+  "wrongFamilyBytes": 2499,
+  "wrongFamilyBytesShipperOnly": 2499
+ },
+ "truthMethod": "sourcemap"
+}

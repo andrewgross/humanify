@@ -1,0 +1,82 @@
+{
+ "bars": {
+  "appBarPassed": true,
+  "appClaimedBytes": 0,
+  "precisionBar": 0.998,
+  "precisionBarPassed": {
+   "apps-esbuild": false
+  }
+ },
+ "config": {
+  "binarySha256": "c299343963b0915bf9786b975975b806db2d46079cb23108fda00fb54c517dee",
+  "buildCommit": "a7de41ed4a98d8f4baaa5dbdfbccd56c72459df6",
+  "chainedSha256": "6260ae974e5d1d50e535ded285d7d45e83fef13919af8458b61ebe74e0e1628f",
+  "copiesSha256": "aeb5a27e9ebf936e0bb3c90c2f5999e0e59937e3c26e45391a063d1bd56323ca",
+  "corpus": "apps",
+  "corpusSha256": "98b06b6770a0a73eb0fea4afd294511d4d4fa5e60cfaafe0a55b35ff3ef23e6f",
+  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "indexBytes": 4515776144,
+  "indexId": "02ce7b0228af233471722cf4e2d63499511ac42cb5836f5f3a8126c8ae8248d1",
+  "originsSha256": "8872eb35102a3cff989b46b2d288fbdc500e955eb6ae3b25993aed2a03e1556b",
+  "rule": "structural",
+  "sets": [
+   "apps-esbuild"
+  ],
+  "settings": [
+   "library.discovery.evidence_conflict=true",
+   "library.discovery.literal_conflict=true",
+   "library.discovery.contested_cover=0.05",
+   "library.discovery.specific_rivals=true",
+   "library.discovery.banner_names=known",
+   "library.discovery.derived_families=true",
+   "library.discovery.payload_min_bytes=4096"
+  ]
+ },
+ "label": "apps-exp110-k2-pp2-rec",
+ "schema": "exp096-score/6",
+ "sets": {
+  "apps-esbuild": {
+   "appClaimedBytes": 0,
+   "bundlerDetected": 38,
+   "copyBytes": 1770002,
+   "discoveryRan": 39,
+   "entries": 39,
+   "exploratoryNames": {
+    "bindings": 153679,
+    "bindingsSameVersion": 144232,
+    "bindingsVersionKnown": 153645,
+    "exactBytes": 14766606,
+    "exactUnits": 13143,
+    "sameVersionShare": 0.938735
+   },
+   "f05": 0.965512,
+   "f05ShipperOnly": 0.949373,
+   "f1": 0.936458,
+   "f1ShipperOnly": 0.920805,
+   "libraryBytes": 25643725,
+   "missShares": {
+    "a": 0.029319,
+    "b": 0.018253,
+    "c": 0.009905,
+    "d-absent": 0.024426,
+    "d-file": 0.000774,
+    "d-variant": 3e-06,
+    "e-ambig": 0.001376,
+    "e-other": 0.000718,
+    "e-support": 0.00052,
+    "e-veto": 0.000723,
+    "f": 0.022248
+   },
+   "namedAsOriginBytes": 382232,
+   "namedAsShipperBytes": 22485155,
+   "namedBytes": 22867387,
+   "precision": 0.985904,
+   "precisionShipperOnly": 0.969424,
+   "recall": 0.891734,
+   "recallShipperOnly": 0.876829,
+   "selfOriginBytes": 10183,
+   "selfOtherBytes": 857,
+   "wrongFamilyBytes": 326958
+  }
+ }
+}
