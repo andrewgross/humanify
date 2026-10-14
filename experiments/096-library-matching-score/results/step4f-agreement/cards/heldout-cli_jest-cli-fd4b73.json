@@ -27,16 +27,17 @@
  },
  "label": "step4f-agreement",
  "missBytes": {
-  "a": 2802
+  "a": 135
  },
  "noDiscovery": null,
  "reportSha256": "4ec2b3d0e8b863153afcc3ce8b6c82bece6181041b14298a5d6b71cde35d79c2",
  "rule": "agreement",
- "schema": "exp096-score/3",
+ "schema": "exp096-score/4",
  "set": "heldout",
  "statementBytes": {
   "<app>": 23,
-  "library": 2802
+  "<unmapped>": 2667,
+  "library": 135
  },
  "toolchain": {
   "adapter": "bun",
@@ -49,7 +50,7 @@
   "copyBytes": 0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 2802,
+  "libraryBytes": 135,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

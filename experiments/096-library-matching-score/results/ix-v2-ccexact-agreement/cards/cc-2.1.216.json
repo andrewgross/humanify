@@ -3,13 +3,13 @@
  "bundleSha256": "ec64d65a1e772ac04719715af0210dc0da6160a048d9922284cafc3cb5da1f76",
  "claimedBytes": {
   "compiler-helper": 22856,
-  "right": 1235910,
-  "wrongFamily": 3064
+  "family": 3064,
+  "right": 1235910
  },
  "claimedSampleUnits": {
   "compiler-helper": 1,
-  "right": 48,
-  "wrongFamily": 1
+  "family": 1,
+  "right": 48
  },
  "detected": {
   "bundler": "bun",
@@ -20,11 +20,11 @@
  "estimate": "stratified ratio estimate from the 620-unit labelled sample (bytes are src-wide estimates)",
  "exploratory": {
   "names": {
-   "bindings": 15025,
+   "bindings": 15072,
    "bindingsSameVersion": 983,
    "bindingsVersionKnown": 1003,
-   "exactBytes": 1149800,
-   "exactUnits": 1639,
+   "exactBytes": 1151473,
+   "exactUnits": 1652,
    "sameVersionShare": 0.98006,
    "versionScope": "labelled sample units only"
   }
@@ -32,7 +32,7 @@
  "indexId": "bfb9d80adc0d65d7b6c1ee02d1b947b6493e1ef68d9c9602b1edcecc3aadc8ce",
  "label": "ix-v2-ccexact-agreement",
  "missBytes": {
-  "b": 73759,
+  "b": 70695,
   "c": 163131,
   "d-nofile": 232084,
   "e-agree": 287939,
@@ -43,7 +43,7 @@
  "originTruth": "none: sample truth (hand-labelled units)",
  "reportSha256": "3f1ac2302f22bb8803de43c930391f0d3ace2a62dd92073a0afd5770d6b64e3c",
  "rule": "agreement",
- "schema": "exp096-score/3",
+ "schema": "exp096-score/4",
  "set": "cc",
  "statementBytes": {
   "<app>": 13036401,
@@ -60,19 +60,19 @@
   "appClaimedBytes": 0,
   "appClaimedSampleUnits": 0,
   "copyBytes": 0,
-  "f1": 0.714309,
-  "f1ShipperOnly": 0.714309,
+  "f1": 0.71608,
+  "f1ShipperOnly": 0.71608,
   "libraryBytes": 2221462,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 1235910,
-  "namedBytes": 1235910,
-  "namedBytesShipperOnly": 1235910,
-  "precision": 0.997527,
-  "precisionShipperOnly": 0.997527,
-  "recall": 0.55635,
-  "recallShipperOnly": 0.55635,
-  "wrongFamilyBytes": 3064,
-  "wrongFamilyBytesShipperOnly": 3064
+  "namedAsShipperBytes": 1238975,
+  "namedBytes": 1238975,
+  "namedBytesShipperOnly": 1238975,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.55773,
+  "recallShipperOnly": 0.55773,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
  },
  "truthMethod": "sample"
 }
