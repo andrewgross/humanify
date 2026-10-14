@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "3ca3cb261dbcb9d29d3101eca298d2426270017767b8a342fc03537e6cb9c579",
+ "claimedBytes": {
+  "family": 1445,
+  "origin": 44543,
+  "right": 944843,
+  "selfOther": 157,
+  "unmapped": 43614,
+  "wrongFamily": 26570
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_gatsby-cli-ed0295",
+ "exploratory": {
+  "names": {
+   "bindings": 11304,
+   "bindingsSameVersion": 10788,
+   "bindingsVersionKnown": 11304,
+   "exactBytes": 610933,
+   "exactUnits": 697,
+   "sameVersionShare": 0.954352
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.791099,
+  "f1": 0.604761,
+  "namedBytes": 913504,
+  "precision": 0.99561,
+  "recall": 0.434276
+ },
+ "label": "exp113-wr-apps-p0",
+ "missBytes": {
+  "a": 439495,
+  "b": 1636,
+  "c": 50996,
+  "d-absent": 512493,
+  "d-file": 79379,
+  "d-variant": 2692,
+  "e-ambig": 2170,
+  "e-other": 769,
+  "e-spec": 3608,
+  "e-support": 6782,
+  "e-veto": 8222,
+  "f": 4437
+ },
+ "noDiscovery": null,
+ "reportSha256": "2d6517c093d2fb1389352873664ed006bde3fbadca088cfed94523521e884de5",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 289411,
+  "<unmapped>": 608535,
+  "copy": 44611,
+  "library": 2103510
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 44611,
+  "f05": 0.802537,
+  "f05ShipperOnly": 0.766459,
+  "f1": 0.634963,
+  "f1ShipperOnly": 0.606417,
+  "libraryBytes": 2103510,
+  "namedAsOriginBytes": 44543,
+  "namedAsShipperBytes": 946288,
+  "namedBytes": 990831,
+  "namedBytesShipperOnly": 946288,
+  "precision": 0.973884,
+  "precisionShipperOnly": 0.930103,
+  "recall": 0.471037,
+  "recallShipperOnly": 0.449861,
+  "wrongFamilyBytes": 26570,
+  "wrongFamilyBytesShipperOnly": 71113
+ },
+ "truthMethod": "sourcemap"
+}

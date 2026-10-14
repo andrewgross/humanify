@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 98529,
+  "foreign": 79357,
+  "origin": 71877,
+  "right": 3047785,
+  "unmapped": 8255,
+  "wrongFamily": 144685
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 34665,
+   "bindingsSameVersion": 27239,
+   "bindingsVersionKnown": 33719,
+   "exactBytes": 2395624,
+   "exactUnits": 3961,
+   "sameVersionShare": 0.807823
+  }
+ },
+ "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.851574,
+  "f1": 0.712833,
+  "namedBytes": 2756495,
+  "precision": 0.978547,
+  "recall": 0.560606
+ },
+ "label": "exp113-opq2-k2",
+ "missBytes": {
+  "a": 459780,
+  "b": 797254,
+  "c": 33859,
+  "d-absent": 91669,
+  "d-file": 17473,
+  "d-variant": 81,
+  "e-ambig": 11110,
+  "e-other": 23712,
+  "e-support": 4082,
+  "e-veto": 11623,
+  "f": 248154
+ },
+ "noDiscovery": null,
+ "reportSha256": "e6b86e53c0440403caf9509d33af8c5b1f670b1f9be63c743f6696a408d8aeb6",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80010,
+  "<self>": 1114888,
+  "<unmapped>": 16989,
+  "copy": 263253,
+  "library": 4916988
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 263253,
+  "f05": 0.876009,
+  "f05ShipperOnly": 0.856443,
+  "f1": 0.777354,
+  "f1ShipperOnly": 0.759991,
+  "libraryBytes": 4916988,
+  "namedAsOriginBytes": 71877,
+  "namedAsShipperBytes": 3146314,
+  "namedBytes": 3218191,
+  "namedBytesShipperOnly": 3146314,
+  "precision": 0.956976,
+  "precisionShipperOnly": 0.935602,
+  "recall": 0.654505,
+  "recallShipperOnly": 0.639886,
+  "wrongFamilyBytes": 144685,
+  "wrongFamilyBytesShipperOnly": 216562
+ },
+ "truthMethod": "sourcemap"
+}
