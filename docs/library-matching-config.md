@@ -112,7 +112,8 @@ from `LookupRules::recommended()` / `DiscoveryOptions::recommended()`.
 baseline (the agreement rule, every guard off), which the unit tests compare
 each rule against. Matching itself stays `off` by default, so these keys
 change only `report` (and, once allowed, `names`) runs; `humanify.example.toml`
-is generated from the registry and holds every value below.
+is generated from the registry and holds every value below. Which index to
+point `library.index` at: docs/design/library-index.md §10.
 
 ```toml
 [library]

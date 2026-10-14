@@ -41,6 +41,9 @@ it (Andrew, 2026-10-11).
   churn guard: an unchanged module keeps its prior name by the exact-hash
   carry before the index is ever consulted (§8).
 
+- **Which index to use.** §10: `k2-l12m4` (Bun/esbuild) with `step4-wr`
+  for webpack/rollup bundles, until `k2-all` (all five slices) is built.
+
 ## 1. Separation: a builder outside the run, sharing the pipeline's code
 
 | Piece                                                                                                  | Lives in                                                                             | Why there                                                                                                                                                                                                                |
@@ -372,3 +375,62 @@ wrote byte-identical files. `--as-of 2020-12-01` refuses `ms@2.1.3`
 also caught a real unpublished version (`debug@4.4.2`). ESM-only packages
 (escape-string-regexp 5, uuid 8 under esbuild) give no module rows: lazy-ESM
 keys are deferred.
+
+## 10. The recommended default index (exp109, 2026-10-14)
+
+An index is data, not code: it is never committed, and nothing in a run
+picks one unless `--library-index` names it. The recommendation below is
+what `library.matching = "report"` should be pointed at today, and what the
+eval's library score (`npm run eval -- library`) is judged on.
+
+**Recommended now: `k2-l12m4`** (exp108; `/work/exp108-data/idx/ix/k2-l12m4`,
+/3, 4.65 GB, 0.67 s and ~2 GB per lookup run) — step 4's roots and pins plus
+every package bundled by at least two of 2,155 independent training apps,
+at the `year-last12+major4` density, in three slices: Bun target bun, Bun
+target node, esbuild. With the shipped config (§ `library-matching-config.md`)
+it beats exp101's `c2-l12m4` on the dev held-out apps (F0.5 90.2 vs 85.0,
+precision 99.1 vs 99.3) and on the frozen test split's Bun and esbuild sets
+(74.1 vs 66.6, 79.4 vs 68.4, precision up on both).
+
+**Webpack and rollup bundles: `step4-wr`** (`/work/exp103-data/ix/step4-wr-v3`,
+exp105) until k2's own webpack/rollup slices exist. An index refuses a
+bundle whose bundler it has no slice for, so a run on a webpack or rollup
+bundle needs this index today.
+
+**Next build: `k2-all`** — k2's package set across all five slices. A
+`c2-all` build (exp101's smaller c2 set, five slices) was started by exp109
+and stopped at ~43% when k2's numbers arrived; its store
+(`/work/exp109-data/store`: ~12.6k new webpack/rollup shards, ~15.7k
+five-recipe literals shards) and seeded work dir are the starting point for
+k2-all, which reuses every shard whose key matches.
+
+**How to build one** (the builder is `crates/humanify-index`; every step
+runs offline against a registry snapshot except npm installs):
+
+1. **Package set.** A roots list and a `--pinned` list (exp101's
+   `scripts/tail_pins.py` picks the `year-last12+major4` versions of new
+   roots from the registry snapshot as of the index date).
+2. **Reuse what exists.** Point `--store` at a store holding earlier shards
+   (hard-link copies: `cp -al <old store>/shards/<slice> <new store>/shards/`;
+   the builder writes every shard with write-then-rename, so a link is
+   never written through). A shard is reused only when its key matches:
+   package, version, recipe, bundler VERSION, fingerprint versions — so pass
+   the same bundler binaries (exp101/105: Bun 1.4.0, esbuild 0.28.2,
+   webpack 5.111.1, rollup 4.64.5). The `literals` shard's key holds the
+   whole recipe SET, so adding a slice rebuilds every literals shard; it
+   reads the slices' builds from `--work`, so seed the work dir from earlier
+   builds (`experiments/109-default-config/scripts/seed-work.sh`: installs
+   hard-linked, finished builds copied).
+3. **Build in short-lived processes.** A `humanify-index build` process
+   grows ~40 MB per version it builds; run many small ones
+   (`experiments/108-app-corpus/scripts/build_chunks.py`, ~100 pins per
+   chunk), then one `build ... --merge-only` (the streaming merge, §4).
+   Under the campaign, every build holds `flock /work/index-build.lock` and
+   at most 30 cores.
+4. **Check it.** `--dry-run` prints the plan (shards to build vs reuse);
+   the merged index's id is its manifest's sha256.
+
+`experiments/109-default-config/scripts/build-c2-all.sh` is the c2-all
+build as one command (point it at k2's roots and pins for k2-all). Since
+exp111 (mimalloc) the builder's memory is flat, so step 3's short-lived
+chunks are optional.
