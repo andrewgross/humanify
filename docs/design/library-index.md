@@ -182,6 +182,7 @@ run reads.
   units.<slice>.bin      lookup: unit hash (16 hex = u64) -> rows (owner id, smallest module bytes)
   literals.bin           lookup: literal -> package count, files; file -> owner id, literal ids
   stoplists.json         copied data (§7); its sha256 in the manifest
+  dedup.json             what the origin rule dropped (below): rows per slice, every (inliner, origin) pair
   families.json          copied data (§7); its sha256 in the manifest
 ```
 
@@ -212,6 +213,22 @@ merging versions keeps only ~63% of rows.
 **Collisions are kept.** A key held by two owners is two rows. Dropping
 multi-owner keys, the specificity rule and the agreement rule are LOOKUP
 rules (§8), not build rules, so the index keeps the evidence they need.
+
+**Copies go to their origin (exp110, `humanify_index::origin`).** The one
+collision the merge resolves: a package whose `dist/` INLINES a dependency
+(rspack's pre-bundled tinypool, mermaid's chunks of cytoscape and elk) holds
+that dependency's unit prints under its own name, and a bundle containing
+the real dependency was claimed as the inliner. A unit print held by owners
+`A` and `B` is dropped from `B` when `B` depends on `A`, `A` does not depend
+on `B`, and they are not one family. "Depends" comes from the build store
+alone: `B`'s shards hold rows OWNED by `A` (its builds bundled `A` from
+`node_modules`), or `B`'s published package.json names `A` in any dependency
+field, devDependencies included (recorded once per version from the install
+in `store/declared/`). A print held by more owners than the lookup reads
+(3) is generic code and is left alone, as is a cycle. Only the unit tables
+change; `dedup.json` records what was dropped. exp097's sponge filter
+(bundler markers, vendored directories) still drops marked copies at shard
+time; this catches the unmarked ones.
 
 **Manifest** (`manifest.json`):
 

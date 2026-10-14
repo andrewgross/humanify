@@ -16,7 +16,7 @@
 //! 112 GB on the 134,000 shards of exp101's 1.8 GB index.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use humanify_core::libindex::format::{
     INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow, PackageRecord, RefusedRecord,
@@ -25,6 +25,9 @@ use humanify_core::libindex::format::{
 use humanify_core::libindex::table::unit_key;
 use serde::Serialize;
 
+use crate::origin::{
+    DEDUP_FILE, DedupRecord, Dependencies, MAX_OWNERS, ORIGIN_RULE, PairDrops, SliceDrops,
+};
 use crate::shard::{Shard, hex_sha256};
 
 /// The stop-lists shipped with every index.
@@ -156,7 +159,15 @@ pub struct Merger {
     /// label → shard key, every shard added
     shard_keys: BTreeMap<String, String>,
     last: Option<(String, String)>,
+    /// Who depends on whom: installed (a shard's rows owned by another
+    /// package) and declared ([`Merger::declare`]) — the origin test
+    /// ([`crate::origin`]).
+    deps: Dependencies,
+    declared_versions: usize,
 }
+
+/// The unit rows the origin rule drops: (hash, owner).
+type Drops = HashSet<(u64, u32)>;
 
 impl Default for Merger {
     fn default() -> Self {
@@ -168,11 +179,24 @@ impl Default for Merger {
             literals: HashMap::new(),
             shard_keys: BTreeMap::new(),
             last: None,
+            deps: Dependencies::default(),
+            declared_versions: 0,
         }
     }
 }
 
 impl Merger {
+    /// One version of `package` declares `names` in its package.json's
+    /// dependency fields (the origin test's declared evidence).
+    pub fn declare(&mut self, package: &str, names: impl IntoIterator<Item = String>) {
+        let p = self.strings.id(package);
+        for n in names {
+            let d = self.strings.id(&n);
+            self.deps.add(p, d);
+        }
+        self.declared_versions += 1;
+    }
+
     /// Add one shard. Shards must come in (label, key) order — a unit
     /// group keeps the first shard's nodes and content — so one out of
     /// order is refused.
@@ -185,6 +209,15 @@ impl Merger {
         self.last = Some(order);
         if shard.kind != "literals" {
             self.slices.entry(shard.kind.clone()).or_default();
+        }
+        let package = self.strings.id(&shard.package);
+        let owners: BTreeSet<&str> = (shard.modules.iter().map(|m| m.owner.as_str()))
+            .chain(shard.units.iter().map(|u| u.owner.as_str()))
+            .chain(shard.literals.iter().map(|l| l.owner.as_str()))
+            .collect();
+        for o in owners {
+            let o = self.strings.id(o);
+            self.deps.add(package, o);
         }
         self.add_modules(&shard);
         self.add_units(&shard)?;
@@ -307,9 +340,18 @@ impl Merger {
 
     /// `units.<slice>.jsonl`, sorted by (hash, owner, file): a hash's
     /// fixed-width lowercase hex sorts as its number.
-    fn unit_rows(&self, g: &SliceGroups, indexed: &BTreeMap<String, Vec<String>>) -> Vec<UnitRow> {
+    fn unit_rows(
+        &self,
+        g: &SliceGroups,
+        indexed: &BTreeMap<String, Vec<String>>,
+        drops: &Drops,
+    ) -> Vec<UnitRow> {
         let s = &self.strings;
-        let mut keys: Vec<&(u64, u32, u32)> = g.units.keys().collect();
+        let mut keys: Vec<&(u64, u32, u32)> = g
+            .units
+            .keys()
+            .filter(|k| !drops.contains(&(k.0, k.1)))
+            .collect();
         keys.sort_by(|a, b| {
             a.0.cmp(&b.0)
                 .then_with(|| s.cmp(a.1, b.1))
@@ -329,6 +371,59 @@ impl Merger {
                 }
             })
             .collect()
+    }
+
+    /// The origin rule on one slice ([`crate::origin`]): the (hash, owner)
+    /// rows to drop, counted into `slice` and `pairs` (rows per (inliner,
+    /// origin)).
+    fn origin_drops(
+        &self,
+        g: &SliceGroups,
+        families: &humanify_core::libindex::families::PackageFamilies,
+        slice: &mut SliceDrops,
+        pairs: &mut HashMap<(u32, u32), usize>,
+    ) -> Drops {
+        let s = &self.strings;
+        // (hash, owner) → (its rows (one per file), its smallest module),
+        // in hash order
+        let mut keys: Vec<(u64, u32, u64)> = g
+            .units
+            .iter()
+            .map(|(k, u)| (k.0, k.1, u.module_bytes))
+            .collect();
+        keys.sort_unstable();
+        let mut groups: Vec<((u64, u32), (usize, u64))> = Vec::new();
+        for (hash, owner, bytes) in keys {
+            match groups.last_mut() {
+                Some((last, (n, _))) if *last == (hash, owner) => *n += 1,
+                _ => groups.push(((hash, owner), (1, bytes))),
+            }
+        }
+        let same = |a: u32, b: u32| families.same(s.get(a), s.get(b));
+        let mut drops = Drops::new();
+        for print in groups.chunk_by(|a, b| a.0.0 == b.0.0) {
+            let hash = print[0].0.0;
+            let mut owners: Vec<(u32, u64)> = print
+                .iter()
+                .map(|((_, o), (_, bytes))| (*o, *bytes))
+                .collect();
+            owners.sort_by(|a, b| s.cmp(a.0, b.0));
+            let inliners = self.deps.inliners(&owners, &same);
+            if inliners.is_empty() {
+                continue;
+            }
+            slice.hashes += 1;
+            for (inliner, origin) in inliners {
+                drops.insert((hash, inliner));
+                let rows = print
+                    .iter()
+                    .find(|((_, o), _)| *o == inliner)
+                    .map_or(0, |(_, (n, _))| *n);
+                slice.rows += rows;
+                *pairs.entry((inliner, origin)).or_default() += rows;
+            }
+        }
+        drops
     }
 
     /// The literal file rows, sorted by (owner, file, literal set).
@@ -358,12 +453,25 @@ impl Merger {
         let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         files.insert("versions.json".into(), pretty(&indexed));
         let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
+        let families = crate::origin::families();
+        let mut dedup = DedupRecord {
+            rule: ORIGIN_RULE,
+            max_owners: MAX_OWNERS,
+            declared_versions: self.declared_versions,
+            slices: BTreeMap::new(),
+            pairs: Vec::new(),
+        };
+        let mut pairs: HashMap<(u32, u32), usize> = HashMap::new();
         for (kind, g) in &self.slices {
             files.insert(
                 format!("modules.{kind}.jsonl"),
                 jsonl(&self.module_rows(g, &indexed)),
             );
-            let rows = self.unit_rows(g, &indexed);
+            let mut drops = SliceDrops::default();
+            let dropped = self.origin_drops(g, &families, &mut drops, &mut pairs);
+            dedup.slices.insert(kind.clone(), drops);
+            let rows = self.unit_rows(g, &indexed, &dropped);
+            drop(dropped);
             if !rows.is_empty() {
                 files.insert(format!("units.{kind}.jsonl"), jsonl(&rows));
                 units.insert(kind.clone(), rows);
@@ -383,6 +491,21 @@ impl Merger {
             })
             .collect();
         files.insert(LITERAL_FILES.into(), jsonl(&provenance));
+        dedup.pairs = pairs
+            .into_iter()
+            .map(|((inliner, origin), rows)| PairDrops {
+                inliner: self.strings.get(inliner).to_string(),
+                origin: self.strings.get(origin).to_string(),
+                rows,
+            })
+            .collect();
+        dedup.pairs.sort_by(|a, b| {
+            b.rows
+                .cmp(&a.rows)
+                .then_with(|| a.inliner.cmp(&b.inliner))
+                .then_with(|| a.origin.cmp(&b.origin))
+        });
+        files.insert(DEDUP_FILE.into(), pretty(&dedup));
         let data: BTreeMap<String, &str> = [
             ("families.json".to_string(), FAMILIES_JSON),
             ("stoplists.json".to_string(), STOPLISTS_JSON),

@@ -1013,6 +1013,11 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
             });
             continue;
         }
+        if let Some(names) =
+            crate::origin::read_or_record_declared(&cfg.store, &cfg.work, &t.name, &t.version)
+        {
+            merger.declare(&t.name, names);
+        }
         packages.push(PackageRecord {
             name: t.name.clone(),
             version: t.version.clone(),

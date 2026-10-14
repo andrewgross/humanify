@@ -1,0 +1,14 @@
+# exp110's lab re-encoder: units.<slice>.jsonl (filtered by postpass.py) -> units.<slice>.bin, by humanify-core's
+# own encoder, against the index's existing packages.json. Lab code, OUTSIDE the workspace: it only produced early
+# numbers while the build lock was held; the shipped rule is the merge's (crates/humanify-index/src/origin.rs).
+[package]
+name = "exp110-reencode"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+humanify-core = { path = "../../../crates/humanify-core" }
+serde_json = "=1.0.142"
