@@ -1120,7 +1120,9 @@ fn resolve_match(
         resolver,
         max_cascade_depth,
     };
-    let mut pool = candidates.to_vec();
+    // The caller's pool is borrowed until a rung narrows it: the cascade
+    // copies a pool only to park it (most priors match or narrow first).
+    let mut pool: std::borrow::Cow<'_, [String]> = std::borrow::Cow::Borrowed(candidates);
     for (_, rung) in RESOLVE_RUNGS {
         match rung(&mut ctx, &pool) {
             Step::Match(id, resolution) => {
@@ -1128,15 +1130,15 @@ fn resolve_match(
                 return resolution;
             }
             Step::Park => {
-                ambiguous.insert(old_id.to_string(), pool);
+                ambiguous.insert(old_id.to_string(), pool.into_owned());
                 return Resolution::Ambiguous;
             }
-            Step::Narrow(narrowed) => pool = narrowed,
+            Step::Narrow(narrowed) => pool = std::borrow::Cow::Owned(narrowed),
             Step::Pass => {}
         }
     }
     // Still ambiguous.
-    ambiguous.insert(old_id.to_string(), pool);
+    ambiguous.insert(old_id.to_string(), pool.into_owned());
     Resolution::Ambiguous
 }
 
