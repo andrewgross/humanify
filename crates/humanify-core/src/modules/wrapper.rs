@@ -59,6 +59,26 @@ pub fn find_wrapper_function(
     (wrapper.binding_count >= WRAPPER_IIFE_BINDING_THRESHOLD).then_some(wrapper)
 }
 
+/// webpack's bootstrap (exp105): the program's one IIFE, whatever its
+/// binding count (webpack's declares a handful: the module table, the
+/// cache, the require function), when the text opens on webpack's runtime
+/// (`detect::signals::detect_webpack` over the detection window: its
+/// names, or its module-table / require-call / definer shapes). The
+/// toolchain picks this layout on a definitive webpack verdict only; the
+/// runtime check keeps a lone IIFE in a webpack run's other texts from
+/// becoming a container.
+pub fn find_webpack_bootstrap(
+    program: &oxc_ast::ast::Program<'_>,
+    semantic: &Semantic<'_>,
+) -> Option<WrapperFunction> {
+    const WINDOW: usize = 16 * 1024;
+    let text = crate::detect::js_text::js_prefix(program.source_text, WINDOW);
+    if crate::detect::signals::detect_webpack(text).is_empty() {
+        return None;
+    }
+    recognize_wrapper_function(program, semantic)
+}
+
 /// The wrapper IIFE's SHAPE — the same grammar as
 /// [`find_wrapper_function`], with the binding count reported but NO
 /// threshold applied. The one caller that may bypass the threshold is the

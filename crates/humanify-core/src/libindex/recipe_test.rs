@@ -34,8 +34,10 @@ fn a_recipe_with_a_missing_or_unknown_setting_is_refused() {
         "bun:target=bun,minify",
         "bun:target=deno,format=cjs",
         "bun:target=bun,format=cjs,sourcemap",
-        "rollup:target=node,format=cjs",
+        "parcel:target=node,format=cjs",
         "esbuild:target=bun,format=cjs",
+        "webpack:target=bun,format=cjs",
+        "rollup:target=bun,format=cjs",
     ] {
         assert!(Recipe::parse(bad).is_err(), "{bad}");
     }
@@ -130,4 +132,41 @@ fn a_recipe_the_index_does_not_hold_is_an_error_naming_what_it_has() {
         choose_slice(&only_node, &detected(None, None)).is_err(),
         "an unknown bundler has no slice"
     );
+}
+
+#[test]
+fn webpack_and_rollup_are_recipe_bundlers_with_node_slices() {
+    for (text, slice, bundler, kind) in [
+        (
+            "webpack:target=node,format=cjs,minify",
+            "webpack-node-cjs-min",
+            RecipeBundler::Webpack,
+            BundlerType::Webpack,
+        ),
+        (
+            "rollup:target=node,format=cjs,minify",
+            "rollup-node-cjs-min",
+            RecipeBundler::Rollup,
+            BundlerType::Rollup,
+        ),
+    ] {
+        let r = Recipe::parse(text).expect("parses");
+        assert_eq!((r.bundler, r.slice_name()), (bundler, slice.to_string()));
+        assert_eq!(r.bundler.bundler_type(), kind);
+        assert_eq!(RecipeBundler::for_bundler(kind), Some(bundler));
+        // neither bundle records its platform: the bundler's default slice
+        let d = detect_recipe("var a=1;", kind, MinifierType::Terser);
+        assert_eq!((d.bundler, d.target), (Some(bundler), None));
+        let s = vec![
+            (
+                Recipe::parse("esbuild:target=node,format=cjs,minify").unwrap(),
+                true,
+            ),
+            (r, true),
+        ];
+        assert_eq!(
+            choose_slice(&s, &d).map(|(r, _)| r.slice_name()),
+            Ok(slice.to_string())
+        );
+    }
 }

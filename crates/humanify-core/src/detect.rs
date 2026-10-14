@@ -27,7 +27,7 @@ use humanify_model::detection::SignalStrength;
 use self::js_text::js_prefix;
 use self::signals::{
     detect_browserify, detect_bun_bundler, detect_bun_debug_id, detect_esbuild, detect_minifier,
-    detect_parcel, detect_webpack,
+    detect_parcel, detect_rollup, detect_webpack,
 };
 use crate::modules::helper_shape::runtime_prologue;
 
@@ -36,12 +36,13 @@ const SCAN_LIMIT: usize = 16 * 1024;
 
 /// TS `BUNDLER_DETECTORS`. The order is the order of the `signals` list
 /// only; which signal wins is decided by strength ([`pick_bundler`]).
-const BUNDLER_DETECTORS: [fn(&str) -> Vec<DetectionSignal>; 5] = [
+const BUNDLER_DETECTORS: [fn(&str) -> Vec<DetectionSignal>; 6] = [
     detect_webpack,
     detect_browserify,
     detect_esbuild,
     detect_parcel,
     detect_bun_bundler,
+    detect_rollup,
 ];
 
 /// TS `detectBundle`. The bundler detectors read the RUNTIME PROLOGUE of

@@ -11,13 +11,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib096 import HERE  # noqa: E402
 
-SETS = ["cc", "heldout", "wrangler", "esbuild-app", "test-bun", "test-esbuild", "test-webpack", "test-rollup"]
+SETS = ["cc", "heldout", "wrangler", "esbuild-app", "test-bun", "test-esbuild", "test-webpack", "test-rollup",
+        "dev-webpack", "dev-rollup"]
 SET_NAMES = {"cc": "Claude Code 2.1.216 (sample est.)", "heldout": "held-out apps (67, Bun)",
              "wrangler": "wrangler (esbuild, re-minified)", "esbuild-app": "task-master-ai (esbuild)",
              "test-bun": "TEST split: new apps, Bun (the held-out recipe)",
              "test-esbuild": "TEST split: the same apps, esbuild (the index's esbuild recipe)",
-             "test-webpack": "TEST split: the same apps, webpack + terser (not indexed)",
-             "test-rollup": "TEST split: the same apps, rollup + terser (not indexed)"}
+             "test-webpack": "TEST split: the same apps, webpack + terser",
+             "test-rollup": "TEST split: the same apps, rollup + terser",
+             "dev-webpack": "exp105 dev apps, webpack + terser (the index's webpack recipe)",
+             "dev-rollup": "exp105 dev apps, rollup + terser (the index's rollup recipe)"}
 
 
 def load(label):

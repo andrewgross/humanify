@@ -481,8 +481,12 @@ export function libraryArgs(args: string[]): string[] | string {
     return "--rule agreement|structural is required";
   }
   const corpus = parsed.flags["--corpus"];
-  if (corpus !== undefined && corpus !== "dev" && corpus !== "test") {
-    return "--corpus dev|test (dev = corpus.json; test = exp100's frozen test split)";
+  if (
+    corpus !== undefined &&
+    (typeof corpus !== "string" ||
+      !["dev", "test", "bundlers"].includes(corpus))
+  ) {
+    return "--corpus dev|test|bundlers (dev = corpus.json; test = exp100's frozen test split; bundlers = exp105's dev-side webpack and rollup builds)";
   }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
@@ -739,7 +743,7 @@ const VERBS: Verb[] = [
   {
     name: "library",
     usage:
-      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test] [--force-mixed] [--pipeline-set library.<key>=value]...",
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|bundlers] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
       "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
@@ -747,7 +751,9 @@ const VERBS: Verb[] = [
       "esbuild app; every input content-addressed), and writes one card per bundle + a summary under that " +
       "experiment's results/<label>. `--corpus test` scores exp100's FROZEN test split instead (new apps chosen " +
       "by rule, built with Bun, esbuild, webpack and rollup; corpus-test.json): its cards stay out of git and only " +
-      "the per-set summary is committed. Compare labels with `library-leaderboard`.",
+      "the per-set summary is committed. `--corpus bundlers` scores exp105's dev-side webpack and rollup builds " +
+      "(small apps made from the index's packages; corpus-bundlers.json). Each bundle runs with `--bundler` = the " +
+      "bundler that built it. Compare labels with `library-leaderboard`.",
     proves:
       "how much library code the index names on THESE bundles (recall: the shipping package OR, for a vendored / " +
       "pre-bundled copy, its origin package), that no app code was claimed (the hard bar), precision / recall / F1 over " +

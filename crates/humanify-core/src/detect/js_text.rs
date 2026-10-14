@@ -82,3 +82,90 @@ pub fn js_prefix(s: &str, units: usize) -> &str {
 pub fn utf16_offset(s: &str, byte_at: usize) -> usize {
     s[..byte_at].chars().map(char::len_utf16).sum()
 }
+
+/// An identifier character (`[A-Za-z0-9_$]`): what a minifier's names and
+/// the shapes' captures are made of.
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'$'
+}
+
+/// The identifier at `at` (`[A-Za-z_$][A-Za-z0-9_$]*`), returning the
+/// offset past it.
+pub fn eat_ident(s: &str, at: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let first = *bytes.get(at)?;
+    if !is_ident_byte(first) || first.is_ascii_digit() {
+        return None;
+    }
+    let len = bytes[at..]
+        .iter()
+        .take_while(|&&b| is_ident_byte(b))
+        .count();
+    Some(at + len)
+}
+
+/// A minifier-insensitive SHAPE at `at`: `pattern`'s space-separated
+/// tokens in order, JS whitespace allowed between any two. A token `$a`
+/// … `$z` matches an identifier — the SAME identifier wherever that
+/// capture repeats (a minifier renames a binding, never one use of it); a
+/// token `x|y` matches either literal; every other token is a literal.
+/// Returns the offset just past the match.
+pub fn eat_shape(s: &str, at: usize, pattern: &str) -> Option<usize> {
+    let mut captures: [Option<&str>; 26] = [None; 26];
+    let mut pos = at;
+    for (k, token) in pattern.split(' ').filter(|t| !t.is_empty()).enumerate() {
+        if k > 0 {
+            pos = skip_js_space(s, pos);
+        }
+        let capture = token
+            .strip_prefix('$')
+            .filter(|c| c.len() == 1 && c.as_bytes()[0].is_ascii_lowercase());
+        pos = match capture {
+            Some(c) => {
+                let end = eat_ident(s, pos)?;
+                let slot = &mut captures[usize::from(c.as_bytes()[0] - b'a')];
+                match slot {
+                    Some(seen) if *seen != &s[pos..end] => return None,
+                    _ => *slot = Some(&s[pos..end]),
+                }
+                end
+            }
+            None => token.split('|').find_map(|alt| eat(s, pos, alt))?,
+        };
+    }
+    Some(pos)
+}
+
+/// How many times `pattern` ([`eat_shape`]) occurs in `s`, counting up to
+/// `limit`. Its first token must be a plain literal: the search anchors on
+/// it.
+pub fn count_shapes(s: &str, pattern: &str, limit: usize) -> usize {
+    let anchor = pattern.split(' ').find(|t| !t.is_empty()).unwrap_or("");
+    debug_assert!(!anchor.is_empty() && !anchor.starts_with('$') && !anchor.contains('|'));
+    s.match_indices(anchor)
+        .filter(|&(i, _)| eat_shape(s, i, pattern).is_some())
+        .take(limit)
+        .count()
+}
+
+/// Past what may precede a program's first statement: whitespace, a
+/// hashbang line at the very start, and comments (a license banner).
+pub fn skip_preamble(s: &str) -> usize {
+    let mut at = 0;
+    if s.starts_with("#!") {
+        at = s.find('\n').map_or(s.len(), |i| i + 1);
+    }
+    loop {
+        at = skip_js_space(s, at);
+        if let Some(open) = eat(s, at, "/*") {
+            match s[open..].find("*/") {
+                Some(i) => at = open + i + 2,
+                None => return s.len(),
+            }
+        } else if let Some(open) = eat(s, at, "//") {
+            at = s[open..].find('\n').map_or(s.len(), |i| open + i + 1);
+        } else {
+            return at;
+        }
+    }
+}

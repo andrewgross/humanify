@@ -1,0 +1,737 @@
+{
+  "corpus": "bundlers",
+  "entries": [
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app00 (osenv, @npmcli/package-json, header-case, web-streams-polyfill, natural-compare, wrappy, hookable): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 285456,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app00/out.js",
+          "sha256": "d51e758f20bcd5d52a6fd51cce9d9dc642a5a38732d633c120d66a525c00760f"
+        },
+        "map": {
+          "bytes": 818321,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app00/out.js.map",
+          "sha256": "db133c5dcd0dd381cef643eeb0d5add48d35f23763b5412d66950cc0fe64ca2b"
+        }
+      },
+      "id": "webpack-dev105-app00",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2d6c7608bca3d3ffdfb194a642764e4f5d15fdf578b771698b5e03c7607e1be0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app00 (osenv, @npmcli/package-json, header-case, web-streams-polyfill, natural-compare, wrappy, hookable): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 290510,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app00/out.js",
+          "sha256": "f0b561a17ed39602ece76fac98af822bcbc60a47f112512d72f07258d083572b"
+        },
+        "map": {
+          "bytes": 823876,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app00/out.js.map",
+          "sha256": "833f4577659e47589bd205974a9cf425c79fc5ad0d61eb39b06ad1ec9fdcc1d2"
+        }
+      },
+      "id": "rollup-dev105-app00",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2c6001117e2f5aff686a7e8cc37f44e3db1162f3d4ddc5ca9375edbae0425685"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app01 (binary-search-tree, flush-write-stream, proxy-agent-negotiate, classnames, mime-db, @jsdevtools/ono, scule): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 236150,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app01/out.js",
+          "sha256": "4b8e40a02e96732469f660781f7887bb48dcd4bf9de17fef8601106014f83ff8"
+        },
+        "map": {
+          "bytes": 325418,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app01/out.js.map",
+          "sha256": "9e06c049bb3f854c5084c201da5bf71838fc37dce23b10965421a77583148b3e"
+        }
+      },
+      "id": "webpack-dev105-app01",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "65f37f71e2f9a96a104f3b664bfcd47ca103880c7dd0d40856978a9923afefaf"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app01 (binary-search-tree, flush-write-stream, proxy-agent-negotiate, classnames, mime-db, @jsdevtools/ono, scule): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 225831,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app01/out.js",
+          "sha256": "867711284666b8aa24e354d47a104beef20ba734b54c06ff85b6707c2810bcb9"
+        },
+        "map": {
+          "bytes": 324322,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app01/out.js.map",
+          "sha256": "3f67f2cc31c8ff9a4738280873a41fac35030c122e4582f90be6e0ef4ecb948b"
+        }
+      },
+      "id": "rollup-dev105-app01",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "63b27d4bcf4750103989b65ab07a13e24f6093d64cc240755e0fc3b1cd4ae988"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app02 (npm-package-arg, npm-normalize-package-bin, get-stream, num2fraction, fetch-cookie, kolorist): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 236680,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app02/out.js",
+          "sha256": "9f1402d873c9e70c781688355a69423d62bc7a5243a7d84d294383a1b46b9e94"
+        },
+        "map": {
+          "bytes": 605081,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app02/out.js.map",
+          "sha256": "4f632a33a86e3c2ccccb45c22f623a67de607a85ce4d85840877c203f72a0184"
+        }
+      },
+      "id": "webpack-dev105-app02",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bc07bb9cfdabba4eaad7d03e233ef90da7c86e779675939cee2f1d3011150d96"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app02 (react-universal-interface, npm-package-arg, npm-normalize-package-bin, get-stream, num2fraction, fetch-cookie, kolorist): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 242917,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app02/out.js",
+          "sha256": "3731bc8abd37af4f76e7820da382c799454c0d92f789ff8c7676f9b0dd61b724"
+        },
+        "map": {
+          "bytes": 725193,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app02/out.js.map",
+          "sha256": "22a6b36b14b1876076dfd14b2f9123c9222eeb827688af9bdf9fe9cd8e76fd3d"
+        }
+      },
+      "id": "rollup-dev105-app02",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bb7375f7b2ec2a378c8d8d737771c15dbb2db4425b2bd25c2f4fcae7ac8d4a23"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app03 (marky, split-string, valid-url, rrweb-cssom, leven, scule): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 33002,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app03/out.js",
+          "sha256": "0f1111ca3312fc317b11afe9f4e180893d422bd81d194257c0652df8554a2d33"
+        },
+        "map": {
+          "bytes": 128228,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app03/out.js.map",
+          "sha256": "78169602e69ea41a276f021209cdc59d552f28dc30c7d09a53693e6b5c62fe8e"
+        }
+      },
+      "id": "webpack-dev105-app03",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "edc747018a38635204421a6d16d4995d991d839bda59ba1d09af2de76e778c65"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app03 (marky, split-string, valid-url, rrweb-cssom, @mapbox/node-pre-gyp, leven, scule): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 118638,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app03/out.js",
+          "sha256": "09ad1bd96b040a7e01f058da34f06d1ac36fc7cdd5ea44ae1b7f16cda4bafad8"
+        },
+        "map": {
+          "bytes": 362830,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app03/out.js.map",
+          "sha256": "efcacc364252b759934fb0855052195a84edc44ffb7c940c3cf023c5d0a87948"
+        }
+      },
+      "id": "rollup-dev105-app03",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cfc411bfdcb8d761e6100e5654b3c83301d328c8b807e9975e6ee4002d40234e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app04 (jsprim, socks-proxy-agent, @envelop/instrumentation, new-github-issue-url, cli-boxes, auto-launch, sade): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 127900,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app04/out.js",
+          "sha256": "62c3a36d6a1226fc2a90f11747c25fb43b073dfccedc46631734d00ed00fc587"
+        },
+        "map": {
+          "bytes": 536120,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app04/out.js.map",
+          "sha256": "31db95b23fe12753c335b16fe73e9d5f28c22246dc28fbf99ff029eb2aca8f5a"
+        }
+      },
+      "id": "webpack-dev105-app04",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0bf7fb005e5bdfa307dc9544dae73f7c76773365124c605b0f770a7b573c51f7"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app04 (jsprim, socks-proxy-agent, @envelop/instrumentation, new-github-issue-url, cli-boxes, auto-launch, sade): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 129511,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app04/out.js",
+          "sha256": "908ef562cebabdb34ecface37d33c12fa9277b7ed9fa0a8d1f41437a017f8e1c"
+        },
+        "map": {
+          "bytes": 538967,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app04/out.js.map",
+          "sha256": "14f6418d8b3ca7ed735419332468f7e5b91b7c4febd1184d44df287dfaf909f5"
+        }
+      },
+      "id": "rollup-dev105-app04",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dc5c3a97d47b045db097d18a13f8e1e80b524b81d7d48b2005603f522c8e3760"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app05 (modify-filename, to-no-case, lodash.sortby, postcss-reduce-transforms, ky): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 65240,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app05/out.js",
+          "sha256": "433fb5cf3e443c83d5bb6411ea37563f2649c6d2f9fd0e4d84dc94de5ef4052b"
+        },
+        "map": {
+          "bytes": 360809,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app05/out.js.map",
+          "sha256": "9a2ee0f6013ec2e3940a4e1e9eddf88342113b52d7ac56ba182b10055d2bf931"
+        }
+      },
+      "id": "webpack-dev105-app05",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a75607ec10aeef2b996dbb82670379cdffc7ce1a8d261e04df49e1466c2fa5df"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app05 (modify-filename, type, to-no-case, lodash.sortby, postcss-reduce-transforms, @fortawesome/react-fontawesome, ky): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 69377,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app05/out.js",
+          "sha256": "c8ff4741752a14191a3022862a476339e7883b132a10f46c39c43a7d58648bba"
+        },
+        "map": {
+          "bytes": 379059,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app05/out.js.map",
+          "sha256": "87fa1635342748095e0efc2abea74b770eee231069c347a2151ec8b7784d66c8"
+        }
+      },
+      "id": "rollup-dev105-app05",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dfdf7b707ee18e9c3b0c779cf0da0cadab99b1ff54442c45988f17f59ef8ccc8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app06 (@simple-git/args-pathspec, @tufjs/models, just-diff, simple-sha1, domexception, @codemirror/lang-jinja, scule): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 517681,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app06/out.js",
+          "sha256": "6a9582335a3eb1dea5cff42cc0936f17892dbf256fa38c80e6076eb481d36e66"
+        },
+        "map": {
+          "bytes": 2083773,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app06/out.js.map",
+          "sha256": "4b7ca5ccc07366b8442ea8857b5f8f995e827695d3ee82dabe42351be68934eb"
+        }
+      },
+      "id": "webpack-dev105-app06",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d9622cfa0920c262ba9cff8df0cf5182a629f78dabe9b4f15d6543a262ee53e9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app06 (@simple-git/args-pathspec, @tufjs/models, just-diff, simple-sha1, domexception, @codemirror/lang-jinja, scule): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 518733,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app06/out.js",
+          "sha256": "db138da473ebb368f52f78a1c42f0c3d17b8208a8957bbfddf0dab10bf22abae"
+        },
+        "map": {
+          "bytes": 2109732,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app06/out.js.map",
+          "sha256": "0b59129544ec0fb37e16a838e0af5ec8d2dcba202adcbf50d211b41191f82194"
+        }
+      },
+      "id": "rollup-dev105-app06",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6e89e48a9b94802e565f22f6dd57f39599e30d3bffaa39109548af0fdad8d943"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app07 (which-command, unquote, micromark-extension-gfm-footnote, browserslist-config-erb, lines-and-columns, caller-path, dequal): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14042,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app07/out.js",
+          "sha256": "7a168b4fb469fc549bb54a9bf4e98b3f4ae707cf663e476a1f7b8e2ec14638ce"
+        },
+        "map": {
+          "bytes": 70141,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app07/out.js.map",
+          "sha256": "48452f95774a154f819e653d2df732f32fbd87838715fed9a4622249ec56b156"
+        }
+      },
+      "id": "rollup-dev105-app07",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6c74c8dd9ccb223fa30685ad4525fb9f68bd247738313cbe5fc62a20e3293738"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app08 (nanomatch, unique-slug, from2, @dabh/diagnostics, micromark-util-decode-numeric-character-reference, hast-util-from-parse5, citty): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 172920,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app08/out.js",
+          "sha256": "01dd80a63e9aeb49a9685805e4d80f8b7b5491ed61571fb5253e1a6f83507b70"
+        },
+        "map": {
+          "bytes": 760978,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app08/out.js.map",
+          "sha256": "0122e4dd51b5c3f35eb55828143f7d254b2d4c5610543977959843f6cd593f21"
+        }
+      },
+      "id": "webpack-dev105-app08",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bb9bf4491e68f3c18eaedc65f45c56c0d74071c087c7c5fe611d9de870f414a2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app08 (nanomatch, unique-slug, from2, @dabh/diagnostics, micromark-util-decode-numeric-character-reference, hast-util-from-parse5, citty): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 206805,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app08/out.js",
+          "sha256": "5a354db943313ace91c5e37af8bfec41348eef6654deec09c88dbac0b82e1ad1"
+        },
+        "map": {
+          "bytes": 868667,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app08/out.js.map",
+          "sha256": "64d6d088b19c21732c64fae50f87a600a1130f2c22523208c60c7e0f5973edce"
+        }
+      },
+      "id": "rollup-dev105-app08",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a82b280d7afd6bf5a20e153599000393b86ba09008d7bba1b6659902e27ee8d6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app09 (nopt, vary, read-pkg, call-me-maybe, ajv, safe-identifier, pathe): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 221477,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app09/out.js",
+          "sha256": "e9a7e885f730bfa141da323522dea72f43d3e7c07a6192b92d7fbf701d99d82b"
+        },
+        "map": {
+          "bytes": 729733,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app09/out.js.map",
+          "sha256": "f88e811fa0d55e21ca266b73f4273f615e77698a848acb475a98fb3b0f6909cf"
+        }
+      },
+      "id": "webpack-dev105-app09",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b9aef0a0f9469fad343f46102c409efa9675a1fa489cbf520ee638d8d5fc7c2d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app09 (nopt, vary, read-pkg, call-me-maybe, ajv, safe-identifier, pathe): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 228448,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app09/out.js",
+          "sha256": "4e0e5393421773e80e45f7a0134ca7976d8bc2e51fbbd738ec4949884f8f10e0"
+        },
+        "map": {
+          "bytes": 744708,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app09/out.js.map",
+          "sha256": "a152f850e08272aefa852623df0d3a15a36ef0b888157da4dfcae8b773e61c32"
+        }
+      },
+      "id": "rollup-dev105-app09",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7f49ed03009a8c7e6ae83cdec5f84f16ec214249eab155e4eca9e86c829d4555"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app10 (libnpmconfig, cross-fetch, url-join, @sindresorhus/merge-streams, indexes-of, ee-first, defu): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 323168,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app10/out.js",
+          "sha256": "7cdaba9193935767cc30ee4be691737050518050427b9b777061a2fb33b75c8a"
+        },
+        "map": {
+          "bytes": 229241,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app10/out.js.map",
+          "sha256": "b4eb1419b2a138bd62c7ce4cfe2e10527cbc0aa4a9848377c7a42ec364d426d5"
+        }
+      },
+      "id": "webpack-dev105-app10",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d9daa898adadf171a75a6757ee56185ad862d96f0f540a0e93718a289ba28746"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app10 (libnpmconfig, cross-fetch, url-join, @sindresorhus/merge-streams, indexes-of, ee-first, defu): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 325000,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app10/out.js",
+          "sha256": "b7bf1d7d6ba5f7ca1115af39363af58a06dd1e1873ff4aa840d84dc4ab4d435e"
+        },
+        "map": {
+          "bytes": 228727,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app10/out.js.map",
+          "sha256": "a9b9954386c76c6457a64e27e777ba0ccd0aee69dde869d3eaceb2423e507cbe"
+        }
+      },
+      "id": "rollup-dev105-app10",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "36febecd6ba6d4788689a9685a8d6d9c81645b31c565cc332c956477c7dbc3f9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app11 (promise-call-limit, parse5-htmlparser2-tree-adapter, find-up-simple, untildify, buffer, @npmcli/name-from-folder, scule): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 33630,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app11/out.js",
+          "sha256": "84dc46dbb451d30546b824f56ef9ea264997786a12f53d79b578b097e1fdfc2c"
+        },
+        "map": {
+          "bytes": 342282,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app11/out.js.map",
+          "sha256": "4cce8aebd2292674d9b2e0886bdba783a50ad05a57d52aa061fbbbe6c66e2dd5"
+        }
+      },
+      "id": "webpack-dev105-app11",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "192f30166576e3668e6194e2c057d0101723bffa75e03dac738fa99bc1d50f24"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app11 (promise-call-limit, parse5-htmlparser2-tree-adapter, find-up-simple, untildify, buffer, @npmcli/name-from-folder, scule): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 32980,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app11/out.js",
+          "sha256": "012e9bf34b87ebb2092c1d0bdac1f708d9b35e4ef9c17d0f7bc049fb84656b4c"
+        },
+        "map": {
+          "bytes": 336765,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app11/out.js.map",
+          "sha256": "ea097b2d259de6e0e508b9e6337d0e992b5f90438b147727ce552c059d65b196"
+        }
+      },
+      "id": "rollup-dev105-app11",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e59baf63a01699590b3f2f00fad59081905ca0725c3d30fe608cc2f4bf005b97"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app12 (number-is-nan, strip-ansi, inline-style-parser, shebang-regex, natural-compare, is-windows, pino): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 65808,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app12/out.js",
+          "sha256": "069763b32b7412a5c168f26717ab7765c6625a08811c9d8b6a1c32dfd1b655b1"
+        },
+        "map": {
+          "bytes": 255712,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app12/out.js.map",
+          "sha256": "02e817bd06fe70d0a66d8f2b071901e3ec54af89402619061c2bd5c9c0e51395"
+        }
+      },
+      "id": "webpack-dev105-app12",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "622c73f09114273e2fab7feaa593d46e7e47f653fa002113d64841084027bb08"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app12 (number-is-nan, strip-ansi, inline-style-parser, shebang-regex, natural-compare, is-windows, pino): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 65958,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app12/out.js",
+          "sha256": "267f5d182221a21a97418b1bce9ab919d599b14599680a085333bd30c0ec6702"
+        },
+        "map": {
+          "bytes": 253561,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app12/out.js.map",
+          "sha256": "993321fb4877d0e683a1780035ab778e78b485bad424437101e9cd36227ce544"
+        }
+      },
+      "id": "rollup-dev105-app12",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bde8cf93558a70af987c28ef3b201a6151a6ddefe147262d9ed608de132c9eae"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp105 dev app dev105-app13 (next-tick, bail, form-data, vfile-message, @discoveryjs/json-ext, balanced-match, hookable): webpack 5.111.1 production (terser), target node, one chunk, source-map (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 192648,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app13/out.js",
+          "sha256": "8fcd355a567c5c42941d5adfb4bdbaaa86995e2c44df69b59b768d89eeaa32b8"
+        },
+        "map": {
+          "bytes": 193956,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/webpack/dev105-app13/out.js.map",
+          "sha256": "fc0d4d92a53afb53804c7219478f805dbdad072cf0db3faab40bf23343cbbd83"
+        }
+      },
+      "id": "webpack-dev105-app13",
+      "kind": "dev105",
+      "set": "dev-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "511491d212d3dc9bdbafe2055b1f82e83e5932f33ced3df554fd0a7ace393ee1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp105 dev app dev105-app13 (next-tick, bail, form-data, vfile-message, @discoveryjs/json-ext, balanced-match, hookable): rollup 4.64.5 + node-resolve + commonjs + json + terser, format cjs, sourcemap (humanify-index's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 182643,
+          "name": "out.js",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app13/out.js",
+          "sha256": "a5e6c0a633b2a233d754a4f508ce996274646b907a0883d3bfaa3d9b4562b579"
+        },
+        "map": {
+          "bytes": 192136,
+          "name": "out.js.map",
+          "origin": "/work/exp105-data/dev/build/rollup/dev105-app13/out.js.map",
+          "sha256": "5422d4f3dbc732378f25add2299dace7f122236d5ff50912490364dd6fd408ef"
+        }
+      },
+      "id": "rollup-dev105-app13",
+      "kind": "dev105",
+      "set": "dev-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d63ca64c76542f520adcabc5e8af0784d0be78d9b59b316b616a1eb9a19fde71"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp105 DEV-SIDE webpack and rollup builds of small apps made from the step-4 index's packages (experiments/105-webpack-rollup/scripts/dev_apps.py): a dev corpus, never the test split",
+  "schema": "exp096-corpus/1"
+}

@@ -2,7 +2,11 @@
 
 use humanify_core::libindex::recipe::RecipeBundler;
 
-use super::recipe::{bundler_package, is_source_file, is_sponge_file};
+use std::path::{Path, PathBuf};
+
+use humanify_core::libindex::recipe::Recipe;
+
+use super::recipe::{RecipeBuild, bundler_package, is_source_file, is_sponge_file};
 
 #[test]
 fn pre_bundled_files_are_sponges() {
@@ -44,6 +48,59 @@ fn source_files_are_javascript_and_json_but_not_type_declarations() {
 fn each_slice_names_its_bundlers_npm_package() {
     assert_eq!(bundler_package(RecipeBundler::Bun), "bun");
     assert_eq!(bundler_package(RecipeBundler::Esbuild), "esbuild");
+    assert_eq!(bundler_package(RecipeBundler::Webpack), "webpack");
+    assert_eq!(bundler_package(RecipeBundler::Rollup), "rollup");
+}
+
+fn args_of(cmd: &std::process::Command) -> Vec<String> {
+    std::iter::once(cmd.get_program())
+        .chain(cmd.get_args())
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect()
+}
+
+#[test]
+fn webpack_and_rollup_run_as_node_scripts_writing_out_js() {
+    for (recipe, script) in [
+        (
+            "webpack:target=node,format=cjs,minify",
+            "/t/webpack-build.cjs",
+        ),
+        (
+            "rollup:target=node,format=cjs,minify",
+            "/t/rollup-build.mjs",
+        ),
+    ] {
+        let build = RecipeBuild {
+            recipe: Recipe::parse(recipe).unwrap(),
+            bin: PathBuf::from(script),
+        };
+        let cmd = build.command(
+            Path::new("/w"),
+            "entries/req.cjs",
+            Path::new("/w/build/x/req"),
+            &["fsevents".to_string()],
+            false,
+        );
+        assert_eq!(
+            args_of(&cmd),
+            [
+                "node",
+                script,
+                "entries/req.cjs",
+                "/w/build/x/req",
+                "cjs",
+                "fsevents"
+            ]
+        );
+        assert_eq!(cmd.get_current_dir(), Some(Path::new("/w")));
+        let esm = build.command(Path::new("/w"), "e.mjs", Path::new("/o"), &[], true);
+        assert_eq!(args_of(&esm)[4], "esm");
+        assert_eq!(
+            args_of(&build.version_command()),
+            ["node", script, "--version"]
+        );
+    }
 }
 
 #[test]

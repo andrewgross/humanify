@@ -59,8 +59,19 @@ describe("eval library argument parsing", () => {
           "heldout"
         ])
       ),
-      /--corpus dev\|test/
+      /--corpus dev\|test\|bundlers/
     );
+    const b = libraryArgs([
+      "dev-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--corpus",
+      "bundlers"
+    ]);
+    assert.ok(typeof b !== "string", String(b));
+    assert.deepStrictEqual(b.slice(-2), ["--corpus", "bundlers"]);
   });
 
   it("requires a label, --index and a known --rule", () => {

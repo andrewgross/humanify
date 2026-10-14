@@ -242,12 +242,19 @@ A structural fingerprint depends on the bundler (Bun vs esbuild agree on
   only code that maps a slice to a bundler. On the pipeline side it becomes
   a toolchain piece (P18, "which index slice to query"), chosen once from
   the bundler verdict exactly like P17's `ModuleIdentitySource`; nothing
-  downstream compares bundler names. A bundler with no slice (webpack, an
-  unknown one) gets literal lookups only.
+  downstream compares bundler names. A bundler with no slice (an unknown
+  one) gets literal lookups only. exp105 (2026-10-14) added the webpack and
+  rollup recipe bundlers (`webpack:target=node,format=cjs,minify`: webpack
+  5 production + terser, one chunk; `rollup:target=node,format=cjs,minify`:
+  rollup 4 + node-resolve + commonjs + json + terser); their bundles cut
+  into units by their own module grammar on both sides.
 - **The builder's recipe per slice** (`humanify-index`'s `recipe`): how to
   run that bundler (Bun: `bun build --target node --format cjs --minify
 --sourcemap=external`; esbuild: `--bundle --platform=node --format=cjs
---minify --sourcemap=external`). The recipe's version is part of the
+--minify --sourcemap=external`; webpack and rollup: the Node scripts in
+  `crates/humanify-index/recipes/`, run as `node <script> <entry> <out>
+  <format> [external…]` from `--webpack` / `--rollup`, because their
+  recipes are configuration code). The recipe's version is part of the
   shard key.
 - **Bun family vs esbuild:** one Bun slice covers Bun 1.2–1.4 once the
   normaliser lands (SYNTHESIS: 100% / 96.5% agreement after
