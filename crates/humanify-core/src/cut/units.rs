@@ -184,6 +184,7 @@ pub fn container_units<'a>(
         factories: factories.iter().map(|s| (s.start, s.end)).collect(),
         factory_bodies,
         in_split: false,
+        depth: 0,
         out: ContainerUnits {
             units: Vec::new(),
             nodes: Vec::new(),
@@ -203,6 +204,9 @@ struct UnitBuilder<'f, 'a> {
     factory_bodies: bool,
     /// Pushing the declarators of a split `var`.
     in_split: bool,
+    /// Inside how many inline scopes (webpack's entry IIFEs): the names
+    /// declared there are not the container's.
+    depth: u32,
     out: ContainerUnits<'a>,
 }
 
@@ -220,10 +224,17 @@ impl<'a> UnitBuilder<'_, 'a> {
     }
 
     fn declare(&mut self, name: &str, u: u32) {
-        self.out.declared.insert(name.to_string(), u);
+        if self.depth == 0 {
+            self.out.declared.insert(name.to_string(), u);
+        }
     }
 
     fn statement(&mut self, stmt: &'a Statement<'a>) {
+        let scopes = self.facts.grammar.statement_scopes(stmt);
+        if !scopes.is_empty() {
+            self.scopes(stmt.span(), scopes);
+            return;
+        }
         match stmt {
             Statement::VariableDeclaration(decl) => {
                 let split = decl.declarations.len() > 1;
@@ -242,7 +253,8 @@ impl<'a> UnitBuilder<'_, 'a> {
                 self.in_split = false;
             }
             Statement::FunctionDeclaration(f) => {
-                let u = self.push(f.span, UnitKind::Statement, UnitNode::Statement(stmt));
+                let modules = self.facts.grammar.statement_modules(stmt);
+                let u = self.inline(f.span, UnitNode::Statement(stmt), modules);
                 if let Some(id) = &f.id {
                     self.declare(&id.name, u);
                 }
@@ -254,7 +266,60 @@ impl<'a> UnitBuilder<'_, 'a> {
                 }
             }
             s => {
-                self.push(s.span(), UnitKind::Statement, UnitNode::Statement(stmt));
+                let modules = self.facts.grammar.statement_modules(stmt);
+                self.inline(s.span(), UnitNode::Statement(stmt), modules);
+            }
+        }
+    }
+
+    /// A statement holding inline scopes: a container unit owning what no
+    /// scope's statements cover, then each scope's statements cut like
+    /// the container's own.
+    fn scopes(
+        &mut self,
+        span: Span,
+        scopes: Vec<crate::modules::inline_modules::InlineModule<'a>>,
+    ) {
+        let outer = self.push(span, UnitKind::Statement, UnitNode::Container);
+        let mut owned = span.size();
+        self.depth += 1;
+        for (_, body) in scopes {
+            for s in body {
+                self.statement(s);
+                owned -= s.span().size();
+            }
+        }
+        self.depth -= 1;
+        self.out.units[outer as usize].bytes = owned;
+    }
+
+    /// A statement (or declarator) unit, or — when the grammar finds
+    /// module bodies written inline in it (`modules::inline_modules`) — a
+    /// lazy module per body: the node itself when one body's wrapper IS
+    /// the node, else the node as a container unit owning what no module
+    /// covers, then each module.
+    fn inline(
+        &mut self,
+        span: Span,
+        node: UnitNode<'a>,
+        modules: Vec<crate::modules::inline_modules::InlineModule<'a>>,
+    ) -> u32 {
+        match modules.as_slice() {
+            [] => self.push(span, UnitKind::Statement, node),
+            [(wrapper, body)] if *wrapper == span => {
+                self.container(span, UnitKind::LazyModule, body)
+            }
+            _ => {
+                let outer = self.push(span, UnitKind::Statement, UnitNode::Container);
+                let in_split = std::mem::replace(&mut self.in_split, false);
+                let mut owned = span.size();
+                for (wrapper, body) in modules {
+                    self.container(wrapper, UnitKind::LazyModule, body);
+                    owned -= wrapper.size();
+                }
+                self.in_split = in_split;
+                self.out.units[outer as usize].bytes = owned;
+                outer
             }
         }
     }
@@ -286,7 +351,10 @@ impl<'a> UnitBuilder<'_, 'a> {
         }
         match lazy_init_body(d, self.facts) {
             Some(body) => self.container(span, UnitKind::LazyModule, body),
-            None => self.push(span, UnitKind::Statement, node),
+            None => {
+                let modules = self.facts.grammar.declarator_modules(d);
+                self.inline(span, node, modules)
+            }
         }
     }
 }
@@ -344,37 +412,51 @@ fn arrow_block<'a>(a: &'a ArrowFunctionExpression<'a>) -> Option<&'a [Statement<
 }
 
 /// Which unit holds a byte position — the innermost one: a body unit
-/// (lazy-init or factory body) before its container. The ONE owner of the
-/// position → unit question (the reference graph's edges and discovery's
-/// seeds both ask it).
+/// (lazy-init or factory body) before its container, a module of a
+/// webpack table before the table's statement (exp105: units nest to any
+/// depth). The ONE owner of the position → unit question (the reference
+/// graph's edges and discovery's seeds both ask it).
 #[derive(Clone, Debug, Default)]
 pub struct UnitLocator {
-    /// Top-level units, then body units, each in source order: the
-    /// lookup's two levels.
-    top: Vec<u32>,
-    inner: Vec<u32>,
+    /// Every unit, by start (a container before what it holds: units are
+    /// pushed container-first, and the sort is stable).
+    order: Vec<u32>,
+    /// Per unit, the innermost unit holding it.
+    parent: Vec<Option<u32>>,
 }
 
 impl UnitLocator {
     pub fn new(units: &[Unit]) -> UnitLocator {
-        let (inner, top): (Vec<u32>, Vec<u32>) = (0..units.len() as u32).partition(|&u| {
-            matches!(
-                units[u as usize].kind,
-                UnitKind::LazyBody { .. } | UnitKind::FactoryBody { .. }
-            )
-        });
-        UnitLocator { top, inner }
+        let mut order: Vec<u32> = (0..units.len() as u32).collect();
+        order.sort_by_key(|&u| units[u as usize].span.start);
+        let mut parent = vec![None; units.len()];
+        let mut open: Vec<u32> = Vec::new();
+        for &u in &order {
+            let span = units[u as usize].span;
+            while let Some(&top) = open.last() {
+                if span.end <= units[top as usize].span.end {
+                    break;
+                }
+                open.pop();
+            }
+            parent[u as usize] = open.last().copied();
+            open.push(u);
+        }
+        UnitLocator { order, parent }
     }
 
     /// The innermost unit of `units` (the list this locator was built
     /// over) holding byte `pos`.
     pub fn unit_at(&self, units: &[Unit], pos: u32) -> Option<u32> {
-        find(units, &self.inner, pos).or_else(|| find(units, &self.top, pos))
+        let i = self
+            .order
+            .partition_point(|&u| units[u as usize].span.start <= pos);
+        let mut u = *self.order.get(i.checked_sub(1)?)?;
+        loop {
+            if pos < units[u as usize].span.end {
+                return Some(u);
+            }
+            u = self.parent[u as usize]?;
+        }
     }
-}
-
-fn find(units: &[Unit], level: &[u32], pos: u32) -> Option<u32> {
-    let i = level.partition_point(|&u| units[u as usize].span.start <= pos);
-    let u = *level.get(i.checked_sub(1)?)?;
-    (pos < units[u as usize].span.end).then_some(u)
 }

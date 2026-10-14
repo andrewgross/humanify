@@ -12,7 +12,7 @@ first by path order. A missing `<app>` source no package map lists stays `<app>`
 evidence (wrangler's own monorepo sources are not on disk either). Rollup's `?commonjs-*` virtual ids are rule
 `virtual`'s (score time), not this one's.
 
-usage: <venv python> -I chained.py build --corpus dev|test   writes <DATA>/truth/<id>.chained.json.gz for every
+usage: <venv python> -I chained.py build --corpus dev|test|bundlers   writes <DATA>/truth/<id>.chained.json.gz for every
        sourcemap entry and the sha manifest (chained.json / chained-test.json beside copies.json). Prints aggregates
        only (counts per set): never per-app names for the test corpus."""
 import collections
@@ -107,8 +107,7 @@ def build():
     man = {"schema": "exp106-chained/1", "corpusSha256": lib096.manifest_sha(), "entries": shas,
            "about": "scorer 5 rule `chained` (experiments/106-matcher-hygiene/scorer5/chained.py): per entry, "
                     "the sha256 of <DATA>/truth/<id>.chained.json.gz"}
-    name = "chained.json" if lib096.CORPUS == "dev" else "chained-test.json"
-    open(os.path.join(SCORE, name), "w").write(lib096.dump(man))
+    open(lib096.CORPORA[lib096.CORPUS]["chained"], "w").write(lib096.dump(man))
     for k, v in sorted(agg.items()):
         print(f"{v:>6}  {k}")
 

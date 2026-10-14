@@ -529,7 +529,7 @@ def main():
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
-                   **({"corpus": "test"} if test else {})},
+                   **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {})},
         "bars": {"appClaimedBytes": app_total, "appBarPassed": app_total == 0,
                  "precisionBar": PRECISION_BAR,
                  "precisionBarPassed": {s: r["precision"] >= PRECISION_BAR for s, r in sets.items()}},

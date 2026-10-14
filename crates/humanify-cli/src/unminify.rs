@@ -134,7 +134,16 @@ pub fn unpack_bundle(
                 outcome.library_discovery,
             )
         }
-        AdapterOutcome::Files(result) => (result.files, None, None, Vec::new(), None),
+        AdapterOutcome::Files {
+            result,
+            library_discovery,
+        } => (
+            result.files,
+            None,
+            None,
+            Vec::new(),
+            library_discovery.map(|r| *r),
+        ),
     };
     span.end(Some(
         JsObject::new()

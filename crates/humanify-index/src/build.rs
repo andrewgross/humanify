@@ -21,7 +21,7 @@ use humanify_core::libindex::literals::{LiteralMode, code_literals, json_literal
 use humanify_core::libindex::recipe::Recipe;
 
 use crate::asof::{VersionPolicy, normalize_time, select_versions};
-use crate::merge::{MergeInput, merge};
+use crate::merge::{MergeMeta, Merger};
 use crate::recipe::{
     MAX_SOURCE_BYTES, RECIPE_VERSION, RecipeBuild, bundler_package, entry_specifiers,
     is_source_file, is_sponge_file, unresolved_specifiers,
@@ -70,6 +70,9 @@ pub struct BuildConfig {
     /// `name@version` specs indexed at exactly these versions (no policy
     /// picks).
     pub pinned: Vec<String>,
+    /// Build nothing: merge the shards the store already holds (a version
+    /// with none is refused `no-shard`).
+    pub merge_only: bool,
 }
 
 /// One `package@version` to index.
@@ -958,34 +961,58 @@ fn execute_all(cfg: &BuildConfig, tasks: &[Task]) -> Vec<(String, String)> {
     errors
 }
 
-/// Plan, build what is missing, merge into `cfg.out`. Returns the index
-/// id. `dry_run`: print the plan and stop (returns an empty id).
+/// Plan, build what is missing (none with `cfg.merge_only`), merge into
+/// `cfg.out`. Returns the index id. `dry_run`: print the plan and stop
+/// (returns an empty id).
+///
+/// The merge streams: every task's shards are read from the store one at
+/// a time, in label order, into the [`Merger`] — never all at once.
 pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
     let mut plan = plan(cfg)?;
     print!("{}", describe(&plan));
     if dry_run {
         return Ok(String::new());
     }
-    let errors = execute_all(cfg, &plan.tasks);
-    for (label, e) in &errors {
-        eprintln!("FAILED {label}: {e}");
+    if !cfg.merge_only {
+        let errors = execute_all(cfg, &plan.tasks);
+        for (label, e) in &errors {
+            eprintln!("FAILED {label}: {e}");
+        }
     }
-    let mut shards = Vec::new();
+    let mut inputs: Vec<(String, usize, ShardInputs)> = plan
+        .tasks
+        .iter()
+        .enumerate()
+        .flat_map(|(i, t)| {
+            shard_inputs(&t.name, &t.version, &plan.slices)
+                .into_iter()
+                .map(move |s| (s.label(), i, s))
+        })
+        .collect();
+    inputs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    let mut found = vec![false; plan.tasks.len()];
+    let mut merger = Merger::default();
+    for (_, i, s) in &inputs {
+        if let Some(shard) = read_current(&cfg.store, s) {
+            found[*i] = true;
+            merger.add(shard)?;
+        }
+    }
     let mut packages = Vec::new();
-    for t in &plan.tasks {
-        let got: Vec<Shard> = shard_inputs(&t.name, &t.version, &plan.slices)
-            .iter()
-            .filter_map(|i| read_current(&cfg.store, i))
-            .collect();
-        if got.is_empty() {
+    for (t, found) in plan.tasks.iter().zip(found) {
+        if !found {
             plan.refused.push(RefusedRecord {
                 name: t.name.clone(),
                 version: t.version.clone(),
-                reason: "build-failed".into(),
+                reason: if cfg.merge_only {
+                    "no-shard"
+                } else {
+                    "build-failed"
+                }
+                .into(),
             });
             continue;
         }
-        shards.extend(got);
         packages.push(PackageRecord {
             name: t.name.clone(),
             version: t.version.clone(),
@@ -998,14 +1025,13 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
             .cmp(&b.name)
             .then(compare_versions(&a.version, &b.version))
     });
-    let index = merge(&MergeInput {
+    let index = merger.finish(MergeMeta {
         as_of: plan.as_of.clone(),
         registry: plan.registry.clone(),
         slices: plan.slices.clone(),
         packages,
         refused: plan.refused.clone(),
-        shards,
-    });
+    })?;
     if let Some(out) = &cfg.out {
         write_index(out, &index.files)?;
     }

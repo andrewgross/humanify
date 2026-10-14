@@ -7,9 +7,15 @@ use crate::libindex::format::UnitRow;
 use crate::libindex::lookup::LibraryIndex;
 use crate::matching::store::{EdgeRead, Label, ReferenceStore, StoreEdges, StoreId};
 
+/// A test name's unit hash (16 hex digits, the only spelling an index
+/// holds).
+fn hx(name: &str) -> String {
+    format!("{:016x}", crate::libindex::table::literal_key(name))
+}
+
 fn row(hash: &str, owner: &str) -> UnitRow {
     UnitRow {
-        hash: hash.into(),
+        hash: hx(hash),
         owner: owner.into(),
         file: "index.js".into(),
         nodes: 40,
@@ -32,10 +38,10 @@ fn the_index_store_answers_by_print_and_never_serves_into_edges() {
         }
     );
     assert_eq!(ix.form().stamp(), crate::hash::forms::LIBRARY_UNITS.stamp());
-    let hits = ix.candidates("aa");
+    let hits = ix.candidates(&hx("aa"));
     assert_eq!(hits.len(), 2);
     assert_eq!(ix.label(hits[1]), Label::Package { name: "lodash-es" });
-    assert!(ix.candidates("bb").is_empty());
+    assert!(ix.candidates(&hx("bb")).is_empty());
     assert_eq!(ix.literals(hits[0]), None, "literals are per file");
     let piece = hits[0];
     assert!(ix.edges(piece, EdgeRead::Scoped(Scope::Into)).is_err());
@@ -68,7 +74,7 @@ fn the_prior_store_is_the_fingerprint_index_read_whole() {
     // b and c print the same: one bucket of two, in entry order.
     let b = index.entry_of_session("input.js:2:0").expect("b");
     let hash = index.entries[b].fingerprint.structural_hash().to_string();
-    assert_eq!(index.candidates(&hash), &[1, 2]);
+    assert_eq!(&*index.candidates(&hash), &[1, 2]);
     assert_eq!(
         index.label(b),
         Label::Prior {

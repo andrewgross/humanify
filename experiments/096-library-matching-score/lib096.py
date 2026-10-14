@@ -21,6 +21,12 @@ CORPORA = {
     "test": {"manifest": os.path.join(HERE, "corpus-test.json"), "origins": os.path.join(HERE, "origins-test.json"),
              "copies": os.path.join(HERE, "copies-test.json"), "chained": os.path.join(HERE, "chained-test.json"),
              "data": "/work/exp100-test-data/frozen"},
+    # exp105's DEV-SIDE webpack and rollup builds (experiments/105-webpack-rollup/scripts/dev_apps.py): small apps
+    # made from the step-4 index's packages, never the test split's; a dev corpus (its cards are committed)
+    "bundlers": {"manifest": os.path.join(HERE, "corpus-bundlers.json"),
+                 "origins": os.path.join(HERE, "origins-bundlers.json"),
+                 "copies": os.path.join(HERE, "copies-bundlers.json"),
+                 "chained": os.path.join(HERE, "chained-bundlers.json"), "data": "/work/exp105-data/frozen"},
 }
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"
@@ -40,12 +46,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|bundlers` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test")
+        raise SystemExit("--corpus needs a value: dev|test|bundlers")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

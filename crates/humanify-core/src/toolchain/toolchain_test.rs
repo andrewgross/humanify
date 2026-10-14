@@ -512,3 +512,87 @@ fn the_module_grammar_names_the_module_helper_and_the_lazy_init_helpers() {
     );
     assert!(lazy("var memo = (f, r) => () => r;").is_empty());
 }
+
+/// exp105: webpack and rollup have their own module grammar, and webpack
+/// its own bootstrap layout; every other input keeps the Bun/esbuild ones.
+#[test]
+fn webpack_and_rollup_get_their_own_module_grammar_and_layout() {
+    let webpack = "(()=>{var e={585(e){e.exports=1}},t={};function r(n){var o=t[n];if(void 0!==o)return o.exports;var i=t[n]={exports:{}};return e[n](i,i.exports,r),i.exports}module.exports=r(585)})();";
+    let t = resolve_toolchain(&detect_bundle(webpack), None, None);
+    assert_eq!(t.bundler, BundlerType::Webpack);
+    assert_eq!(
+        t.module_wrappers,
+        Chosen {
+            piece: ModuleWrapperGrammar::Webpack,
+            reason: Reason::Detected
+        }
+    );
+    assert_eq!(
+        t.layout,
+        Chosen {
+            piece: BundleLayout::WebpackBootstrap,
+            reason: Reason::Detected
+        }
+    );
+    let rollup = "\"use strict\";function e(e){return e&&e.__esModule&&Object.prototype.hasOwnProperty.call(e,\"default\")?e.default:e}var r=1;exports.r=r;";
+    let t = resolve_toolchain(&detect_bundle(rollup), None, None);
+    assert_eq!(t.bundler, BundlerType::Rollup);
+    assert_eq!(t.module_wrappers.piece, ModuleWrapperGrammar::Rollup);
+    assert_eq!(t.layout.piece, BundleLayout::SingleWrapperFunction);
+    // a flag picks them too
+    let forced = resolve_toolchain(&detect_bundle(PLAIN), Some(BundlerType::Rollup), None);
+    assert_eq!(
+        forced.module_wrappers,
+        Chosen {
+            piece: ModuleWrapperGrammar::Rollup,
+            reason: Reason::Flag
+        }
+    );
+    // Bun, esbuild and the unsure keep the one Bun/esbuild grammar
+    for code in [BUN_HEAD, ESBUILD, PLAIN] {
+        let t = resolve_toolchain(&detect_bundle(code), None, None);
+        assert_eq!(
+            (t.module_wrappers, t.layout),
+            (
+                Chosen {
+                    piece: ModuleWrapperGrammar::BunAndEsbuild,
+                    reason: Reason::OnlyImplementation
+                },
+                Chosen {
+                    piece: BundleLayout::SingleWrapperFunction,
+                    reason: Reason::OnlyImplementation
+                }
+            )
+        );
+    }
+}
+
+#[test]
+fn the_webpack_layout_holds_the_bootstrap_whatever_its_binding_count() {
+    use oxc_allocator::Allocator;
+    let code = "(()=>{var e={585(e){e.exports=1}},t={};module.exports=e})();";
+    let allocator = Allocator::default();
+    let ingest = crate::ingest::Ingest::parse(&allocator, code, "input.js");
+    let semantic = ingest.semantic();
+    let w = BundleLayout::WebpackBootstrap
+        .find_wrapper(ingest.program, semantic)
+        .expect("the bootstrap");
+    assert_eq!(
+        &code[w.body_span.start as usize..w.body_span.start as usize + 7],
+        "{var e="
+    );
+    // the Bun layout wants >= 50 bindings
+    assert!(
+        BundleLayout::SingleWrapperFunction
+            .find_wrapper(ingest.program, semantic)
+            .is_none()
+    );
+    // a lone IIFE that is not webpack's runtime is no bootstrap
+    let plain = "(()=>{var a=1;console.log(a)})();";
+    let ingest = crate::ingest::Ingest::parse(&allocator, plain, "input.js");
+    assert!(
+        BundleLayout::WebpackBootstrap
+            .find_wrapper(ingest.program, ingest.semantic())
+            .is_none()
+    );
+}

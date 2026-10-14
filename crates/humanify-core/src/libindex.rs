@@ -12,7 +12,8 @@
 //! - the literal set is [`literals`] (`Source` mode for npm files,
 //!   `Bundled` mode for a module of a bundle);
 //! - the on-disk shapes, the version order and the version ranges are
-//!   [`format`].
+//!   [`format`]; the tables a run looks up in (read on demand, never
+//!   parsed on load) are [`table`].
 //!
 //! Which part of the index a bundle is looked up in is its build
 //! [`recipe::Recipe`] — an index is a set of recipe slices, and a run
@@ -24,6 +25,7 @@ pub mod format;
 pub mod literals;
 pub mod lookup;
 pub mod recipe;
+pub mod table;
 pub mod units;
 
 #[cfg(test)]
@@ -41,6 +43,9 @@ mod lookup_test;
 #[cfg(test)]
 #[path = "libindex/recipe_test.rs"]
 mod recipe_test;
+#[cfg(test)]
+#[path = "libindex/table_test.rs"]
+mod table_test;
 #[cfg(test)]
 #[path = "libindex/units_test.rs"]
 mod units_test;

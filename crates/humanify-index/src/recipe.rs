@@ -24,7 +24,15 @@ pub fn bundler_package(bundler: RecipeBundler) -> &'static str {
     match bundler {
         RecipeBundler::Bun => "bun",
         RecipeBundler::Esbuild => "esbuild",
+        RecipeBundler::Webpack => "webpack",
+        RecipeBundler::Rollup => "rollup",
     }
+}
+
+/// A bundler run as a Node script (`crates/humanify-index/recipes/`): its
+/// configuration is code (plugins, a minimizer), not a command line.
+fn runs_as_node_script(bundler: RecipeBundler) -> bool {
+    matches!(bundler, RecipeBundler::Webpack | RecipeBundler::Rollup)
 }
 
 /// A file the literal index reads: JavaScript or JSON, not a type
@@ -66,14 +74,25 @@ pub struct RecipeBuild {
 }
 
 impl RecipeBuild {
+    /// The command that prints the bundler's version: the binary's
+    /// `--version`, or the recipe script's (`node <script> --version`).
+    pub fn version_command(&self) -> Command {
+        let mut cmd = if runs_as_node_script(self.recipe.bundler) {
+            let mut c = Command::new("node");
+            c.arg(&self.bin);
+            c
+        } else {
+            Command::new(&self.bin)
+        };
+        cmd.arg("--version");
+        cmd
+    }
+
     /// The bundler's `--version` (trimmed).
     pub fn bundler_version(&self) -> Result<String, String> {
-        let out = humanify_core::subprocess::run(
-            Command::new(&self.bin).arg("--version"),
-            None,
-            VERSION_DEADLINE,
-        )
-        .map_err(|e| format!("{}: {e}", self.bin.display()))?;
+        let out =
+            humanify_core::subprocess::run(&mut self.version_command(), None, VERSION_DEADLINE)
+                .map_err(|e| format!("{}: {e}", self.bin.display()))?;
         let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if !out.status.success() || v.is_empty() {
             return Err(format!("{} --version failed", self.bin.display()));
@@ -81,27 +100,29 @@ impl RecipeBuild {
         Ok(v)
     }
 
-    /// Build `entry` (relative to `cwd`) by the recipe, with an external
-    /// sourcemap, into `out_dir/out.js` (+ `.map`). `esm` forces the ESM
-    /// format (an entry with top-level await cannot be CommonJS). Returns
-    /// the bundler's error text on failure.
-    pub fn build(
+    /// The command that builds `entry` (relative to `cwd`) by the recipe
+    /// into `out_dir` (`out.js` + `.map`, except Bun, which names them
+    /// after the entry: [`Self::build`] renames). `esm` forces the ESM
+    /// format.
+    pub fn command(
         &self,
         cwd: &Path,
         entry: &str,
         out_dir: &Path,
         externals: &[String],
         esm: bool,
-    ) -> Result<(), String> {
+    ) -> Command {
         let format = if esm {
             "esm"
         } else {
             self.recipe.format.name()
         };
         let target = self.recipe.target.name();
-        let _ = std::fs::remove_dir_all(out_dir);
-        std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
-        let mut cmd = Command::new(&self.bin);
+        let mut cmd = Command::new(if runs_as_node_script(self.recipe.bundler) {
+            Path::new("node")
+        } else {
+            self.bin.as_path()
+        });
         cmd.current_dir(cwd);
         match self.recipe.bundler {
             RecipeBundler::Bun => {
@@ -134,7 +155,36 @@ impl RecipeBuild {
                     cmd.arg(format!("--external:{x}"));
                 }
             }
+            // The scripts hold the whole recipe (target node, production
+            // minifier, one chunk, the source map's relative paths): the
+            // command line is the entry, the output, the format and the
+            // externals.
+            RecipeBundler::Webpack | RecipeBundler::Rollup => {
+                cmd.arg(&self.bin)
+                    .arg(entry)
+                    .arg(out_dir)
+                    .arg(format)
+                    .args(externals);
+            }
         }
+        cmd
+    }
+
+    /// Build `entry` (relative to `cwd`) by the recipe, with an external
+    /// sourcemap, into `out_dir/out.js` (+ `.map`). `esm` forces the ESM
+    /// format (an entry with top-level await cannot be CommonJS). Returns
+    /// the bundler's error text on failure.
+    pub fn build(
+        &self,
+        cwd: &Path,
+        entry: &str,
+        out_dir: &Path,
+        externals: &[String],
+        esm: bool,
+    ) -> Result<(), String> {
+        let _ = std::fs::remove_dir_all(out_dir);
+        std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+        let mut cmd = self.command(cwd, entry, out_dir, externals, esm);
         let out = humanify_core::subprocess::run(&mut cmd, None, BUILD_DEADLINE)
             .map_err(|e| e.to_string())?;
         if !out.status.success() {
