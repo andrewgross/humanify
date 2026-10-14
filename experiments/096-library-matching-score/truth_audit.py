@@ -214,3 +214,46 @@ def patch_sources(entry, truth, chm):
             if srcs[i][0] == "<app>":
                 srcs[i] = list(row)
     return {**truth, "sources": srcs}
+
+
+# ---------------------------------------------------------------- scorer 7 (exp112): two more copy shapes
+
+# The origin layer rebuilt with origins.py's RULES7 (lazybody: a rolldown lazy module body after `//#endregion`
+# is the region's module; chunk: a file named after a package its owner declares as a build input only is a copy
+# of it), frozen per corpus by experiments/112-test-precision/scorer7/origins7.py as <DATA>/truth/<id>.origins7
+# .json.gz + origins7[-<corpus>].json. Every rule off: the scorer 4-6 layer (origins7.py verify: byte-identical).
+def origins7_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "origins7.json" if c == "dev" else f"origins7-{c}.json")
+
+
+def rules7():
+    import origins as O
+    return O.RULES7
+
+
+def load_origins7_manifest():
+    if not any(rules7().values()):
+        return None
+    with open(origins7_manifest_path()) as fh:
+        m = json.load(fh)
+    if m["rules"] != rules7():
+        raise SystemExit(f"REFUSED: {origins7_manifest_path()} was frozen with rules {m['rules']}, not {rules7()}")
+    return m
+
+
+def origins7_sha():
+    m = load_origins7_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
+def origin_layer(entry, om, o7m):
+    """The entry's origin layer: scorer 7's (o7m, when any RULES7 rule is on) or the frozen scorer 4-6 one."""
+    if o7m is None:
+        return lib096.load_origins(entry, om)
+    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins7.json.gz")
+    got = sha256_file(p)
+    if got != o7m["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: origins7 {p} sha256 {got[:12]} != {origins7_manifest_path()}")
+    with gzip.open(p, "rt") as fh:
+        return json.load(fh)

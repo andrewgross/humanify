@@ -494,9 +494,9 @@ export function libraryArgs(args: string[]): string[] | string {
   if (
     corpus !== undefined &&
     (typeof corpus !== "string" ||
-      !["dev", "test", "bundlers", "apps"].includes(corpus))
+      !["dev", "test", "bundlers", "apps", "pop"].includes(corpus))
   ) {
-    return "--corpus dev|test|bundlers|apps (dev = corpus.json; test = exp100's frozen test split; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps)";
+    return "--corpus dev|test|bundlers|apps|pop (dev = corpus.json; test = exp100's frozen test split; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population)";
   }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
@@ -753,7 +753,7 @@ const VERBS: Verb[] = [
   {
     name: "library",
     usage:
-      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|bundlers|apps] [--force-mixed] [--pipeline-set library.<key>=value]...",
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|bundlers|apps|pop] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
       "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
@@ -763,7 +763,9 @@ const VERBS: Verb[] = [
       "by rule, built with Bun, esbuild, webpack and rollup; corpus-test.json): its cards stay out of git and only " +
       "the per-set summary is committed. `--corpus bundlers` scores exp105's dev-side webpack and rollup builds " +
       "(small apps made from the index's packages; corpus-bundlers.json); `--corpus apps` scores exp107's dev-side " +
-      "esbuild, webpack and rollup builds of 32 real exp095 TRAINING apps (corpus-apps.json). Each bundle runs with `--bundler` = the " +
+      "esbuild, webpack and rollup builds of 32 real exp095 TRAINING apps (corpus-apps.json); `--corpus pop` scores exp112's " +
+      "dev-side Bun and esbuild builds of 46 exp108 TRAINING apps from the test split's population (corpus-pop.json). " +
+      "Each bundle runs with `--bundler` = the " +
       "bundler that built it. Compare labels with `library-leaderboard`.",
     proves:
       "how much library code the index names on THESE bundles (recall: the shipping package OR, for a vendored / " +

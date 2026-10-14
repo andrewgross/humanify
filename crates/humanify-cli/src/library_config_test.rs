@@ -281,3 +281,15 @@ fn the_exp106_hygiene_keys_default_off() {
     .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("banner_names")), "{err:?}");
 }
+
+#[test]
+fn the_exp112_declared_cap_defaults_off() {
+    let off = build(&["in.js"], "").unwrap();
+    assert_eq!(off.library.discovery_options().declared_max_bytes, 0);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ndeclared_max_bytes = 65536\n",
+    )
+    .unwrap();
+    assert_eq!(on.library.discovery_options().declared_max_bytes, 65536);
+}

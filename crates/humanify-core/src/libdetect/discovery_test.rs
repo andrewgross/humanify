@@ -995,3 +995,51 @@ fn specific_rivals_only_a_sponge_s_unspecific_print_is_no_conflict() {
     let (_, _, rows) = run_indexed_with(CONFLICT, &rival, vec![], specific);
     assert_ne!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
 }
+
+fn run_with_options(
+    code: &'static str,
+    seeds: &[(&str, &str, Evidence)],
+    options: DiscoveryOptions,
+) -> Run {
+    let mut r = run(code, &[]);
+    let seeds: Vec<Seed> = seeds
+        .iter()
+        .map(|(head, package, evidence)| Seed {
+            unit: r.unit(head),
+            package: package.to_string(),
+            evidence: evidence.clone(),
+        })
+        .collect();
+    r.found = discover(&r.graph, &seeds, &PackageFamilies::shipped(), options);
+    r
+}
+
+#[test]
+fn a_declared_seed_never_claims_a_statement_bigger_than_the_declared_cap() {
+    // exp112: a package.json literal (`{name:"P",version:...}`) inside a
+    // huge statement (a nested bundle's one factory holding many packages)
+    // says P's manifest is somewhere in it, not that the statement is P's.
+    // Under the cap the declared seed is refused, and nothing propagates
+    // from it; a small statement still seeds.
+    let code: &'static str = Box::leak(
+        format!(
+            "var big = function () {{ var m = {{ name: \"P\", version: \"1.0.0\" }}; return [m, {}].join(); }};\nvar small = {{ name: \"Q\", version: \"2.0.0\" }};\nvar app = () => big() + small.name;\n",
+            (0..200).map(|i| format!("\"payload{i}\"")).collect::<Vec<_>>().join(", ")
+        )
+        .into_boxed_str(),
+    );
+    let seeds = [("var big", "P", declared()), ("var small", "Q", declared())];
+    let off = run_with_options(code, &seeds, DiscoveryOptions::default());
+    assert_eq!(off.claim("var big"), Some(("P", Rule::Seed, 0)));
+    assert_eq!(off.claim("var small"), Some(("Q", Rule::Seed, 0)));
+    let capped = run_with_options(
+        code,
+        &seeds,
+        DiscoveryOptions {
+            declared_max_bytes: 1024,
+            ..DiscoveryOptions::default()
+        },
+    );
+    assert_eq!(capped.claim("var big"), None);
+    assert_eq!(capped.claim("var small"), Some(("Q", Rule::Seed, 0)));
+}

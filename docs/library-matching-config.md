@@ -143,6 +143,8 @@ helper_families = 0            # all off by default
 payload_min_bytes = 0
 specific_rivals = false
 derived_families = false
+declared_max_bytes = 0         # exp112 (experiments/112-test-precision): a declared seed on a
+                               # statement over N bytes is no seed; off by default
 ```
 
 **Missing or stale index — fail loud, before any work.** With

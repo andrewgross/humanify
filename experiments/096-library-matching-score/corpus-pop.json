@@ -1,0 +1,2556 @@
+{
+  "corpus": "pop",
+  "entries": [
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-labystudio__paintdotjs (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 5197936,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-labystudio__paintdotjs-2b9544/entry.js",
+          "sha256": "bb8b1bda01c82f7143e35c9c8bee274aecd4f0b86016e83aa38be848a829ddb0"
+        },
+        "map": {
+          "bytes": 12888153,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-labystudio__paintdotjs-2b9544/entry.js.map",
+          "sha256": "db833d79955839091ca0c72aa28c235d33aaa938cd905f539056a0bfabeec6e6"
+        }
+      },
+      "id": "pop-bun-electron_gh-labystudio__paintdotjs-2b9544",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dba916510d93830230a17bc3837ae037dc999c2ec9387892f7a0f869f3ae4ebe"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-geckse__n8n-desk (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14712999,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-geckse__n8n-desk-445450/entry.js",
+          "sha256": "afdebe68616e858d858322118cd1cab84dcc1c1daaa0618b043aa245d290a4a4"
+        },
+        "map": {
+          "bytes": 43423151,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-geckse__n8n-desk-445450/entry.js.map",
+          "sha256": "dd5c8a2a5561d9e65d59ef0b35ecc8aec711b7a5f0101bc999c140b2a0db48c3"
+        }
+      },
+      "id": "pop-bun-electron_gh-geckse__n8n-desk-445450",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "49ba34f95c3f8764a145d62a99e58488786803c1f3fe9b02acc1e1255c1d404e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-ouijit__ouijit (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 24420686,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-ouijit__ouijit-2338c7/entry.js",
+          "sha256": "489a67b2f29572b578d7b47557d742e47342dd03a2ca80aea510d1a645bee97e"
+        },
+        "map": {
+          "bytes": 53714145,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-ouijit__ouijit-2338c7/entry.js.map",
+          "sha256": "517ee0009a6b523aa110f3818cd579b7debb15b302b8254594be9160dcde23ff"
+        }
+      },
+      "id": "pop-bun-electron_gh-ouijit__ouijit-2338c7",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fede230754a46b7e01c8d922b19a8d0f7394119f647117ccca2fb32697da61d3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-ziguishian__mxpage (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4637318,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-ziguishian__mxpage-fc5285/entry.js",
+          "sha256": "d0a8c57cdfcb6a3582293591194d256bf883f4777ad1e28463dfe9298b1ea9ea"
+        },
+        "map": {
+          "bytes": 15644316,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-ziguishian__mxpage-fc5285/entry.js.map",
+          "sha256": "5ab115768f238b80c0ea3b1df19c96d846d1f6ca82ad5ace6d2fa3a2ab7be326"
+        }
+      },
+      "id": "pop-bun-electron_gh-ziguishian__mxpage-fc5285",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ff921ecdce6759e2a0ed737745945993aec9526929cb92c22f82140551e657e1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-incarnamind__incarnamind (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 10035876,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-incarnamind__incarnamind-542def/entry.js",
+          "sha256": "8443bae53d9fa86f658917091e9ceb74c05b86008a1b6952283c5b7541a8a703"
+        },
+        "map": {
+          "bytes": 31852688,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-incarnamind__incarnamind-542def/entry.js.map",
+          "sha256": "be98d47b444289965686b4ce9111b4f43750899d4d868757f5646849494e4751"
+        }
+      },
+      "id": "pop-bun-electron_gh-incarnamind__incarnamind-542def",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9053f3db11b48498263ee21aa30ff195a9fbbde9967e1ed41dce18aea9aefc00"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-baozha2023__jobtrail (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 19807947,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-baozha2023__jobtrail-b0ed7a/entry.js",
+          "sha256": "e17762d6843a88734e5a1b0ad027414ef3ec8ec3af353034a5ba03b0b2d903a6"
+        },
+        "map": {
+          "bytes": 47375733,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-baozha2023__jobtrail-b0ed7a/entry.js.map",
+          "sha256": "7a0d6e2b0367aedc853942bd87e6b399e9c6e9edbe69089cf0f471bf8d625127"
+        }
+      },
+      "id": "pop-bun-electron_gh-baozha2023__jobtrail-b0ed7a",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "61d36534df87aeab3159cff2fcda1bf20283c5e5c6ff6814ae7d14b8d597f164"
+      }
+    },
+    {
+      "appPackage": "@upstash/context7-mcp",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@upstash/context7-mcp (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2392983,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_upstash_context7-mcp-4fe476/entry.js",
+          "sha256": "35307e13ed637f71ec4ae873164caacdf91a25cf1190b6c875b772c1561208ca"
+        },
+        "map": {
+          "bytes": 7128694,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_upstash_context7-mcp-4fe476/entry.js.map",
+          "sha256": "8e5ffe56c94c6de9a3946d5e4331006e51d2d718a36e7419bc1a20099dca1419"
+        }
+      },
+      "id": "pop-bun-cli_upstash_context7-mcp-4fe476",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f9e22be83cb655430750782d79cc9f01e34955df35244f2ec33c1ab755a1e423"
+      }
+    },
+    {
+      "appPackage": "@eslint/config-inspector",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@eslint/config-inspector (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1320756,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_eslint_config-inspector-8c4a9e/entry.js",
+          "sha256": "d44ac13b310ed4cf8aef29ac020bf65eccc6fd12860d4d77b94837845c657504"
+        },
+        "map": {
+          "bytes": 4529109,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_eslint_config-inspector-8c4a9e/entry.js.map",
+          "sha256": "793996ba8a32edcd4dba98e69d238f826e83f13129821e75e5dfe2291074a159"
+        }
+      },
+      "id": "pop-bun-cli_eslint_config-inspector-8c4a9e",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cdb1cf0f49fe809628d7d9c94a426b8a2093814e6dee8919300c0c573cb59d44"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-kasper9n__ferrum (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6504431,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-kasper9n__ferrum-1909a1/entry.js",
+          "sha256": "d4a6dda07bca14809db172ba46574b40fd19931acce74249d4cead4f3600c863"
+        },
+        "map": {
+          "bytes": 23586916,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-kasper9n__ferrum-1909a1/entry.js.map",
+          "sha256": "27d62c3ff8ac42639a0babd8a66c7f219917fb9fa124d7751004689056015b26"
+        }
+      },
+      "id": "pop-bun-electron_gh-kasper9n__ferrum-1909a1",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0d4c240800b01944f159f35fc7b89c94612d7f843b1f8c65608ed9ca5d9c4a0c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-getsentry__sentry-electron (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 11118783,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-getsentry__sentry-electron-3777eb/entry.js",
+          "sha256": "ec0d9be99c4d4a5813233cca704acfd7aee6496b126ee35d82d2488f9c2bd72d"
+        },
+        "map": {
+          "bytes": 26951863,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-getsentry__sentry-electron-3777eb/entry.js.map",
+          "sha256": "9b2fccf9c32cb08db2795a28f19f1c49cffcfc4362e6d4a5abdb394321f49d55"
+        }
+      },
+      "id": "pop-bun-electron_gh-getsentry__sentry-electron-3777eb",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "53b1505590dfe79d82b033f36be39bb0347c581cb24330a6658ca634ba3d54d6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-cosmicoppai__lisa (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2567774,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-cosmicoppai__lisa-73f20e/entry.js",
+          "sha256": "3bb9f435198b6a172f478f343d22d15db2ae50864cbcf43410a9186253b1d7b4"
+        },
+        "map": {
+          "bytes": 8674706,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-cosmicoppai__lisa-73f20e/entry.js.map",
+          "sha256": "7b7443aaf7a41271f69c5bcab8a891e2e1cc73897b675622f37f70d52d58786d"
+        }
+      },
+      "id": "pop-bun-electron_gh-cosmicoppai__lisa-73f20e",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fffe3b17dde01dfc0868c88051715cd2decc335a175c91e4cfff37377afbf4c2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-richard1208__parallio (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 11724403,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-richard1208__parallio-a2ada2/entry.js",
+          "sha256": "04d4ee9112cc53dd358804ffa3aa44d40b443829b3c736fc15be432c50ec9688"
+        },
+        "map": {
+          "bytes": 35855742,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-richard1208__parallio-a2ada2/entry.js.map",
+          "sha256": "b5e372237108394f6aaeb5f05b3501ec97e340e56373fc758f30da26cc470427"
+        }
+      },
+      "id": "pop-bun-electron_gh-richard1208__parallio-a2ada2",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e02c118ed83144b3d7978995812646595cf954cf253d8a547174d003e6a17e59"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-open-source-labs__overvue (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4932576,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-open-source-labs__overvue-cd8132/entry.js",
+          "sha256": "4f45cb8656492a15613864746ed67d9f8ee0dc2f98be887718590ff05873b2dc"
+        },
+        "map": {
+          "bytes": 15472067,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-open-source-labs__overvue-cd8132/entry.js.map",
+          "sha256": "6cf44371a3062e4987a916305bb6cf497ab56e240d2496f1a02879ef0de61055"
+        }
+      },
+      "id": "pop-bun-electron_gh-open-source-labs__overvue-cd8132",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3a77d97de45c1dc4567b47227262528f78bd19ac2cfd5d6a2729cc1f0e1a0d99"
+      }
+    },
+    {
+      "appPackage": "@nuxt/devtools-wizard",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@nuxt/devtools-wizard (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 627336,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_nuxt_devtools-wizard-f6511a/entry.js",
+          "sha256": "8a98ece3aea4213c954df33193b9aca8ec06695013e2d903dba3c7263acbfa1e"
+        },
+        "map": {
+          "bytes": 1834193,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_nuxt_devtools-wizard-f6511a/entry.js.map",
+          "sha256": "ffd6f04d21a96ec010226fa9d47cb049282b58c117dd6856387e6ca2945eec67"
+        }
+      },
+      "id": "pop-bun-cli_nuxt_devtools-wizard-f6511a",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ae676fdc049f05f15295c47d041f6cfaf7d268a8ccec735ba9d8d246a201e362"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-manusa__electronim (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1006625,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-manusa__electronim-e236a6/entry.js",
+          "sha256": "85fc0e06d1fecce6eb279d56d9720a053adf394a84a458bc3377de686583095c"
+        },
+        "map": {
+          "bytes": 3060978,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-manusa__electronim-e236a6/entry.js.map",
+          "sha256": "9a7542dd270c1aac337dee3bb8aba193dd9c29f87e0815bd0f0f06deefb70297"
+        }
+      },
+      "id": "pop-bun-electron_gh-manusa__electronim-e236a6",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e823d65c97694c86074f445312bf715984d98bf1a8d2a9a13732916b2c166d62"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-kylebing__songvault (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 7266067,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-kylebing__songvault-3315b0/entry.js",
+          "sha256": "2b873bcb3084644fdeb388bae79521b0ac7f0c404885ce90a317b91b3a0e553c"
+        },
+        "map": {
+          "bytes": 17468986,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-kylebing__songvault-3315b0/entry.js.map",
+          "sha256": "b2c33081fadc584e2beb7073fd06781525e3b65df55b405a14878dc7b0e0784c"
+        }
+      },
+      "id": "pop-bun-electron_gh-kylebing__songvault-3315b0",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b1f4828ca150536b45c47e6fd8b90d833756509f40a4bbb542c14a91ebb01a5e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-electron__devtron (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8916428,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-electron__devtron-023999/entry.js",
+          "sha256": "1ae3ef0566cac05a7d1e8d0e65fb9f4013046fa8541ec0ed5a2fdb55d71ec349"
+        },
+        "map": {
+          "bytes": 21039945,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-electron__devtron-023999/entry.js.map",
+          "sha256": "fb596ef7953bde6892fcb03fc4df16777f4c042acdda92f8f396505ab2aa197e"
+        }
+      },
+      "id": "pop-bun-electron_gh-electron__devtron-023999",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5417ed269223e5649e6ff787b27ac28e4e06fe5f4c850a11d841040dd48db50e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-zoidsh__meru (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 20200223,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-zoidsh__meru-b47f72/entry.js",
+          "sha256": "74f0e107a245acbb792b457eb05b2c7761e098c3ec0d9ea0147723d5ced585ec"
+        },
+        "map": {
+          "bytes": 57368106,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-zoidsh__meru-b47f72/entry.js.map",
+          "sha256": "c1538b5fdaf24d4a8312314f6c933d2d8de991071199a738e613f91af0ac4259"
+        }
+      },
+      "id": "pop-bun-electron_gh-zoidsh__meru-b47f72",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c8c585a1206461680b675063ac81eaf394cd25bb79b5a559507435bb722a52c0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-bitwarden__directory-connector (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 25887224,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-bitwarden__directory-connector-ea4d8f/entry.js",
+          "sha256": "3dd6bcdee263b553ff443af1a6355a3bd73786aa981f6a9dda6322a6d2d127ad"
+        },
+        "map": {
+          "bytes": 89350361,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-bitwarden__directory-connector-ea4d8f/entry.js.map",
+          "sha256": "f7b3effc16d88d563a2d8ea9791deb568b99616965d205b01131df29bbbcf719"
+        }
+      },
+      "id": "pop-bun-electron_gh-bitwarden__directory-connector-ea4d8f",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f1e4373f9e6d6956dfcaa100546652b57b7ef13f127d03971972cddeb5dba003"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-jzimz__romie (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 17211011,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-jzimz__romie-b77d2c/entry.js",
+          "sha256": "40ac7e2791933caef3a36e44f203a115e9441602630425bde59cf6d1eafe7116"
+        },
+        "map": {
+          "bytes": 33334159,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-jzimz__romie-b77d2c/entry.js.map",
+          "sha256": "a36e7d123a905189ead3220962d3baf7630d35fa8e8a4cacad785e0636495f09"
+        }
+      },
+      "id": "pop-bun-electron_gh-jzimz__romie-b77d2c",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "90d496dac875d36194ff3b9aadbdeb834cbde5470ea00d8019dc55b7c3eb0ae4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-eastsun5566__hackdesk (mechanism): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 22778387,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-eastsun5566__hackdesk-bca960/entry.js",
+          "sha256": "d176cc7396a54004533e7f7262e2a0ea744b2c35698ee4c8d1eab8cbc40246bc"
+        },
+        "map": {
+          "bytes": 52465487,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-eastsun5566__hackdesk-bca960/entry.js.map",
+          "sha256": "cc0c0a7378ffe0c9367e28eb7ce7997d3f892f1fd50e500bd30b621457e46498"
+        }
+      },
+      "id": "pop-bun-electron_gh-eastsun5566__hackdesk-bca960",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dd52560904427d3db3bbda7dd134468d3d6095b723acd6fa113a02f6a46ecc44"
+      }
+    },
+    {
+      "appPackage": "xo",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:xo (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 18984394,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_xo-a7fdc1/entry.js",
+          "sha256": "2e3ef95adbaaa2e192f045ef232196921d886ba18e4e50375896a39287074f56"
+        },
+        "map": {
+          "bytes": 53068550,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_xo-a7fdc1/entry.js.map",
+          "sha256": "e5710622be577de2dee22ce3a61dce4850842471de3edb7bd031b76929f4d8f9"
+        }
+      },
+      "id": "pop-bun-cli_xo-a7fdc1",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b7a4945b5ecf435e5db9d8d61bb60a4921213734f73c14069105821ed34c87d9"
+      }
+    },
+    {
+      "appPackage": "mjml-migrate",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:mjml-migrate (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2057705,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_mjml-migrate-6cadd6/entry.js",
+          "sha256": "6c11f0cf1f9d62e457d10fb26c009f5560121e32873b19c3136ea48b8f468ea0"
+        },
+        "map": {
+          "bytes": 5478048,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_mjml-migrate-6cadd6/entry.js.map",
+          "sha256": "633b30ecda9e1067088640b41728feaf14dfdd27ae2633a43f6f85b31b1e87ab"
+        }
+      },
+      "id": "pop-bun-cli_mjml-migrate-6cadd6",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8bf090b389e8d6ef8dfc3a3636e80ea299438470735995a6323a2581211ddac9"
+      }
+    },
+    {
+      "appPackage": "dts-bundle",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:dts-bundle (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 58454,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_dts-bundle-d2d905/entry.js",
+          "sha256": "5031b5d178508520b360734b1a0a906f84a831f9d6b7c9e5f4be7a493290729c"
+        },
+        "map": {
+          "bytes": 224047,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_dts-bundle-d2d905/entry.js.map",
+          "sha256": "ea88b07ca879dacd733fdeb2db10fc0357f08dc841e22943e1059c50f3f1d98f"
+        }
+      },
+      "id": "pop-bun-cli_dts-bundle-d2d905",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "be50bea783a772c485c721759556714ef81f9258344ad242b9d4d5867436fb37"
+      }
+    },
+    {
+      "appPackage": "@beisen/storybook",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@beisen/storybook (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1995868,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_beisen_storybook-6bee45/entry.js",
+          "sha256": "d9f847386ae20d3b3b9bf16c74da38f888224d29f4256bd5d6f0dd9f4d464b85"
+        },
+        "map": {
+          "bytes": 6318811,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_beisen_storybook-6bee45/entry.js.map",
+          "sha256": "4b8e70056bf483e9ee1aedf5132237bbd6d4692f5952794768febdbf3a08b90f"
+        }
+      },
+      "id": "pop-bun-cli_beisen_storybook-6bee45",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a0f2d577c8f3c564d81746992888b0a210a2e1f2a6dfba448cc8e1b9d46b56ea"
+      }
+    },
+    {
+      "appPackage": "@modelcontextprotocol/server-filesystem",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@modelcontextprotocol/server-filesystem (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 735374,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_modelcontextprotocol_server-filesystem-f0c73d/entry.js",
+          "sha256": "511c68c71805bbc8dfc047201fdbbe4b86a83c93643b3f777384d6d7ba357480"
+        },
+        "map": {
+          "bytes": 2593514,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_modelcontextprotocol_server-filesystem-f0c73d/entry.js.map",
+          "sha256": "c20c17ee93f060b5072a7b2df8fe0f0090b873e4cffbbe803b44523f1aeb6ba1"
+        }
+      },
+      "id": "pop-bun-cli_modelcontextprotocol_server-filesystem-f0c73d",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "73c4a6ff98d8fec901bba9e51507adfc9d3bcff54ecae4ca403a818d7039e204"
+      }
+    },
+    {
+      "appPackage": "@netlify/build",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@netlify/build (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 9049626,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_netlify_build-1f4290/entry.js",
+          "sha256": "8a1ca241671f741c85cee3e8a22e2a9a0ae8fdbb265c6106466bc616db68b762"
+        },
+        "map": {
+          "bytes": 30332534,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_netlify_build-1f4290/entry.js.map",
+          "sha256": "d36d35779dbe7b41adb2c7bac0256d41ac9af394d18c80807e3e974775ab0a2c"
+        }
+      },
+      "id": "pop-bun-cli_netlify_build-1f4290",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0817e6b0a8c6b69f2c9d2aa6e9f2c0f0a401ef8af4ee8b4d0d2210a4e8ddca45"
+      }
+    },
+    {
+      "appPackage": "cpx",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:cpx (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 388365,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_cpx-ce0fca/entry.js",
+          "sha256": "c68e6bee573199d9fe316057f0a1c0b9f2f72acd41b044a2582d98d6f087a1a6"
+        },
+        "map": {
+          "bytes": 1485833,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_cpx-ce0fca/entry.js.map",
+          "sha256": "8cf6abc74ccbd813127d273d6bd926050071d246be5799f28016da50a2463bb7"
+        }
+      },
+      "id": "pop-bun-cli_cpx-ce0fca",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3a98eca74fc7c071e3537d849d875c912f28f510328e7ec41eee5406e53bdd2f"
+      }
+    },
+    {
+      "appPackage": "gitbook-cli",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:gitbook-cli (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1361156,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_gitbook-cli-e1c767/entry.js",
+          "sha256": "2ef5061c43e44fb2fd050b5ba1f8e53231a6c3961299b2e9616cb90bb52700e3"
+        },
+        "map": {
+          "bytes": 4392577,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_gitbook-cli-e1c767/entry.js.map",
+          "sha256": "9c7b37d1581b004f90b029783405f3a7e5e40a9d4cbf1b4b77d6783c45e47261"
+        }
+      },
+      "id": "pop-bun-cli_gitbook-cli-e1c767",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5290932b932eb4f46a5f940e2fc92227b236e45cfbc029779a85b0498f8093e8"
+      }
+    },
+    {
+      "appPackage": "minify",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:minify (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2837704,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_minify-c55e38/entry.js",
+          "sha256": "a285d80666ea826562cc1f96a13f3e53b267d0ffa5481b9cb9b3d73dbb60a332"
+        },
+        "map": {
+          "bytes": 8240751,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_minify-c55e38/entry.js.map",
+          "sha256": "c3f98ea50f3cdc25f775941cc058cf8d1321034eebc4e173916d64bde95d98e6"
+        }
+      },
+      "id": "pop-bun-cli_minify-c55e38",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "13638090d42b3b9dc2ac8d3f400457b1ce4caee7dc9a8dd856e35f8d0401d0cc"
+      }
+    },
+    {
+      "appPackage": "@opennextjs/cloudflare",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@opennextjs/cloudflare (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3663414,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_opennextjs_cloudflare-c170db/entry.js",
+          "sha256": "12117cb086e5f8ac6d98c15b38e87e75245c25938cb3eac101fe4dbb7ee64a94"
+        },
+        "map": {
+          "bytes": 10183504,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_opennextjs_cloudflare-c170db/entry.js.map",
+          "sha256": "5d93967252e2e45bc387bdc7f3252708f402cfc09d07d301e8372beb00b74d4e"
+        }
+      },
+      "id": "pop-bun-cli_opennextjs_cloudflare-c170db",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e15c0cfd67959a5a2435ed7ae2484a90b9afe1758f5733ca4a7ac645189af277"
+      }
+    },
+    {
+      "appPackage": "tty-table",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:tty-table (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1093812,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_tty-table-505fcf/entry.js",
+          "sha256": "ad3c537e355e95993a289beefe7e570a50ec1abf3bef44b03082c39584cea347"
+        },
+        "map": {
+          "bytes": 3424791,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_tty-table-505fcf/entry.js.map",
+          "sha256": "840bfd4ec905efa47c4dfb15596ed24262d1c8c5f7f94a5b9bf32048a07fef2c"
+        }
+      },
+      "id": "pop-bun-cli_tty-table-505fcf",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5828ed6ce888345958b77f393a1c760d70970166672b1c48d6fff52e001e1701"
+      }
+    },
+    {
+      "appPackage": "@badeball/cypress-cucumber-preprocessor",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app cli:@badeball/cypress-cucumber-preprocessor (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 645671,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/cli_badeball_cypress-cucumber-preprocessor-e4dd32/entry.js",
+          "sha256": "1dc260dd48236e5cd1b0205068a6e6a0b8b66dbcb871e14e6f940ca356b98df4"
+        },
+        "map": {
+          "bytes": 3487072,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/cli_badeball_cypress-cucumber-preprocessor-e4dd32/entry.js.map",
+          "sha256": "f8768787c8560aa69357de26f500f343dac26398bfd7d93763d61819bf439d94"
+        }
+      },
+      "id": "pop-bun-cli_badeball_cypress-cucumber-preprocessor-e4dd32",
+      "kind": "cli",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e2efd3a8c24b44aa04343908df73627e39c5d167a1be9c1e1205a8be3b048493"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-b1z0n__homelander (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1467475,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-b1z0n__homelander-98b103/entry.js",
+          "sha256": "2d89d1b2a1621c2bd3b1ccad9858fe0915579cbb8a6ec7cf5b492b5e36029b67"
+        },
+        "map": {
+          "bytes": 3575029,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-b1z0n__homelander-98b103/entry.js.map",
+          "sha256": "36aac2f3952a002f13f6b631da74598af2b7661c31ff77cd385425f06ba1e2ac"
+        }
+      },
+      "id": "pop-bun-electron_gh-b1z0n__homelander-98b103",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "59548df83d97c47cf1d4953ad4842691448ffcaedd8535ab21602e5df639ade0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-getopenscreen__openscreen (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14090033,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-getopenscreen__openscreen-d83d92/entry.js",
+          "sha256": "22ab8087b86c7b38af7e666a9fc8c9e06f43e0e0b079506f8e08fee5b6a2ea53"
+        },
+        "map": {
+          "bytes": 43766895,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-getopenscreen__openscreen-d83d92/entry.js.map",
+          "sha256": "7fdf3ed4570638ccb8216e13e97149fb6d7aaceb7d92b1c067c493c9bf46bef9"
+        }
+      },
+      "id": "pop-bun-electron_gh-getopenscreen__openscreen-d83d92",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6b8594e8cd381b32b7b423ad8a15c25b0cf0f285bdfea4eda7856bb521f9d169"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-greenfield-inc__pane (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2782093,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-greenfield-inc__pane-0f9ff0/entry.js",
+          "sha256": "7da2595e9341d96d82ce2a3933eb8a88c8099fe52e25a16afac73ca6b5bc758c"
+        },
+        "map": {
+          "bytes": 9747256,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-greenfield-inc__pane-0f9ff0/entry.js.map",
+          "sha256": "4b0af303580bd86296431c051a5e3168f46d3c1cc00cca1fb0da9e151dc5a501"
+        }
+      },
+      "id": "pop-bun-electron_gh-greenfield-inc__pane-0f9ff0",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "542152119b9d26ce2dc35c5f841cf82ed02370cf2178b1b3ef0575db6911636a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-specy__scapix (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3118058,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-specy__scapix-c0972d/entry.js",
+          "sha256": "41212a95afd54a13215759f127ddf9eb1422dce25168fa932d4f78ce9b5e2235"
+        },
+        "map": {
+          "bytes": 9463296,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-specy__scapix-c0972d/entry.js.map",
+          "sha256": "ea3acb620929c0037e1711b8402224ed1214dcbc772cf4e1e6e074fea6ad0f64"
+        }
+      },
+      "id": "pop-bun-electron_gh-specy__scapix-c0972d",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "217cc80f676e67c71bb0a2c78604a2e1368245d08c3f4e4d737e812243746b2e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-ptkdev-boilerplate__svelte-electron-boilerplate (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 7881844,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25/entry.js",
+          "sha256": "e3e9a0a54fe934b77f97c4a0acdc2092f4d3bb7d886fee73ae08c0d4712085ca"
+        },
+        "map": {
+          "bytes": 19576483,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25/entry.js.map",
+          "sha256": "8134b4283e3a6deb6886bb6abcf9702380c60f11f17f24b9a49abbb413aebf2c"
+        }
+      },
+      "id": "pop-bun-electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7efbfa74e7707da7f951130af7692bb093f85bc4cefc551ef827912b110976d5"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-multiboxlabs__flow-browser (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 10950923,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-multiboxlabs__flow-browser-f918a9/entry.js",
+          "sha256": "ea61c55100326658c02994e1078b73bf89d9bfde45bf6f6c9e0e6c2b04ea2861"
+        },
+        "map": {
+          "bytes": 24841817,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-multiboxlabs__flow-browser-f918a9/entry.js.map",
+          "sha256": "9eefc33a4613994747d4125154ba5a1f8b096039507198820f48314f17abb640"
+        }
+      },
+      "id": "pop-bun-electron_gh-multiboxlabs__flow-browser-f918a9",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7c42eae45c6f21fcf6e9507d7f2d1ad6d4879157611c3732518783cecd2a60bb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-3529__fish-book (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1803558,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-3529__fish-book-daf14b/entry.js",
+          "sha256": "ad78c4241b96dac6bcf013561581f01e00f3c6bfa53f293650b351547fdbce9c"
+        },
+        "map": {
+          "bytes": 5056743,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-3529__fish-book-daf14b/entry.js.map",
+          "sha256": "3d669b5af7f41282122bf6113ce8725e7364dcbecefa30b36ae5003899651793"
+        }
+      },
+      "id": "pop-bun-electron_gh-3529__fish-book-daf14b",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a8a9fe69a778c062257585bd0567b02f28cc2930b3143a419c0c661c23996e09"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-h3poteto__whalebird-desktop (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2347909,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-h3poteto__whalebird-desktop-c1d4bf/entry.js",
+          "sha256": "e7c802f1518df5df36f68a55e378e48c718f5d2f521a019313a0c2e983f3766f"
+        },
+        "map": {
+          "bytes": 7240810,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-h3poteto__whalebird-desktop-c1d4bf/entry.js.map",
+          "sha256": "7c9488b31265fac3b8124af528c9483356493e4e94c28386066b59100e7c22f0"
+        }
+      },
+      "id": "pop-bun-electron_gh-h3poteto__whalebird-desktop-c1d4bf",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "36757b9c7cd63c264c5b71d08e23b56fd17ae5b304f549fe7012bff63fd60948"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-soedinglab__mmseqs2-app (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6549062,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-soedinglab__mmseqs2-app-794fcd/entry.js",
+          "sha256": "035e30a7c639c8a3c8186c18a1c05f132bcaa2fca1a996e7829ebf20a1a374ba"
+        },
+        "map": {
+          "bytes": 15343430,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-soedinglab__mmseqs2-app-794fcd/entry.js.map",
+          "sha256": "7685e0835ea7b50aeb11c13ca860b9f1dba7bbbbee7ce590d5a5e0536d454db6"
+        }
+      },
+      "id": "pop-bun-electron_gh-soedinglab__mmseqs2-app-794fcd",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c431a0d19928c29f592de00052e19d964ae94d2a5c2eb97df3c17ada9fcb8960"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-yrq110__dramaolddriver (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1666589,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-yrq110__dramaolddriver-8dccc4/entry.js",
+          "sha256": "1f2b3428bb7929b00e5a7502573fbd8fa809dcf653420c9033b70db20e951a33"
+        },
+        "map": {
+          "bytes": 5374177,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-yrq110__dramaolddriver-8dccc4/entry.js.map",
+          "sha256": "532def9015c85c7c3a44c3db04e6ffca33985907b934e2bf6ea016c98cc1b389"
+        }
+      },
+      "id": "pop-bun-electron_gh-yrq110__dramaolddriver-8dccc4",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "569194e7905b8287140b20fb65cb2301e05a8d7b77b297f829d0e2f909e33756"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-mahiruxia__hermes-forge (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4972540,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-mahiruxia__hermes-forge-993292/entry.js",
+          "sha256": "1de779fe0239b1499ea91e82efc0c92dae525705ab3d8774a8f862d0eadd8396"
+        },
+        "map": {
+          "bytes": 14283367,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-mahiruxia__hermes-forge-993292/entry.js.map",
+          "sha256": "d82422a23a9abf20d1c06d3a849c0060cc8d58a35f8468fe6724ac12bcd7978b"
+        }
+      },
+      "id": "pop-bun-electron_gh-mahiruxia__hermes-forge-993292",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2c1a40136b6d601c352155209246ee48016c5f58d1b7b37c51eb9403bd5be37b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp112 dev app electron:gh-orgoai__bops (random): Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 15726385,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-orgoai__bops-1153c4/entry.js",
+          "sha256": "4ea0eb3cfc83b3360d86a3af4b6286c88868dcac9828b114b480b77ae5937067"
+        },
+        "map": {
+          "bytes": 47193471,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/bun/electron_gh-orgoai__bops-1153c4/entry.js.map",
+          "sha256": "5e0e44d87243e24ac5372b2c4bfd36c4525eaf73e32355fb877fdf37fccc89a5"
+        }
+      },
+      "id": "pop-bun-electron_gh-orgoai__bops-1153c4",
+      "kind": "electron",
+      "set": "pop-bun",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1e94be7defe4a091f2f6d3b02617236e0061ad02776e036af74df47d9c5d7880"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-labystudio__paintdotjs (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4566133,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-labystudio__paintdotjs-2b9544/entry.js",
+          "sha256": "6e7c916f1caaf4be2e5923807a73a24c7a6ac1996b2f96cc6a441bfab8196c33"
+        },
+        "map": {
+          "bytes": 14429985,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-labystudio__paintdotjs-2b9544/entry.js.map",
+          "sha256": "266146b405b95a56f5d04bfb6e1453763b53581f6c10da83725b1c5afdddacc1"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-labystudio__paintdotjs-2b9544",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7b92823e453a3446386bba33c679c16eb2c54845706fe22d994ca42fd4d77c27"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-geckse__n8n-desk (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 19257978,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-geckse__n8n-desk-445450/entry.js",
+          "sha256": "7f7b458450a9ffdf06ecf88e0d36c7fd2921980fe99320230d9ee363a25583b3"
+        },
+        "map": {
+          "bytes": 71770923,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-geckse__n8n-desk-445450/entry.js.map",
+          "sha256": "69ca3907ce35f5cae67e432dd2a50ddf566977e5c168b22f79b5de12984afdcb"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-geckse__n8n-desk-445450",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "886b8da44118a388053b0392b9ec03145b2ec3a2aba03c7e6cf20c29aaae8b3b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-ouijit__ouijit (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 24353959,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-ouijit__ouijit-2338c7/entry.js",
+          "sha256": "abdb0307070f40950b417904153043c908a155dd2a115607911c13261e248e92"
+        },
+        "map": {
+          "bytes": 60191410,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-ouijit__ouijit-2338c7/entry.js.map",
+          "sha256": "69c63d13488a4b17a8131179eb74cf096207087ea46505f832bd665c393aa2fd"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-ouijit__ouijit-2338c7",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "296578c1039c0e515e1ea5683e6bd8f19dfe2240f66c09b5b65848b43d9fdd0d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-ziguishian__mxpage (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4522668,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-ziguishian__mxpage-fc5285/entry.js",
+          "sha256": "10708ed181d5be4e2a5395c8453049f5b4d64859d6eb4bd2bf953a1a90765f27"
+        },
+        "map": {
+          "bytes": 18537118,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-ziguishian__mxpage-fc5285/entry.js.map",
+          "sha256": "efadf5902b4e339f0d0062141bbb88adebbf08eca8f1b996a31371996a0686f1"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-ziguishian__mxpage-fc5285",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "42530ae02107f6c709310bdd46fa389fdfb4b9068cad2478caab1f90af3bcff0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-incarnamind__incarnamind (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 10257716,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-incarnamind__incarnamind-542def/entry.js",
+          "sha256": "0001db1064d0372bbef36982ca1c61450852d50009cedfb64e296f6454cb6a50"
+        },
+        "map": {
+          "bytes": 37379625,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-incarnamind__incarnamind-542def/entry.js.map",
+          "sha256": "39f955ec9d515e1a5b68570aa690aa0a08fd7ee32778dfe6ba0164b8eb2b1030"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-incarnamind__incarnamind-542def",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a39f1b70b390cc7e44ad33445d815e19583224a5d63a10093cb1f91e70625c37"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-baozha2023__jobtrail (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 20287079,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-baozha2023__jobtrail-b0ed7a/entry.js",
+          "sha256": "c93b4c5f036191137dc19962e1c34b1335fc6fd2b21292116048bb405bd4b68c"
+        },
+        "map": {
+          "bytes": 59061254,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-baozha2023__jobtrail-b0ed7a/entry.js.map",
+          "sha256": "3b0d6641bb2b361b08ee0638893b42ee40758decb18cbe70bbbc74d36cf02325"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-baozha2023__jobtrail-b0ed7a",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9fb10fb0b73957af111fa25c84894e702c3ebb2f66447c69e09c29164e337dcc"
+      }
+    },
+    {
+      "appPackage": "@upstash/context7-mcp",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@upstash/context7-mcp (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2639940,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_upstash_context7-mcp-4fe476/entry.js",
+          "sha256": "251b5cf36a905523479a0ff1e76cad8c32a4b1b71c67667fc6a239007a922df1"
+        },
+        "map": {
+          "bytes": 9126326,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_upstash_context7-mcp-4fe476/entry.js.map",
+          "sha256": "a042f3f4635f71346d4e72e092673d7b7a7385a02a40aef667778e818a6f5d37"
+        }
+      },
+      "id": "pop-esbuild-cli_upstash_context7-mcp-4fe476",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7c50793a05a97d6ae78465f8b91275c440a127ba5478f18989c83a29da9201fa"
+      }
+    },
+    {
+      "appPackage": "@eslint/config-inspector",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@eslint/config-inspector (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1314242,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_eslint_config-inspector-8c4a9e/entry.js",
+          "sha256": "b4fd7b174e46a43187e9d5857ccab2019dfe9a1496dd33841fdf6c1649e6fcbe"
+        },
+        "map": {
+          "bytes": 5476113,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_eslint_config-inspector-8c4a9e/entry.js.map",
+          "sha256": "3d630e5659a105ed36b9dce60a7e20c7a5ffca63649d7aab8653bf465063f47a"
+        }
+      },
+      "id": "pop-esbuild-cli_eslint_config-inspector-8c4a9e",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6a0bab25d01281508076313dddd590f859267299b65a278fb6d62b2e457599e1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-kasper9n__ferrum (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6632184,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-kasper9n__ferrum-1909a1/entry.js",
+          "sha256": "37020d428c19fd6c0bdff7fc8b12e531f35cb9e25ac704c1f23062fb54d48459"
+        },
+        "map": {
+          "bytes": 24507820,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-kasper9n__ferrum-1909a1/entry.js.map",
+          "sha256": "0c416ac53f602bf41bd77da1c6071189126debab66df97c8197cd7b37ff26c0f"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-kasper9n__ferrum-1909a1",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "16b43713d5b232590a89fb296bb81119d5aa649006bec1203f34d6c05661e4b3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-getsentry__sentry-electron (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 11238881,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-getsentry__sentry-electron-3777eb/entry.js",
+          "sha256": "e214fca95ca5d15abf1900f598b5f02fcf30ccfec73531fd92d9147ccd4ae4d1"
+        },
+        "map": {
+          "bytes": 33917674,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-getsentry__sentry-electron-3777eb/entry.js.map",
+          "sha256": "0e7690938cc0980d80b6d2438a8125136de2f601af1aaeca401c223d5102481f"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-getsentry__sentry-electron-3777eb",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2094ffb08cc16bcb8a50e334c2543219e7488fb93d206948ff9d0a544b0e4641"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-cosmicoppai__lisa (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2549106,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-cosmicoppai__lisa-73f20e/entry.js",
+          "sha256": "c4046e97c619408624ddffbefbda94ae710a86d2db90f24747b8cee712bdff90"
+        },
+        "map": {
+          "bytes": 10165299,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-cosmicoppai__lisa-73f20e/entry.js.map",
+          "sha256": "44b23dbc0b5d116e757cb59244ec9afbdcb65d9b56908b044c68bc2216043782"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-cosmicoppai__lisa-73f20e",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "df8f122d9a0f01f7527446e35f7fbb517941821eae5a6b8b15b772f30ed0274b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-richard1208__parallio (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 11645243,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-richard1208__parallio-a2ada2/entry.js",
+          "sha256": "d04e9937dbcf23ec872e1c3a3a7bb6bdcf07b92c1a417869a1788bbc2727fcfd"
+        },
+        "map": {
+          "bytes": 41936952,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-richard1208__parallio-a2ada2/entry.js.map",
+          "sha256": "654a0184192240e2a16cb4bc615746804c4b1f370d9cdeadffe2ad202429d9f9"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-richard1208__parallio-a2ada2",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "14b40339b07cc6b1b5f93347b4590cc4cb7746aa0bcce3272f86c0f59e60c890"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-open-source-labs__overvue (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4892553,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-open-source-labs__overvue-cd8132/entry.js",
+          "sha256": "8a343f7bc1fec5c33db6bd5500f7f3208ad996310080b388b19a5ec219f1979c"
+        },
+        "map": {
+          "bytes": 17452557,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-open-source-labs__overvue-cd8132/entry.js.map",
+          "sha256": "d279e9dd752b5c62137c3364218e46609fe7e25402f559488551aee58cbd39ee"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-open-source-labs__overvue-cd8132",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c5b6a5dac60c46b1e98217ff81eadb137a3466ce92b6f5cefc89fab3ec9c5fc6"
+      }
+    },
+    {
+      "appPackage": "@nuxt/devtools-wizard",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@nuxt/devtools-wizard (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 622795,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_nuxt_devtools-wizard-f6511a/entry.js",
+          "sha256": "21ef381ac0703f10db75fd224da64447c08e1f3b5bf48b81ea7268cac36ca06e"
+        },
+        "map": {
+          "bytes": 2317775,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_nuxt_devtools-wizard-f6511a/entry.js.map",
+          "sha256": "ac45bf0b2c928fbc6f979bc5b694e5377cac11261e855a3bd2ed3098aa4b2df0"
+        }
+      },
+      "id": "pop-esbuild-cli_nuxt_devtools-wizard-f6511a",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "46ede88bd08928009e1c1e8c67238fefa7bcb7da72e6bd872b60f55d8488881f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-manusa__electronim (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1003306,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-manusa__electronim-e236a6/entry.js",
+          "sha256": "05e408fd5ffe02099933cf2d3e4283fcd2751269ef6aaf62ade038285e127589"
+        },
+        "map": {
+          "bytes": 3907426,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-manusa__electronim-e236a6/entry.js.map",
+          "sha256": "57fc37ba93ecc313598b7a89af3a81e4b0efe30bafe8d20683401caed18f8ad7"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-manusa__electronim-e236a6",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6c17365a1a3ab5b52b3eeb4221898db94c7c1d66a073cc6f5581b702ec89466c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-kylebing__songvault (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8741388,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-kylebing__songvault-3315b0/entry.js",
+          "sha256": "8fb33bd0e5019b17af08f2c3f66ef2662573a78e0fed980809d8d2df899a0021"
+        },
+        "map": {
+          "bytes": 21216236,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-kylebing__songvault-3315b0/entry.js.map",
+          "sha256": "676f2fc71370662c3bdfa71d369b680e04a2c94f8ab53eaf21dabd628fe2dbfb"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-kylebing__songvault-3315b0",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d92c98249ad8db6ce3eb4774a78a7a7ef167832205cf7f3ab29be67a330b03f2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-electron__devtron (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8924994,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-electron__devtron-023999/entry.js",
+          "sha256": "965e552d15716d9bfed83545296ff1641fd26c198717978162642023dd5d6de2"
+        },
+        "map": {
+          "bytes": 23887743,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-electron__devtron-023999/entry.js.map",
+          "sha256": "c68218ae8c3bddcf4b400ad49e84688a0f0429a8147c70ce103964a30b27b1f4"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-electron__devtron-023999",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "14f4b3974632b37d3d831b7bac15a39134afd29f506e403efb45cf9dfc487e6c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-zoidsh__meru (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 20054948,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-zoidsh__meru-b47f72/entry.js",
+          "sha256": "5ea523b7e366366fa6fb629d100c1084bbd823c334b8e4b5d027e1866edbbb05"
+        },
+        "map": {
+          "bytes": 65496111,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-zoidsh__meru-b47f72/entry.js.map",
+          "sha256": "a7064323ee7044d21493af722ecfab1553bf51c5a9fbf99e9ced64624f40f248"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-zoidsh__meru-b47f72",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9c3fa231f31d92325478e6f9707b824d7fb0522ca9e960f65b4926c603b9a096"
+      }
+    },
+    {
+      "appPackage": "ng-packagr",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:ng-packagr (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 5207699,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_ng-packagr-075862/entry.js",
+          "sha256": "4ad642449e91d2d754e0a2ecf7b3560fd8317e452cb8cfcaa105bec02d0175fc"
+        },
+        "map": {
+          "bytes": 16600284,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_ng-packagr-075862/entry.js.map",
+          "sha256": "8056d544815f7260d7a65a9ee48b12e79dbda7311003c66e7d6f6afbe505fb3a"
+        }
+      },
+      "id": "pop-esbuild-cli_ng-packagr-075862",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "461e9ea4e248c061fe475327dbd4aea9451187bf3859286ae96fdd9d5200d86c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-bitwarden__directory-connector (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 21467480,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-bitwarden__directory-connector-ea4d8f/entry.js",
+          "sha256": "79311a81f78b8c20554955f976eeb5e3e94525c317ec41d73fadccf22e570005"
+        },
+        "map": {
+          "bytes": 83634083,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-bitwarden__directory-connector-ea4d8f/entry.js.map",
+          "sha256": "e13a788ed685f0705d801c9ce9f9aa177ea8b470ef2be42d50670395356f4e7d"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-bitwarden__directory-connector-ea4d8f",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b20df2102307136963dda7e75fb3a46466ecfaf8f1387ef6f84c181c0f59decb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-jzimz__romie (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 17266417,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-jzimz__romie-b77d2c/entry.js",
+          "sha256": "bf4809ec55321ea5c98136a586809bffc66752cec47b60f920d352c91d4929b3"
+        },
+        "map": {
+          "bytes": 38782154,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-jzimz__romie-b77d2c/entry.js.map",
+          "sha256": "5a4265fc01c9dedd70fa09dd4e88c4ff6eca66ea2aa775570b002bb3fcd75bcc"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-jzimz__romie-b77d2c",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "74eac7885b331ecce90038a12866e5fa8c527e4a2a9458198e9694be445d350a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-eastsun5566__hackdesk (mechanism): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 22811126,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-eastsun5566__hackdesk-bca960/entry.js",
+          "sha256": "8f0f431f26111be6d9fe6b6f59aefc0fea35fbab5454341182f9feab51ec6ab9"
+        },
+        "map": {
+          "bytes": 61098797,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-eastsun5566__hackdesk-bca960/entry.js.map",
+          "sha256": "49891e3f5d9015a373cd20a709c3dbbefedd95b13b7d9d44e88970765713d25e"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-eastsun5566__hackdesk-bca960",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "mechanism",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a265c3a77136b4519f3102deb99a707f798313f2b353983002cad362a612557c"
+      }
+    },
+    {
+      "appPackage": "xo",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:xo (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14658940,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_xo-a7fdc1/entry.js",
+          "sha256": "f18768465bf65977a99c63c13e53cb78a44ca676e62b910409c31a7ae8eb5b7c"
+        },
+        "map": {
+          "bytes": 52512425,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_xo-a7fdc1/entry.js.map",
+          "sha256": "cf2954b0ff6a7653e4e44d7865ce12af9a10d4a1569bfb35a2b4499fd5b8c7fd"
+        }
+      },
+      "id": "pop-esbuild-cli_xo-a7fdc1",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "695153015f933ba9ffb723fb1d867ad52a7a5e78a8d560fc7b9d2994a7e7cb21"
+      }
+    },
+    {
+      "appPackage": "mjml-migrate",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:mjml-migrate (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1699471,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_mjml-migrate-6cadd6/entry.js",
+          "sha256": "a929d39ffdbc8761c5ea44c58d2093313e03a651d41bc312a4c03e16a93f3f0f"
+        },
+        "map": {
+          "bytes": 4810642,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_mjml-migrate-6cadd6/entry.js.map",
+          "sha256": "e1bd554cdb769b6265b378996baf6c593b2201372961146641d3125676212b8f"
+        }
+      },
+      "id": "pop-esbuild-cli_mjml-migrate-6cadd6",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "30834d83840e5affc231fe5368a700617cbdbbae3790bc86c60560f7d6e2fac5"
+      }
+    },
+    {
+      "appPackage": "dts-bundle",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:dts-bundle (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 57192,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_dts-bundle-d2d905/entry.js",
+          "sha256": "26a3157923bea7555759953daecfd17e89928e8e7b3eb57823209a4a28d415b1"
+        },
+        "map": {
+          "bytes": 243413,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_dts-bundle-d2d905/entry.js.map",
+          "sha256": "49a511f2120ea1422e0f05a7d43547315cc56fc47565d6952ef7e8353e8fdc3c"
+        }
+      },
+      "id": "pop-esbuild-cli_dts-bundle-d2d905",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0cc823ae36d829b293ddef6df294304e330c0112dae71b357622fb80753b4bc5"
+      }
+    },
+    {
+      "appPackage": "@beisen/storybook",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@beisen/storybook (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2172657,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_beisen_storybook-6bee45/entry.js",
+          "sha256": "457507571a492e2b551e60e4cd59d5c01cc389f73b5fa89ba2be32b4625dab2a"
+        },
+        "map": {
+          "bytes": 7918654,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_beisen_storybook-6bee45/entry.js.map",
+          "sha256": "04512fd59fe639fb245c7194263cb0da34123e008a28d40240aaf9046ab12875"
+        }
+      },
+      "id": "pop-esbuild-cli_beisen_storybook-6bee45",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1809bf1a22644d03d170f874f7ad985e808eebf2f7f6deaeaa1b039f04df8dba"
+      }
+    },
+    {
+      "appPackage": "@modelcontextprotocol/server-filesystem",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@modelcontextprotocol/server-filesystem (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 793363,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_modelcontextprotocol_server-filesystem-f0c73d/entry.js",
+          "sha256": "df82f15668a0e0774c94b10fd2ee9729a1d4afd0e7ccf8f4d17862aebce252de"
+        },
+        "map": {
+          "bytes": 2671786,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_modelcontextprotocol_server-filesystem-f0c73d/entry.js.map",
+          "sha256": "d34346caca45002839d078a6434fcbb46653d96385bf4ad3f53904c1fc5b9f22"
+        }
+      },
+      "id": "pop-esbuild-cli_modelcontextprotocol_server-filesystem-f0c73d",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8ef15f6e18a1dd6763abe423acb409a9ea9b4fa9f20dbc8751fbebd53300e6f3"
+      }
+    },
+    {
+      "appPackage": "@netlify/build",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@netlify/build (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 9440396,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_netlify_build-1f4290/entry.js",
+          "sha256": "5c194bd73923ea977f9cf614750f1ffffa18955008bd5166f3af7db07057f120"
+        },
+        "map": {
+          "bytes": 36861940,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_netlify_build-1f4290/entry.js.map",
+          "sha256": "d3d7f3bca9450d387d6bc1f55149f06d1750a558744907846292149104bda859"
+        }
+      },
+      "id": "pop-esbuild-cli_netlify_build-1f4290",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bf933642ced91a6b7d9192eb7cb0b61d886d6de74877c9b1ae5cceea6c3ce752"
+      }
+    },
+    {
+      "appPackage": "cpx",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:cpx (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 379248,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_cpx-ce0fca/entry.js",
+          "sha256": "c293e3a66c8168dcd5e0ef047cce39dc45f70a2458967f5f5abf8d9dd9fa2292"
+        },
+        "map": {
+          "bytes": 1635076,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_cpx-ce0fca/entry.js.map",
+          "sha256": "f6f5d799c5e1f75c085da8143c3cff6946dc6a5b88c5238d697764a48f8ee2cd"
+        }
+      },
+      "id": "pop-esbuild-cli_cpx-ce0fca",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2d4b452c5a67cd19ccf182141e76054b9a540b32843db269670cce430f3bc0f6"
+      }
+    },
+    {
+      "appPackage": "gitbook-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:gitbook-cli (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1366627,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_gitbook-cli-e1c767/entry.js",
+          "sha256": "46cf80c37e9656a48401e44567c447a74ac0e4f7f549b51c228db30f0e63d317"
+        },
+        "map": {
+          "bytes": 5124611,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_gitbook-cli-e1c767/entry.js.map",
+          "sha256": "3bc66cab5b44c095f52849ace95fbad551f692aac8144d260e98d97f347baf6c"
+        }
+      },
+      "id": "pop-esbuild-cli_gitbook-cli-e1c767",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "57a06ccec7341c5e6c287c73831d152aafe6443888f53f0f801abb513063cb7c"
+      }
+    },
+    {
+      "appPackage": "minify",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:minify (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2895326,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_minify-c55e38/entry.js",
+          "sha256": "4d796a9ac1e5aa3ef66849f860d377a1a7c0cd2c9c0499d3d071b8c68f8b0c73"
+        },
+        "map": {
+          "bytes": 8941104,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_minify-c55e38/entry.js.map",
+          "sha256": "0557512d7372acf24d4a5f78b284bce988a52d8c331b24f3d8b3ecf29663c7c1"
+        }
+      },
+      "id": "pop-esbuild-cli_minify-c55e38",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "beba40ba85122c56b374630ae6298e22ec8254e5c818a14642d54165c4d44a70"
+      }
+    },
+    {
+      "appPackage": "@opennextjs/cloudflare",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@opennextjs/cloudflare (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3682724,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_opennextjs_cloudflare-c170db/entry.js",
+          "sha256": "2f43d8e75be185f6ce068b10fdf5d7f332a3eb70ce1ed02135d5710518144dfc"
+        },
+        "map": {
+          "bytes": 18713319,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_opennextjs_cloudflare-c170db/entry.js.map",
+          "sha256": "428add7d6ca866d3969d9a50d3962e73edbabe56595c4764a7c0aabfbae9c074"
+        }
+      },
+      "id": "pop-esbuild-cli_opennextjs_cloudflare-c170db",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "201f29de20b1240228c16d4ae5c6d351e3bcf74696398a75b4f651c364407f25"
+      }
+    },
+    {
+      "appPackage": "tty-table",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:tty-table (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1150478,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_tty-table-505fcf/entry.js",
+          "sha256": "0c152c9e8cfb6d036d6684dd6fe8ad4c9b4313b53207b11821d2b2749027bd07"
+        },
+        "map": {
+          "bytes": 3512516,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_tty-table-505fcf/entry.js.map",
+          "sha256": "d25dd306db4bb215d4099db9414ddf85f6ebbf5ed09ba344dd8f336f5c04bdce"
+        }
+      },
+      "id": "pop-esbuild-cli_tty-table-505fcf",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d5a6de750c22f71debbca6e4ee3f0ebc5410140ebe346ee7a3160c7cfe0be4b1"
+      }
+    },
+    {
+      "appPackage": "@badeball/cypress-cucumber-preprocessor",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app cli:@badeball/cypress-cucumber-preprocessor (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 645406,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_badeball_cypress-cucumber-preprocessor-e4dd32/entry.js",
+          "sha256": "5e4a151e5598f6f95bebe494dffd2c63dd7c555921c067e58c311c05ca99c09a"
+        },
+        "map": {
+          "bytes": 2536587,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/cli_badeball_cypress-cucumber-preprocessor-e4dd32/entry.js.map",
+          "sha256": "edb04eb281572527838c191886b5d90225c130ad1eda840fc7c22046446cf13c"
+        }
+      },
+      "id": "pop-esbuild-cli_badeball_cypress-cucumber-preprocessor-e4dd32",
+      "kind": "cli",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cc3d12c5736bea7ca4204fa0da5bec8d51ff89ad8c98b8342c3148568fc69ade"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-b1z0n__homelander (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1462036,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-b1z0n__homelander-98b103/entry.js",
+          "sha256": "0dcd99dd0b59f14ecaf0e9f79de61c3893cab169ebc1741f73c28f6472e90194"
+        },
+        "map": {
+          "bytes": 3517250,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-b1z0n__homelander-98b103/entry.js.map",
+          "sha256": "72e46000e18a22087e277d4684b9c948289aec103406955a5bb88e4e9db44678"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-b1z0n__homelander-98b103",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "baf20fd65034e64ee70c01b8325fb96190b504e5b3122a851533d57661c5e1d8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-getopenscreen__openscreen (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14117480,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-getopenscreen__openscreen-d83d92/entry.js",
+          "sha256": "21997091d7fe83de8f380f376479a8cd79e72bdccb23f16a09284941841fea53"
+        },
+        "map": {
+          "bytes": 58315765,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-getopenscreen__openscreen-d83d92/entry.js.map",
+          "sha256": "957e8a4929588a5465f29547b9a7f7e3244c8cff3d8b6867fde59759436fa5f4"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-getopenscreen__openscreen-d83d92",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "38eb3fa68703b94ee94b44db3a8264a8b469e845d5ef8002a0c0127705369f8f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-greenfield-inc__pane (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2749707,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-greenfield-inc__pane-0f9ff0/entry.js",
+          "sha256": "b09dfe0f8e0e3e0bf5c87a53c26b033e88a06bf5b75e44e742da0aaafc77163d"
+        },
+        "map": {
+          "bytes": 11654828,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-greenfield-inc__pane-0f9ff0/entry.js.map",
+          "sha256": "af1feae81ca23bc92568f0ca03c684a832c89a05c4ed9bf39445130c6b2b98af"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-greenfield-inc__pane-0f9ff0",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1a14aa404e026cb075ff1463507d690b34d2ef80f84cc6a75d9e961b11bae9ab"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-specy__scapix (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3113890,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-specy__scapix-c0972d/entry.js",
+          "sha256": "62aff826e6a3eec23e8ea7802987ea70ff0c9000ccb009aea4061238298ad171"
+        },
+        "map": {
+          "bytes": 10545785,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-specy__scapix-c0972d/entry.js.map",
+          "sha256": "279f6c818a8ece50ec784b82ed160f276645b848ff2332fe02242f3a722a24c5"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-specy__scapix-c0972d",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a972c5174f9e8b49bb68709dfb5f702c65c151eb1116b5e27091e11f98f7f6fc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-ptkdev-boilerplate__svelte-electron-boilerplate (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 7722610,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25/entry.js",
+          "sha256": "1efd8f6a7f1f4cccb0fd6ec3e573d39d5fd65fc8e289efa3710b5e4353a064e3"
+        },
+        "map": {
+          "bytes": 21396040,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25/entry.js.map",
+          "sha256": "84a5b00cff465375d1d771c604c886740a36929014fdfc7e31eeb0e442dbe384"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c64e147463d5072cf947574d4f1389c0d3d86bf25f680430054b147c46558097"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-multiboxlabs__flow-browser (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 10938016,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-multiboxlabs__flow-browser-f918a9/entry.js",
+          "sha256": "b9d598bc3456baa6d64b8ca22ee12cfb5a084aa264706039f63e09bbf820a782"
+        },
+        "map": {
+          "bytes": 29126177,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-multiboxlabs__flow-browser-f918a9/entry.js.map",
+          "sha256": "acb5edd9bcde89b41b3c05000404174804f9de3b753aa964dfede504edf81157"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-multiboxlabs__flow-browser-f918a9",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0c5e608ac5ca0e535a30d5579d67e0fdd93666c3435d9dd0261d9f168a69a9c6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-3529__fish-book (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2014613,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-3529__fish-book-daf14b/entry.js",
+          "sha256": "2aa87dd6fc20d58caa989b7ca9bd71cb7c9164a299ca50267ce2d15abad07660"
+        },
+        "map": {
+          "bytes": 5812813,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-3529__fish-book-daf14b/entry.js.map",
+          "sha256": "ff06033e8d7c51223a15abcf94e3e88b8325ed8f9acfb6cbfecc8eae543b237e"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-3529__fish-book-daf14b",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9ffbe97dce486abfcb9f884f47e8b2b4cb30d7cfc103430c5e532cc0646f28c4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-h3poteto__whalebird-desktop (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2320026,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-h3poteto__whalebird-desktop-c1d4bf/entry.js",
+          "sha256": "bcc11d402551a5b807da8cdfef65505461a699a4146136c823fb61963e9ef606"
+        },
+        "map": {
+          "bytes": 8307318,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-h3poteto__whalebird-desktop-c1d4bf/entry.js.map",
+          "sha256": "6a476a8a7828843425bc31e995b4ffbdb362514d2afcd98d9a9644fb774983c4"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-h3poteto__whalebird-desktop-c1d4bf",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "afd6f85fe97e1e44afc1a6824d922a6b70b1a708036ecea82be694cc519d79a8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-soedinglab__mmseqs2-app (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6163354,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-soedinglab__mmseqs2-app-794fcd/entry.js",
+          "sha256": "054229fc299622bd73c710a710a1223be847059ea64cd86ad8d84c87282a3e0b"
+        },
+        "map": {
+          "bytes": 16066131,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-soedinglab__mmseqs2-app-794fcd/entry.js.map",
+          "sha256": "eadf4dc5d449f403a84e060d1b54b4766144e7367f42d5b01898da2d6d6bb479"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-soedinglab__mmseqs2-app-794fcd",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "54a5b77f969ec83a4f46ed3ae6482bf64dbd621ce2020a9d356cf40dad02a3a6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-yrq110__dramaolddriver (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1632731,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-yrq110__dramaolddriver-8dccc4/entry.js",
+          "sha256": "39ee1c9452cd9c188716c512238a5ad8359f9477e6418458245ec0112acfccfe"
+        },
+        "map": {
+          "bytes": 5987409,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-yrq110__dramaolddriver-8dccc4/entry.js.map",
+          "sha256": "b179fa105bdd91af27d54631d05885b5dad77a0b6a39d00704205f2aac8463ce"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-yrq110__dramaolddriver-8dccc4",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "11239282e196200644c8dddfd0a4f8073c9195c57afc76cf6343de1c4a4fd208"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-mahiruxia__hermes-forge (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 5294828,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-mahiruxia__hermes-forge-993292/entry.js",
+          "sha256": "d5784c9cf8cf6d6e79b195840246a1e100fab0d3d63a452b4f91e1085311ad21"
+        },
+        "map": {
+          "bytes": 18333590,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-mahiruxia__hermes-forge-993292/entry.js.map",
+          "sha256": "9441cf2da61a15cfb83c4d837f36c1a8629a5aeb5ccad1e2447a3990302f2110"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-mahiruxia__hermes-forge-993292",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7e4484a1c8da86562afee68f47f577f2bd50aabe43a789a3d8cc6df5a297d2ac"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp112 dev app electron:gh-orgoai__bops (random): esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 15791315,
+          "name": "entry.js",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-orgoai__bops-1153c4/entry.js",
+          "sha256": "7a31efe70444589b94c4abf7ece3dc62451cfc8bf9983dc673a8aaa332867812"
+        },
+        "map": {
+          "bytes": 58566189,
+          "name": "entry.js.map",
+          "origin": "/work/exp112-data/pop/build/esbuild/electron_gh-orgoai__bops-1153c4/entry.js.map",
+          "sha256": "d981abf2a333af71c112dbb8acc0e4e2337bff5b60b44eaac3eee79d376bae1b"
+        }
+      },
+      "id": "pop-esbuild-electron_gh-orgoai__bops-1153c4",
+      "kind": "electron",
+      "set": "pop-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d304a06c5f7456fe402df12de8e595888da7131b5d6706d6d2b26d5f226c3ac0"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp112 DEV analogue of the test split's population: exp108 TRAINING apps (GitHub topic:electron by stars, npm CLIs past rank 7,863; never held-out, never test) with exp100's Bun and esbuild recipes (experiments/112-test-precision/scripts/dev_pop.py)",
+  "schema": "exp096-corpus/1"
+}

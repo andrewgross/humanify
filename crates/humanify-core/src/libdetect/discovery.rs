@@ -188,6 +188,13 @@ pub struct DiscoveryOptions {
     /// (`libindex/families-derived.json`, restricted to the index's
     /// packages) wherever discovery asks "one family?" (exp106).
     pub derived_families: bool,
+    /// The declared-seed cap (exp112; 0 = off): a declared seed (a package
+    /// reader's text: an inlined `package.json`, a scoped error prefix)
+    /// whose statement is bigger than this many bytes is no seed. A
+    /// manifest literal inside a huge statement (a nested bundle's one
+    /// factory holding many packages) says that package is somewhere in
+    /// it, not that the statement is that package's.
+    pub declared_max_bytes: u32,
 }
 
 impl Default for DiscoveryOptions {
@@ -205,6 +212,7 @@ impl Default for DiscoveryOptions {
             payload_min_bytes: 0,
             specific_rivals: false,
             derived_families: false,
+            declared_max_bytes: 0,
         }
     }
 }
@@ -1493,6 +1501,20 @@ pub fn discover_with(
         .filter(|r| r.rule != Rule::Module)
         .copied()
         .collect();
+    let capped: Vec<Seed>;
+    let seeds = if options.declared_max_bytes > 0 {
+        capped = seeds
+            .iter()
+            .filter(|s| {
+                !matches!(s.evidence, Evidence::Declared { .. })
+                    || graph.units[s.unit as usize].bytes <= options.declared_max_bytes
+            })
+            .cloned()
+            .collect();
+        &capped[..]
+    } else {
+        seeds
+    };
     let mut active = settle_seeds(graph, seeds);
     let mut vetoed = Vec::new();
     let (st, rounds) = loop {
