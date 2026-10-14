@@ -294,3 +294,53 @@ fn function_hits_need_no_content_tokens_by_default() {
     q.functions = vec![f];
     assert_eq!(claims(&index, &[q], structural()), vec![(0, "zod".into())]);
 }
+
+#[test]
+fn the_literal_margin_by_family_ignores_a_sibling_holding_the_same_literals() {
+    // @smithy/core and @smithy/util both hold the 12 strings: by package
+    // the runner-up ties the best (margin 0, refused); by family the
+    // runner-up is the best OTHER family's file (none), so it agrees.
+    let strings: Vec<String> = (0..12).map(|i| format!("S:x-amz header {i}")).collect();
+    let held: Vec<&str> = strings.iter().map(String::as_str).collect();
+    let mut literal_rows = vec![
+        lits("@smithy/core", "index.js", &held),
+        lits("@smithy/util", "index.js", &held),
+    ];
+    for i in 0..30 {
+        literal_rows.push(lits(
+            &format!("pkg{i}"),
+            "index.js",
+            &[&format!("S:unrelated {i}")],
+        ));
+    }
+    let index = LibraryIndex::from_rows(vec![row("a", "@aws-sdk/core", 150, 2000)], literal_rows);
+    let array: Vec<String> = (0..12).map(|i| format!("\"x-amz header {i}\"")).collect();
+    let text = format!("var s=[{}];", array.join(","));
+    let p = [whole("a", 150)];
+    let queries = [UnitQuery {
+        unit: 0,
+        prints: &p[0],
+        module_bytes: 1000,
+        text: &text,
+    }];
+    let family = |p: &str| {
+        if p.starts_with("@aws-sdk/") || p.starts_with("@smithy/") {
+            "aws".to_string()
+        } else {
+            p.to_string()
+        }
+    };
+    let same = |a: &str, b: &str| family(a) == family(b);
+    let got = claim_units(&index, &queries, LookupRules::default(), &same);
+    assert!(
+        got.is_empty(),
+        "a tie between siblings is refused by package: {got:?}"
+    );
+    let by_family = LookupRules {
+        literal_margin_by_family: true,
+        ..LookupRules::default()
+    };
+    let got = claim_units(&index, &queries, by_family, &same);
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].package, "@smithy/core");
+}

@@ -253,16 +253,25 @@ fn the_exp106_hygiene_keys_default_off() {
     let o = off.library.discovery_options();
     assert_eq!(o.banner_names, BannerNames::Any);
     assert_eq!(o.helper_families, 0);
+    assert_eq!(o.payload_min_bytes, 0);
     assert!(!o.derived_families);
+    assert!(!off.library.rules().literal_margin_by_family);
     let on = build(
         &["in.js"],
-        "[library.discovery]\nbanner_names = \"known\"\nhelper_families = 4\nderived_families = true\n",
+        "[library.discovery]\nbanner_names = \"known\"\nhelper_families = 4\npayload_min_bytes = 4096\nderived_families = true\n",
     )
     .unwrap();
     let o = on.library.discovery_options();
     assert_eq!(o.banner_names, BannerNames::Known);
     assert_eq!(o.helper_families, 4);
+    assert_eq!(o.payload_min_bytes, 4096);
     assert!(o.derived_families);
+    let by = build(
+        &["in.js"],
+        "[library.lookup]\nliteral_margin_by_family = true\n",
+    )
+    .unwrap();
+    assert!(by.library.rules().literal_margin_by_family);
     let err = ConfigFile::check(
         "cfg.toml",
         "[library.discovery]\nbanner_names = \"maybe\"\n",

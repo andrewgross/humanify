@@ -169,6 +169,14 @@ pub struct DiscoveryOptions {
     /// identity. A unit such prints cover at least half of is no seed and
     /// is refused to propagation ([`Containment::helper_dominated`]).
     pub helper_families: u32,
+    /// The payload floor (exp106; 0 = off): a propagated unit of at least
+    /// this many bytes, nine tenths of them inside string literals (a
+    /// base64 wasm blob, an embedded data table), is refused unless the
+    /// claimed family's own index evidence holds it (a print of it, or its
+    /// long literal in the family's files): the call that reaches a payload
+    /// says nothing about whose payload it is
+    /// ([`Containment::unbacked_payload`]).
+    pub payload_min_bytes: u32,
     /// Join the package families by the metadata-derived links
     /// (`libindex/families-derived.json`, restricted to the index's
     /// packages) wherever discovery asks "one family?" (exp106).
@@ -187,6 +195,7 @@ impl Default for DiscoveryOptions {
             contested_cover: 0.0,
             banner_names: BannerNames::Any,
             helper_families: 0,
+            payload_min_bytes: 0,
             derived_families: false,
         }
     }
@@ -858,6 +867,37 @@ impl<'c> Containment<'c> {
                 .any(|owners| owners.iter().any(|&o| self.owner_is(o, package)))
     }
 
+    /// Is unit `u` a data payload (at least `min_bytes`, nine tenths string
+    /// literal bytes) that `package`'s family holds no evidence of: no print
+    /// of it (any size) and none of its long literals?
+    fn unbacked_payload(&self, u: u32, package: &str, min_bytes: u32) -> bool {
+        use crate::matching::store::ReferenceStore;
+        let span = self.spans[u as usize];
+        if span.size() < min_bytes {
+            return false;
+        }
+        let text = &self.code[span.start as usize..span.end as usize];
+        if 10 * string_literal_bytes(text) < 9 * text.len() {
+            return false;
+        }
+        let printed = match self.prints.get(u as usize) {
+            Some(Some(p)) => std::iter::once(&p.whole).chain(&p.functions).any(|p| {
+                self.index
+                    .candidates(&p.hash)
+                    .iter()
+                    .any(|hit| self.owner_is(hit.owner, package))
+            }),
+            _ => false,
+        };
+        let literal = self
+            .index
+            .long_literal_owners(text)
+            .unwrap_or_default()
+            .iter()
+            .any(|owners| owners.iter().any(|&o| self.owner_is(o, package)));
+        !printed && !literal
+    }
+
     /// Per family, the nodes of unit `u` its index prints cover
     /// ([`family_cover`] at the row floor), and `u`'s nodes; None for a
     /// unit with no prints. `package`'s own family is keyed [`OWN`]; every
@@ -957,6 +997,29 @@ impl<'c> Containment<'c> {
     }
 }
 
+/// The bytes of `text` inside string and template literals (quotes
+/// included; a lexical scan, comments and regexes not told apart: a
+/// payload's share is far from the threshold either way).
+fn string_literal_bytes(text: &str) -> usize {
+    let b = text.as_bytes();
+    let (mut i, mut inside) = (0, 0);
+    while i < b.len() {
+        let q = b[i];
+        if q == b'"' || q == b'\'' || q == b'`' {
+            let start = i;
+            i += 1;
+            while i < b.len() && b[i] != q {
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+            i = (i + 1).min(b.len());
+            inside += i - start;
+        } else {
+            i += 1;
+        }
+    }
+    inside
+}
+
 /// A long literal held by more families than this is no package's
 /// identity (a licence line, a shared message).
 const LITERAL_IDENTITY_FAMILIES: usize = 3;
@@ -1015,6 +1078,7 @@ struct Guard<'c, 'x> {
     literal_conflict: bool,
     contested_cover: f64,
     helper_families: u32,
+    payload_min_bytes: u32,
 }
 
 impl Guard<'_, '_> {
@@ -1026,6 +1090,8 @@ impl Guard<'_, '_> {
             || (self.literal_conflict && c.literal_contradicts(u, package))
             || (self.contested_cover > 0.0 && c.contested_thin(u, package, self.contested_cover))
             || (self.helper_families > 0 && c.helper_dominated(u, self.helper_families))
+            || (self.payload_min_bytes > 0
+                && c.unbacked_payload(u, package, self.payload_min_bytes))
     }
 }
 
@@ -1380,6 +1446,7 @@ pub fn discover_with(
         literal_conflict: options.literal_conflict,
         contested_cover: options.contested_cover,
         helper_families: options.helper_families,
+        payload_min_bytes: options.payload_min_bytes,
     });
     let all = &profile.propagation[..];
     let without_module: Vec<LibraryRule> = all

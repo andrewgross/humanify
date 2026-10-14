@@ -538,6 +538,16 @@ pub static KEYS: &[Key] = &[
         || float(rules().literal_margin),
         "The literal rule's margin over the runner-up (bits).",
     ),
+    Key {
+        section: "library.lookup",
+        name: "literal_margin_by_family",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(rules().literal_margin_by_family)),
+        unset: "",
+        doc: "Read the literal margin against the best file of another package family, not \
+              another package: a sibling holding the same literals is no rival (exp106).",
+    },
     // [library.lookup.targeted]: the second round, on queued regions.
     lib_int(
         "library.lookup.targeted",
@@ -639,6 +649,15 @@ pub static KEYS: &[Key] = &[
         || int(u64::from(discovery().helper_families)),
         "An index print at least this many package families hold is emitted helper code: a unit \
          such prints cover half of is no seed and no propagated claim (exp106; 0 = off).",
+    ),
+    lib_int(
+        "library.discovery",
+        "payload_min_bytes",
+        0,
+        U32,
+        || int(u64::from(discovery().payload_min_bytes)),
+        "A propagated unit of at least this many bytes, nine tenths string literal (a wasm \
+         blob, a data table), needs the claimed family's own index evidence (exp106; 0 = off).",
     ),
     Key {
         section: "library.discovery",

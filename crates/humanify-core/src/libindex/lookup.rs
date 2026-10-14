@@ -233,7 +233,12 @@ impl LibraryIndex {
     /// The literal rule on one text: (package, score) when the best file's
     /// package reaches the score and cover thresholds with a margin over
     /// the next package.
-    fn literal_claim(&self, text: &str, rules: &LookupRules) -> Option<(u32, f64)> {
+    fn literal_claim(
+        &self,
+        text: &str,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Option<(u32, f64)> {
         let lits = code_literals(text, LiteralMode::Bundled)?;
         if lits.len() < rules.min_literals {
             return None;
@@ -279,7 +284,20 @@ impl LibraryIndex {
         let mut ranked: Vec<(u32, f64)> = best.into_iter().collect();
         ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
         let (p, score) = *ranked.first()?;
-        let runner_up = ranked.get(1).map_or(0.0, |r| r.1);
+        let runner_up = if rules.literal_margin_by_family {
+            // The best OTHER family's file: a sibling package (a fork, a
+            // monorepo member, one package's two names) holding the same
+            // literals is no rival — the more packages an index holds, the
+            // likelier such a tie.
+            let named = self.package_name(p);
+            ranked
+                .iter()
+                .skip(1)
+                .find(|r| !same(self.package_name(r.0), named))
+                .map_or(0.0, |r| r.1)
+        } else {
+            ranked.get(1).map_or(0.0, |r| r.1)
+        };
         (score >= rules.literal_score
             && score >= rules.literal_cover * total
             && score - runner_up >= rules.literal_margin)
@@ -434,6 +452,9 @@ pub struct LookupRules {
     pub literal_score: f64,
     pub literal_cover: f64,
     pub literal_margin: f64,
+    /// Read the literal margin against the best file of another package
+    /// FAMILY, not merely another package (exp106; default off).
+    pub literal_margin_by_family: bool,
 }
 
 impl Default for LookupRules {
@@ -452,6 +473,7 @@ impl Default for LookupRules {
             literal_score: 20.0,
             literal_cover: 0.9,
             literal_margin: 10.0,
+            literal_margin_by_family: false,
         }
     }
 }
@@ -517,7 +539,7 @@ pub fn claim_units(
             literal: None,
         };
         if rules.agreement {
-            let Some((l, score)) = index.literal_claim(q.text, &rules) else {
+            let Some((l, score)) = index.literal_claim(q.text, &rules, same) else {
                 continue;
             };
             let named = &index.packages[l as usize];

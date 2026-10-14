@@ -873,3 +873,33 @@ fn helper_prints_held_by_many_families_seed_and_carry_nothing() {
     let (_, _, rows) = run_indexed_with(code, &held, vec![], with(5));
     assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
 }
+
+#[test]
+fn a_data_payload_is_not_claimed_by_propagation_without_its_own_evidence() {
+    // lib (P) calls blob, a big base64 string the index holds no print or
+    // literal of for P: DOWN would take it as P's on the call alone. Under
+    // the payload floor a propagated unit that is mostly string bytes needs
+    // P's own evidence (a print, or its long literal in P's files).
+    let blob: String = "QUJD".repeat(400);
+    let code: &'static str = Box::leak(
+        format!("var lib = function (t) {{ return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length, blob.length, more(t)); }};\nvar more = function (m) {{ return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); }};\nvar blob = \"{blob}\";\nvar app = () => lib(\"a\");\n")
+            .into_boxed_str(),
+    );
+    let held = [Held::whole("var lib", "P"), Held::whole("var more", "P")];
+    let with = |n: u32| DiscoveryOptions {
+        payload_min_bytes: n,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(0));
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(1024));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var blob"), None);
+    // P's files hold the long string: its own evidence, DOWN takes it.
+    let line = code.lines().find(|l| l.starts_with("var blob")).unwrap();
+    let (_, _, rows) = run_indexed_with(code, &held, vec![literal_row("P", line)], with(1024));
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+    // Under the byte floor: not a payload.
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(100_000));
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+}

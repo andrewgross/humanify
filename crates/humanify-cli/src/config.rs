@@ -310,6 +310,7 @@ impl Library {
             literal_score: l.literal_score,
             literal_cover: l.literal_cover,
             literal_margin: l.literal_margin,
+            literal_margin_by_family: l.literal_margin_by_family,
         }
     }
 
@@ -326,6 +327,7 @@ impl Library {
             contested_cover: d.contested_cover,
             banner_names: d.banner_names,
             helper_families: d.helper_families,
+            payload_min_bytes: d.payload_min_bytes,
             derived_families: d.derived_families,
         }
     }
@@ -392,6 +394,7 @@ pub struct LibraryLookup {
     pub literal_score: f64,
     pub literal_cover: f64,
     pub literal_margin: f64,
+    pub literal_margin_by_family: bool,
     pub targeted_min_nodes: u32,
     pub targeted_support: usize,
 }
@@ -411,6 +414,7 @@ pub struct LibraryDiscovery {
     #[serde(serialize_with = "serialize_banner_names")]
     pub banner_names: humanify_core::libdetect::discovery::BannerNames,
     pub helper_families: u32,
+    pub payload_min_bytes: u32,
     pub derived_families: bool,
 }
 
@@ -567,6 +571,7 @@ fn library_of(r: &Resolved) -> Library {
             literal_score: r.float("library.lookup.literal_score"),
             literal_cover: r.float("library.lookup.literal_cover"),
             literal_margin: r.float("library.lookup.literal_margin"),
+            literal_margin_by_family: r.flag_on("library.lookup.literal_margin_by_family"),
             targeted_min_nodes: n("library.lookup.targeted.min_nodes") as u32,
             targeted_support: n("library.lookup.targeted.support") as usize,
         },
@@ -583,6 +588,7 @@ fn library_of(r: &Resolved) -> Library {
                 _ => humanify_core::libdetect::discovery::BannerNames::Any,
             },
             helper_families: n("library.discovery.helper_families") as u32,
+            payload_min_bytes: n("library.discovery.payload_min_bytes") as u32,
             derived_families: r.flag_on("library.discovery.derived_families"),
         },
     }
