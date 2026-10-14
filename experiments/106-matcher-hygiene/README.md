@@ -5,7 +5,7 @@
 EXECUTED on branch `exp106-matcher-hygiene` (main `dcf66970` merged in: exp103 index /3, exp105 webpack/rollup,
 exp101). Every matcher change is a `[library]` key, DEFAULT OFF; the default `humanify discover` claims are
 unchanged (`exp106-ctl2-structural` reproduces `exp102-final-structural` card for card). Scorer bumped to
-`exp096-score/5` (two truth corrections + F0.5). Gate: ALL 13 STAGES PASSED at every commit.
+`exp096-score/5` (two truth corrections + F0.5). Gate: ALL 13 STAGES PASSED at every commit. Warm neutrality of `e6dd9cb1` vs main `116090f2` on 2.1.215->2.1.216: NEUTRAL, 0 files / 0 lines, cache +0 / +0.
 
 **Totals first: the recommended DEFAULT** (judged on `c2-l12m4-v3`, the campaign's candidate index, dev; and on
 the frozen TEST split's summaries with `step4-wr-v3`, the only /3 index holding the webpack and rollup slices the
