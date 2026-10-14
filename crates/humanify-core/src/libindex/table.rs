@@ -112,11 +112,41 @@ fn owner_id(packages: &[String], owner: &str) -> u32 {
 
 // ------------------------------------------------------------------ bytes
 
-/// Where a table's bytes are: a file read by position (a run), or memory
-/// (an index built from rows, the tests'). One reader for both.
+/// Where a table's bytes are: a file read by position through a page
+/// cache of the pages this run touched (a run), or memory (an index built
+/// from rows, the tests'). One reader for both.
 pub enum Source {
-    File { file: std::fs::File, len: u64 },
+    File(PagedFile),
     Memory(Vec<u8>),
+}
+
+/// The bytes a table read moves at once, and the unit the run's own cache
+/// keeps: a lookup's reads cluster (a key block, its offsets, its rows), so
+/// most of them are answered without a system call.
+const PAGE: u64 = 4096;
+
+/// A table file and the pages of it this run has read. The cache holds
+/// only what a lookup touched — bounded by the file, in practice by the
+/// bundle's own vocabulary — never the table. Single-threaded: the lookup
+/// runs on one thread (a `RefCell`, not a lock).
+pub struct PagedFile {
+    file: std::fs::File,
+    len: u64,
+    pages: std::cell::RefCell<HashMap<u64, Box<[u8]>>>,
+}
+
+impl PagedFile {
+    fn page(&self, p: u64, mut use_bytes: impl FnMut(&[u8])) {
+        let mut pages = self.pages.borrow_mut();
+        let bytes = pages.entry(p).or_insert_with(|| {
+            let start = p * PAGE;
+            let mut buf = vec![0; PAGE.min(self.len - start) as usize];
+            read_at(&self.file, start, &mut buf)
+                .unwrap_or_else(|e| panic!("library index table read at {start}: {e}"));
+            buf.into_boxed_slice()
+        });
+        use_bytes(bytes);
+    }
 }
 
 impl Source {
@@ -126,12 +156,16 @@ impl Source {
             .metadata()
             .map_err(|e| format!("{}: {e}", path.display()))?
             .len();
-        Ok(Source::File { file, len })
+        Ok(Source::File(PagedFile {
+            file,
+            len,
+            pages: Default::default(),
+        }))
     }
 
     fn len(&self) -> u64 {
         match self {
-            Source::File { len, .. } => *len,
+            Source::File(f) => f.len,
             Source::Memory(b) => b.len() as u64,
         }
     }
@@ -142,11 +176,20 @@ impl Source {
     fn bytes(&self, at: u64, n: usize) -> Vec<u8> {
         match self {
             Source::Memory(b) => b[at as usize..at as usize + n].to_vec(),
-            Source::File { file, .. } => {
-                let mut buf = vec![0; n];
-                read_at(file, at, &mut buf)
-                    .unwrap_or_else(|e| panic!("library index table read at {at}: {e}"));
-                buf
+            Source::File(f) => {
+                let mut out = Vec::with_capacity(n);
+                let end = at + n as u64;
+                let mut pos = at;
+                while pos < end {
+                    let p = pos / PAGE;
+                    let (from, to) = (
+                        (pos - p * PAGE) as usize,
+                        (end.min((p + 1) * PAGE) - p * PAGE) as usize,
+                    );
+                    f.page(p, |bytes| out.extend_from_slice(&bytes[from..to]));
+                    pos = p * PAGE + to as u64;
+                }
+                out
             }
         }
     }
@@ -169,7 +212,6 @@ impl Source {
             .collect()
     }
 }
-
 #[cfg(unix)]
 fn read_at(file: &std::fs::File, at: u64, buf: &mut [u8]) -> std::io::Result<()> {
     std::os::unix::fs::FileExt::read_exact_at(file, buf, at)
