@@ -11,17 +11,18 @@
  "config": {
   "binarySha256": "5e47ebce7bd653924f3076b7b208febb7f89f3e40768c6a8bd32bb7edd0b1cc1",
   "buildCommit": "c3e64c90952d8d6caa579905fbf40b97834a5f97",
+  "chainedSha256": "2d2ec6251a51031362d24f96add76a6257decd613fbb0f342826f09205e4161e",
   "copiesSha256": "01e78709e765c23ac94b21de9cc207026c6e5468d3d8026c914aada64198c408",
   "corpus": "bundlers",
   "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
-  "familiesSha256": "2586775cd0fedb92762cf654e1857363e008f3e34e9df648cdc05a800de4c38f",
+  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
   "indexBytes": 667492250,
   "indexId": "2cbffa3b3f7e1f58d02b2874c6a0a2d079a8b7f9849a09a127313b88eba6cfec",
   "originsSha256": "6045ae10683020bb8c8021dad08f3bbf49d01536ce7953f70b234d8cb4c99174",
   "rule": "agreement"
  },
  "label": "exp105-dev-agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/5",
  "sets": {
   "dev-rollup": {
    "appClaimedBytes": 0,
@@ -37,6 +38,8 @@
     "exactUnits": 725,
     "sameVersionShare": 0.904162
    },
+   "f05": 0.800326,
+   "f05ShipperOnly": 0.800326,
    "f1": 0.61921,
    "f1ShipperOnly": 0.61921,
    "libraryBytes": 2181488,
@@ -81,6 +84,8 @@
     "exactUnits": 910,
     "sameVersionShare": 0.804663
    },
+   "f05": 0.802463,
+   "f05ShipperOnly": 0.802463,
    "f1": 0.622064,
    "f1ShipperOnly": 0.622064,
    "libraryBytes": 1832036,

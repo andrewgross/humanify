@@ -13,16 +13,17 @@
  "config": {
   "binarySha256": "4d4ca9a8a672faf0635ae1047bbfddaea442e1932d9fc730d0d81cb8782f5f4b",
   "buildCommit": "486b06b9ab5a52a27014e76af700f0548502ae50",
+  "chainedSha256": "eb426b876b7057250694179d1d283f48a0bb1b4b6c708f8929782e5e2f38c6ec",
   "copiesSha256": "ab20aaeae52ee90ddec0acf3ac0b50ab13d1ddc91d17d3ac63f9707eb110b4c7",
   "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
-  "familiesSha256": "2586775cd0fedb92762cf654e1857363e008f3e34e9df648cdc05a800de4c38f",
+  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
   "indexBytes": 440319007,
   "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
   "originsSha256": "0a27c16697b6087247100c7fe7fe855eaf68e9b659ecae49db0e15e6b821754a",
   "rule": "agreement"
  },
  "label": "ix-v2-agreement-repeat",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/5",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,
@@ -39,6 +40,8 @@
     "exactUnits": 526,
     "sameVersionShare": 0.917051
    },
+   "f05": 0.59912,
+   "f05ShipperOnly": 0.59912,
    "f1": 0.374141,
    "f1ShipperOnly": 0.374141,
    "libraryBytes": 2221462,
@@ -76,6 +79,8 @@
     "exactUnits": 809,
     "sameVersionShare": 0.996523
    },
+   "f05": 0.533112,
+   "f05ShipperOnly": 0.525605,
    "f1": 0.334018,
    "f1ShipperOnly": 0.329315,
    "libraryBytes": 4953691,
@@ -117,6 +122,8 @@
     "exactUnits": 6449,
     "sameVersionShare": 0.977361
    },
+   "f05": 0.483672,
+   "f05ShipperOnly": 0.452782,
    "f1": 0.280823,
    "f1ShipperOnly": 0.262888,
    "libraryBytes": 30392913,
@@ -161,6 +168,8 @@
     "exactUnits": 0,
     "sameVersionShare": 0.0
    },
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
    "f1": 0.0,
    "f1ShipperOnly": 0.0,
    "libraryBytes": 1994010,

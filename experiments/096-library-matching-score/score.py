@@ -24,6 +24,8 @@ origins.py). A claim is RIGHT when it names the shipper or the origin (or a memb
                       selfOther, selfOrigin), unmapped and foreign bytes are neither: reported apart, not judged.
                       Read against the bar: precision >= 99.8% (the ~0.2% wrong-name bar of exp095's scale lane)
   f1                  2PR / (P + R), the harmonic mean of precision and recall
+  f05                 F0.5 = 1.25PR / (0.25P + R): precision weighted over recall (beta 0.5), 0 when P + R = 0. The
+                      HEADLINE from scorer 5 on (held-out and test F0.5, under the 99.8% precision bar, app claimed 0)
   misses              every library unit NOT named, one cause each (the exp095 misses lane's classifier,
                       decompose.classify, unchanged): a not indexed / b version missing / c too small /
                       d hash differs (d-file, d-variant, d-absent, d-nofile) / e guard refused (e-veto, e-agree,
@@ -71,7 +73,8 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 # 5: the exp106 source-table corrections (truth_audit.patch_sources): a rollup `?commonjs-*` virtual id is
 #    <unmapped> (bundler glue), and a source reached through an installed package's OWN source map (esbuild chained
 #    @angular/compiler's map out of node_modules) keeps that package instead of <app> (frozen layer chained.json).
-#    Same reports, re-scored; both rules off reproduces scorer 4's cards (verify_s4.py).
+#    Same reports, re-scored; both rules off reproduces scorer 4's cards (verify_s4.py). Also F0.5 (`f05`, beta 0.5:
+#    precision over recall) beside precision / recall / F1 in every prf() block — the campaign's headline metric.
 SCORER_VERSION = "exp096-score/5"
 
 
@@ -84,13 +87,15 @@ def share(n, d):
 
 
 def prf(named, wrong_family, app, library, suffix=""):
-    """Precision, recall and F1 over bytes. True positives are the named bytes (recall's numerator); false
+    """Precision, recall, F1 and F0.5 over bytes (F0.5: beta = 0.5, precision weighted over recall — the
+    campaign's headline from scorer 5 on). True positives are the named bytes (recall's numerator); false
     positives are bytes claimed as the wrong family or app code claimed as any package. Claims the truth cannot
     judge (the app's own package, unmapped, foreign) are neither. Nothing claimed reads precision 0 (the usual
     zero-division convention), so an empty set fails the bar rather than passing it vacuously."""
     p = share(named, named + wrong_family + app)
     r = share(named, library)
-    return {"precision" + suffix: p, "recall" + suffix: r, "f1" + suffix: share(2 * p * r, p + r)}
+    return {"precision" + suffix: p, "recall" + suffix: r, "f1" + suffix: share(2 * p * r, p + r),
+            "f05" + suffix: share(1.25 * p * r, 0.25 * p + r)}
 
 
 # ---------------------------------------------------------------- the run's units, labelled by the truth
@@ -518,7 +523,7 @@ def main():
         if os.path.exists(tp):
             timing[entry["id"]] = json.load(open(tp))
         if not test:
-            print(f"{entry['id']:60s} P {body['totals']['precision']:.3f} R {body['totals']['recall']:.3f} F1 {body['totals']['f1']:.3f} app {body['totals']['appClaimedBytes']}",
+            print(f"{entry['id']:60s} P {body['totals']['precision']:.3f} R {body['totals']['recall']:.3f} F0.5 {body['totals']['f05']:.3f} F1 {body['totals']['f1']:.3f} app {body['totals']['appClaimedBytes']}",
               flush=True)
     sets = aggregate(cards)
     app_total = sum(r["appClaimedBytes"] for r in sets.values())

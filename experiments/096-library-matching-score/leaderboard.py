@@ -71,7 +71,7 @@ def main():
               f"{p_bar(s['bars']):14s}  "
               f"{t.get('totalWallSeconds', 0):6.0f}  {t.get('maxPeakRssMb', 0):7.0f}")
     base = rows[0][1]["sets"]
-    print("\nprecision / recall / F1 over bytes, the ORIGIN-AWARE truth (a claim naming the shipping package OR, for a"
+    print("\nprecision / recall / F0.5 (the headline: beta 0.5, precision over recall) / F1 over bytes, the ORIGIN-AWARE truth (a claim naming the shipping package OR, for a"
           "\nvendored / pre-bundled copy, its origin is right). precision = named / (named + wrong family + app"
           "\nclaimed); bar: precision >= 99.8% and app claimed = 0. [shipper] = the old shipper-only truth; as origin ="
           "\nnamed bytes right only through the origin; deltas against the first label")
@@ -79,7 +79,7 @@ def main():
         if all(set_ not in s["sets"] for _, s, _ in rows):
             continue  # the other corpus's sets (dev labels hold no test set, test labels no dev set)
         print(f"\n{SET_NAMES[set_]}")
-        print(f"  {'label':{w}s}  precision (delta)  recall  (delta)      F1  (delta)  [shipper P/R]  as origin  "
+        print(f"  {'label':{w}s}  precision (delta)  recall  (delta)    F0.5  (delta)      F1  (delta)  [shipper P/R]  as origin  "
               "app claimed  wrong fam KB  not indexed  version  too small  hash differs  guard  other pkg  "
               "no discovery")
         for lab, s, _ in rows:
@@ -94,7 +94,8 @@ def main():
             origin = r["namedAsOriginBytes"] / r["libraryBytes"] if r["libraryBytes"] else 0.0
             shipper = f"{pct(r['precisionShipperOnly'])}/{pct(r['recallShipperOnly'])}"
             print(f"  {lab:{w}s}  {pct(r['precision']):>9s} ({delta(r, b, 'precision')})  "
-                  f"{pct(r['recall'])} ({delta(r, b, 'recall')})  {pct(r['f1'])} ({delta(r, b, 'f1')})  "
+                  f"{pct(r['recall'])} ({delta(r, b, 'recall')})  {pct(r.get('f05', 0.0))} ({delta(r, b, 'f05')})  "
+                  f"{pct(r['f1'])} ({delta(r, b, 'f1')})  "
                   f"{shipper:>13s}  {pct(origin):>9s}  {r['appClaimedBytes']:11d}  "
                   f"{r['wrongFamilyBytes'] / 1e3:12.1f}  "
                   f"{pct(m.get('a', 0)):>11s}  {pct(m.get('b', 0)):>7s}  {pct(m.get('c', 0)):>9s}  "
@@ -102,7 +103,7 @@ def main():
 
 
 def delta(r, b, key):
-    return f"{100 * (r[key] - b[key]):+5.1f}"
+    return f"{100 * (r.get(key, 0.0) - b.get(key, 0.0)):+5.1f}"
 
 
 if __name__ == "__main__":

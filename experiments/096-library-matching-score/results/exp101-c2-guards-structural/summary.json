@@ -13,9 +13,10 @@
  "config": {
   "binarySha256": "fb1895b6c7dd571185298d40a679fcffc6e1cfa1478b50162160dcd43605f453",
   "buildCommit": "5a04e81651860cbb6f39b79b3029ac8a52d5129c",
+  "chainedSha256": "eb426b876b7057250694179d1d283f48a0bb1b4b6c708f8929782e5e2f38c6ec",
   "copiesSha256": "ab20aaeae52ee90ddec0acf3ac0b50ab13d1ddc91d17d3ac63f9707eb110b4c7",
   "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
-  "familiesSha256": "2586775cd0fedb92762cf654e1857363e008f3e34e9df648cdc05a800de4c38f",
+  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
   "indexBytes": 1823696624,
   "indexId": "01531a8a8c5a10e92b9c7dcfa0d7e9a9d96d2c7a822f3b7164e4c1a7e5de72f6",
   "originsSha256": "0a27c16697b6087247100c7fe7fe855eaf68e9b659ecae49db0e15e6b821754a",
@@ -27,7 +28,7 @@
   ]
  },
  "label": "exp101-c2-guards-structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/5",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,
@@ -44,6 +45,8 @@
     "exactUnits": 2685,
     "sameVersionShare": 0.80315
    },
+   "f05": 0.942581,
+   "f05ShipperOnly": 0.942581,
    "f1": 0.867836,
    "f1ShipperOnly": 0.867836,
    "libraryBytes": 2221462,
@@ -78,6 +81,8 @@
     "exactUnits": 3238,
     "sameVersionShare": 0.847647
    },
+   "f05": 0.788717,
+   "f05ShipperOnly": 0.747381,
    "f1": 0.604468,
    "f1ShipperOnly": 0.572789,
    "libraryBytes": 4924477,
@@ -119,6 +124,8 @@
     "exactUnits": 21198,
     "sameVersionShare": 0.871911
    },
+   "f05": 0.850302,
+   "f05ShipperOnly": 0.799327,
    "f1": 0.700081,
    "f1ShipperOnly": 0.658111,
    "libraryBytes": 30392745,
@@ -162,6 +169,8 @@
     "exactUnits": 52,
     "sameVersionShare": 0.306358
    },
+   "f05": 0.415071,
+   "f05ShipperOnly": 0.413243,
    "f1": 0.224457,
    "f1ShipperOnly": 0.223468,
    "libraryBytes": 733474,

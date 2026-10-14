@@ -25,6 +25,7 @@
  "indexId": "c7f20f883ff6d75fd159bcf9006c9044b385962bbeee0203b83b4fdd42585c06",
  "indexSeeds": {
   "appClaimedBytes": 0,
+  "f05": 0.743665,
   "f1": 0.537135,
   "namedBytes": 44720,
   "precision": 1.0,
@@ -42,7 +43,7 @@
  "noDiscovery": null,
  "reportSha256": "588e2319717ac00d64d80ad89898174eedc719f51963031fbc1c941eb07c3d06",
  "rule": "agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/5",
  "set": "heldout",
  "statementBytes": {
   "<app>": 23,
@@ -59,6 +60,8 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
+  "f05": 0.789329,
+  "f05ShipperOnly": 0.789329,
   "f1": 0.604312,
   "f1ShipperOnly": 0.604312,
   "libraryBytes": 121793,
