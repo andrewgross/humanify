@@ -1,0 +1,62 @@
+{
+ "bundleSha256": "9b826cbebfe7672bcf440cbf39e86faab36dfd66193f12f01766d48b04d4c4e6",
+ "claimedBytes": {},
+ "detected": {
+  "bundler": "bun",
+  "minifier": "unknown"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_dogapi-d0a72c",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "01531a8a8c5a10e92b9c7dcfa0d7e9a9d96d2c7a822f3b7164e4c1a7e5de72f6",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f1": 0.0,
+  "namedBytes": 0,
+  "precision": 0.0,
+  "recall": 0.0
+ },
+ "label": "exp101-c2-guards-structural",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "f7f3c949dd2d99d2be91f26da9482bfb283283990c61fc8ec65e81d39c0eda1f",
+ "rule": "structural",
+ "schema": "exp096-score/4",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 22
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "unknown",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f1": 0.0,
+  "f1ShipperOnly": 0.0,
+  "libraryBytes": 0,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 0,
+  "namedBytes": 0,
+  "namedBytesShipperOnly": 0,
+  "precision": 0.0,
+  "precisionShipperOnly": 0.0,
+  "recall": 0.0,
+  "recallShipperOnly": 0.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}
