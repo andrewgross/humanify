@@ -12,8 +12,13 @@ usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>]
              THE config writer, experiments/lib/pipeline-config.ts, after the rule's own key; recorded in
              pipeline.json as `settings`, so a label is one configuration)
   --corpus   dev (default: corpus.json, the corpus tuning lanes read) or test (corpus-test.json: exp100's FROZEN test
-             split; its reports and cards stay under its data dir, only the per-set summary is committed). A label
-             holds ONE corpus: name test labels apart (e.g. test-<label>)
+             split; its reports and cards stay under its data dir, only the per-set summary is committed) or bundlers
+             (corpus-bundlers.json: exp105's dev-side webpack and rollup builds). A label holds ONE corpus: name
+             test labels apart (e.g. test-<label>)
+
+Each bundle runs with `--bundler` = the bundler that BUILT it (the entry's `builtWith`, else its `bundler`): the
+pipeline's override, which picks the toolchain's pieces and the index slice (exp105: webpack and rollup have their
+own; exp100 had recorded them as `bundler: esbuild` only because the binary then had no webpack or rollup slice).
 
 Writes <DATA>/results/<label>/{pipeline.json, reports/<id>.json, reports/<id>.run.json}, then score.py writes the
 committed cards. A label is one configuration: re-running it with another binary, index, rule or corpus is
@@ -124,7 +129,7 @@ def run_one(binary, entry, out_dir, opts, index_dir, config):
     """One `humanify discover` run in a child process; its wall time and peak memory measured from outside."""
     report = os.path.join(out_dir, entry["id"] + ".json")
     cmd = ["taskset", "-c", opts["--cpus"], binary, "discover", lib096.corpus_path(entry, "bundle"),
-           "--library-index", index_dir, "--config", config, "--bundler", entry["bundler"], "--unit-prints",
+           "--library-index", index_dir, "--config", config, "--bundler", entry.get("builtWith", entry["bundler"]), "--unit-prints",
            "--out", report]
     t = time.monotonic()
     # a child per run, waited on here: ru_maxrss of RUSAGE_CHILDREN is the max over all waited children, so
@@ -155,7 +160,7 @@ def main():
     index_id, index_bytes = index_facts(index_dir)
     config = {"buildCommit": commit, "binarySha256": sha256_file(binary), "indexDir": index_dir,
               "indexId": index_id, "indexBytes": index_bytes, "rule": opts["--rule"],
-              "corpusSha256": lib096.manifest_sha(), "instrument": "humanify discover --unit-prints --bundler <corpus bundler> --config discover.toml"}
+              "corpusSha256": lib096.manifest_sha(), "instrument": "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml"}
     if opts["--pipeline-set"]:
         # only when given: a label with none keeps the pipeline.json it always had
         config["settings"] = opts["--pipeline-set"]

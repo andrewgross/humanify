@@ -1,0 +1,33 @@
+{
+  "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
+  "entries": {
+    "rollup-dev105-app00": "2d6765ac5662b06c7c173feb778ff119e61e44d4292e8bae3689b70e42bbcd01",
+    "rollup-dev105-app01": "b3d5a8b43222329280cca648bc077c573911f07b79cdb96c7869445683cdb3b9",
+    "rollup-dev105-app02": "83171579d16ecd09f93b0c1ce40f375b04ad763c13aaf46da68a20a4ee89a736",
+    "rollup-dev105-app03": "b55d98b99fcdd2be156b561bdde28092549a7ca72d0eb316f50d65258f1b088c",
+    "rollup-dev105-app04": "3cdf573f8d55f2783a6b7f8d42e6f3d58c8b084fe7a0bba87f3555610b3e8107",
+    "rollup-dev105-app05": "fbf006e9d21b660e3aad6757bc889ebc226b25941a1d555a14b3a794eee4d2d0",
+    "rollup-dev105-app06": "a3faa032ad7afe49be724bb3cee82d2af393e3bd1422ac072377a50e7e98123f",
+    "rollup-dev105-app07": "2dcdb3a8d6d94c3075b18d67ad31c111e7d03b3d4b6551d8af270d9fee6a5335",
+    "rollup-dev105-app08": "644af7f5bf2b2e707b2adabc3ffd847609dab0bbc65f4e75cf110d3ca25a965d",
+    "rollup-dev105-app09": "80465d2a675cebf69b9b1701fcfe0b798bac8b1f88ee1dfdd33abba47d8b8f61",
+    "rollup-dev105-app10": "21fd0c94d1d9df9581a737f71328780f1c182bc0ebf3028ab2e7736e8509969d",
+    "rollup-dev105-app11": "cbdd29789255a174cfb12c200c5fba9dd89d96fabc441158824fadc4b52e6ba9",
+    "rollup-dev105-app12": "a1ee4e7543f07a8015f54ca0efef0ad48f7e3a27f6c1b1b69b83be6af8062e9a",
+    "rollup-dev105-app13": "6ac50c426ec74f04a8d762a87eb4762283271accfee38cf4589b7f3b91e5b2ed",
+    "webpack-dev105-app00": "9063b453ecd9628aef0d75978b1bb0e7bb9381f7f02d8ded133e4c32b7c40cbe",
+    "webpack-dev105-app01": "cf74bbf6a64eaeb2503a3ee17707a236061da9132c280165aaedd78540ba6bc5",
+    "webpack-dev105-app02": "f3e5c3fb15a4b38bac0f98b08dafcedadc9dadbeb87be205212e308607f74e86",
+    "webpack-dev105-app03": "01fd901dfc3116a3e0395c209551edacc051583774408a2e016da3447ded7318",
+    "webpack-dev105-app04": "e3882ff6b5015554373e27dd70aa3d0fed13701578aa0e91919dd5d2e11c640e",
+    "webpack-dev105-app05": "6012297f1d3b5dc24a52a3c3580da7afd2f12e6388f6c48773a0f4846e1f20c2",
+    "webpack-dev105-app06": "cde003f96cf609d4c30a46c7e37104c9f4933f10c00d26204d4607fcc8f67054",
+    "webpack-dev105-app08": "a360cb086c9fc4924673c583d04f50ff6b4fc169ccba005ee8feb3a93f95b4b4",
+    "webpack-dev105-app09": "c67f55a994a1d665177a120317906e35bef06c5ae3c35dfe5e7206c73a62cde0",
+    "webpack-dev105-app10": "0d2f5c5de1a3cb4df7654234973afff76e5aa26721c689f5baec3a593438e274",
+    "webpack-dev105-app11": "571d6ca913a94f426057ea35900881c284b0e767bfbb627ab37edd1c4fc6e1bb",
+    "webpack-dev105-app12": "6302b4916386e2367fb7b462a2a8f6ab6ef1acec934cb428a7a854f786668beb",
+    "webpack-dev105-app13": "46f2915baaabce3d0d9f278c9a92c2da20ee17c808b3dc0f925014e7028c2341"
+  },
+  "schema": "exp096-origins/1"
+}
