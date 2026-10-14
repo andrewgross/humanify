@@ -54,6 +54,16 @@ def load_copies(entry, cm):
         return json.load(fh)["ranges"]
 
 
+def carried_verdict(unit_tokens, source_tokens, unverified):
+    """A unit with no mapping of its own: is it <unmapped>? Scorer 4: when at least MIN_TOKENS of its tokens can be
+    checked and most are absent from the source the previous mapping names. Scorer 6 (`unverified`): ALSO when too
+    few can be checked — adjacency to a mapping is no evidence, and nothing in the unit confirms it (rollup's
+    guarded-require glue `if(ju)return Hu;ju=1;` carries the mapping of the require call before it)."""
+    if len(unit_tokens) < MIN_TOKENS:
+        return unverified
+    return len(unit_tokens & source_tokens) < CARRIED_SHARE * len(unit_tokens)
+
+
 class Audit:
     def __init__(self, entry, truth, cm):
         self.offs = [s[0] for s in truth["segments"]]
@@ -79,9 +89,7 @@ class Audit:
         if si not in self.tok:
             return False
         t = set(TOKEN.findall(self.text[s:e].decode("utf8", "replace"))) & self.all
-        if len(t) < MIN_TOKENS:
-            return False
-        return len(t & self.tok[si]) < CARRIED_SHARE * len(t)
+        return carried_verdict(t, self.tok[si], RULES6["unverified"])
 
     def copy_origin(self, s, e, shipper):
         """(origin, declaring dependency) when most of [s, e) lies in one origin's copy ranges of this shipper."""
@@ -99,6 +107,56 @@ class Audit:
         return best if 2 * n > e - s else None
 
 
+# ---------------------------------------------------------------- scorer 6 (exp107): the decoder
+
+# Each rule can be switched off: utf16 and unmapped off reproduces scorer 4's segments exactly
+# (experiments/107-zero-app-claims/verify_decoder.py), all three off scorer 5's cards. `unverified` is
+# carried_verdict's.
+RULES6 = {"utf16": True, "unmapped": True, "unverified": True}
+
+
+def redecode(entry, truth, origins):
+    """(truth, origins) with the segments re-decoded under scorer 6's decoder rules (decoder.py: UTF-16 generated
+    columns; one-field segments kept as unmapped). Copies; the frozen files are never rewritten. A segment that
+    maps to nothing points at one extra source row, `<unmapped>`. The origin layer is indexed by scorer 4's
+    segments, which are exactly the re-decoded segments that map somewhere, in the same order (checked: refused
+    otherwise), so each keeps its origin and an unmapped segment has none."""
+    if truth["method"] != "sourcemap" or not (RULES6["utf16"] or RULES6["unmapped"]):
+        return truth, origins
+    import decoder
+    with open(lib096.corpus_path(entry, "bundle"), encoding="utf8", newline=None if not RULES6["utf16"] else "") \
+            as fh:
+        text = fh.read()
+    with open(lib096.corpus_path(entry, "map")) as fh:
+        smap = json.load(fh)
+    inner = None
+    if "innerMap" in entry["files"]:
+        with open(lib096.corpus_path(entry, "innerMap")) as fh:
+            inner = (json.load(fh), 1)
+    segs = decoder.segments(text, smap, inner, utf16=RULES6["utf16"], unmapped=RULES6["unmapped"])
+    old = truth["segments"]
+    mapped = [s for s in segs if s[1] is not None]
+    if len(mapped) != len(old) or any(a[1] != b[1] for a, b in zip(mapped, old)):
+        raise SystemExit(f"REFUSED: {entry['id']}: the re-decoded mapped segments are not scorer 4's, in order")
+    none = len(truth["sources"])
+    new_segs = [[s[0], none if s[1] is None else s[1]] for s in segs]
+    new_truth = {**truth, "segments": new_segs, "sources": [*truth["sources"], ["<unmapped>", None, None]]}
+    if origins is None:
+        return new_truth, None
+    # per old segment index -> its run's (name, kind); re-run-length over the new segment list
+    run_at = [r[0] for r in origins["runs"]]
+    runs, prev, k = [], None, 0
+    for j, s in enumerate(segs):
+        if s[1] is None:
+            o = (-1, -1)
+        else:
+            r = origins["runs"][bisect.bisect_right(run_at, k) - 1] if run_at else [0, -1, -1]
+            o = (r[1], r[2])
+            k += 1
+        if o != prev:
+            runs.append([j, o[0], o[1]])
+            prev = o
+    return new_truth, {**origins, "runs": runs, "segments": len(new_segs)}
 # ---------------------------------------------------------------- scorer 5 (exp106): the truth's source table
 
 # Each scorer-5 rule can be switched off (verify_s4.py: both off must reproduce scorer 4's cards).

@@ -2,8 +2,9 @@
  "bundleSha256": "2480c78141a9e27ac69aee8e6c2c31ba6ce4026dbcaac44266dccc4e1d590cfc",
  "claimedBytes": {
   "family": 1165,
-  "right": 159752,
-  "wrongFamily": 1289
+  "right": 159737,
+  "unmapped": 43,
+  "wrongFamily": 1261
  },
  "detected": {
   "bundler": "bun",
@@ -24,15 +25,16 @@
  "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.652265,
+  "f05": 0.824358,
+  "f1": 0.652459,
   "namedBytes": 112968,
   "precision": 1.0,
-  "recall": 0.483971
+  "recall": 0.484185
  },
  "label": "exp108-k2-agreement",
  "missBytes": {
-  "a": 2344,
-  "c": 10400,
+  "a": 2310,
+  "c": 10346,
   "e-agree": 56152,
   "e-ambig": 536,
   "e-other": 117,
@@ -41,11 +43,12 @@
  "noDiscovery": null,
  "reportSha256": "e7fdae1d3a51933cfb06956d5191878d556eaed7288c2ee609d55204aeb71c0b",
  "rule": "agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 33,
-  "library": 233419
+  "<app>": 18,
+  "<unmapped>": 118,
+  "library": 233316
  },
  "toolchain": {
   "adapter": "bun",
@@ -56,19 +59,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f1": 0.813482,
-  "f1ShipperOnly": 0.813482,
-  "libraryBytes": 233419,
+  "f05": 0.912176,
+  "f05ShipperOnly": 0.912176,
+  "f1": 0.813707,
+  "f1ShipperOnly": 0.813707,
+  "libraryBytes": 233316,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 160917,
-  "namedBytes": 160917,
-  "namedBytesShipperOnly": 160917,
-  "precision": 0.992053,
-  "precisionShipperOnly": 0.992053,
-  "recall": 0.689391,
-  "recallShipperOnly": 0.689391,
-  "wrongFamilyBytes": 1289,
-  "wrongFamilyBytesShipperOnly": 1289
+  "namedAsShipperBytes": 160902,
+  "namedBytes": 160902,
+  "namedBytesShipperOnly": 160902,
+  "precision": 0.992224,
+  "precisionShipperOnly": 0.992224,
+  "recall": 0.689631,
+  "recallShipperOnly": 0.689631,
+  "wrongFamilyBytes": 1261,
+  "wrongFamilyBytesShipperOnly": 1261
  },
  "truthMethod": "sourcemap"
 }

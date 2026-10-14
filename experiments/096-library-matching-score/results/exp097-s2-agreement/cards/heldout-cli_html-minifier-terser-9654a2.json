@@ -41,11 +41,12 @@
  "noDiscovery": null,
  "reportSha256": "0024b32e4673c427915b4e53411417440036715304f8dd84c2508ccf1628fe8b",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 23,
-  "<self>": 40368,
+  "<app>": 18,
+  "<self>": 40353,
+  "<unmapped>": 20,
   "library": 549901
  },
  "toolchain": {

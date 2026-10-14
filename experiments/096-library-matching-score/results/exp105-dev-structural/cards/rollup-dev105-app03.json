@@ -1,9 +1,9 @@
 {
  "bundleSha256": "09ad1bd96b040a7e01f058da34f06d1ac36fc7cdd5ea44ae1b7f16cda4bafad8",
  "claimedBytes": {
-  "right": 81758,
-  "unmapped": 290,
-  "wrongFamily": 331
+  "right": 81347,
+  "unmapped": 956,
+  "wrongFamily": 76
  },
  "detected": {
   "bundler": "rollup",
@@ -24,28 +24,28 @@
  "indexId": "2cbffa3b3f7e1f58d02b2874c6a0a2d079a8b7f9849a09a127313b88eba6cfec",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.910943,
-  "f1": 0.803595,
+  "f05": 0.9758,
+  "f1": 0.941619,
   "namedBytes": 77837,
   "precision": 1.0,
-  "recall": 0.671675
+  "recall": 0.889678
  },
  "label": "exp105-dev-structural",
  "missBytes": {
   "a": 859,
-  "c": 2184,
-  "d-file": 26957,
+  "c": 1032,
+  "d-file": 124,
   "e-veto": 4127
  },
  "noDiscovery": null,
  "reportSha256": "ff6dc68918fdeaa792ee02312c56782685c6399eaa246cd04ee1f207ced861b0",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "dev-rollup",
  "statementBytes": {
   "<app>": 932,
-  "<unmapped>": 700,
-  "library": 115885
+  "<unmapped>": 29096,
+  "library": 87489
  },
  "toolchain": {
   "adapter": "passthrough",
@@ -56,21 +56,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f05": 0.920199,
-  "f05ShipperOnly": 0.920199,
-  "f1": 0.825947,
-  "f1ShipperOnly": 0.825947,
-  "libraryBytes": 115885,
+  "f05": 0.984399,
+  "f05ShipperOnly": 0.984399,
+  "f1": 0.963188,
+  "f1ShipperOnly": 0.963188,
+  "libraryBytes": 87489,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 81758,
-  "namedBytes": 81758,
-  "namedBytesShipperOnly": 81758,
-  "precision": 0.995968,
-  "precisionShipperOnly": 0.995968,
-  "recall": 0.70551,
-  "recallShipperOnly": 0.70551,
-  "wrongFamilyBytes": 331,
-  "wrongFamilyBytesShipperOnly": 331
+  "namedAsShipperBytes": 81347,
+  "namedBytes": 81347,
+  "namedBytesShipperOnly": 81347,
+  "precision": 0.999067,
+  "precisionShipperOnly": 0.999067,
+  "recall": 0.929797,
+  "recallShipperOnly": 0.929797,
+  "wrongFamilyBytes": 76,
+  "wrongFamilyBytesShipperOnly": 76
  },
  "truthMethod": "sourcemap"
 }

@@ -34,7 +34,8 @@
 //! Module groups: the units between two module boundaries (a CommonJS
 //! factory or a lazy wrapper) belong to the module that ends there — a Bun
 //! lazy module's hoisted functions and `var a, b;` precede its wrapper —
-//! plus the wrapper's own body.
+//! plus the wrapper's own body. A statement holding two or more modules
+//! (webpack's module table) is their container and in no group.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -357,9 +358,23 @@ fn module_groups(graph: &ReferenceGraph) -> Groups {
         statements: Vec::new(),
         bodies: BTreeMap::new(),
     };
+    // module heads in source order: a statement holding two or more is
+    // their CONTAINER (webpack's module table), not a hoisted declaration
+    // of the next one, and joins no group
+    let heads: Vec<u32> = graph
+        .units
+        .iter()
+        .filter(|x| matches!(x.kind, UnitKind::Factory | UnitKind::LazyModule))
+        .map(|x| x.span.start)
+        .collect();
+    let holds = |u: u32| {
+        let s = graph.units[u as usize].span;
+        heads.partition_point(|&h| h < s.end) - heads.partition_point(|&h| h < s.start)
+    };
     let mut pending: Vec<u32> = Vec::new();
     for u in 0..n as u32 {
         match graph.units[u as usize].kind {
+            UnitKind::Statement if holds(u) >= 2 => {}
             UnitKind::Statement => pending.push(u),
             UnitKind::Factory | UnitKind::LazyModule => {
                 let g = groups.statements.len() as u32;

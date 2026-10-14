@@ -27,17 +27,15 @@
   "recall": 0.0
  },
  "label": "integ2-agreement",
- "missBytes": {
-  "a": 360
- },
+ "missBytes": {},
  "noDiscovery": null,
  "reportSha256": "d660278ec685413c045913f042482baadd0d6f8f94dbb987cac3eba0884a6667",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
   "<app>": 954,
-  "library": 360
+  "<unmapped>": 360
  },
  "toolchain": {
   "adapter": "bun",
@@ -52,7 +50,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 360,
+  "libraryBytes": 0,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,
