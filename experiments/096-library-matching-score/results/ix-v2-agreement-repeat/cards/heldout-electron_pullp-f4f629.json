@@ -28,17 +28,17 @@
  "label": "ix-v2-agreement-repeat",
  "missBytes": {
   "a": 24194,
-  "c": 58,
-  "d-absent": 92444
+  "c": 58
  },
  "noDiscovery": null,
  "reportSha256": "fd63f6a5ebb6e1ae48576ac06518beca6e3e522668e5520a4464755cd738ae4a",
  "rule": "agreement",
- "schema": "exp096-score/3",
+ "schema": "exp096-score/4",
  "set": "heldout",
  "statementBytes": {
   "<app>": 3102,
-  "library": 116696
+  "<unmapped>": 92444,
+  "library": 24252
  },
  "toolchain": {
   "adapter": "bun",
@@ -51,7 +51,7 @@
   "copyBytes": 0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 116696,
+  "libraryBytes": 24252,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

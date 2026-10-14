@@ -20,11 +20,11 @@
  "estimate": "stratified ratio estimate from the 620-unit labelled sample (bytes are src-wide estimates)",
  "exploratory": {
   "names": {
-   "bindings": 20661,
+   "bindings": 20678,
    "bindingsSameVersion": 1263,
    "bindingsVersionKnown": 1541,
-   "exactBytes": 1561401,
-   "exactUnits": 2612,
+   "exactBytes": 1561962,
+   "exactUnits": 2616,
    "sameVersionShare": 0.819598,
    "versionScope": "labelled sample units only"
   }
@@ -42,7 +42,7 @@
  "originTruth": "none: sample truth (hand-labelled units)",
  "reportSha256": "004b2ceb39d823c572e81c5270b1fbd578c6d7c6ebc661cd8adf049418d3796d",
  "rule": "structural",
- "schema": "exp096-score/3",
+ "schema": "exp096-score/4",
  "set": "cc",
  "statementBytes": {
   "<app>": 13036401,

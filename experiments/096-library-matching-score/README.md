@@ -2,6 +2,18 @@
 
 ## STATUS (2026-10-14)
 
+- **Scorer 4: the exp104 truth audit** (`experiments/104-truth-audit/README.md`). There are three mechanical truth
+  corrections, all measured in both directions and hand-checked:
+
+  - **carried:** a unit the source map never mapped is `<unmapped>`. This removed 9.4 MB of lighthouse locale
+    tables from the held-out library denominator, so held-out recall rises about 7.5 points with no new names.
+  - **copies:** dependency-gated, named vendored copies get an origin (`copies.json`, `copies-test.json`).
+  - **families:** families are joined by npm metadata (`families-derived.json`: one repository, renamed-to, GitHub
+    fork).
+
+  On every ledgered label, right->wrong is 0. All labels were re-scored (31 dev, 2 test). With the rules switched
+  off, the scorer reproduces scorer 3's cards byte for byte.
+
 - **A second corpus: exp100's FROZEN test split (`corpus-test.json`, `--corpus test`).** It holds 55 new apps
   chosen by rule (none was in exp095's 360-app selection corpus or the 67 held-out apps), built with Bun,
   esbuild, webpack and rollup: 191 bundles in the sets `test-bun`, `test-esbuild`, `test-webpack` and
