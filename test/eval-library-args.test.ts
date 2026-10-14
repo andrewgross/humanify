@@ -74,6 +74,36 @@ describe("eval library argument parsing", () => {
     assert.deepStrictEqual(b.slice(-2), ["--corpus", "bundlers"]);
   });
 
+  it("passes --sets through (a subset of the corpus's sets), and refuses an empty one", () => {
+    const r = libraryArgs([
+      "test-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--corpus",
+      "test",
+      "--sets",
+      "test-bun,test-esbuild"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.slice(-2), ["--sets", "test-bun,test-esbuild"]);
+    assert.match(
+      String(
+        libraryArgs([
+          "lbl",
+          "--index",
+          "/ix",
+          "--rule",
+          "structural",
+          "--sets",
+          ","
+        ])
+      ),
+      /--sets/
+    );
+  });
+
   it("requires a label, --index and a known --rule", () => {
     assert.match(String(libraryArgs([])), /usage/);
     assert.match(

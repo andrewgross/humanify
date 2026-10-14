@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 179440,
+  "foreign": 23428,
+  "right": 1202793,
+  "unmapped": 5801,
+  "wrongFamily": 14072
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 20111,
+   "bindingsSameVersion": 14844,
+   "bindingsVersionKnown": 19649,
+   "exactBytes": 1232019,
+   "exactUnits": 2314,
+   "sameVersionShare": 0.755458
+  }
+ },
+ "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f1": 0.245015,
+  "namedBytes": 687592,
+  "precision": 0.99917,
+  "recall": 0.139627
+ },
+ "label": "exp108-k2-guards-agreement",
+ "missBytes": {
+  "a": 470198,
+  "b": 948849,
+  "c": 117989,
+  "d-absent": 154896,
+  "d-file": 20074,
+  "d-variant": 81,
+  "e-agree": 1544284,
+  "e-ambig": 76098,
+  "e-other": 29733,
+  "e-support": 15507,
+  "e-veto": 298,
+  "f": 164237
+ },
+ "noDiscovery": null,
+ "reportSha256": "071f56b78c4c54cb76aa3055707125d7a5b01da676615b290a9c19f71484608c",
+ "rule": "agreement",
+ "schema": "exp096-score/4",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80010,
+  "<self>": 1114916,
+  "<unmapped>": 9472,
+  "copy": 263253,
+  "library": 4924477
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 263253,
+  "f1": 0.437361,
+  "f1ShipperOnly": 0.437361,
+  "libraryBytes": 4924477,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 1382233,
+  "namedBytes": 1382233,
+  "namedBytesShipperOnly": 1382233,
+  "precision": 0.989922,
+  "precisionShipperOnly": 0.989922,
+  "recall": 0.280686,
+  "recallShipperOnly": 0.280686,
+  "wrongFamilyBytes": 14072,
+  "wrongFamilyBytesShipperOnly": 14072
+ },
+ "truthMethod": "sourcemap"
+}

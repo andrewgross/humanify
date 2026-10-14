@@ -315,6 +315,13 @@ export function scoreArgs(args: string[]):
   if (seeded && archive) {
     return "--seeded-base and --archive-prior are exclusive: one base mode per run";
   }
+  const only = parsed.flags["--sets"];
+  if (
+    only !== undefined &&
+    (typeof only !== "string" || only.split(",").every((x) => x === ""))
+  ) {
+    return "--sets <set>[,<set>...]: at least one set name";
+  }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
   );
@@ -452,6 +459,9 @@ const LIBRARY_FLAGS: Record<string, FlagKind> = {
   "--jobs": "value",
   "--cpus": "value",
   "--corpus": "value",
+  // a comma-separated subset of the corpus's sets to run and score (e.g.
+  // `test-bun,test-esbuild` for an index with no webpack or rollup slice)
+  "--sets": "value",
   "--force-mixed": "bool",
   // `[library]` settings for the discover verb's --config file, in order
   // (e.g. `library.discovery.max_rounds=7`); run.py writes them beside the

@@ -1,0 +1,68 @@
+{
+ "bundleSha256": "980ad244eee39186e8b355a628a30b2ddee755bc54509df0eed09ac91ffc6494",
+ "claimedBytes": {
+  "right": 278181
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-electron_lepton-ce8097",
+ "exploratory": {
+  "names": {
+   "bindings": 2333,
+   "bindingsSameVersion": 2333,
+   "bindingsVersionKnown": 2333,
+   "exactBytes": 241245,
+   "exactUnits": 302,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "c9b593a460b802ff80ad6f6dcc0eed0a4f4f41f78cdf9ae853d576433256e97f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f1": 0.020086,
+  "namedBytes": 3171,
+  "precision": 1.0,
+  "recall": 0.010145
+ },
+ "label": "exp108-k5-agreement",
+ "missBytes": {
+  "a": 34316,
+  "c": 73
+ },
+ "noDiscovery": null,
+ "reportSha256": "74276169381e8838690fe64f8f00068e73b467f8ea0da2d567dc8bcff71f90ca",
+ "rule": "agreement",
+ "schema": "exp096-score/4",
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 1951,
+  "library": 312570
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "bun",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f1": 0.941788,
+  "f1ShipperOnly": 0.941788,
+  "libraryBytes": 312570,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 278181,
+  "namedBytes": 278181,
+  "namedBytesShipperOnly": 278181,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.88998,
+  "recallShipperOnly": 0.88998,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}
