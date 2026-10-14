@@ -252,17 +252,15 @@ fn the_exp106_hygiene_keys_default_off() {
     let off = build(&["in.js"], "").unwrap();
     let o = off.library.discovery_options();
     assert_eq!(o.banner_names, BannerNames::Any);
-    assert_eq!(o.lone_seed_max_nodes, 0);
     assert_eq!(o.helper_families, 0);
     assert!(!o.derived_families);
     let on = build(
         &["in.js"],
-        "[library.discovery]\nbanner_names = \"known\"\nlone_seed_max_nodes = 400\nhelper_families = 4\nderived_families = true\n",
+        "[library.discovery]\nbanner_names = \"known\"\nhelper_families = 4\nderived_families = true\n",
     )
     .unwrap();
     let o = on.library.discovery_options();
     assert_eq!(o.banner_names, BannerNames::Known);
-    assert_eq!(o.lone_seed_max_nodes, 400);
     assert_eq!(o.helper_families, 4);
     assert!(o.derived_families);
     let err = ConfigFile::check(

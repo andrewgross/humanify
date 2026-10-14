@@ -633,15 +633,6 @@ pub static KEYS: &[Key] = &[
     },
     lib_int(
         "library.discovery",
-        "lone_seed_max_nodes",
-        0,
-        U32,
-        || int(u64::from(discovery().lone_seed_max_nodes)),
-        "An index seed of fewer nodes that no other seed of its package family in the bundle \
-         corroborates is dropped: nothing propagates from one small print alone (exp106; 0 = off).",
-    ),
-    lib_int(
-        "library.discovery",
         "helper_families",
         0,
         U32,

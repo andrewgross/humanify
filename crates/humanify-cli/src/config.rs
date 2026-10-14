@@ -325,7 +325,6 @@ impl Library {
             literal_conflict: d.literal_conflict,
             contested_cover: d.contested_cover,
             banner_names: d.banner_names,
-            lone_seed_max_nodes: d.lone_seed_max_nodes,
             helper_families: d.helper_families,
             derived_families: d.derived_families,
         }
@@ -411,7 +410,6 @@ pub struct LibraryDiscovery {
     pub contested_cover: f64,
     #[serde(serialize_with = "serialize_banner_names")]
     pub banner_names: humanify_core::libdetect::discovery::BannerNames,
-    pub lone_seed_max_nodes: u32,
     pub helper_families: u32,
     pub derived_families: bool,
 }
@@ -584,7 +582,6 @@ fn library_of(r: &Resolved) -> Library {
                 Some("known") => humanify_core::libdetect::discovery::BannerNames::Known,
                 _ => humanify_core::libdetect::discovery::BannerNames::Any,
             },
-            lone_seed_max_nodes: n("library.discovery.lone_seed_max_nodes") as u32,
             helper_families: n("library.discovery.helper_families") as u32,
             derived_families: r.flag_on("library.discovery.derived_families"),
         },

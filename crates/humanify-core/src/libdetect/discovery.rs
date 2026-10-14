@@ -163,11 +163,6 @@ pub struct DiscoveryOptions {
     pub contested_cover: f64,
     /// Which banner names seed (exp106; default [`BannerNames::Any`]).
     pub banner_names: BannerNames,
-    /// The lone-seed floor (exp106; 0 = off): an index seed whose whole
-    /// print has fewer nodes, and that no other seed of its package family
-    /// in the bundle corroborates, is dropped (vetoed) before the fixpoint:
-    /// nothing propagates from one small print alone.
-    pub lone_seed_max_nodes: u32,
     /// The helper floor (exp106; 0 = off): an index print held by at least
     /// this many package families is emitted helper code (a tsc / Babel /
     /// bundler helper every package that needs it inlines), no package's
@@ -191,7 +186,6 @@ impl Default for DiscoveryOptions {
             literal_conflict: false,
             contested_cover: 0.0,
             banner_names: BannerNames::Any,
-            lone_seed_max_nodes: 0,
             helper_families: 0,
             derived_families: false,
         }
@@ -814,14 +808,6 @@ impl<'c> Containment<'c> {
         self.family_count(self.index.structural_owners(&q, &self.rules))
     }
 
-    /// The nodes of unit `u`'s whole print (0 for a unit with none).
-    fn whole_nodes(&self, u: u32) -> u32 {
-        match self.prints.get(u as usize) {
-            Some(Some(p)) => p.whole.nodes,
-            _ => 0,
-        }
-    }
-
     /// Does the index contradict unit `u` being `package`'s? (type doc)
     fn contradicts(&self, u: u32, package: &str) -> bool {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
@@ -1164,30 +1150,6 @@ fn isolated(
     out
 }
 
-/// The lone-seed floor ([`DiscoveryOptions::lone_seed_max_nodes`]): the
-/// index seeds smaller than `floor` nodes that no OTHER seed of their
-/// family (any evidence, anywhere in the bundle) corroborates. One small
-/// print is weak evidence on its own (a 480-byte function a fork copied
-/// from another project), and everything propagated from it would rest on
-/// it alone.
-fn lone_small_seeds(
-    seeds: &[Seed],
-    families: &PackageFamilies,
-    containment: &Containment<'_>,
-    floor: u32,
-) -> BTreeSet<u32> {
-    seeds
-        .iter()
-        .filter(|s| s.evidence.is_index() && containment.whole_nodes(s.unit) < floor)
-        .filter(|s| {
-            !seeds
-                .iter()
-                .any(|o| o.unit != s.unit && families.same(&o.package, &s.package))
-        })
-        .map(|s| s.unit)
-        .collect()
-}
-
 /// One seed per unit: a declaration or banner beats an index claim; among
 /// equals, the first. Seeds on external units are dropped.
 fn settle_seeds(graph: &ReferenceGraph, seeds: &[Seed]) -> Vec<Seed> {
@@ -1427,13 +1389,6 @@ pub fn discover_with(
         .collect();
     let mut active = settle_seeds(graph, seeds);
     let mut vetoed = Vec::new();
-    if let (Some(c), n @ 1..) = (containment, options.lone_seed_max_nodes) {
-        let lone = lone_small_seeds(&active, families, c, n);
-        let (gone, kept): (Vec<Seed>, Vec<Seed>) =
-            active.into_iter().partition(|s| lone.contains(&s.unit));
-        vetoed.extend(gone);
-        active = kept;
-    }
     let (st, rounds) = loop {
         let (st, rounds) = fixpoint(graph, &groups, &active, options.max_rounds, all, guard);
         let drop = match options.veto_support {
