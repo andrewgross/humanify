@@ -497,7 +497,7 @@ fn run_indexed(code: &str, held: &[(&str, &[&str])]) -> (ReferenceGraph, Discove
         .iter()
         .flat_map(|(head, owners)| owners.iter().map(move |o| Held::whole(head, o)))
         .collect();
-    run_indexed_with(code, &rows, DiscoveryOptions::default())
+    run_indexed_with(code, &rows, vec![], DiscoveryOptions::default())
 }
 
 /// One index row of a test index: statement `head`'s whole print, or its
@@ -540,6 +540,7 @@ impl<'h> Held<'h> {
 fn run_indexed_with(
     code: &str,
     held: &[Held<'_>],
+    literals: Vec<crate::libindex::format::LiteralRow>,
     options: DiscoveryOptions,
 ) -> (ReferenceGraph, Discovery, ClaimRows) {
     use crate::libdetect::discovery::{BundlePieces, IndexLookup, discover_in_bundle};
@@ -585,7 +586,7 @@ fn run_indexed_with(
             versions: vec![("1.0.0".into(), "1.0.0".into())],
         });
     }
-    let index = LibraryIndex::from_rows(rows, vec![]);
+    let index = LibraryIndex::from_rows(rows, literals);
     let rules = LookupRules {
         agreement: false,
         support: 0,
@@ -690,14 +691,14 @@ fn evidence_conflict_refuses_a_propagated_unit_another_family_covers_more_of() {
         Held::function("var dep", "P").unspecific(),
         Held::whole("var dep", "Q").unspecific(),
     ];
-    let (_, _, rows) = run_indexed_with(CONFLICT, &held, DiscoveryOptions::default());
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], DiscoveryOptions::default());
     assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
     assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
     let on = DiscoveryOptions {
         evidence_conflict: true,
         ..DiscoveryOptions::default()
     };
-    let (_, _, rows) = run_indexed_with(CONFLICT, &held, on);
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], on);
     assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
     assert_eq!(claim_of(&rows, "var dep"), None);
     assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
@@ -707,6 +708,45 @@ fn evidence_conflict_refuses_a_propagated_unit_another_family_covers_more_of() {
         Held::function("var dep", "P").unspecific(),
         Held::function("var dep", "Q").unspecific(),
     ];
-    let (_, _, rows) = run_indexed_with(CONFLICT, &tie, on);
+    let (_, _, rows) = run_indexed_with(CONFLICT, &tie, vec![], on);
     assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
+
+/// tbl is a table under the index's row floor: one long string, which no
+/// unit print can speak for — only the literal table can.
+const TABLE: &str = "var lib = function (t) { return t.split(\",\").map(tbl).map(tiny).filter(Boolean).join(\"|\").concat(t.length, t.length); };\nvar tiny = (x) => x + 1;\nvar tbl = (i) => \"!}.&u%}'&}*'~!6*)%&,~!J~!J~%L~y<~!R,~~%Lu~~#GD~~#|)1#%}^%}2%+#.##%##%}&%##%'#%##&%#%#'%#&#%#&#'#%%#&#%##%#)%''%&%#%#'%#%%#%%}%%%#%#&(23#%%#\".charCodeAt(i);\nvar app = () => lib(\"a\");\n";
+
+fn literal_row(owner: &str, statement: &str) -> crate::libindex::format::LiteralRow {
+    use crate::libindex::literals::{LiteralMode, code_literals};
+    crate::libindex::format::LiteralRow {
+        owner: owner.into(),
+        file: "index.js".into(),
+        lits: code_literals(statement, LiteralMode::Bundled)
+            .expect("parses")
+            .into_iter()
+            .collect(),
+        versions: vec![("1.0.0".into(), "1.0.0".into())],
+    }
+}
+
+#[test]
+fn literal_conflict_refuses_a_propagated_unit_whose_long_literal_is_another_family_s() {
+    let tbl = TABLE.lines().find(|l| l.starts_with("var tbl")).unwrap();
+    let held = [Held::whole("var lib", "P")];
+    let on = DiscoveryOptions {
+        literal_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    // Q's files hold tbl's long string; P's do not.
+    let q_only = || vec![literal_row("Q", tbl)];
+    let (_, _, rows) = run_indexed_with(TABLE, &held, q_only(), DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var tbl"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(TABLE, &held, q_only(), on);
+    assert_eq!(claim_of(&rows, "var tbl"), None);
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("P".into(), Rule::Down)));
+    // P's files hold it too, or nobody's do: no conflict.
+    for lits in [vec![literal_row("Q", tbl), literal_row("P", tbl)], vec![]] {
+        let (_, _, rows) = run_indexed_with(TABLE, &held, lits, on);
+        assert_eq!(claim_of(&rows, "var tbl"), Some(("P".into(), Rule::Down)));
+    }
 }

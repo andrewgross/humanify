@@ -126,6 +126,8 @@ max_rounds = 50
 veto_support = "without-module"
 # Refuse a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
 evidence_conflict = false
+# Refuse a propagated claim when the unit carries a long literal the index ties only to other package families (exp102).
+literal_conflict = false
 
 [unpack]
 # Force the bundler verdict.

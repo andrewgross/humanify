@@ -140,6 +140,10 @@ pub struct DiscoveryOptions {
     /// unit another family's index prints cover more of than the claimed
     /// family's is refused ([`Containment::outweighed`]).
     pub evidence_conflict: bool,
+    /// The literal-conflict guard (exp102; default off): a propagated
+    /// unit carrying a long literal the index's literal table ties only to
+    /// other families is refused ([`Containment::literal_contradicts`]).
+    pub literal_conflict: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -150,6 +154,7 @@ impl Default for DiscoveryOptions {
             max_rounds: 50,
             veto_support: VetoSupport::WithoutModule,
             evidence_conflict: false,
+            literal_conflict: false,
         }
     }
 }
@@ -677,6 +682,12 @@ impl LibraryProfile {
 /// lacks (tree-shaken).
 pub struct Containment<'c> {
     index: &'c crate::libindex::lookup::LibraryIndex,
+    /// The bundle and each graph unit's span (the literal guard reads a
+    /// unit's text).
+    code: &'c str,
+    spans: Vec<oxc_span::Span>,
+    /// Per unit, the families holding each of its long literals (read once).
+    long_literals: std::cell::RefCell<HashMap<u32, Vec<BTreeSet<String>>>>,
     prints: &'c [Option<crate::libindex::units::StatementPrints>],
     module_bytes: &'c [u64],
     rules: crate::libindex::lookup::LookupRules,
@@ -687,6 +698,8 @@ pub struct Containment<'c> {
 impl<'c> Containment<'c> {
     pub fn new(
         index: &'c crate::libindex::lookup::LibraryIndex,
+        code: &'c str,
+        graph: &ReferenceGraph,
         prints: &'c [Option<crate::libindex::units::StatementPrints>],
         module_bytes: &'c [u64],
         rules: crate::libindex::lookup::LookupRules,
@@ -694,6 +707,9 @@ impl<'c> Containment<'c> {
     ) -> Containment<'c> {
         Containment {
             index,
+            code,
+            spans: graph.units.iter().map(|u| u.span).collect(),
+            long_literals: std::cell::RefCell::default(),
             prints,
             module_bytes,
             rules,
@@ -752,6 +768,34 @@ impl<'c> Containment<'c> {
         !held_by_family
     }
 
+    /// Does the literal table contradict unit `u` being `family`'s? Its
+    /// long literals (identity evidence: a generated table, a long
+    /// message — see `LibraryIndex::long_literal_owners`) that the table
+    /// ties to at most [`LITERAL_IDENTITY_FAMILIES`] families are read; when
+    /// there are some and none is held by `family`, the unit carries
+    /// another package's identity. The unit print cannot say this for a
+    /// table: one huge string is a handful of nodes, under the row floor.
+    fn literal_contradicts(&self, u: u32, family: &str) -> bool {
+        let mut cache = self.long_literals.borrow_mut();
+        let held = cache.entry(u).or_insert_with(|| {
+            let span = self.spans[u as usize];
+            let text = &self.code[span.start as usize..span.end as usize];
+            self.index
+                .long_literal_owners(text)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|owners| {
+                    owners
+                        .into_iter()
+                        .map(|o| self.family_of(o).to_string())
+                        .collect::<BTreeSet<String>>()
+                })
+                .filter(|f| f.len() <= LITERAL_IDENTITY_FAMILIES)
+                .collect()
+        });
+        !held.is_empty() && !held.iter().any(|f| f.contains(family))
+    }
+
     /// Does another family's evidence outweigh `family`'s on unit `u`?
     /// Per family, the nodes of `u` its index prints cover — the whole
     /// print when the family holds it, else its largest non-overlapping
@@ -782,6 +826,10 @@ impl<'c> Containment<'c> {
         cover.iter().any(|(f, &n)| *f != family && n > own)
     }
 }
+
+/// A long literal held by more families than this is no package's
+/// identity (a licence line, a shared message).
+const LITERAL_IDENTITY_FAMILIES: usize = 3;
 
 /// Per family, the nodes of a unit its held prints cover: the whole
 /// print's nodes when the family holds it, else the sum over its largest
@@ -835,6 +883,7 @@ struct Guard<'c, 'x> {
     containment: &'c Containment<'x>,
     families: &'c PackageFamilies,
     evidence_conflict: bool,
+    literal_conflict: bool,
 }
 
 /// One fixpoint round: every rule's proposals in rule order (first wins
@@ -862,6 +911,7 @@ fn round(
                     .or_insert_with(|| g.families.family(&st.packages[p as usize]));
                 if g.containment.contradicts(u, f)
                     || (g.evidence_conflict && g.containment.outweighed(u, f))
+                    || (g.literal_conflict && g.containment.literal_contradicts(u, f))
                 {
                     continue;
                 }
@@ -1196,6 +1246,7 @@ pub fn discover_with(
         containment: c,
         families,
         evidence_conflict: options.evidence_conflict,
+        literal_conflict: options.literal_conflict,
     });
     let all = &profile.propagation[..];
     let without_module: Vec<LibraryRule> = all
@@ -1441,6 +1492,8 @@ fn discover_unscoped(
     };
     let containment = Containment::new(
         lookup.index,
+        code,
+        &graph,
         &prints,
         &looker.module_bytes,
         lookup.rules,

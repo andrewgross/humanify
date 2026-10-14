@@ -590,6 +590,16 @@ pub static KEYS: &[Key] = &[
         doc: "Refuse a propagated claim when another package family's index prints cover \
               more of the unit than the claimed family's (exp102).",
     },
+    Key {
+        section: "library.discovery",
+        name: "literal_conflict",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().literal_conflict)),
+        unset: "",
+        doc: "Refuse a propagated claim when the unit carries a long literal the index ties \
+              only to other package families (exp102).",
+    },
     // [unpack]
     Key {
         section: "unpack",

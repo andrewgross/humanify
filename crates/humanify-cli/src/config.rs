@@ -322,6 +322,7 @@ impl Library {
             max_rounds: d.max_rounds,
             veto_support: d.veto_support,
             evidence_conflict: d.evidence_conflict,
+            literal_conflict: d.literal_conflict,
         }
     }
 
@@ -401,6 +402,7 @@ pub struct LibraryDiscovery {
     #[serde(serialize_with = "serialize_veto")]
     pub veto_support: humanify_core::libdetect::discovery::VetoSupport,
     pub evidence_conflict: bool,
+    pub literal_conflict: bool,
 }
 
 fn serialize_veto<S: serde::Serializer>(
@@ -558,6 +560,7 @@ fn library_of(r: &Resolved) -> Library {
             max_rounds: n("library.discovery.max_rounds") as u32,
             veto_support: veto,
             evidence_conflict: r.flag_on("library.discovery.evidence_conflict"),
+            literal_conflict: r.flag_on("library.discovery.literal_conflict"),
         },
     }
 }

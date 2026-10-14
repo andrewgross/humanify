@@ -231,10 +231,12 @@ fn the_lab_knobs_are_keys_with_todays_values() {
 fn the_exp102_precision_guards_are_keys_default_off() {
     let off = build(&["in.js"], "").unwrap();
     assert!(!off.library.discovery_options().evidence_conflict);
+    assert!(!off.library.discovery_options().literal_conflict);
     let on = build(
         &["in.js"],
-        "[library.discovery]\nevidence_conflict = true\n",
+        "[library.discovery]\nevidence_conflict = true\nliteral_conflict = true\n",
     )
     .unwrap();
     assert!(on.library.discovery_options().evidence_conflict);
+    assert!(on.library.discovery_options().literal_conflict);
 }
