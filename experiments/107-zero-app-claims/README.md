@@ -11,7 +11,8 @@
   chained/families shas of labels that had none. Scorer 6 with its rules off reproduces scorer 5's cards
   (`verify_s5.py`: step4f-structural 70/70, exp101-c2-l12m4-agreement 70/70, exp105-dev-{structural,agreement} 27/27).
   The bare gate passed all 13 stages. Warm neutrality, 2.1.215->2.1.216, cache +0 on both legs: NEUTRAL 0 files /
-  0 lines vs main `116090f2` at `1421ebb7` (the crates change is the container rule; dev cards 70/70 identical).
+  0 lines vs main `116090f2` at `1421ebb7`, and again vs main `6182666d` at `f92a2aba` after both merges (the
+  crates change is the container rule; dev cards 70/70 identical).
 - **Totals first.** App code claimed on the frozen TEST split is **0 on every bundler, under both rules and on all
   three indexes** (step4-wr-v3, c2-l12m4, call2k-l12m4). Scorer 5 alone left test-webpack 3,962 B / 611 B and
   test-rollup 16 B; the 1.31 MB test-esbuild on the exp101 indexes was scorer 5's `chained` artifact (claims right).
