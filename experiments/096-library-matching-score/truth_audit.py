@@ -53,6 +53,16 @@ def load_copies(entry, cm):
         return json.load(fh)["ranges"]
 
 
+def carried_verdict(unit_tokens, source_tokens, unverified):
+    """A unit with no mapping of its own: is it <unmapped>? Scorer 4: when at least MIN_TOKENS of its tokens can be
+    checked and most are absent from the source the previous mapping names. Scorer 6 (`unverified`): ALSO when too
+    few can be checked — adjacency to a mapping is no evidence, and nothing in the unit confirms it (rollup's
+    guarded-require glue `if(ju)return Hu;ju=1;` carries the mapping of the require call before it)."""
+    if len(unit_tokens) < MIN_TOKENS:
+        return unverified
+    return len(unit_tokens & source_tokens) < CARRIED_SHARE * len(unit_tokens)
+
+
 class Audit:
     def __init__(self, entry, truth, cm):
         self.offs = [s[0] for s in truth["segments"]]
@@ -78,9 +88,7 @@ class Audit:
         if si not in self.tok:
             return False
         t = set(TOKEN.findall(self.text[s:e].decode("utf8", "replace"))) & self.all
-        if len(t) < MIN_TOKENS:
-            return False
-        return len(t & self.tok[si]) < CARRIED_SHARE * len(t)
+        return carried_verdict(t, self.tok[si], RULES6["unverified"])
 
     def copy_origin(self, s, e, shipper):
         """(origin, declaring dependency) when most of [s, e) lies in one origin's copy ranges of this shipper."""
@@ -100,9 +108,10 @@ class Audit:
 
 # ---------------------------------------------------------------- scorer 6 (exp107): the decoder
 
-# Each rule can be switched off: both off reproduces scorer 4's segments (and so its cards) exactly
-# (experiments/107-zero-app-claims/verify_decoder.py).
-RULES6 = {"utf16": True, "unmapped": True}
+# Each rule can be switched off: utf16 and unmapped off reproduces scorer 4's segments exactly
+# (experiments/107-zero-app-claims/verify_decoder.py), all three off scorer 4's cards. `unverified` is
+# carried_verdict's.
+RULES6 = {"utf16": True, "unmapped": True, "unverified": True}
 
 
 def redecode(entry, truth, origins):

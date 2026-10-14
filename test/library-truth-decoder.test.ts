@@ -64,3 +64,50 @@ describe("library truth decoder", () => {
     ]);
   });
 });
+
+function carried(
+  unitTokens: string[],
+  sourceTokens: string[],
+  unverified: boolean
+): boolean {
+  const py = [
+    "import json, sys",
+    "sys.path.insert(0, sys.argv[1])",
+    "import truth_audit",
+    "a = json.loads(sys.argv[2])",
+    "print(json.dumps(truth_audit.carried_verdict(set(a[0]), set(a[1]), a[2])))"
+  ].join("\n");
+  return JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        "-I",
+        "-c",
+        py,
+        DIR,
+        JSON.stringify([unitTokens, sourceTokens, unverified])
+      ],
+      { encoding: "utf8" }
+    )
+  );
+}
+
+describe("library truth: a unit with no mapping of its own (carried)", () => {
+  it("is unmapped when its tokens are mostly absent from the source it was carried from (scorer 4)", () => {
+    assert.strictEqual(
+      carried(["alpha", "beta", "gamma"], ["delta"], false),
+      true
+    );
+    assert.strictEqual(
+      carried(["alpha", "beta", "gamma"], ["alpha", "beta"], false),
+      false
+    );
+  });
+
+  it("with too few tokens to check, keeps the carried label in scorer 4 and is unmapped in scorer 6", () => {
+    // rollup's guard glue `if(ju)return Hu;ju=1;` carries the require site's mapping and has nothing to check
+    assert.strictEqual(carried(["exports"], [], false), false);
+    assert.strictEqual(carried(["exports"], [], true), true);
+    assert.strictEqual(carried([], [], true), true);
+  });
+});

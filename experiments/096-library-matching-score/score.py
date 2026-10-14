@@ -35,7 +35,8 @@ origins.py). A claim is RIGHT when it names the shipper or the origin (or a memb
 Scorer 4 (exp104 truth audit): families also joined by npm metadata (families_lib), units the map never mapped
 <unmapped> (truth_audit `carried`), dependency-gated named vendored copies as origins (truth_audit `copies`).
 Scorer 6 (exp107): the source map decoded as the spec writes it (decoder.py: UTF-16 generated columns, one-field
-segments = unmapped), at score time from the frozen bundle and map (truth_audit.redecode).
+segments = unmapped), at score time from the frozen bundle and map (truth_audit.redecode); a carried unit with
+nothing to check is <unmapped> (truth_audit carried_verdict).
 Claude Code is scored on the labelled sample: byte shares are the stratified ratio estimate (strata sizes from the
 negatives lane), counts are sample units.
 """
@@ -70,8 +71,10 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    dependency-gated, named vendored copy gets an origin (truth_audit: copies). Same reports, re-scored.
 # 6: the exp107 decoder (decoder.py, truth_audit.redecode): generated columns read as UTF-16 code units (scorer 4
 #    read code points: an emoji on a minified line moved every later mapping on it), and one-field segments kept as
-#    unmapped (the bundler's own glue is no longer credited to the mapping before it). Same reports, re-scored; both
-#    rules off reproduces scorer 4's segments exactly (experiments/107-zero-app-claims/verify_decoder.py). (5 is
+#    unmapped (the bundler's own glue is no longer credited to the mapping before it); a unit with no mapping of its
+#    own and too few tokens to check against the source it was carried from is <unmapped> (truth_audit
+#    carried_verdict, `unverified`). Same reports, re-scored; the decoder rules off reproduce scorer 4's segments
+#    exactly (experiments/107-zero-app-claims/verify_decoder.py), all three off scorer 4's cards (verify_s4.py). (5 is
 #    exp106's source-table corrections, on its own branch when this was written.)
 SCORER_VERSION = "exp096-score/6"
 
