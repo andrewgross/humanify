@@ -1,10 +1,10 @@
 {
  "bundleSha256": "268cdf52448e27060defb9d7766d730c501e29daadb909b58e881affaa437f25",
  "claimedBytes": {
-  "family": 34,
-  "right": 120034,
-  "selfOther": 556,
-  "wrongFamily": 474
+  "right": 120024,
+  "selfOther": 452,
+  "unmapped": 182,
+  "wrongFamily": 440
  },
  "detected": {
   "bundler": "bun",
@@ -25,28 +25,28 @@
  "indexId": "e3c0ee92ed0cb0e2b8ded052e9dba29dbb727ad431a3aa1723e5bea3e67c7707",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.97235,
+  "f05": 0.989223,
+  "f1": 0.973487,
   "namedBytes": 115239,
   "precision": 1.0,
-  "recall": 0.946187
+  "recall": 0.948344
  },
  "label": "exp097-s2m-structural",
  "missBytes": {
-  "a": 10,
-  "c": 1134,
+  "c": 911,
   "e-support": 141,
   "f": 440
  },
  "noDiscovery": null,
  "reportSha256": "c0164e78d1d9ad2a26c7a035fbecf0f1f7543546989866be11c64f10dbcc7347",
  "rule": "structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 23,
-  "<self>": 79667,
-  "<unmapped>": 857,
-  "library": 121793
+  "<app>": 18,
+  "<self>": 78531,
+  "<unmapped>": 2275,
+  "library": 121516
  },
  "toolchain": {
   "adapter": "bun",
@@ -57,19 +57,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f1": 0.990926,
-  "f1ShipperOnly": 0.990926,
-  "libraryBytes": 121793,
+  "f05": 0.99461,
+  "f05ShipperOnly": 0.99461,
+  "f1": 0.992016,
+  "f1ShipperOnly": 0.992016,
+  "libraryBytes": 121516,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 120068,
-  "namedBytes": 120068,
-  "namedBytesShipperOnly": 120068,
-  "precision": 0.996068,
-  "precisionShipperOnly": 0.996068,
-  "recall": 0.985837,
-  "recallShipperOnly": 0.985837,
-  "wrongFamilyBytes": 474,
-  "wrongFamilyBytesShipperOnly": 474
+  "namedAsShipperBytes": 120024,
+  "namedBytes": 120024,
+  "namedBytesShipperOnly": 120024,
+  "precision": 0.996347,
+  "precisionShipperOnly": 0.996347,
+  "recall": 0.987722,
+  "recallShipperOnly": 0.987722,
+  "wrongFamilyBytes": 440,
+  "wrongFamilyBytesShipperOnly": 440
  },
  "truthMethod": "sourcemap"
 }

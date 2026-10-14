@@ -757,7 +757,7 @@ const VERBS: Verb[] = [
       "bundler that built it. Compare labels with `library-leaderboard`.",
     proves:
       "how much library code the index names on THESE bundles (recall: the shipping package OR, for a vendored / " +
-      "pre-bundled copy, its origin package), that no app code was claimed (the hard bar), precision / recall / F1 over " +
+      "pre-bundled copy, its origin package), that no app code was claimed (the hard bar), precision / recall / F0.5 (the headline: beta 0.5, precision over recall) / F1 over " +
       "bytes with precision read against the 99.8% bar (under both truths: shipper-only and origin-aware), and why each missed library statement " +
       "was missed; deterministic (measured band 0), so any delta between labels is real",
     cannotProve:
@@ -781,7 +781,7 @@ const VERBS: Verb[] = [
     name: "library-leaderboard",
     usage: "library-leaderboard <label> <label> [label...] [--force-mixed]",
     description:
-      "Compare exp096 library-matching labels side by side (precision, recall, F1, app claimed, " +
+      "Compare exp096 library-matching labels side by side (precision, recall, F0.5 headline, F1, app claimed, " +
       "wrong-family bytes, both truths, miss causes). REFUSES labels scored on different corpus manifests or scorer versions unless --force-mixed.",
     proves:
       "relative library-matching movement between labels on the fixed corpus (band 0: every delta is real)",

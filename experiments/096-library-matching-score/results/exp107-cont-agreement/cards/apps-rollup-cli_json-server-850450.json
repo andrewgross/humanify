@@ -25,6 +25,7 @@
  "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
  "indexSeeds": {
   "appClaimedBytes": 0,
+  "f05": 0.048548,
   "f1": 0.020002,
   "namedBytes": 1322,
   "precision": 1.0,
@@ -47,9 +48,8 @@
  "schema": "exp096-score/6",
  "set": "apps-rollup",
  "statementBytes": {
-  "<app>": 29,
   "<self>": 10635,
-  "<unmapped>": 1277,
+  "<unmapped>": 1306,
   "copy": 4378,
   "library": 130861
  },
@@ -62,6 +62,8 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 4378,
+  "f05": 0.323615,
+  "f05ShipperOnly": 0.323615,
   "f1": 0.216716,
   "f1ShipperOnly": 0.216716,
   "libraryBytes": 130861,

@@ -124,6 +124,7 @@ min_literals = 6
 literal_bits = 20.0
 literal_cover = 0.9
 literal_margin = 10.0
+literal_margin_by_family = false   # exp106
 
 [library.lookup.targeted]
 min_nodes = 20
@@ -137,6 +138,11 @@ veto_support = "without-module"
 evidence_conflict = false      # exp102 precision guards on propagated claims,
 literal_conflict = false       # all off by default (experiments/102-precision)
 contested_cover = 0.0
+banner_names = "any"           # exp106 matcher hygiene (experiments/106-matcher-hygiene),
+helper_families = 0            # all off by default
+payload_min_bytes = 0
+specific_rivals = false
+derived_families = false
 ```
 
 **Missing or stale index — fail loud, before any work.** With

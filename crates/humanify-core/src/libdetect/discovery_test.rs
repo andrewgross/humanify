@@ -864,3 +864,134 @@ fn a_statement_holding_several_modules_is_no_module_s_member() {
         "the module table is no module's code"
     );
 }
+// ---- exp106 matcher hygiene ----------------------------------------------
+
+/// Two banners: one names `noble-curves` (npm has `@noble/curves`), one a
+/// name no index knows. `held` rows only make names known (unspecific:
+/// they seed nothing).
+const BANNERS: &str = "/*! noble-curves v1.2.0 */\nvar lib = function (t) { return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length); };\n/*! no-such-package v1.0.0 */\nvar other = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").slice(0, e.length); };\nvar known = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16)].join(\",\"); };\nvar app = () => lib(\"a\") + other(\"b\") + known(1);\n";
+
+#[test]
+fn banner_names_known_keeps_only_names_the_index_knows_resolved_to_npm_spelling() {
+    use crate::libdetect::discovery::BannerNames;
+    let held = [Held::whole("var known", "@noble/curves").unspecific()];
+    let (_, _, rows) = run_indexed_with(BANNERS, &held, vec![], DiscoveryOptions::default());
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("noble-curves".into(), Rule::Seed))
+    );
+    assert_eq!(
+        claim_of(&rows, "var other"),
+        Some(("no-such-package".into(), Rule::Seed))
+    );
+    let on = DiscoveryOptions {
+        banner_names: BannerNames::Known,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(BANNERS, &held, vec![], on);
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("@noble/curves".into(), Rule::Seed)),
+        "scope-name spelling resolves to the one known scoped package"
+    );
+    assert_eq!(
+        claim_of(&rows, "var other"),
+        None,
+        "an unknown name is no seed"
+    );
+}
+
+#[test]
+fn helper_prints_held_by_many_families_seed_and_carry_nothing() {
+    // lib's whole statement is P's alone, but its function (nearly all of
+    // it) is held by four families: emitted helper code (a tsc / Babel
+    // helper every package that needs it inlines). Under the helper floor
+    // it is no seed. dep's function likewise, so DOWN from a real P seed
+    // (root) does not take it.
+    let code = "var root = function (r) { return [r.a, r.b, r.c, r.d].map(lib).map(dep).map(more).filter(Boolean).join(\";\").concat(r.length); };\nvar more = function (m) { return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); };\nvar lib = function (t) { return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar app = () => root(\"a\");\n";
+    let mut held = vec![
+        Held::whole("var root", "P"),
+        Held::whole("var more", "P"),
+        Held::whole("var lib", "P"),
+    ];
+    for q in ["Q1", "Q2", "Q3", "P"] {
+        held.push(Held::function("var lib", q).unspecific());
+        held.push(Held::function("var dep", q).unspecific());
+    }
+    let with = |n: u32| DiscoveryOptions {
+        helper_families: n,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(0));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(4));
+    assert_eq!(claim_of(&rows, "var root"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    // Held by fewer families than the floor: not a helper.
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(5));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
+
+#[test]
+fn a_data_payload_is_not_claimed_by_propagation_without_its_own_evidence() {
+    // lib (P) calls blob, a big base64 string the index holds no print or
+    // literal of for P: DOWN would take it as P's on the call alone. Under
+    // the payload floor a propagated unit that is mostly string bytes needs
+    // P's own evidence (a print, or its long literal in P's files).
+    let blob: String = "QUJD".repeat(400);
+    let code: &'static str = Box::leak(
+        format!("var lib = function (t) {{ return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length, blob.length, more(t)); }};\nvar more = function (m) {{ return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); }};\nvar blob = \"{blob}\";\nvar app = () => lib(\"a\");\n")
+            .into_boxed_str(),
+    );
+    let held = [Held::whole("var lib", "P"), Held::whole("var more", "P")];
+    let with = |n: u32| DiscoveryOptions {
+        payload_min_bytes: n,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(0));
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(1024));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var blob"), None);
+    // P's files hold the long string: its own evidence, DOWN takes it.
+    let line = code.lines().find(|l| l.starts_with("var blob")).unwrap();
+    let (_, _, rows) = run_indexed_with(code, &held, vec![literal_row("P", line)], with(1024));
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+    // Under the byte floor: not a payload.
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(100_000));
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+}
+
+#[test]
+fn specific_rivals_only_a_sponge_s_unspecific_print_is_no_conflict() {
+    // CONFLICT: Q holds dep's whole print, but only in a module far bigger
+    // than any query's (a sponge bundling P's code). With rivals read
+    // under the lookup's specificity rule, that is no evidence against P.
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let on = DiscoveryOptions {
+        evidence_conflict: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    let specific = DiscoveryOptions {
+        specific_rivals: true,
+        ..on
+    };
+    let (_, _, rows) = run_indexed_with(CONFLICT, &held, vec![], specific);
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    // A specific rival still conflicts.
+    let rival = [
+        Held::whole("var lib", "P"),
+        Held::function("var dep", "P").unspecific(),
+        Held::whole("var dep", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(CONFLICT, &rival, vec![], specific);
+    assert_ne!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}

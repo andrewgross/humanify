@@ -1,9 +1,9 @@
 {
  "bundleSha256": "908ef562cebabdb34ecface37d33c12fa9277b7ed9fa0a8d1f41437a017f8e1c",
  "claimedBytes": {
-  "right": 67688,
-  "unmapped": 329,
-  "wrongFamily": 670
+  "right": 67566,
+  "unmapped": 600,
+  "wrongFamily": 521
  },
  "detected": {
   "bundler": "rollup",
@@ -24,15 +24,16 @@
  "indexId": "2cbffa3b3f7e1f58d02b2874c6a0a2d079a8b7f9849a09a127313b88eba6cfec",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.576918,
+  "f05": 0.774605,
+  "f1": 0.578887,
   "namedBytes": 51033,
   "precision": 1.0,
-  "recall": 0.4054
+  "recall": 0.407348
  },
  "label": "exp105-dev-agreement",
  "missBytes": {
   "a": 4320,
-  "c": 1273,
+  "c": 793,
   "d-absent": 29227,
   "d-file": 1351,
   "e-agree": 21419,
@@ -42,13 +43,13 @@
  "noDiscovery": null,
  "reportSha256": "7ebabc3655efdb2ee947de824ae9f07f08e182e98395142b6dd2997d74766b05",
  "rule": "agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "dev-rollup",
  "statementBytes": {
   "<app>": 1082,
-  "<unmapped>": 2054,
+  "<unmapped>": 2656,
   "copy": 521,
-  "library": 125883
+  "library": 125281
  },
  "toolchain": {
   "adapter": "passthrough",
@@ -59,19 +60,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 521,
-  "f1": 0.696949,
-  "f1ShipperOnly": 0.696949,
-  "libraryBytes": 125883,
+  "f05": 0.849611,
+  "f05ShipperOnly": 0.849611,
+  "f1": 0.698834,
+  "f1ShipperOnly": 0.698834,
+  "libraryBytes": 125281,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 67688,
-  "namedBytes": 67688,
-  "namedBytesShipperOnly": 67688,
-  "precision": 0.990199,
-  "precisionShipperOnly": 0.990199,
-  "recall": 0.537706,
-  "recallShipperOnly": 0.537706,
-  "wrongFamilyBytes": 670,
-  "wrongFamilyBytesShipperOnly": 670
+  "namedAsShipperBytes": 67566,
+  "namedBytes": 67566,
+  "namedBytesShipperOnly": 67566,
+  "precision": 0.992348,
+  "precisionShipperOnly": 0.992348,
+  "recall": 0.539316,
+  "recallShipperOnly": 0.539316,
+  "wrongFamilyBytes": 521,
+  "wrongFamilyBytesShipperOnly": 521
  },
  "truthMethod": "sourcemap"
 }

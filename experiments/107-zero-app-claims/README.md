@@ -2,51 +2,51 @@
 
 ## STATUS (2026-10-14)
 
-- **State:** DONE on branch `exp107-zero-app-claims`, NOT merged. The gate passed all 13 stages (bare) at every commit.
-  Warm neutrality vs main `116090f2` on 2.1.215->2.1.216: NEUTRAL, 0 files / 0 lines, cache candidate +0 / baseline
-  +0, at `1421ebb7`. The crates change is the container rule below; dev cards are byte-identical (70/70, structural).
-- **Totals first.** App code claimed on the frozen TEST split falls to **0 on every bundler, under both rules and
-  on all three indexes** (step4-wr, exp101 c2-l12m4, call2k-l12m4). It takes scorer 6 (this lane) plus exp106's
-  scorer-5 source-table rules (`virtual`, `chained`); the merged scorer was measured on a scratch merge of exp106 @
-  `7f47aacb` (not committed: whoever lands second merges and re-scores). App claimed, bytes:
+- **State:** DONE on branch `exp107-zero-app-claims`, NOT merged; main `5fe24646` (exp106, scorer 5) is merged in.
+  **Scorer 6 = scorer 5 + this lane's three decoder/carry rules** (`patch_sources` first, then `redecode`). Every
+  committed label was re-scored once (58: 41 dev, 2 bundlers, 4 apps, 11 test summaries); `rescore_diff.py` shows
+  only truth-derived fields moved (statement bytes by label, totals, misses, claimed-bytes verdicts, seeds,
+  exploratory names). No report sha, index, rule, toolchain or detection field moved, and in the config only the
+  chained/families shas of labels that had none. Scorer 6 with its rules off reproduces scorer 5's cards
+  (`verify_s5.py`: step4f-structural 70/70, exp101-c2-l12m4-agreement 70/70, exp105-dev-{structural,agreement} 27/27).
+  The bare gate passed all 13 stages. Warm neutrality, 2.1.215->2.1.216, cache +0 on both legs: NEUTRAL 0 files /
+  0 lines vs main `116090f2` at `1421ebb7` (the crates change is the container rule; dev cards 70/70 identical).
+- **Totals first.** App code claimed on the frozen TEST split is **0 on every bundler, under both rules and on all
+  three indexes** (step4-wr-v3, c2-l12m4, call2k-l12m4). Scorer 5 alone left test-webpack 3,962 B / 611 B and
+  test-rollup 16 B; the 1.31 MB test-esbuild on the exp101 indexes was scorer 5's `chained` artifact (claims right).
 
-  | test label (index)              | scorer 4                       | scorer 6 alone    | scorer 5 + 6 |
-  | ------------------------------- | ------------------------------ | ----------------- | ------------ |
-  | main, structural (step4-wr)     | wp 3,962 / ru 248 / esb 13,806 | esb 13,727        | **0**        |
-  | main, agreement (step4-wr)      | wp 611 / ru 242                | ru 76             | **0**        |
-  | exp101 c2-l12m4, structural     | esb 1,311,851 / ru 148         | (esb is exp106's) | **0**        |
-  | exp101 call2k-l12m4, structural | esb 1,320,308 / ru 72          |                   | **0**        |
-  | exp101 call2k-l12m4, agreement  | esb 765,142 / ru 98            |                   | **0**        |
+  TEST, P / R / F0.5 / F1, index step4-wr-v3, main under scorer 5 (`test-exp105-*`) -> this branch's binary under
+  scorer 6 (`test-exp107-cont-*`):
 
-  (wp = test-webpack, ru = test-rollup, esb = test-esbuild.) Scorer 6 alone takes webpack to 0 and rollup to 0
-  structural / 76 B agreement (the rest is `?commonjs-*`, exp106's `virtual`); every esbuild byte is exp106's
-  `chained`. Aggregates only; no per-app test card or report was read.
+  | set          | structural                                             | agreement                                            |
+  | ------------ | ------------------------------------------------------ | ---------------------------------------------------- |
+  | test-bun     | 52.8/14.1/34.1/22.3 -> 52.8/14.1/34.1/22.3             | 58.7/12.9/34.4/21.2 -> 58.7/13.0/34.4/21.2           |
+  | test-esbuild | 51.4/14.3/33.8/22.3 -> 51.4/14.3/33.8/22.4             | 58.9/11.7/32.7/19.6 -> 58.9/11.8/32.7/19.6           |
+  | test-rollup  | 75.8/28.7/57.0/41.6 (app 16) -> 75.9/29.1/57.4/42.1    | 87.1/15.7/45.6/26.6 -> 87.3/16.0/46.1/27.0           |
+  | test-webpack | 85.4/34.0/65.6/48.7 (app 3,962) -> 85.8/34.4/66.1/49.1 | 95.5/23.0/58.6/37.1 (app 611) -> 95.8/23.3/59.0/37.4 |
 
-  TEST P / R / F0.5 / F1 under scorer 5 + 6, this branch's binary (container rule), index step4-wr, vs main under
-  scorer 4 (`test-exp105-*`):
+  App claimed after: 0 everywhere. The container rule alone is +0.01 P on test-webpack; the rest is truth. On the
+  bigger indexes scorer 5 -> 6 moves test by at most 0.1 (c2 structural test-esbuild 77.5/46.5/68.4/58.1 ->
+  77.4/46.5/68.3/58.1; call2k structural 80.5/54.1/73.3/64.7, agreement 90.6/37.6/70.7/53.2, both unchanged).
 
-  | set          | structural (scorer 4 -> 5+6)                                  | agreement (scorer 4 -> 5+6)                               |
-  | ------------ | ------------------------------------------------------------- | --------------------------------------------------------- |
-  | test-bun     | 52.8/14.1/34.1/22.3 -> 52.8/14.1/34.1/22.3                    | 58.7/13.0/34.4/21.2 -> 58.7/13.0/34.4/21.2                |
-  | test-esbuild | 51.4/14.6/34.1/22.7 -> 51.4/14.3/33.8/22.4 (app 13.8 KB -> 0) | 58.9/12.0/33.0/19.9 -> 58.9/11.8/32.7/19.6                |
-  | test-rollup  | 75.7/28.7/57.0/41.6 -> 75.9/29.1/57.4/42.1 (app 248 -> 0)     | 86.9/15.7/45.5/26.5 -> 87.3/16.0/46.1/27.0 (app 242 -> 0) |
-  | test-webpack | 85.4/34.0/65.6/48.6 -> 85.9/34.4/66.1/49.1 (app 3,962 -> 0)   | 95.4/23.0/58.6/37.1 -> 95.8/23.3/59.0/37.4 (app 611 -> 0) |
+  DEV on c2-l12m4 (`exp101-c2-l12m4-*`), scorer 5 -> 6, P / R / F0.5 / F1:
 
-  The container rule alone moves test-webpack by +0.01 P (structural and agreement); everything else is truth.
-  On the bigger indexes under 5 + 6: c2 structural test-esbuild 74.3/45.5/65.9/56.4 -> 77.5/46.5/68.4/58.1; call2k
-  structural 77.7/53.2/71.1/63.1 -> 80.5/54.1/73.3/64.7; call2k agreement 88.0/37.2/69.1/52.3 -> 90.6/37.6/70.7/53.2
-  (the chained bytes the matcher named move from app-claimed to right).
+  | set         | structural                                 | agreement                                    |
+  | ----------- | ------------------------------------------ | -------------------------------------------- |
+  | cc          | 100.0/76.7/94.3/86.8 (unchanged: a sample) | 100.0/63.4/89.6/77.6 (unchanged)             |
+  | held-out 67 | 98.7/54.2/84.8/70.0 -> 98.7/54.2/84.8/70.0 | 95.1/38.1/73.2/54.4 -> 95.2/38.1/73.2/54.4   |
+  | esbuild-app | 98.3/52.5/83.7/68.5 -> 98.4/52.6/83.8/68.5 | 99.3/34.4/72.1/51.1 -> 99.3/34.4/72.1/51.1   |
+  | wrangler    | 95.5/16.5/48.8/28.2 -> 95.5/16.6/48.9/28.3 | 100.0/10.1/36.0/18.4 -> 100.0/10.2/36.1/18.5 |
 
-  DEV-SIDE corpus `apps` (97 bundles, below), this branch, step4-wr, scorer 5 + 6, P / R / F0.5 / F1:
+  App claimed 0 on every dev set before and after.
+
+  DEV-SIDE corpus `apps` (97 bundles, below), this branch, step4-wr-v3, scorer 6, P / R / F0.5 / F1, app claimed 0:
 
   | set          | structural                | agreement                 |
   | ------------ | ------------------------- | ------------------------- |
-  | apps-esbuild | 75.0 / 13.3 / 39.0 / 22.7 | 81.1 / 11.1 / 35.8 / 19.5 |
-  | apps-webpack | 97.2 / 47.7 / 80.5 / 64.0 | 98.7 / 28.9 / 66.6 / 44.7 |
-  | apps-rollup  | 89.3 / 35.2 / 68.3 / 50.5 | 96.4 / 19.1 / 53.2 / 31.9 |
-
-  App claimed 0 on every set. (F0.5 here = 1.25PR / (0.25P + R), exp106's definition; this branch's cards do not
-  carry the field until exp106 merges.)
+  | apps-esbuild | 75.0 / 13.3 / 39.0 / 22.6 | 81.1 / 11.1 / 35.8 / 19.5 |
+  | apps-webpack | 97.1 / 47.7 / 80.5 / 64.0 | 98.7 / 28.9 / 66.6 / 44.7 |
+  | apps-rollup  | 89.3 / 35.2 / 68.3 / 50.5 | 96.4 / 19.1 / 53.2 / 31.8 |
 
 - **Every app-claimed byte was a TRUTH artifact except one class** (webpack's module table, a matcher error, fixed).
   The claims themselves were right: @babel/code-frame's bytes, chromium-bidi's, @prisma/\*'s.
@@ -129,11 +129,6 @@ truth said `<app>`. The claims are right (the index now holds those packages, so
   those modules are no modules, and an app statement before the next module joins that module's group (dev: 16 B of
   `entry$4.exports;` claimed by MODULE as execa, agreement; `unverified` makes it unmapped, but the claim is
   wrong). The fix changes the unit model: it needs a `LIBRARY_UNITS` bump, i.e. rebuilding every module shard.
-- **Scorer numbering / merge order:** 5 is exp106's (truth fixes + F0.5). This branch implements 6 on top of 4; both
-  are needed for 0 on test. If exp106 lands first, merging it here means: keep both scorers' sections (the scratch
-  merge's resolution: `patch_sources` first, then `redecode`; lib096 gains `chained-apps.json`, built with exp106's
-  `chained.py build --corpus apps`), then re-score every committed label once. The committed labels of this branch
-  carry scorer 6 alone.
 - **Precision is still far below the bar on test** (esbuild ~51%, bun ~53%): app-claimed is now 0, and what
   remains is wrong-family bytes, mostly pre-bundled copies the origin layers cannot see (STATE.md).
 
@@ -145,7 +140,9 @@ python3 -I experiments/107-zero-app-claims/scripts/dev_apps.py plan && python3 -
 npm run eval -- library exp107-main-structural --index /work/exp103-data/ix/step4-wr-v3 --rule structural --corpus apps
 <venv python> -I experiments/104-truth-audit/copies.py exp107-main-structural /work/exp107-data/registry \
   experiments/096-library-matching-score/families-derived.json --jobs 1 --corpus apps   # 8 jobs: pickling error
+python3 -I experiments/106-matcher-hygiene/scorer5/chained.py build --corpus apps   # scorer 5's chained layer
 python3 -I experiments/107-zero-app-claims/verify_decoder.py --jobs 12      # decoder vs every frozen truth
-<venv python> -I experiments/107-zero-app-claims/verify_s4.py step4f-structural   # rules off = scorer 4's cards
+python3 -I experiments/107-zero-app-claims/rescore_diff.py <results before> <results after>  # what a re-score moved
+<venv python> -I experiments/107-zero-app-claims/verify_s5.py step4f-structural   # rules off = scorer 5's cards
 <venv python> -I experiments/107-zero-app-claims/app_claims.py <label> --corpus apps   # every app-claimed unit
 ```

@@ -20,6 +20,7 @@
  "indexId": "01531a8a8c5a10e92b9c7dcfa0d7e9a9d96d2c7a822f3b7164e4c1a7e5de72f6",
  "indexSeeds": {
   "appClaimedBytes": 0,
+  "f05": 0.0,
   "f1": 0.0,
   "namedBytes": 0,
   "precision": 0.0,
@@ -27,18 +28,18 @@
  },
  "label": "exp101-c2-guards-agreement",
  "missBytes": {
-  "a": 7212,
-  "c": 22,
+  "a": 7190,
   "e-agree": 3532
  },
  "noDiscovery": null,
  "reportSha256": "2ec081039774137d74c2c517b6ac8be4fd1797bf859c8dc2a94693998f0c31cb",
  "rule": "agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
   "<app>": 3270,
-  "library": 10766
+  "<unmapped>": 44,
+  "library": 10722
  },
  "toolchain": {
   "adapter": "bun",
@@ -49,9 +50,11 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
+  "f05": 0.0,
+  "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 10766,
+  "libraryBytes": 10722,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

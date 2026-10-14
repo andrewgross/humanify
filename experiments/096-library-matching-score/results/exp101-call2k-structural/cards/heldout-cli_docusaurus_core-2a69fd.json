@@ -3,9 +3,9 @@
  "claimedBytes": {
   "family": 1949,
   "origin": 2033,
-  "right": 607593,
-  "unmapped": 5248,
-  "wrongFamily": 7536
+  "right": 607244,
+  "unmapped": 5800,
+  "wrongFamily": 7333
  },
  "detected": {
   "bundler": "bun",
@@ -26,16 +26,17 @@
  "indexId": "6edf4f3d7860d03cc2ed419318780d3844a929ed89d4e428b7055aa2d6203435",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.745582,
+  "f05": 0.878545,
+  "f1": 0.746329,
   "namedBytes": 476399,
   "precision": 0.9962,
-  "recall": 0.595715
+  "recall": 0.59667
  },
  "label": "exp101-call2k-structural",
  "missBytes": {
-  "a": 14802,
+  "a": 14613,
   "b": 247,
-  "c": 54473,
+  "c": 53730,
   "d-absent": 885,
   "d-file": 19370,
   "d-variant": 38716,
@@ -49,13 +50,13 @@
  "noDiscovery": null,
  "reportSha256": "c33e8734137f776370a3a088b46b55a0e3fd4bbad18fcced38ae458fdee19858",
  "rule": "structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<self>": 2842,
-  "<unmapped>": 6946,
+  "<self>": 2796,
+  "<unmapped>": 8273,
   "copy": 5123,
-  "library": 799710
+  "library": 798429
  },
  "toolchain": {
   "adapter": "bun",
@@ -66,19 +67,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 5123,
-  "f1": 0.862089,
-  "f1ShipperOnly": 0.859223,
-  "libraryBytes": 799710,
+  "f05": 0.933835,
+  "f05ShipperOnly": 0.930729,
+  "f1": 0.862712,
+  "f1ShipperOnly": 0.859842,
+  "libraryBytes": 798429,
   "namedAsOriginBytes": 2033,
-  "namedAsShipperBytes": 609542,
-  "namedBytes": 611575,
-  "namedBytesShipperOnly": 609542,
-  "precision": 0.987828,
-  "precisionShipperOnly": 0.984544,
-  "recall": 0.764746,
-  "recallShipperOnly": 0.762204,
-  "wrongFamilyBytes": 7536,
-  "wrongFamilyBytesShipperOnly": 9569
+  "namedAsShipperBytes": 609193,
+  "namedBytes": 611226,
+  "namedBytesShipperOnly": 609193,
+  "precision": 0.988145,
+  "precisionShipperOnly": 0.984858,
+  "recall": 0.765536,
+  "recallShipperOnly": 0.76299,
+  "wrongFamilyBytes": 7333,
+  "wrongFamilyBytesShipperOnly": 9366
  },
  "truthMethod": "sourcemap"
 }

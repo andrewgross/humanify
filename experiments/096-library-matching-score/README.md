@@ -2,6 +2,26 @@
 
 ## STATUS (2026-10-14)
 
+- **Scorer 5 (exp106, `experiments/106-matcher-hygiene/README.md`).** Two source-table corrections and a new
+  headline metric:
+
+  - **virtual:** a rollup CommonJS-plugin virtual id (`entry.cjs?commonjs-entry`, `?commonjs-proxy`, ...) is
+    bundler glue: `<unmapped>`.
+  - **chained:** a source the truth called `<app>` that a bundler reached through an installed package's OWN source
+    map (esbuild chaining `@angular/compiler`'s `fesm2022/*.mjs.map`, whose `../../../../packages/...` sources
+    escape `node_modules`) keeps that package: the path does not exist and that package's map lists it. Frozen per
+    entry (`chained.json`, `chained-test.json`, `chained-bundlers.json`; built by
+    `experiments/106-matcher-hygiene/scorer5/chained.py`). Dev relabels 0 sources, test-esbuild 1,520.
+  - **F0.5** (`f05` = 1.25PR / (0.25P + R), 0 when P + R = 0) beside precision / recall / F1 in every `prf()`
+    block (cards, summaries, `indexSeeds`, `*ShipperOnly`). The campaign's headline from now on: held-out and test
+    F0.5, under the 99.8% precision bar with app claimed 0. `leaderboard.py` prints it first.
+  - With both rules off scorer 5 reproduces scorer 4's cards (`verify_s4.py`, 70/70 on two labels). Re-scoring
+    every committed label changed no dev card beyond the schema and the new `f05` keys; on test, app claimed went to
+    0 on test-esbuild (13,806 B -> 0 at step4f) and test-rollup (76 B -> 0).
+  - `families-derived.json` moved to `crates/humanify-core/src/libindex/` (ONE file for the scorer and the
+    matcher), re-derived over exp104's universe plus the step4 and exp101 c2 index packages; its components over
+    exp104's universe are identical.
+
 - **Scorer 4: the exp104 truth audit** (`experiments/104-truth-audit/README.md`). There are three mechanical truth
   corrections, all measured in both directions and hand-checked:
 

@@ -24,6 +24,7 @@
  "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
  "indexSeeds": {
   "appClaimedBytes": 0,
+  "f05": 0.839746,
   "f1": 0.677006,
   "namedBytes": 1286230,
   "precision": 1.0,
@@ -60,6 +61,8 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
+  "f05": 0.87246,
+  "f05ShipperOnly": 0.87246,
   "f1": 0.733127,
   "f1ShipperOnly": 0.733127,
   "libraryBytes": 2513528,

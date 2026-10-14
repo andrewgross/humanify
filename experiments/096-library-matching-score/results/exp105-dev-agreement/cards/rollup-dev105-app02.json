@@ -1,9 +1,9 @@
 {
  "bundleSha256": "3731bc8abd37af4f76e7820da382c799454c0d92f789ff8c7676f9b0dd61b724",
  "claimedBytes": {
-  "right": 65342,
-  "unmapped": 257,
-  "wrongFamily": 356
+  "right": 65289,
+  "unmapped": 363,
+  "wrongFamily": 303
  },
  "detected": {
   "bundler": "bun",
@@ -24,16 +24,17 @@
  "indexId": "2cbffa3b3f7e1f58d02b2874c6a0a2d079a8b7f9849a09a127313b88eba6cfec",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.291772,
+  "f05": 0.508686,
+  "f1": 0.292858,
   "namedBytes": 40467,
   "precision": 1.0,
-  "recall": 0.170804
+  "recall": 0.171549
  },
  "label": "exp105-dev-agreement",
  "missBytes": {
   "a": 1513,
   "b": 121423,
-  "c": 2704,
+  "c": 1729,
   "d-absent": 10174,
   "d-file": 1536,
   "e-agree": 33328,
@@ -44,12 +45,12 @@
  "noDiscovery": null,
  "reportSha256": "93802bc1f22740bb2dfe0f2106fd5a6fad42694cec59e119294b17795625c523",
  "rule": "agreement",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "dev-rollup",
  "statementBytes": {
   "<app>": 2009,
-  "<unmapped>": 1541,
-  "library": 236920
+  "<unmapped>": 2569,
+  "library": 235892
  },
  "toolchain": {
   "adapter": "passthrough",
@@ -60,19 +61,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f1": 0.431845,
-  "f1ShipperOnly": 0.431845,
-  "libraryBytes": 236920,
+  "f05": 0.65517,
+  "f05ShipperOnly": 0.65517,
+  "f1": 0.433118,
+  "f1ShipperOnly": 0.433118,
+  "libraryBytes": 235892,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 65342,
-  "namedBytes": 65342,
-  "namedBytesShipperOnly": 65342,
-  "precision": 0.994581,
-  "precisionShipperOnly": 0.994581,
-  "recall": 0.275798,
-  "recallShipperOnly": 0.275798,
-  "wrongFamilyBytes": 356,
-  "wrongFamilyBytesShipperOnly": 356
+  "namedAsShipperBytes": 65289,
+  "namedBytes": 65289,
+  "namedBytesShipperOnly": 65289,
+  "precision": 0.995381,
+  "precisionShipperOnly": 0.995381,
+  "recall": 0.276775,
+  "recallShipperOnly": 0.276775,
+  "wrongFamilyBytes": 303,
+  "wrongFamilyBytesShipperOnly": 303
  },
  "truthMethod": "sourcemap"
 }
