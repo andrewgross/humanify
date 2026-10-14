@@ -329,7 +329,7 @@ fn skip_libraries_off_processes_every_unpacked_file() {
 
 /// A library index directory: a manifest with this build's stamps, and
 /// (`slice`) one recipe slice, Bun `--target node` (BUN_BUNDLE has no
-/// `// @bun` banner), with an empty unit table + `literals.jsonl`.
+/// `// @bun` banner), with empty lookup tables.
 fn library_index(dir: &Path, slice: bool) -> String {
     library_index_with(dir, if slice { &[NODE_RECIPE][..] } else { &[] })
 }
@@ -353,10 +353,13 @@ fn library_index_with(dir: &Path, recipes: &[(&str, &str)]) -> String {
         "slices": slices, "packages": [], "refused": [], "shards": {}, "tables": {}, "data": {}
     });
     std::fs::write(dir.join("manifest.json"), manifest.to_string()).unwrap();
-    for (slice, _) in recipes {
-        std::fs::write(dir.join(format!("units.{slice}.jsonl")), "").unwrap();
+    let units = recipes
+        .iter()
+        .map(|(slice, _)| (slice.to_string(), Vec::new()))
+        .collect();
+    for (name, bytes) in humanify_core::libindex::table::lookup_files(&units, &[]).unwrap() {
+        std::fs::write(dir.join(name), bytes).unwrap();
     }
-    std::fs::write(dir.join("literals.jsonl"), "").unwrap();
     dir.display().to_string()
 }
 

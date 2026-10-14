@@ -7,7 +7,7 @@
 //!   index entries, labels are session ids (the prior's names and the
 //!   slot mappings hang off them), fingerprints are the match key. One
 //!   program: its edges are read whole (cross-version reads every edge).
-//! - **the index store** — [`LibraryIndex`], on disk, loaded once with ONE
+//! - **the index store** — [`LibraryIndex`], on disk, opened once with ONE
 //!   recipe slice (`LibraryIndex::load`: the slice is chosen from the
 //!   recipe the run detected once, `libindex::recipe::choose_slice`;
 //!   nothing below re-detects). Pieces are unit rows, labels are packages,
@@ -19,6 +19,8 @@
 //! order (load-bearing: the match list's insertion order is the rename
 //! order) and looks each up in the fresh side; the library profile walks
 //! the bundle's units and looks each up in the index.
+
+use std::borrow::Cow;
 
 use crate::graph::edges::Scope;
 use crate::hash::forms::{CanonicalForm, LIBRARY_UNITS, MATCH_KEY};
@@ -78,8 +80,10 @@ pub trait ReferenceStore {
     /// The hash form the store's fingerprints are in.
     fn form(&self) -> &'static CanonicalForm;
 
-    /// The pieces holding `fingerprint`, in store order (empty: none).
-    fn candidates(&self, fingerprint: &str) -> &[Self::Piece];
+    /// The pieces holding `fingerprint`, in store order (empty: none):
+    /// borrowed from a store held in memory, read for the caller from one
+    /// read on demand (the library index's tables).
+    fn candidates(&self, fingerprint: &str) -> Cow<'_, [Self::Piece]>;
 
     fn label(&self, piece: Self::Piece) -> Label<'_>;
 
@@ -105,8 +109,8 @@ impl ReferenceStore for FingerprintIndex<'_> {
         &MATCH_KEY
     }
 
-    fn candidates(&self, fingerprint: &str) -> &[usize] {
-        self.bucket(fingerprint).unwrap_or(&[])
+    fn candidates(&self, fingerprint: &str) -> Cow<'_, [usize]> {
+        Cow::Borrowed(self.bucket(fingerprint).unwrap_or(&[]))
     }
 
     fn label(&self, piece: usize) -> Label<'_> {
@@ -163,8 +167,8 @@ impl ReferenceStore for LibraryIndex {
         &LIBRARY_UNITS
     }
 
-    fn candidates(&self, fingerprint: &str) -> &[UnitHit] {
-        self.unit_hits(fingerprint)
+    fn candidates(&self, fingerprint: &str) -> Cow<'_, [UnitHit]> {
+        Cow::Owned(self.unit_hits(fingerprint))
     }
 
     fn label(&self, piece: UnitHit) -> Label<'_> {

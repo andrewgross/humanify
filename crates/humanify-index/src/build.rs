@@ -998,14 +998,14 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
             .cmp(&b.name)
             .then(compare_versions(&a.version, &b.version))
     });
-    let index = merge(&MergeInput {
+    let index = merge(MergeInput {
         as_of: plan.as_of.clone(),
         registry: plan.registry.clone(),
         slices: plan.slices.clone(),
         packages,
         refused: plan.refused.clone(),
         shards,
-    });
+    })?;
     if let Some(out) = &cfg.out {
         write_index(out, &index.files)?;
     }

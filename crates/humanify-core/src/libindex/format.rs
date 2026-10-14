@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT};
 
 /// The format tag in every manifest.
-pub const INDEX_FORMAT: &str = "humanify-library-index/2";
+pub const INDEX_FORMAT: &str = "humanify-library-index/3";
 
 /// The build recipe's version (`humanify-index`'s `recipe` module: every
 /// rule of how a slice's bundles are made). Recorded per slice in the
@@ -167,13 +167,26 @@ pub struct UnitRow {
     pub versions: Vec<(String, String)>,
 }
 
-/// One row of `literals.jsonl`: one source file's literal set, per owner,
-/// with the versions in which that file had exactly this set.
+/// One literal FILE row as the merge computes it: one source file's
+/// literal set, per owner, with the versions in which that file had
+/// exactly this set. On disk it is split (`humanify-library-index/3`): the
+/// literal sets go to the lookup table (`table::LiteralTable`, file id =
+/// row position) and the rest to `literals.files.jsonl`
+/// ([`LiteralFileRow`]), row for row.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LiteralRow {
     pub owner: String,
     pub file: String,
     pub lits: Vec<String>,
+    pub versions: Vec<(String, String)>,
+}
+
+/// One row of `literals.files.jsonl`: literal file `i`'s owner, path and
+/// versions (provenance; its literal set is file `i` of `literals.bin`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LiteralFileRow {
+    pub owner: String,
+    pub file: String,
     pub versions: Vec<(String, String)>,
 }
 

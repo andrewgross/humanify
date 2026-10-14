@@ -50,24 +50,24 @@ fn self_index(code: &str, name: &str) -> PathBuf {
         tc.module_wrappers.piece,
         tc.interop.piece,
     );
-    let rows: String = prints
+    let rows: Vec<UnitRow> = prints
         .iter()
-        .map(|(_, p)| {
-            serde_json::to_string(&UnitRow {
-                hash: p.whole.hash.clone(),
-                owner: "fixture-lib".into(),
-                file: "index.js".into(),
-                nodes: p.whole.nodes,
-                content: p.whole.content,
-                module_bytes: 100,
-                versions: vec![("1.0.0".into(), "1.0.0".into())],
-            })
-            .unwrap()
-                + "\n"
+        .map(|(_, p)| UnitRow {
+            hash: p.whole.hash.clone(),
+            owner: "fixture-lib".into(),
+            file: "index.js".into(),
+            nodes: p.whole.nodes,
+            content: p.whole.content,
+            module_bytes: 100,
+            versions: vec![("1.0.0".into(), "1.0.0".into())],
         })
         .collect();
-    std::fs::write(dir.join("units.bun-bun-cjs-min.jsonl"), rows).unwrap();
-    std::fs::write(dir.join("literals.jsonl"), "").unwrap();
+    let units = [("bun-bun-cjs-min".to_string(), rows)]
+        .into_iter()
+        .collect();
+    for (name, bytes) in humanify_core::libindex::table::lookup_files(&units, &[]).unwrap() {
+        std::fs::write(dir.join(name), bytes).unwrap();
+    }
     let manifest = Manifest {
         format: humanify_core::libindex::format::INDEX_FORMAT.into(),
         as_of: "lab".into(),

@@ -11,8 +11,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use humanify_core::libindex::format::{
-    INDEX_FORMAT, LiteralRow, Manifest, ModuleRow, PackageRecord, RefusedRecord, RegistrySnapshot,
-    SliceRecord, UnitRow, fingerprint_versions, sort_versions, version_ranges,
+    INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow, PackageRecord, RefusedRecord,
+    RegistrySnapshot, SliceRecord, UnitRow, fingerprint_versions, sort_versions, version_ranges,
 };
 use serde::Serialize;
 
@@ -155,7 +155,7 @@ fn unit_table(shards: &[&Shard], indexed: &BTreeMap<String, Vec<String>>) -> Vec
         .collect()
 }
 
-/// `literals.jsonl`: one row per (owner, file, literal set).
+/// The literal file rows: one per (owner, file, literal set).
 fn literal_table(shards: &[&Shard], indexed: &BTreeMap<String, Vec<String>>) -> Vec<LiteralRow> {
     let mut groups: BTreeMap<(String, String, Vec<String>), Vec<String>> = BTreeMap::new();
     for s in shards {
@@ -177,11 +177,25 @@ fn literal_table(shards: &[&Shard], indexed: &BTreeMap<String, Vec<String>>) -> 
         .collect()
 }
 
-/// Merge `input` into the index's files.
-pub fn merge(input: &MergeInput) -> IndexFiles {
+/// The literal table's provenance file: each literal file's owner, path
+/// and versions, row for row with `literals.bin`'s files.
+pub const LITERAL_FILES: &str = "literals.files.jsonl";
+
+/// Merge `input` into the index's files: the row tables (provenance, read
+/// by instruments) and the lookup tables a run reads
+/// (`humanify_core::libindex::table`), derived from the same rows.
+pub fn merge(input: MergeInput) -> Result<IndexFiles, String> {
     let stop: serde_json::Value = serde_json::from_str(STOPLISTS_JSON).unwrap_or_default();
-    // Shards in a fixed order, helper owners' rows dropped.
-    let mut shards: Vec<Shard> = input.shards.clone();
+    // Shards in a fixed order, helper owners' rows dropped. Taken, not
+    // copied: the shards are the merge's whole working set.
+    let MergeInput {
+        as_of,
+        registry,
+        slices,
+        packages,
+        refused,
+        mut shards,
+    } = input;
     shards.sort_by(|a, b| a.label().cmp(&b.label()).then(a.key.cmp(&b.key)));
     for s in &mut shards {
         s.modules.retain(|m| !is_helper(&m.owner, &stop));
@@ -194,24 +208,36 @@ pub fn merge(input: &MergeInput) -> IndexFiles {
     let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     files.insert("versions.json".into(), pretty(&indexed));
     let kinds: BTreeSet<&str> = shards.iter().map(|s| s.kind.as_str()).collect();
+    let mut literals: Vec<LiteralRow> = Vec::new();
+    let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
     for kind in kinds {
         let of_kind: Vec<&Shard> = all.iter().copied().filter(|s| s.kind == kind).collect();
         if kind == "literals" {
-            files.insert(
-                "literals.jsonl".into(),
-                jsonl(&literal_table(&of_kind, &indexed)),
-            );
+            literals = literal_table(&of_kind, &indexed);
         } else {
             files.insert(
                 format!("modules.{kind}.jsonl"),
                 jsonl(&module_table(&of_kind, &indexed)),
             );
-            let units = unit_table(&of_kind, &indexed);
-            if !units.is_empty() {
-                files.insert(format!("units.{kind}.jsonl"), jsonl(&units));
+            let rows = unit_table(&of_kind, &indexed);
+            if !rows.is_empty() {
+                files.insert(format!("units.{kind}.jsonl"), jsonl(&rows));
+                units.insert(kind.to_string(), rows);
             }
         }
     }
+    files.extend(humanify_core::libindex::table::lookup_files(
+        &units, &literals,
+    )?);
+    let provenance: Vec<LiteralFileRow> = literals
+        .into_iter()
+        .map(|r| LiteralFileRow {
+            owner: r.owner,
+            file: r.file,
+            versions: r.versions,
+        })
+        .collect();
+    files.insert(LITERAL_FILES.into(), jsonl(&provenance));
     let data: BTreeMap<String, &str> = [
         ("families.json".to_string(), FAMILIES_JSON),
         ("stoplists.json".to_string(), STOPLISTS_JSON),
@@ -220,12 +246,12 @@ pub fn merge(input: &MergeInput) -> IndexFiles {
     .collect();
     let manifest = Manifest {
         format: INDEX_FORMAT.to_string(),
-        as_of: input.as_of.clone(),
+        as_of,
         fingerprints: fingerprint_versions(),
-        registry: input.registry.clone(),
-        slices: input.slices.clone(),
-        packages: input.packages.clone(),
-        refused: input.refused.clone(),
+        registry,
+        slices,
+        packages,
+        refused,
         shards: shards.iter().map(|s| (s.label(), s.key.clone())).collect(),
         tables: files
             .iter()
@@ -242,5 +268,5 @@ pub fn merge(input: &MergeInput) -> IndexFiles {
     let manifest_bytes = pretty(&manifest);
     let id = hex_sha256(&manifest_bytes);
     files.insert("manifest.json".into(), manifest_bytes);
-    IndexFiles { files, id }
+    Ok(IndexFiles { files, id })
 }
