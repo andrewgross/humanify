@@ -28,17 +28,17 @@
  },
  "label": "exp097-s1-structural",
  "missBytes": {
-  "a": 10755,
-  "c": 11
+  "a": 10722
  },
  "noDiscovery": null,
  "reportSha256": "9e1a57c439537338469f8989be8f14855345f807c26854a24438b04e8d3769f0",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
   "<app>": 3270,
-  "library": 10766
+  "<unmapped>": 44,
+  "library": 10722
  },
  "toolchain": {
   "adapter": "bun",
@@ -53,7 +53,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 10766,
+  "libraryBytes": 10722,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

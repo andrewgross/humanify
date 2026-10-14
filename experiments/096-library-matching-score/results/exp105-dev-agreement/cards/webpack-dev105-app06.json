@@ -24,17 +24,17 @@
  "indexId": "2cbffa3b3f7e1f58d02b2874c6a0a2d079a8b7f9849a09a127313b88eba6cfec",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.323951,
-  "f1": 0.160843,
+  "f05": 0.324025,
+  "f1": 0.160889,
   "namedBytes": 44896,
   "precision": 1.0,
-  "recall": 0.087455
+  "recall": 0.087482
  },
  "label": "exp105-dev-agreement",
  "missBytes": {
   "a": 1235,
   "b": 22214,
-  "c": 12028,
+  "c": 11873,
   "d-file": 141725,
   "e-agree": 47159,
   "e-ambig": 708,
@@ -47,12 +47,12 @@
  "noDiscovery": null,
  "reportSha256": "bbe82160c3b47d8a06b6bfd7c937ed07d5d78a7e8bb95aecfd3161f2ce9f0acf",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "dev-webpack",
  "statementBytes": {
   "<app>": 1145,
-  "<unmapped>": 1959,
-  "library": 513359
+  "<unmapped>": 2114,
+  "library": 513204
  },
  "toolchain": {
   "adapter": "webcrack",
@@ -63,19 +63,19 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f05": 0.805476,
-  "f05ShipperOnly": 0.805476,
-  "f1": 0.625182,
-  "f1ShipperOnly": 0.625182,
-  "libraryBytes": 513359,
+  "f05": 0.805561,
+  "f05ShipperOnly": 0.805561,
+  "f1": 0.625311,
+  "f1ShipperOnly": 0.625311,
+  "libraryBytes": 513204,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 233743,
   "namedBytes": 233743,
   "namedBytesShipperOnly": 233743,
   "precision": 0.997193,
   "precisionShipperOnly": 0.997193,
-  "recall": 0.455321,
-  "recallShipperOnly": 0.455321,
+  "recall": 0.455458,
+  "recallShipperOnly": 0.455458,
   "wrongFamilyBytes": 658,
   "wrongFamilyBytesShipperOnly": 658
  },

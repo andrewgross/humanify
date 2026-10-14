@@ -2,9 +2,9 @@
  "bundleSha256": "2131be7c581a625045111de07b14a742445cbff7843cac44d3ae01b1816fafde",
  "claimedBytes": {
   "family": 3906,
-  "right": 512248,
-  "unmapped": 223,
-  "wrongFamily": 43157
+  "right": 512196,
+  "unmapped": 391,
+  "wrongFamily": 43041
  },
  "detected": {
   "bundler": "unknown",
@@ -25,17 +25,17 @@
  "indexId": "b00fa73547b5d76d0ff0f62c7ccaaf19878840d8003e95929cf0b9794d959037",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.50832,
-  "f1": 0.292737,
+  "f05": 0.508717,
+  "f1": 0.293066,
   "namedBytes": 391842,
   "precision": 0.998588,
-  "recall": 0.171507
+  "recall": 0.171733
  },
  "label": "ix-v2-agreement-repeat",
  "missBytes": {
-  "a": 1409306,
-  "b": 1855,
-  "c": 74373,
+  "a": 1407592,
+  "b": 1807,
+  "c": 73177,
   "d-absent": 5199,
   "d-file": 2368,
   "e-agree": 82419,
@@ -45,12 +45,12 @@
  "noDiscovery": null,
  "reportSha256": "3cdd4928bd45785fd660b415e1fb9a63dc1906f22b8ad9edc0bccd6c55b91cf8",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
   "<app>": 6212,
-  "<unmapped>": 46539,
-  "library": 2284697
+  "<unmapped>": 49549,
+  "library": 2281687
  },
  "toolchain": {
   "adapter": "bun",
@@ -61,21 +61,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 0,
-  "f05": 0.570722,
-  "f05ShipperOnly": 0.570722,
-  "f1": 0.362977,
-  "f1ShipperOnly": 0.362977,
-  "libraryBytes": 2284697,
+  "f05": 0.571129,
+  "f05ShipperOnly": 0.571129,
+  "f1": 0.363346,
+  "f1ShipperOnly": 0.363346,
+  "libraryBytes": 2281687,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 516154,
-  "namedBytes": 516154,
-  "namedBytesShipperOnly": 516154,
-  "precision": 0.922839,
-  "precisionShipperOnly": 0.922839,
-  "recall": 0.225918,
-  "recallShipperOnly": 0.225918,
-  "wrongFamilyBytes": 43157,
-  "wrongFamilyBytesShipperOnly": 43157
+  "namedAsShipperBytes": 516102,
+  "namedBytes": 516102,
+  "namedBytesShipperOnly": 516102,
+  "precision": 0.923023,
+  "precisionShipperOnly": 0.923023,
+  "recall": 0.226193,
+  "recallShipperOnly": 0.226193,
+  "wrongFamilyBytes": 43041,
+  "wrongFamilyBytesShipperOnly": 43041
  },
  "truthMethod": "sourcemap"
 }

@@ -31,10 +31,11 @@
  "noDiscovery": null,
  "reportSha256": "b222d63a0efadacea621bf6b1eaacb56f69c2d359c3272d43a0724b6b8b34e16",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 22
+  "<app>": 18,
+  "<unmapped>": 4
  },
  "toolchain": {
   "adapter": "bun",

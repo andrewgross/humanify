@@ -3,9 +3,9 @@
  "claimedBytes": {
   "family": 727,
   "origin": 2033,
-  "right": 578967,
-  "unmapped": 250,
-  "wrongFamily": 23889
+  "right": 578629,
+  "unmapped": 809,
+  "wrongFamily": 23668
  },
  "detected": {
   "bundler": "bun",
@@ -26,16 +26,17 @@
  "indexId": "c9b593a460b802ff80ad6f6dcc0eed0a4f4f41f78cdf9ae853d576433256e97f",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f1": 0.758695,
+  "f05": 0.885093,
+  "f1": 0.759447,
   "namedBytes": 490350,
   "precision": 0.994816,
-  "recall": 0.61316
+  "recall": 0.614144
  },
  "label": "exp108-k5-guards-structural",
  "missBytes": {
-  "a": 33167,
+  "a": 32967,
   "b": 247,
-  "c": 54405,
+  "c": 53662,
   "d-absent": 885,
   "d-file": 20217,
   "d-variant": 58160,
@@ -49,13 +50,13 @@
  "noDiscovery": null,
  "reportSha256": "b2b3a753ed3d745aba5d994dfe30727ec9467f9f3ec304340253fd6576fc9399",
  "rule": "structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<self>": 2842,
-  "<unmapped>": 6946,
+  "<self>": 2796,
+  "<unmapped>": 8273,
   "copy": 5123,
-  "library": 799710
+  "library": 798429
  },
  "toolchain": {
   "adapter": "bun",
@@ -66,19 +67,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 5123,
-  "f1": 0.827889,
-  "f1ShipperOnly": 0.824995,
-  "libraryBytes": 799710,
+  "f05": 0.903155,
+  "f05ShipperOnly": 0.899997,
+  "f1": 0.828493,
+  "f1ShipperOnly": 0.825596,
+  "libraryBytes": 798429,
   "namedAsOriginBytes": 2033,
-  "namedAsShipperBytes": 579694,
-  "namedBytes": 581727,
-  "namedBytesShipperOnly": 579694,
-  "precision": 0.960554,
-  "precisionShipperOnly": 0.957197,
-  "recall": 0.727422,
-  "recallShipperOnly": 0.72488,
-  "wrongFamilyBytes": 23889,
-  "wrongFamilyBytesShipperOnly": 25922
+  "namedAsShipperBytes": 579356,
+  "namedBytes": 581389,
+  "namedBytesShipperOnly": 579356,
+  "precision": 0.960883,
+  "precisionShipperOnly": 0.957523,
+  "recall": 0.728166,
+  "recallShipperOnly": 0.72562,
+  "wrongFamilyBytes": 23668,
+  "wrongFamilyBytesShipperOnly": 25701
  },
  "truthMethod": "sourcemap"
 }

@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "8efe1e80119f6a1765ee1223db6fd36a140effa187276ba18666721b632ce64a",
+ "claimedBytes": {
+  "family": 107,
+  "origin": 46404,
+  "right": 499102,
+  "self": 7249,
+  "unmapped": 5671,
+  "wrongFamily": 155940
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_prisma_cli-1a0b5c",
+ "exploratory": {
+  "names": {
+   "bindings": 5001,
+   "bindingsSameVersion": 4879,
+   "bindingsVersionKnown": 5001,
+   "exactBytes": 326511,
+   "exactUnits": 377,
+   "sameVersionShare": 0.975605
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.233735,
+  "f1": 0.111622,
+  "namedBytes": 367783,
+  "precision": 0.863551,
+  "recall": 0.059667
+ },
+ "label": "exp107-main-agreement",
+ "missBytes": {
+  "a": 1474851,
+  "b": 3545434,
+  "c": 47244,
+  "d-absent": 7875,
+  "d-file": 115329,
+  "e-agree": 350962,
+  "e-ambig": 26307,
+  "e-other": 5055,
+  "e-spec": 406,
+  "e-support": 9286,
+  "e-veto": 25195,
+  "f": 10371
+ },
+ "noDiscovery": null,
+ "reportSha256": "a2f61d3c80b0bb8d348f6b477ede5957b299f3faf9d42304a3204579c056fdc7",
+ "rule": "agreement",
+ "schema": "exp096-score/6",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 356329,
+  "<unmapped>": 57453,
+  "copy": 282990,
+  "library": 6163928
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 282990,
+  "f05": 0.304127,
+  "f05ShipperOnly": 0.278262,
+  "f1": 0.158944,
+  "f1ShipperOnly": 0.145426,
+  "libraryBytes": 6163928,
+  "namedAsOriginBytes": 46404,
+  "namedAsShipperBytes": 499209,
+  "namedBytes": 545613,
+  "namedBytesShipperOnly": 499209,
+  "precision": 0.777722,
+  "precisionShipperOnly": 0.711577,
+  "recall": 0.088517,
+  "recallShipperOnly": 0.080989,
+  "wrongFamilyBytes": 155940,
+  "wrongFamilyBytesShipperOnly": 202344
+ },
+ "truthMethod": "sourcemap"
+}

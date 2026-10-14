@@ -59,7 +59,7 @@ describe("eval library argument parsing", () => {
           "heldout"
         ])
       ),
-      /--corpus dev\|test\|bundlers/
+      /--corpus dev\|test\|bundlers\|apps/
     );
     const b = libraryArgs([
       "dev-lbl",
@@ -72,6 +72,17 @@ describe("eval library argument parsing", () => {
     ]);
     assert.ok(typeof b !== "string", String(b));
     assert.deepStrictEqual(b.slice(-2), ["--corpus", "bundlers"]);
+    const a = libraryArgs([
+      "apps-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--corpus",
+      "apps"
+    ]);
+    assert.ok(typeof a !== "string", String(a));
+    assert.deepStrictEqual(a.slice(-2), ["--corpus", "apps"]);
   });
 
   it("passes --sets through (a subset of the corpus's sets), and refuses an empty one", () => {

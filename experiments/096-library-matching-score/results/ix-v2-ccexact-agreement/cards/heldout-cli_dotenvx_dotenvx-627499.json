@@ -29,20 +29,19 @@
  "label": "ix-v2-ccexact-agreement",
  "missBytes": {
   "a": 4201,
-  "c": 169,
+  "c": 135,
   "e-agree": 989,
   "e-ambig": 243
  },
  "noDiscovery": null,
  "reportSha256": "9ce5ce2c5ddcd1f76cb952a6a2688cd08c199bd3b61ea2aa00742425c7932a37",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 23,
-  "<self>": 10,
-  "<unmapped>": 1150,
-  "library": 5602
+  "<app>": 18,
+  "<unmapped>": 1199,
+  "library": 5568
  },
  "toolchain": {
   "adapter": "bun",
@@ -57,7 +56,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 5602,
+  "libraryBytes": 5568,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

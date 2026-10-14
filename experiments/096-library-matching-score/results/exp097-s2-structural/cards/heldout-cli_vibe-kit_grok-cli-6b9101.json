@@ -3,8 +3,8 @@
  "claimedBytes": {
   "origin": 2555,
   "right": 207624,
-  "unmapped": 2866,
-  "wrongFamily": 1062
+  "unmapped": 3429,
+  "wrongFamily": 499
  },
  "detected": {
   "bundler": "bun",
@@ -25,16 +25,16 @@
  "indexId": "e3c0ee92ed0cb0e2b8ded052e9dba29dbb727ad431a3aa1723e5bea3e67c7707",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.832267,
-  "f1": 0.666348,
+  "f05": 0.833189,
+  "f1": 0.667507,
   "namedBytes": 193227,
-  "precision": 0.997919,
-  "recall": 0.500163
+  "precision": 0.998398,
+  "recall": 0.501349
  },
  "label": "exp097-s2-structural",
  "missBytes": {
-  "a": 158904,
-  "c": 9279,
+  "a": 158204,
+  "c": 9065,
   "d-file": 2533,
   "e-support": 210,
   "e-veto": 5223
@@ -42,14 +42,14 @@
  "noDiscovery": null,
  "reportSha256": "27fde6925d367b58a453ed784174dec5bec75a6e34e4a88998a67368baf8069e",
  "rule": "structural",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "heldout",
  "statementBytes": {
-  "<app>": 24,
-  "<self>": 100828,
-  "<unmapped>": 5955,
+  "<app>": 18,
+  "<self>": 100771,
+  "<unmapped>": 6932,
   "copy": 7536,
-  "library": 386328
+  "library": 385414
  },
  "toolchain": {
   "adapter": "bun",
@@ -60,21 +60,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 7536,
-  "f05": 0.85349,
-  "f05ShipperOnly": 0.843114,
-  "f1": 0.703447,
-  "f1ShipperOnly": 0.694895,
-  "libraryBytes": 386328,
+  "f05": 0.85569,
+  "f05ShipperOnly": 0.845288,
+  "f1": 0.70519,
+  "f1ShipperOnly": 0.696617,
+  "libraryBytes": 385414,
   "namedAsOriginBytes": 2555,
   "namedAsShipperBytes": 207624,
   "namedBytes": 210179,
   "namedBytesShipperOnly": 207624,
-  "precision": 0.994973,
-  "precisionShipperOnly": 0.982877,
-  "recall": 0.544043,
-  "recallShipperOnly": 0.537429,
-  "wrongFamilyBytes": 1062,
-  "wrongFamilyBytesShipperOnly": 3617
+  "precision": 0.997631,
+  "precisionShipperOnly": 0.985504,
+  "recall": 0.545333,
+  "recallShipperOnly": 0.538704,
+  "wrongFamilyBytes": 499,
+  "wrongFamilyBytesShipperOnly": 3054
  },
  "truthMethod": "sourcemap"
 }

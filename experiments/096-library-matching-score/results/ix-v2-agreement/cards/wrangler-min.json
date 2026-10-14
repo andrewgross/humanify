@@ -29,12 +29,12 @@
  "label": "ix-v2-agreement",
  "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran)",
  "missBytes": {
-  "no-discovery": 1994010
+  "no-discovery": 1968644
  },
  "noDiscovery": "the esbuild adapter unpacked no bundled module (the one-file floor): no discovery ran",
  "reportSha256": "a30d33f8e81c05001df130239236ee0af3d0aa19407688d42118a5c17b1c6a0b",
  "rule": "agreement",
- "schema": "exp096-score/5",
+ "schema": "exp096-score/6",
  "set": "wrangler",
  "statementBytes": {},
  "toolchain": {
@@ -50,7 +50,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 1994010,
+  "libraryBytes": 1968644,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,
