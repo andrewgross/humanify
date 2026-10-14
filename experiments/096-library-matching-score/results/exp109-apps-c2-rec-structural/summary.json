@@ -1,0 +1,73 @@
+{
+ "bars": {
+  "appBarPassed": true,
+  "appClaimedBytes": 0,
+  "precisionBar": 0.998,
+  "precisionBarPassed": {
+   "apps-esbuild": false
+  }
+ },
+ "config": {
+  "binarySha256": "c1d6e8ac1642842b14f6b96a3c0b8ea36dea7a5e3ab5508875258ff473974f4c",
+  "buildCommit": "ba5135c1c94fe6381d307af8ca98f07eff4f849f",
+  "chainedSha256": "6260ae974e5d1d50e535ded285d7d45e83fef13919af8458b61ebe74e0e1628f",
+  "copiesSha256": "aeb5a27e9ebf936e0bb3c90c2f5999e0e59937e3c26e45391a063d1bd56323ca",
+  "corpus": "apps",
+  "corpusSha256": "98b06b6770a0a73eb0fea4afd294511d4d4fa5e60cfaafe0a55b35ff3ef23e6f",
+  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "indexBytes": 1732103677,
+  "indexId": "94aa22740dd6088b1ce18813758555f42717a7adb0a7145b83e8832467de7cbf",
+  "originsSha256": "8872eb35102a3cff989b46b2d288fbdc500e955eb6ae3b25993aed2a03e1556b",
+  "rule": "structural",
+  "sets": [
+   "apps-esbuild"
+  ]
+ },
+ "label": "exp109-apps-c2-rec-structural",
+ "schema": "exp096-score/6",
+ "sets": {
+  "apps-esbuild": {
+   "appClaimedBytes": 0,
+   "bundlerDetected": 38,
+   "copyBytes": 1770002,
+   "discoveryRan": 39,
+   "entries": 39,
+   "exploratoryNames": {
+    "bindings": 145308,
+    "bindingsSameVersion": 134472,
+    "bindingsVersionKnown": 145284,
+    "exactBytes": 13633000,
+    "exactUnits": 12673,
+    "sameVersionShare": 0.92558
+   },
+   "f05": 0.960543,
+   "f05ShipperOnly": 0.941348,
+   "f1": 0.918869,
+   "f1ShipperOnly": 0.900506,
+   "libraryBytes": 25643725,
+   "missShares": {
+    "a": 0.048878,
+    "b": 0.018261,
+    "c": 0.00824,
+    "d-absent": 0.025735,
+    "d-file": 0.001365,
+    "d-variant": 4.7e-05,
+    "e-ambig": 0.000947,
+    "e-other": 6.6e-05,
+    "e-support": 0.024824,
+    "e-veto": 0.00034,
+    "f": 0.01439
+   },
+   "namedAsOriginBytes": 439122,
+   "namedAsShipperBytes": 21535102,
+   "namedBytes": 21974224,
+   "precision": 0.990492,
+   "precisionShipperOnly": 0.970698,
+   "recall": 0.856905,
+   "recallShipperOnly": 0.839781,
+   "selfOriginBytes": 10018,
+   "selfOtherBytes": 426,
+   "wrongFamilyBytes": 210945
+  }
+ }
+}

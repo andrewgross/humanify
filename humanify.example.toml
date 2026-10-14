@@ -99,7 +99,7 @@ specificity_factor = 4
 # Specificity: plus this many bytes.
 specificity_slack = 4096
 # Require the literal rule to agree (same package family); false = the structural rule.
-agreement = true
+agreement = false
 # Literals a module needs for the literal rule.
 min_literals = 6
 # The literal rule's score floor (bits).
@@ -109,7 +109,7 @@ literal_cover = 0.9
 # The literal rule's margin over the runner-up (bits).
 literal_margin = 10.0
 # Read the literal margin against the best file of another package family, not another package: a sibling holding the same literals is no rival (exp106).
-literal_margin_by_family = false
+literal_margin_by_family = true
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).
@@ -127,21 +127,21 @@ max_rounds = 50
 # What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
 veto_support = "without-module"
 # Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
-evidence_conflict = false
+evidence_conflict = true
 # Refuse a propagated claim when the unit carries a long literal the index ties only to other package families (exp102).
-literal_conflict = false
+literal_conflict = true
 # Refuse a propagated claim on a unit another package family's prints also cover when the claimed family's prints cover less than this share of it (exp102; 0 = off).
-contested_cover = 0.0
+contested_cover = 0.05
 # Which names a kept /*! banner may seed: "any" (the banner reader's) or "known" (with an index, only a package the index knows, in npm's spelling; exp106).
-banner_names = "any"
+banner_names = "known"
 # An index print at least this many package families hold is emitted helper code: a unit such prints cover half of is no seed and no propagated claim (exp106; 0 = off).
 helper_families = 0
 # A propagated unit of at least this many bytes, nine tenths string literal (a wasm blob, a data table), needs the claimed family's own index evidence (exp106; 0 = off).
-payload_min_bytes = 0
+payload_min_bytes = 4096
 # Read another family's prints in evidence_conflict / contested_cover under the lookup's specificity rule: a sponge's unspecific print is no rival (exp106).
-specific_rivals = false
+specific_rivals = true
 # Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
-derived_families = false
+derived_families = true
 
 [unpack]
 # Force the bundler verdict.

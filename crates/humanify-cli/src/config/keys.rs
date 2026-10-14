@@ -84,11 +84,13 @@ pub fn banner_names_name(v: BannerNames) -> &'static str {
         BannerNames::Known => "known",
     }
 }
+/// The shipped library tunables (exp109): the measured recommendation, not
+/// the engine's all-off baseline.
 fn rules() -> LookupRules {
-    LookupRules::default()
+    LookupRules::recommended()
 }
 fn discovery() -> DiscoveryOptions {
-    DiscoveryOptions::default()
+    DiscoveryOptions::recommended()
 }
 fn float(x: f64) -> Option<Val> {
     Some(Val::Float(x))

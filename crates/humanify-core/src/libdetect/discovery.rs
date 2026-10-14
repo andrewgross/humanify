@@ -209,6 +209,27 @@ impl Default for DiscoveryOptions {
     }
 }
 
+impl DiscoveryOptions {
+    /// The SHIPPED options: what `[library.discovery]` defaults to (exp109,
+    /// from experiments/106-matcher-hygiene's measured recommendation) —
+    /// exp102's three guards, read under `specific_rivals`, banner names the
+    /// index knows, metadata-derived families and the payload guard.
+    /// `helper_families` stays off. `Default` stays the engine's baseline
+    /// (every guard off), which the unit tests compare each guard against.
+    pub fn recommended() -> Self {
+        DiscoveryOptions {
+            evidence_conflict: true,
+            literal_conflict: true,
+            contested_cover: 0.05,
+            banner_names: BannerNames::Known,
+            payload_min_bytes: 4096,
+            specific_rivals: true,
+            derived_families: true,
+            ..DiscoveryOptions::default()
+        }
+    }
+}
+
 /// One fixpoint round.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

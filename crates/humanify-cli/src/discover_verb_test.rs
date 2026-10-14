@@ -20,8 +20,8 @@ fn library(toml: &str) -> Library {
 
 fn rule(name: &str) -> Library {
     match name {
-        "agreement" => library(""),
-        "structural" => library("[library.lookup]\nagreement = false\n"),
+        "agreement" => library("[library.lookup]\nagreement = true\n"),
+        "structural" => library(""),
         other => panic!("{other}"),
     }
 }
@@ -181,22 +181,23 @@ fn a_bad_setting_or_an_unreadable_index_fails_the_verb() {
 }
 
 #[test]
-fn the_default_settings_are_the_pipelines_compiled_in_rules() {
+fn the_default_settings_are_the_shipped_recommendation() {
     use humanify_core::libdetect::discovery::{DiscoveryOptions, DiscoveryRequest};
     use humanify_core::libindex::lookup::{LibraryIndex, LookupRules};
     let ix = LibraryIndex::from_rows(vec![], vec![]);
     let l = library("");
     assert_eq!(
         format!("{:?}", l.rules()),
-        format!("{:?}", LookupRules::default())
+        format!("{:?}", LookupRules::recommended())
     );
     assert_eq!(
         format!("{:?}", l.discovery_options()),
-        format!("{:?}", DiscoveryOptions::default())
+        format!("{:?}", DiscoveryOptions::recommended())
     );
     let ours = l.discovery_request(Some(&ix)).lookup().expect("an index");
     let today = DiscoveryRequest {
         index: Some(&ix),
+        rules: Some(LookupRules::recommended()),
         ..DiscoveryRequest::default()
     }
     .lookup()

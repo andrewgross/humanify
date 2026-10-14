@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "308f229a97cfb08849bd527e6904724e3b80e5c179f1a03640f009520f7deb72",
+ "claimedBytes": {
+  "family": 3722,
+  "origin": 45799,
+  "right": 4714816,
+  "self": 16977,
+  "unmapped": 2871,
+  "wrongFamily": 78893
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_prisma_cli-1a0b5c",
+ "exploratory": {
+  "names": {
+   "bindings": 46855,
+   "bindingsSameVersion": 43984,
+   "bindingsVersionKnown": 46831,
+   "exactBytes": 4456215,
+   "exactUnits": 4262,
+   "sameVersionShare": 0.939207
+  }
+ },
+ "indexId": "94aa22740dd6088b1ce18813758555f42717a7adb0a7145b83e8832467de7cbf",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.942328,
+  "f1": 0.879966,
+  "namedBytes": 4411637,
+  "precision": 0.989057,
+  "recall": 0.79255
+ },
+ "label": "exp109-apps-c2-none-structural",
+ "missBytes": {
+  "a": 57174,
+  "b": 467820,
+  "c": 25269,
+  "d-absent": 91166,
+  "d-file": 22178,
+  "e-ambig": 6844,
+  "e-support": 2361,
+  "e-veto": 1785,
+  "f": 127449
+ },
+ "noDiscovery": null,
+ "reportSha256": "ec86c5706242de70e44a05de687a278be7d0fc995a7db41c62e0ad48a666fb77",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<self>": 306244,
+  "<unmapped>": 5775,
+  "copy": 264373,
+  "library": 5566383
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 264373,
+  "f05": 0.955187,
+  "f05ShipperOnly": 0.946004,
+  "f1": 0.915373,
+  "f1ShipperOnly": 0.906573,
+  "libraryBytes": 5566383,
+  "namedAsOriginBytes": 45799,
+  "namedAsShipperBytes": 4718538,
+  "namedBytes": 4764337,
+  "namedBytesShipperOnly": 4718538,
+  "precision": 0.983711,
+  "precisionShipperOnly": 0.974254,
+  "recall": 0.855913,
+  "recallShipperOnly": 0.847685,
+  "wrongFamilyBytes": 78893,
+  "wrongFamilyBytesShipperOnly": 124692
+ },
+ "truthMethod": "sourcemap"
+}
