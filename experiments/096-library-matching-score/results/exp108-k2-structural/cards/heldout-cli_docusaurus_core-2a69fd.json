@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "5327ffebc4cee3d0ccc2b86197909cff9d60cc8fb4951f5ee0ddde2f993896dc",
+ "claimedBytes": {
+  "family": 1949,
+  "origin": 1873,
+  "right": 594394,
+  "unmapped": 5815,
+  "wrongFamily": 25811
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_docusaurus_core-2a69fd",
+ "exploratory": {
+  "names": {
+   "bindings": 5773,
+   "bindingsSameVersion": 5742,
+   "bindingsVersionKnown": 5773,
+   "exactBytes": 494057,
+   "exactUnits": 1025,
+   "sameVersionShare": 0.99463
+  }
+ },
+ "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.875625,
+  "f1": 0.742964,
+  "namedBytes": 473613,
+  "precision": 0.993941,
+  "recall": 0.593181
+ },
+ "label": "exp108-k2-structural",
+ "missBytes": {
+  "a": 27763,
+  "b": 247,
+  "c": 53708,
+  "d-absent": 885,
+  "d-file": 18702,
+  "d-variant": 34507,
+  "e-ambig": 847,
+  "e-other": 694,
+  "e-spec": 233,
+  "e-support": 13320,
+  "e-veto": 7007,
+  "f": 42300
+ },
+ "noDiscovery": null,
+ "reportSha256": "2290374f073cfa5b1959ac16c111e6a9d519685752ffd1424b2ba360e5f84511",
+ "rule": "structural",
+ "schema": "exp096-score/6",
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 2796,
+  "<unmapped>": 8273,
+  "copy": 5123,
+  "library": 798429
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 5123,
+  "f05": 0.907891,
+  "f05ShipperOnly": 0.905048,
+  "f1": 0.841103,
+  "f1ShipperOnly": 0.838469,
+  "libraryBytes": 798429,
+  "namedAsOriginBytes": 1873,
+  "namedAsShipperBytes": 596343,
+  "namedBytes": 598216,
+  "namedBytesShipperOnly": 596343,
+  "precision": 0.958638,
+  "precisionShipperOnly": 0.955637,
+  "recall": 0.749241,
+  "recallShipperOnly": 0.746895,
+  "wrongFamilyBytes": 25811,
+  "wrongFamilyBytesShipperOnly": 27684
+ },
+ "truthMethod": "sourcemap"
+}

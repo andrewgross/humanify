@@ -504,6 +504,8 @@ def main():
     cards = collections.defaultdict(list)
     timing = {}
     for entry in manifest["entries"]:
+        if pipeline.get("sets") and entry["set"] not in pipeline["sets"]:
+            continue  # the label ran a subset of the corpus (run.py --sets)
         rp = os.path.join(run_dir, "reports", entry["id"] + ".json")
         doc = json.load(open(rp))
         report = doc["libraryDiscovery"]
@@ -546,7 +548,8 @@ def main():
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
-                   **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {})},
+                   **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
+                   **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},
         "bars": {"appClaimedBytes": app_total, "appBarPassed": app_total == 0,
                  "precisionBar": PRECISION_BAR,
                  "precisionBarPassed": {s: r["precision"] >= PRECISION_BAR for s, r in sets.items()}},

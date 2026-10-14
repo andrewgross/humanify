@@ -4,7 +4,8 @@
 
 - **State:** DONE on branch `exp107-zero-app-claims`, NOT merged; main `5fe24646` (exp106, scorer 5) is merged in.
   **Scorer 6 = scorer 5 + this lane's three decoder/carry rules** (`patch_sources` first, then `redecode`). Every
-  committed label was re-scored once (58: 41 dev, 2 bundlers, 4 apps, 11 test summaries); `rescore_diff.py` shows
+  committed label was re-scored once (80: 53 dev, 2 bundlers, 4 apps, 21 test summaries; exp108's 22 labels from
+  scorer 4, its two test families with their `--sets test-bun,test-esbuild`); `rescore_diff.py` shows
   only truth-derived fields moved (statement bytes by label, totals, misses, claimed-bytes verdicts, seeds,
   exploratory names). No report sha, index, rule, toolchain or detection field moved, and in the config only the
   chained/families shas of labels that had none. Scorer 6 with its rules off reproduces scorer 5's cards
@@ -25,7 +26,9 @@
   | test-rollup  | 75.8/28.7/57.0/41.6 (app 16) -> 75.9/29.1/57.4/42.1    | 87.1/15.7/45.6/26.6 -> 87.3/16.0/46.1/27.0           |
   | test-webpack | 85.4/34.0/65.6/48.7 (app 3,962) -> 85.8/34.4/66.1/49.1 | 95.5/23.0/58.6/37.1 (app 611) -> 95.8/23.3/59.0/37.4 |
 
-  App claimed after: 0 everywhere. The container rule alone is +0.01 P on test-webpack; the rest is truth. On the
+  App claimed after: 0 everywhere. exp108's test labels (k2/k5/c2v3, test-bun + test-esbuild) carried 0.77-1.32 MB
+  of test-esbuild app claims under scorer 4 (the chained artifact); under scorer 6, 0 (k2 structural test-esbuild
+  80.6/65.5 -> 83.0/66.1 P/R, F0.5 79.0). The container rule alone is +0.01 P on test-webpack; the rest is truth. On the
   bigger indexes scorer 5 -> 6 moves test by at most 0.1 (c2 structural test-esbuild 77.5/46.5/68.4/58.1 ->
   77.4/46.5/68.3/58.1; call2k structural 80.5/54.1/73.3/64.7, agreement 90.6/37.6/70.7/53.2, both unchanged).
 
