@@ -206,6 +206,9 @@ pub struct DiscoveryOptions {
     /// accepted for) in the bundle, is the rival's shadow — a package
     /// carrying the rival's code: its tied seeds become the rival's (the one
     /// with the most own-seed bytes), the rest are dropped ([`presence`]).
+    /// A rival counts only where it holds the tied code in a module no
+    /// bigger than the package's own (the origin is the smaller context: a
+    /// sponge with its own seeds must not absorb a real origin's ties).
     pub shadow_ties: bool,
 }
 
@@ -1420,11 +1423,22 @@ fn shadow_ties(
         let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
             continue;
         };
+        let own_context = containment.tightest_context(s.unit, &s.package);
+        let mut tied_rival = false;
         for o in containment.accepting_owners(s.unit) {
-            accepts[i].entry(key_of(containment.name(o))).or_insert(o);
+            let k = key_of(containment.name(o));
+            if k == keys[i] {
+                continue;
+            }
+            tied_rival = true;
+            // Only a rival holding this code in a module no bigger than the
+            // package's own can be its ORIGIN; a bigger one is a carrier.
+            let rival_context = containment.tightest_context(s.unit, containment.name(o));
+            if rival_context.zip(own_context).is_some_and(|(r, p)| r <= p) {
+                accepts[i].entry(k).or_insert(o);
+            }
         }
-        accepts[i].remove(&keys[i]);
-        if accepts[i].is_empty() {
+        if !tied_rival {
             *own_bytes.entry(keys[i]).or_default() += u64::from(graph.units[s.unit as usize].bytes);
         }
     }

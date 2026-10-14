@@ -1092,4 +1092,15 @@ fn shadow_ties_give_a_package_with_only_ambiguous_seeds_to_the_rival_the_bundle_
     ];
     let (_, _, rows) = run_indexed_with(SHADOW, &own, vec![], on);
     assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    // Q holds the tied code only in a bigger module than P does: Q would be
+    // the CARRIER of P's code, not its origin — the ties stay P's.
+    let bigger = [
+        Held::whole("var lib", "P"),
+        held_at("var lib", "Q", 4000),
+        Held::whole("var h2", "P"),
+        held_at("var h2", "Q", 4000),
+        Held::whole("var other", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(SHADOW, &bigger, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
 }
