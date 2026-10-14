@@ -10,12 +10,16 @@ use std::path::Path;
 use super::format::{LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
 use super::units::{StatementPrints, UnitPrint};
+use crate::matching::store::ReferenceStore;
 
-/// One indexed occurrence of a unit hash.
-#[derive(Clone, Copy, Debug)]
-struct UnitHit {
-    owner: u32,
-    module_bytes: u64,
+/// One indexed occurrence of a unit hash: the index store's piece
+/// (`matching::store`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnitHit {
+    /// The owner package's id (`LibraryIndex::package_name`).
+    pub owner: u32,
+    /// The smallest bundled module the unit was seen in (specificity).
+    pub module_bytes: u64,
 }
 
 /// A loaded index slice: its unit table and the literal table.
@@ -138,6 +142,21 @@ impl LibraryIndex {
         Ok(ix)
     }
 
+    /// Every indexed occurrence of `hash` (the store's `candidates`).
+    pub fn unit_hits(&self, hash: &str) -> &[UnitHit] {
+        self.units.get(hash).map_or(&[], Vec::as_slice)
+    }
+
+    /// An owner id's package name.
+    pub fn package_name(&self, owner: u32) -> &str {
+        &self.packages[owner as usize]
+    }
+
+    /// Every owner package, by owner id.
+    pub fn package_names(&self) -> &[String] {
+        &self.packages
+    }
+
     /// Every indexed occurrence of `hash`: (owner, module bytes) — for
     /// diagnostics.
     pub fn occurrences(&self, hash: &str) -> Vec<(&str, u64)> {
@@ -150,10 +169,13 @@ impl LibraryIndex {
 
     /// The distinct owners holding `hash` in a module no bigger than the
     /// specificity rule allows; None when there are none or too many.
-    fn look(&self, hash: &str, module_bytes: u64, rules: &LookupRules) -> Option<BTreeSet<u32>> {
-        let owners: BTreeSet<u32> = self
-            .units
-            .get(hash)?
+    pub(crate) fn look(
+        &self,
+        hash: &str,
+        module_bytes: u64,
+        rules: &LookupRules,
+    ) -> Option<BTreeSet<u32>> {
+        let owners: BTreeSet<u32> = ReferenceStore::candidates(self, hash)
             .iter()
             .filter(|h| {
                 rules
@@ -238,6 +260,37 @@ impl LibraryIndex {
         rules: &LookupRules,
         previous: Option<u32>,
     ) -> Option<(u32, u32)> {
+        let score = self.structural_scores(q, rules);
+        let whole = &q.prints.whole;
+        let best = *score.values().max()?;
+        let mut tied: Vec<u32> = score
+            .iter()
+            .filter(|(_, v)| **v == best)
+            .map(|(k, _)| *k)
+            .collect();
+        tied.sort_by(|a, b| self.packages[*a as usize].cmp(&self.packages[*b as usize]));
+        let p = previous.filter(|p| tied.contains(p)).unwrap_or(tied[0]);
+        (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1))).then_some((p, best))
+    }
+
+    /// Every package the structural rule would accept for `q` on its own
+    /// (its covered nodes reach the cover), tie or not: the index's
+    /// ambiguity about the unit.
+    pub(crate) fn structural_owners(&self, q: &UnitQuery<'_>, rules: &LookupRules) -> Vec<u32> {
+        let floor = rules.cover * f64::from(q.prints.whole.nodes.max(1));
+        let mut owners: Vec<u32> = self
+            .structural_scores(q, rules)
+            .into_iter()
+            .filter(|&(_, v)| f64::from(v) >= floor)
+            .map(|(k, _)| k)
+            .collect();
+        owners.sort_unstable();
+        owners
+    }
+
+    /// The structural rule's scores: per package, the nodes its hits cover
+    /// (the whole print, else the largest non-overlapping functions).
+    fn structural_scores(&self, q: &UnitQuery<'_>, rules: &LookupRules) -> HashMap<u32, u32> {
         let usable =
             |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
         let whole = &q.prints.whole;
@@ -270,15 +323,7 @@ impl LibraryIndex {
                 }
             }
         }
-        let best = *score.values().max()?;
-        let mut tied: Vec<u32> = score
-            .iter()
-            .filter(|(_, v)| **v == best)
-            .map(|(k, _)| *k)
-            .collect();
-        tied.sort_by(|a, b| self.packages[*a as usize].cmp(&self.packages[*b as usize]));
-        let p = previous.filter(|p| tied.contains(p)).unwrap_or(tied[0]);
-        (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1))).then_some((p, best))
+        score
     }
 }
 

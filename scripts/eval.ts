@@ -257,11 +257,17 @@ const SCORE_HARNESS_KEYS = [
   "diagnostics.diagnostics_file"
 ];
 
-/** Why a set of `--pipeline-set` entries is refused, or null. */
-function pipelineSetRefusal(entries: string[]): string | null {
+/**
+ * Why a set of `--pipeline-set` entries is refused, or null: malformed, a
+ * key set twice, or a key the launcher (`harnessKeys`) sets itself.
+ */
+function settingsRefusal(
+  harnessKeys: string[],
+  entries: string[]
+): string | null {
   try {
     collectSettings([
-      ...SCORE_HARNESS_KEYS.map((k): [string, string] => [k, "(harness)"]),
+      ...harnessKeys.map((k): [string, string] => [k, "(harness)"]),
       ...entries.map(parseSetting)
     ]);
     return null;
@@ -312,7 +318,7 @@ export function scoreArgs(args: string[]):
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
   );
-  const setRefusal = pipelineSetRefusal(sets);
+  const setRefusal = settingsRefusal(SCORE_HARNESS_KEYS, sets);
   if (setRefusal) return setRefusal;
   const baseMode: BaseMode = archive
     ? "archive"
@@ -369,6 +375,12 @@ export interface NeutralityRunConfig {
   priors: string;
   inputsBase: string;
   endpoint: string | null;
+  /**
+   * `--pipeline-set` entries, in order, written into BOTH legs' --config
+   * file (e.g. `library.matching=report`: prove report mode changes no
+   * output byte). A key neutrality.sh sets itself is refused.
+   */
+  pipelineSettings: string[];
 }
 
 const NEUTRALITY_FLAGS: Record<string, FlagKind> = {
@@ -376,8 +388,20 @@ const NEUTRALITY_FLAGS: Record<string, FlagKind> = {
   "--cache": "value",
   "--priors": "value",
   "--inputs-base": "value",
-  "--endpoint": "value"
+  "--endpoint": "value",
+  "--pipeline-set": "repeat"
 };
+
+/** The keys neutrality.sh's `leg_flags` writes for every leg. */
+const NEUTRALITY_HARNESS_KEYS = [
+  "llm.reasoning_effort",
+  "llm.concurrency",
+  "split.enabled",
+  "llm.cache_dir"
+];
+
+const NEUTRALITY_USAGE =
+  "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL] [--pipeline-set section.key=value]...";
 
 /** `eval neutrality`'s arguments → its run config, validated here. */
 export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
@@ -385,12 +409,17 @@ export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
   if (typeof parsed === "string") return parsed;
   const [baseline, pair = "2.1.85:2.1.86", ...extra] = parsed.positional;
   if (!baseline || extra.length > 0) {
-    return "usage: eval neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL]";
+    return `usage: eval ${NEUTRALITY_USAGE}`;
   }
   if (!/^[^:\s]+:[^:\s]+$/.test(pair)) {
     return `pair "${pair}" is not <from>:<to> (e.g. 2.1.215:2.1.216)`;
   }
   const f = parsed.flags;
+  const sets = parsed.given.filter(
+    (_, i) => parsed.given[i - 1] === "--pipeline-set"
+  );
+  const setRefusal = settingsRefusal(NEUTRALITY_HARNESS_KEYS, sets);
+  if (setRefusal) return setRefusal;
   const workdir = strFlag(f, "--workdir", "/work");
   return {
     kind: "neutrality",
@@ -400,7 +429,8 @@ export function neutralityArgs(args: string[]): NeutralityRunConfig | string {
     cache: strFlag(f, "--cache", path.join(workdir, "neutrality-cache")),
     priors: strFlag(f, "--priors", path.join(workdir, "exp050-cold")),
     inputsBase: strFlag(f, "--inputs-base", pairsDefaults().inputsBase),
-    endpoint: typeof f["--endpoint"] === "string" ? f["--endpoint"] : null
+    endpoint: typeof f["--endpoint"] === "string" ? f["--endpoint"] : null,
+    pipelineSettings: sets
   };
 }
 
@@ -579,8 +609,7 @@ const VERBS: Verb[] = [
   },
   {
     name: "neutrality",
-    usage:
-      "neutrality <baseline-ref> [from:to] [--workdir D] [--cache D] [--priors D] [--inputs-base D] [--endpoint URL]",
+    usage: NEUTRALITY_USAGE,
     description:
       "Byte-identity A/B against a committed ref with a shared WARM cache (~25min). " +
       "Default cache is the standing warm one — a fresh/per-run cache makes the run cold and the verdict void.",

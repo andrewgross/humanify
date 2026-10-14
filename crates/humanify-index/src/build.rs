@@ -49,9 +49,7 @@ const PURITY: f64 = 0.9;
 /// every module shard's key.
 pub const UNIT_ROWS_VERSION: &str = "unit-rows/4";
 
-/// Units smaller than this are not indexed (the lab's unit votes counted
-/// units of >= 20 nodes; the lookup's own floor is higher).
-pub const UNIT_ROW_MIN_NODES: u32 = 20;
+use humanify_core::libindex::units::UNIT_ROW_MIN_NODES;
 
 pub struct BuildConfig {
     /// `name` or `name@version` (a pin), one per entry.

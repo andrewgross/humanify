@@ -41,8 +41,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde::Serialize;
 
 use crate::cut::units::UnitKind;
+use crate::graph::edges::Scope;
 use crate::graph::references::ReferenceGraph;
 use crate::libindex::families::PackageFamilies;
+use crate::matching::rules::{
+    self, Evidence as Reads, Profile, Refusal, RuleList, RuleSpec, Stage, lib,
+};
 
 /// What a seed claim stands on.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -103,6 +107,9 @@ pub struct Claim {
     pub rule: Rule,
     pub round: u32,
     pub evidence: Option<Evidence>,
+    /// The profile rule that made a graph claim (`matching::rules`); empty
+    /// for a seed (its evidence says what made it).
+    pub by: &'static str,
 }
 
 /// Which claims may support an index seed against the isolation veto.
@@ -175,6 +182,74 @@ pub struct Discovery {
     /// DOWN-CLASS: unit → the package whose claim's closure reached it.
     pub library_class: BTreeMap<u32, String>,
     pub queue: Vec<QueueEntry>,
+    /// The boundary check, after the claims: per package, the INTO edges
+    /// landing on its claims and how many of its units they land on (a
+    /// package's callers should land on its entry points). Read, never
+    /// used to claim.
+    pub boundary: BTreeMap<String, Boundary>,
+}
+
+impl Discovery {
+    /// Every claim as a decision trail (`matching::rules::Decision`): the
+    /// claimed unit, what it was decided against (the index's package, the
+    /// unit's own text, or the claims it hangs off) and the deciding rule
+    /// of `profile`, with what that rule reads.
+    pub fn decisions(
+        &self,
+        graph: &ReferenceGraph,
+        profile: &LibraryProfile,
+    ) -> Vec<crate::matching::rules::Decision> {
+        self.claims
+            .iter()
+            .map(|(&u, c)| {
+                let span = graph.units[u as usize].span;
+                let (rule, against) = match (c.rule, &c.evidence) {
+                    (Rule::Seed, Some(Evidence::Declared { .. })) => (lib::DECLARED.name, "text"),
+                    (Rule::Seed, Some(Evidence::Banner)) => (lib::BANNER.name, "text"),
+                    (Rule::Seed, Some(Evidence::QueueIndex)) => (lib::TARGETED.name, "index"),
+                    (Rule::Seed, _) => (lib::STRUCTURAL.name, "index"),
+                    _ => (c.by, "claims"),
+                };
+                profile.rules().decide(
+                    format!("unit@{}-{}", span.start, span.end),
+                    format!("{against}:{}", c.package),
+                    rule,
+                )
+            })
+            .collect()
+    }
+}
+
+/// One package's INTO edges (the boundary check).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Boundary {
+    pub into_edges: u32,
+    pub into_units: u32,
+}
+
+/// The boundary check (`matching::rules::lib::BOUNDARY`, the one library
+/// rule that may read INTO edges: it runs after every claim and decides
+/// nothing).
+fn boundary(st: &State<'_>, groups: &Groups) -> BTreeMap<String, Boundary> {
+    let view = RoundView {
+        st,
+        groups,
+        spec: &lib::BOUNDARY,
+    };
+    let mut out: BTreeMap<String, Boundary> = BTreeMap::new();
+    for u in 0..view.units() {
+        let Some(p) = view.package_of(u) else {
+            continue;
+        };
+        let into = view.into_callers(u, p).len() as u32;
+        if into > 0 {
+            let b = out.entry(st.packages[p as usize].clone()).or_default();
+            b.into_edges += into;
+            b.into_units += 1;
+        }
+    }
+    out
 }
 
 /// Is `u` a statement (top-level or of an init body) — the population the
@@ -250,8 +325,15 @@ fn module_bytes(graph: &ReferenceGraph) -> Vec<u64> {
 struct State<'g> {
     graph: &'g ReferenceGraph,
     packages: Vec<String>,
-    claimed: Vec<Option<(u32, Rule, u32)>>,
+    claimed: Vec<Option<(u32, Rule, u32, &'static str)>>,
+    /// Per claimed unit, the one seed its claim derives from, or [`MANY`]
+    /// (more than one seed, or a positional fill): what the isolation veto
+    /// asks so a seed cannot support itself through its own propagation.
+    origin: Vec<u32>,
 }
+
+/// A claim deriving from more than one seed (or none).
+const MANY: u32 = u32::MAX;
 
 impl State<'_> {
     fn ext(&self, u: u32) -> bool {
@@ -285,109 +367,445 @@ impl State<'_> {
         found
     }
 
-    /// DOWN: every caller is claimed as one package.
-    fn down(&self, u: u32) -> Option<u32> {
-        let callers = &self.graph.inn[u as usize];
-        if callers.is_empty() {
-            return None;
-        }
-        self.one_package(callers.iter().copied())
-    }
-
-    /// Does `u`'s closure over unidentified units stay inside group `g`'s
-    /// statements?
-    fn closed_in(&self, groups: &Groups, g: u32, u: u32) -> bool {
-        let inside = |w: u32| groups.of[w as usize] == Some(g) && is_statement(self.graph, w);
-        let mut seen = BTreeSet::from([u]);
-        let mut stack = vec![u];
-        while let Some(x) = stack.pop() {
-            for &w in &self.graph.out[x as usize] {
-                if seen.contains(&w) || self.ext(w) {
-                    continue;
-                }
-                if !inside(w) {
-                    return false;
-                }
-                seen.insert(w);
-                stack.push(w);
-            }
-        }
-        true
-    }
-
-    /// MODULE over one group whose claims are all one package.
-    fn module(&self, groups: &Groups, g: u32, out: &mut Vec<(u32, u32, Rule)>) {
-        let members = &groups.statements[g as usize];
-        let mut packages = members.iter().filter_map(|&u| self.package_of(u));
-        let Some(p) = packages.next() else {
-            return;
-        };
-        if packages.any(|q| q != p) {
-            return;
-        }
-        for &u in members {
-            if self.ext(u) || !self.closed_in(groups, g, u) {
+    /// The seed a new claim of `u` as `p` derives from: the one origin of
+    /// the `p` claims it hangs off (its `p` callers, or a wrapper's body),
+    /// else [`MANY`].
+    fn derive_origin(&self, groups: &Groups, u: u32, p: u32) -> u32 {
+        let body = groups.bodies.get(&u).map_or(&[][..], Vec::as_slice);
+        let mut found = None;
+        for &c in self.graph.inn[u as usize].iter().chain(body) {
+            if self.package_of(c) != Some(p) {
                 continue;
             }
-            // The module's own wrapper counts as outside until GLUE claims
-            // it (the lab prototype's rule): a body statement is filled
-            // only through DOWN or once its init is identified.
-            let outside_caller = self.graph.inn[u as usize].iter().any(|&c| {
-                !(groups.of[c as usize] == Some(g) && is_statement(self.graph, c)) && !self.ext(c)
-            });
-            if !outside_caller {
-                out.push((u, p, Rule::Module));
+            let o = self.origin[c as usize];
+            match found {
+                None => found = Some(o),
+                Some(f) if f != o => return MANY,
+                Some(_) => {}
             }
         }
-    }
-
-    /// One round's claims, rule order DOWN, MODULE, GLUE (first wins).
-    fn round(&self, groups: &Groups, module_rule: bool) -> Vec<(u32, u32, Rule)> {
-        let mut found = Vec::new();
-        for u in 0..self.graph.units.len() as u32 {
-            if is_statement(self.graph, u)
-                && !self.ext(u)
-                && let Some(p) = self.down(u)
-            {
-                found.push((u, p, Rule::Down));
-            }
-        }
-        for g in (0..groups.statements.len() as u32).filter(|_| module_rule) {
-            self.module(groups, g, &mut found);
-        }
-        for (&wrapper, body) in &groups.bodies {
-            if !self.ext(wrapper)
-                && let Some(p) = self.one_package(body.iter().copied())
-            {
-                found.push((wrapper, p, Rule::Glue));
-            }
-        }
-        let mut seen = BTreeSet::new();
-        found.retain(|&(u, _, _)| seen.insert(u));
-        found
+        found.unwrap_or(MANY)
     }
 }
 
-/// Run the fixpoint from `seeds`; the rounds' tally.
+/// What a library rule sees: the claims so far, the module groups, and
+/// the graph's edges — ONLY in the scopes the rule declared
+/// (`matching::rules`, docs/matching-architecture.md §4). Scope is read
+/// relative to the region the rule decides for: when a rule asks whether
+/// unit `u` is package P's, an edge from a P claim to `u` is INSIDE P's
+/// region, an edge from anything else (app code, another package) to `u`
+/// is INTO it, and `u`'s own edges out are OUT OF it. Reading a scope the
+/// rule did not declare is a bug, and panics.
+pub struct RoundView<'v, 'g> {
+    st: &'v State<'g>,
+    groups: &'v Groups,
+    spec: &'v RuleSpec,
+}
+
+impl RoundView<'_, '_> {
+    fn need(&self, e: Reads) {
+        assert!(
+            self.spec.may_read(e),
+            "library rule {} reads {} without declaring it",
+            self.spec.name,
+            e.spelling()
+        );
+    }
+
+    /// How many units the graph has.
+    pub fn units(&self) -> u32 {
+        self.st.graph.units.len() as u32
+    }
+
+    /// A statement (top-level or of an init body) — the population the
+    /// rules claim from.
+    pub fn is_statement(&self, u: u32) -> bool {
+        is_statement(self.st.graph, u)
+    }
+
+    /// Already identified: claimed, or a runtime helper / bundled module.
+    pub fn is_external(&self, u: u32) -> bool {
+        self.need(Reads::Claims);
+        self.st.ext(u)
+    }
+
+    pub fn package_of(&self, u: u32) -> Option<u32> {
+        self.need(Reads::Claims);
+        self.st.package_of(u)
+    }
+
+    /// The one package every unit in `units` is claimed as.
+    pub fn one_package(&self, units: impl Iterator<Item = u32>) -> Option<u32> {
+        self.need(Reads::Claims);
+        self.st.one_package(units)
+    }
+
+    /// The packages P with a claim of P calling `u`: for each, an INSIDE
+    /// edge of P's region were `u` P's. Unclaimed callers (the app, or code
+    /// nobody has identified) are not read.
+    pub fn inside_caller_packages(&self, u: u32) -> BTreeSet<u32> {
+        self.need(Reads::Graph(Scope::Inside));
+        self.st.graph.inn[u as usize]
+            .iter()
+            .filter_map(|&c| self.st.package_of(c))
+            .collect()
+    }
+
+    /// The callers of `u` that are NOT claimed as `p`: the INTO edges of
+    /// P's region were `u` P's — how the app (or another package) calls it.
+    pub fn into_callers(&self, u: u32, p: u32) -> Vec<u32> {
+        self.need(Reads::Graph(Scope::Into));
+        self.st.graph.inn[u as usize]
+            .iter()
+            .copied()
+            .filter(|&c| self.st.package_of(c) != Some(p))
+            .collect()
+    }
+
+    /// `u`'s own edges out: OUT OF any region `u` would join (or INSIDE
+    /// it, where the callee joins too).
+    pub fn callees(&self, u: u32) -> &[u32] {
+        self.need(Reads::Graph(Scope::OutOf));
+        &self.st.graph.out[u as usize]
+    }
+
+    /// Is a neighbour of `u` (either direction, runtime aside) claimed as a
+    /// package `same` accepts: an INSIDE edge of that family's region.
+    pub fn has_inside_neighbour(&self, u: u32, mut same: impl FnMut(u32, u32) -> bool) -> bool {
+        self.need(Reads::Graph(Scope::Inside));
+        let g = self.st.graph;
+        g.out[u as usize]
+            .iter()
+            .chain(&g.inn[u as usize])
+            .filter(|&&w| !g.units[w as usize].runtime)
+            .filter_map(|&w| Some((w, self.st.package_of(w)?)))
+            .any(|(w, q)| same(w, q))
+    }
+
+    /// Was `w`'s claim made only through seed `seed`'s own propagation?
+    pub fn derives_only_from(&self, w: u32, seed: u32) -> bool {
+        self.need(Reads::Claims);
+        self.st.origin[w as usize] == seed
+    }
+
+    /// The module groups (positional: the units between two module
+    /// boundaries, module doc).
+    pub fn group_count(&self) -> u32 {
+        self.need(Reads::Position);
+        self.groups.statements.len() as u32
+    }
+
+    pub fn group_of(&self, u: u32) -> Option<u32> {
+        self.need(Reads::Position);
+        self.groups.of[u as usize]
+    }
+
+    pub fn group_statements(&self, g: u32) -> &[u32] {
+        self.need(Reads::Position);
+        &self.groups.statements[g as usize]
+    }
+
+    /// Each lazy wrapper with its body statements (its LazyWrapper edges:
+    /// INSIDE the module's region).
+    pub fn wrapper_bodies(&self) -> impl Iterator<Item = (u32, &[u32])> {
+        self.need(Reads::Graph(Scope::Inside));
+        self.groups.bodies.iter().map(|(&w, b)| (w, b.as_slice()))
+    }
+}
+
+/// A propagation rule's proposals for one round: (unit, package id).
+pub type ProposeFn = fn(&RoundView<'_, '_>, &mut Vec<(u32, u32)>);
+
+/// One propagation rule of the library profile: its spec (what it
+/// reads), the claim kind it makes, and its code.
+#[derive(Clone, Copy)]
+pub struct LibraryRule {
+    pub spec: RuleSpec,
+    pub rule: Rule,
+    pub propose: ProposeFn,
+}
+
+/// DOWN: a unit whose library callers are all one package P is P's
+/// private code. Only INSIDE edges: the app's calls into the library are
+/// not read (two apps calling one library differently must identify it
+/// the same).
+fn propose_down(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
+    for u in 0..v.units() {
+        if !v.is_statement(u) || v.is_external(u) {
+            continue;
+        }
+        let packages = v.inside_caller_packages(u);
+        if packages.len() == 1 {
+            out.extend(packages.into_iter().map(|p| (u, p)));
+        }
+    }
+}
+
+/// Does `u`'s closure over unidentified units stay inside group `g`'s
+/// statements?
+fn closed_in(v: &RoundView<'_, '_>, g: u32, u: u32) -> bool {
+    let inside = |w: u32| v.group_of(w) == Some(g) && v.is_statement(w);
+    let mut seen = BTreeSet::from([u]);
+    let mut stack = vec![u];
+    while let Some(x) = stack.pop() {
+        for &w in v.callees(x) {
+            if seen.contains(&w) || v.is_external(w) {
+                continue;
+            }
+            if !inside(w) {
+                return false;
+            }
+            seen.insert(w);
+            stack.push(w);
+        }
+    }
+    true
+}
+
+/// MODULE: a unit of a module whose claims are all one package P, whose
+/// closure stays inside the module. Who calls the unit from outside is
+/// not read (INTO).
+fn propose_module(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
+    for g in 0..v.group_count() {
+        let members = v.group_statements(g);
+        let Some(p) = v.one_package(
+            members
+                .iter()
+                .copied()
+                .filter(|&u| v.package_of(u).is_some()),
+        ) else {
+            continue;
+        };
+        for &u in members {
+            if !v.is_external(u) && closed_in(v, g, u) {
+                out.push((u, p));
+            }
+        }
+    }
+}
+
+/// GLUE: a lazy wrapper whose body is all P.
+fn propose_glue(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
+    for (wrapper, body) in v.wrapper_bodies() {
+        if !v.is_external(wrapper)
+            && let Some(p) = v.one_package(body.iter().copied())
+        {
+            out.push((wrapper, p));
+        }
+    }
+}
+
+/// The library profile's propagation rules, in round order (first wins),
+/// and the rule list they belong to (every one admitted by it).
+#[derive(Clone)]
+pub struct LibraryProfile {
+    list: RuleList,
+    propagation: Vec<LibraryRule>,
+}
+
+impl LibraryProfile {
+    /// The library profile (`matching::rules::library`) with its
+    /// fixpoint's rules DOWN, MODULE, GLUE.
+    pub fn standard() -> LibraryProfile {
+        Self::with_propagation(Self::standard_rules()).expect("the built-in rules are admitted")
+    }
+
+    /// The fixpoint's built-in rules, in round order.
+    pub fn standard_rules() -> Vec<LibraryRule> {
+        vec![
+            LibraryRule {
+                spec: lib::DOWN,
+                rule: Rule::Down,
+                propose: propose_down,
+            },
+            LibraryRule {
+                spec: lib::MODULE,
+                rule: Rule::Module,
+                propose: propose_module,
+            },
+            LibraryRule {
+                spec: lib::GLUE,
+                rule: Rule::Glue,
+                propose: propose_glue,
+            },
+        ]
+    }
+
+    /// The profile with `rules` as its fixpoint's rules, each admitted by
+    /// the library profile ([`crate::matching::rules::Profile::admit`]):
+    /// a rule that reads INTO edges is REFUSED.
+    pub fn with_propagation(rules: Vec<LibraryRule>) -> Result<LibraryProfile, Refusal> {
+        // The fixpoint's rules stand where the built-in list has its
+        // propagation rules.
+        let mut list = RuleList::new(Profile::Library);
+        let mut placed = false;
+        for spec in rules::library().rules() {
+            if spec.stage != Stage::Propagate {
+                list.push(*spec)?;
+            } else if !placed {
+                placed = true;
+                for r in &rules {
+                    list.push(r.spec)?;
+                }
+            }
+        }
+        Ok(LibraryProfile {
+            list,
+            propagation: rules,
+        })
+    }
+
+    pub fn rules(&self) -> &RuleList {
+        &self.list
+    }
+}
+
+/// Containment (docs/matching-architecture.md §4) with the index's node
+/// table. A bundled library is a SUBSET of its package's build
+/// (tree-shaking only removes), so a piece a propagation rule would add to
+/// package P's region must be in P's index entry wherever the index can
+/// say: a unit whose print is at or over the index's row floor
+/// ([`crate::libindex::units::UNIT_ROW_MIN_NODES`]) and that no print of
+/// P's family holds is not P's — the INSIDE edge that would bring it in is
+/// one P's entry cannot have. A smaller unit counts for nothing (the index
+/// holds no row for it), and so does what P's entry has that the bundle
+/// lacks (tree-shaken).
+pub struct Containment<'c> {
+    index: &'c crate::libindex::lookup::LibraryIndex,
+    prints: &'c [Option<crate::libindex::units::StatementPrints>],
+    module_bytes: &'c [u64],
+    rules: crate::libindex::lookup::LookupRules,
+    /// Per index owner, its family (read once).
+    owner_family: Vec<String>,
+}
+
+impl<'c> Containment<'c> {
+    pub fn new(
+        index: &'c crate::libindex::lookup::LibraryIndex,
+        prints: &'c [Option<crate::libindex::units::StatementPrints>],
+        module_bytes: &'c [u64],
+        rules: crate::libindex::lookup::LookupRules,
+        families: &PackageFamilies,
+    ) -> Containment<'c> {
+        Containment {
+            index,
+            prints,
+            module_bytes,
+            rules,
+            owner_family: index
+                .package_names()
+                .iter()
+                .map(|p| families.family(p))
+                .collect(),
+        }
+    }
+
+    fn family_of(&self, owner: u32) -> &str {
+        &self.owner_family[owner as usize]
+    }
+
+    /// How many families the structural rule would accept for `u` on its
+    /// own, tie or not: the index's ambiguity about the unit (a sponge
+    /// package, a fork, helpers every build emits).
+    fn families_accepting(&self, u: u32) -> usize {
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return 0;
+        };
+        let q = crate::libindex::lookup::UnitQuery {
+            unit: u,
+            prints,
+            module_bytes: self.module_bytes[u as usize],
+            text: "",
+        };
+        self.index
+            .structural_owners(&q, &self.rules)
+            .into_iter()
+            .map(|o| self.family_of(o))
+            .collect::<BTreeSet<_>>()
+            .len()
+    }
+
+    /// Does the index contradict unit `u` being `family`'s? (type doc)
+    fn contradicts(&self, u: u32, family: &str) -> bool {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return false;
+        };
+        if prints.whole.nodes < UNIT_ROW_MIN_NODES {
+            return false;
+        }
+        let held_by_family = std::iter::once(&prints.whole)
+            .chain(&prints.functions)
+            .filter(|p| p.nodes >= UNIT_ROW_MIN_NODES)
+            .any(|p| {
+                self.index
+                    .candidates(&p.hash)
+                    .iter()
+                    .any(|hit| self.family_of(hit.owner) == family)
+            });
+        !held_by_family
+    }
+}
+
+/// One fixpoint round: every rule's proposals in rule order (first wins
+/// per unit), each checked by containment when an index is at hand.
+fn round(
+    st: &State<'_>,
+    groups: &Groups,
+    rules: &[LibraryRule],
+    guard: Option<(&Containment<'_>, &PackageFamilies)>,
+) -> Vec<(u32, u32, Rule, &'static str)> {
+    let mut found = Vec::new();
+    let mut family: HashMap<u32, String> = HashMap::new();
+    for r in rules {
+        let view = RoundView {
+            st,
+            groups,
+            spec: &r.spec,
+        };
+        let mut proposed = Vec::new();
+        (r.propose)(&view, &mut proposed);
+        for (u, p) in proposed {
+            if let Some((c, families)) = guard {
+                let f = family
+                    .entry(p)
+                    .or_insert_with(|| families.family(&st.packages[p as usize]));
+                if c.contradicts(u, f) {
+                    continue;
+                }
+            }
+            found.push((u, p, r.rule, r.spec.name));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    found.retain(|&(u, _, _, _)| seen.insert(u));
+    found
+}
+
+/// Run the fixpoint from `seeds` with `rules`; the rounds' tally.
 fn fixpoint<'g>(
     graph: &'g ReferenceGraph,
     groups: &Groups,
     seeds: &[Seed],
     max_rounds: u32,
-    module_rule: bool,
+    rules: &[LibraryRule],
+    guard: Option<(&Containment<'_>, &PackageFamilies)>,
 ) -> (State<'g>, Vec<RoundStats>) {
     let mut st = State {
         graph,
         packages: Vec::new(),
         claimed: vec![None; graph.units.len()],
+        origin: vec![MANY; graph.units.len()],
     };
     for seed in seeds {
         let p = st.intern(&seed.package);
-        st.claimed[seed.unit as usize] = Some((p, Rule::Seed, 0));
+        st.claimed[seed.unit as usize] = Some((p, Rule::Seed, 0, ""));
+        st.origin[seed.unit as usize] = seed.unit;
     }
     let mut rounds = Vec::new();
     for k in 1..=max_rounds {
-        let added = st.round(groups, module_rule);
+        let added = round(&st, groups, rules, guard);
         if added.is_empty() {
             break;
         }
@@ -396,8 +814,14 @@ fn fixpoint<'g>(
             units: added.len() as u32,
             ..RoundStats::default()
         };
-        for &(u, p, rule) in &added {
-            st.claimed[u as usize] = Some((p, rule, k));
+        // Origins from the round's starting state, like the claims.
+        let origins: Vec<u32> = added
+            .iter()
+            .map(|&(u, p, _, _)| st.derive_origin(groups, u, p))
+            .collect();
+        for (&(u, p, rule, by), o) in added.iter().zip(origins) {
+            st.claimed[u as usize] = Some((p, rule, k, by));
+            st.origin[u as usize] = o;
             *stats.by_rule.entry(rule).or_default() += 1;
             if is_statement(graph, u) {
                 stats.statement_bytes += u64::from(graph.units[u as usize].bytes);
@@ -408,9 +832,27 @@ fn fixpoint<'g>(
     (st, rounds)
 }
 
-/// The index seeds with no neighbour (runtime aside) claimed as their own
-/// family.
-fn isolated(st: &State<'_>, seeds: &[Seed], families: &PackageFamilies) -> BTreeSet<u32> {
+/// The isolation veto: the index seeds with no neighbour (runtime aside)
+/// claimed as their own family — INSIDE edges of the family's region only.
+/// A seed the index is AMBIGUOUS about (the structural rule would accept
+/// more than one family for it: a sponge package's copy, a fork, shared
+/// emitted helpers) cannot support itself: a neighbour claimed only
+/// through this seed's own propagation is not independent evidence. (The
+/// old DOWN read the app's callers, which kept such a seed's neighbours
+/// unclaimed by accident; without INTO edges, its own declarations and
+/// helpers would otherwise vouch for it.)
+fn isolated(
+    st: &State<'_>,
+    groups: &Groups,
+    seeds: &[Seed],
+    families: &PackageFamilies,
+    containment: Option<&Containment<'_>>,
+) -> BTreeSet<u32> {
+    let view = RoundView {
+        st,
+        groups,
+        spec: &lib::ISOLATION_VETO,
+    };
     let mut family_cache: HashMap<u32, String> = HashMap::new();
     let mut family = |p: u32| {
         family_cache
@@ -420,17 +862,14 @@ fn isolated(st: &State<'_>, seeds: &[Seed], families: &PackageFamilies) -> BTree
     };
     let mut out = BTreeSet::new();
     for seed in seeds.iter().filter(|s| s.evidence.is_index()) {
-        let Some(p) = st.package_of(seed.unit) else {
+        let Some(p) = view.package_of(seed.unit) else {
             continue;
         };
         let own = family(p);
-        let u = seed.unit as usize;
-        let supported = st.graph.out[u]
-            .iter()
-            .chain(&st.graph.inn[u])
-            .filter(|&&w| !st.graph.units[w as usize].runtime)
-            .filter_map(|&w| st.package_of(w))
-            .any(|q| family(q) == own);
+        let ambiguous = containment.is_some_and(|c| c.families_accepting(seed.unit) > 1);
+        let supported = view.has_inside_neighbour(seed.unit, |w, q| {
+            !(ambiguous && view.derives_only_from(w, seed.unit)) && family(q) == own
+        });
         if !supported {
             out.insert(seed.unit);
         }
@@ -456,46 +895,58 @@ fn settle_seeds(graph: &ReferenceGraph, seeds: &[Seed]) -> Vec<Seed> {
     by_unit.into_values().cloned().collect()
 }
 
-/// DOWN-CLASS (module doc).
-fn down_class(st: &State<'_>, floor: u32) -> BTreeMap<u32, String> {
+/// DOWN-CLASS (module doc): what a claim reaches through its OUT-OF
+/// edges over unidentified code.
+fn down_class(st: &State<'_>, groups: &Groups, floor: u32) -> BTreeMap<u32, String> {
+    let v = RoundView {
+        st,
+        groups,
+        spec: &lib::LIBRARY_CLASS,
+    };
     let graph = st.graph;
     let mut class: BTreeMap<u32, String> = BTreeMap::new();
-    for u in 0..graph.units.len() as u32 {
-        let Some(p) = st.package_of(u) else {
+    for u in 0..v.units() {
+        let Some(p) = v.package_of(u) else {
             continue;
         };
         if graph.units[u as usize].bytes < floor {
             continue;
         }
-        let mut stack: Vec<u32> = graph.out[u as usize].clone();
+        let mut stack: Vec<u32> = v.callees(u).to_vec();
         while let Some(x) = stack.pop() {
-            if class.contains_key(&x) || st.ext(x) {
+            if class.contains_key(&x) || v.is_external(x) {
                 continue;
             }
             class.insert(x, st.packages[p as usize].clone());
-            stack.extend(graph.out[x as usize].iter().copied());
+            stack.extend(v.callees(x).iter().copied());
         }
     }
     class
 }
 
-/// The candidate queue (module doc).
-fn candidate_queue(st: &State<'_>, cap: u32) -> Vec<QueueEntry> {
-    let graph = st.graph;
+/// The candidate queue (module doc): unidentified regions and the
+/// packages their OUT-OF edges reach (abstract: package names only).
+fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry> {
+    let view = RoundView {
+        st,
+        groups,
+        spec: &lib::QUEUE,
+    };
     let mut queue = Vec::new();
-    for v in 0..graph.units.len() as u32 {
-        if !is_statement(graph, v) || st.ext(v) {
+    for v in 0..view.units() {
+        if !view.is_statement(v) || view.is_external(v) {
             continue;
         }
-        let uses: BTreeSet<&str> = graph.out[v as usize]
+        let uses: BTreeSet<&str> = view
+            .callees(v)
             .iter()
-            .filter_map(|&w| st.package_of(w))
+            .filter_map(|&w| view.package_of(w))
             .map(|p| st.packages[p as usize].as_str())
             .collect();
         if uses.is_empty() {
             continue;
         }
-        if let Some((region, bytes)) = bounded_closure(st, v, u64::from(cap)) {
+        if let Some((region, bytes)) = bounded_closure(&view, v, u64::from(cap)) {
             queue.push(QueueEntry {
                 unit: v,
                 region_units: region.len() as u32,
@@ -509,18 +960,18 @@ fn candidate_queue(st: &State<'_>, cap: u32) -> Vec<QueueEntry> {
 }
 
 /// |D(v)| over unidentified units, None past `cap` bytes.
-fn bounded_closure(st: &State<'_>, v: u32, cap: u64) -> Option<(Vec<u32>, u64)> {
+fn bounded_closure(view: &RoundView<'_, '_>, v: u32, cap: u64) -> Option<(Vec<u32>, u64)> {
     let mut seen = BTreeSet::from([v]);
     let mut order = vec![v];
     let mut stack = vec![v];
     let mut bytes = 0u64;
     while let Some(x) = stack.pop() {
-        bytes += u64::from(st.graph.units[x as usize].bytes);
+        bytes += u64::from(view.st.graph.units[x as usize].bytes);
         if bytes > cap {
             return None;
         }
-        for &w in &st.graph.out[x as usize] {
-            if !st.ext(w) && seen.insert(w) {
+        for &w in view.callees(x) {
+            if !view.is_external(w) && seen.insert(w) {
                 order.push(w);
                 stack.push(w);
             }
@@ -621,23 +1072,58 @@ fn aws_client_package(client: &str) -> String {
     out
 }
 
-/// Run discovery over `graph` from `seeds`.
+/// Run discovery over `graph` from `seeds` with the standard library
+/// profile and no index at hand (no containment).
 pub fn discover(
     graph: &ReferenceGraph,
     seeds: &[Seed],
     families: &PackageFamilies,
     options: DiscoveryOptions,
 ) -> Discovery {
+    discover_with(
+        graph,
+        seeds,
+        families,
+        options,
+        &LibraryProfile::standard(),
+        None,
+    )
+}
+
+/// Run discovery over `graph` from `seeds` under `profile`; `containment`
+/// guards every propagated claim when an index is at hand.
+pub fn discover_with(
+    graph: &ReferenceGraph,
+    seeds: &[Seed],
+    families: &PackageFamilies,
+    options: DiscoveryOptions,
+    profile: &LibraryProfile,
+    containment: Option<&Containment<'_>>,
+) -> Discovery {
     let groups = module_groups(graph);
+    let guard = containment.map(|c| (c, families));
+    let all = &profile.propagation[..];
+    let without_module: Vec<LibraryRule> = all
+        .iter()
+        .filter(|r| r.rule != Rule::Module)
+        .copied()
+        .collect();
     let mut active = settle_seeds(graph, seeds);
     let mut vetoed = Vec::new();
     let (st, rounds) = loop {
-        let (st, rounds) = fixpoint(graph, &groups, &active, options.max_rounds, true);
+        let (st, rounds) = fixpoint(graph, &groups, &active, options.max_rounds, all, guard);
         let drop = match options.veto_support {
-            VetoSupport::AllRules => isolated(&st, &active, families),
+            VetoSupport::AllRules => isolated(&st, &groups, &active, families, containment),
             VetoSupport::WithoutModule => {
-                let (support, _) = fixpoint(graph, &groups, &active, options.max_rounds, false);
-                isolated(&support, &active, families)
+                let (support, _) = fixpoint(
+                    graph,
+                    &groups,
+                    &active,
+                    options.max_rounds,
+                    &without_module,
+                    guard,
+                );
+                isolated(&support, &groups, &active, families, containment)
             }
         };
         if drop.is_empty() {
@@ -651,7 +1137,7 @@ pub fn discover(
     let evidence: HashMap<u32, &Evidence> = active.iter().map(|s| (s.unit, &s.evidence)).collect();
     let claims = (0..graph.units.len() as u32)
         .filter_map(|u| {
-            let (p, rule, round) = st.claimed[u as usize]?;
+            let (p, rule, round, by) = st.claimed[u as usize]?;
             Some((
                 u,
                 Claim {
@@ -659,6 +1145,7 @@ pub fn discover(
                     rule,
                     round,
                     evidence: evidence.get(&u).map(|e| (*e).clone()),
+                    by,
                 },
             ))
         })
@@ -667,8 +1154,9 @@ pub fn discover(
         claims,
         rounds,
         vetoed,
-        library_class: down_class(&st, options.closure_floor),
-        queue: candidate_queue(&st, options.queue_cap),
+        library_class: down_class(&st, &groups, options.closure_floor),
+        queue: candidate_queue(&st, &groups, options.queue_cap),
+        boundary: boundary(&st, &groups),
     }
 }
 
@@ -759,6 +1247,30 @@ pub fn discover_in_bundle(
     lookup: Option<IndexLookup<'_>>,
     options: DiscoveryOptions,
 ) -> (ReferenceGraph, Discovery) {
+    discover_in_bundle_with(
+        code,
+        ingest,
+        pieces,
+        factories,
+        index_claims,
+        lookup,
+        options,
+        &LibraryProfile::standard(),
+    )
+}
+
+/// [`discover_in_bundle`] under a given library profile.
+#[allow(clippy::too_many_arguments)]
+pub fn discover_in_bundle_with(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'_>,
+    pieces: BundlePieces,
+    factories: &[oxc_span::Span],
+    index_claims: &[(u32, String)],
+    lookup: Option<IndexLookup<'_>>,
+    options: DiscoveryOptions,
+    profile: &LibraryProfile,
+) -> (ReferenceGraph, Discovery) {
     let (mut graph, found) = discover_unscoped(
         code,
         ingest,
@@ -767,6 +1279,7 @@ pub fn discover_in_bundle(
         index_claims,
         lookup,
         options,
+        profile,
     );
     graph.assign_scopes(&library_regions(&graph, &found));
     (graph, found)
@@ -792,6 +1305,7 @@ pub fn library_regions(graph: &ReferenceGraph, found: &Discovery) -> crate::grap
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn discover_unscoped(
     code: &str,
     ingest: &crate::ingest::Ingest<'_>,
@@ -800,6 +1314,7 @@ fn discover_unscoped(
     index_claims: &[(u32, String)],
     lookup: Option<IndexLookup<'_>>,
     options: DiscoveryOptions,
+    profile: &LibraryProfile,
 ) -> (ReferenceGraph, Discovery) {
     let semantic = ingest.semantic();
     let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
@@ -816,7 +1331,7 @@ fn discover_unscoped(
         .collect();
     seeds.extend(evidence_seeds(code, semantic, &graph));
     let Some(lookup) = lookup else {
-        let found = discover(&graph, &seeds, &families, options);
+        let found = discover_with(&graph, &seeds, &families, options, profile, None);
         return (graph, found);
     };
     let units = crate::cut::units::container_units(statements, factories, &facts, false);
@@ -829,9 +1344,23 @@ fn discover_unscoped(
         module_bytes: module_bytes(&graph),
         family: &|p: &str| families.family(p),
     };
+    let containment = Containment::new(
+        lookup.index,
+        &prints,
+        &looker.module_bytes,
+        lookup.rules,
+        &families,
+    );
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
     seeds.extend(looker.claims(lookup.index, &everything, lookup.rules, Evidence::Index));
-    let found = discover(&graph, &seeds, &families, options);
+    let found = discover_with(
+        &graph,
+        &seeds,
+        &families,
+        options,
+        profile,
+        Some(&containment),
+    );
     let Some(targeted) = lookup.targeted else {
         return (graph, found);
     };
@@ -855,7 +1384,14 @@ fn discover_unscoped(
         return (graph, found);
     }
     seeds.extend(more);
-    let found = discover(&graph, &seeds, &families, options);
+    let found = discover_with(
+        &graph,
+        &seeds,
+        &families,
+        options,
+        profile,
+        Some(&containment),
+    );
     (graph, found)
 }
 
@@ -1100,6 +1636,10 @@ pub struct PackageRow {
     /// Queued regions that reference this package.
     pub queue_units: u32,
     pub queue_bytes: u64,
+    /// The boundary check: INTO edges landing on this package's claims,
+    /// and on how many of its units.
+    pub into_edges: u32,
+    pub into_units: u32,
 }
 
 /// `--diagnostics` `libraryDiscovery`: totals and one row per package by
@@ -1118,6 +1658,10 @@ pub struct DiscoveryReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index_slice_reason: Option<String>,
     pub graph: GraphStats,
+    /// The library profile's rules, in order, each with what it reads
+    /// (`matching::rules`): a claim row's `rule` (and a seed's evidence
+    /// kind) names one of them.
+    pub profile: Vec<crate::matching::rules::RuleRow>,
     /// Seeds KEPT (one per unit, after the isolation veto), by evidence kind.
     pub seeds: BTreeMap<String, u32>,
     pub rounds: Vec<RoundStats>,
@@ -1190,7 +1734,13 @@ impl DiscoveryReport {
                 p.queue_bytes += b;
             }
         }
+        for (package, b) in &found.boundary {
+            let p = package_row(&mut packages, package);
+            p.into_edges = b.into_edges;
+            p.into_units = b.into_units;
+        }
         r.packages = packages.into_values().collect();
+        r.profile = LibraryProfile::standard().rules().describe();
         if units {
             r.list_units(graph, found);
         }

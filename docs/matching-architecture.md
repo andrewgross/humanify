@@ -1,15 +1,15 @@
 # Matching architecture: one engine for "is this the same code?"
 
-Status: DESIGN, 2026-10-13. Nothing here is built. Main @ `872dff10`; the library
-side lives on the exp095 branches (`exp095-discovery-core`, `exp095-index-v2`,
-`exp095-match-misses`) and is not on main. The settings and the library index's
+Status: steps 1-4 BUILT (2026-10-14); step 5 (behaviour changes) is open,
+on experiment branches with evals. The settings and the library index's
 life cycle are in [library-matching-config.md](./library-matching-config.md).
 
-Progress: step 1 (shared helpers) and step 2 (hash forms as named,
-versioned settings: `hash/forms.rs`) are on main; step 3 (one cutter
-`cut.rs`, one graph `graph/edges.rs`, region scope plumbed) is built on
-branch `refactor/matching-cutter-graph` (2026-10-13). §2 below is the
-inventory as it stood BEFORE them.
+Progress: step 1 (shared helpers), step 2 (hash forms as named, versioned
+settings: `hash/forms.rs`) and step 3 (one cutter `cut.rs`, one graph
+`graph/edges.rs`, region scope plumbed; merged `b7235695`) are on main.
+Step 4 (reference store + rule lists, and the library profile reading graph
+scope) is built on branch `refactor/matching-reference-store` (2026-10-14,
+§3.7). §2 below is the inventory as it stood BEFORE them.
 
 ## Totals first
 
@@ -306,6 +306,124 @@ pipeline (discovery: the RAW bundle at unpack; the cascade: the fresh
 pre-rename text), so a region known on one must be mapped by span through
 the unpack before the other can use it — step 4's store owns that map.
 
+### 3.7 As built in step 4 (2026-10-14)
+
+Branch `refactor/matching-reference-store`, four commits on main
+`372221a0`: 4a (store + rule lists), the neutrality harness's
+`--pipeline-set`, 4b (the library profile reads graph scope), and a perf
+fix to 4a's rung interpreter.
+
+**The reference store** is `matching/store.rs`: one `ReferenceStore` trait
+(identity, form, candidates for a print, label, literals, edges by scope)
+with two implementations. The PRIOR store is `FingerprintIndex` (per run;
+the cascade's buckets read it through the trait; a scoped edge read is
+refused, since one program has no regions). The INDEX store is
+`LibraryIndex`, loaded with ONE recipe slice chosen once in
+`LibraryIndex::load`; it refuses INTO and every-edge reads and answers
+INSIDE / OUT-OF with `NotRecorded` (this index format has no edge table).
+The lookup reads it through the trait. The span map between the raw-bundle
+graph (discovery) and the pre-rename graph (cascade) that §3.6 assigned to
+the store was NOT needed: no step-4 rule reads a region across the two
+texts. It arrives with step 5's vendor INSIDE-only rule.
+
+**The rule lists** are `matching/rules.rs`: `RuleSpec` (name, stage,
+`Evidence` incl. graph scope), `Profile::admit` (the library profile
+REFUSES a rule that reads INTO or every edge, unless it is a post-claim
+`Stage::Check`), `RuleList` (built only through `push`) and
+`RuleList::decide`, the ONE constructor of a `Decision` (query piece,
+reference piece, deciding rule, what it reads).
+
+- **Cross-version profile** (`cross_version()`): today's rungs in today's
+  order. `cascade::resolve_match` EXECUTES the resolve rungs off
+  `rules::RESOLVE` (each rung a Match / Park / Narrow / Pass step); the park
+  pools, the one insertion point and the single calleeHashes+twoHopShapes
+  rung are as before, so the match list's order is unchanged.
+  `MatchResult::decisions` is the trail. The interpreter borrows the
+  candidate pool (`Cow`) until a rung narrows it: 4a's first version copied
+  every pool up front and cost +1.9 s on match:functions (8.3 → 10.2 s);
+  the fix brings it back to 8.1 s, match list digest identical.
+- **Library profile** (`library()`): the index lookup rules and discovery's
+  fixpoint (`libdetect::discovery::LibraryProfile`, every rule admitted by
+  `Profile::admit`). Each rule reads the graph through `RoundView`, which
+  serves only the scopes that rule declared. DOWN reads INSIDE edges only
+  (a unit whose LIBRARY callers are all one package is that package's; the
+  app's callers are not read); MODULE dropped its outside-caller (INTO)
+  guard. Only the post-claim `boundary` check reads INTO
+  (`packages[].intoEdges` / `intoUnits` in the report), and it decides
+  nothing.
+- **Two guards came with the scope rule**, because without the app's
+  callers DOWN reaches further. **Containment** with the index's unit
+  table (`discovery::Containment::contradicts`): a propagated unit at or
+  over the index's row floor (`libindex::units::UNIT_ROW_MIN_NODES`, 20
+  nodes) that no print of the claimed package's family holds is refused
+  (bundled ⊂ built). **Ambiguous seeds cannot vouch for themselves**: in
+  the isolation veto, a seed the structural rule would accept for more
+  than one family (`LibraryIndex::structural_owners`) is not supported by a
+  neighbour that was claimed only through that seed's own propagation.
+- **The §4 scope fixture** (`libdetect/scope_fixture_test.rs`, written
+  first and red): one library bundled into two apps that call it
+  differently identifies the same, piece for piece, against an index built
+  from the library alone; a probe rule declaring INTO is refused, and with
+  the refusal removed the probe runs and the apps disagree.
+
+**Gates (final head `6816607a`).** `npm run check`: all 13 stages passed.
+Warm neutrality vs `372221a0` on 2.1.215→2.1.216: 0 files / 0 lines, both
+legs +0 cache writes, with the default settings AND with
+`library.matching = "report"` plus the step-4 index (the only differing
+artifact is the diagnostics-only `library-report.json`). Pipeline output
+did not move.
+
+**Library score** (exp096, index `/work/exp097-data/ix/step4`, the same
+index as exp097's step-4 labels; labels `step4f-agreement` /
+`step4f-structural` vs `exp097-s4-*`; band 0, so every delta is real;
+recall / wrong family, origin-aware truth):
+
+| set (rule)                    | before       | after        | app claimed |
+| ----------------------------- | ------------ | ------------ | ----------- |
+| Claude Code 2.1.216 (struct.) | 67.1% / 0.0% | 70.6% / 0.0% | 0 → 0       |
+| held-out, 67 apps (struct.)   | 20.7% / 5.1% | 23.9% / 3.9% | 0 → 0       |
+| task-master-ai (struct.)      | 38.5% / 8.2% | 40.5% / 2.1% | 0 → 0       |
+| wrangler (struct.)            | 7.6% / 5.9%  | 14.6% / 4.9% | 0 → 0       |
+| Claude Code 2.1.216 (agree.)  | 41.9% / 0.0% | 61.9% / 0.0% | 0 → 0       |
+| held-out, 67 apps (agree.)    | 12.9% / 7.2% | 18.5% / 3.9% | 0 → 0       |
+| task-master-ai (agree.)       | 22.8% / 4.0% | 28.3% / 1.0% | 0 → 0       |
+| wrangler (agree.)             | 6.6% / 0.0%  | 10.4% / 0.0% | 0 → 0       |
+
+Read from the claims that changed (statement bytes, per unit):
+
+- **Recall rises through the scope rule.** New DOWN / MODULE claims the
+  app's callers used to block: highlight.js in codex (709 KB, MODULE),
+  @modelcontextprotocol/sdk in Claude Code, node-fetch / zod / MCP SDK in
+  task-master-ai, @aws-sdk/client-sts and yargs-parser in wrangler. The
+  isolation veto counts a same-family neighbour as support, and DOWN now
+  claims those neighbours, so seeds it used to drop survive: Claude Code's
+  vetoed bytes under agreement fell 161 KB → 17 KB (zod's seeds, the main
+  part of agreement's +20.0 points; its "guard" miss fell 21.4% → 5.8%).
+- **Wrong family falls through containment.** The largest wrong claims
+  before were propagated units the index's build of that package cannot
+  hold: `web-streams-polyfill` over @google/genai's shared TypeScript
+  helpers (126 KB in task-master-ai, 155 KB in held-out task-master-ai),
+  zod-to-json-schema over @ai-sdk/provider-utils in tidgi (31 KB),
+  content-type over the MCP core in task-master-ai (14 KB). Containment also drops some RIGHT claims (held-out ~174 KB, e.g.
+  markdown-it in renovate, 36 KB; @aws-sdk/client-s3 in wrangler, 5 KB): a
+  unit the bundle has and the indexed build does not print the same way.
+- **New wrong family from the scope rule**, which the guards do not catch:
+  uglify-js claimed over terser in html-minifier-terser (115 KB, DOWN:
+  terser is uglify's fork and shares its prints), @hono/node-server over
+  MCP code (19 KB in each task-master-ai), parse5 over entities (56 KB
+  across held-out apps), zod-to-json-schema over @ai-sdk/provider-utils in
+  the esbuild task-master-ai (7 KB, MODULE).
+  The isolation veto now drops @inquirer/figures seeds over `figures`
+  (~6 KB in each of three apps) and confbox over jsonc-parser in wrangler.
+- Claude Code under structural loses 0.9 KB of sample bytes
+  (@aws-sdk/client-bedrock, a DOWN claim no longer reached) and gains
+  12.5 KB (MCP SDK DOWN claims, p-map and client-bedrock-runtime seeds).
+
+The ~0.2% wrong-name bar is still unmet on held-out (3.8-3.9%),
+task-master-ai (1.0-2.1%) and structural wrangler (4.9%); Claude Code and
+agreement-wrangler stay at 0. App code claimed: 0 bytes on every set,
+both rules.
+
 ## 4. Graph evidence has a scope
 
 Andrew's constraint, 2026-10-13. A region is a set of pieces we think are one
@@ -333,7 +451,7 @@ library (or one module). Every graph edge touching it is one of:
   evidence is arguably more correct (an app edit should not unmatch an
   unchanged library), but it is a **behaviour change**: step 5, with an eval.
   It is not part of the byte-identical refactor.
-- **Test fixture (to write in step 4, red first).** One small library (a few
+- **Test fixture (written in step 4, red first: `libdetect/scope_fixture_test.rs`).** One small library (a few
   functions calling each other, one exported entry), bundled into two
   different apps that call it from different places and different numbers of
   times. Build a two-entry index from the library alone. Required: both apps'
@@ -394,18 +512,17 @@ writes**. A cold run is invalid (CLAUDE.md).
    carries scope tags (unused by any rule yet). Perf check against
    `docs/perf-inventory.md` (fresh 2.1.182: ≤ 368 s, ≤ 8.35 GB; with prior
    2.1.213: no regression) on top of neutrality.
-4. **Reference store + rule list.** The cross-version cascade moves behind
-   the prior store and its rule list unchanged (rung order, `MatchMap` order
-   kept). The exp095 library code comes to main here as the second profile,
-   **OFF by default, report-only** (config doc). Write the §4 scope fixture
-   first. The one library setting (`library.mode`, config doc §2) replaces
-   `--skip-libraries`; with the default `off`, files and functions the
-   path/banner detector marks as library are treated exactly as the
-   default `--skip-libraries` treats them today. Neutrality with the default
-   proves the move; a second warm neutrality with `library.mode = "report"`
-   proves report-only
-   changes no output byte (index-v2 already did this on its branch: 0/0, both
-   legs +0).
+4. **Reference store + rule list. BUILT (§3.7).** The cross-version
+   cascade moved behind the prior store and its rule list unchanged (rung
+   order, `MatchMap` order kept). The exp095 library code was already on
+   main (`587e211f`, OFF by default, report-only); step 4 made it the
+   second profile, reading graph scope (§4) with the scope fixture written
+   first. The one library setting landed in config sweeps 5-6 as
+   `[library] matching = "off" | "report"` (flag `--library-matching`) plus
+   `unnamed = "leave" | "model"` replacing `--skip-libraries`. Warm
+   neutrality with the default AND with `matching = "report"` and an index:
+   0/0, both legs +0 (the second run needs the harness's
+   `--pipeline-set`, which step 4 added).
 5. **Behaviour changes, on experiment branches with evals:** INSIDE-only
    evidence for vendor regions in cross-version; the minifier normaliser
    preset; names from the index; any library result that renames, moves or

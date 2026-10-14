@@ -29,6 +29,13 @@ pub struct UnitPrint {
     pub content: u32,
 }
 
+/// Prints smaller than this are not indexed (the lab's unit votes counted
+/// units of >= 20 nodes; the lookup's own floor is higher). The builder
+/// writes no row under it, so the index can say nothing about a smaller
+/// piece — and a piece at or over it that a package's build HAS is in that
+/// package's rows (containment, `libdetect::discovery::Containment`).
+pub const UNIT_ROW_MIN_NODES: u32 = 20;
+
 /// A statement unit's fingerprints: the whole statement, and every
 /// function inside it (nested ones included), in source order.
 #[derive(Clone, Debug, PartialEq, Eq)]
