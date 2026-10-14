@@ -127,6 +127,18 @@ pub enum VetoSupport {
     AllRules,
 }
 
+/// Which names a kept `/*!` banner may seed (exp106).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BannerNames {
+    /// Any name the banner reader reads (the default).
+    Any,
+    /// With an index at hand, only a package the index knows, in npm's
+    /// spelling ([`crate::libindex::lookup::LibraryIndex::resolve_known`]):
+    /// a banner names a project (`noble-curves`, `Runge-Kutta`, `@license`),
+    /// not always a package.
+    Known,
+}
+
 /// The tunables (design §5): the content floor a DOWN-CLASS start needs,
 /// the largest region queued for an index lookup, and what may support a
 /// seed against the isolation veto.
@@ -149,6 +161,32 @@ pub struct DiscoveryOptions {
     /// family's prints cover less than this share, is refused
     /// ([`Containment::contested_thin`]).
     pub contested_cover: f64,
+    /// Which banner names seed (exp106; default [`BannerNames::Any`]).
+    pub banner_names: BannerNames,
+    /// The helper floor (exp106; 0 = off): an index print held by at least
+    /// this many package families is emitted helper code (a tsc / Babel /
+    /// bundler helper every package that needs it inlines), no package's
+    /// identity. A unit such prints cover at least half of is no seed and
+    /// is refused to propagation ([`Containment::helper_dominated`]).
+    pub helper_families: u32,
+    /// The payload floor (exp106; 0 = off): a propagated unit of at least
+    /// this many bytes, nine tenths of them inside string literals (a
+    /// base64 wasm blob, an embedded data table), is refused unless the
+    /// claimed family's own index evidence holds it (a print of it, or its
+    /// long literal in the family's files): the call that reaches a payload
+    /// says nothing about whose payload it is
+    /// ([`Containment::unbacked_payload`]).
+    pub payload_min_bytes: u32,
+    /// Read another family's evidence in the conflict guards
+    /// (`evidence_conflict`, `contested_cover`) under the lookup's
+    /// specificity rule (exp106; default off): a print another family holds
+    /// only in a module far bigger than the query's (a sponge package
+    /// bundling the claimed package's code) is no rival.
+    pub specific_rivals: bool,
+    /// Join the package families by the metadata-derived links
+    /// (`libindex/families-derived.json`, restricted to the index's
+    /// packages) wherever discovery asks "one family?" (exp106).
+    pub derived_families: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -161,6 +199,11 @@ impl Default for DiscoveryOptions {
             evidence_conflict: false,
             literal_conflict: false,
             contested_cover: 0.0,
+            banner_names: BannerNames::Any,
+            helper_families: 0,
+            payload_min_bytes: 0,
+            specific_rivals: false,
+            derived_families: false,
         }
     }
 }
@@ -692,16 +735,28 @@ pub struct Containment<'c> {
     /// unit's text).
     code: &'c str,
     spans: Vec<oxc_span::Span>,
-    /// Per unit, the families holding each of its long literals (read once).
-    long_literals: std::cell::RefCell<HashMap<u32, Vec<BTreeSet<String>>>>,
+    /// Per unit, the owners holding each of its long literals that at most
+    /// [`LITERAL_IDENTITY_FAMILIES`] families hold (read once).
+    long_literals: std::cell::RefCell<HashMap<u32, Vec<BTreeSet<u32>>>>,
     prints: &'c [Option<crate::libindex::units::StatementPrints>],
     module_bytes: &'c [u64],
     rules: crate::libindex::lookup::LookupRules,
-    /// Per index owner, its family (read once).
+    /// The family judgement (`same`) every guard asks.
+    families: &'c PackageFamilies,
+    /// Per index owner, its base family (read once): a key for counting
+    /// and covering, joined by `families.same` where links apply.
     owner_family: Vec<String>,
+    /// Rivals' prints count only under the specificity rule
+    /// ([`DiscoveryOptions::specific_rivals`]).
+    specific_rivals: bool,
 }
 
+/// The cover key of the claimed package's own family (see
+/// [`Containment::covers`]).
+const OWN: &str = "\u{0}own";
+
 impl<'c> Containment<'c> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         index: &'c crate::libindex::lookup::LibraryIndex,
         code: &'c str,
@@ -709,7 +764,7 @@ impl<'c> Containment<'c> {
         prints: &'c [Option<crate::libindex::units::StatementPrints>],
         module_bytes: &'c [u64],
         rules: crate::libindex::lookup::LookupRules,
-        families: &PackageFamilies,
+        families: &'c PackageFamilies,
     ) -> Containment<'c> {
         Containment {
             index,
@@ -719,16 +774,48 @@ impl<'c> Containment<'c> {
             prints,
             module_bytes,
             rules,
+            families,
             owner_family: index
                 .package_names()
                 .iter()
                 .map(|p| families.family(p))
                 .collect(),
+            specific_rivals: false,
         }
     }
 
-    fn family_of(&self, owner: u32) -> &str {
-        &self.owner_family[owner as usize]
+    /// Read rivals under the specificity rule ([`DiscoveryOptions::specific_rivals`]).
+    pub fn with_specific_rivals(mut self, on: bool) -> Self {
+        self.specific_rivals = on;
+        self
+    }
+
+    fn name(&self, owner: u32) -> &str {
+        self.index.package_name(owner)
+    }
+
+    /// Is index owner `owner` of `package`'s family?
+    fn owner_is(&self, owner: u32, package: &str) -> bool {
+        self.families.same(self.name(owner), package)
+    }
+
+    /// How many families `owners` span: owners one family judgement joins
+    /// count once.
+    fn family_count(&self, owners: impl IntoIterator<Item = u32>) -> usize {
+        let mut reps: Vec<u32> = Vec::new();
+        let mut keys: BTreeSet<&str> = BTreeSet::new();
+        for o in owners {
+            if !keys.insert(&self.owner_family[o as usize]) {
+                continue;
+            }
+            if !reps
+                .iter()
+                .any(|&r| self.families.same(self.name(r), self.name(o)))
+            {
+                reps.push(o);
+            }
+        }
+        reps.len()
     }
 
     /// How many families the structural rule would accept for `u` on its
@@ -744,16 +831,11 @@ impl<'c> Containment<'c> {
             module_bytes: self.module_bytes[u as usize],
             text: "",
         };
-        self.index
-            .structural_owners(&q, &self.rules)
-            .into_iter()
-            .map(|o| self.family_of(o))
-            .collect::<BTreeSet<_>>()
-            .len()
+        self.family_count(self.index.structural_owners(&q, &self.rules))
     }
 
-    /// Does the index contradict unit `u` being `family`'s? (type doc)
-    fn contradicts(&self, u: u32, family: &str) -> bool {
+    /// Does the index contradict unit `u` being `package`'s? (type doc)
+    fn contradicts(&self, u: u32, package: &str) -> bool {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         use crate::matching::store::ReferenceStore;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
@@ -769,19 +851,20 @@ impl<'c> Containment<'c> {
                 self.index
                     .candidates(&p.hash)
                     .iter()
-                    .any(|hit| self.family_of(hit.owner) == family)
+                    .any(|hit| self.owner_is(hit.owner, package))
             });
         !held_by_family
     }
 
-    /// Does the literal table contradict unit `u` being `family`'s? Its
+    /// Does the literal table contradict unit `u` being `package`'s? Its
     /// long literals (identity evidence: a generated table, a long
     /// message — see `LibraryIndex::long_literal_owners`) that the table
     /// ties to at most [`LITERAL_IDENTITY_FAMILIES`] families are read; when
-    /// there are some and none is held by `family`, the unit carries
-    /// another package's identity. The unit print cannot say this for a
-    /// table: one huge string is a handful of nodes, under the row floor.
-    fn literal_contradicts(&self, u: u32, family: &str) -> bool {
+    /// there are some and none is held by `package`'s family, the unit
+    /// carries another package's identity. The unit print cannot say this
+    /// for a table: one huge string is a handful of nodes, under the row
+    /// floor.
+    fn literal_contradicts(&self, u: u32, package: &str) -> bool {
         let mut cache = self.long_literals.borrow_mut();
         let held = cache.entry(u).or_insert_with(|| {
             let span = self.spans[u as usize];
@@ -790,22 +873,53 @@ impl<'c> Containment<'c> {
                 .long_literal_owners(text)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|owners| {
-                    owners
-                        .into_iter()
-                        .map(|o| self.family_of(o).to_string())
-                        .collect::<BTreeSet<String>>()
+                .filter(|owners| {
+                    self.family_count(owners.iter().copied()) <= LITERAL_IDENTITY_FAMILIES
                 })
-                .filter(|f| f.len() <= LITERAL_IDENTITY_FAMILIES)
                 .collect()
         });
-        !held.is_empty() && !held.iter().any(|f| f.contains(family))
+        !held.is_empty()
+            && !held
+                .iter()
+                .any(|owners| owners.iter().any(|&o| self.owner_is(o, package)))
+    }
+
+    /// Is unit `u` a data payload (at least `min_bytes`, nine tenths string
+    /// literal bytes) that `package`'s family holds no evidence of: no print
+    /// of it (any size) and none of its long literals?
+    fn unbacked_payload(&self, u: u32, package: &str, min_bytes: u32) -> bool {
+        use crate::matching::store::ReferenceStore;
+        let span = self.spans[u as usize];
+        if span.size() < min_bytes {
+            return false;
+        }
+        let text = &self.code[span.start as usize..span.end as usize];
+        if 10 * string_literal_bytes(text) < 9 * text.len() {
+            return false;
+        }
+        let printed = match self.prints.get(u as usize) {
+            Some(Some(p)) => std::iter::once(&p.whole).chain(&p.functions).any(|p| {
+                self.index
+                    .candidates(&p.hash)
+                    .iter()
+                    .any(|hit| self.owner_is(hit.owner, package))
+            }),
+            _ => false,
+        };
+        let literal = self
+            .index
+            .long_literal_owners(text)
+            .unwrap_or_default()
+            .iter()
+            .any(|owners| owners.iter().any(|&o| self.owner_is(o, package)));
+        !printed && !literal
     }
 
     /// Per family, the nodes of unit `u` its index prints cover
     /// ([`family_cover`] at the row floor), and `u`'s nodes; None for a
-    /// unit with no prints.
-    fn covers(&self, u: u32) -> Option<(BTreeMap<&str, u32>, u32)> {
+    /// unit with no prints. `package`'s own family is keyed [`OWN`]; every
+    /// other owner by its base family.
+    fn covers(&self, u: u32, package: &str) -> Option<(BTreeMap<&str, u32>, u32)> {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
             return None;
@@ -815,17 +929,30 @@ impl<'c> Containment<'c> {
             &prints.functions,
             UNIT_ROW_MIN_NODES,
             |hash| {
+                let query = self.module_bytes[u as usize];
                 crate::matching::store::ReferenceStore::candidates(self.index, hash)
                     .iter()
-                    .map(|hit| self.family_of(hit.owner))
+                    .filter_map(|hit| {
+                        if self.owner_is(hit.owner, package) {
+                            Some(OWN)
+                        } else if self.specific_rivals
+                            && self.rules.specificity.is_some_and(|(factor, slack)| {
+                                hit.module_bytes > factor * query + slack
+                            })
+                        {
+                            None
+                        } else {
+                            Some(self.owner_family[hit.owner as usize].as_str())
+                        }
+                    })
                     .collect()
             },
         );
         Some((cover, prints.whole.nodes))
     }
 
-    /// Does another family's evidence outweigh `family`'s on unit `u`?
-    /// Per family, the nodes of `u` its index prints cover — the whole
+    /// Does another family's evidence outweigh `package`'s family's on unit
+    /// `u`? Per family, the nodes of `u` its index prints cover — the whole
     /// print when the family holds it, else its largest non-overlapping
     /// function prints (the structural rule's scoring, every print at or
     /// over the row floor, no specificity or package-count filter): a
@@ -834,27 +961,87 @@ impl<'c> Containment<'c> {
     /// the unit's own evidence point elsewhere?" — a module of package Q
     /// that one nested helper shared with P would otherwise let DOWN take
     /// as P's. A tie (a fork holding the same prints) is no conflict.
-    fn outweighed(&self, u: u32, family: &str) -> bool {
-        let Some((cover, _)) = self.covers(u) else {
+    fn outweighed(&self, u: u32, package: &str) -> bool {
+        let Some((cover, _)) = self.covers(u, package) else {
             return false;
         };
-        let own = cover.get(family).copied().unwrap_or(0);
-        cover.iter().any(|(f, &n)| *f != family && n > own)
+        let own = cover.get(OWN).copied().unwrap_or(0);
+        cover.iter().any(|(f, &n)| *f != OWN && n > own)
     }
 
-    /// Is unit `u` contested and `family`'s claim on it thin? Another
-    /// family's prints also cover part of it, and `family`'s cover less
-    /// than `floor` of its nodes: a big unit (a whole module of Q) taken
-    /// through one small helper P shares with it. Uncontested, a thin
-    /// cover is version drift and DOWN may keep it.
-    fn contested_thin(&self, u: u32, family: &str, floor: f64) -> bool {
-        let Some((cover, nodes)) = self.covers(u) else {
+    /// Is unit `u` contested and `package`'s family's claim on it thin?
+    /// Another family's prints also cover part of it, and the claimed
+    /// family's cover less than `floor` of its nodes: a big unit (a whole
+    /// module of Q) taken through one small helper P shares with it.
+    /// Uncontested, a thin cover is version drift and DOWN may keep it.
+    fn contested_thin(&self, u: u32, package: &str, floor: f64) -> bool {
+        let Some((cover, nodes)) = self.covers(u, package) else {
             return false;
         };
-        let own = cover.get(family).copied().unwrap_or(0);
-        let contested = cover.iter().any(|(f, &n)| *f != family && n > 0);
+        let own = cover.get(OWN).copied().unwrap_or(0);
+        let contested = cover.iter().any(|(f, &n)| *f != OWN && n > 0);
         contested && f64::from(own) < floor * f64::from(nodes)
     }
+
+    /// Is unit `u` emitted helper code? Its prints at or over the row floor
+    /// that at least `floor` families hold (the whole print, else the
+    /// largest non-overlapping function prints) cover at least half of its
+    /// nodes. Commonness is read from the index alone: no list of helper
+    /// names.
+    fn helper_dominated(&self, u: u32, floor: u32) -> bool {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return false;
+        };
+        let shared = |hash: &str| {
+            self.family_count(self.index.candidates(hash).iter().map(|h| h.owner)) >= floor as usize
+        };
+        let whole = &prints.whole;
+        if whole.nodes >= UNIT_ROW_MIN_NODES && shared(&whole.hash) {
+            return true;
+        }
+        let mut fns: Vec<&crate::libindex::units::UnitPrint> = prints
+            .functions
+            .iter()
+            .filter(|p| p.nodes >= UNIT_ROW_MIN_NODES)
+            .collect();
+        fns.sort_by_key(|p| std::cmp::Reverse(p.nodes));
+        let mut taken: Vec<(u32, u32)> = Vec::new();
+        let mut covered = 0u32;
+        for p in fns {
+            let (s, e) = (p.span.start, p.span.end);
+            if taken.iter().any(|&(a, b)| !(e <= a || s >= b)) || !shared(&p.hash) {
+                continue;
+            }
+            taken.push((s, e));
+            covered += p.nodes;
+        }
+        whole.nodes > 0 && 2 * covered >= whole.nodes
+    }
+}
+
+/// The bytes of `text` inside string and template literals (quotes
+/// included; a lexical scan, comments and regexes not told apart: a
+/// payload's share is far from the threshold either way).
+fn string_literal_bytes(text: &str) -> usize {
+    let b = text.as_bytes();
+    let (mut i, mut inside) = (0, 0);
+    while i < b.len() {
+        let q = b[i];
+        if q == b'"' || q == b'\'' || q == b'`' {
+            let start = i;
+            i += 1;
+            while i < b.len() && b[i] != q {
+                i += if b[i] == b'\\' { 2 } else { 1 };
+            }
+            i = (i + 1).min(b.len());
+            inside += i - start;
+        } else {
+            i += 1;
+        }
+    }
+    inside
 }
 
 /// A long literal held by more families than this is no package's
@@ -911,10 +1098,25 @@ fn family_cover<'f>(
 #[derive(Clone, Copy)]
 struct Guard<'c, 'x> {
     containment: &'c Containment<'x>,
-    families: &'c PackageFamilies,
     evidence_conflict: bool,
     literal_conflict: bool,
     contested_cover: f64,
+    helper_families: u32,
+    payload_min_bytes: u32,
+}
+
+impl Guard<'_, '_> {
+    /// Does a guard refuse unit `u` as `package`'s?
+    fn refuses(&self, u: u32, package: &str) -> bool {
+        let c = self.containment;
+        c.contradicts(u, package)
+            || (self.evidence_conflict && c.outweighed(u, package))
+            || (self.literal_conflict && c.literal_contradicts(u, package))
+            || (self.contested_cover > 0.0 && c.contested_thin(u, package, self.contested_cover))
+            || (self.helper_families > 0 && c.helper_dominated(u, self.helper_families))
+            || (self.payload_min_bytes > 0
+                && c.unbacked_payload(u, package, self.payload_min_bytes))
+    }
 }
 
 /// One fixpoint round: every rule's proposals in rule order (first wins
@@ -926,7 +1128,6 @@ fn round(
     guard: Option<Guard<'_, '_>>,
 ) -> Vec<(u32, u32, Rule, &'static str)> {
     let mut found = Vec::new();
-    let mut family: HashMap<u32, String> = HashMap::new();
     for r in rules {
         let view = RoundView {
             st,
@@ -936,18 +1137,8 @@ fn round(
         let mut proposed = Vec::new();
         (r.propose)(&view, &mut proposed);
         for (u, p) in proposed {
-            if let Some(g) = guard {
-                let f = family
-                    .entry(p)
-                    .or_insert_with(|| g.families.family(&st.packages[p as usize]));
-                if g.containment.contradicts(u, f)
-                    || (g.evidence_conflict && g.containment.outweighed(u, f))
-                    || (g.literal_conflict && g.containment.literal_contradicts(u, f))
-                    || (g.contested_cover > 0.0
-                        && g.containment.contested_thin(u, f, g.contested_cover))
-                {
-                    continue;
-                }
+            if guard.is_some_and(|g| g.refuses(u, &st.packages[p as usize])) {
+                continue;
             }
             found.push((u, p, r.rule, r.spec.name));
         }
@@ -1027,22 +1218,20 @@ fn isolated(
         groups,
         spec: &lib::ISOLATION_VETO,
     };
-    let mut family_cache: HashMap<u32, String> = HashMap::new();
-    let mut family = |p: u32| {
-        family_cache
-            .entry(p)
-            .or_insert_with(|| families.family(&st.packages[p as usize]))
-            .clone()
+    let mut same_cache: HashMap<(u32, u32), bool> = HashMap::new();
+    let mut same = |p: u32, q: u32| {
+        *same_cache
+            .entry((p, q))
+            .or_insert_with(|| families.same(&st.packages[p as usize], &st.packages[q as usize]))
     };
     let mut out = BTreeSet::new();
     for seed in seeds.iter().filter(|s| s.evidence.is_index()) {
         let Some(p) = view.package_of(seed.unit) else {
             continue;
         };
-        let own = family(p);
         let ambiguous = containment.is_some_and(|c| c.families_accepting(seed.unit) > 1);
         let supported = view.has_inside_neighbour(seed.unit, |w, q| {
-            !(ambiguous && view.derives_only_from(w, seed.unit)) && family(q) == own
+            !(ambiguous && view.derives_only_from(w, seed.unit)) && same(p, q)
         });
         if !supported {
             out.insert(seed.unit);
@@ -1277,10 +1466,11 @@ pub fn discover_with(
     let groups = module_groups(graph);
     let guard = containment.map(|c| Guard {
         containment: c,
-        families,
         evidence_conflict: options.evidence_conflict,
         literal_conflict: options.literal_conflict,
         contested_cover: options.contested_cover,
+        helper_families: options.helper_families,
+        payload_min_bytes: options.payload_min_bytes,
     });
     let all = &profile.propagation[..];
     let without_module: Vec<LibraryRule> = all
@@ -1498,7 +1688,13 @@ fn discover_unscoped(
 ) -> (ReferenceGraph, Discovery) {
     let semantic = ingest.semantic();
     let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
-    let families = PackageFamilies::shipped();
+    let families = match (options.derived_families, lookup) {
+        (false, _) => PackageFamilies::shipped(),
+        (true, Some(l)) => {
+            PackageFamilies::shipped().with_shipped_links_among(l.index.known_names())
+        }
+        (true, None) => PackageFamilies::shipped().with_shipped_links(),
+    };
     let mut seeds: Vec<Seed> = index_claims
         .iter()
         .filter_map(|(start, package)| {
@@ -1514,6 +1710,9 @@ fn discover_unscoped(
         let found = discover_with(&graph, &seeds, &families, options, profile, None);
         return (graph, found);
     };
+    if options.banner_names == BannerNames::Known {
+        seeds = known_banner_names(seeds, lookup.index);
+    }
     let units = crate::cut::units::container_units(statements, factories, &facts, false);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
@@ -1523,7 +1722,7 @@ fn discover_unscoped(
         graph: &graph,
         prints: &prints,
         module_bytes: module_bytes(&graph),
-        family: &|p: &str| families.family(p),
+        same: &|a: &str, b: &str| families.same(a, b),
     };
     let containment = Containment::new(
         lookup.index,
@@ -1533,13 +1732,17 @@ fn discover_unscoped(
         &looker.module_bytes,
         lookup.rules,
         &families,
-    );
+    )
+    .with_specific_rivals(options.specific_rivals);
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
     // The evidence-conflict guard reads index seeds too: the lookup picks
     // the best package under its specificity and package-count filters; a
     // unit the index as a whole gives to another family more is no seed.
+    // The helper floor likewise: emitted helper code is no package's seed.
     let unconflicted = |s: &Seed| {
-        !(options.evidence_conflict && containment.outweighed(s.unit, &families.family(&s.package)))
+        !(options.evidence_conflict && containment.outweighed(s.unit, &s.package))
+            && !(options.helper_families > 0
+                && containment.helper_dominated(s.unit, options.helper_families))
     };
     seeds.extend(
         looker
@@ -1560,7 +1763,6 @@ fn discover_unscoped(
     };
     let mut more = Vec::new();
     for q in &found.queue {
-        let used: BTreeSet<String> = q.uses.iter().map(|p| families.family(p)).collect();
         let region: Vec<u32> = q
             .region
             .iter()
@@ -1571,7 +1773,7 @@ fn discover_unscoped(
             looker
                 .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
                 .into_iter()
-                .filter(|s| used.contains(&families.family(&s.package)))
+                .filter(|s| q.uses.iter().any(|used| families.same(used, &s.package)))
                 .filter(unconflicted),
         );
     }
@@ -1588,6 +1790,24 @@ fn discover_unscoped(
         Some(&containment),
     );
     (graph, found)
+}
+
+/// The seeds with every banner name resolved to a package `index` knows
+/// ([`BannerNames::Known`]); a banner naming none is no seed.
+fn known_banner_names(
+    seeds: Vec<Seed>,
+    index: &crate::libindex::lookup::LibraryIndex,
+) -> Vec<Seed> {
+    seeds
+        .into_iter()
+        .filter_map(|s| match s.evidence {
+            Evidence::Banner => Some(Seed {
+                package: index.resolve_known(&s.package)?,
+                ..s
+            }),
+            _ => Some(s),
+        })
+        .collect()
 }
 
 /// The container statements, bundler facts and statement reference graph
@@ -1730,7 +1950,7 @@ struct Looker<'l> {
     graph: &'l ReferenceGraph,
     prints: &'l [Option<crate::libindex::units::StatementPrints>],
     module_bytes: Vec<u64>,
-    family: &'l dyn Fn(&str) -> String,
+    same: &'l dyn Fn(&str, &str) -> bool,
 }
 
 impl Looker<'_> {
@@ -1756,7 +1976,7 @@ impl Looker<'_> {
                 })
             })
             .collect();
-        claim_units(index, &queries, rules, self.family)
+        claim_units(index, &queries, rules, self.same)
             .into_iter()
             .map(|c| Seed {
                 unit: c.unit,

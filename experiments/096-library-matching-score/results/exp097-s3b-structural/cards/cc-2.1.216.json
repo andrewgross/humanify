@@ -41,7 +41,7 @@
  "originTruth": "none: sample truth (hand-labelled units)",
  "reportSha256": "e9b8faf2d2e7c885242af79bdf90d4d062e33e834dc341a96b12b9947dbf0fe2",
  "rule": "structural",
- "schema": "exp096-score/4",
+ "schema": "exp096-score/5",
  "set": "cc",
  "statementBytes": {
   "<app>": 13036401,
@@ -58,6 +58,8 @@
   "appClaimedBytes": 0,
   "appClaimedSampleUnits": 0,
   "copyBytes": 0,
+  "f05": 0.853251,
+  "f05ShipperOnly": 0.853251,
   "f1": 0.699315,
   "f1ShipperOnly": 0.699315,
   "libraryBytes": 2221462,

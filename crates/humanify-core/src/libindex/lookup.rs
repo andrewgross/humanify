@@ -37,6 +37,9 @@ pub struct LibraryIndex {
     packages: Vec<String>,
     units: UnitTable,
     literals: LiteralTable,
+    /// Every package name the index knows: its owners, and (loaded) the
+    /// packages its manifest records registry metadata or builds for.
+    known: BTreeSet<String>,
 }
 
 impl LibraryIndex {
@@ -54,8 +57,46 @@ impl LibraryIndex {
                 &literals, &packages,
             )))
             .expect("an encoded literal table opens"),
+            known: packages.iter().cloned().collect(),
             packages,
         }
+    }
+
+    /// Does the index know package `name` (an owner, or a package its
+    /// manifest records)?
+    pub fn knows(&self, name: &str) -> bool {
+        self.known.contains(name)
+    }
+
+    /// Every package name the index knows.
+    pub fn known_names(&self) -> &BTreeSet<String> {
+        &self.known
+    }
+
+    /// `name` as a package the index knows, in npm's spelling: itself, its
+    /// lower case, or the ONE known scoped package `@s/n` it spells as
+    /// `s-n` (a banner's `noble-curves` is `@noble/curves`). None when no
+    /// known package, or more than one, answers to it.
+    pub fn resolve_known(&self, name: &str) -> Option<String> {
+        if self.known.contains(name) {
+            return Some(name.to_string());
+        }
+        let lower = name.to_ascii_lowercase();
+        if self.known.contains(&lower) {
+            return Some(lower);
+        }
+        let mut hits = self.known.iter().filter(|k| {
+            k.strip_prefix('@')
+                .and_then(|rest| rest.split_once('/'))
+                .is_some_and(|(scope, base)| {
+                    lower.len() == scope.len() + 1 + base.len()
+                        && lower.starts_with(scope)
+                        && lower.as_bytes()[scope.len()] == b'-'
+                        && lower.ends_with(base)
+                })
+        });
+        let first = hits.next()?;
+        hits.next().is_none().then(|| first.clone())
     }
 
     /// Open `dir`'s slice for the bundle's `recipe` (`units.<slice>.bin`)
@@ -93,10 +134,14 @@ impl LibraryIndex {
             UnitTable::open(open(&units_name)?).map_err(|e| format!("{units_name}: {e}"))?;
         let literals = LiteralTable::open(open(table::LITERALS_FILE)?)
             .map_err(|e| format!("{}: {e}", table::LITERALS_FILE))?;
+        let mut known: BTreeSet<String> = packages.iter().cloned().collect();
+        known.extend(manifest.registry.packuments.keys().cloned());
+        known.extend(manifest.packages.iter().map(|p| p.name.clone()));
         Ok(LibraryIndex {
             id,
             slice,
             slice_reason: reason.to_string(),
+            known,
             packages,
             units,
             literals,
@@ -188,7 +233,12 @@ impl LibraryIndex {
     /// The literal rule on one text: (package, score) when the best file's
     /// package reaches the score and cover thresholds with a margin over
     /// the next package.
-    fn literal_claim(&self, text: &str, rules: &LookupRules) -> Option<(u32, f64)> {
+    fn literal_claim(
+        &self,
+        text: &str,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Option<(u32, f64)> {
         let lits = code_literals(text, LiteralMode::Bundled)?;
         if lits.len() < rules.min_literals {
             return None;
@@ -234,7 +284,20 @@ impl LibraryIndex {
         let mut ranked: Vec<(u32, f64)> = best.into_iter().collect();
         ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
         let (p, score) = *ranked.first()?;
-        let runner_up = ranked.get(1).map_or(0.0, |r| r.1);
+        let runner_up = if rules.literal_margin_by_family {
+            // The best OTHER family's file: a sibling package (a fork, a
+            // monorepo member, one package's two names) holding the same
+            // literals is no rival — the more packages an index holds, the
+            // likelier such a tie.
+            let named = self.package_name(p);
+            ranked
+                .iter()
+                .skip(1)
+                .find(|r| !same(self.package_name(r.0), named))
+                .map_or(0.0, |r| r.1)
+        } else {
+            ranked.get(1).map_or(0.0, |r| r.1)
+        };
         (score >= rules.literal_score
             && score >= rules.literal_cover * total
             && score - runner_up >= rules.literal_margin)
@@ -389,6 +452,9 @@ pub struct LookupRules {
     pub literal_score: f64,
     pub literal_cover: f64,
     pub literal_margin: f64,
+    /// Read the literal margin against the best file of another package
+    /// FAMILY, not merely another package (exp106; default off).
+    pub literal_margin_by_family: bool,
 }
 
 impl Default for LookupRules {
@@ -407,6 +473,7 @@ impl Default for LookupRules {
             literal_score: 20.0,
             literal_cover: 0.9,
             literal_margin: 10.0,
+            literal_margin_by_family: false,
         }
     }
 }
@@ -433,12 +500,12 @@ pub struct UnitClaim {
 }
 
 /// The claims of `queries` (statement units, in statement order) under
-/// `rules`; `family` decides agreement.
+/// `rules`; `same` (one package family?) decides agreement.
 pub fn claim_units(
     index: &LibraryIndex,
     queries: &[UnitQuery<'_>],
     rules: LookupRules,
-    family: &dyn Fn(&str) -> String,
+    same: &dyn Fn(&str, &str) -> bool,
 ) -> Vec<UnitClaim> {
     let mut previous = None;
     let structural: Vec<Option<(u32, u32)>> = queries
@@ -472,11 +539,11 @@ pub fn claim_units(
             literal: None,
         };
         if rules.agreement {
-            let Some((l, score)) = index.literal_claim(q.text, &rules) else {
+            let Some((l, score)) = index.literal_claim(q.text, &rules, same) else {
                 continue;
             };
             let named = &index.packages[l as usize];
-            if family(named) != family(package) {
+            if !same(named, package) {
                 continue;
             }
             claim.package = named.clone();

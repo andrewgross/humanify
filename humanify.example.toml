@@ -108,6 +108,8 @@ literal_score = 20.0
 literal_cover = 0.9
 # The literal rule's margin over the runner-up (bits).
 literal_margin = 10.0
+# Read the literal margin against the best file of another package family, not another package: a sibling holding the same literals is no rival (exp106).
+literal_margin_by_family = false
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).
@@ -130,6 +132,16 @@ evidence_conflict = false
 literal_conflict = false
 # Refuse a propagated claim on a unit another package family's prints also cover when the claimed family's prints cover less than this share of it (exp102; 0 = off).
 contested_cover = 0.0
+# Which names a kept /*! banner may seed: "any" (the banner reader's) or "known" (with an index, only a package the index knows, in npm's spelling; exp106).
+banner_names = "any"
+# An index print at least this many package families hold is emitted helper code: a unit such prints cover half of is no seed and no propagated claim (exp106; 0 = off).
+helper_families = 0
+# A propagated unit of at least this many bytes, nine tenths string literal (a wasm blob, a data table), needs the claimed family's own index evidence (exp106; 0 = off).
+payload_min_bytes = 0
+# Read another family's prints in evidence_conflict / contested_cover under the lookup's specificity rule: a sponge's unspecific print is no rival (exp106).
+specific_rivals = false
+# Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
+derived_families = false
 
 [unpack]
 # Force the bundler verdict.
