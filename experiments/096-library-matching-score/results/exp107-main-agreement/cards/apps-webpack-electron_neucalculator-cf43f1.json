@@ -1,0 +1,82 @@
+{
+ "bundleSha256": "0512730ade5ef9931df3081816fb1ec7bec600e39d15780817b01118265de8b0",
+ "claimedBytes": {
+  "right": 3986543,
+  "unmapped": 6570,
+  "wrongFamily": 2895
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_neucalculator-cf43f1",
+ "exploratory": {
+  "names": {
+   "bindings": 43932,
+   "bindingsSameVersion": 42551,
+   "bindingsVersionKnown": 43932,
+   "exactBytes": 3740758,
+   "exactUnits": 3561,
+   "sameVersionShare": 0.968565
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f1": 0.455416,
+  "namedBytes": 3210867,
+  "precision": 0.999102,
+  "recall": 0.294925
+ },
+ "label": "exp107-main-agreement",
+ "missBytes": {
+  "a": 1457773,
+  "b": 517274,
+  "c": 552602,
+  "d-absent": 119931,
+  "d-file": 21942,
+  "d-variant": 2055,
+  "e-agree": 4079465,
+  "e-ambig": 20972,
+  "e-other": 8212,
+  "e-support": 22248,
+  "e-veto": 54605,
+  "f": 43457
+ },
+ "noDiscovery": null,
+ "reportSha256": "700c0a702dcf8ccae748c76b7eaec55646f8143a13c062f7c5bb4c4053b5b54f",
+ "rule": "agreement",
+ "schema": "exp096-score/6",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 2225,
+  "<unmapped>": 2788612,
+  "copy": 5095,
+  "library": 10887079
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 5095,
+  "f1": 0.535951,
+  "f1ShipperOnly": 0.535951,
+  "libraryBytes": 10887079,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 3986543,
+  "namedBytes": 3986543,
+  "namedBytesShipperOnly": 3986543,
+  "precision": 0.999274,
+  "precisionShipperOnly": 0.999274,
+  "recall": 0.366172,
+  "recallShipperOnly": 0.366172,
+  "wrongFamilyBytes": 2895,
+  "wrongFamilyBytesShipperOnly": 2895
+ },
+ "truthMethod": "sourcemap"
+}
