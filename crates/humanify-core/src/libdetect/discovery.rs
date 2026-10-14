@@ -136,6 +136,10 @@ pub struct DiscoveryOptions {
     pub queue_cap: u32,
     pub max_rounds: u32,
     pub veto_support: VetoSupport,
+    /// The evidence-conflict guard (exp102; default off): a propagated
+    /// unit another family's index prints cover more of than the claimed
+    /// family's is refused ([`Containment::outweighed`]).
+    pub evidence_conflict: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -145,6 +149,7 @@ impl Default for DiscoveryOptions {
             queue_cap: 256_000,
             max_rounds: 50,
             veto_support: VetoSupport::WithoutModule,
+            evidence_conflict: false,
         }
     }
 }
@@ -746,15 +751,99 @@ impl<'c> Containment<'c> {
             });
         !held_by_family
     }
+
+    /// Does another family's evidence outweigh `family`'s on unit `u`?
+    /// Per family, the nodes of `u` its index prints cover — the whole
+    /// print when the family holds it, else its largest non-overlapping
+    /// function prints (the structural rule's scoring, every print at or
+    /// over the row floor, no specificity or package-count filter): a
+    /// propagated claim is refused when some other family covers strictly
+    /// more. Containment asks "can P's build hold this?"; this asks "does
+    /// the unit's own evidence point elsewhere?" — a module of package Q
+    /// that one nested helper shared with P would otherwise let DOWN take
+    /// as P's. A tie (a fork holding the same prints) is no conflict.
+    fn outweighed(&self, u: u32, family: &str) -> bool {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return false;
+        };
+        let cover = family_cover(
+            &prints.whole,
+            &prints.functions,
+            UNIT_ROW_MIN_NODES,
+            |hash| {
+                crate::matching::store::ReferenceStore::candidates(self.index, hash)
+                    .iter()
+                    .map(|hit| self.family_of(hit.owner))
+                    .collect()
+            },
+        );
+        let own = cover.get(family).copied().unwrap_or(0);
+        cover.iter().any(|(f, &n)| *f != family && n > own)
+    }
+}
+
+/// Per family, the nodes of a unit its held prints cover: the whole
+/// print's nodes when the family holds it, else the sum over its largest
+/// non-overlapping held function prints (prints under `floor` nodes are
+/// not in the index and count for nothing). `holders` names the families
+/// holding a hash.
+fn family_cover<'f>(
+    whole: &crate::libindex::units::UnitPrint,
+    functions: &[crate::libindex::units::UnitPrint],
+    floor: u32,
+    holders: impl Fn(&str) -> BTreeSet<&'f str>,
+) -> BTreeMap<&'f str, u32> {
+    let mut cover: BTreeMap<&str, u32> = BTreeMap::new();
+    let whole_held = if whole.nodes >= floor {
+        holders(&whole.hash)
+    } else {
+        BTreeSet::new()
+    };
+    for f in &whole_held {
+        cover.insert(f, whole.nodes);
+    }
+    let mut hits: Vec<(&crate::libindex::units::UnitPrint, BTreeSet<&str>)> = functions
+        .iter()
+        .filter(|p| p.nodes >= floor)
+        .map(|p| (p, holders(&p.hash)))
+        .filter(|(_, h)| !h.is_empty())
+        .collect();
+    hits.sort_by_key(|(p, _)| std::cmp::Reverse(p.nodes));
+    let mut taken: BTreeMap<&str, Vec<(u32, u32)>> = BTreeMap::new();
+    for (p, families) in hits {
+        let (s, e) = (p.span.start, p.span.end);
+        for f in families {
+            if whole_held.contains(f) {
+                continue;
+            }
+            let spans = taken.entry(f).or_default();
+            if spans.iter().any(|&(a, b)| !(e <= a || s >= b)) {
+                continue;
+            }
+            spans.push((s, e));
+            *cover.entry(f).or_default() += p.nodes;
+        }
+    }
+    cover
+}
+
+/// The guards on every propagated claim when an index is at hand:
+/// containment, and the evidence-conflict guard when the run asks for it.
+#[derive(Clone, Copy)]
+struct Guard<'c, 'x> {
+    containment: &'c Containment<'x>,
+    families: &'c PackageFamilies,
+    evidence_conflict: bool,
 }
 
 /// One fixpoint round: every rule's proposals in rule order (first wins
-/// per unit), each checked by containment when an index is at hand.
+/// per unit), each checked by the guards when an index is at hand.
 fn round(
     st: &State<'_>,
     groups: &Groups,
     rules: &[LibraryRule],
-    guard: Option<(&Containment<'_>, &PackageFamilies)>,
+    guard: Option<Guard<'_, '_>>,
 ) -> Vec<(u32, u32, Rule, &'static str)> {
     let mut found = Vec::new();
     let mut family: HashMap<u32, String> = HashMap::new();
@@ -767,11 +856,13 @@ fn round(
         let mut proposed = Vec::new();
         (r.propose)(&view, &mut proposed);
         for (u, p) in proposed {
-            if let Some((c, families)) = guard {
+            if let Some(g) = guard {
                 let f = family
                     .entry(p)
-                    .or_insert_with(|| families.family(&st.packages[p as usize]));
-                if c.contradicts(u, f) {
+                    .or_insert_with(|| g.families.family(&st.packages[p as usize]));
+                if g.containment.contradicts(u, f)
+                    || (g.evidence_conflict && g.containment.outweighed(u, f))
+                {
                     continue;
                 }
             }
@@ -790,7 +881,7 @@ fn fixpoint<'g>(
     seeds: &[Seed],
     max_rounds: u32,
     rules: &[LibraryRule],
-    guard: Option<(&Containment<'_>, &PackageFamilies)>,
+    guard: Option<Guard<'_, '_>>,
 ) -> (State<'g>, Vec<RoundStats>) {
     let mut st = State {
         graph,
@@ -1101,7 +1192,11 @@ pub fn discover_with(
     containment: Option<&Containment<'_>>,
 ) -> Discovery {
     let groups = module_groups(graph);
-    let guard = containment.map(|c| (c, families));
+    let guard = containment.map(|c| Guard {
+        containment: c,
+        families,
+        evidence_conflict: options.evidence_conflict,
+    });
     let all = &profile.propagation[..];
     let without_module: Vec<LibraryRule> = all
         .iter()

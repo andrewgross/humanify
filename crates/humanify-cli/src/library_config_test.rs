@@ -226,3 +226,15 @@ fn the_lab_knobs_are_keys_with_todays_values() {
     let spec = build(&["in.js"], "[library.lookup]\nspecificity = false\n").unwrap();
     assert!(spec.library.rules().specificity.is_none());
 }
+
+#[test]
+fn the_exp102_precision_guards_are_keys_default_off() {
+    let off = build(&["in.js"], "").unwrap();
+    assert!(!off.library.discovery_options().evidence_conflict);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\nevidence_conflict = true\n",
+    )
+    .unwrap();
+    assert!(on.library.discovery_options().evidence_conflict);
+}

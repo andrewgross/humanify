@@ -580,6 +580,16 @@ pub static KEYS: &[Key] = &[
         doc: "What may support a seed against the isolation veto: \"without-module\" or \
               \"all-rules\" (the lab prototype's).",
     },
+    Key {
+        section: "library.discovery",
+        name: "evidence_conflict",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().evidence_conflict)),
+        unset: "",
+        doc: "Refuse a propagated claim when another package family's index prints cover \
+              more of the unit than the claimed family's (exp102).",
+    },
     // [unpack]
     Key {
         section: "unpack",

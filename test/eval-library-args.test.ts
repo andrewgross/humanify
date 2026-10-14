@@ -47,6 +47,61 @@ describe("eval library argument parsing", () => {
     );
   });
 
+  it("passes --pipeline-set [library] settings through, in order", () => {
+    const r = libraryArgs([
+      "lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--pipeline-set",
+      "library.discovery.max_rounds=7",
+      "--pipeline-set",
+      "library.lookup.cover=0.6"
+    ]);
+    assert.ok(typeof r !== "string", String(r));
+    assert.deepStrictEqual(r.slice(5), [
+      "--pipeline-set",
+      "library.discovery.max_rounds=7",
+      "--pipeline-set",
+      "library.lookup.cover=0.6"
+    ]);
+  });
+
+  it("refuses a --pipeline-set the verb cannot read, or the rule's own key", () => {
+    const base = ["lbl", "--index", "/ix", "--rule", "agreement"];
+    assert.match(
+      String(libraryArgs([...base, "--pipeline-set", "split.enabled=true"])),
+      /only \[library\.\*\] keys/
+    );
+    assert.match(
+      String(
+        libraryArgs([
+          ...base,
+          "--pipeline-set",
+          "library.lookup.agreement=false"
+        ])
+      ),
+      /library\.lookup\.agreement/
+    );
+    assert.match(
+      String(libraryArgs([...base, "--pipeline-set", "nodots"])),
+      /--pipeline-set/
+    );
+    assert.match(
+      String(
+        libraryArgs([
+          ...base,
+          "--pipeline-set",
+          "library.lookup.cover=0.6",
+          "--pipeline-set",
+          "library.lookup.cover=0.7"
+        ])
+      ),
+      /set twice/
+    );
+  });
+
   it("refuses an unknown flag before anything runs", () => {
     const r = spawnSync(
       "npx",

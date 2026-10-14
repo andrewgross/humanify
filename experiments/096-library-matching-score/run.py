@@ -2,12 +2,15 @@
 one claim rule, score it.
 
 usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST]
-                      [--force-mixed]
+                      [--force-mixed] [--pipeline-set library.<key>=value]...
 
   --commit   build the binary from this commit in a detached worktree (default: this checkout's HEAD, which must
              be clean under crates/ and Cargo.*; a dirty tree would make the label describe code that did not run)
   --jobs     bundles in flight at once (default 4; each run is ~1-2 GB and a few seconds)
   --cpus     taskset CPU list for the runs (default 0-15: keep off the cores a neutrality or eval run is using)
+  --pipeline-set  a `[library]` setting for the discover verb's --config file, repeatable, in order (written by
+             THE config writer, experiments/lib/pipeline-config.ts, after the rule's own key; recorded in
+             pipeline.json as `settings`, so a label is one configuration)
 
 Writes <DATA>/results/<label>/{pipeline.json, reports/<id>.json, reports/<id>.run.json}, then score.py writes the
 committed cards. A label is one configuration: re-running it with another binary, index, rule or corpus is
@@ -33,12 +36,18 @@ def parse(argv):
         raise SystemExit(__doc__)
     label, opts = argv[0], {"--jobs": "4", "--cpus": "0-15", "--rule": None, "--index": None, "--commit": None}
     force = False
+    opts["--pipeline-set"] = []
     i = 1
     while i < len(argv):
         a = argv[i]
         if a == "--force-mixed":
             force = True
             i += 1
+        elif a == "--pipeline-set":
+            if i + 1 >= len(argv) or not argv[i + 1].startswith("library."):
+                raise SystemExit("--pipeline-set needs a library.<key>=value setting")
+            opts[a].append(argv[i + 1])
+            i += 2
         elif a in opts:
             opts[a] = argv[i + 1]
             i += 2
@@ -93,11 +102,17 @@ def guard(run_dir, config, force):
     print(f"!! MIXED CONFIG in label — {msg} — forced.")
 
 
-def write_rule_config(run_dir, rule):
+def write_rule_config(run_dir, rule, settings):
     """The claim rule as the binary's config file (config sweep step 6: `discover --rule` became the
-    `[library.lookup] agreement` key; every other library tunable stays at its compiled-in default)."""
+    `[library.lookup] agreement` key), then the label's `--pipeline-set` settings; every other library tunable
+    stays at its compiled-in default. Written by THE config writer (pipeline-config.ts), which refuses a key set
+    twice."""
     path = os.path.join(run_dir, "discover.toml")
-    open(path, "w").write(f"[library.lookup]\nagreement = {'true' if rule == 'agreement' else 'false'}\n")
+    rule_key = f"library.lookup.agreement={'true' if rule == 'agreement' else 'false'}"
+    rc = subprocess.call(["npx", "tsx", os.path.join(REPO, "experiments/lib/pipeline-config.ts"), path, rule_key,
+                          *settings], cwd=REPO)
+    if rc != 0:
+        raise SystemExit(f"REFUSED: the --pipeline-set settings {settings} (pipeline-config.ts exit {rc})")
     return path
 
 
@@ -135,9 +150,12 @@ def main():
     config = {"buildCommit": commit, "binarySha256": sha256_file(binary), "indexDir": index_dir,
               "indexId": index_id, "indexBytes": index_bytes, "rule": opts["--rule"],
               "corpusSha256": lib096.manifest_sha(), "instrument": "humanify discover --unit-prints --bundler <corpus bundler> --config discover.toml"}
+    if opts["--pipeline-set"]:
+        # only when given: a label with none keeps the pipeline.json it always had
+        config["settings"] = opts["--pipeline-set"]
     guard(run_dir, config, force)
     open(os.path.join(run_dir, "pipeline.json"), "w").write(dump(config))
-    rule_config = write_rule_config(run_dir, opts["--rule"])
+    rule_config = write_rule_config(run_dir, opts["--rule"], opts["--pipeline-set"])
     entries = lib096.load_manifest()["entries"]
     # biggest first, so the long ones do not trail
     entries.sort(key=lambda e: -e["files"]["bundle"]["bytes"])

@@ -451,8 +451,15 @@ const LIBRARY_FLAGS: Record<string, FlagKind> = {
   "--commit": "value",
   "--jobs": "value",
   "--cpus": "value",
-  "--force-mixed": "bool"
+  "--force-mixed": "bool",
+  // `[library]` settings for the discover verb's --config file, in order
+  // (e.g. `library.discovery.max_rounds=7`); run.py writes them beside the
+  // rule's own key, which `--rule` owns.
+  "--pipeline-set": "repeat"
 };
+
+/** The --config key `eval library`'s run.py writes itself (from --rule). */
+const LIBRARY_HARNESS_KEYS = ["library.lookup.agreement"];
 
 /**
  * `eval library`'s arguments (the exp096 library-matching score): the label
@@ -472,6 +479,15 @@ export function libraryArgs(args: string[]): string[] | string {
   if (rule !== "agreement" && rule !== "structural") {
     return "--rule agreement|structural is required";
   }
+  const sets = parsed.given.filter(
+    (_, i) => parsed.given[i - 1] === "--pipeline-set"
+  );
+  const foreign = sets.find((e) => !e.startsWith("library."));
+  if (foreign !== undefined) {
+    return `--pipeline-set ${foreign}: the discover verb reads only [library.*] keys`;
+  }
+  const setRefusal = settingsRefusal(LIBRARY_HARNESS_KEYS, sets);
+  if (setRefusal) return setRefusal;
   return [parsed.positional[0], ...parsed.given];
 }
 
@@ -718,7 +734,7 @@ const VERBS: Verb[] = [
   {
     name: "library",
     usage:
-      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--force-mixed]",
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
       "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
