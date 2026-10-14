@@ -34,6 +34,8 @@ origins.py). A claim is RIGHT when it names the shipper or the origin (or a memb
                       collision renames). No name is read from the index: it stores none today.
 Scorer 4 (exp104 truth audit): families also joined by npm metadata (families_lib), units the map never mapped
 <unmapped> (truth_audit `carried`), dependency-gated named vendored copies as origins (truth_audit `copies`).
+Scorer 6 (exp107): the source map decoded as the spec writes it (decoder.py: UTF-16 generated columns, one-field
+segments = unmapped), at score time from the frozen bundle and map (truth_audit.redecode).
 Claude Code is scored on the labelled sample: byte shares are the stratified ratio estimate (strata sizes from the
 negatives lane), counts are sample units.
 """
@@ -66,7 +68,12 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    by npm metadata (families_lib: one repository, renamed-to, GitHub fork under a scope); a unit the source map
 #    never mapped and the previous mapping's source does not contain is <unmapped> (truth_audit: carried); a
 #    dependency-gated, named vendored copy gets an origin (truth_audit: copies). Same reports, re-scored.
-SCORER_VERSION = "exp096-score/4"
+# 6: the exp107 decoder (decoder.py, truth_audit.redecode): generated columns read as UTF-16 code units (scorer 4
+#    read code points: an emoji on a minified line moved every later mapping on it), and one-field segments kept as
+#    unmapped (the bundler's own glue is no longer credited to the mapping before it). Same reports, re-scored; both
+#    rules off reproduces scorer 4's segments exactly (experiments/107-zero-app-claims/verify_decoder.py). (5 is
+#    exp106's source-table corrections, on its own branch when this was written.)
+SCORER_VERSION = "exp096-score/6"
 
 
 def r6(x):
@@ -484,7 +491,8 @@ def main():
         doc = json.load(open(rp))
         report = doc["libraryDiscovery"]
         slice_ = doc["toolchain"]["slice"]
-        truth = lib096.load_truth(entry)
+        origins = lib096.load_origins(entry, om) if entry["truth"]["method"] == "sourcemap" else None
+        truth, origins = truth_audit.redecode(entry, lib096.load_truth(entry), origins)
         if report is None:
             body = score_floor(entry, truth)
         else:
@@ -496,8 +504,8 @@ def main():
             if truth["method"] == "sample":
                 body = score_sample(entry, report, truth, indexes[slice_], pipeline["rule"])
             else:
-                body = score_map(entry, report, truth, indexes[slice_], pipeline["rule"],
-                                 lib096.load_origins(entry, om), truth_audit.Audit(entry, truth, cm))
+                body = score_map(entry, report, truth, indexes[slice_], pipeline["rule"], origins,
+                                 truth_audit.Audit(entry, truth, cm))
         card = {"schema": SCORER_VERSION, "label": label, "entry": entry["id"], "set": entry["set"],
                 "truthMethod": truth["method"], "bundleSha256": entry["files"]["bundle"]["sha256"],
                 "indexId": pipeline["indexId"], "rule": pipeline["rule"], "toolchain": doc["toolchain"],

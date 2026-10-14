@@ -13,7 +13,8 @@ usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>]
              pipeline.json as `settings`, so a label is one configuration)
   --corpus   dev (default: corpus.json, the corpus tuning lanes read) or test (corpus-test.json: exp100's FROZEN test
              split; its reports and cards stay under its data dir, only the per-set summary is committed) or bundlers
-             (corpus-bundlers.json: exp105's dev-side webpack and rollup builds). A label holds ONE corpus: name
+             (corpus-bundlers.json: exp105's dev-side webpack and rollup builds) or apps (corpus-apps.json: exp107's
+             dev-side esbuild/webpack/rollup builds of real training apps). A label holds ONE corpus: name
              test labels apart (e.g. test-<label>)
 
 Each bundle runs with `--bundler` = the bundler that BUILT it (the entry's `builtWith`, else its `bundler`): the

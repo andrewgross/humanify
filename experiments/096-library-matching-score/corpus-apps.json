@@ -1,0 +1,2627 @@
+{
+  "corpus": "apps",
+  "entries": [
+    {
+      "appPackage": "gatsby-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:gatsby-cli: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3609632,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_gatsby-cli-ed0295/entry.js",
+          "sha256": "9b69b1ec577b24d98aed375430d5493e3cb53b03821cae56deabfa29576afbe9"
+        },
+        "map": {
+          "bytes": 11636345,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_gatsby-cli-ed0295/entry.js.map",
+          "sha256": "ad5fb3c435516c3ad672d750ad5906f860078d4432dccac4d42540cd3c8f4638"
+        }
+      },
+      "id": "apps-esbuild-cli_gatsby-cli-ed0295",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5ff838ebe4d81734195b3f7b781dcea6eb1bfc7641ab90e64db4b37c07ea99ba"
+      }
+    },
+    {
+      "appPackage": "shadcn",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:shadcn: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 10438817,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_shadcn-f483ac/entry.js",
+          "sha256": "82240bd986ad940a2fa59ccddad682b123a5880f5d9f3d60563bb1052ab61bca"
+        },
+        "map": {
+          "bytes": 33681194,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_shadcn-f483ac/entry.js.map",
+          "sha256": "b3e7e6ef3fb524ff683cd8ea777adf414557c22bac138c441315f91144a609fc"
+        }
+      },
+      "id": "apps-esbuild-cli_shadcn-f483ac",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e19edb1b5560f6c855ce744a80794441a6b31220be0c4c20b5692e3fd499a23f"
+      }
+    },
+    {
+      "appPackage": "tsup",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:tsup: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1145943,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_tsup-73c365/entry.js",
+          "sha256": "a7e4c9212cf6b6a04a47edc5174b1b0151e1baf7c614dcc725e94ec77f1ee1e3"
+        },
+        "map": {
+          "bytes": 4285115,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_tsup-73c365/entry.js.map",
+          "sha256": "7b325109b899ba9e1a22abb9a5f743a450812ed17693b8509f7d69a237345102"
+        }
+      },
+      "id": "apps-esbuild-cli_tsup-73c365",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6a44156f0ff33812877d78d19d4ed78e30d87d3dfe88f28284b463716ab223fa"
+      }
+    },
+    {
+      "appPackage": "mammoth",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:mammoth: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 391676,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_mammoth-33d124/entry.js",
+          "sha256": "7778c190035b562ce7f3d82a95c8cc1c2966359800954fa7ba87c9b3cc39543d"
+        },
+        "map": {
+          "bytes": 1758843,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_mammoth-33d124/entry.js.map",
+          "sha256": "7c2afabeb316dfae785efe48f9f8c8c24d7466aef590aed90f6dfec716a94dcc"
+        }
+      },
+      "id": "apps-esbuild-cli_mammoth-33d124",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f61e678fb066e2ea4d7d2223ed707e912945f4b792507bc883a33bb3425137a0"
+      }
+    },
+    {
+      "appPackage": "@stoplight/spectral-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:@stoplight/spectral-cli: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4936940,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_stoplight_spectral-cli-05ca81/entry.js",
+          "sha256": "061814f188835d31b4e4bf5acca164d64048e5bf3f0b974196b76d957246bbf2"
+        },
+        "map": {
+          "bytes": 13118191,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_stoplight_spectral-cli-05ca81/entry.js.map",
+          "sha256": "a91176f53678977efbd4e18421b08456db54d30864750bb4452b9682172f02fc"
+        }
+      },
+      "id": "apps-esbuild-cli_stoplight_spectral-cli-05ca81",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "71cc30bc5fe771387858ec16cdcad6a9447424d7d4ee96f7717dbc3784ac674b"
+      }
+    },
+    {
+      "appPackage": "@salesforce/cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:@salesforce/cli: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 562096,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_salesforce_cli-9e0d40/entry.js",
+          "sha256": "264017663684652ddae0c36d72d9d1b35255ab00082e440abcf9af2d06457200"
+        },
+        "map": {
+          "bytes": 1980345,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_salesforce_cli-9e0d40/entry.js.map",
+          "sha256": "eff59730951e316cba9e2b7daefdbfa0b40678356c0c40d7619232dba362ef4f"
+        }
+      },
+      "id": "apps-esbuild-cli_salesforce_cli-9e0d40",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8dd89c3629e6903cec13a2d4b2bdc3203799a6425c8894704c6fa319916a0024"
+      }
+    },
+    {
+      "appPackage": "gunzip-maybe",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:gunzip-maybe: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 43744,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_gunzip-maybe-acfb58/entry.js",
+          "sha256": "484ff03a1a7c2a4b1dd1e7e88007d59f7f317bf9f11636d879ea51385e09ac07"
+        },
+        "map": {
+          "bytes": 179775,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_gunzip-maybe-acfb58/entry.js.map",
+          "sha256": "004f0b2ccbf74dabc4d97255c8926dc0d4bc5492f8684b5400488bc390b53f2b"
+        }
+      },
+      "id": "apps-esbuild-cli_gunzip-maybe-acfb58",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2b18df416e601bab0f5066b702b153f0efffc82efd907995cdb5437ba13d924e"
+      }
+    },
+    {
+      "appPackage": "knip",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:knip: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1433861,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_knip-920662/entry.js",
+          "sha256": "a4b593b993fa47781677f8c09f9279084071d4b4d261310834fb6ceeb8bd7995"
+        },
+        "map": {
+          "bytes": 5077140,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_knip-920662/entry.js.map",
+          "sha256": "425938f026d0af63d9b48f65638033547dc2d0c440eac2fd684199010a6c3c72"
+        }
+      },
+      "id": "apps-esbuild-cli_knip-920662",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "596a98b942ee0ad8daa35a8d7d7a6a484652f69e237cbea0327bae0b4f9e949c"
+      }
+    },
+    {
+      "appPackage": "@bitwarden/cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:@bitwarden/cli: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8445713,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_bitwarden_cli-ada1b6/entry.js",
+          "sha256": "3bad7ea0fdf56a42b46a67de7b266befb96d577ef1697bc06e6a859abd7142f7"
+        },
+        "map": {
+          "bytes": 25444022,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_bitwarden_cli-ada1b6/entry.js.map",
+          "sha256": "1a64dcf1ab08fbde3d9dd6dd38d09adeb323b47d99fda36fc8ab433602497bf6"
+        }
+      },
+      "id": "apps-esbuild-cli_bitwarden_cli-ada1b6",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0e85b9f7067bbc7317b5d8770730d30cd51a255179d66cf7afa29a00f37ee317"
+      }
+    },
+    {
+      "appPackage": "json-server",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:json-server: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 124160,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_json-server-850450/entry.js",
+          "sha256": "06dc39a8d982725ea02499f8e33c8c2002ab652edfdf769f46dce6edf5e7d0fb"
+        },
+        "map": {
+          "bytes": 397554,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_json-server-850450/entry.js.map",
+          "sha256": "c2ab7842c28af943ef39af4dde70731a450aa5c9f66ecfada575a030baf036cc"
+        }
+      },
+      "id": "apps-esbuild-cli_json-server-850450",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1bc864f9b8bf4a86611f72ec8b5011d5623a7fdda04fc632b0cb4ede42b6cbba"
+      }
+    },
+    {
+      "appPackage": "markdown-it",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:markdown-it: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 152786,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_markdown-it-27f7b1/entry.js",
+          "sha256": "39378b51bd20901e7229302ab410caf17c4265a8319610cf3d6660e3497911d7"
+        },
+        "map": {
+          "bytes": 713410,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_markdown-it-27f7b1/entry.js.map",
+          "sha256": "339cc269a377bb0b65f812113d212a9a68cdab2b6c5766e5b971065d95e0e43e"
+        }
+      },
+      "id": "apps-esbuild-cli_markdown-it-27f7b1",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "33cef5b7c8398f8ecb34922829e2881b28aedd6e9d81f2ec3c97324bdea08cfa"
+      }
+    },
+    {
+      "appPackage": "copyfiles",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:copyfiles: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 188386,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_copyfiles-18b665/entry.js",
+          "sha256": "9037c856fe8c9f265abd1b24c3b92c935493b57033f2de4ec2fc705be2c51651"
+        },
+        "map": {
+          "bytes": 788190,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_copyfiles-18b665/entry.js.map",
+          "sha256": "dc64deb0c3e2487c7a352aa31c80ee76c8de4aef0e24885e1a9d2603150a4abd"
+        }
+      },
+      "id": "apps-esbuild-cli_copyfiles-18b665",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1aa202f494f47412a21c790fe7509314e4c996063b721cea167dfc6d9601581f"
+      }
+    },
+    {
+      "appPackage": "conventional-recommended-bump",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:conventional-recommended-bump: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 25855,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_conventional-recommended-bump-e96f98/entry.js",
+          "sha256": "58637b5b35b88c4d16a9a765a2d4f1b12fe0d8c33e66d66818dffcb1e1130306"
+        },
+        "map": {
+          "bytes": 75705,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_conventional-recommended-bump-e96f98/entry.js.map",
+          "sha256": "bfa29d1ca58fc93fa2998ff6226ff4b9c9b28e11e2475c4ce820ed332050c5b4"
+        }
+      },
+      "id": "apps-esbuild-cli_conventional-recommended-bump-e96f98",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "50791ba25851e6f9b39b9e97e8594133907207063d737b3116bb5a6ebff04199"
+      }
+    },
+    {
+      "appPackage": "cordova",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:cordova: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2585162,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_cordova-ed3406/entry.js",
+          "sha256": "99504032058b8db1ea3f105e064d8ec162226b5925b1479e6e8a52b34f0d88f7"
+        },
+        "map": {
+          "bytes": 9541147,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_cordova-ed3406/entry.js.map",
+          "sha256": "8d4eb166781dfa39a745abc740827c49f8869c2ec5f22925a98d56e355bce628"
+        }
+      },
+      "id": "apps-esbuild-cli_cordova-ed3406",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "521b856a99cd47f77c26d8aedd5963a3032d8d60f4357e560671e5eb92772784"
+      }
+    },
+    {
+      "appPackage": "astro",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:astro: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14283354,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_astro-82a1ed/entry.js",
+          "sha256": "b4f449bee9b00b27e895d001c8462891fd99addc341e76a8f6b984df4b1385af"
+        },
+        "map": {
+          "bytes": 29301893,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_astro-82a1ed/entry.js.map",
+          "sha256": "a6456def69a450919cceb6a1f99e8ccd5232bf1e989f9aca47aa3f451984058e"
+        }
+      },
+      "id": "apps-esbuild-cli_astro-82a1ed",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9a8f833a6c91bcb1fb76379da6c830c511996089a643607707347a34b0c6da0d"
+      }
+    },
+    {
+      "appPackage": "forever",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:forever: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 737673,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_forever-b0987f/entry.js",
+          "sha256": "8347e8b920489b839d189af1b1626e7fffb13f4bd8fd5ec29b53a460f2465019"
+        },
+        "map": {
+          "bytes": 3223746,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_forever-b0987f/entry.js.map",
+          "sha256": "3655f5c7821f51f6e9b7d056439620942b4ae9af484e7346303f90b638bfa348"
+        }
+      },
+      "id": "apps-esbuild-cli_forever-b0987f",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9a184707bb30b66261ea38de27d66e73a08f6a3dadab661ac8b08f49684f4ee9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:magiccap: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4276373,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_magiccap-c99fe5/entry.js",
+          "sha256": "3dc1d9a9848dbb57df36cf54f8ce0531e943aaebeecccff983d1ad5d92b3f182"
+        },
+        "map": {
+          "bytes": 11574709,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_magiccap-c99fe5/entry.js.map",
+          "sha256": "c7a3579f980d872658616a744c749e88d643d04acb7a3ff6a15eb7ca281793c5"
+        }
+      },
+      "id": "apps-esbuild-electron_magiccap-c99fe5",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "17c3eeb3e6ee86d8489e5f0d1e3a8f98a102e518fd0cfe5fb868783e78364573"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:elcalc: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 13481683,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_elcalc-a9cee6/entry.js",
+          "sha256": "aec100fde0ec460beb45f54e5781dfcf2bc54d0bce78ad5beaeb8ad290f00e45"
+        },
+        "map": {
+          "bytes": 42607886,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_elcalc-a9cee6/entry.js.map",
+          "sha256": "cdda3e43a05b4ae6b5cb9bd10e50c7b10b1a79931d47bb8f99ac992799ab7d98"
+        }
+      },
+      "id": "apps-esbuild-electron_elcalc-a9cee6",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "adf73278b43b0523dff032d73d07f86d605068596c072ed0e0a95b1c1f11baf0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:deer: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8984794,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_deer-45c579/entry.js",
+          "sha256": "db95da1f587f41f503284ce92c49bd419293b03f9574f65e01b6c151d8861fed"
+        },
+        "map": {
+          "bytes": 30060606,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_deer-45c579/entry.js.map",
+          "sha256": "a11da5378098afdc5f8dd9e82fa8bbb1c3d1de0b91bf77979f618f3cc0903f68"
+        }
+      },
+      "id": "apps-esbuild-electron_deer-45c579",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8e28a784077a041e9190701ecd8dd804495cbfec7e4e14b4d67f54e783ffff37"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:excel-parser-processor: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1764811,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_excel-parser-processor-639b3d/entry.js",
+          "sha256": "e53ca09be1b2f15c3e0e7ca132978dede22726db847d6588470b285dfc3664d6"
+        },
+        "map": {
+          "bytes": 4944663,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_excel-parser-processor-639b3d/entry.js.map",
+          "sha256": "5fef70f59113bd309655f0416016222f671774d2dc73215d3babe29525641d74"
+        }
+      },
+      "id": "apps-esbuild-electron_excel-parser-processor-639b3d",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "889eb1b3131522e111b563f1a386941053354c7b707ae4462b33970e34869edc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:cozy-desktop: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4873562,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_cozy-desktop-3c5a87/entry.js",
+          "sha256": "f1eb04e3ff9b66e000f0eff2abe106147349bbbbc8e1402f96ef90b5d487cb6c"
+        },
+        "map": {
+          "bytes": 16696199,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_cozy-desktop-3c5a87/entry.js.map",
+          "sha256": "c27fe593a34b0de036c0446a6bc84f69765aaf9ad0c3d3b07df5629d6fcbe08a"
+        }
+      },
+      "id": "apps-esbuild-electron_cozy-desktop-3c5a87",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b55a60cbb7d3fbdf4c948ebe0f4f8da17170db1cd808266aa153210af5ab32e8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:opencomic: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4924899,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_opencomic-9001ae/entry.js",
+          "sha256": "a2ce0bb724bdb60b506b22cde398be9e6149f92ca9a717dfb87ef74acd518b63"
+        },
+        "map": {
+          "bytes": 16587411,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_opencomic-9001ae/entry.js.map",
+          "sha256": "2adb31e3b7a7c7cc4859d5c0f7a407f5062374cb80f3425f55f8b2cf0a67fadf"
+        }
+      },
+      "id": "apps-esbuild-electron_opencomic-9001ae",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8aae3f445fe3b0db3c7b964c6b92bf4a6250b40cf1e418e27dba4edc53a82e1f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:final-countdown: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1004947,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_final-countdown-7f5d06/entry.js",
+          "sha256": "5790177b65005e2ed7e4dbafb0400c7d0e4e8c58bd206fdcc376fbc9df711cec"
+        },
+        "map": {
+          "bytes": 5249111,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_final-countdown-7f5d06/entry.js.map",
+          "sha256": "e2a4d7003ec27e545919156a7d5cd035d7fc1f46f837bc0a48ce1222bbd7077f"
+        }
+      },
+      "id": "apps-esbuild-electron_final-countdown-7f5d06",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d7049fda828a34369f782731ad1089fb8bb9b673261045773b677ebbc4c09bd1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:erin: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2559474,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_erin-ceab49/entry.js",
+          "sha256": "1c3d52d6092fdf2467c1767238f82c86a01984e35c0b3d0d4ae9e73e06dbee36"
+        },
+        "map": {
+          "bytes": 8806689,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_erin-ceab49/entry.js.map",
+          "sha256": "b2dc183968f4937474eb568423632a0b8140af3635c843091d3194a90ed1d154"
+        }
+      },
+      "id": "apps-esbuild-electron_erin-ceab49",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6faaeb595eb65841990800f069a01e2bafb24d745b5a32cb9ed3f8c16f24cf6c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:neucalculator: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 12575418,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_neucalculator-cf43f1/entry.js",
+          "sha256": "510002b72571d6cd7872ff6dd3f40fab861ce3280a97464e22e673c6476d17e9"
+        },
+        "map": {
+          "bytes": 41514470,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_neucalculator-cf43f1/entry.js.map",
+          "sha256": "513162a919e632aca966d593ce92fbc8e3e0b5c17c7579c6e3718c78f3c8d423"
+        }
+      },
+      "id": "apps-esbuild-electron_neucalculator-cf43f1",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bdf1551191a73e81dcc4a700760027fbd23f2c3e449a713bc7770c44e41b4433"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:image-shrinker: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1406636,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_image-shrinker-11e935/entry.js",
+          "sha256": "a1c8753fdef0d18250fd1449123dc91684fb0979a70db19031cae606c0e1a529"
+        },
+        "map": {
+          "bytes": 5083739,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_image-shrinker-11e935/entry.js.map",
+          "sha256": "3db716ffd1d900d36d0d0230307bf15d4275415355594c37c911821c6fcd01f7"
+        }
+      },
+      "id": "apps-esbuild-electron_image-shrinker-11e935",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dfe0f4b4d78419d5dd3a3832ceb338b0ba60cd473297f071301e6414394a1e2b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:domodel-diary: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 370830,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_domodel-diary-83dded/entry.js",
+          "sha256": "d550eb89cf95b0f15a8af2f04e94dd9ccd80ed67f58ce3fc98313de26cd68eb6"
+        },
+        "map": {
+          "bytes": 1074855,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_domodel-diary-83dded/entry.js.map",
+          "sha256": "0c7485bf6a4bbdf65fe9465c59d6ee0c5f47860b0a6157f2a1f39cb44bd5c41f"
+        }
+      },
+      "id": "apps-esbuild-electron_domodel-diary-83dded",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a8692491029275a204a65e71bb46c74a894e9b96c32e35cc2ca3d6526b4fd493"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:hyper: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8318452,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_hyper-e7aafe/entry.js",
+          "sha256": "46f3d022c34b0a17b95d445b4a707d2d9005141ba066c02531fba26cdea65066"
+        },
+        "map": {
+          "bytes": 31986865,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_hyper-e7aafe/entry.js.map",
+          "sha256": "9933f74f950f2b623333f67146203ea5a0555a0d9adca32b8e8c643bc566b674"
+        }
+      },
+      "id": "apps-esbuild-electron_hyper-e7aafe",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4d4a4e0d274c301c1abfab220962620f50bdd93090e85d2a66e9e0295b2d7932"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:min: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 723954,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_min-163bb0/entry.js",
+          "sha256": "7ff4dedc724fd576805436ff56107dd4cdda7970c01e1f8b5f63079322c92def"
+        },
+        "map": {
+          "bytes": 2953949,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_min-163bb0/entry.js.map",
+          "sha256": "991e2f6af4989a985f63c0da3f62acbbc0911a8976fa3e7fe852246d8b099738"
+        }
+      },
+      "id": "apps-esbuild-electron_min-163bb0",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1a1eb419462994c59c7651fcfb72ede6456bb5dbe8e901eec471247b9b52408a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:mjml-app: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 9502420,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_mjml-app-e7cdcc/entry.js",
+          "sha256": "56c7994f9b0e269229b23db3ec16568ee9f6851ed00e663e63dddfa9377485a7"
+        },
+        "map": {
+          "bytes": 29096194,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_mjml-app-e7cdcc/entry.js.map",
+          "sha256": "f65abea393b12e7f3172ed6822133f5ae8e783c3c37a6cd4120e5cd9aad947a0"
+        }
+      },
+      "id": "apps-esbuild-electron_mjml-app-e7cdcc",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6c43991579b983e1881f35c48fadc230baa4b1569790ac80aca92ac91a33ab2f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:whale: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 639551,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_whale-432845/entry.js",
+          "sha256": "9b75145d1e457fdfcd4404184075649f4e887f618dcf81f7e85b9c58b5f0a4df"
+        },
+        "map": {
+          "bytes": 2229398,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_whale-432845/entry.js.map",
+          "sha256": "9cc9ccbbbe651a3e83a4c05e8283bb2114826d5aa7f5e7799b54d5ba68bcdfc1"
+        }
+      },
+      "id": "apps-esbuild-electron_whale-432845",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4745ac98a452781b14f5fd66c9b56aa35bc758364ce6701aed4983ec563c325a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:wanna-class: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1580678,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_wanna-class-1bc853/entry.js",
+          "sha256": "45366a36f92545b8445afa2fbe5488b5f2fceda13f726d9992578395fe26d13c"
+        },
+        "map": {
+          "bytes": 5459223,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_wanna-class-1bc853/entry.js.map",
+          "sha256": "3d751ab92485c4e4cbf142757d81a6f6da013cd3998a9c12bf8416069d3b730a"
+        }
+      },
+      "id": "apps-esbuild-electron_wanna-class-1bc853",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "286808405ea78a99d196474932f4c21da4f11c77175c7d36b84db41fbae75cb0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:paperarxiv: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6495453,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_paperarxiv-725a6a/entry.js",
+          "sha256": "161b87d87122b940e62930e5be82c882d09e9a1f1d7a47e0ba85c3f11de2fcc7"
+        },
+        "map": {
+          "bytes": 23818831,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_paperarxiv-725a6a/entry.js.map",
+          "sha256": "c31557a12b19bf951a7ff9e9651852989729f4b54bbed3124058b2077af6746a"
+        }
+      },
+      "id": "apps-esbuild-electron_paperarxiv-725a6a",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "684f21d32b5c0cec642d723f6acd1a69379b3718a4960918ea4cfd0a365b808c"
+      }
+    },
+    {
+      "appPackage": "n8n",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:n8n: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3038894,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_n8n-d2ce94/entry.js",
+          "sha256": "3100381c131170097c148998d55ff967daecd1523d9f173e8efb49cfbf61e472"
+        },
+        "map": {
+          "bytes": 8229006,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_n8n-d2ce94/entry.js.map",
+          "sha256": "413813914feecaca7268b30e23d3a0dbfbd7e2734f4eeadb5dcc64a733682fca"
+        }
+      },
+      "id": "apps-esbuild-cli_n8n-d2ce94",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9c37e781944f79b3b0d0a77a8082768690b2359b02d8e8bf78b3d72b53fdd09d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:pendulums: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 5312570,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_pendulums-5a2e5c/entry.js",
+          "sha256": "74cc79a5b29bc0f06dd6e38bd442f933cf91c755adfeae8927f27c73356092c8"
+        },
+        "map": {
+          "bytes": 19167140,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_pendulums-5a2e5c/entry.js.map",
+          "sha256": "28b1f7aaedb86e165d0dabb217657442fe5e402c81dbce5c8dbbc5f924e3a910"
+        }
+      },
+      "id": "apps-esbuild-electron_pendulums-5a2e5c",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e674f048f180ff947d646c4227c83c68cbde0a1faa61291f22ba9f04e1d27739"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app electron:i5sing: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 9671852,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/electron_i5sing-c08c8f/entry.js",
+          "sha256": "2e3e9d8c36e371482d76dcdfba7f542bbfeef2e4a941ac94584322f5d1f42bfd"
+        },
+        "map": {
+          "bytes": 29821100,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/electron_i5sing-c08c8f/entry.js.map",
+          "sha256": "ad7e03ed51499886740cd087531a8ad3cbdbfa9cc13db7f03cd633054d8bccd5"
+        }
+      },
+      "id": "apps-esbuild-electron_i5sing-c08c8f",
+      "kind": "electron",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9db1e4dceb7ea9053307639843c6e9aea924477e76f59713242b8b72f0ceec1b"
+      }
+    },
+    {
+      "appPackage": "puppeteer",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:puppeteer: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 960790,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_puppeteer-b84e91/entry.js",
+          "sha256": "75dc6c0a8dcf9265f0cbba1daf098217aaf1f576f3aa7a271f090a83edce1b51"
+        },
+        "map": {
+          "bytes": 4089439,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_puppeteer-b84e91/entry.js.map",
+          "sha256": "3334269207fbe961b77826b8dbbcff0fa506f478dcec1d0f7d478a539bdea4ff"
+        }
+      },
+      "id": "apps-esbuild-cli_puppeteer-b84e91",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f5723e9e4cebe489cf3968f50fef37a026538a20b8a168c0231ad9199afa12e0"
+      }
+    },
+    {
+      "appPackage": "@prisma/cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:@prisma/cli: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 7234483,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_prisma_cli-1a0b5c/entry.js",
+          "sha256": "308f229a97cfb08849bd527e6904724e3b80e5c179f1a03640f009520f7deb72"
+        },
+        "map": {
+          "bytes": 19646765,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_prisma_cli-1a0b5c/entry.js.map",
+          "sha256": "b9a5920da9cd26a93f7a7f4904e36c6110bab867ebebf2ea63aced7c86b82995"
+        }
+      },
+      "id": "apps-esbuild-cli_prisma_cli-1a0b5c",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6c82eea3de3b10d12d91b579be8026c7560d54ba8bf50809231503a5cc146e86"
+      }
+    },
+    {
+      "appPackage": "@percy/cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp107 dev app cli:@percy/cli: esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3113368,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/esbuild/cli_percy_cli-2ecd02/entry.js",
+          "sha256": "37cd8b327460b018b2894d7220983e0ba2b60bfd7fb28f3e26b3596a601028a0"
+        },
+        "map": {
+          "bytes": 10138288,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/esbuild/cli_percy_cli-2ecd02/entry.js.map",
+          "sha256": "9df6ed99bcd4ca94e0595bf47cd2e89d2128e61ba871b25b13b3f51a2c5b28a1"
+        }
+      },
+      "id": "apps-esbuild-cli_percy_cli-2ecd02",
+      "kind": "cli",
+      "set": "apps-esbuild",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5c11c930df7872e5ea02256e18f3b3e7aa8c34a4d4f3296841939897356cb41b"
+      }
+    },
+    {
+      "appPackage": "shadcn",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:shadcn: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 234,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_shadcn-f483ac/entry.js",
+          "sha256": "d93b6be17dac350d3c55ad2d9fc01e31ff453c9266750b2d5c301305e71a01e5"
+        },
+        "map": {
+          "bytes": 1582,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_shadcn-f483ac/entry.js.map",
+          "sha256": "e1e63510efcf2ae1e63f3ae3720415fa0470d4699d7978cd7fdaa56c908ba12d"
+        }
+      },
+      "id": "apps-webpack-cli_shadcn-f483ac",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f88730afe4a1d64c011ab3221b3673e5480f6a66e7fb5fe84c87b38e69a37337"
+      }
+    },
+    {
+      "appPackage": "tsup",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:tsup: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1036770,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_tsup-73c365/entry.js",
+          "sha256": "9a21cf899e1d67bceb721bcdba9743b1812b412a8b11efc3b8d511e962b9e902"
+        },
+        "map": {
+          "bytes": 3937439,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_tsup-73c365/entry.js.map",
+          "sha256": "bbfb3ee646248423f7e6d4af458c1021ab36587c960c0447e5fbf4ee1ae30ddc"
+        }
+      },
+      "id": "apps-webpack-cli_tsup-73c365",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "077730165c12c13d93056620c774c344c0c857ca196345ef7510caa00746f7a0"
+      }
+    },
+    {
+      "appPackage": "mammoth",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:mammoth: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 368834,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_mammoth-33d124/entry.js",
+          "sha256": "60e1be158b7168685550e4afb1eedda67f3ff00ebc8cad978b69c0da90066e18"
+        },
+        "map": {
+          "bytes": 1698264,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_mammoth-33d124/entry.js.map",
+          "sha256": "0680a8c47aa084293fea584c08185a1effbc51acb03c8e7d01c8b20296ced6f1"
+        }
+      },
+      "id": "apps-webpack-cli_mammoth-33d124",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "af15d6bebf0a63851cc15d8f3e2a2cde8ad41299aab053ca400a95f8c8b69bb6"
+      }
+    },
+    {
+      "appPackage": "@stoplight/spectral-cli",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:@stoplight/spectral-cli: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4961723,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_stoplight_spectral-cli-05ca81/entry.js",
+          "sha256": "4e8e6a5805fc4e3580709e7175d379ac87b4a275a12b6111175d6f9a5cd88d9b"
+        },
+        "map": {
+          "bytes": 11241304,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_stoplight_spectral-cli-05ca81/entry.js.map",
+          "sha256": "021f7162bab83d444cf4c39fc69a964ae3b4721afe2a7958e33365eb4e89be9c"
+        }
+      },
+      "id": "apps-webpack-cli_stoplight_spectral-cli-05ca81",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e3b3101525b4fa4413a2cfbf845782ffc40ad6e5e3b72edb65314b228ab5926e"
+      }
+    },
+    {
+      "appPackage": "gunzip-maybe",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:gunzip-maybe: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 42638,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_gunzip-maybe-acfb58/entry.js",
+          "sha256": "22d44c06702fed6597af487d36cbf4ef02b9c00b7c669b7698cae60715dee115"
+        },
+        "map": {
+          "bytes": 175040,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_gunzip-maybe-acfb58/entry.js.map",
+          "sha256": "0eda368ab7ae9d8593ad698a29ba64620d6382f86b638354b68092a8b788963e"
+        }
+      },
+      "id": "apps-webpack-cli_gunzip-maybe-acfb58",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2fe16e044885378bb6b00e34059d627500c37aaf85e4d1ebf4195519e57eeca3"
+      }
+    },
+    {
+      "appPackage": "knip",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:knip: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3029567,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_knip-920662/entry.js",
+          "sha256": "3d83fd5c8725a93db2f2c2d2d2fc0c76501f98a7f4024bb6aa07f2903b1a1e7d"
+        },
+        "map": {
+          "bytes": 9062316,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_knip-920662/entry.js.map",
+          "sha256": "2dd518bab769fd5c46fc298e378502224f211fdfc6c8198f0025e0e51a347ffb"
+        }
+      },
+      "id": "apps-webpack-cli_knip-920662",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0d732f34aa1ddfb45ce53bb4bbfbb632ad214b9f27e1748fcec679eec5c24da5"
+      }
+    },
+    {
+      "appPackage": "json-server",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:json-server: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 121625,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_json-server-850450/entry.js",
+          "sha256": "0ddcce5e688b0650d523acaa55654e7dbe89ffae28f3bad310354985bd7d74b5"
+        },
+        "map": {
+          "bytes": 455026,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_json-server-850450/entry.js.map",
+          "sha256": "1bb090652e4b24e085c124104f266855ed28a18930f57eafd0051775ed0ff735"
+        }
+      },
+      "id": "apps-webpack-cli_json-server-850450",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f7206f9c32f612f0fd92b00b7a00d8d0e38d9b63b76391c2e33997069157b31d"
+      }
+    },
+    {
+      "appPackage": "markdown-it",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:markdown-it: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 151538,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_markdown-it-27f7b1/entry.js",
+          "sha256": "1c0108b5eada7f1464015972be3ab639739f67da4f031c06f6a15254025810e1"
+        },
+        "map": {
+          "bytes": 627891,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_markdown-it-27f7b1/entry.js.map",
+          "sha256": "8a83c2ee85db730654c3e73a872527172b163b742636da1158689526c982f366"
+        }
+      },
+      "id": "apps-webpack-cli_markdown-it-27f7b1",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e578e3b88074d2b89cc796df3fefea2a89ecdb8e3c97c85502fad2f61a7e3d07"
+      }
+    },
+    {
+      "appPackage": "copyfiles",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:copyfiles: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 184947,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_copyfiles-18b665/entry.js",
+          "sha256": "cb7367ef14db199f49740c7409c1c2763a2fc69a858eefdb954f3df4b2db15b1"
+        },
+        "map": {
+          "bytes": 761507,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_copyfiles-18b665/entry.js.map",
+          "sha256": "752c6301aa2804113d2ef7e5750c57b47a435d32fbf03bc50d9967a32e7d36eb"
+        }
+      },
+      "id": "apps-webpack-cli_copyfiles-18b665",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b0ccbd08eaf5e5cfcab0d40efa332842ee51f24b85df580358fb37c97abc9a19"
+      }
+    },
+    {
+      "appPackage": "conventional-recommended-bump",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:conventional-recommended-bump: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 26535,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_conventional-recommended-bump-e96f98/entry.js",
+          "sha256": "e09b839cfdc59440765a410420b29f37c7908b6db8d52c4138a6e3ea495084f8"
+        },
+        "map": {
+          "bytes": 194215,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_conventional-recommended-bump-e96f98/entry.js.map",
+          "sha256": "89b6d5991740929f878f2498ed4f48c854548c8266dad41814227dfe5121d697"
+        }
+      },
+      "id": "apps-webpack-cli_conventional-recommended-bump-e96f98",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a5b3af2dd3d5dbe314eea36285d29f4fcf39c23455c4a433eb4c2de5edf21348"
+      }
+    },
+    {
+      "appPackage": "forever",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:forever: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 695668,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_forever-b0987f/entry.js",
+          "sha256": "4ef17862c73b91bec018fc89f23eb311ce40bb475772cae4880ba05db2e3d886"
+        },
+        "map": {
+          "bytes": 3064172,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_forever-b0987f/entry.js.map",
+          "sha256": "98afb5c933864368ec8e86e85f1e6a4681917873e17b0f6b10ba4f683eca2d5d"
+        }
+      },
+      "id": "apps-webpack-cli_forever-b0987f",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "501be3e850549ce52bda7367bf2a967dcdb8725f821a36589f35ca5244014d6d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:magiccap: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3448162,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_magiccap-c99fe5/entry.js",
+          "sha256": "d1ec9d29ac1ab02384b2db45723735536caea4b247b354586f0955244f9d2c25"
+        },
+        "map": {
+          "bytes": 9250999,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_magiccap-c99fe5/entry.js.map",
+          "sha256": "2984edc23b0ceeb2255302e074da40b8db10a71b4808b62a2ddba4d294da1acc"
+        }
+      },
+      "id": "apps-webpack-electron_magiccap-c99fe5",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d6c8684e243106cf29b1a10735524e1dc494eb99b873a313f9652ecea5387c84"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:elcalc: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14050949,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_elcalc-a9cee6/entry.js",
+          "sha256": "e10620be0b47f18dce4cf87886f78d763938510d7f32c70fa17c7e9ad7ce1d15"
+        },
+        "map": {
+          "bytes": 41644660,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_elcalc-a9cee6/entry.js.map",
+          "sha256": "be30e51784c63edaa77cc1d76384dcfcfb1749815ddfb3be09f4adadb5b1fd29"
+        }
+      },
+      "id": "apps-webpack-electron_elcalc-a9cee6",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "af4e877fda7e8849273a3b7a8d2461fef8278df8aee642acaf351015df9593eb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:excel-parser-processor: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1519887,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_excel-parser-processor-639b3d/entry.js",
+          "sha256": "9f3030491dabca3c34e5850e4f4d3026aea07e4ca5a3c988e815784453ca8930"
+        },
+        "map": {
+          "bytes": 3848801,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_excel-parser-processor-639b3d/entry.js.map",
+          "sha256": "489c9d1dd32445e622aa8acf8dc02773d213f69e49e46a944c486d9eed4e8fa5"
+        }
+      },
+      "id": "apps-webpack-electron_excel-parser-processor-639b3d",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3509ccac6830fc9f8b89d4fb6a3851b8e6240749fc0cf1aa94151df420f8b210"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:cozy-desktop: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4622236,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_cozy-desktop-3c5a87/entry.js",
+          "sha256": "cfd1adcb9d1d02c3a4cb2984e243ea57030a013fa7bc8cd26663512ae0ff795b"
+        },
+        "map": {
+          "bytes": 15040617,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_cozy-desktop-3c5a87/entry.js.map",
+          "sha256": "07eddf5ad8cad2f8b3c0f4cc34e6701506467c56eaa0fba909f812b0e81db598"
+        }
+      },
+      "id": "apps-webpack-electron_cozy-desktop-3c5a87",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "affe4afd483a677fd69f45ddfccb0fcad097dc328fd92527f7f01b3cc37bf572"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:opencomic: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4916873,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_opencomic-9001ae/entry.js",
+          "sha256": "61cacfb4467d1c0681d3fa02297a41b949a66acb92a6bb5107e12275f98f6382"
+        },
+        "map": {
+          "bytes": 14733759,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_opencomic-9001ae/entry.js.map",
+          "sha256": "2f4ae596f13dd7d5384b6ca5f5b34ef188acdad5653ff29d0bd256c50bede812"
+        }
+      },
+      "id": "apps-webpack-electron_opencomic-9001ae",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6c88919b8de5231e11f0e32a05f67d00995a8adf0b4a4732f009efaf4e42b2ba"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:erin: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3563193,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_erin-ceab49/entry.js",
+          "sha256": "1f52eec3b83f193c888ae5d9986f0647c91409743a4c9493c40673fcb402b8f6"
+        },
+        "map": {
+          "bytes": 8326954,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_erin-ceab49/entry.js.map",
+          "sha256": "892ea4854bced27bffa9ff16062e33c085b8268c4f88ecd72f1854b5d36d445d"
+        }
+      },
+      "id": "apps-webpack-electron_erin-ceab49",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dc8a9474e7ed6f0f218b54d92474f9a960e1bed67234f30ec687ab4af797b36f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:neucalculator: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 13820943,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_neucalculator-cf43f1/entry.js",
+          "sha256": "0512730ade5ef9931df3081816fb1ec7bec600e39d15780817b01118265de8b0"
+        },
+        "map": {
+          "bytes": 41417423,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_neucalculator-cf43f1/entry.js.map",
+          "sha256": "6c0071f0e4eaa4866bbbeb6c67194ba0d4176c7d6a5b0348067f6a2f60c3a687"
+        }
+      },
+      "id": "apps-webpack-electron_neucalculator-cf43f1",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a61a162caf43c8d699940fb98e82fb2159c0f910b9637269aa7676eb329dd07c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:image-shrinker: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1527161,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_image-shrinker-11e935/entry.js",
+          "sha256": "6ed4e9b71ebc2609a70dd7a0d8b989dde7aa1e930379f858a69d7c1cb00033c2"
+        },
+        "map": {
+          "bytes": 4277577,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_image-shrinker-11e935/entry.js.map",
+          "sha256": "f765950a99a97e0a5158e7f79f27b198c236c995f66c56ddfa4865121fe5a51e"
+        }
+      },
+      "id": "apps-webpack-electron_image-shrinker-11e935",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5b3f8168804c2a0f7f1b871746097c979dae1a4be1e4dac3c1e19662929d5c90"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:domodel-diary: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 348453,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_domodel-diary-83dded/entry.js",
+          "sha256": "0bbd55d33f118d2e776aaef1a0511e52507fc1ddbac4f439ae62f57d996e926f"
+        },
+        "map": {
+          "bytes": 909534,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_domodel-diary-83dded/entry.js.map",
+          "sha256": "a0bf564204f9dad968e4918fb4cdb6d88fffd65ed2ecc70ad617163ed5037e3f"
+        }
+      },
+      "id": "apps-webpack-electron_domodel-diary-83dded",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c35ad51f547038174e27c0a66849030988395fb35fcb230ce194268736428d3a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:hyper: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 9031617,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_hyper-e7aafe/entry.js",
+          "sha256": "a85bfe6f2ac32c9872f27a44e5726bb7a54a288016ad58064b81bba8d8fa638a"
+        },
+        "map": {
+          "bytes": 29795476,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_hyper-e7aafe/entry.js.map",
+          "sha256": "46c913f7335b405a28dff69d5e98a7046294576b24dad8dfb3212a259c859e12"
+        }
+      },
+      "id": "apps-webpack-electron_hyper-e7aafe",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9a2b3f157b36d04469b6b5c3a84ee7201d2c7fa19f2d6b251779e7094cff91bb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:min: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 683231,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_min-163bb0/entry.js",
+          "sha256": "dfe3c088f7d01bcc9a4d75d22efd068add7306fe965ac11343b554f804d8926b"
+        },
+        "map": {
+          "bytes": 2429074,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_min-163bb0/entry.js.map",
+          "sha256": "59188d82dedad9ab2f5f51a2360b471977c28557189b2280ef859ac19b5bc801"
+        }
+      },
+      "id": "apps-webpack-electron_min-163bb0",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c674c0b8ad2d529da03202a6294247c67f02631ab99806599c178982903f504e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:whale: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 629278,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_whale-432845/entry.js",
+          "sha256": "0f338400562f9bf944ee8b98b207317e7e80e50f97ef6fabfba3ea10d30abeaf"
+        },
+        "map": {
+          "bytes": 1810669,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_whale-432845/entry.js.map",
+          "sha256": "47a5b2825123c040dac54e2d7cb686345bf62604c4a915eeb71d2717dc771552"
+        }
+      },
+      "id": "apps-webpack-electron_whale-432845",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "df1ac3a64f8d200d987179ded9ecf1d6b02ccfea2b4ace4bea2193bfa15c34b0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:wanna-class: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1797045,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_wanna-class-1bc853/entry.js",
+          "sha256": "5fdf13a326e87ac9fe9304c0822cd8a49f6e7ea88ad63a56d7b2c64b939673d7"
+        },
+        "map": {
+          "bytes": 5295652,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_wanna-class-1bc853/entry.js.map",
+          "sha256": "1f31c8d6828993a1d71eac64fb8094f9581433996195cb83e11425e725d9cdb7"
+        }
+      },
+      "id": "apps-webpack-electron_wanna-class-1bc853",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d24222564b384acd89db37548d922e028a71fb9fbc810f85133e58b9e451beee"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:paperarxiv: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6248012,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_paperarxiv-725a6a/entry.js",
+          "sha256": "5704d7a8be5c001f70f164b8eeedc57eef09ade1e8d3de33f91183253571e08f"
+        },
+        "map": {
+          "bytes": 22685788,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_paperarxiv-725a6a/entry.js.map",
+          "sha256": "6ee24144cc59e6f5956b50c3df03447cf92737495d1e16be74a00559d35a4f61"
+        }
+      },
+      "id": "apps-webpack-electron_paperarxiv-725a6a",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f3fd86b6fb3ffe01472b5299d8aa7e6e29ca3b6fd541947b687ea3c36977b22c"
+      }
+    },
+    {
+      "appPackage": "n8n",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:n8n: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2909338,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_n8n-d2ce94/entry.js",
+          "sha256": "99d783a449ba8efe48453662dee92616c925c4b86eb1ff1f68db430dd95ad741"
+        },
+        "map": {
+          "bytes": 9095886,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_n8n-d2ce94/entry.js.map",
+          "sha256": "e1b64e80c17910ef19f6d0b2a61c9fe6b1efda55c064528fb08f9d8f17e5e116"
+        }
+      },
+      "id": "apps-webpack-cli_n8n-d2ce94",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b1af15ae046453dd568c85d0cb19045772a0835675b919eeb7a8fe8968e62aa2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app electron:i5sing: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 7830378,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/electron_i5sing-c08c8f/entry.js",
+          "sha256": "5003339e887b1188c258669e69d59e56ee755cb51449e3914e3140e041aee0bc"
+        },
+        "map": {
+          "bytes": 24120084,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/electron_i5sing-c08c8f/entry.js.map",
+          "sha256": "77f561442fc20928d5d538cad01cfdf4234634046f3567c5676b025acd9e6cf0"
+        }
+      },
+      "id": "apps-webpack-electron_i5sing-c08c8f",
+      "kind": "electron",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3f2fcc14db508527ecfee705559878eceead07037f86f9c9716ecf7c5864fa0a"
+      }
+    },
+    {
+      "appPackage": "puppeteer",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:puppeteer: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 608402,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_puppeteer-b84e91/entry.js",
+          "sha256": "98f6f41e1ad3973dd1960a8ce76b2ab35fc9a2727968583b7eb30435dfd04d4f"
+        },
+        "map": {
+          "bytes": 2500124,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_puppeteer-b84e91/entry.js.map",
+          "sha256": "fe10d700cf956a1e174004d2956483fcc48ee2369b7ef0bb57cf9cf4a712c028"
+        }
+      },
+      "id": "apps-webpack-cli_puppeteer-b84e91",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5ff22899346867f044654dd61bdbc924e8ee4d55912015c82cefbcb80a7d2cc2"
+      }
+    },
+    {
+      "appPackage": "@percy/cli",
+      "builtWith": "webpack",
+      "bundler": "webpack",
+      "description": "exp107 dev app cli:@percy/cli: webpack 5.111.1 production (terser), target node, one chunk, source-map (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3385585,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/webpack/cli_percy_cli-2ecd02/entry.js",
+          "sha256": "55450cae0387b6379a0a95257644d828bf83db29837a269b36d452a00072f809"
+        },
+        "map": {
+          "bytes": 11499670,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/webpack/cli_percy_cli-2ecd02/entry.js.map",
+          "sha256": "3b8ec4a3095ec50f32fd0ab38431191bc55202fdb71162029e17781d0d0b3764"
+        }
+      },
+      "id": "apps-webpack-cli_percy_cli-2ecd02",
+      "kind": "cli",
+      "set": "apps-webpack",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "203dc83dbbb773da35d4b2faf0053a316884dceab15d7b31b0e468fb8f37e458"
+      }
+    },
+    {
+      "appPackage": "gatsby-cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:gatsby-cli: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3024467,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_gatsby-cli-ed0295/entry.js",
+          "sha256": "3ca3cb261dbcb9d29d3101eca298d2426270017767b8a342fc03537e6cb9c579"
+        },
+        "map": {
+          "bytes": 8955148,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_gatsby-cli-ed0295/entry.js.map",
+          "sha256": "9dd58b05c5c61623357ddebf7d30e30bd9c326ab9d5d688c07525cf0e26a05ed"
+        }
+      },
+      "id": "apps-rollup-cli_gatsby-cli-ed0295",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6939b1e19ffcbb831208f85c0f5f703f3f83060d514b3a874095f68a9432edaf"
+      }
+    },
+    {
+      "appPackage": "shadcn",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:shadcn: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 197,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_shadcn-f483ac/entry.js",
+          "sha256": "6f0782267d9f768974b9daf1ed2ff71f342c67d4d79b4e8d7c8dfbc032535e91"
+        },
+        "map": {
+          "bytes": 715,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_shadcn-f483ac/entry.js.map",
+          "sha256": "bba2ff1b43f0a8d7bd00843a4b3d730a40be35ae18377cfc22d1842de27aad26"
+        }
+      },
+      "id": "apps-rollup-cli_shadcn-f483ac",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "41cfa69393af1a45df0bc7517bbc962f7cf9e72859ad482c519bd15c67c6e7bc"
+      }
+    },
+    {
+      "appPackage": "tsup",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:tsup: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1046352,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_tsup-73c365/entry.js",
+          "sha256": "4fdf7c780943331fcae387b2c18559d39679c3cac9a850df712b2ead76383bac"
+        },
+        "map": {
+          "bytes": 4030959,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_tsup-73c365/entry.js.map",
+          "sha256": "8acf36b3f7b5c8e9cca28e7d3ef3eb84c61e1fb329aaf01a2d4b701083f59692"
+        }
+      },
+      "id": "apps-rollup-cli_tsup-73c365",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5b5ecef2bd71c386c4f304f7ed43bd2e7a1c747c1fe7fb89792a2996c95d7772"
+      }
+    },
+    {
+      "appPackage": "mammoth",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:mammoth: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 987,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_mammoth-33d124/entry.js",
+          "sha256": "5f30828be4e4a6ad813ed56acbebe3603a085f6b4a1b88463b00121b8bcc6b78"
+        },
+        "map": {
+          "bytes": 2553,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_mammoth-33d124/entry.js.map",
+          "sha256": "3d1ed8a7a4fae6a759c57ee9008354fc46289f93cdd64c84c8c89e8d803cff34"
+        }
+      },
+      "id": "apps-rollup-cli_mammoth-33d124",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0cc8527997d33c49c9dcc79738dd98e20054ba6712c7275c9a61c1a6789e2280"
+      }
+    },
+    {
+      "appPackage": "@stoplight/spectral-cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:@stoplight/spectral-cli: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 4689742,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_stoplight_spectral-cli-05ca81/entry.js",
+          "sha256": "8e24ad5a66427f346cc098fc026ca6cd7381a097da0fe22e70f79d25b1acc5a5"
+        },
+        "map": {
+          "bytes": 11185328,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_stoplight_spectral-cli-05ca81/entry.js.map",
+          "sha256": "d77945e2a5a07d52402bf5395df464343587fc927819625c0f706292be542ef3"
+        }
+      },
+      "id": "apps-rollup-cli_stoplight_spectral-cli-05ca81",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0b219e2dec275d5f0b312cf7860f942749bd031c27f2303e42bda60d0ecbcbc3"
+      }
+    },
+    {
+      "appPackage": "gunzip-maybe",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:gunzip-maybe: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 43428,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_gunzip-maybe-acfb58/entry.js",
+          "sha256": "fe64092a7fd0d6efba8d9a2fc80d324a9854422ffdda243e765daca7ade46f34"
+        },
+        "map": {
+          "bytes": 176364,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_gunzip-maybe-acfb58/entry.js.map",
+          "sha256": "9f9c11788f449f927d2fc2dc4590e8fcb4f06daba7a4edad98031cc9af77f1cd"
+        }
+      },
+      "id": "apps-rollup-cli_gunzip-maybe-acfb58",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "332097ba85a0eabb05f329fe24d819d81f411ae1990fdfb75ee5b05aab4acee7"
+      }
+    },
+    {
+      "appPackage": "@bitwarden/cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:@bitwarden/cli: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8004836,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_bitwarden_cli-ada1b6/entry.js",
+          "sha256": "ae0f18f6ef19daea2e35b974f97efe64da06eeb9f3e5da575cab44c88e2618d5"
+        },
+        "map": {
+          "bytes": 22315592,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_bitwarden_cli-ada1b6/entry.js.map",
+          "sha256": "aa3b5b10c7004012a8e3bc513f2cfb50f84b741f884bea1c0436056050caf8e5"
+        }
+      },
+      "id": "apps-rollup-cli_bitwarden_cli-ada1b6",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fbdc68136b7d2d97164b81b7773cdb048855b8f21ec4c7012b5cf9a71149e868"
+      }
+    },
+    {
+      "appPackage": "json-server",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:json-server: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 143540,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_json-server-850450/entry.js",
+          "sha256": "dd61c35c194e3854bd9412db1d910008c4a8361c3bd83b9c07ef9d1bae834043"
+        },
+        "map": {
+          "bytes": 554106,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_json-server-850450/entry.js.map",
+          "sha256": "195ab544decd2deb31e14de64c74226af33955125413975c78b1807d6625a0a9"
+        }
+      },
+      "id": "apps-rollup-cli_json-server-850450",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5d77391c9a236211ed8be24d4488268225a42be971ee155b78e2a749f70bc97a"
+      }
+    },
+    {
+      "appPackage": "markdown-it",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:markdown-it: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 151706,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_markdown-it-27f7b1/entry.js",
+          "sha256": "444d37573fda500aedb6a3b27eef594fcc6dd7d81bc172a17fdeaadb5e687a04"
+        },
+        "map": {
+          "bytes": 635459,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_markdown-it-27f7b1/entry.js.map",
+          "sha256": "10bfdb391521bac6315cfa067d70bb29c319fe47ff19b02794466dcbaee9b145"
+        }
+      },
+      "id": "apps-rollup-cli_markdown-it-27f7b1",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f3314985d6f2e565e20443d8d58ab0e61ce0926d46b7fbe9cc82f80313d37a86"
+      }
+    },
+    {
+      "appPackage": "copyfiles",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:copyfiles: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1201,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_copyfiles-18b665/entry.js",
+          "sha256": "7ca1091491f1109e5582228790fabc494d4fb3f6314b8287c03a9b93addf40de"
+        },
+        "map": {
+          "bytes": 3053,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_copyfiles-18b665/entry.js.map",
+          "sha256": "9de4cdeb9a64ae31efeb7f0fd9bdc1eead3bc29e469e2a7c8359c45c1e6b2d07"
+        }
+      },
+      "id": "apps-rollup-cli_copyfiles-18b665",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "df76e483ddb8634ffe75371f8515e76e78cc489bace9b0e423cacab46890bb7b"
+      }
+    },
+    {
+      "appPackage": "conventional-recommended-bump",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:conventional-recommended-bump: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 24086,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_conventional-recommended-bump-e96f98/entry.js",
+          "sha256": "d52f353155550e756524c4df5098fba0ebe327f3c26fda05b2e0667cdda61faa"
+        },
+        "map": {
+          "bytes": 185411,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_conventional-recommended-bump-e96f98/entry.js.map",
+          "sha256": "21160e8e7d91eb512cf952b4f363641d4f10ff2df6576f382ed4fcd246e8d895"
+        }
+      },
+      "id": "apps-rollup-cli_conventional-recommended-bump-e96f98",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "98692228fdbc1508b419d2cfe63042d2d8e8f63c985183aac30ae60206de261c"
+      }
+    },
+    {
+      "appPackage": "cordova",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:cordova: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 558,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_cordova-ed3406/entry.js",
+          "sha256": "7e464d35c052ad75664773d4ad8f64cf8e5d6174483050cbf65d33fa4715afb2"
+        },
+        "map": {
+          "bytes": 2882,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_cordova-ed3406/entry.js.map",
+          "sha256": "345135cc76c0d472bf95647765bb16410a7cbf7c262e08c43435d6b55a94df58"
+        }
+      },
+      "id": "apps-rollup-cli_cordova-ed3406",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "03b551e3906ae7eee9bfe6ea8428b4e5f6710f6c73a81a84617aa39799669a8d"
+      }
+    },
+    {
+      "appPackage": "astro",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:astro: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 14021006,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_astro-82a1ed/entry.js",
+          "sha256": "0b1de92d489f25241501eba098b61c7ab031c1dab662e59daf52163ab7eb5ec9"
+        },
+        "map": {
+          "bytes": 27763158,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_astro-82a1ed/entry.js.map",
+          "sha256": "b82b46251395fbcc52b1587763c8580a42ff549b1dfb613a320aaa6263e4c043"
+        }
+      },
+      "id": "apps-rollup-cli_astro-82a1ed",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7ae383e16567566e9bfe37a42dd9da33e7e2ce7348b2512394798ed4afc59878"
+      }
+    },
+    {
+      "appPackage": "forever",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:forever: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 235,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_forever-b0987f/entry.js",
+          "sha256": "86973b8baa20723c74a991435541912fc8d35b557c053cb6a37251690e76ec43"
+        },
+        "map": {
+          "bytes": 969,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_forever-b0987f/entry.js.map",
+          "sha256": "836e0d689dd4e7c0a3b0f80fc32fd36148b3ff72dbd29c8146f535c83d638e1c"
+        }
+      },
+      "id": "apps-rollup-cli_forever-b0987f",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8cf44d4d6cf46ff93452ae2e9095901439b6e3d34bc73161c88136879aa4d2e2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:elcalc: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 12852060,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_elcalc-a9cee6/entry.js",
+          "sha256": "2a037a496ea925cfae2021b1d623db1505ec93d7d4c31f2a08705ecae398e545"
+        },
+        "map": {
+          "bytes": 41080709,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_elcalc-a9cee6/entry.js.map",
+          "sha256": "441fc48f7b423866d067a4fd59c35080a4ed55cd48c3cd64b0628ffaf52b3331"
+        }
+      },
+      "id": "apps-rollup-electron_elcalc-a9cee6",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5ae9545b468182c4817e1a0b343350b412743217bbcba04d00741796ec04c757"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:deer: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 7609139,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_deer-45c579/entry.js",
+          "sha256": "3781ab4cc89e0744a531c306c692123859fd7e1674c6b6df3133ad39f731bd0b"
+        },
+        "map": {
+          "bytes": 25471268,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_deer-45c579/entry.js.map",
+          "sha256": "954520d61edd81634031ae9d26084674919308343c8e18063562214ce7b02bac"
+        }
+      },
+      "id": "apps-rollup-electron_deer-45c579",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "05c72e1df449d97ca4a1263ba693217128ebfcc6bfa3f13180f259b5f3761dc5"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:cozy-desktop: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 5078150,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_cozy-desktop-3c5a87/entry.js",
+          "sha256": "983e01be3170d4ff844fbb3216d81f9ec52506b876d8dadc317552cab9f00964"
+        },
+        "map": {
+          "bytes": 16202246,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_cozy-desktop-3c5a87/entry.js.map",
+          "sha256": "374998e5205fa6170926823a42231c25c58fc599a12cbfb0ed36e75f0ef1336d"
+        }
+      },
+      "id": "apps-rollup-electron_cozy-desktop-3c5a87",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f158b7e477eaa4106190e9209be0a8b1f29253c666cf83dd6b14ee7e357b58af"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:erin: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2973332,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_erin-ceab49/entry.js",
+          "sha256": "7f053061b5d6dcd16642280c63d58729b7443e1e156668805f12524e9770e296"
+        },
+        "map": {
+          "bytes": 9409012,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_erin-ceab49/entry.js.map",
+          "sha256": "b90df5138c254cd2e33eca174c18d4d293e776e0c330b937754981e93c0eff45"
+        }
+      },
+      "id": "apps-rollup-electron_erin-ceab49",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "68e7ae307f11471dbd99a5ecfcefbaa121048e30a570ade6ed2107672f656158"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:neucalculator: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 13339376,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_neucalculator-cf43f1/entry.js",
+          "sha256": "3c478b3e96a4124448041841a75a5781739b4647a2abed92a99ba4364dd11616"
+        },
+        "map": {
+          "bytes": 40433330,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_neucalculator-cf43f1/entry.js.map",
+          "sha256": "91b4441b594cf01dc582fa03fe8dd3f6c5f4d048ed7dcf417320b54d09436288"
+        }
+      },
+      "id": "apps-rollup-electron_neucalculator-cf43f1",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "759dc74285f1093113a42514fc04b7788fdfd9a8850737468f98c7fc0017eed9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:domodel-diary: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 350947,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_domodel-diary-83dded/entry.js",
+          "sha256": "d74bf99aca0748b22c8d52788204a3e1dac1ea115ba1e14eae159285843e241c"
+        },
+        "map": {
+          "bytes": 936111,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_domodel-diary-83dded/entry.js.map",
+          "sha256": "85ef5646047fb111d46d6b9fdc3d83fc399c1b70ef4539fcd2d5898d92e26e59"
+        }
+      },
+      "id": "apps-rollup-electron_domodel-diary-83dded",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "94785267e60163d01027a3687104054379932bc2c6f756be2fc315c5d1920c6e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:hyper: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8126259,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_hyper-e7aafe/entry.js",
+          "sha256": "b514731723fbc80c42b191bcda978bfcf4f0cfd25f49fba1f1c8d8a05c560d58"
+        },
+        "map": {
+          "bytes": 30062616,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_hyper-e7aafe/entry.js.map",
+          "sha256": "7d254a7f326f1a4cdab4bf505ca3be47cb7d53737a5c3414de5afbbf78691dcc"
+        }
+      },
+      "id": "apps-rollup-electron_hyper-e7aafe",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "09ec04448709eb4c7b62521210b5eeffc75c3a4e4e34d45e23a256f3c80210cc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:whale: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 631856,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_whale-432845/entry.js",
+          "sha256": "f3c7c723a31659b8228a2bc24d002e702c453c7f74b841065a7f98062ab7d47a"
+        },
+        "map": {
+          "bytes": 1843499,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_whale-432845/entry.js.map",
+          "sha256": "989e6a1047afbde189d3dad74597db31ca44e81dee8e44414a5b2b8caf17bdc2"
+        }
+      },
+      "id": "apps-rollup-electron_whale-432845",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "05961eb1ba2be0a18509310acebf8df2bd6bf4146786ffd9761bf00a2f02a338"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:wanna-class: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 1550506,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_wanna-class-1bc853/entry.js",
+          "sha256": "042dcd31a6919cef06eb9912cd82a073da27dbbb9ecfe049ea7ec11f49e94152"
+        },
+        "map": {
+          "bytes": 4733059,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_wanna-class-1bc853/entry.js.map",
+          "sha256": "c2944a7e2cf71d5a8fdaee333c901f1aa139d39583685d6c83f8b53cb4d0d6c2"
+        }
+      },
+      "id": "apps-rollup-electron_wanna-class-1bc853",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "024f78b3be79c3c6aec5387a5d93a0aff655306c31b3600bf8bbe51dd687e399"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:paperarxiv: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6279990,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_paperarxiv-725a6a/entry.js",
+          "sha256": "078867fb2a0a115eaf0253939c18d969d1cc9c5d41b86eaf21b3d866be5a1e89"
+        },
+        "map": {
+          "bytes": 23206443,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_paperarxiv-725a6a/entry.js.map",
+          "sha256": "66b8229a5404d15137904d7570dac36ffd6824766cf76091c64fc370791a04fb"
+        }
+      },
+      "id": "apps-rollup-electron_paperarxiv-725a6a",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "82e8c380eed9dc15ed1d4aebca64731c32bf3d2a0baf99f3ce99fdb109ac5f13"
+      }
+    },
+    {
+      "appPackage": "n8n",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:n8n: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 2486816,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_n8n-d2ce94/entry.js",
+          "sha256": "68c402eb80998a1170bb44c72e848f7c335dec58dda1ae5e7929c6feac041dbe"
+        },
+        "map": {
+          "bytes": 7723964,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_n8n-d2ce94/entry.js.map",
+          "sha256": "3c91a0688ab7927d893e073ed4af54d954c0e0e09ef6e081fa393430bfb13de2"
+        }
+      },
+      "id": "apps-rollup-cli_n8n-d2ce94",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a17566c31698a3409beefb97344882229afce129ff5ad1f1a9966d1665b99987"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app electron:i5sing: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 8700767,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/electron_i5sing-c08c8f/entry.js",
+          "sha256": "3282f7ef0ee47ec2d66bd54cef8b6ccc7b38c9bde9e4c176d304b00f40237b26"
+        },
+        "map": {
+          "bytes": 26121564,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/electron_i5sing-c08c8f/entry.js.map",
+          "sha256": "22825bbaa309799b6f86272503dd393f2f4f7d0b7c330d21b95fb26496476867"
+        }
+      },
+      "id": "apps-rollup-electron_i5sing-c08c8f",
+      "kind": "electron",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f23ad98d4c37f7c831ef119ab365b8fcb628a925be357298ace7d07afb74349e"
+      }
+    },
+    {
+      "appPackage": "puppeteer",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:puppeteer: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 942676,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_puppeteer-b84e91/entry.js",
+          "sha256": "b223e67abcb730bedc4d321f97ed42326ebc03c479022a895a5a38f900228f99"
+        },
+        "map": {
+          "bytes": 3886672,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_puppeteer-b84e91/entry.js.map",
+          "sha256": "84dff2a1ebe9a13fe8b3d9c4c756ad03aa846ef8f8e319126506dc3c2734f166"
+        }
+      },
+      "id": "apps-rollup-cli_puppeteer-b84e91",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b5e4b0de5bad14e64048720af67c649813046253691512ebdf75fb237eee8644"
+      }
+    },
+    {
+      "appPackage": "@prisma/cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:@prisma/cli: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 6596427,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_prisma_cli-1a0b5c/entry.js",
+          "sha256": "8efe1e80119f6a1765ee1223db6fd36a140effa187276ba18666721b632ce64a"
+        },
+        "map": {
+          "bytes": 17681454,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_prisma_cli-1a0b5c/entry.js.map",
+          "sha256": "6fdf5a50764835e2d3eb970d7d65bec8a780616d8f88bf809e5c8c8f276c2e9e"
+        }
+      },
+      "id": "apps-rollup-cli_prisma_cli-1a0b5c",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bb7bed6a9d4da2cb4bc3e505cadbf9428e9d27b2a6ec19de1050e82a1843253f"
+      }
+    },
+    {
+      "appPackage": "@percy/cli",
+      "builtWith": "rollup",
+      "bundler": "rollup",
+      "description": "exp107 dev app cli:@percy/cli: rollup 4 + node-resolve + commonjs + json + terser, format cjs, sourcemap (exp100's recipe)",
+      "files": {
+        "bundle": {
+          "bytes": 3071394,
+          "name": "entry.js",
+          "origin": "/work/exp107-data/build/rollup/cli_percy_cli-2ecd02/entry.js",
+          "sha256": "fbb20404711cc2c171eb1fbf2b9621682761f4eda0bb26122205e48bc7ca466b"
+        },
+        "map": {
+          "bytes": 9823573,
+          "name": "entry.js.map",
+          "origin": "/work/exp107-data/build/rollup/cli_percy_cli-2ecd02/entry.js.map",
+          "sha256": "7c412122ef17f97ebb52fd4794edd2d788aff882febae70ee1ed58bf49ae4586"
+        }
+      },
+      "id": "apps-rollup-cli_percy_cli-2ecd02",
+      "kind": "cli",
+      "set": "apps-rollup",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "98f67aabb824fbd2596bb3f27af8e69fceff640c6a1ebc32af6d08395e823403"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp107 DEV-SIDE builds of exp095 TRAINING apps (never held-out, never test) with exp100's esbuild / webpack / rollup recipes (experiments/107-zero-app-claims/scripts/dev_apps.py)",
+  "schema": "exp096-corpus/1"
+}

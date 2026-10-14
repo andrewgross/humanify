@@ -24,6 +24,10 @@ CORPORA = {
     "bundlers": {"manifest": os.path.join(HERE, "corpus-bundlers.json"),
                  "origins": os.path.join(HERE, "origins-bundlers.json"),
                  "copies": os.path.join(HERE, "copies-bundlers.json"), "data": "/work/exp105-data/frozen"},
+    # exp107's DEV-SIDE esbuild, webpack and rollup builds of 32 real apps drawn from exp095's TRAINING apps (never
+    # held-out, never test; experiments/107-zero-app-claims/scripts/dev_apps.py); a dev corpus (cards committed)
+    "apps": {"manifest": os.path.join(HERE, "corpus-apps.json"), "origins": os.path.join(HERE, "origins-apps.json"),
+             "copies": os.path.join(HERE, "copies-apps.json"), "data": "/work/exp107-data/frozen"},
 }
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"
@@ -43,12 +47,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|bundlers` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|bundlers|apps` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|bundlers")
+        raise SystemExit("--corpus needs a value: dev|test|bundlers|apps")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

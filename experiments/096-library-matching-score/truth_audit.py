@@ -96,3 +96,54 @@ class Audit:
             return None
         (best, n), = sorted(by.items(), key=lambda kv: (-kv[1], kv[0]))[:1]
         return best if 2 * n > e - s else None
+
+
+# ---------------------------------------------------------------- scorer 6 (exp107): the decoder
+
+# Each rule can be switched off: both off reproduces scorer 4's segments (and so its cards) exactly
+# (experiments/107-zero-app-claims/verify_decoder.py).
+RULES6 = {"utf16": True, "unmapped": True}
+
+
+def redecode(entry, truth, origins):
+    """(truth, origins) with the segments re-decoded under scorer 6's decoder rules (decoder.py: UTF-16 generated
+    columns; one-field segments kept as unmapped). Copies; the frozen files are never rewritten. A segment that
+    maps to nothing points at one extra source row, `<unmapped>`. The origin layer is indexed by scorer 4's
+    segments, which are exactly the re-decoded segments that map somewhere, in the same order (checked: refused
+    otherwise), so each keeps its origin and an unmapped segment has none."""
+    if truth["method"] != "sourcemap" or not (RULES6["utf16"] or RULES6["unmapped"]):
+        return truth, origins
+    import decoder
+    with open(lib096.corpus_path(entry, "bundle"), encoding="utf8", newline=None if not RULES6["utf16"] else "") \
+            as fh:
+        text = fh.read()
+    with open(lib096.corpus_path(entry, "map")) as fh:
+        smap = json.load(fh)
+    inner = None
+    if "innerMap" in entry["files"]:
+        with open(lib096.corpus_path(entry, "innerMap")) as fh:
+            inner = (json.load(fh), 1)
+    segs = decoder.segments(text, smap, inner, utf16=RULES6["utf16"], unmapped=RULES6["unmapped"])
+    old = truth["segments"]
+    mapped = [s for s in segs if s[1] is not None]
+    if len(mapped) != len(old) or any(a[1] != b[1] for a, b in zip(mapped, old)):
+        raise SystemExit(f"REFUSED: {entry['id']}: the re-decoded mapped segments are not scorer 4's, in order")
+    none = len(truth["sources"])
+    new_segs = [[s[0], none if s[1] is None else s[1]] for s in segs]
+    new_truth = {**truth, "segments": new_segs, "sources": [*truth["sources"], ["<unmapped>", None, None]]}
+    if origins is None:
+        return new_truth, None
+    # per old segment index -> its run's (name, kind); re-run-length over the new segment list
+    run_at = [r[0] for r in origins["runs"]]
+    runs, prev, k = [], None, 0
+    for j, s in enumerate(segs):
+        if s[1] is None:
+            o = (-1, -1)
+        else:
+            r = origins["runs"][bisect.bisect_right(run_at, k) - 1] if run_at else [0, -1, -1]
+            o = (r[1], r[2])
+            k += 1
+        if o != prev:
+            runs.append([j, o[0], o[1]])
+            prev = o
+    return new_truth, {**origins, "runs": runs, "segments": len(new_segs)}
