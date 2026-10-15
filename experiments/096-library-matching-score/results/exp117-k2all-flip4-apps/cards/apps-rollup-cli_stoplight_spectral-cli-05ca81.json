@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "8e24ad5a66427f346cc098fc026ca6cd7381a097da0fe22e70f79d25b1acc5a5",
+ "claimedBytes": {
+  "family": 1482,
+  "right": 1304678,
+  "unmapped": 4967,
+  "wrongFamily": 118032
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_stoplight_spectral-cli-05ca81",
+ "exploratory": {
+  "names": {
+   "bindings": 15150,
+   "bindingsSameVersion": 14917,
+   "bindingsVersionKnown": 15150,
+   "exactBytes": 762162,
+   "exactUnits": 664,
+   "sameVersionShare": 0.98462
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.732066,
+  "f1": 0.553366,
+  "namedBytes": 1259846,
+  "precision": 0.932911,
+  "recall": 0.39334
+ },
+ "label": "exp117-k2all-flip4-apps",
+ "missBytes": {
+  "a": 1839741,
+  "b": 915,
+  "c": 20894,
+  "d-absent": 6055,
+  "d-file": 2171,
+  "d-variant": 171,
+  "e-ambig": 2262,
+  "e-support": 2692,
+  "e-veto": 10061,
+  "f": 11820,
+  "unit-model": 5
+ },
+ "noDiscovery": null,
+ "reportSha256": "bd5fb7876028dd62852409ae08193b6e75d7221c23fd6379694199b4ef5e1e2d",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 12174,
+  "<unmapped>": 1462240,
+  "copy": 38025,
+  "library": 3202947
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 38025,
+  "f05": 0.733821,
+  "f05ShipperOnly": 0.733821,
+  "f1": 0.564565,
+  "f1ShipperOnly": 0.564565,
+  "libraryBytes": 3202947,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 1306160,
+  "namedBytes": 1306160,
+  "namedBytesShipperOnly": 1306160,
+  "precision": 0.917124,
+  "precisionShipperOnly": 0.917124,
+  "recall": 0.407799,
+  "recallShipperOnly": 0.407799,
+  "wrongFamilyBytes": 118032,
+  "wrongFamilyBytesShipperOnly": 118032
+ },
+ "truthMethod": "sourcemap"
+}

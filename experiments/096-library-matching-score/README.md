@@ -2,6 +2,12 @@
 
 ## STATUS (2026-10-14)
 
+- **Scorer 8 (exp119, `experiments/119-families-full/README.md`).** `families-derived.json` was re-derived with
+  exp104's rules, unchanged, over every package of the default index k2-all plus the earlier universe (17,316
+  names; 5,562 links, a strict superset of scorer 7's joins). `family()` is the only thing that changed. All 223
+  committed labels were re-scored. The ledger shows right -> wrong = 0 on every label; every relabel is
+  wrong -> right, on the webpack/rollup forks (e.g. `@redocly/ajv` ~ `ajv`) and pop-bun. Dev's four sets did not
+  move. The frozen copies layers keep the families they were built with.
 - **Scorer 5 (exp106, `experiments/106-matcher-hygiene/README.md`).** Two source-table corrections and a new
   headline metric:
 

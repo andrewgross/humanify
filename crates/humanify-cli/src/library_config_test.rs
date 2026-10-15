@@ -273,6 +273,21 @@ fn the_default_library_tunables_are_the_measured_recommendation() {
     assert_eq!(o.helper_families, 0, "helper_families stays off (exp106)");
 }
 
+/// exp117: exp114's context-presence pair with its fence, and exp112's
+/// declared cap, measured together on every corpus on k2-all
+/// (experiments/117-default-flip). shadow_ties joined them 2026-10-15 on
+/// Andrew's call: it removes fork claims (@redocly/ajv over ajv) on every
+/// webpack/rollup set for 1,035 wrong bytes on test2-esbuild.
+#[test]
+fn the_default_presence_keys_and_declared_cap_are_on() {
+    let o = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(o.context_presence, 1.5);
+    assert_eq!(o.context_presence_slack, 16384);
+    assert!(o.presence_fence);
+    assert_eq!(o.declared_max_bytes, 65536);
+    assert!(o.shadow_ties, "shadow_ties on since 2026-10-15");
+}
+
 #[test]
 fn the_exp106_hygiene_keys_turn_off() {
     use humanify_core::libdetect::discovery::BannerNames;
@@ -313,35 +328,26 @@ fn the_exp106_hygiene_keys_turn_off() {
     assert!(err.iter().any(|e| e.contains("banner_names")), "{err:?}");
 }
 
-/// exp114's presence keys: off by default, set from the file.
+/// exp114's presence keys: context_presence + presence_fence on by default
+/// since exp117, shadow_ties since 2026-10-15; each is set from the file.
 #[test]
-fn the_exp114_presence_keys_default_off_and_set() {
-    let c = build(&["in.js"], "").unwrap();
-    let o = c.library.discovery_options();
+fn the_exp114_presence_keys_set_from_the_file() {
+    let off = build(
+        &["in.js"],
+        "[library.discovery]\ncontext_presence = 0.0\ncontext_presence_slack = 0\npresence_fence = false\n",
+    )
+    .unwrap();
+    let o = off.library.discovery_options();
     assert_eq!(o.context_presence, 0.0);
     assert_eq!(o.context_presence_slack, 0);
-    assert!(!o.shadow_ties);
     assert!(!o.presence_fence);
-    let on = build(
-        &["in.js"],
-        "[library.discovery]\ncontext_presence = 1.5\ncontext_presence_slack = 16384\nshadow_ties = true\npresence_fence = true\n",
-    )
-    .unwrap();
-    let o = on.library.discovery_options();
-    assert_eq!(o.context_presence, 1.5);
-    assert_eq!(o.context_presence_slack, 16384);
-    assert!(o.shadow_ties);
-    assert!(o.presence_fence);
+    let on = build(&["in.js"], "[library.discovery]\nshadow_ties = false\n").unwrap();
+    assert!(!on.library.discovery_options().shadow_ties);
 }
 
+/// exp112's declared cap: 65536 by default since exp117, 0 turns it off.
 #[test]
-fn the_exp112_declared_cap_defaults_off() {
-    let off = build(&["in.js"], "").unwrap();
+fn the_exp112_declared_cap_turns_off() {
+    let off = build(&["in.js"], "[library.discovery]\ndeclared_max_bytes = 0\n").unwrap();
     assert_eq!(off.library.discovery_options().declared_max_bytes, 0);
-    let on = build(
-        &["in.js"],
-        "[library.discovery]\ndeclared_max_bytes = 65536\n",
-    )
-    .unwrap();
-    assert_eq!(on.library.discovery_options().declared_max_bytes, 65536);
 }

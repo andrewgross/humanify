@@ -155,15 +155,21 @@ banner_names = "known"         # exp106 matcher hygiene (experiments/106-matcher
 derived_families = true        # exp106: one family = npm-metadata links (families-derived.json)
 payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence (exp113: own bytes; a base64 payload naming the package is its own)
 helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
-context_presence = 0.0         # exp114: off; a package seen only in index modules bigger
-context_presence_slack = 0     #   than the bundle's groups is no seed (experiments/114-dev-precision)
-shadow_ties = false            # exp114: off; a package whose seeds are all ties goes to its rival
-presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
-declared_max_bytes = 0         # exp112: off; a declared seed on a statement over N bytes is no
-                               #   seed (experiments/112-test-precision; 65536 measured)
+context_presence = 1.5         # exp114, ON since exp117: a package seen only in index modules
+context_presence_slack = 16384 #   bigger than the bundle's groups is no seed (experiments/114-dev-precision)
+shadow_ties = true             # exp114, ON since 2026-10-15 (Andrew): fork claims gone on webpack/rollup; costs 1,035 B on test2-esbuild
+presence_fence = true          # exp114, ON since exp117: what context_presence drops is named by no one
+declared_max_bytes = 65536     # exp112, ON since exp117: a declared seed on a statement over N bytes
+                               #   is no seed (experiments/112-test-precision, 117-default-flip)
 ```
 
-To reproduce a pre-exp109 run, set the old values back explicitly:
+Since exp117 (2026-10-15) `context_presence = 1.5`, `context_presence_slack = 16384`,
+`presence_fence = true` and `declared_max_bytes = 65536` are on too: together they lowered
+neither precision nor F0.5 on any of 19 sets (dev, apps, bundlers, pop, test, test2) on the
+k2-all index (experiments/117-default-flip). To reproduce a pre-exp117 run, set them back to
+`0.0`, `0`, `false`, `0`.
+
+To reproduce a pre-exp109 run, set the old values back explicitly (and the exp117 keys as above):
 `agreement = true`, `literal_margin_by_family = false`, `evidence_conflict =
 false`, `literal_conflict = false`, `contested_cover = 0.0`, `specific_rivals
 = false`, `banner_names = "any"`, `derived_families = false`,

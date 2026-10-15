@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "5704d7a8be5c001f70f164b8eeedc57eef09ade1e8d3de33f91183253571e08f",
+ "claimedBytes": {
+  "family": 660479,
+  "right": 4860770,
+  "unmapped": 3076,
+  "wrongFamily": 6064
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_paperarxiv-725a6a",
+ "exploratory": {
+  "names": {
+   "bindings": 76190,
+   "bindingsSameVersion": 59673,
+   "bindingsVersionKnown": 76190,
+   "exactBytes": 4408578,
+   "exactUnits": 4065,
+   "sameVersionShare": 0.783213
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.956492,
+  "f1": 0.898676,
+  "namedBytes": 5068379,
+  "precision": 0.999353,
+  "recall": 0.816428
+ },
+ "label": "exp117-k2all-cpf-apps",
+ "missBytes": {
+  "a": 2361,
+  "c": 371652,
+  "d-absent": 46258,
+  "d-file": 84456,
+  "d-variant": 266,
+  "e-ambig": 7219,
+  "e-other": 19283,
+  "e-spec": 397,
+  "e-support": 5507,
+  "e-veto": 122155,
+  "f": 25982,
+  "unit-model": 1209
+ },
+ "noDiscovery": null,
+ "reportSha256": "feaa0a233492857f1319f81af7d7bfd69c04e15b03270e6bfdc3ae9ffb979e5b",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 763,
+  "<unmapped>": 19312,
+  "copy": 516830,
+  "library": 6207994
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 516830,
+  "f05": 0.974892,
+  "f05ShipperOnly": 0.974892,
+  "f1": 0.940964,
+  "f1ShipperOnly": 0.940964,
+  "libraryBytes": 6207994,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 5521249,
+  "namedBytes": 5521249,
+  "namedBytesShipperOnly": 5521249,
+  "precision": 0.998903,
+  "precisionShipperOnly": 0.998903,
+  "recall": 0.889377,
+  "recallShipperOnly": 0.889377,
+  "wrongFamilyBytes": 6064,
+  "wrongFamilyBytesShipperOnly": 6064
+ },
+ "truthMethod": "sourcemap"
+}

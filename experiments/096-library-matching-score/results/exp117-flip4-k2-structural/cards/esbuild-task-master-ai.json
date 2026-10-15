@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 98523,
+  "foreign": 79357,
+  "origin": 71877,
+  "right": 3044854,
+  "unmapped": 8255,
+  "wrongFamily": 125529
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 34685,
+   "bindingsSameVersion": 27259,
+   "bindingsVersionKnown": 33739,
+   "exactBytes": 2396896,
+   "exactUnits": 3969,
+   "sameVersionShare": 0.807937
+  }
+ },
+ "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.855206,
+  "f1": 0.714577,
+  "namedBytes": 2757767,
+  "precision": 0.984352,
+  "recall": 0.560865
+ },
+ "label": "exp117-flip4-k2-structural",
+ "missBytes": {
+  "a": 459786,
+  "b": 801497,
+  "c": 33819,
+  "d-absent": 91669,
+  "d-file": 17473,
+  "d-variant": 81,
+  "e-ambig": 19912,
+  "e-other": 28872,
+  "e-support": 4824,
+  "e-veto": 11623,
+  "f": 232178
+ },
+ "noDiscovery": null,
+ "reportSha256": "81b76172e43657f4ffd742a127f856941147aeeddccb161ec6e5c3e8be90e0f6",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80010,
+  "<self>": 1114888,
+  "<unmapped>": 16989,
+  "copy": 263429,
+  "library": 4916988
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 263429,
+  "f05": 0.87944,
+  "f05ShipperOnly": 0.85978,
+  "f1": 0.778722,
+  "f1ShipperOnly": 0.761313,
+  "libraryBytes": 4916988,
+  "namedAsOriginBytes": 71877,
+  "namedAsShipperBytes": 3143377,
+  "namedBytes": 3215254,
+  "namedBytesShipperOnly": 3143377,
+  "precision": 0.962425,
+  "precisionShipperOnly": 0.94091,
+  "recall": 0.653907,
+  "recallShipperOnly": 0.639289,
+  "wrongFamilyBytes": 125529,
+  "wrongFamilyBytesShipperOnly": 197406
+ },
+ "truthMethod": "sourcemap"
+}

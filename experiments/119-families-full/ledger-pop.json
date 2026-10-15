@@ -1,0 +1,137 @@
+{
+  "pop-exp113-k2all": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp113-main-k2": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp113-own-k2": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-base-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-cpf-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-dmb-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-flip3-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-flip4-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-k2all-cpf": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-k2all-cpfdmb": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-exp117-k2all-flip4": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-k2-rec": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-k2-rec-dcap": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 35333,
+        "WRONG->GOOD:repo": 35333
+      }
+    },
+    "transitions": [["pop-bun", "repo", "wrongFamily", "family", 35333]]
+  },
+  "pop-step4-structural": {
+    "corpus": "pop",
+    "perSet": {},
+    "transitions": []
+  }
+}

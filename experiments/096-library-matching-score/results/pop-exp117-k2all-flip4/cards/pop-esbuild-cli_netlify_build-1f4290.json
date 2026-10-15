@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "5c194bd73923ea977f9cf614750f1ffffa18955008bd5166f3af7db07057f120",
+ "claimedBytes": {
+  "family": 890,
+  "origin": 1147,
+  "right": 1519514,
+  "selfOther": 2004,
+  "unmapped": 258,
+  "wrongFamily": 168254
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-cli_netlify_build-1f4290",
+ "exploratory": {
+  "names": {
+   "bindings": 15418,
+   "bindingsSameVersion": 10570,
+   "bindingsVersionKnown": 15418,
+   "exactBytes": 1425337,
+   "exactUnits": 1485,
+   "sameVersionShare": 0.685562
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.861325,
+  "f1": 0.815249,
+  "namedBytes": 1363338,
+  "precision": 0.895049,
+  "recall": 0.748514
+ },
+ "label": "pop-exp117-k2all-flip4",
+ "missBytes": {
+  "a": 14020,
+  "b": 26147,
+  "c": 18133,
+  "d-absent": 69756,
+  "d-file": 29226,
+  "d-variant": 5132,
+  "e-ambig": 6633,
+  "e-other": 212,
+  "e-support": 2519,
+  "e-veto": 594,
+  "f": 127470
+ },
+ "noDiscovery": null,
+ "reportSha256": "90ddae7c64c6752d9bf90d6f3cd82ef34f402644e9a529cc3c19043bb7766e03",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<self>": 165825,
+  "<unmapped>": 1153,
+  "copy": 170184,
+  "library": 1821393
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 170184,
+  "f05": 0.886622,
+  "f05ShipperOnly": 0.885953,
+  "f1": 0.866685,
+  "f1ShipperOnly": 0.866031,
+  "libraryBytes": 1821393,
+  "namedAsOriginBytes": 1147,
+  "namedAsShipperBytes": 1520404,
+  "namedBytes": 1521551,
+  "namedBytesShipperOnly": 1520404,
+  "precision": 0.90043,
+  "precisionShipperOnly": 0.899751,
+  "recall": 0.835378,
+  "recallShipperOnly": 0.834748,
+  "wrongFamilyBytes": 168254,
+  "wrongFamilyBytesShipperOnly": 169401
+ },
+ "truthMethod": "sourcemap"
+}
