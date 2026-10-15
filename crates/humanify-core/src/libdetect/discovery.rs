@@ -257,7 +257,9 @@ impl DiscoveryOptions {
     /// index knows, metadata-derived families and the payload guard; since
     /// exp117 (experiments/117-default-flip) also exp114's context presence
     /// with its fence and exp112's declared cap, measured together on every
-    /// corpus on k2-all. `helper_families` and `shadow_ties` stay off.
+    /// corpus on k2-all; and since 2026-10-15 (Andrew's call) `shadow_ties`,
+    /// which removes fork claims on every webpack/rollup set for 1,035 wrong
+    /// bytes on test2-esbuild. `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
     pub fn recommended() -> Self {
@@ -273,6 +275,7 @@ impl DiscoveryOptions {
             context_presence_slack: 16384,
             presence_fence: true,
             declared_max_bytes: 65536,
+            shadow_ties: true,
             ..DiscoveryOptions::default()
         }
     }

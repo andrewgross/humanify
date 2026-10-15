@@ -157,7 +157,7 @@ payload_min_bytes = 4096       # exp106: a propagated string payload needs its o
 helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
 context_presence = 1.5         # exp114, ON since exp117: a package seen only in index modules
 context_presence_slack = 16384 #   bigger than the bundle's groups is no seed (experiments/114-dev-precision)
-shadow_ties = false            # exp114: off (exp117: alone it added 1,035 wrong bytes on test2-esbuild)
+shadow_ties = true             # exp114, ON since 2026-10-15 (Andrew): fork claims gone on webpack/rollup; costs 1,035 B on test2-esbuild
 presence_fence = true          # exp114, ON since exp117: what context_presence drops is named by no one
 declared_max_bytes = 65536     # exp112, ON since exp117: a declared seed on a statement over N bytes
                                #   is no seed (experiments/112-test-precision, 117-default-flip)
