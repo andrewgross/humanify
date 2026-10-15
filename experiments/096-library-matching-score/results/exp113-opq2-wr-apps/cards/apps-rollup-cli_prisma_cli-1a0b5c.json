@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "8efe1e80119f6a1765ee1223db6fd36a140effa187276ba18666721b632ce64a",
+ "claimedBytes": {
+  "family": 883,
+  "origin": 129110,
+  "right": 809140,
+  "self": 7249,
+  "unmapped": 8480,
+  "wrongFamily": 209843
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_prisma_cli-1a0b5c",
+ "exploratory": {
+  "names": {
+   "bindings": 7951,
+   "bindingsSameVersion": 7561,
+   "bindingsVersionKnown": 7951,
+   "exactBytes": 494031,
+   "exactUnits": 707,
+   "sameVersionShare": 0.95095
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.398681,
+  "f1": 0.22509,
+  "namedBytes": 803995,
+  "precision": 0.820561,
+  "recall": 0.130435
+ },
+ "label": "exp113-opq2-wr-apps",
+ "missBytes": {
+  "a": 1480848,
+  "b": 3473615,
+  "c": 27431,
+  "d-absent": 7416,
+  "d-file": 101876,
+  "e-ambig": 7032,
+  "e-other": 7760,
+  "e-spec": 406,
+  "e-support": 8969,
+  "e-veto": 77777,
+  "f": 31665
+ },
+ "noDiscovery": null,
+ "reportSha256": "33158e13d31c2a051dc01138742ee64e39d41d06969dfe0d1520e107f5ec71aa",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 356329,
+  "<unmapped>": 57453,
+  "copy": 282990,
+  "library": 6163928
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 282990,
+  "f05": 0.436408,
+  "f05ShipperOnly": 0.37641,
+  "f1": 0.256843,
+  "f1ShipperOnly": 0.221532,
+  "libraryBytes": 6163928,
+  "namedAsOriginBytes": 129110,
+  "namedAsShipperBytes": 810023,
+  "namedBytes": 939133,
+  "namedBytesShipperOnly": 810023,
+  "precision": 0.817365,
+  "precisionShipperOnly": 0.704996,
+  "recall": 0.15236,
+  "recallShipperOnly": 0.131413,
+  "wrongFamilyBytes": 209843,
+  "wrongFamilyBytesShipperOnly": 338953
+ },
+ "truthMethod": "sourcemap"
+}

@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "0b1de92d489f25241501eba098b61c7ab031c1dab662e59daf52163ab7eb5ec9",
+ "claimedBytes": {
+  "family": 9316035,
+  "origin": 234428,
+  "right": 2167426,
+  "selfOrigin": 2088,
+  "selfOther": 10215,
+  "unmapped": 2975,
+  "wrongFamily": 104433
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_astro-82a1ed",
+ "exploratory": {
+  "names": {
+   "bindings": 25232,
+   "bindingsSameVersion": 23211,
+   "bindingsVersionKnown": 25232,
+   "exactBytes": 1970214,
+   "exactUnits": 1849,
+   "sameVersionShare": 0.919903
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.485948,
+  "f1": 0.278394,
+  "namedBytes": 2172854,
+  "precision": 0.966153,
+  "recall": 0.162627
+ },
+ "label": "exp113-k2all-apps",
+ "missBytes": {
+  "a": 7038,
+  "c": 736176,
+  "d-absent": 517993,
+  "d-file": 36735,
+  "e-ambig": 35034,
+  "e-other": 46080,
+  "e-support": 2183,
+  "e-veto": 20786,
+  "f": 241058,
+  "unit-model": 29
+ },
+ "noDiscovery": null,
+ "reportSha256": "8f173bab2efbdcd34cee34d4a7f2a2679ca7bd7cf7606325fc80bda94f7389a9",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 622696,
+  "<unmapped>": 12814,
+  "copy": 668179,
+  "library": 13361001
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 668179,
+  "f05": 0.966021,
+  "f05ShipperOnly": 0.946694,
+  "f1": 0.930607,
+  "f1ShipperOnly": 0.911989,
+  "libraryBytes": 13361001,
+  "namedAsOriginBytes": 234428,
+  "namedAsShipperBytes": 11483461,
+  "namedBytes": 11717889,
+  "namedBytesShipperOnly": 11483461,
+  "precision": 0.991166,
+  "precisionShipperOnly": 0.971337,
+  "recall": 0.877022,
+  "recallShipperOnly": 0.859476,
+  "wrongFamilyBytes": 104433,
+  "wrongFamilyBytesShipperOnly": 338861
+ },
+ "truthMethod": "sourcemap"
+}

@@ -171,10 +171,12 @@ pub struct DiscoveryOptions {
     /// is refused to propagation ([`Containment::helper_dominated`]).
     pub helper_families: u32,
     /// The payload floor (exp106; 0 = off): a propagated unit of at least
-    /// this many bytes, nine tenths of them inside string literals (a
-    /// base64 wasm blob, an embedded data table), is refused unless the
-    /// claimed family's own index evidence holds it (a print of it, or its
-    /// long literal in the family's files): the call that reaches a payload
+    /// this many OWN bytes (exp113: a module wrapper is not its body), nine
+    /// tenths of them inside string literals (a base64 wasm blob, an
+    /// embedded data table), is refused unless the claimed family's own
+    /// index evidence holds it (a print of it, or its long literal in the
+    /// family's files) or the payload names it (exp113: a base64 script
+    /// opening with the package's banner): the call that reaches a payload
     /// says nothing about whose payload it is
     /// ([`Containment::unbacked_payload`]).
     pub payload_min_bytes: u32,
@@ -810,6 +812,9 @@ pub struct Containment<'c> {
     /// unit's text).
     code: &'c str,
     spans: Vec<oxc_span::Span>,
+    /// Each graph unit's OWN bytes: a module wrapper's span holds its body,
+    /// but the body is a unit of its own.
+    own_bytes: Vec<u32>,
     /// Per unit, the owners holding each of its long literals that at most
     /// [`LITERAL_IDENTITY_FAMILIES`] families hold (read once).
     long_literals: std::cell::RefCell<HashMap<u32, Vec<BTreeSet<u32>>>>,
@@ -845,6 +850,7 @@ impl<'c> Containment<'c> {
             index,
             code,
             spans: graph.units.iter().map(|u| u.span).collect(),
+            own_bytes: graph.units.iter().map(|u| u.bytes).collect(),
             long_literals: std::cell::RefCell::default(),
             prints,
             module_bytes,
@@ -997,17 +1003,19 @@ impl<'c> Containment<'c> {
                 .any(|owners| owners.iter().any(|&o| self.owner_is(o, package)))
     }
 
-    /// Is unit `u` a data payload (at least `min_bytes`, nine tenths string
-    /// literal bytes) that `package`'s family holds no evidence of: no print
-    /// of it (any size) and none of its long literals?
+    /// Is unit `u` a data payload (at least `min_bytes` of its own, nine
+    /// tenths string literal bytes) that `package`'s family holds no
+    /// evidence of: no print of it (any size), none of its long literals,
+    /// and no opaque run naming `package` ([`payload_names`])?
     fn unbacked_payload(&self, u: u32, package: &str, min_bytes: u32) -> bool {
         use crate::matching::store::ReferenceStore;
-        let span = self.spans[u as usize];
-        if span.size() < min_bytes {
+        // judged by its own bytes: a wrapper's body is judged as itself
+        if self.own_bytes[u as usize] < min_bytes {
             return false;
         }
+        let span = self.spans[u as usize];
         let text = &self.code[span.start as usize..span.end as usize];
-        if 10 * string_literal_bytes(text) < 9 * text.len() {
+        if 10 * string_literal_bytes(text) < 9 * text.len() || payload_names(text, package) {
             return false;
         }
         let printed = match self.prints.get(u as usize) {
@@ -1134,9 +1142,13 @@ impl<'c> Containment<'c> {
     }
 }
 
+/// A run of the base64 / base64url alphabet at least this long is an
+/// opaque payload (a wasm module, an embedded script, a packed trie): what
+/// [`payload_names`] decodes.
+const OPAQUE_RUN_MIN: usize = 256;
+
 /// The bytes of `text` inside string and template literals (quotes
-/// included; a lexical scan, comments and regexes not told apart: a
-/// payload's share is far from the threshold either way).
+/// included; a lexical scan, comments and regexes not told apart).
 fn string_literal_bytes(text: &str) -> usize {
     let b = text.as_bytes();
     let (mut i, mut inside) = (0, 0);
@@ -1155,6 +1167,62 @@ fn string_literal_bytes(text: &str) -> usize {
         }
     }
     inside
+}
+
+/// The opaque runs of `text` ([`OPAQUE_RUN_MIN`]).
+fn opaque_runs(text: &str) -> impl Iterator<Item = &[u8]> {
+    let opaque =
+        |c: &u8| c.is_ascii_alphanumeric() || matches!(c, b'+' | b'/' | b'=' | b'_' | b'-');
+    text.as_bytes()
+        .split(move |c| !opaque(c))
+        .filter(|run| run.len() >= OPAQUE_RUN_MIN)
+}
+
+/// How much of an opaque run's head is decoded to look for a banner.
+const PAYLOAD_HEAD: usize = 1024;
+
+/// Does an opaque run of `text`, read as base64, open with text naming
+/// `package` (a worker script embedded with its banner, `/*! <package>
+/// 1.2.3 */`)? A payload that says whose it is is its package's own
+/// evidence. The name must stand alone: not inside a longer name.
+fn payload_names(text: &str, package: &str) -> bool {
+    let name = package.as_bytes();
+    let part = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'@' | b'/' | b'_' | b'-' | b'.');
+    opaque_runs(text).any(|run| {
+        let head = base64_decode(&run[..run.len().min(PAYLOAD_HEAD)]);
+        head.windows(name.len()).enumerate().any(|(i, w)| {
+            w == name
+                && (i == 0 || !part(head[i - 1]))
+                && head
+                    .get(i + name.len())
+                    .is_none_or(|&c| !part(c) || c == b'@')
+        })
+    })
+}
+
+/// Standard or URL-safe base64 to bytes, up to the first byte outside the
+/// alphabet (padding included); a trailing partial group is dropped.
+fn base64_decode(text: &[u8]) -> Vec<u8> {
+    let value = |c: u8| match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' | b'-' => Some(62),
+        b'/' | b'_' => Some(63),
+        _ => None,
+    };
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for v in text.iter().map_while(|&c| value(c)) {
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    out
 }
 
 /// A long literal held by more families than this is no package's

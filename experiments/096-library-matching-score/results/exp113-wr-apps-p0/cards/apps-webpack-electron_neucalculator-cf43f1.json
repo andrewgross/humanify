@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "0512730ade5ef9931df3081816fb1ec7bec600e39d15780817b01118265de8b0",
+ "claimedBytes": {
+  "family": 8372,
+  "origin": 4694,
+  "right": 8120988,
+  "unmapped": 6772,
+  "wrongFamily": 54055
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_neucalculator-cf43f1",
+ "exploratory": {
+  "names": {
+   "bindings": 91293,
+   "bindingsSameVersion": 88684,
+   "bindingsVersionKnown": 91293,
+   "exactBytes": 7735687,
+   "exactUnits": 9076,
+   "sameVersionShare": 0.971422
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.922275,
+  "f1": 0.831628,
+  "namedBytes": 7779613,
+  "precision": 0.994545,
+  "recall": 0.714573
+ },
+ "label": "exp113-wr-apps-p0",
+ "missBytes": {
+  "a": 1452778,
+  "b": 512540,
+  "c": 388273,
+  "d-absent": 92407,
+  "d-file": 16589,
+  "d-variant": 733,
+  "e-ambig": 6027,
+  "e-other": 1133,
+  "e-support": 21673,
+  "e-veto": 204630,
+  "f": 56242
+ },
+ "noDiscovery": null,
+ "reportSha256": "0195ae9aca85e3d3b579bc5430f47730643e6efab8923693731b43274e014f6d",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 2225,
+  "<unmapped>": 2788612,
+  "copy": 38737,
+  "library": 10887079
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 38737,
+  "f05": 0.931959,
+  "f05ShipperOnly": 0.931422,
+  "f1": 0.852841,
+  "f1ShipperOnly": 0.852349,
+  "libraryBytes": 10887079,
+  "namedAsOriginBytes": 4694,
+  "namedAsShipperBytes": 8129360,
+  "namedBytes": 8134054,
+  "namedBytesShipperOnly": 8129360,
+  "precision": 0.993398,
+  "precisionShipperOnly": 0.992825,
+  "recall": 0.747129,
+  "recallShipperOnly": 0.746698,
+  "wrongFamilyBytes": 54055,
+  "wrongFamilyBytesShipperOnly": 58749
+ },
+ "truthMethod": "sourcemap"
+}

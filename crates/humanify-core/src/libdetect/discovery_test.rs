@@ -567,7 +567,15 @@ fn run_indexed_with(
         let (_, p) = prints
             .iter()
             .find(|(u, _)| code[u.span.start as usize..].starts_with(h.head))
-            .unwrap_or_else(|| panic!("no unit {:?}", h.head));
+            .unwrap_or_else(|| {
+                let heads: Vec<&str> = prints
+                    .iter()
+                    .map(|(u, _)| {
+                        &code[u.span.start as usize..(u.span.start as usize + 12).min(code.len())]
+                    })
+                    .collect();
+                panic!("no unit {:?} in {heads:?}", h.head)
+            });
         let print = if h.function {
             p.functions
                 .iter()
@@ -624,7 +632,10 @@ fn run_indexed_with(
 fn claim_of(rows: &ClaimRows, head: &str) -> Option<(String, Rule)> {
     rows.iter()
         .find(|(h, _)| h.starts_with(head))
-        .unwrap_or_else(|| panic!("no unit {head:?}"))
+        .unwrap_or_else(|| {
+            let heads: Vec<&String> = rows.iter().map(|(h, _)| h).collect();
+            panic!("no unit {head:?} in {heads:?}")
+        })
         .1
         .clone()
 }
@@ -962,6 +973,111 @@ fn a_data_payload_is_not_claimed_by_propagation_without_its_own_evidence() {
     // Under the byte floor: not a payload.
     let (_, _, rows) = run_indexed_with(code, &held, vec![], with(100_000));
     assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+}
+
+#[test]
+fn a_module_wrapper_is_judged_by_its_own_bytes() {
+    // I is a lazy module whose body (a data table: a highlight.js
+    // language, a moment locale) is P's seed by its own print. The wrapper
+    // itself is a few bytes of call; its span holds the body, but the body
+    // is a unit of its own, judged as one. Read by its span, the wrapper
+    // looked like a string payload P has no evidence of: GLUE was refused,
+    // and the seed, left without support, was vetoed with it.
+    let words: Vec<String> = (0..300).map(|i| format!("kw{i}")).collect();
+    let code: &'static str = Box::leak(
+        format!("var b=(e,t)=>()=>(e&&(t=e(e=0)),t);\nvar N;\nvar I=b(()=>{{\n  N=lang({{name: \"Lang\", keyword: \"{0}\", built_in: \"{0}\", literal: \"{0}\", type: [\"a\", \"b\", \"c\"], aliases: [\"l\", \"lg\"], contains: [N, I, b, lang, Number, String, Boolean]}});\n}});\nvar main=()=>(I(),N);\n", words.join(" "))
+            .into_boxed_str(),
+    );
+    let held = [Held::whole("N=lang", "P")];
+    let off = DiscoveryOptions::default();
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], off);
+    assert_eq!(claim_of(&rows, "N=lang"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var I="), Some(("P".into(), Rule::Glue)));
+    let on = DiscoveryOptions {
+        payload_min_bytes: 1024,
+        ..off
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "N=lang"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var I="), Some(("P".into(), Rule::Glue)));
+}
+
+#[test]
+fn an_opaque_run_inside_code_is_a_payload() {
+    // The wasm-bindgen shape: a small function whose argument is a long
+    // base64 string (the wasm module). Its bytes are the run's, so it is a
+    // payload whatever code wraps it.
+    let blob: String = "AGFzbQEAAAAB".repeat(200);
+    let code: &'static str = Box::leak(
+        format!("var lib = function (t) {{ return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length, wasm(t), more(t)); }};\nvar more = function (m) {{ return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); }};\nvar wasm = function (a) {{ return load(1, null, \"{blob}\"); }};\nvar app = () => lib(\"a\");\n")
+            .into_boxed_str(),
+    );
+    let held = [Held::whole("var lib", "P"), Held::whole("var more", "P")];
+    let off = DiscoveryOptions::default();
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], off);
+    assert_eq!(claim_of(&rows, "var wasm"), Some(("P".into(), Rule::Down)));
+    let on = DiscoveryOptions {
+        payload_min_bytes: 1024,
+        ..off
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var wasm"), None);
+}
+
+/// Standard base64 (padded), for payload fixtures.
+fn base64(bytes: &[u8]) -> String {
+    const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for c in bytes.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        for i in 0..4 {
+            if i <= c.len() {
+                out.push(A[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn an_opaque_payload_that_names_its_package_is_its_own() {
+    // A base64-embedded worker script whose decoded text opens with the
+    // package's own banner ("/*! @acme/worker-kit 1.2.3 */"): the payload
+    // names whose it is, so the call reaching it may claim it. A payload
+    // naming another package, or nothing, stays refused.
+    let unit = |banner: &str| {
+        let script = format!(
+            "/*! {banner} 1.2.3 | https://example.com */\n{}",
+            "self.onmessage=function(e){postMessage(e.data*2)};".repeat(40)
+        );
+        let code: &'static str = Box::leak(
+            format!("var lib = function (t) {{ return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length, worker.length, more(t)); }};\nvar more = function (m) {{ return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); }};\nvar worker = \"{}\";\nvar app = () => lib(\"a\");\n", base64(script.as_bytes()))
+                .into_boxed_str(),
+        );
+        code
+    };
+    let held = [
+        Held::whole("var lib", "@acme/worker-kit"),
+        Held::whole("var more", "@acme/worker-kit"),
+    ];
+    let on = DiscoveryOptions {
+        payload_min_bytes: 1024,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(unit("@acme/worker-kit"), &held, vec![], on);
+    assert_eq!(
+        claim_of(&rows, "var worker"),
+        Some(("@acme/worker-kit".into(), Rule::Down))
+    );
+    for other in ["@acme/worker-kit-pro", "@other/thing", "no banner"] {
+        let (_, _, rows) = run_indexed_with(unit(other), &held, vec![], on);
+        assert_eq!(claim_of(&rows, "var worker"), None, "{other}");
+    }
 }
 
 #[test]

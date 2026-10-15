@@ -376,33 +376,43 @@ also caught a real unpublished version (`debug@4.4.2`). ESM-only packages
 (escape-string-regexp 5, uuid 8 under esbuild) give no module rows: lazy-ESM
 keys are deferred.
 
-## 10. The recommended default index (exp109, 2026-10-14)
+## 10. The recommended default index (exp113, 2026-10-15)
 
 An index is data, not code: it is never committed, and nothing in a run
 picks one unless `--library-index` names it. The recommendation below is
 what `library.matching = "report"` should be pointed at today, and what the
 eval's library score (`npm run eval -- library`) is judged on.
 
-**Recommended now: `k2-l12m4`** (exp108; `/work/exp108-data/idx/ix/k2-l12m4`,
-/3, 4.65 GB, 0.67 s and ~2 GB per lookup run) — step 4's roots and pins plus
-every package bundled by at least two of 2,155 independent training apps,
-at the `year-last12+major4` density, in three slices: Bun target bun, Bun
-target node, esbuild. With the shipped config (§ `library-matching-config.md`)
-it beats exp101's `c2-l12m4` on the dev held-out apps (F0.5 90.2 vs 85.0,
-precision 99.1 vs 99.3) and on the frozen test split's Bun and esbuild sets
-(74.1 vs 66.6, 79.4 vs 68.4, precision up on both).
+**Recommended now: `k2-all`** (exp113; `/work/exp113-data/ix/k2-all`, /3,
+6.4 GB, index id `6d503431...`) — exp108's `k2-l12m4` package set (step 4's
+roots and pins plus every package bundled by at least two of 2,155
+independent training apps, at the `year-last12+major4` density) in ALL FIVE
+slices: Bun target bun, Bun target node, esbuild, webpack, rollup. ONE index
+for every bundler. With the shipped config (scorer 7):
 
-**Webpack and rollup bundles: `step4-wr`** (`/work/exp103-data/ix/step4-wr-v3`,
-exp105) until k2's own webpack/rollup slices exist. An index refuses a
-bundle whose bundler it has no slice for, so a run on a webpack or rollup
-bundle needs this index today.
+- **Bun and esbuild bundles: identical to `k2-l12m4`** on every set (dev
+  held-out, task-master, wrangler, Claude Code, apps-esbuild, pop, test,
+  test2: every number equal), so nothing is lost by switching.
+- **Webpack and rollup bundles: far better than `step4-wr`** (exp105's
+  thin as-of webpack/rollup slices of step 4's packages), F0.5:
+  test2-webpack 70.4 -> 90.9, test2-rollup 78.6 -> 89.3, test-webpack
+  75.4 -> 91.0, test-rollup 71.1 -> 89.4, apps-webpack 80.6 -> 91.4,
+  apps-rollup 71.7 -> 92.7, dev-rollup 92.4 -> 92.9.
+- **Costs, stated:** precision falls on test2-rollup (96.7 -> 94.7) and on
+  the self-built dev `bundlers` corpus (webpack 99.6 -> 97.8, rollup 99.8 ->
+  98.5; dev-webpack F0.5 87.65 -> 87.53, the one F0.5 that does not rise):
+  the dev wrong is `@redocly/ajv` (a fork carrying ajv's code, now indexed
+  in webpack/rollup too) claiming ajv, a fork/sibling family the derived
+  families do not join. Lookup memory is unchanged (~2 GB dev, ~4 GB test).
 
-**Next build: `k2-all`** — k2's package set across all five slices. A
-`c2-all` build (exp101's smaller c2 set, five slices) was started by exp109
-and stopped at ~43% when k2's numbers arrived; its store
-(`/work/exp109-data/store`: ~12.6k new webpack/rollup shards, ~15.7k
-five-recipe literals shards) and seeded work dir are the starting point for
-k2-all, which reuses every shard whose key matches.
+`k2-l12m4` (exp108, Bun/esbuild only) and `step4-wr`
+(`/work/exp103-data/ix/step4-wr-v3`) were the previous pair; an index
+refuses a bundle whose bundler it has no slice for, which is why that pair
+needed two indexes. Built from a hard-linked union of exp101/exp105/exp109's
+stores and a hard-linked seeded work dir (68,304 versions; 62,739 seeded):
+~51k webpack + ~51k rollup + ~52.6k literals shards built in 12.1 h on 30
+cores, merge 17.5 min at 34 GB peak RSS
+(`experiments/113-k2-all/scripts/build-k2-all.sh`).
 
 **How to build one** (the builder is `crates/humanify-index`; every step
 runs offline against a registry snapshot except npm installs):
@@ -430,7 +440,7 @@ runs offline against a registry snapshot except npm installs):
 4. **Check it.** `--dry-run` prints the plan (shards to build vs reuse);
    the merged index's id is its manifest's sha256.
 
-`experiments/109-default-config/scripts/build-c2-all.sh` is the c2-all
-build as one command (point it at k2's roots and pins for k2-all). Since
+`experiments/113-k2-all/scripts/build-k2-all.sh` is the k2-all build as
+one command, with `seed-work.sh` beside it for the work dir. Since
 exp111 (mimalloc) the builder's memory is flat, so step 3's short-lived
 chunks are optional.

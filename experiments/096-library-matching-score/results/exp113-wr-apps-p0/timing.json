@@ -1,0 +1,239 @@
+{
+ "maxPeakRssMb": 3291,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "apps-rollup-cli_astro-82a1ed": {
+   "peakRssMb": 426,
+   "wallSeconds": 20.07
+  },
+  "apps-rollup-cli_bitwarden_cli-ada1b6": {
+   "peakRssMb": 895,
+   "wallSeconds": 3.59
+  },
+  "apps-rollup-cli_conventional-recommended-bump-e96f98": {
+   "peakRssMb": 69,
+   "wallSeconds": 0.08
+  },
+  "apps-rollup-cli_copyfiles-18b665": {
+   "peakRssMb": 58,
+   "wallSeconds": 0.07
+  },
+  "apps-rollup-cli_cordova-ed3406": {
+   "peakRssMb": 57,
+   "wallSeconds": 0.07
+  },
+  "apps-rollup-cli_forever-b0987f": {
+   "peakRssMb": 56,
+   "wallSeconds": 0.07
+  },
+  "apps-rollup-cli_gatsby-cli-ed0295": {
+   "peakRssMb": 562,
+   "wallSeconds": 1.81
+  },
+  "apps-rollup-cli_gunzip-maybe-acfb58": {
+   "peakRssMb": 86,
+   "wallSeconds": 0.09
+  },
+  "apps-rollup-cli_json-server-850450": {
+   "peakRssMb": 119,
+   "wallSeconds": 0.11
+  },
+  "apps-rollup-cli_mammoth-33d124": {
+   "peakRssMb": 59,
+   "wallSeconds": 0.07
+  },
+  "apps-rollup-cli_markdown-it-27f7b1": {
+   "peakRssMb": 148,
+   "wallSeconds": 0.11
+  },
+  "apps-rollup-cli_n8n-d2ce94": {
+   "peakRssMb": 474,
+   "wallSeconds": 0.83
+  },
+  "apps-rollup-cli_percy_cli-2ecd02": {
+   "peakRssMb": 82,
+   "wallSeconds": 0.09
+  },
+  "apps-rollup-cli_prisma_cli-1a0b5c": {
+   "peakRssMb": 641,
+   "wallSeconds": 1.72
+  },
+  "apps-rollup-cli_puppeteer-b84e91": {
+   "peakRssMb": 244,
+   "wallSeconds": 0.33
+  },
+  "apps-rollup-cli_shadcn-f483ac": {
+   "peakRssMb": 57,
+   "wallSeconds": 0.07
+  },
+  "apps-rollup-cli_stoplight_spectral-cli-05ca81": {
+   "peakRssMb": 691,
+   "wallSeconds": 2.01
+  },
+  "apps-rollup-cli_tsup-73c365": {
+   "peakRssMb": 254,
+   "wallSeconds": 0.36
+  },
+  "apps-rollup-electron_cozy-desktop-3c5a87": {
+   "peakRssMb": 596,
+   "wallSeconds": 1.85
+  },
+  "apps-rollup-electron_deer-45c579": {
+   "peakRssMb": 768,
+   "wallSeconds": 1.76
+  },
+  "apps-rollup-electron_domodel-diary-83dded": {
+   "peakRssMb": 152,
+   "wallSeconds": 0.18
+  },
+  "apps-rollup-electron_elcalc-a9cee6": {
+   "peakRssMb": 3286,
+   "wallSeconds": 35.3
+  },
+  "apps-rollup-electron_erin-ceab49": {
+   "peakRssMb": 625,
+   "wallSeconds": 0.93
+  },
+  "apps-rollup-electron_hyper-e7aafe": {
+   "peakRssMb": 1440,
+   "wallSeconds": 8.56
+  },
+  "apps-rollup-electron_i5sing-c08c8f": {
+   "peakRssMb": 817,
+   "wallSeconds": 1.83
+  },
+  "apps-rollup-electron_neucalculator-cf43f1": {
+   "peakRssMb": 1131,
+   "wallSeconds": 14.31
+  },
+  "apps-rollup-electron_paperarxiv-725a6a": {
+   "peakRssMb": 732,
+   "wallSeconds": 2.07
+  },
+  "apps-rollup-electron_wanna-class-1bc853": {
+   "peakRssMb": 385,
+   "wallSeconds": 0.59
+  },
+  "apps-rollup-electron_whale-432845": {
+   "peakRssMb": 214,
+   "wallSeconds": 0.23
+  },
+  "apps-webpack-cli_conventional-recommended-bump-e96f98": {
+   "peakRssMb": 74,
+   "wallSeconds": 0.08
+  },
+  "apps-webpack-cli_copyfiles-18b665": {
+   "peakRssMb": 157,
+   "wallSeconds": 0.16
+  },
+  "apps-webpack-cli_forever-b0987f": {
+   "peakRssMb": 213,
+   "wallSeconds": 0.32
+  },
+  "apps-webpack-cli_gunzip-maybe-acfb58": {
+   "peakRssMb": 93,
+   "wallSeconds": 0.09
+  },
+  "apps-webpack-cli_json-server-850450": {
+   "peakRssMb": 113,
+   "wallSeconds": 0.11
+  },
+  "apps-webpack-cli_knip-920662": {
+   "peakRssMb": 736,
+   "wallSeconds": 2.74
+  },
+  "apps-webpack-cli_mammoth-33d124": {
+   "peakRssMb": 178,
+   "wallSeconds": 0.18
+  },
+  "apps-webpack-cli_markdown-it-27f7b1": {
+   "peakRssMb": 153,
+   "wallSeconds": 0.16
+  },
+  "apps-webpack-cli_n8n-d2ce94": {
+   "peakRssMb": 472,
+   "wallSeconds": 0.91
+  },
+  "apps-webpack-cli_percy_cli-2ecd02": {
+   "peakRssMb": 560,
+   "wallSeconds": 1.72
+  },
+  "apps-webpack-cli_puppeteer-b84e91": {
+   "peakRssMb": 209,
+   "wallSeconds": 0.27
+  },
+  "apps-webpack-cli_shadcn-f483ac": {
+   "peakRssMb": 59,
+   "wallSeconds": 0.07
+  },
+  "apps-webpack-cli_stoplight_spectral-cli-05ca81": {
+   "peakRssMb": 455,
+   "wallSeconds": 0.94
+  },
+  "apps-webpack-cli_tsup-73c365": {
+   "peakRssMb": 258,
+   "wallSeconds": 0.37
+  },
+  "apps-webpack-electron_cozy-desktop-3c5a87": {
+   "peakRssMb": 491,
+   "wallSeconds": 1.21
+  },
+  "apps-webpack-electron_domodel-diary-83dded": {
+   "peakRssMb": 150,
+   "wallSeconds": 0.17
+  },
+  "apps-webpack-electron_elcalc-a9cee6": {
+   "peakRssMb": 3291,
+   "wallSeconds": 55.2
+  },
+  "apps-webpack-electron_erin-ceab49": {
+   "peakRssMb": 370,
+   "wallSeconds": 0.85
+  },
+  "apps-webpack-electron_excel-parser-processor-639b3d": {
+   "peakRssMb": 256,
+   "wallSeconds": 0.45
+  },
+  "apps-webpack-electron_hyper-e7aafe": {
+   "peakRssMb": 1265,
+   "wallSeconds": 18.57
+  },
+  "apps-webpack-electron_i5sing-c08c8f": {
+   "peakRssMb": 736,
+   "wallSeconds": 1.89
+  },
+  "apps-webpack-electron_image-shrinker-11e935": {
+   "peakRssMb": 271,
+   "wallSeconds": 0.54
+  },
+  "apps-webpack-electron_magiccap-c99fe5": {
+   "peakRssMb": 404,
+   "wallSeconds": 0.76
+  },
+  "apps-webpack-electron_min-163bb0": {
+   "peakRssMb": 302,
+   "wallSeconds": 0.82
+  },
+  "apps-webpack-electron_neucalculator-cf43f1": {
+   "peakRssMb": 888,
+   "wallSeconds": 26.57
+  },
+  "apps-webpack-electron_opencomic-9001ae": {
+   "peakRssMb": 556,
+   "wallSeconds": 1.13
+  },
+  "apps-webpack-electron_paperarxiv-725a6a": {
+   "peakRssMb": 723,
+   "wallSeconds": 2.1
+  },
+  "apps-webpack-electron_wanna-class-1bc853": {
+   "peakRssMb": 340,
+   "wallSeconds": 0.54
+  },
+  "apps-webpack-electron_whale-432845": {
+   "peakRssMb": 218,
+   "wallSeconds": 0.38
+  }
+ },
+ "totalWallSeconds": 218.5
+}
