@@ -1,0 +1,75 @@
+{
+ "bundleSha256": "2d89d1b2a1621c2bd3b1ccad9858fe0915579cbb8a6ec7cf5b492b5e36029b67",
+ "claimedBytes": {
+  "right": 86312,
+  "unmapped": 28,
+  "wrongFamily": 30
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-electron_gh-b1z0n__homelander-98b103",
+ "exploratory": {
+  "names": {
+   "bindings": 1397,
+   "bindingsSameVersion": 1397,
+   "bindingsVersionKnown": 1397,
+   "exactBytes": 82911,
+   "exactUnits": 53,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.984807,
+  "f1": 0.962864,
+  "namedBytes": 80636,
+  "precision": 1.0,
+  "recall": 0.928387
+ },
+ "label": "pop-exp113-k2all",
+ "missBytes": {
+  "c": 355,
+  "e-support": 189
+ },
+ "noDiscovery": null,
+ "reportSha256": "ca50fb1a3981789d0b6c07df90ca2c282ae1612e94f3983d0a432f5eba2f36c3",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "pop-bun",
+ "statementBytes": {
+  "<app>": 296,
+  "<unmapped>": 130,
+  "copy": 133,
+  "library": 86856
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 133,
+  "f05": 0.998464,
+  "f05ShipperOnly": 0.998464,
+  "f1": 0.996686,
+  "f1ShipperOnly": 0.996686,
+  "libraryBytes": 86856,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 86312,
+  "namedBytes": 86312,
+  "namedBytesShipperOnly": 86312,
+  "precision": 0.999653,
+  "precisionShipperOnly": 0.999653,
+  "recall": 0.993737,
+  "recallShipperOnly": 0.993737,
+  "wrongFamilyBytes": 30,
+  "wrongFamilyBytesShipperOnly": 30
+ },
+ "truthMethod": "sourcemap"
+}

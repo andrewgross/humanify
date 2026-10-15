@@ -1,0 +1,371 @@
+{
+ "maxPeakRssMb": 1803,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "pop-bun-cli_badeball_cypress-cucumber-preprocessor-e4dd32": {
+   "peakRssMb": 223,
+   "wallSeconds": 0.42
+  },
+  "pop-bun-cli_beisen_storybook-6bee45": {
+   "peakRssMb": 240,
+   "wallSeconds": 0.88
+  },
+  "pop-bun-cli_cpx-ce0fca": {
+   "peakRssMb": 191,
+   "wallSeconds": 0.35
+  },
+  "pop-bun-cli_dts-bundle-d2d905": {
+   "peakRssMb": 193,
+   "wallSeconds": 0.22
+  },
+  "pop-bun-cli_eslint_config-inspector-8c4a9e": {
+   "peakRssMb": 414,
+   "wallSeconds": 0.86
+  },
+  "pop-bun-cli_gitbook-cli-e1c767": {
+   "peakRssMb": 259,
+   "wallSeconds": 0.58
+  },
+  "pop-bun-cli_minify-c55e38": {
+   "peakRssMb": 476,
+   "wallSeconds": 1.32
+  },
+  "pop-bun-cli_mjml-migrate-6cadd6": {
+   "peakRssMb": 295,
+   "wallSeconds": 1.11
+  },
+  "pop-bun-cli_modelcontextprotocol_server-filesystem-f0c73d": {
+   "peakRssMb": 218,
+   "wallSeconds": 0.44
+  },
+  "pop-bun-cli_netlify_build-1f4290": {
+   "peakRssMb": 1202,
+   "wallSeconds": 4.06
+  },
+  "pop-bun-cli_nuxt_devtools-wizard-f6511a": {
+   "peakRssMb": 228,
+   "wallSeconds": 0.44
+  },
+  "pop-bun-cli_opennextjs_cloudflare-c170db": {
+   "peakRssMb": 524,
+   "wallSeconds": 1.53
+  },
+  "pop-bun-cli_tty-table-505fcf": {
+   "peakRssMb": 233,
+   "wallSeconds": 0.48
+  },
+  "pop-bun-cli_upstash_context7-mcp-4fe476": {
+   "peakRssMb": 322,
+   "wallSeconds": 0.91
+  },
+  "pop-bun-cli_xo-a7fdc1": {
+   "peakRssMb": 1480,
+   "wallSeconds": 7.02
+  },
+  "pop-bun-electron_gh-3529__fish-book-daf14b": {
+   "peakRssMb": 293,
+   "wallSeconds": 0.6
+  },
+  "pop-bun-electron_gh-b1z0n__homelander-98b103": {
+   "peakRssMb": 226,
+   "wallSeconds": 0.47
+  },
+  "pop-bun-electron_gh-baozha2023__jobtrail-b0ed7a": {
+   "peakRssMb": 667,
+   "wallSeconds": 4.45
+  },
+  "pop-bun-electron_gh-bitwarden__directory-connector-ea4d8f": {
+   "peakRssMb": 1727,
+   "wallSeconds": 8.72
+  },
+  "pop-bun-electron_gh-cosmicoppai__lisa-73f20e": {
+   "peakRssMb": 351,
+   "wallSeconds": 1.11
+  },
+  "pop-bun-electron_gh-eastsun5566__hackdesk-bca960": {
+   "peakRssMb": 1118,
+   "wallSeconds": 6.1
+  },
+  "pop-bun-electron_gh-electron__devtron-023999": {
+   "peakRssMb": 1088,
+   "wallSeconds": 5.82
+  },
+  "pop-bun-electron_gh-geckse__n8n-desk-445450": {
+   "peakRssMb": 703,
+   "wallSeconds": 4.66
+  },
+  "pop-bun-electron_gh-getopenscreen__openscreen-d83d92": {
+   "peakRssMb": 675,
+   "wallSeconds": 4.54
+  },
+  "pop-bun-electron_gh-getsentry__sentry-electron-3777eb": {
+   "peakRssMb": 1536,
+   "wallSeconds": 7.11
+  },
+  "pop-bun-electron_gh-greenfield-inc__pane-0f9ff0": {
+   "peakRssMb": 329,
+   "wallSeconds": 1.12
+  },
+  "pop-bun-electron_gh-h3poteto__whalebird-desktop-c1d4bf": {
+   "peakRssMb": 340,
+   "wallSeconds": 0.9
+  },
+  "pop-bun-electron_gh-incarnamind__incarnamind-542def": {
+   "peakRssMb": 597,
+   "wallSeconds": 2.78
+  },
+  "pop-bun-electron_gh-jzimz__romie-b77d2c": {
+   "peakRssMb": 790,
+   "wallSeconds": 9.33
+  },
+  "pop-bun-electron_gh-kasper9n__ferrum-1909a1": {
+   "peakRssMb": 1038,
+   "wallSeconds": 2.5
+  },
+  "pop-bun-electron_gh-kylebing__songvault-3315b0": {
+   "peakRssMb": 377,
+   "wallSeconds": 1.82
+  },
+  "pop-bun-electron_gh-labystudio__paintdotjs-2b9544": {
+   "peakRssMb": 324,
+   "wallSeconds": 1.53
+  },
+  "pop-bun-electron_gh-mahiruxia__hermes-forge-993292": {
+   "peakRssMb": 361,
+   "wallSeconds": 1.48
+  },
+  "pop-bun-electron_gh-manusa__electronim-e236a6": {
+   "peakRssMb": 265,
+   "wallSeconds": 0.5
+  },
+  "pop-bun-electron_gh-multiboxlabs__flow-browser-f918a9": {
+   "peakRssMb": 684,
+   "wallSeconds": 2.85
+  },
+  "pop-bun-electron_gh-open-source-labs__overvue-cd8132": {
+   "peakRssMb": 380,
+   "wallSeconds": 1.91
+  },
+  "pop-bun-electron_gh-orgoai__bops-1153c4": {
+   "peakRssMb": 1387,
+   "wallSeconds": 5.85
+  },
+  "pop-bun-electron_gh-ouijit__ouijit-2338c7": {
+   "peakRssMb": 878,
+   "wallSeconds": 5.44
+  },
+  "pop-bun-electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25": {
+   "peakRssMb": 618,
+   "wallSeconds": 2.79
+  },
+  "pop-bun-electron_gh-richard1208__parallio-a2ada2": {
+   "peakRssMb": 726,
+   "wallSeconds": 3.57
+  },
+  "pop-bun-electron_gh-soedinglab__mmseqs2-app-794fcd": {
+   "peakRssMb": 412,
+   "wallSeconds": 1.8
+  },
+  "pop-bun-electron_gh-specy__scapix-c0972d": {
+   "peakRssMb": 385,
+   "wallSeconds": 1.05
+  },
+  "pop-bun-electron_gh-yrq110__dramaolddriver-8dccc4": {
+   "peakRssMb": 270,
+   "wallSeconds": 0.71
+  },
+  "pop-bun-electron_gh-ziguishian__mxpage-fc5285": {
+   "peakRssMb": 390,
+   "wallSeconds": 1.55
+  },
+  "pop-bun-electron_gh-zoidsh__meru-b47f72": {
+   "peakRssMb": 1803,
+   "wallSeconds": 11.48
+  },
+  "pop-esbuild-cli_badeball_cypress-cucumber-preprocessor-e4dd32": {
+   "peakRssMb": 226,
+   "wallSeconds": 0.43
+  },
+  "pop-esbuild-cli_beisen_storybook-6bee45": {
+   "peakRssMb": 236,
+   "wallSeconds": 0.88
+  },
+  "pop-esbuild-cli_cpx-ce0fca": {
+   "peakRssMb": 196,
+   "wallSeconds": 0.36
+  },
+  "pop-esbuild-cli_dts-bundle-d2d905": {
+   "peakRssMb": 185,
+   "wallSeconds": 0.22
+  },
+  "pop-esbuild-cli_eslint_config-inspector-8c4a9e": {
+   "peakRssMb": 380,
+   "wallSeconds": 0.97
+  },
+  "pop-esbuild-cli_gitbook-cli-e1c767": {
+   "peakRssMb": 227,
+   "wallSeconds": 0.62
+  },
+  "pop-esbuild-cli_minify-c55e38": {
+   "peakRssMb": 480,
+   "wallSeconds": 1.33
+  },
+  "pop-esbuild-cli_mjml-migrate-6cadd6": {
+   "peakRssMb": 241,
+   "wallSeconds": 0.66
+  },
+  "pop-esbuild-cli_modelcontextprotocol_server-filesystem-f0c73d": {
+   "peakRssMb": 213,
+   "wallSeconds": 0.4
+  },
+  "pop-esbuild-cli_netlify_build-1f4290": {
+   "peakRssMb": 1216,
+   "wallSeconds": 4.26
+  },
+  "pop-esbuild-cli_ng-packagr-075862": {
+   "peakRssMb": 894,
+   "wallSeconds": 2.06
+  },
+  "pop-esbuild-cli_nuxt_devtools-wizard-f6511a": {
+   "peakRssMb": 252,
+   "wallSeconds": 0.43
+  },
+  "pop-esbuild-cli_opennextjs_cloudflare-c170db": {
+   "peakRssMb": 542,
+   "wallSeconds": 1.74
+  },
+  "pop-esbuild-cli_tty-table-505fcf": {
+   "peakRssMb": 218,
+   "wallSeconds": 0.52
+  },
+  "pop-esbuild-cli_upstash_context7-mcp-4fe476": {
+   "peakRssMb": 316,
+   "wallSeconds": 0.94
+  },
+  "pop-esbuild-cli_xo-a7fdc1": {
+   "peakRssMb": 1360,
+   "wallSeconds": 5.52
+  },
+  "pop-esbuild-electron_gh-3529__fish-book-daf14b": {
+   "peakRssMb": 268,
+   "wallSeconds": 0.63
+  },
+  "pop-esbuild-electron_gh-b1z0n__homelander-98b103": {
+   "peakRssMb": 195,
+   "wallSeconds": 0.47
+  },
+  "pop-esbuild-electron_gh-baozha2023__jobtrail-b0ed7a": {
+   "peakRssMb": 660,
+   "wallSeconds": 4.67
+  },
+  "pop-esbuild-electron_gh-bitwarden__directory-connector-ea4d8f": {
+   "peakRssMb": 1015,
+   "wallSeconds": 7.16
+  },
+  "pop-esbuild-electron_gh-cosmicoppai__lisa-73f20e": {
+   "peakRssMb": 305,
+   "wallSeconds": 1.17
+  },
+  "pop-esbuild-electron_gh-eastsun5566__hackdesk-bca960": {
+   "peakRssMb": 951,
+   "wallSeconds": 6.09
+  },
+  "pop-esbuild-electron_gh-electron__devtron-023999": {
+   "peakRssMb": 1079,
+   "wallSeconds": 6.35
+  },
+  "pop-esbuild-electron_gh-geckse__n8n-desk-445450": {
+   "peakRssMb": 880,
+   "wallSeconds": 6.7
+  },
+  "pop-esbuild-electron_gh-getopenscreen__openscreen-d83d92": {
+   "peakRssMb": 670,
+   "wallSeconds": 4.7
+  },
+  "pop-esbuild-electron_gh-getsentry__sentry-electron-3777eb": {
+   "peakRssMb": 1530,
+   "wallSeconds": 7.57
+  },
+  "pop-esbuild-electron_gh-greenfield-inc__pane-0f9ff0": {
+   "peakRssMb": 301,
+   "wallSeconds": 1.16
+  },
+  "pop-esbuild-electron_gh-h3poteto__whalebird-desktop-c1d4bf": {
+   "peakRssMb": 318,
+   "wallSeconds": 1.03
+  },
+  "pop-esbuild-electron_gh-incarnamind__incarnamind-542def": {
+   "peakRssMb": 673,
+   "wallSeconds": 2.9
+  },
+  "pop-esbuild-electron_gh-jzimz__romie-b77d2c": {
+   "peakRssMb": 749,
+   "wallSeconds": 10.27
+  },
+  "pop-esbuild-electron_gh-kasper9n__ferrum-1909a1": {
+   "peakRssMb": 991,
+   "wallSeconds": 2.63
+  },
+  "pop-esbuild-electron_gh-kylebing__songvault-3315b0": {
+   "peakRssMb": 381,
+   "wallSeconds": 1.91
+  },
+  "pop-esbuild-electron_gh-labystudio__paintdotjs-2b9544": {
+   "peakRssMb": 311,
+   "wallSeconds": 1.41
+  },
+  "pop-esbuild-electron_gh-mahiruxia__hermes-forge-993292": {
+   "peakRssMb": 332,
+   "wallSeconds": 1.59
+  },
+  "pop-esbuild-electron_gh-manusa__electronim-e236a6": {
+   "peakRssMb": 206,
+   "wallSeconds": 0.52
+  },
+  "pop-esbuild-electron_gh-multiboxlabs__flow-browser-f918a9": {
+   "peakRssMb": 582,
+   "wallSeconds": 13.21
+  },
+  "pop-esbuild-electron_gh-open-source-labs__overvue-cd8132": {
+   "peakRssMb": 371,
+   "wallSeconds": 2.01
+  },
+  "pop-esbuild-electron_gh-orgoai__bops-1153c4": {
+   "peakRssMb": 1397,
+   "wallSeconds": 6.05
+  },
+  "pop-esbuild-electron_gh-ouijit__ouijit-2338c7": {
+   "peakRssMb": 921,
+   "wallSeconds": 5.39
+  },
+  "pop-esbuild-electron_gh-ptkdev-boilerplate__svelte-electron-boilerplate-3faf25": {
+   "peakRssMb": 616,
+   "wallSeconds": 2.88
+  },
+  "pop-esbuild-electron_gh-richard1208__parallio-a2ada2": {
+   "peakRssMb": 864,
+   "wallSeconds": 3.99
+  },
+  "pop-esbuild-electron_gh-soedinglab__mmseqs2-app-794fcd": {
+   "peakRssMb": 366,
+   "wallSeconds": 1.88
+  },
+  "pop-esbuild-electron_gh-specy__scapix-c0972d": {
+   "peakRssMb": 367,
+   "wallSeconds": 1.13
+  },
+  "pop-esbuild-electron_gh-yrq110__dramaolddriver-8dccc4": {
+   "peakRssMb": 232,
+   "wallSeconds": 0.75
+  },
+  "pop-esbuild-electron_gh-ziguishian__mxpage-fc5285": {
+   "peakRssMb": 331,
+   "wallSeconds": 1.61
+  },
+  "pop-esbuild-electron_gh-zoidsh__meru-b47f72": {
+   "peakRssMb": 1594,
+   "wallSeconds": 10.91
+  }
+ },
+ "totalWallSeconds": 265.2
+}
