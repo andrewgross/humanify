@@ -1,7 +1,8 @@
 """exp112: wrong-family bytes by MECHANISM, read from the SHIPPER's own file (the map's sourcesContent) at the
 unit's mapped line. Aggregate output only.
 
-usage: <venv python> -I mech.py <corpus> <ev.jsonl> [--samples N] [--rows-out p]
+usage: <venv python> -I mech.py <corpus> <ev.jsonl> [--samples N] [--rows-out p] [--json out.json]
+(--json writes the aggregate table only: per set, bytes per class; safe to commit for the test corpus)
 (ev.jsonl from evidence.py: wrong-family rows with index owners)
 
 Classes, first that holds:
@@ -118,14 +119,21 @@ def main():
         by_entry[r["entry"]].append(r)
     man = {e["id"]: e for e in lib096.load_manifest()["entries"]}
     agg = collections.defaultdict(collections.Counter)
+    by_rule = collections.defaultdict(collections.Counter)
     groups = collections.defaultdict(collections.Counter)
     fh = open(rows_out, "w") if rows_out else None
     for eid, rows in sorted(by_entry.items()):
         for r, cls, opkg in classify_entry(man[eid], rows):
             agg[r["set"]][cls] += r["bytes"]
+            by_rule[r["set"]][f"{cls} | {r['rule']}:{r['evidence']}"] += r["bytes"]
             groups[(r["set"], cls)][(r["package"], r["truth"], r.get("origin") or opkg, r["truthFile"])] += r["bytes"]
             if fh:
                 fh.write(json.dumps({**r, "mech": cls, "regionPkg": opkg}) + "\n")
+    if "--json" in sys.argv:
+        with open(sys.argv[sys.argv.index("--json") + 1], "w") as jf:
+            json.dump({s: {"wrongFamilyBytes": sum(agg[s].values()), "classes": dict(agg[s].most_common()),
+                           "classByClaimRule": dict(by_rule[s].most_common())}
+                       for s in sorted(agg)}, jf, indent=1)
     for s in sorted(agg):
         w = sum(agg[s].values())
         print(f"{s}: wrong-family {w:,} B")

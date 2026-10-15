@@ -89,7 +89,7 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    a rolldown lazy module body emitted after its region's `//#endregion` is that region's package (lazybody),
 #    and a file named after a package its owner declares as a build input only (npm devDependencies / bundled, or
 #    the tarball's own license collection) is a copy of it (chunk). Same reports, re-scored; every rule off
-#    reproduces scorer 6's cards (the layer is byte-identical: origins7.py verify).
+#    reproduces scorer 6's cards (verify_s6.py; the layer is byte-identical: origins7.py verify).
 SCORER_VERSION = "exp096-score/7"
 
 

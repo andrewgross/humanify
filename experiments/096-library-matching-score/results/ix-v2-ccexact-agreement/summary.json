@@ -19,11 +19,12 @@
   "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
   "indexBytes": 465484748,
   "indexId": "bfb9d80adc0d65d7b6c1ee02d1b947b6493e1ef68d9c9602b1edcecc3aadc8ce",
+  "origins7Sha256": "0d153d5d80e718b06c0ac00a471361c5a3a11885edc438dfee949c47997f3c7b",
   "originsSha256": "0a27c16697b6087247100c7fe7fe855eaf68e9b659ecae49db0e15e6b821754a",
   "rule": "agreement"
  },
  "label": "ix-v2-ccexact-agreement",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,
@@ -67,7 +68,7 @@
   "esbuild-app": {
    "appClaimedBytes": 0,
    "bundlerDetected": 0,
-   "copyBytes": 284299,
+   "copyBytes": 284488,
    "discoveryRan": 1,
    "entries": 1,
    "exploratoryNames": {
@@ -110,7 +111,7 @@
   "heldout": {
    "appClaimedBytes": 0,
    "bundlerDetected": 7,
-   "copyBytes": 2011381,
+   "copyBytes": 2037190,
    "discoveryRan": 65,
    "entries": 67,
    "exploratoryNames": {

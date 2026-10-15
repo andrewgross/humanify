@@ -47,11 +47,12 @@
  "noDiscovery": null,
  "reportSha256": "bbe82160c3b47d8a06b6bfd7c937ed07d5d78a7e8bb95aecfd3161f2ce9f0acf",
  "rule": "agreement",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "set": "dev-webpack",
  "statementBytes": {
   "<app>": 1145,
   "<unmapped>": 2114,
+  "copy": 269,
   "library": 513204
  },
  "toolchain": {
@@ -62,7 +63,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 0,
+  "copyBytes": 269,
   "f05": 0.805561,
   "f05ShipperOnly": 0.805561,
   "f1": 0.625311,
