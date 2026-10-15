@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 98523,
+  "foreign": 79357,
+  "origin": 71877,
+  "right": 3047785,
+  "unmapped": 8255,
+  "wrongFamily": 126841
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 34665,
+   "bindingsSameVersion": 27239,
+   "bindingsVersionKnown": 33719,
+   "exactBytes": 2395624,
+   "exactUnits": 3961,
+   "sameVersionShare": 0.807823
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.854811,
+  "f1": 0.714248,
+  "namedBytes": 2756495,
+  "precision": 0.983898,
+  "recall": 0.560606
+ },
+ "label": "exp117-k2all-head",
+ "missBytes": {
+  "a": 459786,
+  "b": 797254,
+  "c": 33859,
+  "d-absent": 91669,
+  "d-file": 17473,
+  "d-variant": 81,
+  "e-ambig": 19912,
+  "e-other": 28872,
+  "e-support": 4824,
+  "e-veto": 11623,
+  "f": 233450
+ },
+ "noDiscovery": null,
+ "reportSha256": "26350f9475bd90b147775dbe94635bb6c41e14ab934214d8f61677815e0502bf",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80010,
+  "<self>": 1114888,
+  "<unmapped>": 16989,
+  "copy": 263429,
+  "library": 4916988
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 263429,
+  "f05": 0.879425,
+  "f05ShipperOnly": 0.859784,
+  "f1": 0.779031,
+  "f1ShipperOnly": 0.761632,
+  "libraryBytes": 4916988,
+  "namedAsOriginBytes": 71877,
+  "namedAsShipperBytes": 3146308,
+  "namedBytes": 3218185,
+  "namedBytesShipperOnly": 3146308,
+  "precision": 0.962081,
+  "precisionShipperOnly": 0.940593,
+  "recall": 0.654503,
+  "recallShipperOnly": 0.639885,
+  "wrongFamilyBytes": 126841,
+  "wrongFamilyBytesShipperOnly": 198718
+ },
+ "truthMethod": "sourcemap"
+}

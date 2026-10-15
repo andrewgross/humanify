@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "8efe1e80119f6a1765ee1223db6fd36a140effa187276ba18666721b632ce64a",
+ "claimedBytes": {
+  "family": 11388,
+  "origin": 91330,
+  "right": 4612511,
+  "self": 7666,
+  "unmapped": 10918,
+  "wrongFamily": 26205
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_prisma_cli-1a0b5c",
+ "exploratory": {
+  "names": {
+   "bindings": 42009,
+   "bindingsSameVersion": 40523,
+   "bindingsVersionKnown": 42009,
+   "exactBytes": 3592595,
+   "exactUnits": 4443,
+   "sameVersionShare": 0.964627
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.908628,
+  "f1": 0.803872,
+  "namedBytes": 4156359,
+  "precision": 0.995076,
+  "recall": 0.674304
+ },
+ "label": "exp117-k2all-flip4-apps",
+ "missBytes": {
+  "b": 641984,
+  "c": 149279,
+  "d-absent": 118358,
+  "d-file": 305239,
+  "e-ambig": 29051,
+  "e-other": 41445,
+  "e-spec": 6378,
+  "e-support": 4561,
+  "e-veto": 65357,
+  "f": 87047
+ },
+ "noDiscovery": null,
+ "reportSha256": "c344c0b515efd7d25291ad0ed27c1065c5934d3ebd6bc14867f966058c3c14a6",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 356329,
+  "<unmapped>": 57453,
+  "copy": 282990,
+  "library": 6163928
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 282990,
+  "f05": 0.93818,
+  "f05ShipperOnly": 0.920008,
+  "f1": 0.864754,
+  "f1ShipperOnly": 0.848005,
+  "libraryBytes": 6163928,
+  "namedAsOriginBytes": 91330,
+  "namedAsShipperBytes": 4623899,
+  "namedBytes": 4715229,
+  "namedBytesShipperOnly": 4623899,
+  "precision": 0.994473,
+  "precisionShipperOnly": 0.975211,
+  "recall": 0.764971,
+  "recallShipperOnly": 0.750155,
+  "wrongFamilyBytes": 26205,
+  "wrongFamilyBytesShipperOnly": 117535
+ },
+ "truthMethod": "sourcemap"
+}

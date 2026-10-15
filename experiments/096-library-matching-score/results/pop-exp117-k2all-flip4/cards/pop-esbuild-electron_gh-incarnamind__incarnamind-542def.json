@@ -1,0 +1,84 @@
+{
+ "bundleSha256": "0001db1064d0372bbef36982ca1c61450852d50009cedfb64e296f6454cb6a50",
+ "claimedBytes": {
+  "family": 1503,
+  "foreign": 433151,
+  "right": 2519317,
+  "unmapped": 11287,
+  "wrongFamily": 4020
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-incarnamind__incarnamind-542def",
+ "exploratory": {
+  "names": {
+   "bindings": 27864,
+   "bindingsSameVersion": 25405,
+   "bindingsVersionKnown": 27467,
+   "exactBytes": 2423165,
+   "exactUnits": 2677,
+   "sameVersionShare": 0.924928
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.91733,
+  "f1": 0.817594,
+  "namedBytes": 2364743,
+  "precision": 0.998535,
+  "recall": 0.692169
+ },
+ "label": "pop-exp117-k2all-flip4",
+ "missBytes": {
+  "a": 7023,
+  "b": 10028,
+  "c": 7067,
+  "d-absent": 50678,
+  "e-ambig": 378,
+  "e-support": 168,
+  "e-veto": 816795,
+  "f": 3469
+ },
+ "noDiscovery": null,
+ "reportSha256": "a3b69b19bfacc55e67a374f4a096bf3b5f9ecd65a5072d943e5a9510bb7e00f8",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 4034,
+  "<foreign>": 433151,
+  "<unmapped>": 12246,
+  "copy": 23347,
+  "library": 3416426
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 23347,
+  "f05": 0.932547,
+  "f05ShipperOnly": 0.932547,
+  "f1": 0.84858,
+  "f1ShipperOnly": 0.84858,
+  "libraryBytes": 3416426,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 2520820,
+  "namedBytes": 2520820,
+  "namedBytesShipperOnly": 2520820,
+  "precision": 0.998408,
+  "precisionShipperOnly": 0.998408,
+  "recall": 0.737853,
+  "recallShipperOnly": 0.737853,
+  "wrongFamilyBytes": 4020,
+  "wrongFamilyBytesShipperOnly": 4020
+ },
+ "truthMethod": "sourcemap"
+}

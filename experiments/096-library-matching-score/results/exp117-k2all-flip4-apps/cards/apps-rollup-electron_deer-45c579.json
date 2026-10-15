@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "3781ab4cc89e0744a531c306c692123859fd7e1674c6b6df3133ad39f731bd0b",
+ "claimedBytes": {
+  "family": 1237,
+  "right": 4647440,
+  "unmapped": 18385,
+  "wrongFamily": 4668
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-electron_deer-45c579",
+ "exploratory": {
+  "names": {
+   "bindings": 49139,
+   "bindingsSameVersion": 48474,
+   "bindingsVersionKnown": 49139,
+   "exactBytes": 3502037,
+   "exactUnits": 3510,
+   "sameVersionShare": 0.986467
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.897653,
+  "f1": 0.778322,
+  "namedBytes": 4397333,
+  "precision": 0.999849,
+  "recall": 0.637154
+ },
+ "label": "exp117-k2all-flip4-apps",
+ "missBytes": {
+  "a": 25671,
+  "b": 15041,
+  "c": 1451180,
+  "d-absent": 11110,
+  "d-file": 608023,
+  "e-ambig": 89784,
+  "e-other": 3057,
+  "e-support": 15326,
+  "e-veto": 28642,
+  "f": 5003,
+  "unit-model": 12
+ },
+ "noDiscovery": null,
+ "reportSha256": "8ae40efe4d747d8f594075ac0580915a45f021453586fb63ac308772ab779bf9",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<app>": 3911,
+  "<unmapped>": 668257,
+  "copy": 4855,
+  "library": 6901526
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 4855,
+  "f05": 0.910973,
+  "f05ShipperOnly": 0.910973,
+  "f1": 0.804626,
+  "f1ShipperOnly": 0.804626,
+  "libraryBytes": 6901526,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 4648677,
+  "namedBytes": 4648677,
+  "namedBytesShipperOnly": 4648677,
+  "precision": 0.998997,
+  "precisionShipperOnly": 0.998997,
+  "recall": 0.673572,
+  "recallShipperOnly": 0.673572,
+  "wrongFamilyBytes": 4668,
+  "wrongFamilyBytesShipperOnly": 4668
+ },
+ "truthMethod": "sourcemap"
+}

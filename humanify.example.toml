@@ -143,15 +143,15 @@ specific_rivals = true
 # Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
 derived_families = true
 # A package every index seed of which sits in a module group its index holds that code only in modules at least this many times the group's bytes (plus context_presence_slack) is no seed: its copy lives in a dist that inlines the code's origin (exp114; 0 = off).
-context_presence = 0.0
+context_presence = 1.5
 # The context-presence slack in bytes (exp114).
-context_presence_slack = 0
+context_presence_slack = 16384
 # A package whose every index seed is a tie with another family that has a seed of its own in the bundle is that family's shadow: its tied seeds become the rival's, the rest are dropped (exp114).
 shadow_ties = false
 # What context_presence / shadow_ties drop is claimed by no one, the dropped package nor a rival propagating into it: the code is ambiguous between a shipper and its origin, so name neither (exp114).
-presence_fence = false
+presence_fence = true
 # A declared seed (an inlined package.json, a scoped error prefix) whose statement is bigger than this many bytes is no seed: a manifest inside a huge statement names one of its packages, not the statement (exp112; 0 = off).
-declared_max_bytes = 0
+declared_max_bytes = 65536
 
 [unpack]
 # Force the bundler verdict.

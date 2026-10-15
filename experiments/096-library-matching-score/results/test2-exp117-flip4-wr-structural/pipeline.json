@@ -1,0 +1,21 @@
+{
+ "binarySha256": "e6e30b928494f433f64ca73fc269d5bb3883a7ce4057d28f46b2fa26dba48f4f",
+ "buildCommit": "126dd3a9614758f35bb0fb2e5a62f2c5a52da692",
+ "corpus": "test2",
+ "corpusSha256": "d497ddcf6166f05e5a8262e3c6ad30e6dfea0e901e2d953110b6824c6f5fa34a",
+ "indexBytes": 642359696,
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "instrument": "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml",
+ "rule": "structural",
+ "sets": [
+  "test2-rollup",
+  "test2-webpack"
+ ],
+ "settings": [
+  "library.discovery.shadow_ties=true",
+  "library.discovery.context_presence=1.5",
+  "library.discovery.context_presence_slack=16384",
+  "library.discovery.presence_fence=true",
+  "library.discovery.declared_max_bytes=65536"
+ ]
+}
