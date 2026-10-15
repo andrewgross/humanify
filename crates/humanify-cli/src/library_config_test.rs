@@ -275,8 +275,9 @@ fn the_default_library_tunables_are_the_measured_recommendation() {
 
 /// exp117: exp114's context-presence pair with its fence, and exp112's
 /// declared cap, measured together on every corpus on k2-all
-/// (experiments/117-default-flip). shadow_ties stays off: it alone added
-/// wrong bytes on one held-out set.
+/// (experiments/117-default-flip). shadow_ties joined them 2026-10-15 on
+/// Andrew's call: it removes fork claims (@redocly/ajv over ajv) on every
+/// webpack/rollup set for 1,035 wrong bytes on test2-esbuild.
 #[test]
 fn the_default_presence_keys_and_declared_cap_are_on() {
     let o = build(&["in.js"], "").unwrap().library.discovery_options();
@@ -284,7 +285,7 @@ fn the_default_presence_keys_and_declared_cap_are_on() {
     assert_eq!(o.context_presence_slack, 16384);
     assert!(o.presence_fence);
     assert_eq!(o.declared_max_bytes, 65536);
-    assert!(!o.shadow_ties, "shadow_ties stays off (exp117)");
+    assert!(o.shadow_ties, "shadow_ties on since 2026-10-15");
 }
 
 #[test]
@@ -328,7 +329,7 @@ fn the_exp106_hygiene_keys_turn_off() {
 }
 
 /// exp114's presence keys: context_presence + presence_fence on by default
-/// since exp117, shadow_ties off; each is set from the file.
+/// since exp117, shadow_ties since 2026-10-15; each is set from the file.
 #[test]
 fn the_exp114_presence_keys_set_from_the_file() {
     let off = build(
@@ -340,8 +341,8 @@ fn the_exp114_presence_keys_set_from_the_file() {
     assert_eq!(o.context_presence, 0.0);
     assert_eq!(o.context_presence_slack, 0);
     assert!(!o.presence_fence);
-    let on = build(&["in.js"], "[library.discovery]\nshadow_ties = true\n").unwrap();
-    assert!(on.library.discovery_options().shadow_ties);
+    let on = build(&["in.js"], "[library.discovery]\nshadow_ties = false\n").unwrap();
+    assert!(!on.library.discovery_options().shadow_ties);
 }
 
 /// exp112's declared cap: 65536 by default since exp117, 0 turns it off.
