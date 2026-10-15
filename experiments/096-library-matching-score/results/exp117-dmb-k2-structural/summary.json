@@ -16,7 +16,7 @@
   "chainedSha256": "eb426b876b7057250694179d1d283f48a0bb1b4b6c708f8929782e5e2f38c6ec",
   "copiesSha256": "ab20aaeae52ee90ddec0acf3ac0b50ab13d1ddc91d17d3ac63f9707eb110b4c7",
   "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
-  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
   "indexBytes": 4646716206,
   "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
   "origins7Sha256": "0d153d5d80e718b06c0ac00a471361c5a3a11885edc438dfee949c47997f3c7b",
@@ -27,7 +27,7 @@
   ]
  },
  "label": "exp117-dmb-k2-structural",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,

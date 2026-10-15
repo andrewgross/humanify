@@ -1,10 +1,10 @@
 {
  "bundleSha256": "3c478b3e96a4124448041841a75a5781739b4647a2abed92a99ba4364dd11616",
  "claimedBytes": {
-  "family": 233604,
+  "family": 236585,
   "right": 6404923,
   "unmapped": 128700,
-  "wrongFamily": 161129
+  "wrongFamily": 158148
  },
  "detected": {
   "bundler": "rollup",
@@ -25,15 +25,15 @@
  "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.868518,
-  "f1": 0.743759,
-  "namedBytes": 6217261,
-  "precision": 0.977871,
-  "recall": 0.600091
+  "f05": 0.868935,
+  "f1": 0.744116,
+  "namedBytes": 6220242,
+  "precision": 0.97834,
+  "recall": 0.600379
  },
  "label": "exp117-base-wr-apps-structural",
  "missBytes": {
-  "a": 1601283,
+  "a": 1598302,
   "b": 203073,
   "c": 500519,
   "d-absent": 718557,
@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "ec0fe16a6728985631807fea5f79eacebd9b18e53f9acb52cce1d5f0c01aa217",
  "rule": "structural",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "set": "apps-rollup",
  "statementBytes": {
   "<app>": 2461,
@@ -66,21 +66,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 32645,
-  "f05": 0.883743,
-  "f05ShipperOnly": 0.883743,
-  "f1": 0.773713,
-  "f1ShipperOnly": 0.773713,
+  "f05": 0.88414,
+  "f05ShipperOnly": 0.88414,
+  "f1": 0.77406,
+  "f1ShipperOnly": 0.77406,
   "libraryBytes": 10360529,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 6638527,
-  "namedBytes": 6638527,
-  "namedBytesShipperOnly": 6638527,
-  "precision": 0.976303,
-  "precisionShipperOnly": 0.976303,
-  "recall": 0.640752,
-  "recallShipperOnly": 0.640752,
-  "wrongFamilyBytes": 161129,
-  "wrongFamilyBytesShipperOnly": 161129
+  "namedAsShipperBytes": 6641508,
+  "namedBytes": 6641508,
+  "namedBytesShipperOnly": 6641508,
+  "precision": 0.976742,
+  "precisionShipperOnly": 0.976742,
+  "recall": 0.641039,
+  "recallShipperOnly": 0.641039,
+  "wrongFamilyBytes": 158148,
+  "wrongFamilyBytesShipperOnly": 158148
  },
  "truthMethod": "sourcemap"
 }

@@ -15,7 +15,7 @@
   "copiesSha256": "01e78709e765c23ac94b21de9cc207026c6e5468d3d8026c914aada64198c408",
   "corpus": "bundlers",
   "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
-  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
   "indexBytes": 642359696,
   "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
   "origins7Sha256": "8b6652faafd20967eb565bb668efb2930f44a02ee31102df79eea6f4708e135f",
@@ -29,7 +29,7 @@
   ]
  },
  "label": "exp117-flip3-wr-bundlers-structural",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "sets": {
   "dev-rollup": {
    "appClaimedBytes": 0,

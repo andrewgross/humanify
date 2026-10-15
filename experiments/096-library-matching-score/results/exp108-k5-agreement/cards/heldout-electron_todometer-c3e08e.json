@@ -39,7 +39,7 @@
  "noDiscovery": null,
  "reportSha256": "df9602e54ca8ef2dbadae105fed9f92ec54811430d0cbd881b578d5450bb8834",
  "rule": "agreement",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "set": "heldout",
  "statementBytes": {
   "<app>": 983,

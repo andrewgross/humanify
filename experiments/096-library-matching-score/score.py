@@ -90,7 +90,11 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    and a file named after a package its owner declares as a build input only (npm devDependencies / bundled, or
 #    the tarball's own license collection) is a copy of it (chunk). Same reports, re-scored; every rule off
 #    reproduces scorer 6's cards (verify_s6.py; the layer is byte-identical: origins7.py verify).
-SCORER_VERSION = "exp096-score/7"
+# 8: exp119 re-derived families-derived.json (exp104's derive_families.py, rules unchanged) over every package of
+#    the default index k2-all plus the earlier universe (17,316 names): same repository, renamed-to, GitHub-recorded
+#    fork, pairwise. family() reads more links, nothing else changed; the frozen copies layers keep the families
+#    they were built with. Same reports, re-scored (experiments/119-families-full/README.md, ledger.py).
+SCORER_VERSION = "exp096-score/8"
 
 
 def r6(x):

@@ -15,7 +15,7 @@
   "copiesSha256": "ab60a31d3d89a1d6be770b8c258f7197c427cb736f46f1ddb555b6cb0e8dbd3a",
   "corpus": "pop",
   "corpusSha256": "626b032b7d7d11fa1aa18e9d08e789cdc83ba5a899c50e03f5a1f93641c02fea",
-  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
   "indexBytes": 538021713,
   "indexId": "0999ad6ee9e9f9d7d5e18080bbb5f2a618370329cc34924b2cc443c2b1e90542",
   "origins7Sha256": "e1ef4764b0ad31ba9abb13160fe4d6ca4d86295d9e4ca6ff4106ff150c48db30",
@@ -23,7 +23,7 @@
   "rule": "structural"
  },
  "label": "pop-step4-structural",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "sets": {
   "pop-bun": {
    "appClaimedBytes": 0,

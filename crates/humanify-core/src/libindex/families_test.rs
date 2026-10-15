@@ -62,3 +62,12 @@ fn the_shipped_derived_links_parse_and_join_a_known_rename() {
     assert!(f.link_count() > 0);
     assert!(f.same("mimic-fn", "mimic-function"));
 }
+
+#[test]
+fn the_shipped_derived_links_cover_the_default_index_s_packages() {
+    // exp119: the links are derived over EVERY package of the default index
+    // (k2-all), so a GitHub-recorded fork the index holds under a scope is its
+    // original's family (exp113/exp117 saw @redocly/ajv claim ajv's code).
+    let f = PackageFamilies::shipped().with_shipped_links();
+    assert!(f.same("ajv", "@redocly/ajv"));
+}
