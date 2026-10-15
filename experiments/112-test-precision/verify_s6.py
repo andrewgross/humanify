@@ -22,7 +22,7 @@ import score  # noqa: E402
 def main():
     argv = score.lib096.corpus_flag(sys.argv)
     label = argv[1]
-    test = score.lib096.CORPUS == "test"
+    test = score.lib096.CORPUS in score.lib096.PRIVATE
     out = tempfile.mkdtemp(prefix="exp112-s6-")
     score.HERE = out
     score.SCORER_VERSION = "exp096-score/6"
