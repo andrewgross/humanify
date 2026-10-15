@@ -1,173 +1,125 @@
 {
- "exp105-dev-agreement": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp105-dev-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp109-final-wr-bundlers-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp113-k2all-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {
-   "dev-rollup": {
-    "WRONG->GOOD": 22145,
-    "WRONG->GOOD:fork": 22145
-   },
-   "dev-webpack": {
-    "WRONG->GOOD": 20904,
-    "WRONG->GOOD:fork": 20904
-   }
+  "exp105-dev-agreement": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
   },
-  "transitions": [
-   [
-    "dev-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    22145
-   ],
-   [
-    "dev-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    20904
-   ]
-  ]
- },
- "exp113-opq2-wr-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp113-own-wr-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-base-wr-bundlers-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-cpf-wr-bundlers-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-dmb-wr-bundlers-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-flip3-wr-bundlers-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-flip4-wr-bundlers-structural": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-k2all-cpf-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {
-   "dev-rollup": {
-    "WRONG->GOOD": 22145,
-    "WRONG->GOOD:fork": 22145
-   },
-   "dev-webpack": {
-    "WRONG->GOOD": 20904,
-    "WRONG->GOOD:fork": 20904
-   }
+  "exp105-dev-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
   },
-  "transitions": [
-   [
-    "dev-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    22145
-   ],
-   [
-    "dev-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    20904
-   ]
-  ]
- },
- "exp117-k2all-cpfdmb-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {
-   "dev-rollup": {
-    "WRONG->GOOD": 22145,
-    "WRONG->GOOD:fork": 22145
-   },
-   "dev-webpack": {
-    "WRONG->GOOD": 20904,
-    "WRONG->GOOD:fork": 20904
-   }
+  "exp109-final-wr-bundlers-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
   },
-  "transitions": [
-   [
-    "dev-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    22145
-   ],
-   [
-    "dev-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    20904
-   ]
-  ]
- },
- "exp117-k2all-flip4-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {},
-  "transitions": []
- },
- "exp117-k2all-head-bundlers": {
-  "corpus": "bundlers",
-  "perSet": {
-   "dev-rollup": {
-    "WRONG->GOOD": 22145,
-    "WRONG->GOOD:fork": 22145
-   },
-   "dev-webpack": {
-    "WRONG->GOOD": 20904,
-    "WRONG->GOOD:fork": 20904
-   }
+  "exp113-k2all-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {
+      "dev-rollup": {
+        "WRONG->GOOD": 22145,
+        "WRONG->GOOD:fork": 22145
+      },
+      "dev-webpack": {
+        "WRONG->GOOD": 20904,
+        "WRONG->GOOD:fork": 20904
+      }
+    },
+    "transitions": [
+      ["dev-rollup", "fork", "wrongFamily", "family", 22145],
+      ["dev-webpack", "fork", "wrongFamily", "family", 20904]
+    ]
   },
-  "transitions": [
-   [
-    "dev-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    22145
-   ],
-   [
-    "dev-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    20904
-   ]
-  ]
- }
+  "exp113-opq2-wr-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp113-own-wr-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-base-wr-bundlers-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-cpf-wr-bundlers-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-dmb-wr-bundlers-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-flip3-wr-bundlers-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-flip4-wr-bundlers-structural": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-k2all-cpf-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {
+      "dev-rollup": {
+        "WRONG->GOOD": 22145,
+        "WRONG->GOOD:fork": 22145
+      },
+      "dev-webpack": {
+        "WRONG->GOOD": 20904,
+        "WRONG->GOOD:fork": 20904
+      }
+    },
+    "transitions": [
+      ["dev-rollup", "fork", "wrongFamily", "family", 22145],
+      ["dev-webpack", "fork", "wrongFamily", "family", 20904]
+    ]
+  },
+  "exp117-k2all-cpfdmb-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {
+      "dev-rollup": {
+        "WRONG->GOOD": 22145,
+        "WRONG->GOOD:fork": 22145
+      },
+      "dev-webpack": {
+        "WRONG->GOOD": 20904,
+        "WRONG->GOOD:fork": 20904
+      }
+    },
+    "transitions": [
+      ["dev-rollup", "fork", "wrongFamily", "family", 22145],
+      ["dev-webpack", "fork", "wrongFamily", "family", 20904]
+    ]
+  },
+  "exp117-k2all-flip4-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-k2all-head-bundlers": {
+    "corpus": "bundlers",
+    "perSet": {
+      "dev-rollup": {
+        "WRONG->GOOD": 22145,
+        "WRONG->GOOD:fork": 22145
+      },
+      "dev-webpack": {
+        "WRONG->GOOD": 20904,
+        "WRONG->GOOD:fork": 20904
+      }
+    },
+    "transitions": [
+      ["dev-rollup", "fork", "wrongFamily", "family", 22145],
+      ["dev-webpack", "fork", "wrongFamily", "family", 20904]
+    ]
+  }
 }

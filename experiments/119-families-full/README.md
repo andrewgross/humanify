@@ -22,10 +22,12 @@
 - **Matcher (main's defaults incl. shadow_ties, k2-all), before -> after the new file:** held-out F0.5 90.41 -> 90.42,
   P 99.24 =. With shadow_ties off (f581d036's defaults): 90.35 -> 90.35.
   Recall rises slightly on webpack and rollup. Precision drops by at most 0.07 points, in two places:
+
   - pop-esbuild 93.59 -> 93.52 (+68 KB wrong). This is a truth artifact, diagnosed below.
   - apps-webpack +4.6 KB wrong, a fork that is missing from the universe. P is 98.61 either way.
 
   test-esbuild adds 2.6 KB of wrong bytes and P stays 96.42. App claimed is 0 everywhere.
+
 - **`shadow_ties` (ON in main's defaults since `34b7bd63`, Andrew's call; merged in and kept on).** Main's new
   defaults are this branch's `*exp119-k2all-st*` config. The merged HEAD with no `--pipeline-set` reproduces those
   labels' set summaries exactly (dev and bundlers: `exp119-head*`). **Does the new families file change what
@@ -42,7 +44,7 @@
   the package name is less specific.
 - **Gate:** ALL 13 STAGES PASSED, bare, at `37687fc8` and again on the final tree (see the commit log).
 - **Neutrality, warm.** Pair 2.1.215 -> 2.1.216, named explicitly. Flags `--priors /work/exp050-cold --cache
-  /work/neutrality-cache`. Run under `flock /work/neutrality.lock`, each time from a clean detached worktree of the
+/work/neutrality-cache`. Run under `flock /work/neutrality.lock`, each time from a clean detached worktree of the
   candidate commit.
   - **vs main `34b7bd63` (shadow_ties on), candidate merge `02f783a6`:** default mode **NEUTRAL, 0 files / 0 lines,
     cache +0 / +0, exit 0 / 0**. Report mode (`--pipeline-set library.matching=report library.index=/work/exp113-data/ix/k2-all`):
@@ -63,7 +65,7 @@
    them sequentially, unauthenticated, keeping only `full_name`, `fork` and `parent`. On a rate-limit refusal it
    waits for the API's advertised reset. After this, `forkCandidatesWithoutGithubData` is empty.
 3. **Derive.** `python3 -I experiments/104-truth-audit/derive_families.py /work/exp104-data/registry
-   /work/exp119-data/universe-k2all.json crates/humanify-core/src/libindex/families-derived.json`, then prettier.
+/work/exp119-data/universe-k2all.json crates/humanify-core/src/libindex/families-derived.json`, then prettier.
 
 The rules are exp104's, unchanged:
 
@@ -90,24 +92,24 @@ and test2 hold per-set aggregates only.
 
 Shipped-default labels (`*exp117-k2all-cpfdmb*`), wrong -> right bytes (right -> wrong is 0 on every row):
 
-| corpus   | set           | wrong -> right | by link kind                                 |
-| -------- | ------------- | -------------- | -------------------------------------------- |
-| dev      | all 4 sets    | 0              | -                                            |
-| apps     | apps-esbuild  | 114            | repo 114                                     |
-| apps     | apps-rollup   | 170,422        | fork 114,681, repo 55,741                    |
-| apps     | apps-webpack  | 125,605        | fork 118,899, repo 6,706                     |
-| bundlers | dev-rollup    | 22,145         | fork 22,145 (@redocly/ajv)                   |
-| bundlers | dev-webpack   | 20,904         | fork 20,904 (@redocly/ajv)                   |
-| pop      | pop-bun       | 35,333         | repo 35,333                                  |
-| pop      | pop-esbuild   | 0              | -                                            |
-| test     | test-bun      | 43,072         | repo                                         |
-| test     | test-esbuild  | 7,837          | repo                                         |
-| test     | test-rollup   | 159,389        | fork 101,934, repo 57,455                    |
-| test     | test-webpack  | 257,578        | fork 162,923, repo 90,638, rename 4,017      |
-| test2    | test2-bun     | 68             | repo                                         |
-| test2    | test2-esbuild | 541            | repo                                         |
-| test2    | test2-rollup  | 370,733        | fork 360,760, repo 9,973                     |
-| test2    | test2-webpack | 207,716        | fork 174,369, repo 33,347                    |
+| corpus   | set           | wrong -> right | by link kind                            |
+| -------- | ------------- | -------------- | --------------------------------------- |
+| dev      | all 4 sets    | 0              | -                                       |
+| apps     | apps-esbuild  | 114            | repo 114                                |
+| apps     | apps-rollup   | 170,422        | fork 114,681, repo 55,741               |
+| apps     | apps-webpack  | 125,605        | fork 118,899, repo 6,706                |
+| bundlers | dev-rollup    | 22,145         | fork 22,145 (@redocly/ajv)              |
+| bundlers | dev-webpack   | 20,904         | fork 20,904 (@redocly/ajv)              |
+| pop      | pop-bun       | 35,333         | repo 35,333                             |
+| pop      | pop-esbuild   | 0              | -                                       |
+| test     | test-bun      | 43,072         | repo                                    |
+| test     | test-esbuild  | 7,837          | repo                                    |
+| test     | test-rollup   | 159,389        | fork 101,934, repo 57,455               |
+| test     | test-webpack  | 257,578        | fork 162,923, repo 90,638, rename 4,017 |
+| test2    | test2-bun     | 68             | repo                                    |
+| test2    | test2-esbuild | 541            | repo                                    |
+| test2    | test2-rollup  | 370,733        | fork 360,760, repo 9,973                |
+| test2    | test2-webpack | 207,716        | fork 174,369, repo 33,347               |
 
 `rescore_diff.py` (exp107) over all labels agrees with the ledger. On dev, only `schema` and
 `config.familiesSha256` moved, with one exception. One card of `exp113-own-k2` (held-out codex) gains
@@ -144,13 +146,13 @@ Recall rises because a claim newly judged "family" counts as named. The denomina
 The pool is 1,467 distinct relabelled units from the dev, apps, bundlers and pop ledgers. test and test2 were not
 drawn. Each unit's text was read from the frozen bundle.
 
-| draws | claim <- truth label                                                     | verdict                                                                                                               |
-| ----- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| 13    | `@redocly/ajv` <- `ajv`                                                  | correct: ajv's codegen, errors and compile modules. GitHub fork                                                      |
-| 2     | `@eslint-community/eslint-utils` <- `eslint-utils`                       | correct: ReferenceTracker. GitHub fork                                                                                |
-| 1 each | `@supabase/node-fetch` <- `node-fetch`; `@soda/friendly-errors-webpack-plugin`; `error-stack-parser` <- `@devexpress/error-stack-parser` | correct: GitHub forks, same code                                                         |
-| 1     | `pouchdb-browser` <- `pouchdb`                                           | correct: one monorepo (pouchdb-find's selector matchers)                                                              |
-| 1     | `@mark.probst/typescript-json-schema` <- `typescript-json-schema`        | correct as family. The unit itself is TypeScript's `__assign` / `__awaiter` helpers in the package's build (generic code) |
+| draws  | claim <- truth label                                                                                                                     | verdict                                                                                                                   |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 13     | `@redocly/ajv` <- `ajv`                                                                                                                  | correct: ajv's codegen, errors and compile modules. GitHub fork                                                           |
+| 2      | `@eslint-community/eslint-utils` <- `eslint-utils`                                                                                       | correct: ReferenceTracker. GitHub fork                                                                                    |
+| 1 each | `@supabase/node-fetch` <- `node-fetch`; `@soda/friendly-errors-webpack-plugin`; `error-stack-parser` <- `@devexpress/error-stack-parser` | correct: GitHub forks, same code                                                                                          |
+| 1      | `pouchdb-browser` <- `pouchdb`                                                                                                           | correct: one monorepo (pouchdb-find's selector matchers)                                                                  |
+| 1      | `@mark.probst/typescript-json-schema` <- `typescript-json-schema`                                                                        | correct as family. The unit itself is TypeScript's `__assign` / `__awaiter` helpers in the package's build (generic code) |
 
 ## Matcher: main's current defaults (shadow_ties on), before -> after the new file
 
@@ -158,27 +160,27 @@ drawn. Each unit's text was read from the frozen bundle.
 defaults, re-scored under scorer 8. "After" is `*exp119-k2all-st*`, which equals this branch's merged defaults
 (`exp119-head*` are identical). Both are structural, scorer 8, on k2-all. Values are P / R / F0.5 in %.
 
-| set | before (main 34b7bd63 defaults) | after (this branch) | dF0.5 | wrong-family bytes | app |
-|---|---|---|---|---|---|
-| cc | 100.00 / 81.90 / 95.77 | 100.00 / 81.90 / 95.77 | +0.00 | 0 -> 0 | 0 -> 0 |
-| esbuild-app | 96.25 / 65.48 / 87.98 | 96.25 / 65.50 / 87.99 | +0.01 | 125,529 -> 125,529 | 0 -> 0 |
-| heldout | 99.24 / 66.69 / 90.41 | 99.24 / 66.69 / 90.42 | +0.00 | 154,754 -> 154,751 | 0 -> 0 |
-| wrangler | 95.99 / 18.52 / 52.26 | 95.99 / 18.53 / 52.28 | +0.02 | 5,652 -> 5,652 | 0 -> 0 |
-| apps-esbuild | 98.73 / 89.71 / 96.79 | 98.73 / 89.71 / 96.79 | +0.00 | 295,428 -> 295,428 | 0 -> 0 |
-| apps-rollup | 98.57 / 77.01 / 93.34 | 98.57 / 77.12 / 93.38 | +0.03 | 1,095,712 -> 1,095,684 | 0 -> 0 |
-| apps-webpack | 98.61 / 72.55 / 92.00 | 98.61 / 72.75 / 92.06 | +0.06 | 760,061 -> 764,663 | 0 -> 0 |
-| dev-rollup | 99.87 / 77.44 / 94.40 | 99.87 / 77.53 / 94.43 | +0.03 | 2,114 -> 2,114 | 0 -> 0 |
-| dev-webpack | 99.64 / 62.63 / 89.11 | 99.64 / 62.89 / 89.22 | +0.11 | 4,139 -> 4,139 | 0 -> 0 |
-| pop-bun | 95.07 / 77.06 / 90.83 | 95.08 / 77.13 / 90.85 | +0.02 | 4,040,238 -> 4,040,238 | 0 -> 0 |
-| pop-esbuild | 93.59 / 79.54 / 90.40 | 93.52 / 79.54 / 90.34 | -0.05 | 5,532,133 -> 5,600,477 | 0 -> 0 |
-| test-bun | 97.23 / 66.36 / 88.95 | 97.23 / 66.39 / 88.96 | +0.01 | 1,235,745 -> 1,235,745 | 0 -> 0 |
-| test-esbuild | 96.42 / 75.93 / 91.48 | 96.42 / 75.96 / 91.49 | +0.00 | 1,944,386 -> 1,946,978 | 0 -> 0 |
-| test-rollup | 97.89 / 68.25 / 90.06 | 97.89 / 68.39 / 90.12 | +0.05 | 1,607,380 -> 1,607,380 | 0 -> 0 |
-| test-webpack | 99.18 / 70.30 / 91.65 | 99.19 / 70.51 / 91.73 | +0.07 | 865,283 -> 865,443 | 0 -> 0 |
-| test2-bun | 98.71 / 77.70 / 93.64 | 98.71 / 77.70 / 93.64 | +0.00 | 423,750 -> 423,750 | 0 -> 0 |
-| test2-esbuild | 99.41 / 74.21 / 93.09 | 99.41 / 74.21 / 93.09 | +0.00 | 190,602 -> 190,602 | 0 -> 0 |
-| test2-rollup | 96.15 / 74.13 / 90.76 | 96.18 / 74.74 / 90.96 | +0.20 | 1,756,319 -> 1,756,319 | 0 -> 0 |
-| test2-webpack | 99.13 / 69.13 / 91.22 | 99.14 / 69.22 / 91.25 | +0.03 | 1,029,629 -> 1,029,629 | 0 -> 0 |
+| set           | before (main 34b7bd63 defaults) | after (this branch)    | dF0.5 | wrong-family bytes     | app    |
+| ------------- | ------------------------------- | ---------------------- | ----- | ---------------------- | ------ |
+| cc            | 100.00 / 81.90 / 95.77          | 100.00 / 81.90 / 95.77 | +0.00 | 0 -> 0                 | 0 -> 0 |
+| esbuild-app   | 96.25 / 65.48 / 87.98           | 96.25 / 65.50 / 87.99  | +0.01 | 125,529 -> 125,529     | 0 -> 0 |
+| heldout       | 99.24 / 66.69 / 90.41           | 99.24 / 66.69 / 90.42  | +0.00 | 154,754 -> 154,751     | 0 -> 0 |
+| wrangler      | 95.99 / 18.52 / 52.26           | 95.99 / 18.53 / 52.28  | +0.02 | 5,652 -> 5,652         | 0 -> 0 |
+| apps-esbuild  | 98.73 / 89.71 / 96.79           | 98.73 / 89.71 / 96.79  | +0.00 | 295,428 -> 295,428     | 0 -> 0 |
+| apps-rollup   | 98.57 / 77.01 / 93.34           | 98.57 / 77.12 / 93.38  | +0.03 | 1,095,712 -> 1,095,684 | 0 -> 0 |
+| apps-webpack  | 98.61 / 72.55 / 92.00           | 98.61 / 72.75 / 92.06  | +0.06 | 760,061 -> 764,663     | 0 -> 0 |
+| dev-rollup    | 99.87 / 77.44 / 94.40           | 99.87 / 77.53 / 94.43  | +0.03 | 2,114 -> 2,114         | 0 -> 0 |
+| dev-webpack   | 99.64 / 62.63 / 89.11           | 99.64 / 62.89 / 89.22  | +0.11 | 4,139 -> 4,139         | 0 -> 0 |
+| pop-bun       | 95.07 / 77.06 / 90.83           | 95.08 / 77.13 / 90.85  | +0.02 | 4,040,238 -> 4,040,238 | 0 -> 0 |
+| pop-esbuild   | 93.59 / 79.54 / 90.40           | 93.52 / 79.54 / 90.34  | -0.05 | 5,532,133 -> 5,600,477 | 0 -> 0 |
+| test-bun      | 97.23 / 66.36 / 88.95           | 97.23 / 66.39 / 88.96  | +0.01 | 1,235,745 -> 1,235,745 | 0 -> 0 |
+| test-esbuild  | 96.42 / 75.93 / 91.48           | 96.42 / 75.96 / 91.49  | +0.00 | 1,944,386 -> 1,946,978 | 0 -> 0 |
+| test-rollup   | 97.89 / 68.25 / 90.06           | 97.89 / 68.39 / 90.12  | +0.05 | 1,607,380 -> 1,607,380 | 0 -> 0 |
+| test-webpack  | 99.18 / 70.30 / 91.65           | 99.19 / 70.51 / 91.73  | +0.07 | 865,283 -> 865,443     | 0 -> 0 |
+| test2-bun     | 98.71 / 77.70 / 93.64           | 98.71 / 77.70 / 93.64  | +0.00 | 423,750 -> 423,750     | 0 -> 0 |
+| test2-esbuild | 99.41 / 74.21 / 93.09           | 99.41 / 74.21 / 93.09  | +0.00 | 190,602 -> 190,602     | 0 -> 0 |
+| test2-rollup  | 96.15 / 74.13 / 90.76           | 96.18 / 74.74 / 90.96  | +0.20 | 1,756,319 -> 1,756,319 | 0 -> 0 |
+| test2-webpack | 99.13 / 69.13 / 91.22           | 99.14 / 69.22 / 91.25  | +0.03 | 1,029,629 -> 1,029,629 | 0 -> 0 |
 
 F0.5 is up or equal on every set except pop-esbuild (-0.05). That set, apps-webpack and test-esbuild are the only
 sets that add wrong bytes: +68,344, +4,602 and +2,592 B, the same as with shadow_ties off. The two dev cases are

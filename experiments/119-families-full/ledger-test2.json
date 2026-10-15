@@ -1,760 +1,406 @@
 {
- "test2-exp113-k2all": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   },
-   "test2-rollup": {
-    "WRONG->GOOD": 370733,
-    "WRONG->GOOD:fork": 360760,
-    "WRONG->GOOD:repo": 9973
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 207716,
-    "WRONG->GOOD:fork": 174369,
-    "WRONG->GOOD:repo": 33347
-   }
+  "test2-exp113-k2all": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      },
+      "test2-rollup": {
+        "WRONG->GOOD": 370733,
+        "WRONG->GOOD:fork": 360760,
+        "WRONG->GOOD:repo": 9973
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 207716,
+        "WRONG->GOOD:fork": 174369,
+        "WRONG->GOOD:repo": 33347
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541],
+      ["test2-rollup", "fork", "wrongFamily", "family", 311248],
+      ["test2-rollup", "fork", "wrongFamily", "origin", 49512],
+      ["test2-rollup", "repo", "wrongFamily", "origin", 9973],
+      ["test2-webpack", "fork", "wrongFamily", "family", 174369],
+      ["test2-webpack", "repo", "wrongFamily", "family", 33347]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ],
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    311248
-   ],
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "origin",
-    49512
-   ],
-   [
-    "test2-rollup",
-    "repo",
-    "wrongFamily",
-    "origin",
-    9973
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    174369
-   ],
-   [
-    "test2-webpack",
-    "repo",
-    "wrongFamily",
-    "family",
-    33347
-   ]
-  ]
- },
- "test2-exp113-own-k2": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp113-own-k2": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp113-own-wr": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-exp113-own-wr": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-exp117-base-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-base-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp117-base-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-exp117-base-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-exp117-cpf-bun-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   }
+  "test2-exp117-cpf-bun-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      }
+    },
+    "transitions": [["test2-bun", "repo", "wrongFamily", "family", 68]]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ]
-  ]
- },
- "test2-exp117-cpf-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-cpf-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [["test2-esbuild", "repo", "wrongFamily", "family", 541]]
   },
-  "transitions": [
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp117-cpf-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-exp117-cpf-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-exp117-dmb-bun-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   }
+  "test2-exp117-dmb-bun-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      }
+    },
+    "transitions": [["test2-bun", "repo", "wrongFamily", "family", 68]]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ]
-  ]
- },
- "test2-exp117-dmb-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-dmb-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [["test2-esbuild", "repo", "wrongFamily", "family", 541]]
   },
-  "transitions": [
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp117-dmb-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-exp117-dmb-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-exp117-flip3-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-flip3-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp117-flip3-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-exp117-flip3-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-exp117-flip4-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-flip4-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp117-flip4-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-exp117-flip4-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-exp117-k2all-cpf": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   },
-   "test2-rollup": {
-    "WRONG->GOOD": 370733,
-    "WRONG->GOOD:fork": 360760,
-    "WRONG->GOOD:repo": 9973
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 207716,
-    "WRONG->GOOD:fork": 174369,
-    "WRONG->GOOD:repo": 33347
-   }
+  "test2-exp117-k2all-cpf": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      },
+      "test2-rollup": {
+        "WRONG->GOOD": 370733,
+        "WRONG->GOOD:fork": 360760,
+        "WRONG->GOOD:repo": 9973
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 207716,
+        "WRONG->GOOD:fork": 174369,
+        "WRONG->GOOD:repo": 33347
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541],
+      ["test2-rollup", "fork", "wrongFamily", "family", 311248],
+      ["test2-rollup", "fork", "wrongFamily", "origin", 49512],
+      ["test2-rollup", "repo", "wrongFamily", "origin", 9973],
+      ["test2-webpack", "fork", "wrongFamily", "family", 174369],
+      ["test2-webpack", "repo", "wrongFamily", "family", 33347]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ],
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    311248
-   ],
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "origin",
-    49512
-   ],
-   [
-    "test2-rollup",
-    "repo",
-    "wrongFamily",
-    "origin",
-    9973
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    174369
-   ],
-   [
-    "test2-webpack",
-    "repo",
-    "wrongFamily",
-    "family",
-    33347
-   ]
-  ]
- },
- "test2-exp117-k2all-cpfdmb": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   },
-   "test2-rollup": {
-    "WRONG->GOOD": 370733,
-    "WRONG->GOOD:fork": 360760,
-    "WRONG->GOOD:repo": 9973
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 207716,
-    "WRONG->GOOD:fork": 174369,
-    "WRONG->GOOD:repo": 33347
-   }
+  "test2-exp117-k2all-cpfdmb": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      },
+      "test2-rollup": {
+        "WRONG->GOOD": 370733,
+        "WRONG->GOOD:fork": 360760,
+        "WRONG->GOOD:repo": 9973
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 207716,
+        "WRONG->GOOD:fork": 174369,
+        "WRONG->GOOD:repo": 33347
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541],
+      ["test2-rollup", "fork", "wrongFamily", "family", 311248],
+      ["test2-rollup", "fork", "wrongFamily", "origin", 49512],
+      ["test2-rollup", "repo", "wrongFamily", "origin", 9973],
+      ["test2-webpack", "fork", "wrongFamily", "family", 174369],
+      ["test2-webpack", "repo", "wrongFamily", "family", 33347]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ],
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    311248
-   ],
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "origin",
-    49512
-   ],
-   [
-    "test2-rollup",
-    "repo",
-    "wrongFamily",
-    "origin",
-    9973
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    174369
-   ],
-   [
-    "test2-webpack",
-    "repo",
-    "wrongFamily",
-    "family",
-    33347
-   ]
-  ]
- },
- "test2-exp117-k2all-flip4": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   },
-   "test2-rollup": {
-    "WRONG->GOOD": 9973,
-    "WRONG->GOOD:repo": 9973
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 4729,
-    "WRONG->GOOD:repo": 4729
-   }
+  "test2-exp117-k2all-flip4": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      },
+      "test2-rollup": {
+        "WRONG->GOOD": 9973,
+        "WRONG->GOOD:repo": 9973
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 4729,
+        "WRONG->GOOD:repo": 4729
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541],
+      ["test2-rollup", "repo", "wrongFamily", "origin", 9973],
+      ["test2-webpack", "repo", "wrongFamily", "family", 4729]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ],
-   [
-    "test2-rollup",
-    "repo",
-    "wrongFamily",
-    "origin",
-    9973
-   ],
-   [
-    "test2-webpack",
-    "repo",
-    "wrongFamily",
-    "family",
-    4729
-   ]
-  ]
- },
- "test2-exp117-p3-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-p3-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [["test2-esbuild", "repo", "wrongFamily", "family", 541]]
   },
-  "transitions": [
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-exp117-st-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-exp117-st-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [["test2-esbuild", "repo", "wrongFamily", "family", 541]]
   },
-  "transitions": [
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-main-k2-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-bun": {
-    "WRONG->GOOD": 68,
-    "WRONG->GOOD:repo": 68
-   },
-   "test2-esbuild": {
-    "WRONG->GOOD": 541,
-    "WRONG->GOOD:repo": 541
-   }
+  "test2-main-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "WRONG->GOOD": 68,
+        "WRONG->GOOD:repo": 68
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 541,
+        "WRONG->GOOD:repo": 541
+      }
+    },
+    "transitions": [
+      ["test2-bun", "repo", "wrongFamily", "family", 68],
+      ["test2-esbuild", "repo", "wrongFamily", "family", 541]
+    ]
   },
-  "transitions": [
-   [
-    "test2-bun",
-    "repo",
-    "wrongFamily",
-    "family",
-    68
-   ],
-   [
-    "test2-esbuild",
-    "repo",
-    "wrongFamily",
-    "family",
-    541
-   ]
-  ]
- },
- "test2-main-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
+  "test2-main-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
   },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- },
- "test2-ref-wr-structural": {
-  "corpus": "test2",
-  "perSet": {
-   "test2-rollup": {
-    "WRONG->GOOD": 1818,
-    "WRONG->GOOD:fork": 1818
-   },
-   "test2-webpack": {
-    "WRONG->GOOD": 301,
-    "WRONG->GOOD:fork": 301
-   }
-  },
-  "transitions": [
-   [
-    "test2-rollup",
-    "fork",
-    "wrongFamily",
-    "family",
-    1818
-   ],
-   [
-    "test2-webpack",
-    "fork",
-    "wrongFamily",
-    "family",
-    301
-   ]
-  ]
- }
+  "test2-ref-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-rollup": {
+        "WRONG->GOOD": 1818,
+        "WRONG->GOOD:fork": 1818
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 301,
+        "WRONG->GOOD:fork": 301
+      }
+    },
+    "transitions": [
+      ["test2-rollup", "fork", "wrongFamily", "family", 1818],
+      ["test2-webpack", "fork", "wrongFamily", "family", 301]
+    ]
+  }
 }
