@@ -487,7 +487,7 @@ def main():
     pipeline = json.load(open(os.path.join(run_dir, "pipeline.json")))
     if pipeline.get("corpus", "dev") != lib096.CORPUS:
         raise SystemExit(f"REFUSED: the label ran on the {pipeline.get('corpus', 'dev')} corpus — pass --corpus")
-    test = lib096.CORPUS == "test"
+    test = lib096.CORPUS in lib096.PRIVATE
     manifest = lib096.load_manifest()
     if pipeline["corpusSha256"] != lib096.manifest_sha():
         raise SystemExit("REFUSED: the label ran on another corpus manifest")

@@ -40,6 +40,10 @@
   `test-rollup`. This dev corpus (`corpus.json`) and every committed label are unchanged. A test label commits
   per-set aggregates only, and the leaderboard refuses to mix it with dev labels. Tuning lanes never run or read
   it. See `experiments/100-test-split/README.md`.
+- **A third, untouched judge: exp116's FROZEN test split v2 (`corpus-test2.json`, `--corpus test2`).** exp100's
+  split was partly spent (exp104/107/112 ran aggregate diagnoses on it). test2 holds 55 new apps no lane had seen
+  (188 bundles: `test2-bun`, `test2-esbuild`, `test2-webpack`, `test2-rollup`), private exactly as `test`. It is
+  never tuned on and never diagnosed. See `experiments/116-test2/README.md`.
 - **Scorer 3: precision / recall / F1 (2026-10-14, Andrew: "more standard").** Same bytes, same judge: precision =
   named ÷ (named + wrong family + app claimed), recall unchanged, F1 = 2PR ÷ (P + R). The wrong-family and
   wrong-name shares are gone; the bar is precision ≥ 99.8% (app claimed stays a hard 0). Every committed label was
