@@ -254,9 +254,12 @@ impl DiscoveryOptions {
     /// The SHIPPED options: what `[library.discovery]` defaults to (exp109,
     /// from experiments/106-matcher-hygiene's measured recommendation) —
     /// exp102's three guards, read under `specific_rivals`, banner names the
-    /// index knows, metadata-derived families and the payload guard.
-    /// `helper_families` stays off. `Default` stays the engine's baseline
-    /// (every guard off), which the unit tests compare each guard against.
+    /// index knows, metadata-derived families and the payload guard; since
+    /// exp117 (experiments/117-default-flip) also exp114's context presence
+    /// with its fence and exp112's declared cap, measured together on every
+    /// corpus on k2-all. `helper_families` and `shadow_ties` stay off.
+    /// `Default` stays the engine's baseline (every guard off), which the
+    /// unit tests compare each guard against.
     pub fn recommended() -> Self {
         DiscoveryOptions {
             evidence_conflict: true,
@@ -266,6 +269,10 @@ impl DiscoveryOptions {
             payload_min_bytes: 4096,
             specific_rivals: true,
             derived_families: true,
+            context_presence: 1.5,
+            context_presence_slack: 16384,
+            presence_fence: true,
+            declared_max_bytes: 65536,
             ..DiscoveryOptions::default()
         }
     }
