@@ -159,6 +159,8 @@ context_presence = 0.0         # exp114: off; a package seen only in index modul
 context_presence_slack = 0     #   than the bundle's groups is no seed (experiments/114-dev-precision)
 shadow_ties = false            # exp114: off; a package whose seeds are all ties goes to its rival
 presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
+declared_max_bytes = 0         # exp112: off; a declared seed on a statement over N bytes is no
+                               #   seed (experiments/112-test-precision; 65536 measured)
 ```
 
 To reproduce a pre-exp109 run, set the old values back explicitly:

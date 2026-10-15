@@ -1,0 +1,74 @@
+{
+ "bundleSha256": "85fc0e06d1fecce6eb279d56d9720a053adf394a84a458bc3377de686583095c",
+ "claimedBytes": {
+  "right": 67718,
+  "unmapped": 932
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-electron_gh-manusa__electronim-e236a6",
+ "exploratory": {
+  "names": {
+   "bindings": 1162,
+   "bindingsSameVersion": 1162,
+   "bindingsVersionKnown": 1162,
+   "exactBytes": 51733,
+   "exactUnits": 146,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "0999ad6ee9e9f9d7d5e18080bbb5f2a618370329cc34924b2cc443c2b1e90542",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.829741,
+  "f1": 0.660944,
+  "namedBytes": 49585,
+  "precision": 1.0,
+  "recall": 0.493589
+ },
+ "label": "pop-step4-structural",
+ "missBytes": {
+  "a": 31050,
+  "c": 715,
+  "d-file": 840,
+  "e-spec": 135
+ },
+ "noDiscovery": null,
+ "reportSha256": "6b21287ee251eb2bec70c7a67ee23937e69f54c2a66c6e6c13a08fb7c6e3ea5c",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "pop-bun",
+ "statementBytes": {
+  "<unmapped>": 1409,
+  "library": 100458
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.911831,
+  "f05ShipperOnly": 0.911831,
+  "f1": 0.805323,
+  "f1ShipperOnly": 0.805323,
+  "libraryBytes": 100458,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 67718,
+  "namedBytes": 67718,
+  "namedBytesShipperOnly": 67718,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.674093,
+  "recallShipperOnly": 0.674093,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

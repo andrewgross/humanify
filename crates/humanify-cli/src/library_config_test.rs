@@ -333,3 +333,15 @@ fn the_exp114_presence_keys_default_off_and_set() {
     assert!(o.shadow_ties);
     assert!(o.presence_fence);
 }
+
+#[test]
+fn the_exp112_declared_cap_defaults_off() {
+    let off = build(&["in.js"], "").unwrap();
+    assert_eq!(off.library.discovery_options().declared_max_bytes, 0);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ndeclared_max_bytes = 65536\n",
+    )
+    .unwrap();
+    assert_eq!(on.library.discovery_options().declared_max_bytes, 65536);
+}
