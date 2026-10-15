@@ -494,9 +494,9 @@ export function libraryArgs(args: string[]): string[] | string {
   if (
     corpus !== undefined &&
     (typeof corpus !== "string" ||
-      !["dev", "test", "bundlers", "apps", "pop"].includes(corpus))
+      !["dev", "test", "test2", "bundlers", "apps", "pop"].includes(corpus))
   ) {
-    return "--corpus dev|test|bundlers|apps|pop (dev = corpus.json; test = exp100's frozen test split; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population)";
+    return "--corpus dev|test|test2|bundlers|apps|pop (dev = corpus.json; test = exp100's frozen test split; test2 = exp116's frozen test split v2, the untouched final judge; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population)";
   }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"

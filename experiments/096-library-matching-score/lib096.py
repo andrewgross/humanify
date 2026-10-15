@@ -21,6 +21,11 @@ CORPORA = {
     "test": {"manifest": os.path.join(HERE, "corpus-test.json"), "origins": os.path.join(HERE, "origins-test.json"),
              "copies": os.path.join(HERE, "copies-test.json"), "chained": os.path.join(HERE, "chained-test.json"),
              "data": "/work/exp100-test-data/frozen"},
+    # exp116's FROZEN test split v2: new apps no lane has seen (exp100's split was partly spent by aggregate
+    # diagnoses), the untouched final judge; private exactly as `test` (summaries only, never tuned on)
+    "test2": {"manifest": os.path.join(HERE, "corpus-test2.json"), "origins": os.path.join(HERE, "origins-test2.json"),
+              "copies": os.path.join(HERE, "copies-test2.json"), "chained": os.path.join(HERE, "chained-test2.json"),
+              "data": "/work/exp116-test2-data/frozen"},
     # exp105's DEV-SIDE webpack and rollup builds (experiments/105-webpack-rollup/scripts/dev_apps.py): small apps
     # made from the step-4 index's packages, never the test split's; a dev corpus (its cards are committed)
     "bundlers": {"manifest": os.path.join(HERE, "corpus-bundlers.json"),
@@ -41,6 +46,8 @@ CORPORA = {
             "copies": os.path.join(HERE, "copies-pop.json"), "chained": os.path.join(HERE, "chained-pop.json"),
             "data": "/work/exp112-data/pop/frozen"},
 }
+# frozen judges: a label on one commits per-set aggregates only (no per-bundle cards, no bundle names in its log)
+PRIVATE = ("test", "test2")
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"
 DATA = CORPORA[CORPUS]["data"]  # the frozen corpus, truth and raw reports (not committed)
@@ -59,12 +66,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|bundlers|apps|pop` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|test2|bundlers|apps|pop` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|bundlers|apps|pop")
+        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv
