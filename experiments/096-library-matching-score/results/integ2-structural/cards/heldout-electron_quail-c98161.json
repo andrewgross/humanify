@@ -34,7 +34,7 @@
  "noDiscovery": "the bun adapter unpacked no bundled module (the one-file floor): no discovery ran",
  "reportSha256": "96736301d948ef75ec0fffae59aef1b90f91f668865058f4952d9774c5974881",
  "rule": "structural",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "set": "heldout",
  "statementBytes": {},
  "toolchain": {

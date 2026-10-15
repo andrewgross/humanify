@@ -4,7 +4,7 @@
   "appClaimedBytes": 0,
   "precisionBar": 0.998,
   "precisionBarPassed": {
-   "dev-rollup": false,
+   "dev-rollup": true,
    "dev-webpack": false
   }
  },
@@ -15,7 +15,7 @@
   "copiesSha256": "01e78709e765c23ac94b21de9cc207026c6e5468d3d8026c914aada64198c408",
   "corpus": "bundlers",
   "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
-  "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
+  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
   "indexBytes": 6807877931,
   "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
   "origins7Sha256": "8b6652faafd20967eb565bb668efb2930f44a02ee31102df79eea6f4708e135f",
@@ -29,7 +29,7 @@
   ]
  },
  "label": "exp117-k2all-cpfdmb-bundlers",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "sets": {
   "dev-rollup": {
    "appClaimedBytes": 0,
@@ -38,21 +38,21 @@
    "discoveryRan": 14,
    "entries": 14,
    "exploratoryNames": {
-    "bindings": 21529,
-    "bindingsSameVersion": 21411,
-    "bindingsVersionKnown": 21529,
-    "exactBytes": 1478864,
-    "exactUnits": 1341,
-    "sameVersionShare": 0.994519
+    "bindings": 22005,
+    "bindingsSameVersion": 21887,
+    "bindingsVersionKnown": 22005,
+    "exactBytes": 1500638,
+    "exactUnits": 1362,
+    "sameVersionShare": 0.994638
    },
-   "f05": 0.928957,
-   "f05ShipperOnly": 0.928957,
-   "f1": 0.855627,
-   "f1ShipperOnly": 0.855627,
+   "f05": 0.941654,
+   "f05ShipperOnly": 0.941654,
+   "f1": 0.867322,
+   "f1ShipperOnly": 0.867322,
    "libraryBytes": 2142780,
    "missShares": {
     "a": 0.000122,
-    "c": 0.07108,
+    "c": 0.070754,
     "d-absent": 0.000593,
     "d-file": 0.004884,
     "e-ambig": 0.022811,
@@ -60,19 +60,19 @@
     "e-spec": 0.087663,
     "e-support": 0.004504,
     "e-veto": 0.01832,
-    "f": 0.015716,
+    "f": 0.005707,
     "unit-model": 2.4e-05
    },
    "namedAsOriginBytes": 0,
-   "namedAsShipperBytes": 1620257,
-   "namedBytes": 1620257,
-   "precision": 0.985249,
-   "precisionShipperOnly": 0.985249,
-   "recall": 0.756147,
-   "recallShipperOnly": 0.756147,
+   "namedAsShipperBytes": 1642402,
+   "namedBytes": 1642402,
+   "precision": 0.998715,
+   "precisionShipperOnly": 0.998715,
+   "recall": 0.766482,
+   "recallShipperOnly": 0.766482,
    "selfOriginBytes": 0,
    "selfOtherBytes": 0,
-   "wrongFamilyBytes": 24259
+   "wrongFamilyBytes": 2114
   },
   "dev-webpack": {
    "appClaimedBytes": 0,
@@ -81,21 +81,21 @@
    "discoveryRan": 13,
    "entries": 13,
    "exploratoryNames": {
-    "bindings": 18638,
-    "bindingsSameVersion": 18588,
-    "bindingsVersionKnown": 18638,
-    "exactBytes": 1021304,
-    "exactUnits": 1388,
-    "sameVersionShare": 0.997317
+    "bindings": 19031,
+    "bindingsSameVersion": 18981,
+    "bindingsVersionKnown": 19031,
+    "exactBytes": 1041376,
+    "exactUnits": 1445,
+    "sameVersionShare": 0.997373
    },
-   "f05": 0.875279,
-   "f05ShipperOnly": 0.875279,
-   "f1": 0.756191,
-   "f1ShipperOnly": 0.756191,
+   "f05": 0.891505,
+   "f05ShipperOnly": 0.891505,
+   "f1": 0.77021,
+   "f1ShipperOnly": 0.77021,
    "libraryBytes": 1829402,
    "missShares": {
     "a": 0.000128,
-    "c": 0.090238,
+    "c": 0.089231,
     "d-absent": 0.003477,
     "d-file": 0.104782,
     "e-ambig": 0.00739,
@@ -103,19 +103,19 @@
     "e-spec": 0.09788,
     "e-support": 0.005896,
     "e-veto": 0.021483,
-    "f": 0.031766,
-    "unit-model": 0.003808
+    "f": 0.021355,
+    "unit-model": 0.003799
    },
    "namedAsOriginBytes": 0,
-   "namedAsShipperBytes": 1127667,
-   "namedBytes": 1127667,
-   "precision": 0.977953,
-   "precisionShipperOnly": 0.977953,
-   "recall": 0.616413,
-   "recallShipperOnly": 0.616413,
+   "namedAsShipperBytes": 1148571,
+   "namedBytes": 1148571,
+   "precision": 0.996082,
+   "precisionShipperOnly": 0.996082,
+   "recall": 0.62784,
+   "recallShipperOnly": 0.62784,
    "selfOriginBytes": 0,
    "selfOtherBytes": 0,
-   "wrongFamilyBytes": 25422
+   "wrongFamilyBytes": 4518
   }
  }
 }

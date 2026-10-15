@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "0512730ade5ef9931df3081816fb1ec7bec600e39d15780817b01118265de8b0",
+ "claimedBytes": {
+  "family": 15511,
+  "origin": 1119,
+  "right": 9095472,
+  "unmapped": 6811,
+  "wrongFamily": 23130
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_neucalculator-cf43f1",
+ "exploratory": {
+  "names": {
+   "bindings": 111188,
+   "bindingsSameVersion": 106197,
+   "bindingsVersionKnown": 111188,
+   "exactBytes": 8755920,
+   "exactUnits": 10630,
+   "sameVersionShare": 0.955112
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.94771,
+  "f1": 0.880843,
+  "namedBytes": 8580757,
+  "precision": 0.998229,
+  "recall": 0.78816
+ },
+ "label": "exp119-k2all-def-apps",
+ "missBytes": {
+  "a": 132906,
+  "b": 463463,
+  "c": 756156,
+  "d-absent": 2585,
+  "d-file": 10986,
+  "e-ambig": 43228,
+  "e-other": 8565,
+  "e-support": 26067,
+  "e-veto": 288735,
+  "f": 42286
+ },
+ "noDiscovery": null,
+ "reportSha256": "00a8d0adaf173ecf826b628b9ef851b9ea1a3918a2881d25405a0dd7fe941755",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 2225,
+  "<unmapped>": 2788612,
+  "copy": 38737,
+  "library": 10887079
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 38737,
+  "f05": 0.960625,
+  "f05ShipperOnly": 0.960507,
+  "f1": 0.910195,
+  "f1ShipperOnly": 0.910083,
+  "libraryBytes": 10887079,
+  "namedAsOriginBytes": 1119,
+  "namedAsShipperBytes": 9110983,
+  "namedBytes": 9112102,
+  "namedBytesShipperOnly": 9110983,
+  "precision": 0.997468,
+  "precisionShipperOnly": 0.997346,
+  "recall": 0.836965,
+  "recallShipperOnly": 0.836862,
+  "wrongFamilyBytes": 23130,
+  "wrongFamilyBytesShipperOnly": 24249
+ },
+ "truthMethod": "sourcemap"
+}

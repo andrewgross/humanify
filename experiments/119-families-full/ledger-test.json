@@ -1,0 +1,1026 @@
+{
+ "test-exp101-c2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43273,
+    "WRONG->GOOD:repo": 43273
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43273
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp101-call2k-agreement": {
+  "corpus": "test",
+  "perSet": {
+   "test-rollup": {
+    "WRONG->GOOD": 132191,
+    "WRONG->GOOD:repo": 2761,
+    "WRONG->GOOD:repo+rename": 129430
+   }
+  },
+  "transitions": [
+   [
+    "test-rollup",
+    "repo",
+    "wrongFamily",
+    "family",
+    2761
+   ],
+   [
+    "test-rollup",
+    "repo+rename",
+    "wrongFamily",
+    "family",
+    129430
+   ]
+  ]
+ },
+ "test-exp101-call2k-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43273,
+    "WRONG->GOOD:repo": 43273
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   },
+   "test-rollup": {
+    "WRONG->GOOD": 9273,
+    "WRONG->GOOD:repo+rename": 9273
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43273
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ],
+   [
+    "test-rollup",
+    "repo+rename",
+    "wrongFamily",
+    "family",
+    9273
+   ]
+  ]
+ },
+ "test-exp105-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp105-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp107-cont-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp107-cont-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp107-main-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp107-main-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp108-c2v3-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp108-c2v3-guards-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp108-c2v3-guards-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43273,
+    "WRONG->GOOD:repo": 43273
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43273
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp108-c2v3-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43273,
+    "WRONG->GOOD:repo": 43273
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43273
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp108-k2-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp108-k2-guards-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp108-k2-guards-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43234,
+    "WRONG->GOOD:repo": 43234
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43234
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp108-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43234,
+    "WRONG->GOOD:repo": 43234
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43234
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp108-k5-guards-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43273,
+    "WRONG->GOOD:repo": 43273
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43273
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp108-k5-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43273,
+    "WRONG->GOOD:repo": 43273
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 8190,
+    "WRONG->GOOD:repo": 8190
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43273
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    8190
+   ]
+  ]
+ },
+ "test-exp109-c2-rec-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43111,
+    "WRONG->GOOD:repo": 43111
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43111
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp109-final-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp109-final-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp112-k2-rec": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp112-k2-rec-dcap": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp113-k2all": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   },
+   "test-rollup": {
+    "WRONG->GOOD": 159389,
+    "WRONG->GOOD:fork": 101934,
+    "WRONG->GOOD:repo": 57455
+   },
+   "test-webpack": {
+    "WRONG->GOOD": 257578,
+    "WRONG->GOOD:fork": 162923,
+    "WRONG->GOOD:rename": 4017,
+    "WRONG->GOOD:repo": 90638
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ],
+   [
+    "test-rollup",
+    "fork",
+    "wrongFamily",
+    "family",
+    101934
+   ],
+   [
+    "test-rollup",
+    "repo",
+    "wrongFamily",
+    "family",
+    57455
+   ],
+   [
+    "test-webpack",
+    "fork",
+    "wrongFamily",
+    "family",
+    162923
+   ],
+   [
+    "test-webpack",
+    "rename",
+    "wrongFamily",
+    "family",
+    4017
+   ],
+   [
+    "test-webpack",
+    "repo",
+    "wrongFamily",
+    "family",
+    90638
+   ]
+  ]
+ },
+ "test-exp113-opq2-k2": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp113-opq2-wr": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp113-own-k2": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp113-own-wr": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-allf-k2-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-allf-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-both2-k2-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-both2-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-cp-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp114-cp-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-cpf-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp114-cpf-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-st2-k2-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp114-st2-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-base-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp117-base-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-cpf-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp117-cpf-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-dmb-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp117-dmb-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-flip3-k2-structural": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ]
+  ]
+ },
+ "test-exp117-flip3-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-flip4-k2-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-flip4-wr-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-exp117-k2all-cpf": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   },
+   "test-rollup": {
+    "WRONG->GOOD": 159389,
+    "WRONG->GOOD:fork": 101934,
+    "WRONG->GOOD:repo": 57455
+   },
+   "test-webpack": {
+    "WRONG->GOOD": 257578,
+    "WRONG->GOOD:fork": 162923,
+    "WRONG->GOOD:rename": 4017,
+    "WRONG->GOOD:repo": 90638
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ],
+   [
+    "test-rollup",
+    "fork",
+    "wrongFamily",
+    "family",
+    101934
+   ],
+   [
+    "test-rollup",
+    "repo",
+    "wrongFamily",
+    "family",
+    57455
+   ],
+   [
+    "test-webpack",
+    "fork",
+    "wrongFamily",
+    "family",
+    162923
+   ],
+   [
+    "test-webpack",
+    "rename",
+    "wrongFamily",
+    "family",
+    4017
+   ],
+   [
+    "test-webpack",
+    "repo",
+    "wrongFamily",
+    "family",
+    90638
+   ]
+  ]
+ },
+ "test-exp117-k2all-cpfdmb": {
+  "corpus": "test",
+  "perSet": {
+   "test-bun": {
+    "WRONG->GOOD": 43072,
+    "WRONG->GOOD:repo": 43072
+   },
+   "test-esbuild": {
+    "WRONG->GOOD": 7837,
+    "WRONG->GOOD:repo": 7837
+   },
+   "test-rollup": {
+    "WRONG->GOOD": 159389,
+    "WRONG->GOOD:fork": 101934,
+    "WRONG->GOOD:repo": 57455
+   },
+   "test-webpack": {
+    "WRONG->GOOD": 257578,
+    "WRONG->GOOD:fork": 162923,
+    "WRONG->GOOD:rename": 4017,
+    "WRONG->GOOD:repo": 90638
+   }
+  },
+  "transitions": [
+   [
+    "test-bun",
+    "repo",
+    "wrongFamily",
+    "family",
+    43072
+   ],
+   [
+    "test-esbuild",
+    "repo",
+    "wrongFamily",
+    "family",
+    7837
+   ],
+   [
+    "test-rollup",
+    "fork",
+    "wrongFamily",
+    "family",
+    101934
+   ],
+   [
+    "test-rollup",
+    "repo",
+    "wrongFamily",
+    "family",
+    57455
+   ],
+   [
+    "test-webpack",
+    "fork",
+    "wrongFamily",
+    "family",
+    162923
+   ],
+   [
+    "test-webpack",
+    "rename",
+    "wrongFamily",
+    "family",
+    4017
+   ],
+   [
+    "test-webpack",
+    "repo",
+    "wrongFamily",
+    "family",
+    90638
+   ]
+  ]
+ },
+ "test-exp117-k2all-flip4": {
+  "corpus": "test",
+  "perSet": {
+   "test-rollup": {
+    "WRONG->GOOD": 5929,
+    "WRONG->GOOD:repo": 5929
+   },
+   "test-webpack": {
+    "WRONG->GOOD": 111860,
+    "WRONG->GOOD:fork": 75746,
+    "WRONG->GOOD:repo": 36114
+   }
+  },
+  "transitions": [
+   [
+    "test-rollup",
+    "repo",
+    "wrongFamily",
+    "family",
+    5929
+   ],
+   [
+    "test-webpack",
+    "fork",
+    "wrongFamily",
+    "family",
+    75746
+   ],
+   [
+    "test-webpack",
+    "repo",
+    "wrongFamily",
+    "family",
+    36114
+   ]
+  ]
+ },
+ "test-step4f-agreement": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ },
+ "test-step4f-structural": {
+  "corpus": "test",
+  "perSet": {},
+  "transitions": []
+ }
+}

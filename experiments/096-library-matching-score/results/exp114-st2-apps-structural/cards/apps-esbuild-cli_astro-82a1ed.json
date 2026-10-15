@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "dd804603ef940dcfb70d531aefb74bf59fd175b0818a4e2c51fa3f24be69d196",
  "rule": "structural",
- "schema": "exp096-score/7",
+ "schema": "exp096-score/8",
  "set": "apps-esbuild",
  "statementBytes": {
   "<app>": 24,

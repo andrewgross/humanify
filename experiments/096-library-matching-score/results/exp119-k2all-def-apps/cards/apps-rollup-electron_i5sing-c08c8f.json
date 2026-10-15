@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "3282f7ef0ee47ec2d66bd54cef8b6ccc7b38c9bde9e4c176d304b00f40237b26",
+ "claimedBytes": {
+  "family": 12674,
+  "origin": 211,
+  "right": 6608946,
+  "unmapped": 71866,
+  "wrongFamily": 156209
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-electron_i5sing-c08c8f",
+ "exploratory": {
+  "names": {
+   "bindings": 44729,
+   "bindingsSameVersion": 41570,
+   "bindingsVersionKnown": 44729,
+   "exactBytes": 4810193,
+   "exactUnits": 4733,
+   "sameVersionShare": 0.929375
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.935028,
+  "f1": 0.871355,
+  "namedBytes": 6137746,
+  "precision": 0.982912,
+  "recall": 0.782539
+ },
+ "label": "exp119-k2all-def-apps",
+ "missBytes": {
+  "a": 230139,
+  "b": 143535,
+  "c": 213124,
+  "d-absent": 30284,
+  "d-file": 224633,
+  "d-variant": 39427,
+  "e-ambig": 85706,
+  "e-other": 15948,
+  "e-spec": 46186,
+  "e-support": 10059,
+  "e-veto": 55838,
+  "f": 126659
+ },
+ "noDiscovery": null,
+ "reportSha256": "2673407b7107d7e4d902f04e1a4a43538e1af7a398f9b48a07f0cb47fcc3ad20",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<app>": 2000,
+  "<unmapped>": 784160,
+  "copy": 8713,
+  "library": 7843369
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "bun",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 8713,
+  "f05": 0.94718,
+  "f05ShipperOnly": 0.94715,
+  "f1": 0.905772,
+  "f1ShipperOnly": 0.905744,
+  "libraryBytes": 7843369,
+  "namedAsOriginBytes": 211,
+  "namedAsShipperBytes": 6621620,
+  "namedBytes": 6621831,
+  "namedBytesShipperOnly": 6621620,
+  "precision": 0.976954,
+  "precisionShipperOnly": 0.976923,
+  "recall": 0.844259,
+  "recallShipperOnly": 0.844232,
+  "wrongFamilyBytes": 156209,
+  "wrongFamilyBytesShipperOnly": 156420
+ },
+ "truthMethod": "sourcemap"
+}
