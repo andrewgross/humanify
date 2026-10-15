@@ -213,7 +213,52 @@ def patch_sources(entry, truth, chm):
         for i, row in load_chained(entry, chm).items():
             if srcs[i][0] == "<app>":
                 srcs[i] = list(row)
+    if RULES9["npmchain"]:
+        for i, row in load_chained9(entry).items():
+            if srcs[i][0] == row[3]:
+                srcs[i] = list(row[:3])
     return {**truth, "sources": srcs}
+
+
+# ---------------------------------------------------------------- scorer 9 (exp120): chained non-npm sources
+
+# A chained source (path not on disk, listed by an installed package's own map) whose path names a package npm does
+# not have (`node_modules/@primevue/src/...`, from @primevue/core's `../../src/` sources) keeps the real package
+# whose map listed it. Frozen per corpus by experiments/120-truth-families/scorer9/chained9.py as
+# <DATA>/truth/<id>.chained9.json.gz + chained9[-<corpus>].json; each row is [package, version, file, old label]
+# and applies only to a source still carrying that old label. Off: scorer 8's truth exactly.
+RULES9 = {"npmchain": True}
+_CHAINED9 = {}
+
+
+def chained9_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "chained9.json" if c == "dev" else f"chained9-{c}.json")
+
+
+def load_chained9_manifest():
+    if not RULES9["npmchain"]:
+        return None
+    p = chained9_manifest_path()
+    if p not in _CHAINED9:
+        with open(p) as fh:
+            _CHAINED9[p] = json.load(fh)
+    return _CHAINED9[p]
+
+
+def chained9_sha():
+    m = load_chained9_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
+def load_chained9(entry):
+    m = load_chained9_manifest()
+    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".chained9.json.gz")
+    got = sha256_file(p)
+    if got != m["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: chained9 {p} sha256 {got[:12]} != {os.path.basename(chained9_manifest_path())}")
+    with gzip.open(p, "rt") as fh:
+        return {int(k): v for k, v in json.load(fh)["sources"].items()}
 
 
 # ---------------------------------------------------------------- scorer 7 (exp112): two more copy shapes

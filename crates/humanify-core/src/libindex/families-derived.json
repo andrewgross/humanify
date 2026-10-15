@@ -58,6 +58,12 @@
       "rule": "fork"
     },
     {
+      "a": "better-ajv-errors",
+      "b": "@stoplight/better-ajv-errors",
+      "evidence": "github.com/atlassian/better-ajv-errors -> github.com/stoplightio/better-ajv-errors",
+      "rule": "fork"
+    },
+    {
       "a": "bin-check",
       "b": "@xhmikosr/bin-check",
       "evidence": "github.com/kevva/bin-check -> github.com/xhmikosr/bin-check",
@@ -244,9 +250,21 @@
       "rule": "fork"
     },
     {
+      "a": "get-pixels",
+      "b": "@cronvel/get-pixels",
+      "evidence": "github.com/scijs/get-pixels -> github.com/cronvel/get-pixels",
+      "rule": "fork"
+    },
+    {
       "a": "global",
       "b": "@storybook/global",
       "evidence": "github.com/raynos/global -> github.com/storybookjs/global",
+      "rule": "fork"
+    },
+    {
+      "a": "graphlib",
+      "b": "@snyk/graphlib",
+      "evidence": "github.com/dagrejs/graphlib -> github.com/snyk/graphlib",
       "rule": "fork"
     },
     {
@@ -388,6 +406,12 @@
       "rule": "fork"
     },
     {
+      "a": "react-resizable-panels",
+      "b": "@iamevan/react-resizable-panels",
+      "evidence": "github.com/bvaughn/react-resizable-panels -> github.com/iamevanyt/react-resizable-panels",
+      "rule": "fork"
+    },
+    {
       "a": "react-slick",
       "b": "@ant-design/react-slick",
       "evidence": "github.com/akiran/react-slick -> github.com/ant-design/react-slick",
@@ -487,6 +511,12 @@
       "a": "xml-js",
       "b": "@netless/xml-js",
       "evidence": "github.com/nashwaan/xml-js -> github.com/netless-io/xml-js",
+      "rule": "fork"
+    },
+    {
+      "a": "yaml-ast-parser",
+      "b": "@stoplight/yaml-ast-parser",
+      "evidence": "github.com/mulesoft-labs/yaml-ast-parser -> github.com/stoplightio/yaml-ast-parser",
       "rule": "fork"
     },
     {
@@ -862,6 +892,12 @@
       "rule": "rename"
     },
     {
+      "a": "cucumber-expressions",
+      "b": "@cucumber/cucumber-expressions",
+      "evidence": "@cucumber/cucumber-expressions",
+      "rule": "rename"
+    },
+    {
       "a": "electron-config",
       "b": "electron-store",
       "evidence": "electron-store",
@@ -871,6 +907,12 @@
       "a": "electron-prebuilt",
       "b": "electron",
       "evidence": "electron",
+      "rule": "rename"
+    },
+    {
+      "a": "elevenlabs",
+      "b": "@elevenlabs/elevenlabs-js",
+      "evidence": "@elevenlabs/elevenlabs-js",
       "rule": "rename"
     },
     {
@@ -907,6 +949,12 @@
       "a": "find-cache-dir",
       "b": "find-cache-directory",
       "evidence": "find-cache-directory",
+      "rule": "rename"
+    },
+    {
+      "a": "gherkin",
+      "b": "@cucumber/gherkin",
+      "evidence": "@cucumber/gherkin",
       "rule": "rename"
     },
     {
@@ -1259,6 +1307,12 @@
     },
     {
       "a": "@ai-sdk/alibaba",
+      "b": "@ai-sdk/cerebras",
+      "evidence": "github.com/vercel/ai",
+      "rule": "repo"
+    },
+    {
+      "a": "@ai-sdk/alibaba",
       "b": "@ai-sdk/cohere",
       "evidence": "github.com/vercel/ai",
       "rule": "repo"
@@ -1331,6 +1385,12 @@
     },
     {
       "a": "@ai-sdk/alibaba",
+      "b": "@ai-sdk/otel",
+      "evidence": "github.com/vercel/ai",
+      "rule": "repo"
+    },
+    {
+      "a": "@ai-sdk/alibaba",
       "b": "@ai-sdk/perplexity",
       "evidence": "github.com/vercel/ai",
       "rule": "repo"
@@ -1373,6 +1433,12 @@
     },
     {
       "a": "@ai-sdk/alibaba",
+      "b": "@ai-sdk/voyage",
+      "evidence": "github.com/vercel/ai",
+      "rule": "repo"
+    },
+    {
+      "a": "@ai-sdk/alibaba",
       "b": "@ai-sdk/vue",
       "evidence": "github.com/vercel/ai",
       "rule": "repo"
@@ -1380,6 +1446,12 @@
     {
       "a": "@ai-sdk/alibaba",
       "b": "@ai-sdk/xai",
+      "evidence": "github.com/vercel/ai",
+      "rule": "repo"
+    },
+    {
+      "a": "@ai-sdk/alibaba",
+      "b": "@ai-sdk/zai",
       "evidence": "github.com/vercel/ai",
       "rule": "repo"
     },
@@ -2263,6 +2335,12 @@
       "a": "@assemblyscript/loader",
       "b": "assemblyscript",
       "evidence": "github.com/assemblyscript/assemblyscript",
+      "rule": "repo"
+    },
+    {
+      "a": "@ast-grep/napi",
+      "b": "@ast-grep/napi-linux-x64-gnu",
+      "evidence": "github.com/ast-grep/ast-grep",
       "rule": "repo"
     },
     {
@@ -6142,9 +6220,27 @@
       "rule": "repo"
     },
     {
+      "a": "@composio/core",
+      "b": "@composio/json-schema-to-zod",
+      "evidence": "github.com/composiohq/composio",
+      "rule": "repo"
+    },
+    {
+      "a": "@composio/core",
+      "b": "@composio/openai",
+      "evidence": "github.com/composiohq/composio",
+      "rule": "repo"
+    },
+    {
       "a": "@connectrpc/connect",
       "b": "@connectrpc/connect-web",
       "evidence": "github.com/connectrpc/connect-es",
+      "rule": "repo"
+    },
+    {
+      "a": "@contentful/rich-text-html-renderer",
+      "b": "@contentful/rich-text-types",
+      "evidence": "github.com/contentful/rich-text",
       "rule": "repo"
     },
     {
@@ -7030,6 +7126,12 @@
       "rule": "repo"
     },
     {
+      "a": "@devframes/agentic",
+      "b": "devframe",
+      "evidence": "github.com/devframes/devframe",
+      "rule": "repo"
+    },
+    {
       "a": "@dicebear/converter",
       "b": "@dicebear/core",
       "evidence": "github.com/dicebear/dicebear",
@@ -7411,6 +7513,12 @@
       "a": "@element-plus/icons-svg",
       "b": "@element-plus/icons-vue",
       "evidence": "github.com/element-plus/element-plus-icons",
+      "rule": "repo"
+    },
+    {
+      "a": "@elevenlabs/elevenlabs-js",
+      "b": "elevenlabs",
+      "evidence": "github.com/elevenlabs/elevenlabs-js",
       "rule": "repo"
     },
     {
@@ -8107,6 +8215,42 @@
       "a": "@ethersproject/abi",
       "b": "ethers",
       "evidence": "github.com/ethers-io/ethers.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@evomap/evolver-adapter-public",
+      "b": "@evomap/evolver-cli",
+      "evidence": "github.com/evomap/evolver",
+      "rule": "repo"
+    },
+    {
+      "a": "@evomap/evolver-adapter-public",
+      "b": "@evomap/evolver-core",
+      "evidence": "github.com/evomap/evolver",
+      "rule": "repo"
+    },
+    {
+      "a": "@evomap/evolver-adapter-public",
+      "b": "@evomap/evolver-mcp",
+      "evidence": "github.com/evomap/evolver",
+      "rule": "repo"
+    },
+    {
+      "a": "@evomap/evolver-adapter-public",
+      "b": "@evomap/evolver-proxy",
+      "evidence": "github.com/evomap/evolver",
+      "rule": "repo"
+    },
+    {
+      "a": "@evomap/evolver-adapter-public",
+      "b": "@evomap/evolver-runtime-adapters",
+      "evidence": "github.com/evomap/evolver",
+      "rule": "repo"
+    },
+    {
+      "a": "@evomap/evolver-adapter-public",
+      "b": "@evomap/evolver-webui",
+      "evidence": "github.com/evomap/evolver",
       "rule": "repo"
     },
     {
@@ -9269,7 +9413,31 @@
     },
     {
       "a": "@fontsource-variable/inter",
+      "b": "@fontsource-variable/roboto",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
       "b": "@fontsource-variable/rubik",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
+      "b": "@fontsource-variable/source-sans-3",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
+      "b": "@fontsource-variable/source-serif-4",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
+      "b": "@fontsource/carlito",
       "evidence": "github.com/fontsource/font-files",
       "rule": "repo"
     },
@@ -9293,6 +9461,12 @@
     },
     {
       "a": "@fontsource-variable/inter",
+      "b": "@fontsource/jetbrains-mono",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
       "b": "@fontsource/maple-mono",
       "evidence": "github.com/fontsource/font-files",
       "rule": "repo"
@@ -9306,6 +9480,12 @@
     {
       "a": "@fontsource-variable/inter",
       "b": "@fontsource/roboto",
+      "evidence": "github.com/fontsource/font-files",
+      "rule": "repo"
+    },
+    {
+      "a": "@fontsource-variable/inter",
+      "b": "@fontsource/space-mono",
       "evidence": "github.com/fontsource/font-files",
       "rule": "repo"
     },
@@ -9378,6 +9558,12 @@
     {
       "a": "@fortawesome/fontawesome",
       "b": "@fortawesome/fontawesome-free",
+      "evidence": "github.com/fortawesome/font-awesome",
+      "rule": "repo"
+    },
+    {
+      "a": "@fortawesome/fontawesome",
+      "b": "@fortawesome/fontawesome-free-solid",
       "evidence": "github.com/fortawesome/font-awesome",
       "rule": "repo"
     },
@@ -9484,187 +9670,193 @@
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
+      "b": "@google-cloud/bigquery",
+      "evidence": "github.com/googleapis/google-cloud-node",
+      "rule": "repo"
+    },
+    {
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/common",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/firestore",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/firestore-api",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/functions",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/logging",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/logging-api",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/paginator",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/precise-date",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/projectify",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/promisify",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/pubsub",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/pubsub-api",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/resource-manager",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/spanner",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/storage",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/text-to-speech",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "@google-cloud/translate",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "gapic-tools",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "gaxios",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "gcp-metadata",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "google-auth-library",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "google-gax",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "google-logging-utils",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "google-proto-files",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "googleapis-common",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "jsdoc-fresh",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "jsdoc-region-tag",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "pack-n-play",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "proto3-json-serializer",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "retry-request",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
     },
     {
-      "a": "@google-cloud/bigquery",
+      "a": "@google-cloud/aiplatform",
       "b": "teeny-request",
       "evidence": "github.com/googleapis/google-cloud-node",
       "rule": "repo"
@@ -9913,6 +10105,12 @@
       "a": "@happy-dom/global-registrator",
       "b": "happy-dom",
       "evidence": "github.com/capricorn86/happy-dom",
+      "rule": "repo"
+    },
+    {
+      "a": "@headless-tree/core",
+      "b": "@headless-tree/react",
+      "evidence": "github.com/lukasbach/headless-tree",
       "rule": "repo"
     },
     {
@@ -10468,6 +10666,24 @@
       "rule": "repo"
     },
     {
+      "a": "@huggingface/hub",
+      "b": "@huggingface/inference",
+      "evidence": "github.com/huggingface/huggingface.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@huggingface/hub",
+      "b": "@huggingface/jinja",
+      "evidence": "github.com/huggingface/huggingface.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@huggingface/hub",
+      "b": "@huggingface/xetchunk-wasm",
+      "evidence": "github.com/huggingface/huggingface.js",
+      "rule": "repo"
+    },
+    {
       "a": "@humanfs/core",
       "b": "@humanfs/node",
       "evidence": "github.com/humanwhocodes/humanfs",
@@ -10843,6 +11059,84 @@
       "a": "@inquirer/ansi",
       "b": "inquirer",
       "evidence": "github.com/sboudrias/inquirer.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/auto-scroll",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/auto-start",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/core",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/inertia",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/interact",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/interactjs",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/modifiers",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/offset",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/pointer-events",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/reflow",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/snappers",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "@interactjs/utils",
+      "evidence": "github.com/taye/interact.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@interactjs/actions",
+      "b": "interactjs",
+      "evidence": "github.com/taye/interact.js",
       "rule": "repo"
     },
     {
@@ -12401,6 +12695,12 @@
     },
     {
       "a": "@jsep-plugin/assignment",
+      "b": "@jsep-plugin/ternary",
+      "evidence": "github.com/ericsmekens/jsep",
+      "rule": "repo"
+    },
+    {
+      "a": "@jsep-plugin/assignment",
       "b": "jsep",
       "evidence": "github.com/ericsmekens/jsep",
       "rule": "repo"
@@ -13636,6 +13936,24 @@
       "rule": "repo"
     },
     {
+      "a": "@mdit-vue/plugin-component",
+      "b": "@mdit-vue/shared",
+      "evidence": "github.com/mdit-vue/mdit-vue",
+      "rule": "repo"
+    },
+    {
+      "a": "@mdit/helper",
+      "b": "@mdit/plugin-attrs",
+      "evidence": "github.com/mdit-plugins/mdit-plugins",
+      "rule": "repo"
+    },
+    {
+      "a": "@mdit/helper",
+      "b": "@mdit/plugin-container",
+      "evidence": "github.com/mdit-plugins/mdit-plugins",
+      "rule": "repo"
+    },
+    {
       "a": "@mdit/helper",
       "b": "@mdit/plugin-katex",
       "evidence": "github.com/mdit-plugins/mdit-plugins",
@@ -14296,15 +14614,51 @@
       "rule": "repo"
     },
     {
+      "a": "@napi-rs/keyring",
+      "b": "@napi-rs/keyring-linux-x64-gnu",
+      "evidence": "github.com/brooooooklyn/keyring-node",
+      "rule": "repo"
+    },
+    {
       "a": "@napi-rs/lzma",
       "b": "@napi-rs/lzma-linux-x64-gnu",
       "evidence": "github.com/brooooooklyn/lzma",
       "rule": "repo"
     },
     {
+      "a": "@napi-rs/wasm-tools",
+      "b": "@napi-rs/wasm-tools-linux-x64-gnu",
+      "evidence": "github.com/napi-rs/wasm-tools",
+      "rule": "repo"
+    },
+    {
       "a": "@neon-rs/cli",
       "b": "@neon-rs/load",
       "evidence": "github.com/neon-bindings/neon-rs",
+      "rule": "repo"
+    },
+    {
+      "a": "@nestcloud/brakes",
+      "b": "@nestcloud/common",
+      "evidence": "github.com/nest-cloud/nestcloud",
+      "rule": "repo"
+    },
+    {
+      "a": "@nestcloud/brakes",
+      "b": "@nestcloud/consul-loadbalance",
+      "evidence": "github.com/nest-cloud/nestcloud",
+      "rule": "repo"
+    },
+    {
+      "a": "@nestcloud/brakes",
+      "b": "@nestcloud/core",
+      "evidence": "github.com/nest-cloud/nestcloud",
+      "rule": "repo"
+    },
+    {
+      "a": "@nestcloud/brakes",
+      "b": "@nestcloud/feign",
+      "evidence": "github.com/nest-cloud/nestcloud",
       "rule": "repo"
     },
     {
@@ -15514,6 +15868,12 @@
       "rule": "repo"
     },
     {
+      "a": "@oxc-node/cli",
+      "b": "@oxc-node/core-linux-x64-gnu",
+      "evidence": "github.com/oxc-project/oxc-node",
+      "rule": "repo"
+    },
+    {
       "a": "@oxc-project/types",
       "b": "@oxfmt/binding-android-arm-eabi",
       "evidence": "github.com/oxc-project/oxc",
@@ -15881,6 +16241,12 @@
     },
     {
       "a": "@parcel/cache",
+      "b": "@parcel/runtime-js",
+      "evidence": "github.com/parcel-bundler/parcel",
+      "rule": "repo"
+    },
+    {
+      "a": "@parcel/cache",
       "b": "@parcel/rust",
       "evidence": "github.com/parcel-bundler/parcel",
       "rule": "repo"
@@ -16175,7 +16541,73 @@
     },
     {
       "a": "@percy/cli",
+      "b": "@percy/cli-command",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/cli-doctor",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/cli-pdf",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/client",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/config",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/core",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/dom",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/env",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
       "b": "@percy/logger",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/monitoring",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/sdk-utils",
+      "evidence": "github.com/percy/cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@percy/cli",
+      "b": "@percy/webdriver-utils",
       "evidence": "github.com/percy/cli",
       "rule": "repo"
     },
@@ -16696,25 +17128,31 @@
       "rule": "repo"
     },
     {
-      "a": "@posthog/browser-common",
+      "a": "@posthog/ai",
+      "b": "@posthog/browser-common",
+      "evidence": "github.com/posthog/posthog-js",
+      "rule": "repo"
+    },
+    {
+      "a": "@posthog/ai",
       "b": "@posthog/core",
       "evidence": "github.com/posthog/posthog-js",
       "rule": "repo"
     },
     {
-      "a": "@posthog/browser-common",
+      "a": "@posthog/ai",
       "b": "@posthog/types",
       "evidence": "github.com/posthog/posthog-js",
       "rule": "repo"
     },
     {
-      "a": "@posthog/browser-common",
+      "a": "@posthog/ai",
       "b": "posthog-js",
       "evidence": "github.com/posthog/posthog-js",
       "rule": "repo"
     },
     {
-      "a": "@posthog/browser-common",
+      "a": "@posthog/ai",
       "b": "posthog-node",
       "evidence": "github.com/posthog/posthog-js",
       "rule": "repo"
@@ -16811,6 +17249,12 @@
     },
     {
       "a": "@prisma/adapter-better-sqlite3",
+      "b": "@prisma/credentials-store",
+      "evidence": "github.com/prisma/prisma",
+      "rule": "repo"
+    },
+    {
+      "a": "@prisma/adapter-better-sqlite3",
       "b": "@prisma/debug",
       "evidence": "github.com/prisma/prisma",
       "rule": "repo"
@@ -16855,6 +17299,12 @@
       "a": "@prisma/cli-engine",
       "b": "prisma",
       "evidence": "github.com/prisma/prisma-cli",
+      "rule": "repo"
+    },
+    {
+      "a": "@prisma/composer",
+      "b": "@prisma/composer-cli",
+      "evidence": "github.com/prisma/composer",
       "rule": "repo"
     },
     {
@@ -16963,6 +17413,12 @@
       "a": "@puppeteer/browsers",
       "b": "puppeteer-core",
       "evidence": "github.com/puppeteer/puppeteer",
+      "rule": "repo"
+    },
+    {
+      "a": "@qawolf/api-contracts",
+      "b": "@qawolf/flow-targets",
+      "evidence": "github.com/qawolf/platform",
       "rule": "repo"
     },
     {
@@ -18022,6 +18478,12 @@
       "rule": "repo"
     },
     {
+      "a": "@reddojs/core",
+      "b": "@reddojs/svelte",
+      "evidence": "github.com/eihabkhan/reddojs",
+      "rule": "repo"
+    },
+    {
       "a": "@redhat-developer/locators",
       "b": "@redhat-developer/page-objects",
       "evidence": "github.com/redhat-developer/vscode-extension-tester",
@@ -18922,6 +19384,54 @@
       "rule": "repo"
     },
     {
+      "a": "@rrweb/record",
+      "b": "@rrweb/replay",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "@rrweb/types",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "@rrweb/utils",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "@sentry-internal/rrweb",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "@sentry-internal/rrweb-snapshot",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "@sentry/rrweb",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "@sentry/rrweb-snapshot",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
+      "a": "@rrweb/record",
+      "b": "rrweb",
+      "evidence": "github.com/rrweb-io/rrweb",
+      "rule": "repo"
+    },
+    {
       "a": "@rspack/binding",
       "b": "@rspack/cli",
       "evidence": "github.com/web-infra-dev/rspack",
@@ -19355,6 +19865,12 @@
     },
     {
       "a": "@sentry-internal/browser-utils",
+      "b": "@sentry/eslint-plugin-sdk",
+      "evidence": "github.com/getsentry/sentry-javascript",
+      "rule": "repo"
+    },
+    {
+      "a": "@sentry-internal/browser-utils",
       "b": "@sentry/feedback",
       "evidence": "github.com/getsentry/sentry-javascript",
       "rule": "repo"
@@ -19392,6 +19908,12 @@
     {
       "a": "@sentry-internal/browser-utils",
       "b": "@sentry/node-core",
+      "evidence": "github.com/getsentry/sentry-javascript",
+      "rule": "repo"
+    },
+    {
+      "a": "@sentry-internal/browser-utils",
+      "b": "@sentry/node-native",
       "evidence": "github.com/getsentry/sentry-javascript",
       "rule": "repo"
     },
@@ -20290,6 +20812,12 @@
       "rule": "repo"
     },
     {
+      "a": "@sonar/scan",
+      "b": "sonarqube-scanner",
+      "evidence": "github.com/sonarsource/sonar-scanner-npm",
+      "rule": "repo"
+    },
+    {
       "a": "@stablelib/base64",
       "b": "@stablelib/binary",
       "evidence": "github.com/stablelib/stablelib",
@@ -20383,6 +20911,60 @@
       "a": "@stardust-ui/docs-components",
       "b": "@stardust-ui/react-proptypes",
       "evidence": "github.com/stardust-ui/react",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-formats",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-formatters",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-functions",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-parsers",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-ref-resolver",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-ruleset-bundler",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-ruleset-migrator",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-rulesets",
+      "evidence": "github.com/stoplightio/spectral",
+      "rule": "repo"
+    },
+    {
+      "a": "@stoplight/spectral-core",
+      "b": "@stoplight/spectral-runtime",
+      "evidence": "github.com/stoplightio/spectral",
       "rule": "repo"
     },
     {
@@ -21214,6 +21796,90 @@
       "rule": "repo"
     },
     {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/app",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/content-disposition",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/cookie",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/cookie-signature",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/encode-url",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/etag",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/forwarded",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/proxy-addr",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/req",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/res",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/router",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/send",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/type-is",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
+      "a": "@tinyhttp/accepts",
+      "b": "@tinyhttp/url",
+      "evidence": "github.com/tinyhttp/tinyhttp",
+      "rule": "repo"
+    },
+    {
       "a": "@tiptap/core",
       "b": "@tiptap/extension-blockquote",
       "evidence": "github.com/ueberdosis/tiptap",
@@ -21509,6 +22175,12 @@
     },
     {
       "a": "@tiptap/core",
+      "b": "@tiptap/extension-unique-id",
+      "evidence": "github.com/ueberdosis/tiptap",
+      "rule": "repo"
+    },
+    {
+      "a": "@tiptap/core",
       "b": "@tiptap/extensions",
       "evidence": "github.com/ueberdosis/tiptap",
       "rule": "repo"
@@ -21559,6 +22231,12 @@
       "a": "@tomjs/logger",
       "b": "@tomjs/node",
       "evidence": "github.com/tomjs/utils",
+      "rule": "repo"
+    },
+    {
+      "a": "@toondepauw/node-zstd",
+      "b": "@toondepauw/node-zstd-linux-x64-gnu",
+      "evidence": "github.com/toondepauw/node-zstd",
       "rule": "repo"
     },
     {
@@ -24899,7 +25577,49 @@
     },
     {
       "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-alpha",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-block",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-colorful",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
       "b": "@uiw/react-color-editable-input",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-editable-input-rgba",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-hue",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-saturation",
+      "evidence": "github.com/uiwjs/react-color",
+      "rule": "repo"
+    },
+    {
+      "a": "@uiw/color-convert",
+      "b": "@uiw/react-color-sketch",
       "evidence": "github.com/uiwjs/react-color",
       "rule": "repo"
     },
@@ -27083,13 +27803,37 @@
     },
     {
       "a": "@xterm/addon-attach",
+      "b": "xterm-addon-image",
+      "evidence": "github.com/xtermjs/xterm.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@xterm/addon-attach",
+      "b": "xterm-addon-ligatures",
+      "evidence": "github.com/xtermjs/xterm.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@xterm/addon-attach",
       "b": "xterm-addon-search",
       "evidence": "github.com/xtermjs/xterm.js",
       "rule": "repo"
     },
     {
       "a": "@xterm/addon-attach",
+      "b": "xterm-addon-unicode11",
+      "evidence": "github.com/xtermjs/xterm.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@xterm/addon-attach",
       "b": "xterm-addon-web-links",
+      "evidence": "github.com/xtermjs/xterm.js",
+      "rule": "repo"
+    },
+    {
+      "a": "@xterm/addon-attach",
+      "b": "xterm-addon-webgl",
       "evidence": "github.com/xtermjs/xterm.js",
       "rule": "repo"
     },
@@ -27953,7 +28697,43 @@
     },
     {
       "a": "artplayer",
+      "b": "artplayer-plugin-ambilight",
+      "evidence": "github.com/zhw2590582/artplayer",
+      "rule": "repo"
+    },
+    {
+      "a": "artplayer",
+      "b": "artplayer-plugin-chapter",
+      "evidence": "github.com/zhw2590582/artplayer",
+      "rule": "repo"
+    },
+    {
+      "a": "artplayer",
       "b": "artplayer-plugin-danmuku",
+      "evidence": "github.com/zhw2590582/artplayer",
+      "rule": "repo"
+    },
+    {
+      "a": "artplayer",
+      "b": "artplayer-plugin-dash-control",
+      "evidence": "github.com/zhw2590582/artplayer",
+      "rule": "repo"
+    },
+    {
+      "a": "artplayer",
+      "b": "artplayer-plugin-document-pip",
+      "evidence": "github.com/zhw2590582/artplayer",
+      "rule": "repo"
+    },
+    {
+      "a": "artplayer",
+      "b": "artplayer-plugin-hls-control",
+      "evidence": "github.com/zhw2590582/artplayer",
+      "rule": "repo"
+    },
+    {
+      "a": "artplayer",
+      "b": "artplayer-plugin-jassub",
       "evidence": "github.com/zhw2590582/artplayer",
       "rule": "repo"
     },
@@ -28750,6 +29530,24 @@
       "rule": "repo"
     },
     {
+      "a": "cozy-client",
+      "b": "cozy-stack-client",
+      "evidence": "github.com/linagora/cozy-client",
+      "rule": "repo"
+    },
+    {
+      "a": "cozy-device-helper",
+      "b": "cozy-flags",
+      "evidence": "github.com/cozy/cozy-libs",
+      "rule": "repo"
+    },
+    {
+      "a": "cozy-device-helper",
+      "b": "cozy-realtime",
+      "evidence": "github.com/cozy/cozy-libs",
+      "rule": "repo"
+    },
+    {
       "a": "create-gatsby",
       "b": "gatsby",
       "evidence": "github.com/gatsbyjs/gatsby",
@@ -29149,6 +29947,108 @@
       "a": "diagnostic-channel",
       "b": "diagnostic-channel-publishers",
       "evidence": "github.com/microsoft/node-diagnostic-channel",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-ca-valencia",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-de",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-en",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-en-gb",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-es",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-eu",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-fr",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-it",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-ka",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-lt",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-nl",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-pl",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-pt",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-ru",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-sv",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-tr",
+      "evidence": "github.com/wooorm/dictionaries",
+      "rule": "repo"
+    },
+    {
+      "a": "dictionary-ca",
+      "b": "dictionary-uk",
+      "evidence": "github.com/wooorm/dictionaries",
       "rule": "repo"
     },
     {
@@ -29680,6 +30580,12 @@
       "rule": "repo"
     },
     {
+      "a": "impit",
+      "b": "impit-linux-x64-gnu",
+      "evidence": "github.com/apify/impit",
+      "rule": "repo"
+    },
+    {
       "a": "is-class",
       "b": "is-class-hotfix",
       "evidence": "github.com/miguelmota/is-class",
@@ -29725,6 +30631,18 @@
       "a": "karma-typescript",
       "b": "karma-typescript-es6-transform",
       "evidence": "github.com/monounity/karma-typescript",
+      "rule": "repo"
+    },
+    {
+      "a": "langfuse",
+      "b": "langfuse-core",
+      "evidence": "github.com/langfuse/langfuse-js",
+      "rule": "repo"
+    },
+    {
+      "a": "langfuse",
+      "b": "langfuse-vercel",
+      "evidence": "github.com/langfuse/langfuse-js",
       "rule": "repo"
     },
     {
@@ -30215,6 +31133,12 @@
     },
     {
       "a": "lodash",
+      "b": "lodash.constant",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
       "b": "lodash.create",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
@@ -30294,6 +31218,12 @@
     {
       "a": "lodash",
       "b": "lodash.findindex",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
+      "b": "lodash.flatmap",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
     },
@@ -30767,6 +31697,12 @@
     },
     {
       "a": "lodash",
+      "b": "lodash.size",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
       "b": "lodash.snakecase",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
@@ -30840,6 +31776,12 @@
     {
       "a": "lodash",
       "b": "lodash.topairs",
+      "evidence": "github.com/lodash/lodash",
+      "rule": "repo"
+    },
+    {
+      "a": "lodash",
+      "b": "lodash.topath",
       "evidence": "github.com/lodash/lodash",
       "rule": "repo"
     },
@@ -31264,6 +32206,30 @@
       "rule": "repo"
     },
     {
+      "a": "markdown-it-cjk-friendly",
+      "b": "mdast-util-to-markdown-cjk-friendly",
+      "evidence": "github.com/tats-u/markdown-cjk-friendly",
+      "rule": "repo"
+    },
+    {
+      "a": "markdown-it-cjk-friendly",
+      "b": "micromark-extension-cjk-friendly",
+      "evidence": "github.com/tats-u/markdown-cjk-friendly",
+      "rule": "repo"
+    },
+    {
+      "a": "markdown-it-cjk-friendly",
+      "b": "micromark-extension-cjk-friendly-util",
+      "evidence": "github.com/tats-u/markdown-cjk-friendly",
+      "rule": "repo"
+    },
+    {
+      "a": "markdown-it-cjk-friendly",
+      "b": "remark-cjk-friendly",
+      "evidence": "github.com/tats-u/markdown-cjk-friendly",
+      "rule": "repo"
+    },
+    {
       "a": "markdownlint-cli2",
       "b": "markdownlint-cli2-formatter-default",
       "evidence": "github.com/davidanson/markdownlint-cli2",
@@ -31285,24 +32251,6 @@
       "a": "markmap-common",
       "b": "markmap-view",
       "evidence": "github.com/markmap/markmap",
-      "rule": "repo"
-    },
-    {
-      "a": "mdast-util-to-markdown-cjk-friendly",
-      "b": "micromark-extension-cjk-friendly",
-      "evidence": "github.com/tats-u/markdown-cjk-friendly",
-      "rule": "repo"
-    },
-    {
-      "a": "mdast-util-to-markdown-cjk-friendly",
-      "b": "micromark-extension-cjk-friendly-util",
-      "evidence": "github.com/tats-u/markdown-cjk-friendly",
-      "rule": "repo"
-    },
-    {
-      "a": "mdast-util-to-markdown-cjk-friendly",
-      "b": "remark-cjk-friendly",
-      "evidence": "github.com/tats-u/markdown-cjk-friendly",
       "rule": "repo"
     },
     {
@@ -31582,20 +32530,182 @@
       "rule": "repo"
     },
     {
-      "a": "mjml-core",
+      "a": "mjml",
+      "b": "mjml-accordion",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-body",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-button",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-carousel",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-column",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-core",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-divider",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-group",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-attributes",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-breakpoint",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-font",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-html-attributes",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-preview",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-style",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-head-title",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-hero",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-image",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
       "b": "mjml-migrate",
       "evidence": "github.com/mjmlio/mjml",
       "rule": "repo"
     },
     {
-      "a": "mjml-core",
+      "a": "mjml",
+      "b": "mjml-navbar",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
       "b": "mjml-parser-xml",
       "evidence": "github.com/mjmlio/mjml",
       "rule": "repo"
     },
     {
-      "a": "mjml-core",
+      "a": "mjml",
+      "b": "mjml-preset-core",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-raw",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-section",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-social",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-spacer",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-table",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-text",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
       "b": "mjml-validator",
+      "evidence": "github.com/mjmlio/mjml",
+      "rule": "repo"
+    },
+    {
+      "a": "mjml",
+      "b": "mjml-wrapper",
       "evidence": "github.com/mjmlio/mjml",
       "rule": "repo"
     },
@@ -31756,6 +32866,12 @@
       "rule": "repo"
     },
     {
+      "a": "oxlint-plugin-react-doctor",
+      "b": "react-doctor",
+      "evidence": "github.com/millionco/react-doctor",
+      "rule": "repo"
+    },
+    {
       "a": "parse5",
       "b": "parse5-html-rewriting-stream",
       "evidence": "github.com/inikulin/parse5",
@@ -31847,6 +32963,12 @@
     },
     {
       "a": "pouchdb",
+      "b": "pouchdb-abstract-mapreduce",
+      "evidence": "github.com/pouchdb/pouchdb",
+      "rule": "repo"
+    },
+    {
+      "a": "pouchdb",
       "b": "pouchdb-ajax",
       "evidence": "github.com/pouchdb/pouchdb",
       "rule": "repo"
@@ -31901,6 +33023,12 @@
     },
     {
       "a": "pouchdb",
+      "b": "pouchdb-find",
+      "evidence": "github.com/pouchdb/pouchdb",
+      "rule": "repo"
+    },
+    {
+      "a": "pouchdb",
       "b": "pouchdb-generate-replication-id",
       "evidence": "github.com/pouchdb/pouchdb",
       "rule": "repo"
@@ -31932,6 +33060,12 @@
     {
       "a": "pouchdb",
       "b": "pouchdb-promise",
+      "evidence": "github.com/pouchdb/pouchdb",
+      "rule": "repo"
+    },
+    {
+      "a": "pouchdb",
+      "b": "pouchdb-selector-core",
       "evidence": "github.com/pouchdb/pouchdb",
       "rule": "repo"
     },
@@ -33748,6 +34882,7 @@
       "generative-bayesian-network",
       "header-generator"
     ],
+    "github.com/apify/impit": ["impit", "impit-linux-x64-gnu"],
     "github.com/apollographql/apollo-client": [
       "@apollo/client",
       "apollo-cache",
@@ -33875,6 +35010,10 @@
     "github.com/assemblyscript/assemblyscript": [
       "@assemblyscript/loader",
       "assemblyscript"
+    ],
+    "github.com/ast-grep/ast-grep": [
+      "@ast-grep/napi",
+      "@ast-grep/napi-linux-x64-gnu"
     ],
     "github.com/atlassian/pragmatic-drag-and-drop": [
       "@atlaskit/pragmatic-drag-and-drop",
@@ -34472,6 +35611,10 @@
       "pg-protocol",
       "pg-query-stream"
     ],
+    "github.com/brooooooklyn/keyring-node": [
+      "@napi-rs/keyring",
+      "@napi-rs/keyring-linux-x64-gnu"
+    ],
     "github.com/brooooooklyn/lzma": [
       "@napi-rs/lzma",
       "@napi-rs/lzma-linux-x64-gnu"
@@ -34775,9 +35918,18 @@
       "@compodoc/ngd-core",
       "@compodoc/ngd-transformer"
     ],
+    "github.com/composiohq/composio": [
+      "@composio/core",
+      "@composio/json-schema-to-zod",
+      "@composio/openai"
+    ],
     "github.com/connectrpc/connect-es": [
       "@connectrpc/connect",
       "@connectrpc/connect-web"
+    ],
+    "github.com/contentful/rich-text": [
+      "@contentful/rich-text-html-renderer",
+      "@contentful/rich-text-types"
     ],
     "github.com/conventional-changelog/commitlint": [
       "@commitlint/cli",
@@ -34814,6 +35966,11 @@
       "git-semver-tags",
       "gulp-conventional-changelog",
       "standard-changelog"
+    ],
+    "github.com/cozy/cozy-libs": [
+      "cozy-device-helper",
+      "cozy-flags",
+      "cozy-realtime"
     ],
     "github.com/cssinjs/jss": [
       "css-jss",
@@ -35505,6 +36662,7 @@
       "fs-extra-p"
     ],
     "github.com/developit/unfetch": ["isomorphic-unfetch", "unfetch"],
+    "github.com/devframes/devframe": ["@devframes/agentic", "devframe"],
     "github.com/devongovett/png.js": ["png-js", "png-ts"],
     "github.com/dexie/dexie.js": [
       "dexie",
@@ -35658,6 +36816,7 @@
       "@earendil-works/pi-tui"
     ],
     "github.com/eemeli/make-plural": ["make-plural", "make-plural-compiler"],
+    "github.com/eihabkhan/reddojs": ["@reddojs/core", "@reddojs/svelte"],
     "github.com/electric-sql/pglite": [
       "@electric-sql/pglite",
       "@electric-sql/pglite-socket",
@@ -35686,6 +36845,10 @@
     "github.com/element-plus/element-plus-icons": [
       "@element-plus/icons-svg",
       "@element-plus/icons-vue"
+    ],
+    "github.com/elevenlabs/elevenlabs-js": [
+      "@elevenlabs/elevenlabs-js",
+      "elevenlabs"
     ],
     "github.com/emotion-js/emotion": [
       "@emotion/babel-plugin",
@@ -35732,6 +36895,7 @@
     "github.com/ericsmekens/jsep": [
       "@jsep-plugin/assignment",
       "@jsep-plugin/regex",
+      "@jsep-plugin/ternary",
       "jsep"
     ],
     "github.com/eshaz/icecast-metadata-js": [
@@ -35850,6 +37014,15 @@
       "@netlify/esbuild",
       "esbuild",
       "esbuild-wasm"
+    ],
+    "github.com/evomap/evolver": [
+      "@evomap/evolver-adapter-public",
+      "@evomap/evolver-cli",
+      "@evomap/evolver-core",
+      "@evomap/evolver-mcp",
+      "@evomap/evolver-proxy",
+      "@evomap/evolver-runtime-adapters",
+      "@evomap/evolver-webui"
     ],
     "github.com/expo/expo": [
       "@expo/config",
@@ -36034,13 +37207,19 @@
       "@fontsource-variable/inter",
       "@fontsource-variable/jetbrains-mono",
       "@fontsource-variable/noto-sans-sc",
+      "@fontsource-variable/roboto",
       "@fontsource-variable/rubik",
+      "@fontsource-variable/source-sans-3",
+      "@fontsource-variable/source-serif-4",
+      "@fontsource/carlito",
       "@fontsource/dm-mono",
       "@fontsource/dm-sans",
       "@fontsource/ibm-plex-mono",
+      "@fontsource/jetbrains-mono",
       "@fontsource/maple-mono",
       "@fontsource/noto-serif",
-      "@fontsource/roboto"
+      "@fontsource/roboto",
+      "@fontsource/space-mono"
     ],
     "github.com/form-data/form-data": ["@discordjs/form-data", "form-data"],
     "github.com/formatjs/formatjs": [
@@ -36060,6 +37239,7 @@
     "github.com/fortawesome/font-awesome": [
       "@fortawesome/fontawesome",
       "@fortawesome/fontawesome-free",
+      "@fortawesome/fontawesome-free-solid",
       "@fortawesome/fontawesome-svg-core",
       "@fortawesome/free-brands-svg-icons",
       "@fortawesome/free-regular-svg-icons",
@@ -36106,6 +37286,7 @@
       "@sentry/bundler-plugins",
       "@sentry/core",
       "@sentry/esbuild-plugin",
+      "@sentry/eslint-plugin-sdk",
       "@sentry/feedback",
       "@sentry/hub",
       "@sentry/integrations",
@@ -36113,6 +37294,7 @@
       "@sentry/nextjs",
       "@sentry/node",
       "@sentry/node-core",
+      "@sentry/node-native",
       "@sentry/opentelemetry",
       "@sentry/react",
       "@sentry/replay",
@@ -36147,6 +37329,7 @@
       "quicktype-typescript-input"
     ],
     "github.com/googleapis/google-cloud-node": [
+      "@google-cloud/aiplatform",
       "@google-cloud/bigquery",
       "@google-cloud/common",
       "@google-cloud/firestore",
@@ -36361,6 +37544,12 @@
     "github.com/hugeicons/hugeicons": [
       "@hugeicons/core-free-icons",
       "@hugeicons/react"
+    ],
+    "github.com/huggingface/huggingface.js": [
+      "@huggingface/hub",
+      "@huggingface/inference",
+      "@huggingface/jinja",
+      "@huggingface/xetchunk-wasm"
     ],
     "github.com/humanwhocodes/humanfs": ["@humanfs/core", "@humanfs/node"],
     "github.com/huolalatech/page-spy": [
@@ -36737,6 +37926,11 @@
       "@langchain/langgraph-checkpoint-sqlite",
       "@langchain/langgraph-sdk"
     ],
+    "github.com/langfuse/langfuse-js": [
+      "langfuse",
+      "langfuse-core",
+      "langfuse-vercel"
+    ],
     "github.com/larsgw/sync-fetch": ["@ardatan/sync-fetch", "sync-fetch"],
     "github.com/lddubeau/xml-conformance-suite": [
       "@xml-conformance-suite/js",
@@ -36774,6 +37968,7 @@
       "@libsql/isomorphic-fetch",
       "@libsql/isomorphic-ws"
     ],
+    "github.com/linagora/cozy-client": ["cozy-client", "cozy-stack-client"],
     "github.com/lingui/js-lingui": [
       "@lingui/babel-plugin-extract-messages",
       "@lingui/babel-plugin-lingui-macro",
@@ -36912,6 +38107,7 @@
       "lodash.chunk",
       "lodash.clone",
       "lodash.clonedeep",
+      "lodash.constant",
       "lodash.create",
       "lodash.curry",
       "lodash.debounce",
@@ -36926,6 +38122,7 @@
       "lodash.filter",
       "lodash.find",
       "lodash.findindex",
+      "lodash.flatmap",
       "lodash.flatten",
       "lodash.flattendeep",
       "lodash.flow",
@@ -37004,6 +38201,7 @@
       "lodash.sample",
       "lodash.set",
       "lodash.shuffle",
+      "lodash.size",
       "lodash.snakecase",
       "lodash.some",
       "lodash.sortby",
@@ -37017,6 +38215,7 @@
       "lodash.toarray",
       "lodash.tonumber",
       "lodash.topairs",
+      "lodash.topath",
       "lodash.toplainobject",
       "lodash.tostring",
       "lodash.transform",
@@ -37113,6 +38312,10 @@
       "lucide-react",
       "lucide-svelte",
       "lucide-vue-next"
+    ],
+    "github.com/lukasbach/headless-tree": [
+      "@headless-tree/core",
+      "@headless-tree/react"
     ],
     "github.com/lukeapage/pngjs2": ["pngjs-nozlib", "pngjs2"],
     "github.com/lukeed/polka": [
@@ -37211,8 +38414,14 @@
     ],
     "github.com/mdit-plugins/mdit-plugins": [
       "@mdit/helper",
+      "@mdit/plugin-attrs",
+      "@mdit/plugin-container",
       "@mdit/plugin-katex",
       "@mdit/plugin-tex"
+    ],
+    "github.com/mdit-vue/mdit-vue": [
+      "@mdit-vue/plugin-component",
+      "@mdit-vue/shared"
     ],
     "github.com/mdx-js/mdx": [
       "@mdx-js/loader",
@@ -37568,6 +38777,10 @@
       "@milkdown/transformer",
       "@milkdown/utils"
     ],
+    "github.com/millionco/react-doctor": [
+      "oxlint-plugin-react-doctor",
+      "react-doctor"
+    ],
     "github.com/mishoo/uglifyjs2": ["@sheetjs/uglify-js", "uglify-es"],
     "github.com/missive/emoji-mart": [
       "@emoji-mart/data",
@@ -37575,10 +38788,37 @@
       "emoji-mart"
     ],
     "github.com/mjmlio/mjml": [
+      "mjml",
+      "mjml-accordion",
+      "mjml-body",
+      "mjml-button",
+      "mjml-carousel",
+      "mjml-column",
       "mjml-core",
+      "mjml-divider",
+      "mjml-group",
+      "mjml-head",
+      "mjml-head-attributes",
+      "mjml-head-breakpoint",
+      "mjml-head-font",
+      "mjml-head-html-attributes",
+      "mjml-head-preview",
+      "mjml-head-style",
+      "mjml-head-title",
+      "mjml-hero",
+      "mjml-image",
       "mjml-migrate",
+      "mjml-navbar",
       "mjml-parser-xml",
-      "mjml-validator"
+      "mjml-preset-core",
+      "mjml-raw",
+      "mjml-section",
+      "mjml-social",
+      "mjml-spacer",
+      "mjml-table",
+      "mjml-text",
+      "mjml-validator",
+      "mjml-wrapper"
     ],
     "github.com/mljs/array": [
       "ml-array-max",
@@ -37712,6 +38952,10 @@
       "@node-rs/xxhash",
       "@node-rs/xxhash-linux-x64-gnu"
     ],
+    "github.com/napi-rs/wasm-tools": [
+      "@napi-rs/wasm-tools",
+      "@napi-rs/wasm-tools-linux-x64-gnu"
+    ],
     "github.com/nathancahill/split": ["react-split", "split.js"],
     "github.com/nearform/graphql-hooks": [
       "graphql-hooks",
@@ -37723,6 +38967,13 @@
       "neo4j-driver-core"
     ],
     "github.com/neon-bindings/neon-rs": ["@neon-rs/cli", "@neon-rs/load"],
+    "github.com/nest-cloud/nestcloud": [
+      "@nestcloud/brakes",
+      "@nestcloud/common",
+      "@nestcloud/consul-loadbalance",
+      "@nestcloud/core",
+      "@nestcloud/feign"
+    ],
     "github.com/nestjs/nest": [
       "@nestjs/common",
       "@nestjs/core",
@@ -37969,7 +39220,11 @@
       "oxlint",
       "oxlint-plugin-eslint"
     ],
-    "github.com/oxc-project/oxc-node": ["@oxc-node/cli", "@oxc-node/core"],
+    "github.com/oxc-project/oxc-node": [
+      "@oxc-node/cli",
+      "@oxc-node/core",
+      "@oxc-node/core-linux-x64-gnu"
+    ],
     "github.com/oxc-project/oxc-resolver": [
       "@oxc-resolver/binding-linux-x64-gnu",
       "oxc-resolver"
@@ -38017,6 +39272,7 @@
       "@parcel/package-manager",
       "@parcel/packager-ts",
       "@parcel/profiler",
+      "@parcel/runtime-js",
       "@parcel/rust",
       "@parcel/service-worker",
       "@parcel/transformer-typescript-tsc",
@@ -38067,7 +39323,21 @@
       "@peculiar/asn1-x509-post-quantum"
     ],
     "github.com/peculiarventures/pvtsutils": ["@peculiar/utils", "pvtsutils"],
-    "github.com/percy/cli": ["@percy/cli", "@percy/logger"],
+    "github.com/percy/cli": [
+      "@percy/cli",
+      "@percy/cli-command",
+      "@percy/cli-doctor",
+      "@percy/cli-pdf",
+      "@percy/client",
+      "@percy/config",
+      "@percy/core",
+      "@percy/dom",
+      "@percy/env",
+      "@percy/logger",
+      "@percy/monitoring",
+      "@percy/sdk-utils",
+      "@percy/webdriver-utils"
+    ],
     "github.com/petkaantonov/urlparser": [
       "@kamilkisiela/fast-url-parser",
       "fast-url-parser"
@@ -38205,6 +39475,7 @@
     ],
     "github.com/popperjs/popper-core": ["@popperjs/core", "@sxzz/popperjs-es"],
     "github.com/posthog/posthog-js": [
+      "@posthog/ai",
       "@posthog/browser-common",
       "@posthog/core",
       "@posthog/types",
@@ -38220,6 +39491,7 @@
     ],
     "github.com/pouchdb/pouchdb": [
       "pouchdb",
+      "pouchdb-abstract-mapreduce",
       "pouchdb-ajax",
       "pouchdb-binary-utils",
       "pouchdb-browser",
@@ -38229,12 +39501,14 @@
       "pouchdb-debug",
       "pouchdb-errors",
       "pouchdb-fetch",
+      "pouchdb-find",
       "pouchdb-generate-replication-id",
       "pouchdb-json",
       "pouchdb-mapreduce-utils",
       "pouchdb-md5",
       "pouchdb-merge",
       "pouchdb-promise",
+      "pouchdb-selector-core",
       "pouchdb-utils",
       "sublevel-pouchdb"
     ],
@@ -38257,6 +39531,7 @@
       "@primer/octicons",
       "@primer/octicons-react"
     ],
+    "github.com/prisma/composer": ["@prisma/composer", "@prisma/composer-cli"],
     "github.com/prisma/orm": ["@prisma/orm-framework", "@prisma/orm-toolchain"],
     "github.com/prisma/prisma": [
       "@prisma/adapter-better-sqlite3",
@@ -38264,6 +39539,7 @@
       "@prisma/client",
       "@prisma/client-runtime-utils",
       "@prisma/config",
+      "@prisma/credentials-store",
       "@prisma/debug",
       "@prisma/driver-adapter-utils",
       "@prisma/engines",
@@ -38301,6 +39577,10 @@
       "@puppeteer/browsers",
       "puppeteer",
       "puppeteer-core"
+    ],
+    "github.com/qawolf/platform": [
+      "@qawolf/api-contracts",
+      "@qawolf/flow-targets"
     ],
     "github.com/qmhc/unplugin-dts": ["unplugin-dts", "vite-plugin-dts"],
     "github.com/qunitjs/qunit": ["qunit", "qunitjs"],
@@ -38911,6 +40191,17 @@
       "eslint-formatter-friendly",
       "eslint-friendly-formatter"
     ],
+    "github.com/rrweb-io/rrweb": [
+      "@rrweb/record",
+      "@rrweb/replay",
+      "@rrweb/types",
+      "@rrweb/utils",
+      "@sentry-internal/rrweb",
+      "@sentry-internal/rrweb-snapshot",
+      "@sentry/rrweb",
+      "@sentry/rrweb-snapshot",
+      "rrweb"
+    ],
     "github.com/sanity-io/pkg-utils": ["@sanity/pkg-utils", "@sanity/tsconfig"],
     "github.com/sapphiredev/utilities": [
       "@sapphire/async-queue",
@@ -39146,6 +40437,10 @@
       "socket.io-parser"
     ],
     "github.com/solidjs/solid": ["babel-preset-solid", "solid-js"],
+    "github.com/sonarsource/sonar-scanner-npm": [
+      "@sonar/scan",
+      "sonarqube-scanner"
+    ],
     "github.com/spacingbat3/reforged": [
       "@reforged/maker-appimage",
       "@reforged/maker-types"
@@ -39181,6 +40476,18 @@
       "@simple-git/args-pathspec",
       "@simple-git/argv-parser",
       "simple-git"
+    ],
+    "github.com/stoplightio/spectral": [
+      "@stoplight/spectral-core",
+      "@stoplight/spectral-formats",
+      "@stoplight/spectral-formatters",
+      "@stoplight/spectral-functions",
+      "@stoplight/spectral-parsers",
+      "@stoplight/spectral-ref-resolver",
+      "@stoplight/spectral-ruleset-bundler",
+      "@stoplight/spectral-ruleset-migrator",
+      "@stoplight/spectral-rulesets",
+      "@stoplight/spectral-runtime"
     ],
     "github.com/storybookjs/storybook": [
       "@storybook/addon-a11y",
@@ -39353,6 +40660,7 @@
     ],
     "github.com/tapjs/tapjs": ["tap", "tap-parser", "tap-yaml"],
     "github.com/tats-u/markdown-cjk-friendly": [
+      "markdown-it-cjk-friendly",
       "mdast-util-to-markdown-cjk-friendly",
       "micromark-extension-cjk-friendly",
       "micromark-extension-cjk-friendly-util",
@@ -39371,6 +40679,22 @@
       "@tauri-apps/plugin-shell",
       "@tauri-apps/plugin-store",
       "@tauri-apps/plugin-updater"
+    ],
+    "github.com/taye/interact.js": [
+      "@interactjs/actions",
+      "@interactjs/auto-scroll",
+      "@interactjs/auto-start",
+      "@interactjs/core",
+      "@interactjs/inertia",
+      "@interactjs/interact",
+      "@interactjs/interactjs",
+      "@interactjs/modifiers",
+      "@interactjs/offset",
+      "@interactjs/pointer-events",
+      "@interactjs/reflow",
+      "@interactjs/snappers",
+      "@interactjs/utils",
+      "interactjs"
     ],
     "github.com/tencent/omi": [
       "omi",
@@ -39455,6 +40779,23 @@
       "@protobuf-ts/runtime",
       "@protobuf-ts/runtime-rpc"
     ],
+    "github.com/tinyhttp/tinyhttp": [
+      "@tinyhttp/accepts",
+      "@tinyhttp/app",
+      "@tinyhttp/content-disposition",
+      "@tinyhttp/cookie",
+      "@tinyhttp/cookie-signature",
+      "@tinyhttp/encode-url",
+      "@tinyhttp/etag",
+      "@tinyhttp/forwarded",
+      "@tinyhttp/proxy-addr",
+      "@tinyhttp/req",
+      "@tinyhttp/res",
+      "@tinyhttp/router",
+      "@tinyhttp/send",
+      "@tinyhttp/type-is",
+      "@tinyhttp/url"
+    ],
     "github.com/tktcorporation/clip-filepaths": [
       "clip-filepaths",
       "clip-filepaths-darwin-arm64",
@@ -39468,6 +40809,10 @@
     ],
     "github.com/toji/gl-matrix": ["@antv/gl-matrix", "gl-matrix"],
     "github.com/tomjs/utils": ["@tomjs/logger", "@tomjs/node"],
+    "github.com/toondepauw/node-zstd": [
+      "@toondepauw/node-zstd",
+      "@toondepauw/node-zstd-linux-x64-gnu"
+    ],
     "github.com/tootallnate/proxy-agents": [
       "agent-base",
       "data-uri-to-buffer",
@@ -39648,6 +40993,7 @@
       "@tiptap/extension-text-style",
       "@tiptap/extension-typography",
       "@tiptap/extension-underline",
+      "@tiptap/extension-unique-id",
       "@tiptap/extensions",
       "@tiptap/markdown",
       "@tiptap/pm",
@@ -39666,7 +41012,14 @@
     ],
     "github.com/uiwjs/react-color": [
       "@uiw/color-convert",
+      "@uiw/react-color-alpha",
+      "@uiw/react-color-block",
+      "@uiw/react-color-colorful",
       "@uiw/react-color-editable-input",
+      "@uiw/react-color-editable-input-rgba",
+      "@uiw/react-color-hue",
+      "@uiw/react-color-saturation",
+      "@uiw/react-color-sketch",
       "@uiw/react-color-swatch",
       "@uiw/react-drag-event-interactive"
     ],
@@ -39824,6 +41177,7 @@
       "@ai-sdk/amazon-bedrock",
       "@ai-sdk/anthropic",
       "@ai-sdk/azure",
+      "@ai-sdk/cerebras",
       "@ai-sdk/cohere",
       "@ai-sdk/deepseek",
       "@ai-sdk/gateway",
@@ -39836,6 +41190,7 @@
       "@ai-sdk/moonshotai",
       "@ai-sdk/openai",
       "@ai-sdk/openai-compatible",
+      "@ai-sdk/otel",
       "@ai-sdk/perplexity",
       "@ai-sdk/provider",
       "@ai-sdk/provider-utils",
@@ -39843,8 +41198,10 @@
       "@ai-sdk/test-server",
       "@ai-sdk/togetherai",
       "@ai-sdk/ui-utils",
+      "@ai-sdk/voyage",
       "@ai-sdk/vue",
       "@ai-sdk/xai",
+      "@ai-sdk/zai",
       "ai"
     ],
     "github.com/vercel/edge-runtime": [
@@ -40194,6 +41551,26 @@
       "@roamhq/wrtc-linux-x64",
       "@roamhq/wrtc-win32-x64"
     ],
+    "github.com/wooorm/dictionaries": [
+      "dictionary-ca",
+      "dictionary-ca-valencia",
+      "dictionary-de",
+      "dictionary-en",
+      "dictionary-en-gb",
+      "dictionary-es",
+      "dictionary-eu",
+      "dictionary-fr",
+      "dictionary-it",
+      "dictionary-ka",
+      "dictionary-lt",
+      "dictionary-nl",
+      "dictionary-pl",
+      "dictionary-pt",
+      "dictionary-ru",
+      "dictionary-sv",
+      "dictionary-tr",
+      "dictionary-uk"
+    ],
     "github.com/wooorm/franc": ["franc", "franc-all", "franc-min"],
     "github.com/xmldom/xmldom": ["@xmldom/xmldom", "xmldom"],
     "github.com/xtermjs/xterm.js": [
@@ -40215,8 +41592,12 @@
       "xterm-addon-attach",
       "xterm-addon-canvas",
       "xterm-addon-fit",
+      "xterm-addon-image",
+      "xterm-addon-ligatures",
       "xterm-addon-search",
-      "xterm-addon-web-links"
+      "xterm-addon-unicode11",
+      "xterm-addon-web-links",
+      "xterm-addon-webgl"
     ],
     "github.com/xtuc/webassemblyjs": [
       "@webassemblyjs/ast",
@@ -40315,7 +41696,13 @@
     ],
     "github.com/zhw2590582/artplayer": [
       "artplayer",
+      "artplayer-plugin-ambilight",
+      "artplayer-plugin-chapter",
       "artplayer-plugin-danmuku",
+      "artplayer-plugin-dash-control",
+      "artplayer-plugin-document-pip",
+      "artplayer-plugin-hls-control",
+      "artplayer-plugin-jassub",
       "artplayer-plugin-multiple-subtitles"
     ],
     "github.com/zkochan/packages": [
@@ -40349,7 +41736,7 @@
     ]
   },
   "schema": "exp104-families/1",
-  "universe": 17316,
-  "withMetadata": 17180,
-  "withRepository": 16634
+  "universe": 18034,
+  "withMetadata": 17808,
+  "withRepository": 17236
 }

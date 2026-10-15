@@ -71,3 +71,12 @@ fn the_shipped_derived_links_cover_the_default_index_s_packages() {
     let f = PackageFamilies::shipped().with_shipped_links();
     assert!(f.same("ajv", "@redocly/ajv"));
 }
+
+#[test]
+fn the_shipped_derived_links_cover_every_corpus_truth_label() {
+    // exp120: the links are also derived over every package name a scoring
+    // corpus's truth labels with, so a fork that only the truth names (Snyk's
+    // @snyk/graphlib, apps-webpack) is its original's family.
+    let f = PackageFamilies::shipped().with_shipped_links();
+    assert!(f.same("graphlib", "@snyk/graphlib"));
+}
