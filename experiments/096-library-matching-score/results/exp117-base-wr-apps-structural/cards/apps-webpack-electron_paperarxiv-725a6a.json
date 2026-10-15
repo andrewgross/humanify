@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "5704d7a8be5c001f70f164b8eeedc57eef09ade1e8d3de33f91183253571e08f",
+ "claimedBytes": {
+  "family": 3216,
+  "origin": 53154,
+  "right": 1366188,
+  "unmapped": 241,
+  "wrongFamily": 15251
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_paperarxiv-725a6a",
+ "exploratory": {
+  "names": {
+   "bindings": 17614,
+   "bindingsSameVersion": 14303,
+   "bindingsVersionKnown": 17614,
+   "exactBytes": 1170400,
+   "exactUnits": 1069,
+   "sameVersionShare": 0.812025
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.570486,
+  "f1": 0.347012,
+  "namedBytes": 1303333,
+  "precision": 0.999678,
+  "recall": 0.209944
+ },
+ "label": "exp117-base-wr-apps-structural",
+ "missBytes": {
+  "a": 4357567,
+  "b": 16342,
+  "c": 307281,
+  "d-absent": 31734,
+  "d-file": 33005,
+  "e-ambig": 2014,
+  "e-other": 207,
+  "e-spec": 397,
+  "e-support": 5844,
+  "e-veto": 29416,
+  "f": 420,
+  "unit-model": 1209
+ },
+ "noDiscovery": null,
+ "reportSha256": "3a861ca052607424c4d4288bb4782839cd3c121a8df60d94c6861b7c6b87ac14",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 763,
+  "<unmapped>": 19312,
+  "copy": 516830,
+  "library": 6207994
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 516830,
+  "f05": 0.594753,
+  "f05ShipperOnly": 0.57253,
+  "f1": 0.372114,
+  "f1ShipperOnly": 0.35821,
+  "libraryBytes": 6207994,
+  "namedAsOriginBytes": 53154,
+  "namedAsShipperBytes": 1369404,
+  "namedBytes": 1422558,
+  "namedBytesShipperOnly": 1369404,
+  "precision": 0.989393,
+  "precisionShipperOnly": 0.952424,
+  "recall": 0.229149,
+  "recallShipperOnly": 0.220587,
+  "wrongFamilyBytes": 15251,
+  "wrongFamilyBytesShipperOnly": 68405
+ },
+ "truthMethod": "sourcemap"
+}

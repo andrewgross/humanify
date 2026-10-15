@@ -1,0 +1,84 @@
+{
+ "bundleSha256": "ae0f18f6ef19daea2e35b974f97efe64da06eeb9f3e5da575cab44c88e2618d5",
+ "claimedBytes": {
+  "right": 3729626,
+  "unmapped": 80143,
+  "wrongFamily": 37256
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-cli_bitwarden_cli-ada1b6",
+ "exploratory": {
+  "names": {
+   "bindings": 39722,
+   "bindingsSameVersion": 33348,
+   "bindingsVersionKnown": 39722,
+   "exactBytes": 3024254,
+   "exactUnits": 2450,
+   "sameVersionShare": 0.839535
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.920606,
+  "f1": 0.829367,
+  "namedBytes": 3540167,
+  "precision": 0.993468,
+  "recall": 0.711793
+ },
+ "label": "exp117-k2all-cpfdmb-apps",
+ "missBytes": {
+  "a": 1466,
+  "b": 119418,
+  "c": 57720,
+  "d-absent": 798198,
+  "d-file": 19833,
+  "e-ambig": 93835,
+  "e-other": 14219,
+  "e-spec": 6814,
+  "e-support": 78029,
+  "e-veto": 31032,
+  "f": 23400
+ },
+ "noDiscovery": null,
+ "reportSha256": "fb879a5864f46bb3a7adec18b0288f6fae46891fdc1161278ef4a675a410a256",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<self>": 1547981,
+  "<unmapped>": 1436853,
+  "copy": 250,
+  "library": 4973590
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 250,
+  "f05": 0.930494,
+  "f05ShipperOnly": 0.930494,
+  "f1": 0.853415,
+  "f1ShipperOnly": 0.853415,
+  "libraryBytes": 4973590,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 3729626,
+  "namedBytes": 3729626,
+  "namedBytesShipperOnly": 3729626,
+  "precision": 0.99011,
+  "precisionShipperOnly": 0.99011,
+  "recall": 0.749886,
+  "recallShipperOnly": 0.749886,
+  "wrongFamilyBytes": 37256,
+  "wrongFamilyBytesShipperOnly": 37256
+ },
+ "truthMethod": "sourcemap"
+}

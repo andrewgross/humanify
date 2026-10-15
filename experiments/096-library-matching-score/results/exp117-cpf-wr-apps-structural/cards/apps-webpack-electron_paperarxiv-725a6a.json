@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "5704d7a8be5c001f70f164b8eeedc57eef09ade1e8d3de33f91183253571e08f",
+ "claimedBytes": {
+  "family": 3216,
+  "origin": 52457,
+  "right": 1366188,
+  "unmapped": 241,
+  "wrongFamily": 5206
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_paperarxiv-725a6a",
+ "exploratory": {
+  "names": {
+   "bindings": 17614,
+   "bindingsSameVersion": 14303,
+   "bindingsVersionKnown": 17614,
+   "exactBytes": 1170400,
+   "exactUnits": 1069,
+   "sameVersionShare": 0.812025
+  }
+ },
+ "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.570486,
+  "f1": 0.347012,
+  "namedBytes": 1303333,
+  "precision": 0.999678,
+  "recall": 0.209944
+ },
+ "label": "exp117-cpf-wr-apps-structural",
+ "missBytes": {
+  "a": 4358264,
+  "b": 16342,
+  "c": 307281,
+  "d-absent": 31734,
+  "d-file": 33005,
+  "e-ambig": 2014,
+  "e-other": 207,
+  "e-spec": 397,
+  "e-support": 5844,
+  "e-veto": 29416,
+  "f": 420,
+  "unit-model": 1209
+ },
+ "noDiscovery": null,
+ "reportSha256": "4a8a1dd64bff97eb2f288908655396d94b279ac79ae83763b33b690cfd402863",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 763,
+  "<unmapped>": 19312,
+  "copy": 516830,
+  "library": 6207994
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 516830,
+  "f05": 0.596605,
+  "f05ShipperOnly": 0.574594,
+  "f1": 0.372456,
+  "f1ShipperOnly": 0.358714,
+  "libraryBytes": 6207994,
+  "namedAsOriginBytes": 52457,
+  "namedAsShipperBytes": 1369404,
+  "namedBytes": 1421861,
+  "namedBytesShipperOnly": 1369404,
+  "precision": 0.996352,
+  "precisionShipperOnly": 0.959593,
+  "recall": 0.229037,
+  "recallShipperOnly": 0.220587,
+  "wrongFamilyBytes": 5206,
+  "wrongFamilyBytesShipperOnly": 57663
+ },
+ "truthMethod": "sourcemap"
+}
