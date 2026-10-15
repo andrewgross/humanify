@@ -346,3 +346,15 @@ fn the_exp115_vendored_presence_key_defaults_off_and_sets() {
     .unwrap();
     assert!(on.library.discovery_options().vendored_presence);
 }
+
+#[test]
+fn the_exp112_declared_cap_defaults_off() {
+    let off = build(&["in.js"], "").unwrap();
+    assert_eq!(off.library.discovery_options().declared_max_bytes, 0);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ndeclared_max_bytes = 65536\n",
+    )
+    .unwrap();
+    assert_eq!(on.library.discovery_options().declared_max_bytes, 65536);
+}

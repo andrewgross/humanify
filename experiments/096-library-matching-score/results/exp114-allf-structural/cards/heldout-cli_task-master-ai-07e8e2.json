@@ -51,12 +51,12 @@
  "noDiscovery": null,
  "reportSha256": "322c9ace3f0e106eea724bcd1f7be0dfd5b4f47eee6142f594afe85429367e75",
  "rule": "structural",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "set": "heldout",
  "statementBytes": {
   "<self>": 1110356,
   "<unmapped>": 38731,
-  "copy": 1011560,
+  "copy": 1011691,
   "library": 4314485
  },
  "toolchain": {
@@ -67,7 +67,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 1011560,
+  "copyBytes": 1011691,
   "f05": 0.916326,
   "f05ShipperOnly": 0.792745,
   "f1": 0.819076,

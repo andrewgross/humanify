@@ -1,0 +1,75 @@
+{
+ "bundleSha256": "1dc260dd48236e5cd1b0205068a6e6a0b8b66dbcb871e14e6f940ca356b98df4",
+ "claimedBytes": {
+  "right": 45411,
+  "unmapped": 10
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-cli_badeball_cypress-cucumber-preprocessor-e4dd32",
+ "exploratory": {
+  "names": {
+   "bindings": 10,
+   "bindingsSameVersion": 5,
+   "bindingsVersionKnown": 10,
+   "exactBytes": 43843,
+   "exactUnits": 5,
+   "sameVersionShare": 0.5
+  }
+ },
+ "indexId": "0999ad6ee9e9f9d7d5e18080bbb5f2a618370329cc34924b2cc443c2b1e90542",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.474217,
+  "f1": 0.265122,
+  "namedBytes": 45281,
+  "precision": 1.0,
+  "recall": 0.152819
+ },
+ "label": "pop-step4-structural",
+ "missBytes": {
+  "a": 249892,
+  "b": 53,
+  "c": 42,
+  "e-support": 907
+ },
+ "noDiscovery": null,
+ "reportSha256": "27b0669c97db38dea205859ceeb7fe8d69e5a545b34b14b8180aadcb39a5215f",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "pop-bun",
+ "statementBytes": {
+  "<app>": 18,
+  "<unmapped>": 13562,
+  "library": 296305
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.475062,
+  "f05ShipperOnly": 0.475062,
+  "f1": 0.265783,
+  "f1ShipperOnly": 0.265783,
+  "libraryBytes": 296305,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 45411,
+  "namedBytes": 45411,
+  "namedBytesShipperOnly": 45411,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.153258,
+  "recallShipperOnly": 0.153258,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

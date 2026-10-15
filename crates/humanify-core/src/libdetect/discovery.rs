@@ -224,6 +224,13 @@ pub struct DiscoveryOptions {
     /// ([`presence`]). With [`Self::presence_fence`], what it drops is named
     /// by no one.
     pub vendored_presence: bool,
+    /// The declared-seed cap (exp112; 0 = off): a declared seed (a package
+    /// reader's text: an inlined `package.json`, a scoped error prefix)
+    /// whose statement is bigger than this many bytes is no seed. A
+    /// manifest literal inside a huge statement (a nested bundle's one
+    /// factory holding many packages) says that package is somewhere in
+    /// it, not that the statement is that package's.
+    pub declared_max_bytes: u32,
 }
 
 impl Default for DiscoveryOptions {
@@ -246,6 +253,7 @@ impl Default for DiscoveryOptions {
             shadow_ties: false,
             presence_fence: false,
             vendored_presence: false,
+            declared_max_bytes: 0,
         }
     }
 }
@@ -1812,6 +1820,20 @@ pub fn discover_with(
         .filter(|r| r.rule != Rule::Module)
         .copied()
         .collect();
+    let capped: Vec<Seed>;
+    let seeds = if options.declared_max_bytes > 0 {
+        capped = seeds
+            .iter()
+            .filter(|s| {
+                !matches!(s.evidence, Evidence::Declared { .. })
+                    || graph.units[s.unit as usize].bytes <= options.declared_max_bytes
+            })
+            .cloned()
+            .collect();
+        &capped[..]
+    } else {
+        seeds
+    };
     let mut active = settle_seeds(graph, seeds);
     let mut vetoed = Vec::new();
     let (st, rounds) = loop {

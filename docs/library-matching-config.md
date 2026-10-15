@@ -161,6 +161,8 @@ shadow_ties = false            # exp114: off; a package whose seeds are all ties
 presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
 vendored_presence = false      # exp115: off; a package whose every index seed stands on rows from vendored-copy
                                #   files (a path naming another package: index /4 marks) is no seed
+declared_max_bytes = 0         # exp112: off; a declared seed on a statement over N bytes is no
+                               #   seed (experiments/112-test-precision; 65536 measured)
 ```
 
 To reproduce a pre-exp109 run, set the old values back explicitly:

@@ -335,6 +335,7 @@ impl Library {
             shadow_ties: d.shadow_ties,
             presence_fence: d.presence_fence,
             vendored_presence: d.vendored_presence,
+            declared_max_bytes: d.declared_max_bytes,
         }
     }
 
@@ -428,6 +429,7 @@ pub struct LibraryDiscovery {
     pub shadow_ties: bool,
     pub presence_fence: bool,
     pub vendored_presence: bool,
+    pub declared_max_bytes: u32,
 }
 
 fn serialize_banner_names<S: serde::Serializer>(
@@ -608,6 +610,7 @@ fn library_of(r: &Resolved) -> Library {
             shadow_ties: r.flag_on("library.discovery.shadow_ties"),
             presence_fence: r.flag_on("library.discovery.presence_fence"),
             vendored_presence: r.flag_on("library.discovery.vendored_presence"),
+            declared_max_bytes: n("library.discovery.declared_max_bytes") as u32,
         },
     }
 }

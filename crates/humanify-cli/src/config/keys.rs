@@ -738,6 +738,16 @@ pub static KEYS: &[Key] = &[
               bundle shows only code it ships a copy of (exp115; with presence_fence, named by \
               no one).",
     },
+    lib_int(
+        "library.discovery",
+        "declared_max_bytes",
+        0,
+        U32,
+        || int(u64::from(discovery().declared_max_bytes)),
+        "A declared seed (an inlined package.json, a scoped error prefix) whose statement is \
+         bigger than this many bytes is no seed: a manifest inside a huge statement names one of \
+         its packages, not the statement (exp112; 0 = off).",
+    ),
     // [unpack]
     Key {
         section: "unpack",

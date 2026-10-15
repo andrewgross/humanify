@@ -47,12 +47,12 @@
  "noDiscovery": null,
  "reportSha256": "f03c3cdcd2e6e0d68fd92f3bb4476faa403575028984c720a88e7ae5bc115b7c",
  "rule": "agreement",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "set": "wrangler",
  "statementBytes": {
   "<app>": 845382,
   "<unmapped>": 15747,
-  "copy": 4709,
+  "copy": 4896,
   "library": 730596
  },
  "toolchain": {
@@ -63,7 +63,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 4709,
+  "copyBytes": 4896,
   "f05": 0.398153,
   "f05ShipperOnly": 0.398153,
   "f1": 0.209249,
