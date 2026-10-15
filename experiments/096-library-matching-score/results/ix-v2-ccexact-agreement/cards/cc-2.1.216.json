@@ -43,7 +43,7 @@
  "originTruth": "none: sample truth (hand-labelled units)",
  "reportSha256": "3f1ac2302f22bb8803de43c930391f0d3ace2a62dd92073a0afd5770d6b64e3c",
  "rule": "agreement",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "set": "cc",
  "statementBytes": {
   "<app>": 13036401,

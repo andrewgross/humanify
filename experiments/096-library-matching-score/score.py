@@ -85,7 +85,12 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    carried_verdict, `unverified`). Same reports, re-scored; the decoder rules off reproduce scorer 4's segments
 #    exactly (experiments/107-zero-app-claims/verify_decoder.py); all three off reproduces scorer 5's cards
 #    (verify_s5.py). Built on 5: patch_sources (5) first, then redecode (6).
-SCORER_VERSION = "exp096-score/6"
+# 7: the exp112 origin layer (origins.py RULES7, frozen by experiments/112-test-precision/scorer7/origins7.py):
+#    a rolldown lazy module body emitted after its region's `//#endregion` is that region's package (lazybody),
+#    and a file named after a package its owner declares as a build input only (npm devDependencies / bundled, or
+#    the tarball's own license collection) is a copy of it (chunk). Same reports, re-scored; every rule off
+#    reproduces scorer 6's cards (verify_s6.py; the layer is byte-identical: origins7.py verify).
+SCORER_VERSION = "exp096-score/7"
 
 
 def r6(x):
@@ -495,6 +500,9 @@ def main():
     chm = truth_audit.load_chained_manifest()
     if chm["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the chained-sources layer was frozen for another corpus manifest")
+    o7m = truth_audit.load_origins7_manifest()
+    if o7m is not None and o7m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 7 origin layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -511,7 +519,7 @@ def main():
         report = doc["libraryDiscovery"]
         slice_ = doc["toolchain"]["slice"]
         truth = truth_audit.patch_sources(entry, lib096.load_truth(entry), chm)
-        origins = lib096.load_origins(entry, om) if entry["truth"]["method"] == "sourcemap" else None
+        origins = truth_audit.origin_layer(entry, om, o7m) if entry["truth"]["method"] == "sourcemap" else None
         truth, origins = truth_audit.redecode(entry, truth, origins)
         if report is None:
             body = score_floor(entry, truth)
@@ -547,6 +555,7 @@ def main():
                                                "corpusSha256")}, "originsSha256": lib096.origins_sha(),
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    "chainedSha256": truth_audit.chained_sha(),
+                   **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},

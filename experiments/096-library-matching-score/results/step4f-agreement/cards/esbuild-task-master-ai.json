@@ -50,13 +50,13 @@
  "noDiscovery": null,
  "reportSha256": "c79ee51dc0c5cfe88ea931061bb1fce70987fde3ec96ea2a84f4ae82c43beccd",
  "rule": "agreement",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "set": "esbuild-app",
  "statementBytes": {
   "<foreign>": 80010,
   "<self>": 1114888,
   "<unmapped>": 16989,
-  "copy": 263253,
+  "copy": 263429,
   "library": 4916988
  },
  "toolchain": {
@@ -67,7 +67,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 263253,
+  "copyBytes": 263429,
   "f05": 0.66162,
   "f05ShipperOnly": 0.607992,
   "f1": 0.441772,

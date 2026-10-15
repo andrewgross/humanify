@@ -18,16 +18,17 @@
   "familiesSha256": "52a23cd5ce061df613526c80f124d62a25515f810d5d5daee4b26fbfffc2a163",
   "indexBytes": 642359696,
   "indexId": "ff8e99a1f8d0414f832fb355f0a21f3bb19f360625410940e29a97e78eefecbc",
+  "origins7Sha256": "8b6652faafd20967eb565bb668efb2930f44a02ee31102df79eea6f4708e135f",
   "originsSha256": "6045ae10683020bb8c8021dad08f3bbf49d01536ce7953f70b234d8cb4c99174",
   "rule": "structural"
  },
  "label": "exp109-final-wr-bundlers-structural",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "sets": {
   "dev-rollup": {
    "appClaimedBytes": 0,
    "bundlerDetected": 13,
-   "copyBytes": 1293,
+   "copyBytes": 1693,
    "discoveryRan": 14,
    "entries": 14,
    "exploratoryNames": {
@@ -72,7 +73,7 @@
   "dev-webpack": {
    "appClaimedBytes": 0,
    "bundlerDetected": 13,
-   "copyBytes": 808,
+   "copyBytes": 1077,
    "discoveryRan": 13,
    "entries": 13,
    "exploratoryNames": {

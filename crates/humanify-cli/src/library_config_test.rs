@@ -312,3 +312,36 @@ fn the_exp106_hygiene_keys_turn_off() {
     .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("banner_names")), "{err:?}");
 }
+
+/// exp114's presence keys: off by default, set from the file.
+#[test]
+fn the_exp114_presence_keys_default_off_and_set() {
+    let c = build(&["in.js"], "").unwrap();
+    let o = c.library.discovery_options();
+    assert_eq!(o.context_presence, 0.0);
+    assert_eq!(o.context_presence_slack, 0);
+    assert!(!o.shadow_ties);
+    assert!(!o.presence_fence);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ncontext_presence = 1.5\ncontext_presence_slack = 16384\nshadow_ties = true\npresence_fence = true\n",
+    )
+    .unwrap();
+    let o = on.library.discovery_options();
+    assert_eq!(o.context_presence, 1.5);
+    assert_eq!(o.context_presence_slack, 16384);
+    assert!(o.shadow_ties);
+    assert!(o.presence_fence);
+}
+
+#[test]
+fn the_exp112_declared_cap_defaults_off() {
+    let off = build(&["in.js"], "").unwrap();
+    assert_eq!(off.library.discovery_options().declared_max_bytes, 0);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ndeclared_max_bytes = 65536\n",
+    )
+    .unwrap();
+    assert_eq!(on.library.discovery_options().declared_max_bytes, 65536);
+}

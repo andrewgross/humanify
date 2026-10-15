@@ -190,6 +190,40 @@ pub struct DiscoveryOptions {
     /// (`libindex/families-derived.json`, restricted to the index's
     /// packages) wherever discovery asks "one family?" (exp106).
     pub derived_families: bool,
+    /// The context-presence factor (exp114; 0 = off): a package every one
+    /// of whose index seeds sits in a module group the package's index
+    /// holds that unit's prints only in modules at least `factor` x the
+    /// group's bytes + [`Self::context_presence_slack`] is no seed. A
+    /// package's dist that INLINES a dependency holds the dependency's code
+    /// in a bigger module than the dependency's own; when the bundle shows
+    /// the code in the smaller module, and nowhere does the bundle show the
+    /// package at its own size, the code came from the dependency, not the
+    /// package ([`presence`]). Units in no module group are not judged.
+    pub context_presence: f64,
+    /// The context-presence slack in bytes (exp114).
+    pub context_presence_slack: u64,
+    /// Shadow ties (exp114; default off): a package whose every index seed
+    /// is a TIE the structural rule would accept for another family too,
+    /// while some such rival has a seed of its own (one only its family is
+    /// accepted for) in the bundle, is the rival's shadow — a package
+    /// carrying the rival's code: its tied seeds become the rival's (the one
+    /// with the most own-seed bytes), the rest are dropped ([`presence`]).
+    /// A rival counts only where it holds the tied code in a module no
+    /// bigger than the package's own (the origin is the smaller context: a
+    /// sponge with its own seeds must not absorb a real origin's ties).
+    pub shadow_ties: bool,
+    /// Fence what the presence rules drop (exp114; default off): a dropped
+    /// seed's unit is claimed by no one — neither the package nor a rival
+    /// propagating into it — instead of left open (the code is ambiguous
+    /// between a shipper and its origin; name neither).
+    pub presence_fence: bool,
+    /// The declared-seed cap (exp112; 0 = off): a declared seed (a package
+    /// reader's text: an inlined `package.json`, a scoped error prefix)
+    /// whose statement is bigger than this many bytes is no seed. A
+    /// manifest literal inside a huge statement (a nested bundle's one
+    /// factory holding many packages) says that package is somewhere in
+    /// it, not that the statement is that package's.
+    pub declared_max_bytes: u32,
 }
 
 impl Default for DiscoveryOptions {
@@ -207,6 +241,11 @@ impl Default for DiscoveryOptions {
             payload_min_bytes: 0,
             specific_rivals: false,
             derived_families: false,
+            context_presence: 0.0,
+            context_presence_slack: 0,
+            shadow_ties: false,
+            presence_fence: false,
+            declared_max_bytes: 0,
         }
     }
 }
@@ -876,6 +915,44 @@ impl<'c> Containment<'c> {
         self.family_count(self.index.structural_owners(&q, &self.rules))
     }
 
+    /// The owners the structural rule would accept for `u` on its own, tie
+    /// or not (empty for a unit with no prints).
+    fn accepting_owners(&self, u: u32) -> Vec<u32> {
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return Vec::new();
+        };
+        let q = crate::libindex::lookup::UnitQuery {
+            unit: u,
+            prints,
+            module_bytes: self.module_bytes[u as usize],
+            text: "",
+        };
+        self.index.structural_owners(&q, &self.rules)
+    }
+
+    /// The smallest index module in which `package`'s family holds any of
+    /// unit `u`'s prints at or over the row floor: the package's tightest
+    /// context for this code. None when it holds none.
+    fn tightest_context(&self, u: u32, package: &str) -> Option<u64> {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return None;
+        };
+        std::iter::once(&prints.whole)
+            .chain(&prints.functions)
+            .filter(|p| p.nodes >= UNIT_ROW_MIN_NODES)
+            .filter_map(|p| {
+                self.index
+                    .candidates(&p.hash)
+                    .iter()
+                    .filter(|hit| self.owner_is(hit.owner, package))
+                    .map(|hit| hit.module_bytes)
+                    .min()
+            })
+            .min()
+    }
+
     /// Does the index contradict unit `u` being `package`'s? (type doc)
     fn contradicts(&self, u: u32, package: &str) -> bool {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
@@ -1344,6 +1421,172 @@ fn isolated(
     out
 }
 
+/// The bundle-level presence rules on the index seeds (exp114;
+/// [`DiscoveryOptions::context_presence`], [`DiscoveryOptions::shadow_ties`]):
+/// a package's index seeds answer "is this code P's?" one unit at a time;
+/// these ask whether the bundle shows P AT ALL. Declarations and banners
+/// pass untouched, and a package with one keeps its index seeds.
+fn presence(
+    seeds: Vec<Seed>,
+    graph: &ReferenceGraph,
+    module_bytes: &[u64],
+    containment: &Containment<'_>,
+    families: &PackageFamilies,
+    options: DiscoveryOptions,
+) -> Vec<Seed> {
+    if options.context_presence <= 0.0 && !options.shadow_ties {
+        return seeds;
+    }
+    // A family key per package: one family judgement joins packages.
+    let mut reps: Vec<String> = Vec::new();
+    let mut key_of = |p: &str| -> usize {
+        match reps.iter().position(|r| families.same(r, p)) {
+            Some(i) => i,
+            None => {
+                reps.push(p.to_string());
+                reps.len() - 1
+            }
+        }
+    };
+    let keys: Vec<usize> = seeds.iter().map(|s| key_of(&s.package)).collect();
+    let declared: BTreeSet<usize> = seeds
+        .iter()
+        .zip(&keys)
+        .filter(|(s, _)| !s.evidence.is_index())
+        .map(|(_, &k)| k)
+        .collect();
+    let mut keep: Vec<Option<Seed>> = seeds.into_iter().map(Some).collect();
+    let mut dropped_units: Vec<u32> = Vec::new();
+    if options.context_presence > 0.0 {
+        let mut present: BTreeSet<usize> = declared.clone();
+        let mut judged: BTreeSet<usize> = BTreeSet::new();
+        for (s, &k) in keep.iter().flatten().zip(&keys) {
+            let u = s.unit as usize;
+            let group = module_bytes[u];
+            let grouped = group > u64::from(graph.units[u].bytes);
+            let oversized = grouped
+                && containment
+                    .tightest_context(s.unit, &s.package)
+                    .is_some_and(|ctx| {
+                        ctx as f64
+                            >= options.context_presence * group as f64
+                                + options.context_presence_slack as f64
+                    });
+            judged.insert(k);
+            if !oversized {
+                present.insert(k);
+            }
+        }
+        for (slot, &k) in keep.iter_mut().zip(&keys) {
+            if judged.contains(&k) && !present.contains(&k) {
+                dropped_units.extend(slot.take().map(|s| s.unit));
+            }
+        }
+    }
+    let before: Vec<u32> = keep.iter().flatten().map(|s| s.unit).collect();
+    if options.shadow_ties {
+        shadow_ties(&mut keep, &keys, &declared, graph, containment, &mut key_of);
+    }
+    let mut out: Vec<Seed> = keep.into_iter().flatten().collect();
+    if options.presence_fence {
+        let kept: BTreeSet<u32> = out.iter().map(|s| s.unit).collect();
+        let all: BTreeSet<u32> = before.into_iter().chain(dropped_units).collect();
+        out.extend(
+            all.into_iter()
+                .filter(|u| !kept.contains(u))
+                .map(|unit| Seed {
+                    unit,
+                    package: FENCE.to_string(),
+                    evidence: Evidence::Declared {
+                        reader: FENCE.to_string(),
+                    },
+                }),
+        );
+    }
+    out
+}
+
+/// The package a fenced unit is claimed as while the fixpoint runs
+/// ([`DiscoveryOptions::presence_fence`]); [`unfence`] removes every
+/// claim of it after.
+const FENCE: &str = "<fence>";
+
+/// `found` without the fence's claims (see [`FENCE`]).
+fn unfence(mut found: Discovery) -> Discovery {
+    found.claims.retain(|_, c| c.package != FENCE);
+    found.library_class.retain(|_, p| p != FENCE);
+    found.boundary.remove(FENCE);
+    for q in &mut found.queue {
+        q.uses.retain(|p| p != FENCE);
+    }
+    found.queue.retain(|q| !q.uses.is_empty());
+    found
+}
+
+/// [`DiscoveryOptions::shadow_ties`] over the kept seeds (see [`presence`]).
+fn shadow_ties(
+    keep: &mut [Option<Seed>],
+    keys: &[usize],
+    declared: &BTreeSet<usize>,
+    graph: &ReferenceGraph,
+    containment: &Containment<'_>,
+    key_of: &mut dyn FnMut(&str) -> usize,
+) {
+    // Per index seed, the families the structural rule accepts (its own
+    // included) and the owner naming each rival family.
+    let mut accepts: Vec<BTreeMap<usize, u32>> = vec![BTreeMap::new(); keep.len()];
+    let mut own_bytes: BTreeMap<usize, u64> = BTreeMap::new();
+    for (i, s) in keep.iter().enumerate() {
+        let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
+            continue;
+        };
+        let own_context = containment.tightest_context(s.unit, &s.package);
+        let mut tied_rival = false;
+        for o in containment.accepting_owners(s.unit) {
+            let k = key_of(containment.name(o));
+            if k == keys[i] {
+                continue;
+            }
+            tied_rival = true;
+            // Only a rival holding this code in a module no bigger than the
+            // package's own can be its ORIGIN; a bigger one is a carrier.
+            let rival_context = containment.tightest_context(s.unit, containment.name(o));
+            if rival_context.zip(own_context).is_some_and(|(r, p)| r <= p) {
+                accepts[i].entry(k).or_insert(o);
+            }
+        }
+        if !tied_rival {
+            *own_bytes.entry(keys[i]).or_default() += u64::from(graph.units[s.unit as usize].bytes);
+        }
+    }
+    let mut packages: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for (i, s) in keep.iter().enumerate() {
+        if s.as_ref().is_some_and(|s| s.evidence.is_index()) {
+            packages.entry(keys[i]).or_default().push(i);
+        }
+    }
+    for (k, seeds) in packages {
+        if declared.contains(&k) || own_bytes.contains_key(&k) {
+            continue;
+        }
+        let rival = seeds
+            .iter()
+            .flat_map(|&i| accepts[i].keys())
+            .filter(|r| own_bytes.contains_key(r))
+            .max_by_key(|&&r| (own_bytes[&r], std::cmp::Reverse(r)))
+            .copied();
+        let Some(rival) = rival else {
+            continue;
+        };
+        for i in seeds {
+            match (accepts[i].get(&rival), keep[i].as_mut()) {
+                (Some(&owner), Some(s)) => s.package = containment.name(owner).to_string(),
+                _ => keep[i] = None,
+            }
+        }
+    }
+}
+
 /// One seed per unit: a declaration or banner beats an index claim; among
 /// equals, the first. Seeds on external units are dropped.
 fn settle_seeds(graph: &ReferenceGraph, seeds: &[Seed]) -> Vec<Seed> {
@@ -1582,6 +1825,20 @@ pub fn discover_with(
         .filter(|r| r.rule != Rule::Module)
         .copied()
         .collect();
+    let capped: Vec<Seed>;
+    let seeds = if options.declared_max_bytes > 0 {
+        capped = seeds
+            .iter()
+            .filter(|s| {
+                !matches!(s.evidence, Evidence::Declared { .. })
+                    || graph.units[s.unit as usize].bytes <= options.declared_max_bytes
+            })
+            .cloned()
+            .collect();
+        &capped[..]
+    } else {
+        seeds
+    };
     let mut active = settle_seeds(graph, seeds);
     let mut vetoed = Vec::new();
     let (st, rounds) = loop {
@@ -1854,14 +2111,24 @@ fn discover_unscoped(
             .into_iter()
             .filter(unconflicted),
     );
-    let found = discover_with(
+    let present = |seeds: &[Seed]| {
+        presence(
+            seeds.to_vec(),
+            &graph,
+            &looker.module_bytes,
+            &containment,
+            &families,
+            options,
+        )
+    };
+    let found = unfence(discover_with(
         &graph,
-        &seeds,
+        &present(&seeds),
         &families,
         options,
         profile,
         Some(&containment),
-    );
+    ));
     let Some(targeted) = lookup.targeted else {
         return (graph, found);
     };
@@ -1885,14 +2152,14 @@ fn discover_unscoped(
         return (graph, found);
     }
     seeds.extend(more);
-    let found = discover_with(
+    let found = unfence(discover_with(
         &graph,
-        &seeds,
+        &present(&seeds),
         &families,
         options,
         profile,
         Some(&containment),
-    );
+    ));
     (graph, found)
 }
 

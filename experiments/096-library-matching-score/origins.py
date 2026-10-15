@@ -55,11 +55,94 @@ def marker_regions(content):
     return out
 
 
-class Origins:
-    """origin(source index, original line) -> (kind, package) or None, for one map's sources."""
+# ---------------------------------------------------------------- scorer 7 (exp112): two more copy shapes
 
-    def __init__(self, paths, contents, shippers):
+# Each rule can be switched off; both off, Origins builds exactly scorer 4-6's layer (verify_s6.py).
+#   lazybody  rolldown/tsdown emits a lazily initialised module as its region (hoisted declarations) followed,
+#             AFTER `//#endregion`, by the module's body `__esmMin(() => {...})()`; the body is the region's
+#             module (up to the next marker or the file's top-level `export`), not the shipper's own code
+#   chunk     a file a package built from ANOTHER package is named after it: rolldown/tsdown/unbuild chunk names
+#             (`dist/jiti-Bb1dT6Cw.mjs`, `dist/_chunks/libs/cjs-module-lexer.mjs`); the file (a mapped source of
+#             the shipper, or the file a marker region names inside an origin) is a copy of P when P is the
+#             longest `-`-prefix of the file's stem AND the owning package declares P as a BUILD input: its npm
+#             manifest's devDependencies / bundled dependencies, or its tarball's own third-party license
+#             collection (`dist/licenses/<P>/LICENSE`, a LICENSE.md `## <P>` section) — and never as a runtime
+#             dependency (a runtime dependency is installed beside it: a file named after one is a wrapper)
+RULES7 = {"lazybody": True, "chunk": True}
+LAZY = re.compile(r"^\s*(?:(?:var|let|const) [\w$]+ = )?__esm(?:Min)?\(")
+EXPORT = re.compile(r"^export\b")
+SRC_EXT = re.compile(r"\.(?:[cm]?[jt]sx?)$")
+PNPM_PKG = re.compile(r"\.pnpm/((?:@[^/@+]+\+)?[^/@]+)@([^/_(]+)")
+RUNTIME_KEYS = ("dependencies", "peerDependencies", "optionalDependencies")
+BUILD_KEYS = ("devDependencies", "bundleDependencies", "bundledDependencies")
+
+
+def marker_regions7(content, lazybody):
+    """[(first line, origin package or None, marker path or None, kind)]: marker_regions (kind "marker"), plus
+    (lazybody) each region's lazy body after its `//#endregion` (kind "lazybody")."""
+    out = []
+    lines = content.split("\n")
+    last = None  # (origin, path) of the last region opened
+    lazy = False
+    for i, line in enumerate(lines):
+        if REGION_END.match(line):
+            out.append((i, None, None, None))
+            if lazybody and last and last[0] and i + 1 < len(lines) and LAZY.match(lines[i + 1]):
+                out.append((i + 1, last[0], last[1], "lazybody"))
+                lazy = True
+            last = None
+            continue
+        if lazy and EXPORT.match(line):
+            out.append((i, None, None, None))
+            lazy = False
+            continue
+        for rx in MARKERS:
+            m = rx.match(line)
+            if m and PATHLIKE.match(m.group(1)):
+                pkgs = NODE_MODULES_PKG.findall(m.group(1))
+                last = (pkgs[-1] if pkgs else None, m.group(1))
+                out.append((i, last[0], m.group(1), "marker"))
+                lazy = False
+                break
+    return out
+
+
+def path_version(path, pkg):
+    """The version a pnpm store path spells for pkg (`.pnpm/<name>@<version>_<peers>/`), else None."""
+    for name, ver in PNPM_PKG.findall(path):
+        if name.replace("+", "/") == pkg:
+            return ver
+    return None
+
+
+def chunk_candidates(rest):
+    """Package names a built file's path could be named after, longest first: its stem's `-`-prefixes."""
+    base = SRC_EXT.sub("", rest.rsplit("/", 1)[-1])
+    parts = base.split("-")
+    return ["-".join(parts[:k]) for k in range(len(parts), 0, -1) if parts[0]]
+
+
+def chunk_origin(owner, version, rest, inputs, same_family):
+    """P when `rest` (a file path inside owner's package) is a chunk named after P and owner@version declares P as
+    a build input and not a runtime dependency. `inputs(owner, version)` -> (runtime names, build-input names)."""
+    runtime, build = inputs(owner, version)
+    if not build:
+        return None
+    for c in chunk_candidates(rest):
+        if c in build and c not in runtime and c != owner and not same_family(c, owner):
+            return c
+    return None
+
+
+class Origins:
+    """origin(source index, original line) -> (kind, package) or None, for one map's sources.
+    `rules` (scorer 7, RULES7 keys; None = all off) adds the lazybody and chunk shapes; `chunk` needs `versions`
+    (the truth's version per source), `inputs(pkg, version)` -> (runtime dependency names, build-input names), and
+    `same_family(a, b)`."""
+
+    def __init__(self, paths, contents, shippers, rules=None, versions=None, inputs=None, same_family=None):
         self.whole, self.regions = {}, {}
+        rules = rules or {}
         contents = contents or [None] * len(paths)
         for si, (p, c) in enumerate(zip(paths, contents)):
             ship = shippers[si]
@@ -68,10 +151,32 @@ class Origins:
             if m and m.group(1) != ship:
                 self.whole[si] = ("path", m.group(1))
                 continue
+            if not rules.get("lazybody") and not rules.get("chunk"):
+                if c:
+                    r = [(ln, ("marker", o) if o is not None and o != ship else None) for ln, o in marker_regions(c)]
+                    if any(o for _, o in r):
+                        self.regions[si] = ([x[0] for x in r], [x[1] for x in r])
+                continue
+            r = []
             if c:
-                r = [(ln, o if o != ship else None) for ln, o in marker_regions(c)]
-                if any(o for _, o in r):
-                    self.regions[si] = ([x[0] for x in r], [x[1] for x in r])
+                for ln, o, mp, kind in marker_regions7(c, rules.get("lazybody")):
+                    if o is None or o == ship:
+                        r.append((ln, None))
+                        continue
+                    if rules.get("chunk"):
+                        rest = mp.rsplit("node_modules/" + o + "/", 1)[-1] if "node_modules/" + o + "/" in mp else ""
+                        nested = chunk_origin(o, path_version(mp, o), rest, inputs, same_family) if rest else None
+                        if nested:
+                            r.append((ln, ("chunk", nested)))
+                            continue
+                    r.append((ln, (kind, o)))
+            if any(o for _, o in r):
+                self.regions[si] = ([x[0] for x in r], [x[1] for x in r])
+            elif rules.get("chunk") and "node_modules/" in p and ship and versions:
+                rest = p.rsplit("node_modules/" + ship + "/", 1)[-1] if "node_modules/" + ship + "/" in p else ""
+                o = chunk_origin(ship, versions[si], rest, inputs, same_family) if rest else None
+                if o:
+                    self.whole[si] = ("chunk", o)
 
     def at(self, si, oline):
         if si in self.whole:
@@ -80,7 +185,8 @@ class Origins:
         if r is None:
             return None
         k = bisect.bisect_right(r[0], oline) - 1
-        return ("marker", r[1][k]) if k >= 0 and r[1][k] is not None else None
+        return r[1][k] if k >= 0 else None
+
 
 
 def segments(text, smap, inner=None):

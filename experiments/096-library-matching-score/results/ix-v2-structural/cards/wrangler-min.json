@@ -34,7 +34,7 @@
  "noDiscovery": "the esbuild adapter unpacked no bundled module (the one-file floor): no discovery ran",
  "reportSha256": "c35d7398eb29878c6b2bfa6e4cc7652130abedcfc96c70fffaf74ec51cf6a8af",
  "rule": "structural",
- "schema": "exp096-score/6",
+ "schema": "exp096-score/7",
  "set": "wrangler",
  "statementBytes": {},
  "toolchain": {

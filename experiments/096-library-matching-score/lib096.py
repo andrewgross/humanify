@@ -33,6 +33,13 @@ CORPORA = {
     "apps": {"manifest": os.path.join(HERE, "corpus-apps.json"), "origins": os.path.join(HERE, "origins-apps.json"),
              "copies": os.path.join(HERE, "copies-apps.json"),
              "chained": os.path.join(HERE, "chained-apps.json"), "data": "/work/exp107-data/frozen"},
+    # exp112's DEV analogue of the test split's POPULATION: exp108 TRAINING apps (GitHub topic:electron by stars,
+    # npm CLIs past rank 7,863; never held-out, never test) built with exp100's Bun and esbuild recipes, one stratum
+    # chosen by a pre-bundled-copy mechanism read from training installs (experiments/112-test-precision/scripts/
+    # dev_pop.py); a dev corpus (cards committed)
+    "pop": {"manifest": os.path.join(HERE, "corpus-pop.json"), "origins": os.path.join(HERE, "origins-pop.json"),
+            "copies": os.path.join(HERE, "copies-pop.json"), "chained": os.path.join(HERE, "chained-pop.json"),
+            "data": "/work/exp112-data/pop/frozen"},
 }
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"
@@ -52,12 +59,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|bundlers|apps` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|bundlers|apps|pop` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|bundlers|apps")
+        raise SystemExit("--corpus needs a value: dev|test|bundlers|apps|pop")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

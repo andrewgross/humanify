@@ -1,0 +1,234 @@
+{
+ "about": "exp112 mech.py: wrong-family bytes per mechanism class (aggregate only), k2-l12m4 index + exp106 recommended keys, structural rule; scorer 6 = scorer 7's rules off, scorer7dcap = + library.discovery.declared_max_bytes=65536",
+ "labels": {
+  "scorer6": "test-exp112-k2-rec",
+  "scorer7": "test-exp112-k2-rec",
+  "scorer7dcap": "test-exp112-k2-rec-dcap"
+ },
+ "scorer6": {
+  "test-bun": {
+   "classByClaimRule": {
+    "after-region:lazy-wrapper | down:": 666028,
+    "after-region:lazy-wrapper | seed:index": 2705303,
+    "after-region:other | down:": 3,
+    "after-region:other | module:": 29,
+    "before-first-marker | down:": 640,
+    "before-first-marker | module:": 2214,
+    "nested | down:": 227871,
+    "nested | module:": 246542,
+    "nested | seed:declared": 671406,
+    "nested | seed:index": 3836314,
+    "nested | seed:queueIndex": 655,
+    "no-markers:claim-holds-whole | down:": 89377,
+    "no-markers:claim-holds-whole | module:": 2087,
+    "no-markers:claim-holds-whole | seed:index": 212552,
+    "no-markers:claim-holds-whole | seed:queueIndex": 1769,
+    "no-markers:other | down:": 52558,
+    "no-markers:other | module:": 42047,
+    "no-markers:other | seed:banner": 9267,
+    "no-markers:other | seed:declared": 5837,
+    "no-markers:other | seed:index": 20043,
+    "own-region | down:": 2083,
+    "own-region | module:": 949,
+    "own-region | seed:index": 12886,
+    "own-region | seed:queueIndex": 77
+   },
+   "classes": {
+    "after-region:lazy-wrapper": 3371331,
+    "after-region:other": 32,
+    "before-first-marker": 2854,
+    "nested": 4982788,
+    "no-markers:claim-holds-whole": 305785,
+    "no-markers:other": 129752,
+    "own-region": 15995
+   },
+   "wrongFamilyBytes": 8808537
+  },
+  "test-esbuild": {
+   "classByClaimRule": {
+    "after-region:lazy-wrapper | down:": 1033976,
+    "after-region:lazy-wrapper | seed:index": 2275663,
+    "after-region:other | down:": 3,
+    "after-region:other | module:": 29,
+    "before-first-marker | down:": 1252,
+    "before-first-marker | module:": 3248,
+    "before-first-marker | seed:queueIndex": 340,
+    "nested | down:": 264478,
+    "nested | module:": 243537,
+    "nested | seed:declared": 662647,
+    "nested | seed:index": 3795986,
+    "nested | seed:queueIndex": 166,
+    "no-content | down:": 167,
+    "no-markers:claim-holds-whole | down:": 32344,
+    "no-markers:claim-holds-whole | module:": 4564,
+    "no-markers:claim-holds-whole | seed:index": 347525,
+    "no-markers:claim-holds-whole | seed:queueIndex": 849,
+    "no-markers:other | down:": 72724,
+    "no-markers:other | module:": 31063,
+    "no-markers:other | seed:declared": 5727,
+    "no-markers:other | seed:index": 152300,
+    "no-markers:other | seed:queueIndex": 169,
+    "own-region | down:": 1089,
+    "own-region | module:": 3060,
+    "own-region | seed:index": 10857
+   },
+   "classes": {
+    "after-region:lazy-wrapper": 3309639,
+    "after-region:other": 32,
+    "before-first-marker": 4840,
+    "nested": 4966814,
+    "no-content": 167,
+    "no-markers:claim-holds-whole": 385282,
+    "no-markers:other": 261983,
+    "own-region": 15006
+   },
+   "wrongFamilyBytes": 8943763
+  }
+ },
+ "scorer7": {
+  "test-bun": {
+   "classByClaimRule": {
+    "after-region:other | down:": 3,
+    "after-region:other | module:": 29,
+    "before-first-marker | down:": 640,
+    "before-first-marker | module:": 2214,
+    "nested | down:": 228161,
+    "nested | module:": 246403,
+    "nested | seed:declared": 671406,
+    "nested | seed:index": 577616,
+    "nested | seed:queueIndex": 655,
+    "no-markers:claim-holds-whole | down:": 29161,
+    "no-markers:claim-holds-whole | module:": 1662,
+    "no-markers:claim-holds-whole | seed:index": 166562,
+    "no-markers:claim-holds-whole | seed:queueIndex": 1769,
+    "no-markers:other | down:": 52140,
+    "no-markers:other | module:": 39493,
+    "no-markers:other | seed:banner": 9182,
+    "no-markers:other | seed:declared": 5837,
+    "no-markers:other | seed:index": 20043,
+    "own-region | down:": 2083,
+    "own-region | module:": 949,
+    "own-region | seed:index": 12886,
+    "own-region | seed:queueIndex": 77
+   },
+   "classes": {
+    "after-region:other": 32,
+    "before-first-marker": 2854,
+    "nested": 1724241,
+    "no-markers:claim-holds-whole": 199154,
+    "no-markers:other": 126695,
+    "own-region": 15995
+   },
+   "wrongFamilyBytes": 2068971
+  },
+  "test-esbuild": {
+   "classByClaimRule": {
+    "after-region:other | down:": 3,
+    "after-region:other | module:": 29,
+    "before-first-marker | down:": 1252,
+    "before-first-marker | module:": 3248,
+    "before-first-marker | seed:queueIndex": 340,
+    "nested | down:": 265070,
+    "nested | module:": 243328,
+    "nested | seed:declared": 662647,
+    "nested | seed:index": 509681,
+    "nested | seed:queueIndex": 166,
+    "no-content | down:": 167,
+    "no-markers:claim-holds-whole | down:": 30755,
+    "no-markers:claim-holds-whole | module:": 3815,
+    "no-markers:claim-holds-whole | seed:index": 265465,
+    "no-markers:claim-holds-whole | seed:queueIndex": 849,
+    "no-markers:other | down:": 71471,
+    "no-markers:other | module:": 29882,
+    "no-markers:other | seed:declared": 5727,
+    "no-markers:other | seed:index": 150538,
+    "no-markers:other | seed:queueIndex": 169,
+    "own-region | down:": 1089,
+    "own-region | module:": 3060,
+    "own-region | seed:index": 10857
+   },
+   "classes": {
+    "after-region:other": 32,
+    "before-first-marker": 4840,
+    "nested": 1680892,
+    "no-content": 167,
+    "no-markers:claim-holds-whole": 300884,
+    "no-markers:other": 257787,
+    "own-region": 15006
+   },
+   "wrongFamilyBytes": 2259608
+  }
+ },
+ "scorer7dcap": {
+  "test-bun": {
+   "classByClaimRule": {
+    "after-region:other | down:": 3,
+    "after-region:other | module:": 29,
+    "before-first-marker | down:": 327,
+    "before-first-marker | module:": 2169,
+    "nested | down:": 224790,
+    "nested | module:": 246231,
+    "nested | seed:index": 577616,
+    "nested | seed:queueIndex": 511,
+    "no-markers:claim-holds-whole | down:": 29161,
+    "no-markers:claim-holds-whole | module:": 1662,
+    "no-markers:claim-holds-whole | seed:index": 166562,
+    "no-markers:claim-holds-whole | seed:queueIndex": 1769,
+    "no-markers:other | down:": 52140,
+    "no-markers:other | module:": 39493,
+    "no-markers:other | seed:banner": 9182,
+    "no-markers:other | seed:declared": 5837,
+    "no-markers:other | seed:index": 20043,
+    "own-region | down:": 2083,
+    "own-region | module:": 949,
+    "own-region | seed:index": 12886,
+    "own-region | seed:queueIndex": 77
+   },
+   "classes": {
+    "after-region:other": 32,
+    "before-first-marker": 2496,
+    "nested": 1049148,
+    "no-markers:claim-holds-whole": 199154,
+    "no-markers:other": 126695,
+    "own-region": 15995
+   },
+   "wrongFamilyBytes": 1393520
+  },
+  "test-esbuild": {
+   "classByClaimRule": {
+    "after-region:other | down:": 3,
+    "after-region:other | module:": 29,
+    "before-first-marker | down:": 978,
+    "before-first-marker | module:": 3735,
+    "before-first-marker | seed:queueIndex": 93,
+    "nested | down:": 262602,
+    "nested | module:": 243328,
+    "nested | seed:index": 949632,
+    "nested | seed:queueIndex": 166,
+    "no-content | down:": 167,
+    "no-markers:claim-holds-whole | down:": 30755,
+    "no-markers:claim-holds-whole | module:": 3815,
+    "no-markers:claim-holds-whole | seed:index": 265465,
+    "no-markers:claim-holds-whole | seed:queueIndex": 849,
+    "no-markers:other | down:": 71471,
+    "no-markers:other | module:": 29882,
+    "no-markers:other | seed:declared": 5727,
+    "no-markers:other | seed:index": 150538,
+    "no-markers:other | seed:queueIndex": 169,
+    "own-region | down:": 1089,
+    "own-region | module:": 3060,
+    "own-region | seed:index": 10857
+   },
+   "classes": {
+    "after-region:other": 32,
+    "before-first-marker": 4806,
+    "nested": 1455728,
+    "no-content": 167,
+    "no-markers:claim-holds-whole": 300884,
+    "no-markers:other": 257787,
+    "own-region": 15006
+   },
+   "wrongFamilyBytes": 2034410
+  }
+ }
+}
