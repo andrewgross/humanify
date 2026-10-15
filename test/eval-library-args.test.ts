@@ -59,7 +59,7 @@ describe("eval library argument parsing", () => {
           "heldout"
         ])
       ),
-      /--corpus dev\|test\|bundlers\|apps\|pop/
+      /--corpus dev\|test\|test2\|bundlers\|apps\|pop/
     );
     const b = libraryArgs([
       "dev-lbl",
@@ -83,6 +83,17 @@ describe("eval library argument parsing", () => {
     ]);
     assert.ok(typeof a !== "string", String(a));
     assert.deepStrictEqual(a.slice(-2), ["--corpus", "apps"]);
+    const t2 = libraryArgs([
+      "test2-lbl",
+      "--index",
+      "/ix",
+      "--rule",
+      "structural",
+      "--corpus",
+      "test2"
+    ]);
+    assert.ok(typeof t2 !== "string", String(t2));
+    assert.deepStrictEqual(t2.slice(-2), ["--corpus", "test2"]);
     const p = libraryArgs([
       "pop-lbl",
       "--index",

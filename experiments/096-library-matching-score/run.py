@@ -2,7 +2,7 @@
 one claim rule, score it.
 
 usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST]
-                      [--corpus dev|test] [--sets A,B] [--force-mixed] [--pipeline-set library.<key>=value]...
+                      [--corpus dev|test|test2|bundlers|apps] [--sets A,B] [--force-mixed] [--pipeline-set library.<key>=value]...
 
   --commit   build the binary from this commit in a detached worktree (default: this checkout's HEAD, which must
              be clean under crates/ and Cargo.*; a dirty tree would make the label describe code that did not run)
@@ -14,7 +14,8 @@ usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>]
   --sets     run and score only these sets of the corpus (comma-separated; recorded in pipeline.json, so the
              summary holds only them): e.g. test-bun,test-esbuild for an index with no webpack or rollup slice
   --corpus   dev (default: corpus.json, the corpus tuning lanes read) or test (corpus-test.json: exp100's FROZEN test
-             split; its reports and cards stay under its data dir, only the per-set summary is committed) or bundlers
+             split; its reports and cards stay under its data dir, only the per-set summary is committed) or test2
+             (corpus-test2.json: exp116's FROZEN test split v2, private exactly as test) or bundlers
              (corpus-bundlers.json: exp105's dev-side webpack and rollup builds) or apps (corpus-apps.json: exp107's
              dev-side esbuild/webpack/rollup builds of real training apps). A label holds ONE corpus: name
              test labels apart (e.g. test-<label>)

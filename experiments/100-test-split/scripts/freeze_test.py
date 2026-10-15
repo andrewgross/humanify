@@ -1,7 +1,7 @@
 """exp100 step 3: freeze the TEST corpus — copy every built bundle and map under the test data dir, build its
 ground truth and origin layer exactly as exp096 does for the held-out apps, and write corpus-test.json.
 
-usage: <exp095 venv python> -I freeze_test.py [--jobs N]
+usage: <exp095 venv python> -I freeze_test.py [--jobs N] [--split test|test2]
    -> /work/exp100-test-data/frozen/{corpus,truth}/, experiments/096-library-matching-score/corpus-test.json and
       origins-test.json (then `corpus.py verify --corpus test` checks every sha)
 
@@ -20,10 +20,19 @@ REPO = os.path.normpath(os.path.join(HERE, "../../.."))
 sys.path.insert(0, os.path.join(REPO, "experiments/096-library-matching-score"))
 import lib096  # noqa: E402
 
-lib096.use("test")
+# `--split test2` freezes exp116's test split v2 with this same method (its own data dir, manifest and set names)
+SPLITS = {
+    "test": {"sel": "/work/exp100-test-data", "who": "exp100",
+             "note": "exp100 FROZEN test split: never tune on it, never read its per-bundle results"},
+    "test2": {"sel": "/work/exp116-test2-data", "who": "exp116",
+              "note": "exp116 FROZEN test split v2 (the untouched final judge): never tune on it, never diagnose it, "
+                      "never read its per-bundle results"},
+}
+SPLIT = sys.argv[sys.argv.index("--split") + 1] if "--split" in sys.argv else "test"
+lib096.use(SPLIT)
 import corpus  # noqa: E402
 
-SEL = "/work/exp100-test-data"
+SEL = SPLITS[SPLIT]["sel"]
 DESC = {
     "bun": "Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (the held-out recipe)",
     "esbuild": "esbuild 0.28.2 --bundle --minify --platform=node --format=cjs --sourcemap (the index's esbuild recipe)",
@@ -44,17 +53,16 @@ def entries():
             # `bundler` is what the runner tells `discover` (it picks the index slice); the index has no webpack or
             # rollup slice and discover refuses a bundler without one, so those builds are read through the
             # esbuild slice (node, cjs). `builtWith` is the bundler that actually built the file.
-            out.append(({"id": f"test-{bundler}-{a['slug']}", "set": f"test-{bundler}",
+            out.append(({"id": f"{SPLIT}-{bundler}-{a['slug']}", "set": f"{SPLIT}-{bundler}",
                          "bundler": "bun" if bundler == "bun" else "esbuild", "builtWith": bundler,
                          "appPackage": app, "kind": a["kind"],
-                         "description": f"exp100 test app {a['id']}: {DESC[bundler]}"},
+                         "description": f"{SPLITS[SPLIT]['who']} test app {a['id']}: {DESC[bundler]}"},
                         {"bundle": js, "map": js + ".map"}, ("install", os.path.dirname(js), app)))
     return out
 
 
 def main(jobs):
-    manifest = {"schema": "exp096-corpus/1", "corpus": "test", "frozen": True,
-                "note": "exp100 FROZEN test split: never tune on it, never read its per-bundle results",
+    manifest = {"schema": "exp096-corpus/1", "corpus": SPLIT, "frozen": True, "note": SPLITS[SPLIT]["note"],
                 "entries": []}
     work = []
     for entry, files, how in entries():

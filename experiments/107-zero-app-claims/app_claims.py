@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(HERE, "../096-library-matching-score"))
 import lib096  # noqa: E402
 
 ARGV = lib096.corpus_flag(sys.argv)
-if lib096.CORPUS == "test":
+if lib096.CORPUS in lib096.PRIVATE:
     raise SystemExit("REFUSED: the test split's per-bundle reports are not for reading")
 import score  # noqa: E402
 import truth_audit  # noqa: E402
