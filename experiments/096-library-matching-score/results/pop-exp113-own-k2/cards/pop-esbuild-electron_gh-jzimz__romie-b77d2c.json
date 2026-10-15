@@ -1,0 +1,84 @@
+{
+ "bundleSha256": "bf4809ec55321ea5c98136a586809bffc66752cec47b60f920d352c91d4929b3",
+ "claimedBytes": {
+  "family": 6867864,
+  "origin": 310120,
+  "right": 3657464,
+  "unmapped": 173852,
+  "wrongFamily": 1481095
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-jzimz__romie-b77d2c",
+ "exploratory": {
+  "names": {
+   "bindings": 8085,
+   "bindingsSameVersion": 6350,
+   "bindingsVersionKnown": 7478,
+   "exactBytes": 3733808,
+   "exactUnits": 784,
+   "sameVersionShare": 0.849158
+  }
+ },
+ "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.29165,
+  "f1": 0.17562,
+  "namedBytes": 1467314,
+  "precision": 0.521231,
+  "recall": 0.1056
+ },
+ "label": "pop-exp113-own-k2",
+ "missBytes": {
+  "a": 1395862,
+  "b": 719485,
+  "c": 98960,
+  "d-absent": 490387,
+  "e-ambig": 21734,
+  "e-other": 52881,
+  "e-support": 1210,
+  "e-veto": 6247,
+  "f": 272786
+ },
+ "noDiscovery": null,
+ "reportSha256": "3d29109f11d088bf450e31c8b851340b39b472449b458cfbeace4017b39cbd89",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 1429,
+  "<unmapped>": 533946,
+  "copy": 1423492,
+  "library": 13895000
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 1423492,
+  "f05": 0.857762,
+  "f05ShipperOnly": 0.833212,
+  "f1": 0.826769,
+  "f1ShipperOnly": 0.803106,
+  "libraryBytes": 13895000,
+  "namedAsOriginBytes": 310120,
+  "namedAsShipperBytes": 10525328,
+  "namedBytes": 10835448,
+  "namedBytesShipperOnly": 10525328,
+  "precision": 0.879748,
+  "precisionShipperOnly": 0.854568,
+  "recall": 0.779809,
+  "recallShipperOnly": 0.75749,
+  "wrongFamilyBytes": 1481095,
+  "wrongFamilyBytesShipperOnly": 1791215
+ },
+ "truthMethod": "sourcemap"
+}

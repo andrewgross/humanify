@@ -7,7 +7,7 @@ defaults (no `--pipeline-set`) unless a label says otherwise.
 
 - **B. payload guard fixed: DONE** (commit `5b3db379`). Gate: ALL 13 STAGES PASSED (bare, before the commit). Warm
   neutrality `5b3db379` vs main `f568e5bc`, 2.1.215 -> 2.1.216, `--priors /work/exp050-cold --cache
-  /work/neutrality-cache`: NEUTRAL 0 files / 0 lines, exit 0 / 0, cache +0 / +0 (library matching is off by default).
+/work/neutrality-cache`: NEUTRAL 0 files / 0 lines, exit 0 / 0, cache +0 / +0 (library matching is off by default).
 - **A. k2-all build: RUNNING** under `/work/index-build.lock` (30 cores) to `/work/exp113-data/ix/k2-all`.
 
 ## Totals first: the payload fix (P / R / F0.5; app claimed 0 on every set)
