@@ -478,6 +478,21 @@ impl Default for LookupRules {
     }
 }
 
+impl LookupRules {
+    /// The SHIPPED rules: what `[library.lookup]` defaults to (exp109, from
+    /// experiments/106-matcher-hygiene's measured recommendation) — the
+    /// structural rule, the literal margin read by family. `Default` stays
+    /// the engine's baseline (the agreement rule, margin by package), which
+    /// the unit tests compare each rule against.
+    pub fn recommended() -> Self {
+        LookupRules {
+            agreement: false,
+            literal_margin_by_family: true,
+            ..LookupRules::default()
+        }
+    }
+}
+
 /// One statement unit to look up, in statement order.
 pub struct UnitQuery<'q> {
     pub unit: u32,

@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "308f229a97cfb08849bd527e6904724e3b80e5c179f1a03640f009520f7deb72",
+ "claimedBytes": {
+  "family": 3519,
+  "origin": 60926,
+  "right": 4721906,
+  "self": 16369,
+  "unmapped": 2877,
+  "wrongFamily": 156117
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_prisma_cli-1a0b5c",
+ "exploratory": {
+  "names": {
+   "bindings": 47098,
+   "bindingsSameVersion": 44175,
+   "bindingsVersionKnown": 47064,
+   "exactBytes": 4467036,
+   "exactUnits": 4284,
+   "sameVersionShare": 0.938616
+  }
+ },
+ "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.923725,
+  "f1": 0.864215,
+  "namedBytes": 4344111,
+  "precision": 0.968171,
+  "recall": 0.780419
+ },
+ "label": "exp114-both2-apps-structural",
+ "missBytes": {
+  "a": 57174,
+  "b": 467419,
+  "c": 22411,
+  "d-absent": 72713,
+  "d-file": 13390,
+  "e-ambig": 11510,
+  "e-other": 17848,
+  "e-support": 2526,
+  "e-veto": 1785,
+  "f": 113256
+ },
+ "noDiscovery": null,
+ "reportSha256": "e5ae2ddd16978a8ddea96b4189c911db36bd8c4071a149d3401ec05a0d285a65",
+ "rule": "structural",
+ "schema": "exp096-score/7",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<self>": 306244,
+  "<unmapped>": 5775,
+  "copy": 264373,
+  "library": 5566383
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 264373,
+  "f05": 0.944565,
+  "f05ShipperOnly": 0.932542,
+  "f1": 0.910918,
+  "f1ShipperOnly": 0.899323,
+  "libraryBytes": 5566383,
+  "namedAsOriginBytes": 60926,
+  "namedAsShipperBytes": 4725425,
+  "namedBytes": 4786351,
+  "namedBytesShipperOnly": 4725425,
+  "precision": 0.968413,
+  "precisionShipperOnly": 0.956086,
+  "recall": 0.859867,
+  "recallShipperOnly": 0.848922,
+  "wrongFamilyBytes": 156117,
+  "wrongFamilyBytesShipperOnly": 217043
+ },
+ "truthMethod": "sourcemap"
+}

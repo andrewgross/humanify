@@ -267,6 +267,8 @@ Selected test labels, precision and F0.5, scorer 6 -> 7:
 The rule fires on webpack and rollup too. For example, test-exp107-main-structural webpack goes from P 85.8 to
 97.9 and rollup from 75.9 to 93.2.
 
+**After merging main `b4db2b76` (exp109 defaults, exp114 keys):** its 35 new labels (exp109-\*, exp114-\*, and their test summaries) were re-scored once under scorer 7, all exit 0. The moves are the same as above: dev, apps and bundlers move only `schema`, `origins7Sha256` and `copyBytes`; test moves only the truth-derived summary fields. App claimed is 0 everywhere. For example, test-exp109-final-k2-structural (the shipped default config) goes from bun P 80.6 to 95.4 / F0.5 74.1 to 87.7, and from esbuild P 83.6 to 95.9 / F0.5 79.4 to 91.1. test-exp114-allf-k2-structural goes from bun F0.5 74.3 to 88.0 and esbuild 79.5 to 91.2. `declared_max_bytes` stays default-off beside exp109's `recommended()`, which is unchanged.
+
 **Merge note:** exp113 also works off main. Whichever lane lands second re-scores once under the combined
 scorer.
 

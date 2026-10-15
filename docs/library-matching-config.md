@@ -103,7 +103,17 @@ name from the index (in `off` and `report`, that is all of it):
   freeze, no prefix pass; the model names everything. The move must prove
   byte-identity with today's `--no-skip-libraries` on the e2e fixtures.
 
-The config section, with today's values as the compiled-in defaults:
+The config section, with the compiled-in defaults. Since exp109 (2026-10-14)
+the `[library.lookup]` and `[library.discovery]` defaults are the overnight
+campaign's MEASURED recommendation (experiments/106-matcher-hygiene, judged
+end to end on the campaign index in experiments/109-default-config), read
+from `LookupRules::recommended()` / `DiscoveryOptions::recommended()`.
+`LookupRules::default()` / `DiscoveryOptions::default()` stay the engine's
+baseline (the agreement rule, every guard off), which the unit tests compare
+each rule against. Matching itself stays `off` by default, so these keys
+change only `report` (and, once allowed, `names`) runs; `humanify.example.toml`
+is generated from the registry and holds every value below. Which index to
+point `library.index` at: docs/design/library-index.md §10.
 
 ```toml
 [library]
@@ -118,13 +128,15 @@ cover = 0.5
 max_packages = 3
 support = 10
 strong = 100
-specificity = [4, 4096]
-agreement = true               # index-v2: agreement for anything that names code
-min_literals = 6
-literal_bits = 20.0
+specificity = true             # factor 4 + slack 4096 B
+specificity_factor = 4
+specificity_slack = 4096
+agreement = false              # exp109: the STRUCTURAL rule (dev held-out F0.5 85.0 vs agreement 75.2, exp106)
+min_literals = 6               # the literal rule below is read only when agreement = true
+literal_score = 20.0
 literal_cover = 0.9
 literal_margin = 10.0
-literal_margin_by_family = false   # exp106
+literal_margin_by_family = true    # exp106 (agreement rule only)
 
 [library.lookup.targeted]
 min_nodes = 20
@@ -135,17 +147,28 @@ closure_floor = 30
 queue_cap_bytes = 256000
 max_rounds = 50
 veto_support = "without-module"
-evidence_conflict = false      # exp102 precision guards on propagated claims,
-literal_conflict = false       # all off by default (experiments/102-precision)
-contested_cover = 0.0
-banner_names = "any"           # exp106 matcher hygiene (experiments/106-matcher-hygiene),
-helper_families = 0            # all off by default
-payload_min_bytes = 0
-specific_rivals = false
-derived_families = false
-declared_max_bytes = 0         # exp112 (experiments/112-test-precision): a declared seed on a
-                               # statement over N bytes is no seed; off by default
+evidence_conflict = true       # exp102 precision guards on seeds / propagated claims
+literal_conflict = true        #   (experiments/102-precision), ON since exp109
+contested_cover = 0.05
+specific_rivals = true         # exp106: the two conflict guards read rivals under specificity
+banner_names = "known"         # exp106 matcher hygiene (experiments/106-matcher-hygiene)
+derived_families = true        # exp106: one family = npm-metadata links (families-derived.json)
+payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence
+helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
+context_presence = 0.0         # exp114: off; a package seen only in index modules bigger
+context_presence_slack = 0     #   than the bundle's groups is no seed (experiments/114-dev-precision)
+shadow_ties = false            # exp114: off; a package whose seeds are all ties goes to its rival
+presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
+declared_max_bytes = 0         # exp112: off; a declared seed on a statement over N bytes is no
+                               #   seed (experiments/112-test-precision; 65536 measured)
 ```
+
+To reproduce a pre-exp109 run, set the old values back explicitly:
+`agreement = true`, `literal_margin_by_family = false`, `evidence_conflict =
+false`, `literal_conflict = false`, `contested_cover = 0.0`, `specific_rivals
+= false`, `banner_names = "any"`, `derived_families = false`,
+`payload_min_bytes = 0`. (The exp096 harness already pins the rule per label
+with `--rule`; every other key reads the compiled-in default.)
 
 **Missing or stale index — fail loud, before any work.** With
 `--library-matching` not `off`, a missing, unreadable or version-mismatched

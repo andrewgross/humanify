@@ -214,9 +214,9 @@ fn an_index_id_resolves_under_the_store_or_is_refused() {
 
 #[test]
 fn the_lab_knobs_are_keys_with_todays_values() {
-    let c = build(&["in.js"], "[library.lookup]\nagreement = false\nsupport = 0\n[library.lookup.targeted]\nmin_nodes = 25\n[library.discovery]\nveto_support = \"all-rules\"\n").unwrap();
+    let c = build(&["in.js"], "[library.lookup]\nagreement = true\nsupport = 0\n[library.lookup.targeted]\nmin_nodes = 25\n[library.discovery]\nveto_support = \"all-rules\"\n").unwrap();
     let r = c.library.rules();
-    assert!(!r.agreement);
+    assert!(r.agreement);
     assert_eq!(r.support, 0);
     assert_eq!(c.library.lookup.targeted_min_nodes, 25);
     assert_eq!(
@@ -228,8 +228,12 @@ fn the_lab_knobs_are_keys_with_todays_values() {
 }
 
 #[test]
-fn the_exp102_precision_guards_are_keys_default_off() {
-    let off = build(&["in.js"], "").unwrap();
+fn the_exp102_precision_guards_are_keys() {
+    let off = build(
+        &["in.js"],
+        "[library.discovery]\nevidence_conflict = false\nliteral_conflict = false\ncontested_cover = 0.0\n",
+    )
+    .unwrap();
     assert!(!off.library.discovery_options().evidence_conflict);
     assert!(!off.library.discovery_options().literal_conflict);
     assert_eq!(off.library.discovery_options().contested_cover, 0.0);
@@ -246,10 +250,37 @@ fn the_exp102_precision_guards_are_keys_default_off() {
     assert!(err.iter().any(|e| e.contains("contested_cover")), "{err:?}");
 }
 
+/// exp109: the shipped DEFAULT is the campaign's measured recommendation
+/// (experiments/106-matcher-hygiene, experiments/109-default-config): the
+/// structural rule, exp102's three guards, and exp106's hygiene keys. Matching
+/// itself stays off, so only report / names runs read these.
 #[test]
-fn the_exp106_hygiene_keys_default_off() {
+fn the_default_library_tunables_are_the_measured_recommendation() {
     use humanify_core::libdetect::discovery::BannerNames;
-    let off = build(&["in.js"], "").unwrap();
+    let c = build(&["in.js"], "").unwrap();
+    assert_eq!(c.library.matching, LibraryMatching::Off);
+    let r = c.library.rules();
+    assert!(!r.agreement, "the structural rule");
+    assert!(r.literal_margin_by_family);
+    let o = c.library.discovery_options();
+    assert!(o.evidence_conflict);
+    assert!(o.literal_conflict);
+    assert_eq!(o.contested_cover, 0.05);
+    assert!(o.specific_rivals);
+    assert_eq!(o.banner_names, BannerNames::Known);
+    assert!(o.derived_families);
+    assert_eq!(o.payload_min_bytes, 4096);
+    assert_eq!(o.helper_families, 0, "helper_families stays off (exp106)");
+}
+
+#[test]
+fn the_exp106_hygiene_keys_turn_off() {
+    use humanify_core::libdetect::discovery::BannerNames;
+    let off = build(
+        &["in.js"],
+        "[library.lookup]\nliteral_margin_by_family = false\n[library.discovery]\nbanner_names = \"any\"\npayload_min_bytes = 0\nspecific_rivals = false\nderived_families = false\n",
+    )
+    .unwrap();
     let o = off.library.discovery_options();
     assert_eq!(o.banner_names, BannerNames::Any);
     assert_eq!(o.helper_families, 0);
@@ -280,6 +311,27 @@ fn the_exp106_hygiene_keys_default_off() {
     )
     .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("banner_names")), "{err:?}");
+}
+
+/// exp114's presence keys: off by default, set from the file.
+#[test]
+fn the_exp114_presence_keys_default_off_and_set() {
+    let c = build(&["in.js"], "").unwrap();
+    let o = c.library.discovery_options();
+    assert_eq!(o.context_presence, 0.0);
+    assert_eq!(o.context_presence_slack, 0);
+    assert!(!o.shadow_ties);
+    assert!(!o.presence_fence);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ncontext_presence = 1.5\ncontext_presence_slack = 16384\nshadow_ties = true\npresence_fence = true\n",
+    )
+    .unwrap();
+    let o = on.library.discovery_options();
+    assert_eq!(o.context_presence, 1.5);
+    assert_eq!(o.context_presence_slack, 16384);
+    assert!(o.shadow_ties);
+    assert!(o.presence_fence);
 }
 
 #[test]

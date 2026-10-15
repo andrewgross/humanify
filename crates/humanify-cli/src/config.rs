@@ -330,6 +330,10 @@ impl Library {
             payload_min_bytes: d.payload_min_bytes,
             specific_rivals: d.specific_rivals,
             derived_families: d.derived_families,
+            context_presence: d.context_presence,
+            context_presence_slack: d.context_presence_slack,
+            shadow_ties: d.shadow_ties,
+            presence_fence: d.presence_fence,
             declared_max_bytes: d.declared_max_bytes,
         }
     }
@@ -419,6 +423,10 @@ pub struct LibraryDiscovery {
     pub payload_min_bytes: u32,
     pub specific_rivals: bool,
     pub derived_families: bool,
+    pub context_presence: f64,
+    pub context_presence_slack: u64,
+    pub shadow_ties: bool,
+    pub presence_fence: bool,
     pub declared_max_bytes: u32,
 }
 
@@ -595,6 +603,10 @@ fn library_of(r: &Resolved) -> Library {
             payload_min_bytes: n("library.discovery.payload_min_bytes") as u32,
             specific_rivals: r.flag_on("library.discovery.specific_rivals"),
             derived_families: r.flag_on("library.discovery.derived_families"),
+            context_presence: r.float("library.discovery.context_presence"),
+            context_presence_slack: n("library.discovery.context_presence_slack"),
+            shadow_ties: r.flag_on("library.discovery.shadow_ties"),
+            presence_fence: r.flag_on("library.discovery.presence_fence"),
             declared_max_bytes: n("library.discovery.declared_max_bytes") as u32,
         },
     }

@@ -996,6 +996,146 @@ fn specific_rivals_only_a_sponge_s_unspecific_print_is_no_conflict() {
     assert_ne!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
 }
 
+// ---- exp114 dev precision --------------------------------------------------
+
+/// A Bun lazy module (`init_m`) whose group holds lib, dep and x: lib and
+/// dep sit in a module of the group's bytes. `UNGROUPED` is the same code
+/// with no wrapper (every unit its own module).
+const GROUPED: &str = "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\nvar lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar x;\nvar init_m = __esm(() => { x = lib(\"a\"); });\nvar app = () => init_m();\n";
+const UNGROUPED: &str = "var lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar app = () => lib(\"a\");\n";
+
+fn held_at(head: &'static str, owner: &'static str, module_bytes: u64) -> Held<'static> {
+    Held {
+        module_bytes,
+        ..Held::whole(head, owner)
+    }
+}
+
+#[test]
+fn context_presence_drops_a_package_seen_only_in_contexts_bigger_than_the_bundle_s() {
+    // P's index holds lib only in a 3,000-byte module: bigger than the
+    // ~300-byte module lib sits in here (still inside the lookup's
+    // specificity bound, so it seeds). Every P seed oversized: P's copy of
+    // this code lives in an aggregate (a dist bundling its dependency); the
+    // bundle's smaller module is the code's origin, not P. P is no seed and
+    // propagates nothing.
+    let on = DiscoveryOptions {
+        context_presence: 1.5,
+        context_presence_slack: 0,
+        ..DiscoveryOptions::default()
+    };
+    // dep: P's build holds it (containment), in no module a query reads.
+    let oversized = [
+        held_at("var lib", "P", 3000),
+        Held::whole("var dep", "P").unspecific(),
+    ];
+    let (_, _, rows) = run_indexed_with(GROUPED, &oversized, vec![], DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(GROUPED, &oversized, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    // One right-sized seed of P anywhere in the bundle: P is present, every
+    // seed of it stays.
+    let mixed = [held_at("var lib", "P", 3000), held_at("var dep", "P", 100)];
+    let (_, _, rows) = run_indexed_with(GROUPED, &mixed, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    // A unit in no module group (scope-hoisted code) has no module size to
+    // compare: not judged.
+    let (_, _, rows) = run_indexed_with(UNGROUPED, &oversized, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    // The slack: a context within factor x module + slack is right-sized.
+    let slack = DiscoveryOptions {
+        context_presence_slack: 4096,
+        ..on
+    };
+    let (_, _, rows) = run_indexed_with(GROUPED, &oversized, vec![], slack);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+}
+
+/// lib and h2 (lib calls h2) are held by P and Q alike: ties, which the
+/// lookup gives P (name order). other is Q's alone.
+const SHADOW: &str = "var lib = function (t) { return t.split(\",\").map(h2).filter(Boolean).join(\"|\").concat(t.length); };\nvar h2 = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar other = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16)].join(\",\"); };\nvar app = () => lib(\"a\") + other(1);\n";
+
+#[test]
+fn shadow_ties_give_a_package_with_only_ambiguous_seeds_to_the_rival_the_bundle_evidences() {
+    let on = DiscoveryOptions {
+        shadow_ties: true,
+        ..DiscoveryOptions::default()
+    };
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::whole("var lib", "Q"),
+        Held::whole("var h2", "P"),
+        Held::whole("var h2", "Q"),
+        Held::whole("var other", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(SHADOW, &held, vec![], DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var h2"), Some(("P".into(), Rule::Seed)));
+    // P's every seed is a tie with Q, and Q has evidence of its own here:
+    // P is Q's shadow (a package carrying Q's code), its ties are Q's.
+    let (_, _, rows) = run_indexed_with(SHADOW, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var h2"), Some(("Q".into(), Rule::Seed)));
+    // Q with no evidence of its own: nothing to prefer, the ties stay P's.
+    let (_, _, rows) = run_indexed_with(SHADOW, &held[..4], vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    // P with a seed of its own (other held by P alone too would tie; give
+    // P a unique unit instead): P is present, its ties stay.
+    let own = [
+        Held::whole("var lib", "P"),
+        Held::whole("var lib", "Q"),
+        Held::whole("var h2", "P"),
+        Held::whole("var other", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(SHADOW, &own, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    // Q holds the tied code only in a bigger module than P does: Q would be
+    // the CARRIER of P's code, not its origin — the ties stay P's.
+    let bigger = [
+        Held::whole("var lib", "P"),
+        held_at("var lib", "Q", 4000),
+        Held::whole("var h2", "P"),
+        held_at("var h2", "Q", 4000),
+        Held::whole("var other", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(SHADOW, &bigger, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+}
+
+/// GROUPED with a caller of lib, `user`, that is Q's: with P dropped, Q's
+/// DOWN would take lib and dep (Q's build holds them, unspecific).
+const FENCED: &str = "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\nvar lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar user = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), lib(String(k))].join(\",\"); };\nvar x;\nvar init_m = __esm(() => { x = user(1); });\nvar app = () => init_m();\n";
+
+#[test]
+fn presence_fence_names_neither_the_dropped_package_nor_its_rival() {
+    let held = [
+        held_at("var lib", "P", 3000),
+        Held::whole("var dep", "P").unspecific(),
+        held_at("var user", "Q", 100),
+        Held::whole("var lib", "Q").unspecific(),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let drop = DiscoveryOptions {
+        context_presence: 1.5,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(FENCED, &held, vec![], drop);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Down)));
+    // Fenced: the code P's seeds stood on is ambiguous between the shipper
+    // and the origin; nothing names it.
+    let fence = DiscoveryOptions {
+        presence_fence: true,
+        ..drop
+    };
+    let (_, found, rows) = run_indexed_with(FENCED, &held, vec![], fence);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert!(found.claims.values().all(|c| !c.package.starts_with('<')));
+}
+
 fn run_with_options(
     code: &'static str,
     seeds: &[(&str, &str, Evidence)],
