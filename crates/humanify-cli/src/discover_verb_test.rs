@@ -60,6 +60,7 @@ fn self_index(code: &str, name: &str) -> PathBuf {
             content: p.whole.content,
             module_bytes: 100,
             versions: vec![("1.0.0".into(), "1.0.0".into())],
+            vendored: None,
         })
         .collect();
     let units = [("bun-bun-cjs-min".to_string(), rows)]

@@ -726,6 +726,18 @@ pub static KEYS: &[Key] = &[
               nor a rival propagating into it: the code is ambiguous between a shipper and its \
               origin, so name neither (exp114).",
     },
+    Key {
+        section: "library.discovery",
+        name: "vendored_presence",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().vendored_presence)),
+        unset: "",
+        doc: "A package whose every index seed stands only on index rows from vendored copies \
+              (files whose path inside the package names another package) is no seed: the \
+              bundle shows only code it ships a copy of (exp115; with presence_fence, named by \
+              no one).",
+    },
     // [unpack]
     Key {
         section: "unpack",

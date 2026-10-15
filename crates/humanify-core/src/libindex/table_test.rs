@@ -1,4 +1,4 @@
-//! The lookup tables (`humanify-library-index/3`): what the encoder writes
+//! The lookup tables (`humanify-library-index/4`): what the encoder writes
 //! the reader answers, from disk and from memory alike, without loading a
 //! table whole.
 
@@ -19,6 +19,7 @@ fn unit(hash: u64, owner: &str, module_bytes: u64) -> UnitRow {
         content: 5,
         module_bytes,
         versions: vec![("1.0.0".into(), "1.0.0".into())],
+        vendored: None,
     }
 }
 
@@ -105,6 +106,43 @@ fn a_unit_table_answers_every_hash_with_its_rows_in_row_order() {
     assert_eq!(table.hits(&format!("{:016x}", 7 * 199)).len(), 1);
     assert!(table.hits(&format!("{:016x}", 8)).is_empty());
     assert!(table.hits("not-a-hash").is_empty());
+}
+
+#[test]
+fn a_unit_table_carries_each_row_s_vendored_mark() {
+    // exp115 (/4): own code, a copy of an indexed package (its owner id),
+    // a copy of a package the index does not hold
+    use crate::libindex::table::{NOT_VENDORED, VENDORED_UNINDEXED};
+    let mut own = unit(5, "crossws", 100);
+    own.file = "dist/index.mjs".into();
+    let mut copy = unit(5, "crossws", 200);
+    copy.file = "dist/_chunks/libs/ws.mjs".into();
+    copy.vendored = Some("ws".into());
+    let mut unknown = unit(5, "@rspack/core", 300);
+    unknown.file = "compiled/tinypool/index.js".into();
+    unknown.vendored = Some("tinypool".into());
+    let origin = unit(5, "ws", 50);
+    let rows = vec![own, copy, unknown, origin];
+    let packages = package_table(&[&rows], &[]);
+    let ws = packages.iter().position(|p| p == "ws").unwrap() as u32;
+    let table = UnitTable::open(Source::Memory(
+        UnitTable::encode(&rows, &packages).expect("encodes"),
+    ))
+    .expect("opens");
+    let got: Vec<(u64, u32, bool)> = table
+        .hits(&format!("{:016x}", 5))
+        .iter()
+        .map(|h| (h.module_bytes, h.vendored, h.is_vendored()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            (100, NOT_VENDORED, false),
+            (200, ws, true),
+            (300, VENDORED_UNINDEXED, true),
+            (50, NOT_VENDORED, false),
+        ]
+    );
 }
 
 #[test]

@@ -333,3 +333,16 @@ fn the_exp114_presence_keys_default_off_and_set() {
     assert!(o.shadow_ties);
     assert!(o.presence_fence);
 }
+
+/// exp115's vendored-presence key: off by default, set from the file.
+#[test]
+fn the_exp115_vendored_presence_key_defaults_off_and_sets() {
+    let c = build(&["in.js"], "").unwrap();
+    assert!(!c.library.discovery_options().vendored_presence);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\nvendored_presence = true\n",
+    )
+    .unwrap();
+    assert!(on.library.discovery_options().vendored_presence);
+}

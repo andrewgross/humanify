@@ -326,6 +326,7 @@ impl Merger {
                     content: u.content,
                     module_bytes: u.module_bytes,
                     versions: self.ranges(indexed, k.1, &u.versions),
+                    vendored: None,
                 }
             })
             .collect()
@@ -365,11 +366,17 @@ impl Merger {
             );
             let rows = self.unit_rows(g, &indexed);
             if !rows.is_empty() {
-                files.insert(format!("units.{kind}.jsonl"), jsonl(&rows));
                 units.insert(kind.clone(), rows);
             }
         }
         let literals = self.literal_rows(&indexed);
+        files.insert(
+            VENDORED_FILE.into(),
+            pretty(&mark_vendored_rows(&mut units, &literals)),
+        );
+        for (kind, rows) in &units {
+            files.insert(format!("units.{kind}.jsonl"), jsonl(rows));
+        }
         files.extend(humanify_core::libindex::table::lookup_files(
             &units, &literals,
         )?);
@@ -414,6 +421,43 @@ impl Merger {
         let id = hex_sha256(&manifest_bytes);
         files.insert("manifest.json".into(), manifest_bytes);
         Ok(IndexFiles { files, id })
+    }
+}
+
+/// The merge's summary of the vendored-copy marks (exp115).
+pub const VENDORED_FILE: &str = "vendored.json";
+
+/// What [`mark_vendored_rows`] marked, per slice.
+#[derive(serde::Serialize)]
+struct VendoredSummary {
+    about: &'static str,
+    slices: BTreeMap<String, humanify_core::libindex::vendored::VendoredStats>,
+}
+
+/// Mark every slice's unit rows whose file is a vendored copy of another
+/// package (`humanify_core::libindex::vendored`): the names known are the
+/// index's owners, the families the shipped ones joined by the derived
+/// links among them (what a run's family judgement reads).
+fn mark_vendored_rows(
+    units: &mut BTreeMap<String, Vec<UnitRow>>,
+    literals: &[LiteralRow],
+) -> VendoredSummary {
+    use humanify_core::libindex::families::PackageFamilies;
+    use humanify_core::libindex::vendored::mark_vendored;
+    let slices: Vec<&[UnitRow]> = units.values().map(Vec::as_slice).collect();
+    let names: BTreeSet<String> = humanify_core::libindex::table::package_table(&slices, literals)
+        .into_iter()
+        .collect();
+    let families = PackageFamilies::shipped().with_shipped_links_among(&names);
+    let known = |n: &str| names.contains(n);
+    let same = |a: &str, b: &str| families.same(a, b);
+    VendoredSummary {
+        about: "Unit rows whose file is a vendored copy of another package (exp115, \
+                humanify_core::libindex::vendored): per slice, the rows and files marked.",
+        slices: units
+            .iter_mut()
+            .map(|(kind, rows)| (kind.clone(), mark_vendored(rows, &known, &same)))
+            .collect(),
     }
 }
 

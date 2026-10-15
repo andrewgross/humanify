@@ -1,0 +1,16 @@
+# exp115's LAB marker: an existing /3 index -> a /4 copy whose unit rows carry the vendored-copy marks, computed by
+# humanify-core's own `libindex::vendored::mark_vendored` (the merge's rule) over the index's own rows. Lab code,
+# OUTSIDE the workspace: it gives early numbers while /work/index-build.lock is held; the shipped path is the
+# merge (crates/humanify-index/src/merge.rs, `--merge-only`).
+[package]
+name = "exp115-lab-mark"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+humanify-core = { path = "../../../crates/humanify-core" }
+serde_json = "=1.0.142"
+sha2 = "=0.10.9"

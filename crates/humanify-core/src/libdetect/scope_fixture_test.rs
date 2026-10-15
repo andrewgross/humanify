@@ -62,6 +62,7 @@ fn library_index() -> LibraryIndex {
             content: p.whole.content,
             module_bytes: LIBRARY.len() as u64,
             versions: vec![("1.0.0".into(), "1.0.0".into())],
+            vendored: None,
         })
         .collect();
     assert_eq!(rows.len(), 2, "a two-entry index: fmt and entry");

@@ -159,6 +159,8 @@ context_presence = 0.0         # exp114: off; a package seen only in index modul
 context_presence_slack = 0     #   than the bundle's groups is no seed (experiments/114-dev-precision)
 shadow_ties = false            # exp114: off; a package whose seeds are all ties goes to its rival
 presence_fence = false         # exp114: off; what the two presence keys drop is named by no one
+vendored_presence = false      # exp115: off; a package whose every index seed stands on rows from vendored-copy
+                               #   files (a path naming another package: index /4 marks) is no seed
 ```
 
 To reproduce a pre-exp109 run, set the old values back explicitly:

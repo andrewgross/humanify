@@ -355,6 +355,7 @@ fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
             content: p.whole.content,
             module_bytes: 500,
             versions: vec![("3.0.0".into(), "3.0.0".into())],
+            vendored: None,
         })
         .collect();
     let index = LibraryIndex::from_rows(rows, vec![]);
@@ -508,6 +509,8 @@ struct Held<'h> {
     owner: &'h str,
     function: bool,
     module_bytes: u64,
+    /// The package the row's file is a vendored copy of (exp115).
+    vendored: Option<&'h str>,
 }
 
 impl<'h> Held<'h> {
@@ -517,6 +520,15 @@ impl<'h> Held<'h> {
             owner,
             function: false,
             module_bytes: 500,
+            vendored: None,
+        }
+    }
+
+    /// Held in a file that is a vendored copy of `named`.
+    fn vendored(self, named: &'h str) -> Held<'h> {
+        Held {
+            vendored: Some(named),
+            ..self
         }
     }
 
@@ -579,11 +591,15 @@ fn run_indexed_with(
         rows.push(UnitRow {
             hash: print.hash.clone(),
             owner: h.owner.into(),
-            file: "index.js".into(),
+            file: match h.vendored {
+                Some(n) => format!("compiled/{n}/index.js"),
+                None => "index.js".into(),
+            },
             nodes: print.nodes,
             content: print.content,
             module_bytes: h.module_bytes,
             versions: vec![("1.0.0".into(), "1.0.0".into())],
+            vendored: h.vendored.map(str::to_string),
         });
     }
     let index = LibraryIndex::from_rows(rows, literals);
@@ -1131,6 +1147,63 @@ fn presence_fence_names_neither_the_dropped_package_nor_its_rival() {
         ..drop
     };
     let (_, found, rows) = run_indexed_with(FENCED, &held, vec![], fence);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert!(found.claims.values().all(|c| !c.package.starts_with('<')));
+}
+
+#[test]
+fn vendored_presence_drops_a_package_whose_every_seed_stands_on_vendored_copies() {
+    // P's index rows for lib and dep sit in P's `compiled/Q/` directory: a
+    // copy of Q that P ships. Nowhere does the bundle show P's own code.
+    let on = DiscoveryOptions {
+        vendored_presence: true,
+        ..DiscoveryOptions::default()
+    };
+    let copies = [
+        Held::whole("var lib", "P").vendored("Q"),
+        Held::whole("var dep", "P").vendored("Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(UNGROUPED, &copies, vec![], DiscoveryOptions::default());
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    let (_, _, rows) = run_indexed_with(UNGROUPED, &copies, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    // One seed on P's own code: P is present, every seed stays.
+    let mixed = [
+        Held::whole("var lib", "P").vendored("Q"),
+        Held::whole("var dep", "P"),
+    ];
+    let (_, _, rows) = run_indexed_with(UNGROUPED, &mixed, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    // P holding the same code in its own file too: not a copy-only seed.
+    let both = [
+        Held::whole("var lib", "P").vendored("Q"),
+        Held::whole("var lib", "P"),
+        Held::whole("var dep", "P").vendored("Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(UNGROUPED, &both, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+}
+
+#[test]
+fn presence_fence_names_neither_a_vendored_shipper_nor_a_rival() {
+    // Q holds the code only far away (no seed), but would propagate into
+    // what P's dropped seeds leave open; fenced, nothing names it.
+    let held = [
+        Held::whole("var lib", "P").vendored("Q"),
+        Held::whole("var dep", "P").vendored("Q"),
+        held_at("var user", "Q", 100),
+        Held::whole("var lib", "Q").unspecific(),
+        Held::whole("var dep", "Q").unspecific(),
+    ];
+    let on = DiscoveryOptions {
+        vendored_presence: true,
+        presence_fence: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, found, rows) = run_indexed_with(FENCED, &held, vec![], on);
     assert_eq!(claim_of(&rows, "var lib"), None);
     assert_eq!(claim_of(&rows, "var dep"), None);
     assert!(found.claims.values().all(|c| !c.package.starts_with('<')));

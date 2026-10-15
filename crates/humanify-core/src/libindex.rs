@@ -27,6 +27,7 @@ pub mod lookup;
 pub mod recipe;
 pub mod table;
 pub mod units;
+pub mod vendored;
 
 #[cfg(test)]
 #[path = "libindex/families_test.rs"]
@@ -49,3 +50,6 @@ mod table_test;
 #[cfg(test)]
 #[path = "libindex/units_test.rs"]
 mod units_test;
+#[cfg(test)]
+#[path = "libindex/vendored_test.rs"]
+mod vendored_test;

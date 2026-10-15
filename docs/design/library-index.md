@@ -165,7 +165,7 @@ bundler automatically is deferred.
 - The registry `time` map is the publisher's clock. Mirrors can differ;
   the builder reads `registry.npmjs.org` through npm's own configuration.
 
-## 4. On-disk format (`humanify-library-index/3`)
+## 4. On-disk format (`humanify-library-index/4`)
 
 An index is a directory of two kinds of table: ROW tables (UTF-8 JSON or
 JSON-lines, one row per line, rows sorted, keys in a fixed order, a
@@ -179,10 +179,11 @@ run reads.
   manifest.json          what was built from what (below); its sha256 is the INDEX ID
   versions.json          {"<owner>": ["1.0.0", "1.1.0", ...]} — each owner's indexed versions, semver order
   modules.<slice>.jsonl  {"key", "owner", "files", "versions"}   one row per (key, owner)
-  units.<slice>.jsonl    {"hash", "owner", "file", "nodes", "content", "moduleBytes", "versions"}
+  units.<slice>.jsonl    {"hash", "owner", "file", "nodes", "content", "moduleBytes", "versions"[, "vendored"]}
   literals.files.jsonl   {"owner", "file", "versions"}   literal file i (its literal SET is file i of literals.bin)
   packages.json          every owner the lookup tables hold, sorted: an owner id is its position
-  units.<slice>.bin      lookup: unit hash (16 hex = u64) -> rows (owner id, smallest module bytes)
+  units.<slice>.bin      lookup: unit hash (16 hex = u64) -> rows (owner id, smallest module bytes, vendored mark)
+  vendored.json          the merge's summary of the vendored-copy marks, per slice (since /4)
   literals.bin           lookup: literal -> package count, files; file -> owner id, literal ids
   stoplists.json         copied data (§7); its sha256 in the manifest
   families.json          copied data (§7); its sha256 in the manifest
@@ -200,7 +201,20 @@ with a resident set of ~1/64 of the key columns, so the run's cost no
 longer grows with the index's size. The literal sets are stored ONLY in
 `literals.bin` (`literals.jsonl`, 40% of a `/2` index, is gone); a unit
 row's file, nodes, content and versions stay in the row table. The merge
-writes both kinds from the same rows; the loader reads only `/3`.
+writes both kinds from the same rows; the loader reads only `/4`.
+
+**Vendored-copy marks (since `/4`, exp115).** The merge marks a unit row
+whose FILE, inside its owner's package, is a copy of another package
+(`humanify_core::libindex::vendored`): `compiled/<pkg>/`,
+`lib-vendor/<pkg>/`, `node_modules/<pkg>/` mark as they stand; a weak
+directory (`libs/`, `deps/`, `external/`) or the file's own stem with its
+chunk hash stripped (`chunks/typescript-<hash>.cjs`) marks only when the
+named package itself holds at least 2 and 10% of that file's prints. The
+row table gains `"vendored": "<pkg>"`, the lookup row a u32 (the named
+package's owner id, or "not indexed", or "own code"), so a run can tell a
+shipper's copy from its own code (`[library.discovery] vendored_presence`).
+The builder's older rule still drops plain `vendor/` directories and
+bundler-marker files at build time (`humanify-index`'s `sponge_evidence`).
 
 **Version ranges.** `versions` is a list of `[from, to]` pairs over the
 owner's indexed versions in `versions.json` order: `["1.0.0","1.2.0"]`
@@ -220,7 +234,7 @@ rules (§8), not build rules, so the index keeps the evidence they need.
 
 ```json
 {
-  "format": "humanify-library-index/3",
+  "format": "humanify-library-index/4",
   "asOf": "2024-06-30T23:59:59.999Z",
   "fingerprints": {"module": "vendor-content-key/4", "literals": "literals/1"},
   "registry": {"earliestFetch": "...", "latestFetch": "...", "packuments": {"ms": "<sha256>", ...}},

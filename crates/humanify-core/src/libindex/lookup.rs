@@ -21,6 +21,18 @@ pub struct UnitHit {
     pub owner: u32,
     /// The smallest bundled module the unit was seen in (specificity).
     pub module_bytes: u64,
+    /// The package this row's file is a vendored copy of (exp115):
+    /// [`table::NOT_VENDORED`] for the owner's own code,
+    /// [`table::VENDORED_UNINDEXED`] for a package the index does not
+    /// hold, else that package's owner id.
+    pub vendored: u32,
+}
+
+impl UnitHit {
+    /// Does this row sit in a vendored copy of another package?
+    pub fn is_vendored(&self) -> bool {
+        self.vendored != table::NOT_VENDORED
+    }
 }
 
 /// An opened index slice: its unit table and the literal table, read on

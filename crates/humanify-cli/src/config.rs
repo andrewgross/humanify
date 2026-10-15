@@ -334,6 +334,7 @@ impl Library {
             context_presence_slack: d.context_presence_slack,
             shadow_ties: d.shadow_ties,
             presence_fence: d.presence_fence,
+            vendored_presence: d.vendored_presence,
         }
     }
 
@@ -426,6 +427,7 @@ pub struct LibraryDiscovery {
     pub context_presence_slack: u64,
     pub shadow_ties: bool,
     pub presence_fence: bool,
+    pub vendored_presence: bool,
 }
 
 fn serialize_banner_names<S: serde::Serializer>(
@@ -605,6 +607,7 @@ fn library_of(r: &Resolved) -> Library {
             context_presence_slack: n("library.discovery.context_presence_slack"),
             shadow_ties: r.flag_on("library.discovery.shadow_ties"),
             presence_fence: r.flag_on("library.discovery.presence_fence"),
+            vendored_presence: r.flag_on("library.discovery.vendored_presence"),
         },
     }
 }

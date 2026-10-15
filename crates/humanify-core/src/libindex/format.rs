@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT};
 
 /// The format tag in every manifest.
-pub const INDEX_FORMAT: &str = "humanify-library-index/3";
+pub const INDEX_FORMAT: &str = "humanify-library-index/4";
 
 /// The build recipe's version (`humanify-index`'s `recipe` module: every
 /// rule of how a slice's bundles are made). Recorded per slice in the
@@ -165,11 +165,15 @@ pub struct UnitRow {
     pub content: u32,
     pub module_bytes: u64,
     pub versions: Vec<(String, String)>,
+    /// The package this row's FILE is a vendored copy of, when its path
+    /// says so (exp115, [`super::vendored`]); None for the owner's own code.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vendored: Option<String>,
 }
 
 /// One literal FILE row as the merge computes it: one source file's
 /// literal set, per owner, with the versions in which that file had
-/// exactly this set. On disk it is split (`humanify-library-index/3`): the
+/// exactly this set. On disk it is split (since `humanify-library-index/3`): the
 /// literal sets go to the lookup table (`table::LiteralTable`, file id =
 /// row position) and the rest to `literals.files.jsonl`
 /// ([`LiteralFileRow`]), row for row.

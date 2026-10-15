@@ -215,6 +215,15 @@ pub struct DiscoveryOptions {
     /// propagating into it — instead of left open (the code is ambiguous
     /// between a shipper and its origin; name neither).
     pub presence_fence: bool,
+    /// Vendored presence (exp115; default off): a package every one of
+    /// whose index seeds stands only on index rows from VENDORED COPIES —
+    /// files whose path inside the package names another package
+    /// (`compiled/<pkg>/`, `dist/_chunks/libs/<pkg>.mjs`; the index's
+    /// `libindex::vendored` marks) — is no seed: nowhere does the bundle
+    /// show the package's own code, only code it ships a copy of
+    /// ([`presence`]). With [`Self::presence_fence`], what it drops is named
+    /// by no one.
+    pub vendored_presence: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -236,6 +245,7 @@ impl Default for DiscoveryOptions {
             context_presence_slack: 0,
             shadow_ties: false,
             presence_fence: false,
+            vendored_presence: false,
         }
     }
 }
@@ -939,6 +949,40 @@ impl<'c> Containment<'c> {
             .min()
     }
 
+    /// Does `package` hold unit `u`'s code only in VENDORED copies
+    /// ([`DiscoveryOptions::vendored_presence`])? Over every print of `u`
+    /// the index can hold (and the lookup's specificity bound): `package`
+    /// holds at least one, and every row of `package` holding one sits in
+    /// a file marked as a copy of another package.
+    fn vendored_only(&self, u: u32, package: &str) -> bool {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return false;
+        };
+        let query = self.module_bytes[u as usize];
+        let mut held = false;
+        for p in std::iter::once(&prints.whole)
+            .chain(&prints.functions)
+            .filter(|p| p.nodes >= UNIT_ROW_MIN_NODES)
+        {
+            for hit in self.index.candidates(&p.hash).iter() {
+                let specific = self
+                    .rules
+                    .specificity
+                    .is_none_or(|(factor, slack)| hit.module_bytes <= factor * query + slack);
+                if !specific || self.name(hit.owner) != package {
+                    continue;
+                }
+                if !hit.is_vendored() {
+                    return false;
+                }
+                held = true;
+            }
+        }
+        held
+    }
+
     /// Does the index contradict unit `u` being `package`'s? (type doc)
     fn contradicts(&self, u: u32, package: &str) -> bool {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
@@ -1346,7 +1390,8 @@ fn isolated(
 }
 
 /// The bundle-level presence rules on the index seeds (exp114;
-/// [`DiscoveryOptions::context_presence`], [`DiscoveryOptions::shadow_ties`]):
+/// [`DiscoveryOptions::context_presence`], [`DiscoveryOptions::shadow_ties`];
+/// exp115 [`DiscoveryOptions::vendored_presence`]):
 /// a package's index seeds answer "is this code P's?" one unit at a time;
 /// these ask whether the bundle shows P AT ALL. Declarations and banners
 /// pass untouched, and a package with one keeps its index seeds.
@@ -1358,7 +1403,7 @@ fn presence(
     families: &PackageFamilies,
     options: DiscoveryOptions,
 ) -> Vec<Seed> {
-    if options.context_presence <= 0.0 && !options.shadow_ties {
+    if options.context_presence <= 0.0 && !options.shadow_ties && !options.vendored_presence {
         return seeds;
     }
     // A family key per package: one family judgement joins packages.
@@ -1398,6 +1443,24 @@ fn presence(
                     });
             judged.insert(k);
             if !oversized {
+                present.insert(k);
+            }
+        }
+        for (slot, &k) in keep.iter_mut().zip(&keys) {
+            if judged.contains(&k) && !present.contains(&k) {
+                dropped_units.extend(slot.take().map(|s| s.unit));
+            }
+        }
+    }
+    if options.vendored_presence {
+        // A package (family) is present when one of its index seeds stands
+        // on its own code; one judged and never present is dropped.
+        let mut present: BTreeSet<usize> = declared.clone();
+        let mut judged: BTreeSet<usize> = BTreeSet::new();
+        for (s, &k) in keep.iter().zip(&keys) {
+            let Some(s) = s else { continue };
+            judged.insert(k);
+            if !present.contains(&k) && !containment.vendored_only(s.unit, &s.package) {
                 present.insert(k);
             }
         }

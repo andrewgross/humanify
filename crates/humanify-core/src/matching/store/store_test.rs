@@ -22,6 +22,7 @@ fn row(hash: &str, owner: &str) -> UnitRow {
         content: 5,
         module_bytes: 900,
         versions: vec![("1.0.0".into(), "1.0.0".into())],
+        vendored: None,
     }
 }
 

@@ -1,4 +1,4 @@
-//! The index's LOOKUP tables (`humanify-library-index/3`,
+//! The index's LOOKUP tables (`humanify-library-index/4`,
 //! docs/design/library-index.md §4): everything the lookup reads, in
 //! sorted binary columns read on demand — never parsed into a map on load.
 //!
@@ -17,8 +17,10 @@
 //!   is its position.
 //! - `units.<slice>.bin` ([`UnitTable`]) — per distinct unit hash (16 hex
 //!   digits read as a `u64`, [`unit_key`]) the rows holding it, in row
-//!   order: (owner id, smallest module bytes). What the structural rule,
-//!   specificity and containment read; a unit row's file, nodes, content
+//!   order: (owner id, smallest module bytes, vendored mark). What the
+//!   structural rule, specificity and containment read (the mark: the
+//!   package the row's file is a vendored copy of, exp115 /4); a unit
+//!   row's file, nodes, content
 //!   and versions stay in `units.<slice>.jsonl` (provenance: the scorer's,
 //!   never the run's).
 //! - [`LITERALS_FILE`] ([`LiteralTable`]) — every distinct literal (keyed
@@ -51,7 +53,7 @@ pub fn units_file(slice: &str) -> String {
 /// the share of a key column a process holds (1/64).
 pub const BLOCK: usize = 64;
 
-const UNITS_MAGIC: &[u8; 8] = b"HXUNIT03";
+const UNITS_MAGIC: &[u8; 8] = b"HXUNIT04";
 const LITERALS_MAGIC: &[u8; 8] = b"HXLITS03";
 
 /// A unit hash's key: its 16 lowercase hex digits as a number. Any other
@@ -382,7 +384,9 @@ fn header(src: &Source, magic: &[u8; 8], what: &str, n: usize) -> Result<Vec<u64
 // ----------------------------------------------------------- unit table
 
 /// `units.<slice>.bin`: header (magic, keys, rows), the key column, row
-/// starts (keys + 1), rows (owner u32, module bytes u64).
+/// starts (keys + 1), rows (owner u32, module bytes u64, vendored u32:
+/// [`NOT_VENDORED`], [`VENDORED_UNINDEXED`] or the named package's owner
+/// id).
 pub struct UnitTable {
     src: Source,
     keys: KeyColumn,
@@ -390,20 +394,35 @@ pub struct UnitTable {
     rows_at: u64,
 }
 
-const UNIT_ROW: u64 = 12;
+const UNIT_ROW: u64 = 16;
+
+/// A row of the owner's own code.
+pub const NOT_VENDORED: u32 = u32::MAX;
+/// A vendored copy of a package the index does not hold.
+pub const VENDORED_UNINDEXED: u32 = u32::MAX - 1;
+
+fn vendored_id(packages: &[String], named: Option<&str>) -> u32 {
+    match named {
+        None => NOT_VENDORED,
+        Some(n) => packages
+            .binary_search_by(|p| p.as_str().cmp(n))
+            .map_or(VENDORED_UNINDEXED, |i| i as u32),
+    }
+}
 
 impl UnitTable {
     /// `rows` in any order; a key's rows keep their order in `rows`.
     pub fn encode(rows: &[UnitRow], packages: &[String]) -> Result<Vec<u8>, String> {
-        let mut by_key: BTreeMap<u64, Vec<(u32, u64)>> = BTreeMap::new();
+        let mut by_key: BTreeMap<u64, Vec<(u32, u64, u32)>> = BTreeMap::new();
         for r in rows {
             let key = unit_key(&r.hash).ok_or_else(|| {
                 format!("unit row hash {:?} is not 16 lowercase hex digits", r.hash)
             })?;
-            by_key
-                .entry(key)
-                .or_default()
-                .push((owner_id(packages, &r.owner), r.module_bytes));
+            by_key.entry(key).or_default().push((
+                owner_id(packages, &r.owner),
+                r.module_bytes,
+                vendored_id(packages, r.vendored.as_deref()),
+            ));
         }
         let keys: Vec<u64> = by_key.keys().copied().collect();
         let mut out = Out::default();
@@ -411,9 +430,10 @@ impl UnitTable {
         out.u64s([keys.len() as u64, rows.len() as u64]);
         out.0.extend(KeyColumnBytes::encode(&keys).bytes);
         out.u64s(offsets(by_key.values().map(Vec::len)));
-        for (owner, bytes) in by_key.into_values().flatten() {
+        for (owner, bytes, vendored) in by_key.into_values().flatten() {
             out.u32(owner);
             out.u64(bytes);
+            out.u32(vendored);
         }
         Ok(out.0)
     }
@@ -451,7 +471,8 @@ impl UnitTable {
             .iter()
             .map(|c| UnitHit {
                 owner: u32::from_le_bytes(c[..4].try_into().expect("4 bytes")),
-                module_bytes: u64::from_le_bytes(c[4..].try_into().expect("8 bytes")),
+                module_bytes: u64::from_le_bytes(c[4..12].try_into().expect("8 bytes")),
+                vendored: u32::from_le_bytes(c[12..].try_into().expect("4 bytes")),
             })
             .collect()
     }

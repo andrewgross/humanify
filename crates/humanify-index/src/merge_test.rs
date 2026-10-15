@@ -300,3 +300,66 @@ fn a_unit_group_keeps_the_first_shards_nodes_whatever_order_the_list_had() {
         rows(&a.files["units.bun-node-cjs-min.jsonl"]);
     assert_eq!(rows[0].nodes, 40, "label order: 1.0.0 first");
 }
+
+#[test]
+fn the_merge_marks_unit_rows_whose_file_is_a_vendored_copy() {
+    // exp115: crossws ships ws in `dist/_chunks/libs/ws.mjs` (the chunk
+    // shares its prints with ws itself: confirmed) and @rspack/core ships
+    // tinypool under `compiled/` (a vendor directory: marked as it stands,
+    // tinypool unindexed). The rows' marks reach the jsonl, the lookup
+    // table and the merge's summary.
+    use super::shard::ShardUnit;
+    use humanify_core::libindex::table::{Source, UnitTable, VENDORED_UNINDEXED};
+    let unit = |owner: &str, file: &str, hash: &str| ShardUnit {
+        owner: owner.into(),
+        version: "1.0.0".into(),
+        file: file.into(),
+        hash: hash.into(),
+        nodes: 40,
+        content: 5,
+        module_bytes: 900,
+    };
+    let mut s = module_shard("1.0.0", &[]);
+    s.units = vec![
+        unit("crossws", "dist/_chunks/libs/ws.mjs", H1),
+        unit("crossws", "dist/_chunks/libs/ws.mjs", H2),
+        unit("crossws", "dist/index.mjs", HT),
+        unit("ws", "lib/websocket.js", H1),
+        unit("ws", "lib/receiver.js", H2),
+        unit("@rspack/core", "compiled/tinypool/dist/index.js", HT),
+    ];
+    let files = merge(meta(), vec![s]).expect("merges").files;
+    let rows: Vec<humanify_core::libindex::format::UnitRow> =
+        rows(&files["units.bun-node-cjs-min.jsonl"]);
+    let marks: Vec<(&str, &str, Option<&str>)> = rows
+        .iter()
+        .map(|r| (r.owner.as_str(), r.file.as_str(), r.vendored.as_deref()))
+        .collect();
+    assert!(marks.contains(&("crossws", "dist/_chunks/libs/ws.mjs", Some("ws"))));
+    assert!(marks.contains(&("crossws", "dist/index.mjs", None)));
+    assert!(marks.contains(&("ws", "lib/websocket.js", None)));
+    assert!(marks.contains(&(
+        "@rspack/core",
+        "compiled/tinypool/dist/index.js",
+        Some("tinypool")
+    )));
+    let packages: Vec<String> = serde_json::from_slice(&files["packages.json"]).unwrap();
+    let ws = packages.iter().position(|p| p == "ws").unwrap() as u32;
+    let table = UnitTable::open(Source::Memory(files["units.bun-node-cjs-min.bin"].clone()))
+        .expect("opens");
+    let h1: Vec<(String, u32)> = table
+        .hits(H1)
+        .iter()
+        .map(|h| (packages[h.owner as usize].clone(), h.vendored))
+        .collect();
+    assert!(h1.contains(&("crossws".into(), ws)));
+    let ht: Vec<(String, u32)> = table
+        .hits(HT)
+        .iter()
+        .map(|h| (packages[h.owner as usize].clone(), h.vendored))
+        .collect();
+    assert!(ht.contains(&("@rspack/core".into(), VENDORED_UNINDEXED)));
+    let summary: serde_json::Value = serde_json::from_slice(&files["vendored.json"]).unwrap();
+    assert_eq!(summary["slices"]["bun-node-cjs-min"]["rows"], 3);
+    assert_eq!(summary["slices"]["bun-node-cjs-min"]["files"], 2);
+}
