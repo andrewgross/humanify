@@ -1,0 +1,385 @@
+{
+  "costModel": {
+    "coreSecondsPerVersion": 35.0,
+    "cores": 30,
+    "kbPerVersion": 69.4,
+    "pinsPerRoot": 5.48
+  },
+  "densityOnPopulation": {
+    "byDensity": {
+      "exact-any-version": {
+        "pointsOfLibrary": 23.24,
+        "pointsOfLibraryExLargest": 10.33
+      },
+      "year-last1+major1": {
+        "pointsOfLibrary": 19.27,
+        "pointsOfLibraryExLargest": 6.37
+      },
+      "year-last12+major4": {
+        "pointsOfLibrary": 22.24,
+        "pointsOfLibraryExLargest": 9.34
+      },
+      "year-last3+major1": {
+        "pointsOfLibrary": 21.23,
+        "pointsOfLibraryExLargest": 8.32
+      },
+      "year-last6+major2": {
+        "pointsOfLibrary": 21.38,
+        "pointsOfLibraryExLargest": 8.47
+      }
+    },
+    "packages": 13929,
+    "population": "pop-dl25k.txt"
+  },
+  "label": "exp113-k2all",
+  "largestPackagePointsOfLibrary": 12.9,
+  "libraryBytes": 30358106,
+  "meta": {
+    "closureLevelSizes": [2558, 1035, 348, 189, 91, 38, 2, 0, 0],
+    "dependentsAtRank": {
+      "16000": 84,
+      "20000": 61
+    },
+    "downloadsAtRank": {
+      "16000": 1613047,
+      "25000": 503066,
+      "35000": 208020,
+      "50000": 81202
+    },
+    "indexedMaintainers": 7338,
+    "indexedOwners": 12139,
+    "indexedScopes": 721,
+    "indexedVersions": 92237,
+    "rankedDependents": 19999,
+    "rankedDownloads": 49995
+  },
+  "notIndexedBytes": 7547675,
+  "notIndexedPackages": 70,
+  "notIndexedPointsOfLibrary": 24.86,
+  "policies": {
+    "closure-bundled": {
+      "cost": {
+        "buildHoursEst30c": 0.0,
+        "indexGBEst": 0.0,
+        "packages": 0,
+        "versionsEst": 0
+      },
+      "coveredBytes": 0,
+      "missPackagesCovered": 0,
+      "pointsOfLibrary": 0.0,
+      "pointsOfLibraryExLargest": 0.0,
+      "shareOfNotIndexed": 0.0
+    },
+    "closure-dev": {
+      "cost": {
+        "buildHoursEst30c": 12.3,
+        "indexGBEst": 2.64,
+        "packages": 6947,
+        "versionsEst": 38077
+      },
+      "coveredBytes": 101524,
+      "missPackagesCovered": 10,
+      "pointsOfLibrary": 0.33,
+      "pointsOfLibraryExLargest": 0.33,
+      "shareOfNotIndexed": 0.0135
+    },
+    "closure-runtime-L1": {
+      "cost": {
+        "buildHoursEst30c": 4.5,
+        "indexGBEst": 0.97,
+        "packages": 2558,
+        "versionsEst": 14020
+      },
+      "coveredBytes": 29729,
+      "missPackagesCovered": 4,
+      "pointsOfLibrary": 0.1,
+      "pointsOfLibraryExLargest": 0.1,
+      "shareOfNotIndexed": 0.0039
+    },
+    "closure-runtime-L2": {
+      "cost": {
+        "buildHoursEst30c": 6.4,
+        "indexGBEst": 1.37,
+        "packages": 3593,
+        "versionsEst": 19693
+      },
+      "coveredBytes": 30238,
+      "missPackagesCovered": 5,
+      "pointsOfLibrary": 0.1,
+      "pointsOfLibraryExLargest": 0.1,
+      "shareOfNotIndexed": 0.004
+    },
+    "closure-runtime-L3": {
+      "cost": {
+        "buildHoursEst30c": 7.0,
+        "indexGBEst": 1.5,
+        "packages": 3941,
+        "versionsEst": 21601
+      },
+      "coveredBytes": 41608,
+      "missPackagesCovered": 8,
+      "pointsOfLibrary": 0.14,
+      "pointsOfLibraryExLargest": 0.14,
+      "shareOfNotIndexed": 0.0055
+    },
+    "closure-runtime-L4": {
+      "cost": {
+        "buildHoursEst30c": 7.3,
+        "indexGBEst": 1.57,
+        "packages": 4130,
+        "versionsEst": 22637
+      },
+      "coveredBytes": 49677,
+      "missPackagesCovered": 12,
+      "pointsOfLibrary": 0.16,
+      "pointsOfLibraryExLargest": 0.16,
+      "shareOfNotIndexed": 0.0066
+    },
+    "closure-runtime-L5": {
+      "cost": {
+        "buildHoursEst30c": 7.5,
+        "indexGBEst": 1.61,
+        "packages": 4221,
+        "versionsEst": 23135
+      },
+      "coveredBytes": 49677,
+      "missPackagesCovered": 12,
+      "pointsOfLibrary": 0.16,
+      "pointsOfLibraryExLargest": 0.16,
+      "shareOfNotIndexed": 0.0066
+    },
+    "closure-runtime-L6": {
+      "cost": {
+        "buildHoursEst30c": 7.6,
+        "indexGBEst": 1.62,
+        "packages": 4259,
+        "versionsEst": 23344
+      },
+      "coveredBytes": 49677,
+      "missPackagesCovered": 12,
+      "pointsOfLibrary": 0.16,
+      "pointsOfLibraryExLargest": 0.16,
+      "shareOfNotIndexed": 0.0066
+    },
+    "closure-runtime-L7": {
+      "cost": {
+        "buildHoursEst30c": 7.6,
+        "indexGBEst": 1.62,
+        "packages": 4261,
+        "versionsEst": 23355
+      },
+      "coveredBytes": 49677,
+      "missPackagesCovered": 12,
+      "pointsOfLibrary": 0.16,
+      "pointsOfLibraryExLargest": 0.16,
+      "shareOfNotIndexed": 0.0066
+    },
+    "dependents-top100k(threshold)": {
+      "cost": {
+        "buildHoursEst30c": 177.6,
+        "indexGBEst": 38.03,
+        "packages": 100000,
+        "upperBound": true,
+        "versionsEst": 548100
+      },
+      "coveredBytes": 876335,
+      "missPackagesCovered": 32,
+      "pointsOfLibrary": 2.89,
+      "pointsOfLibraryExLargest": 2.89,
+      "shareOfNotIndexed": 0.1161
+    },
+    "dependents-top20k": {
+      "cost": {
+        "buildHoursEst30c": 24.9,
+        "indexGBEst": 5.33,
+        "packages": 14022,
+        "versionsEst": 76855
+      },
+      "coveredBytes": 620166,
+      "missPackagesCovered": 17,
+      "pointsOfLibrary": 2.04,
+      "pointsOfLibraryExLargest": 2.04,
+      "shareOfNotIndexed": 0.0822
+    },
+    "dependents-top50k(threshold)": {
+      "cost": {
+        "buildHoursEst30c": 88.8,
+        "indexGBEst": 19.02,
+        "packages": 50000,
+        "upperBound": true,
+        "versionsEst": 274050
+      },
+      "coveredBytes": 847200,
+      "missPackagesCovered": 28,
+      "pointsOfLibrary": 2.79,
+      "pointsOfLibraryExLargest": 2.79,
+      "shareOfNotIndexed": 0.1122
+    },
+    "downloads-0k-16k": {
+      "cost": {
+        "buildHoursEst30c": 13.0,
+        "indexGBEst": 2.78,
+        "packages": 7316,
+        "versionsEst": 40099
+      },
+      "coveredBytes": 1357495,
+      "missPackagesCovered": 33,
+      "pointsOfLibrary": 4.47,
+      "pointsOfLibraryExLargest": 4.47,
+      "shareOfNotIndexed": 0.1799
+    },
+    "downloads-0k-50k": {
+      "cost": {
+        "buildHoursEst30c": 69.2,
+        "indexGBEst": 14.83,
+        "packages": 38986,
+        "versionsEst": 213682
+      },
+      "coveredBytes": 7483568,
+      "missPackagesCovered": 58,
+      "pointsOfLibrary": 24.65,
+      "pointsOfLibraryExLargest": 11.75,
+      "shareOfNotIndexed": 0.9915
+    },
+    "downloads-16k-25k": {
+      "cost": {
+        "buildHoursEst30c": 13.7,
+        "indexGBEst": 2.94,
+        "packages": 7740,
+        "versionsEst": 42423
+      },
+      "coveredBytes": 5696395,
+      "missPackagesCovered": 14,
+      "pointsOfLibrary": 18.76,
+      "pointsOfLibraryExLargest": 5.86,
+      "shareOfNotIndexed": 0.7547
+    },
+    "downloads-16k-50k": {
+      "cost": {
+        "buildHoursEst30c": 56.3,
+        "indexGBEst": 12.04,
+        "packages": 31670,
+        "versionsEst": 173583
+      },
+      "coveredBytes": 6126073,
+      "missPackagesCovered": 25,
+      "pointsOfLibrary": 20.18,
+      "pointsOfLibraryExLargest": 7.28,
+      "shareOfNotIndexed": 0.8117
+    },
+    "downloads-25k-35k": {
+      "cost": {
+        "buildHoursEst30c": 16.7,
+        "indexGBEst": 3.58,
+        "packages": 9407,
+        "versionsEst": 51560
+      },
+      "coveredBytes": 186615,
+      "missPackagesCovered": 3,
+      "pointsOfLibrary": 0.61,
+      "pointsOfLibraryExLargest": 0.61,
+      "shareOfNotIndexed": 0.0247
+    },
+    "downloads-35k-50k": {
+      "cost": {
+        "buildHoursEst30c": 25.8,
+        "indexGBEst": 5.52,
+        "packages": 14523,
+        "versionsEst": 79601
+      },
+      "coveredBytes": 243063,
+      "missPackagesCovered": 8,
+      "pointsOfLibrary": 0.8,
+      "pointsOfLibraryExLargest": 0.8,
+      "shareOfNotIndexed": 0.0322
+    },
+    "downloads-50k-100k(threshold)": {
+      "cost": {
+        "buildHoursEst30c": 88.8,
+        "indexGBEst": 19.02,
+        "packages": 50000,
+        "upperBound": true,
+        "versionsEst": 274050
+      },
+      "coveredBytes": 25286,
+      "missPackagesCovered": 6,
+      "pointsOfLibrary": 0.08,
+      "pointsOfLibraryExLargest": 0.08,
+      "shareOfNotIndexed": 0.0034
+    },
+    "maintainers(>=1 indexed pkgs)": {
+      "coveredBytes": 1397993,
+      "missPackagesCovered": 40,
+      "pointsOfLibrary": 4.61,
+      "pointsOfLibraryExLargest": 4.61,
+      "shareOfNotIndexed": 0.1852
+    },
+    "maintainers(>=10 indexed pkgs)": {
+      "coveredBytes": 515237,
+      "missPackagesCovered": 19,
+      "pointsOfLibrary": 1.7,
+      "pointsOfLibraryExLargest": 1.7,
+      "shareOfNotIndexed": 0.0683
+    },
+    "maintainers(>=3 indexed pkgs)": {
+      "coveredBytes": 1128319,
+      "missPackagesCovered": 25,
+      "pointsOfLibrary": 3.72,
+      "pointsOfLibraryExLargest": 3.72,
+      "shareOfNotIndexed": 0.1495
+    },
+    "maintainers(>=30 indexed pkgs)": {
+      "coveredBytes": 432005,
+      "missPackagesCovered": 17,
+      "pointsOfLibrary": 1.42,
+      "pointsOfLibraryExLargest": 1.42,
+      "shareOfNotIndexed": 0.0572
+    },
+    "maintainers(ranked-only)": {
+      "cost": {
+        "buildHoursEst30c": 39.4,
+        "indexGBEst": 8.43,
+        "packages": 22171,
+        "versionsEst": 121519
+      },
+      "coveredBytes": 1370268,
+      "missPackagesCovered": 34,
+      "pointsOfLibrary": 4.51,
+      "pointsOfLibraryExLargest": 4.51,
+      "shareOfNotIndexed": 0.1815
+    },
+    "paths": {
+      "cost": {
+        "buildHoursEst30c": 0.1,
+        "indexGBEst": 0.01,
+        "packages": 39,
+        "versionsEst": 214
+      },
+      "coveredBytes": 18354,
+      "missPackagesCovered": 1,
+      "pointsOfLibrary": 0.06,
+      "pointsOfLibraryExLargest": 0.06,
+      "shareOfNotIndexed": 0.0024
+    },
+    "scopes": {
+      "coveredBytes": 428535,
+      "missPackagesCovered": 12,
+      "pointsOfLibrary": 1.41,
+      "pointsOfLibraryExLargest": 1.41,
+      "shareOfNotIndexed": 0.0568
+    },
+    "scopes(ranked-only)": {
+      "cost": {
+        "buildHoursEst30c": 11.9,
+        "indexGBEst": 2.55,
+        "packages": 6695,
+        "versionsEst": 36695
+      },
+      "coveredBytes": 428535,
+      "missPackagesCovered": 12,
+      "pointsOfLibrary": 1.41,
+      "pointsOfLibraryExLargest": 1.41,
+      "shareOfNotIndexed": 0.0568
+    }
+  }
+}
