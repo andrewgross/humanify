@@ -1,0 +1,72 @@
+{
+ "bundleSha256": "f1eb04e3ff9b66e000f0eff2abe106147349bbbbc8e1402f96ef90b5d487cb6c",
+ "claimedBytes": {
+  "right": 3736,
+  "wrongFamily": 656
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-electron_cozy-desktop-3c5a87",
+ "exploratory": {
+  "names": {
+   "bindings": 52,
+   "bindingsSameVersion": 52,
+   "bindingsVersionKnown": 52,
+   "exactBytes": 2981,
+   "exactUnits": 12,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.478706,
+  "f1": 0.290766,
+  "namedBytes": 2664,
+  "precision": 0.841175,
+  "recall": 0.17576
+ },
+ "label": "exp118-dl25k-apps",
+ "missBytes": {
+  "a": 11421
+ },
+ "noDiscovery": null,
+ "reportSha256": "6185bd3593931c66d71e4d2c58bcfb02c9eac80869a698e10fad3feb6079df09",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<app>": 2184,
+  "<unmapped>": 43,
+  "library": 15157
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.570818,
+  "f05ShipperOnly": 0.570818,
+  "f1": 0.382219,
+  "f1ShipperOnly": 0.382219,
+  "libraryBytes": 15157,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 3736,
+  "namedBytes": 3736,
+  "namedBytesShipperOnly": 3736,
+  "precision": 0.850638,
+  "precisionShipperOnly": 0.850638,
+  "recall": 0.246487,
+  "recallShipperOnly": 0.246487,
+  "wrongFamilyBytes": 656,
+  "wrongFamilyBytesShipperOnly": 656
+ },
+ "truthMethod": "sourcemap"
+}
