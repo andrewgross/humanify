@@ -1,0 +1,71 @@
+{
+ "bundleSha256": "061814f188835d31b4e4bf5acca164d64048e5bf3f0b974196b76d957246bbf2",
+ "claimedBytes": {
+  "wrongFamily": 656
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_stoplight_spectral-cli-05ca81",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.0,
+  "f1": 0.0,
+  "namedBytes": 0,
+  "precision": 0.0,
+  "recall": 0.0
+ },
+ "label": "exp121-v2-apps",
+ "missBytes": {
+  "a": 17530
+ },
+ "noDiscovery": null,
+ "reportSha256": "3de2e8b507028302701e29f70551428c98c1621d72fc59bf1fbbd0fd82541013",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<app>": 24,
+  "<unmapped>": 340,
+  "library": 17530
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.0,
+  "f05ShipperOnly": 0.0,
+  "f1": 0.0,
+  "f1ShipperOnly": 0.0,
+  "libraryBytes": 17530,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 0,
+  "namedBytes": 0,
+  "namedBytesShipperOnly": 0,
+  "precision": 0.0,
+  "precisionShipperOnly": 0.0,
+  "recall": 0.0,
+  "recallShipperOnly": 0.0,
+  "wrongFamilyBytes": 656,
+  "wrongFamilyBytesShipperOnly": 656
+ },
+ "truthMethod": "sourcemap"
+}

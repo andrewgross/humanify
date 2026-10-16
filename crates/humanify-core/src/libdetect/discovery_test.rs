@@ -508,6 +508,9 @@ struct Held<'h> {
     owner: &'h str,
     function: bool,
     module_bytes: u64,
+    /// Hold the unit's function print whose span starts with this text
+    /// (instead of the whole print or the largest function).
+    inner: Option<&'h str>,
 }
 
 impl<'h> Held<'h> {
@@ -517,6 +520,17 @@ impl<'h> Held<'h> {
             owner,
             function: false,
             module_bytes: 500,
+            inner: None,
+        }
+    }
+
+    /// The function print of unit `head` whose span starts with `inner`,
+    /// in a module of `module_bytes`.
+    fn inner(head: &'h str, inner: &'h str, owner: &'h str, module_bytes: u64) -> Held<'h> {
+        Held {
+            inner: Some(inner),
+            module_bytes,
+            ..Held::whole(head, owner)
         }
     }
 
@@ -576,7 +590,12 @@ fn run_indexed_with(
                     .collect();
                 panic!("no unit {:?} in {heads:?}", h.head)
             });
-        let print = if h.function {
+        let print = if let Some(inner) = h.inner {
+            p.functions
+                .iter()
+                .find(|f| code[f.span.start as usize..].starts_with(inner))
+                .unwrap_or_else(|| panic!("{:?} has no function {inner:?}", h.head))
+        } else if h.function {
             p.functions
                 .iter()
                 .max_by_key(|f| f.nodes)
@@ -1298,4 +1317,146 @@ fn a_declared_seed_never_claims_a_statement_bigger_than_the_declared_cap() {
     );
     assert_eq!(capped.claim("var big"), None);
     assert_eq!(capped.claim("var small"), Some(("Q", Rule::Seed, 0)));
+}
+
+// ---- exp121 sponge rule ----------------------------------------------------
+
+/// lib holds two inner functions, a and b, that cover most of it, and calls
+/// tiny (under the row floor: DOWN takes it, and it keeps lib's seed off
+/// the isolation veto); other is a unit of its own.
+const COPIED: &str = "var lib = function (t) { var a = function (x) { return x.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, x.length); }; var b = function (y) { return [y, y + 1, y * 2, y % 7, String(y), y.toFixed(2), y.toString(16)].join(\",\"); }; return tiny(a(t) + b(t.length)); };\nvar tiny = (x) => x + 1;\nvar other = function (k) { return [k, k - 1, k * 3, String(k), k.toFixed(3), k.toString(8)].join(\";\"); };\nvar app = () => lib(\"a\") + other(1);\n";
+
+#[test]
+fn copy_presence_drops_a_package_whose_every_seed_is_an_inlined_copy_of_a_smaller_origin() {
+    // S (a sponge) holds both of lib's inner functions in a 4,000-byte
+    // module of its dist; Q holds one of them in a 500-byte module of its
+    // own: S's copy of this code is Q's, inlined. Q alone covers too little
+    // of lib to seed it.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+    ];
+    let off = DiscoveryOptions::default();
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], off);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    let on = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        ..off
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    // The co-holder's module is not the smaller context (2,000 x 4 > 4,000):
+    // no origin, S keeps its seed.
+    let bigger = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 2000),
+    ];
+    let (_, _, rows) = run_indexed_with(COPIED, &bigger, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    // A seed of S's own (code no smaller context holds) anywhere in the
+    // bundle: S is present, every seed of it stays (other's own seed is
+    // then lost to the isolation veto, as without the rule).
+    let present = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::whole("var other", "S"),
+    ];
+    let (_, _, rows) = run_indexed_with(COPIED, &present, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    // A scope sibling's own seed does not vouch for the sponge's copies:
+    // judged per package, @acme/server is dropped though @acme/core (one
+    // family) is present.
+    let sibling = [
+        Held::inner("var lib", "function (x)", "@acme/server", 4000),
+        Held::inner("var lib", "function (y)", "@acme/server", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::whole("var other", "@acme/core"),
+    ];
+    let (_, _, rows) = run_indexed_with(COPIED, &sibling, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    // Under the share: Q co-holds a, about half of S's cover, under 0.9.
+    let thin = DiscoveryOptions {
+        copy_presence: 0.9,
+        ..on
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], thin);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+}
+
+#[test]
+fn copy_presence_origin_gives_a_sponge_s_copy_seeds_to_the_origin() {
+    // As above, with the origin preferred: S's copy seed of lib becomes
+    // Q's (the family co-holding most of S's cover in the smaller context),
+    // and Q's claim propagates like any seed.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+    ];
+    let on = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        copy_presence_origin: true,
+        presence_fence: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("Q".into(), Rule::Down)));
+}
+
+#[test]
+fn copy_presence_own_needs_a_share_of_the_package_s_seed_bytes_to_vouch_for_it() {
+    // S's one own seed (other) is smaller than its copy seed (lib): under
+    // copy_presence_own = 0.6 it is too small a share of S's seed bytes to
+    // show S in the bundle, so lib (the copy) goes; at 0 any own seed vouches.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::whole("var other", "S"),
+    ];
+    let any = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], any);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    let share = DiscoveryOptions {
+        copy_presence_own: 0.6,
+        ..any
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], share);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+}
+
+/// lib with three inner functions, a, b and c, of about a third each.
+const COPIED3: &str = "var lib = function (t) { var a = function (x) { return x.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, x.length); }; var b = function (y) { return [y, y + 1, y * 2, y % 7, String(y), y.toFixed(2), y.toString(16)].join(\",\"); }; var c = function (z) { return [z, z - 3, z / 2, z % 5, String(z), z.toFixed(4), z.toString(2)].join(\";\"); }; return tiny(a(t) + b(t.length) + c(1)); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
+
+#[test]
+fn copy_presence_reads_only_the_prints_the_lookup_reads() {
+    // a is held by S and by three small-module packages: more owners than
+    // the lookup reads (max_packages), so it is generic code that neither
+    // seeds S nor says where S's copy came from. S's cover is b and c, no
+    // smaller context holds them: S is no sponge here.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (z)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::inner("var lib", "function (x)", "R1", 500),
+        Held::inner("var lib", "function (x)", "R2", 500),
+    ];
+    let on = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED3, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
 }

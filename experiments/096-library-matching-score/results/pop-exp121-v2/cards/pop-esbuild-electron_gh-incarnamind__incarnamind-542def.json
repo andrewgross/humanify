@@ -1,0 +1,84 @@
+{
+ "bundleSha256": "0001db1064d0372bbef36982ca1c61450852d50009cedfb64e296f6454cb6a50",
+ "claimedBytes": {
+  "family": 4382,
+  "foreign": 433151,
+  "right": 2499408,
+  "unmapped": 11317,
+  "wrongFamily": 14255
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-incarnamind__incarnamind-542def",
+ "exploratory": {
+  "names": {
+   "bindings": 27910,
+   "bindingsSameVersion": 26312,
+   "bindingsVersionKnown": 27542,
+   "exactBytes": 2423167,
+   "exactUnits": 2671,
+   "sameVersionShare": 0.955341
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.912659,
+  "f1": 0.812652,
+  "namedBytes": 2347617,
+  "precision": 0.994228,
+  "recall": 0.687156
+ },
+ "label": "pop-exp121-v2",
+ "missBytes": {
+  "a": 7023,
+  "b": 12467,
+  "c": 7212,
+  "d-absent": 50678,
+  "e-ambig": 3873,
+  "e-support": 168,
+  "e-veto": 817586,
+  "f": 13629
+ },
+ "noDiscovery": null,
+ "reportSha256": "4d44986d792f551e9a7f851c42594f72c95b7ce455816c71df06a1fe2670010a",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 4034,
+  "<foreign>": 433151,
+  "<unmapped>": 12246,
+  "copy": 23347,
+  "library": 3416426
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 23347,
+  "f05": 0.928113,
+  "f05ShipperOnly": 0.928113,
+  "f1": 0.843812,
+  "f1ShipperOnly": 0.843812,
+  "libraryBytes": 3416426,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 2503790,
+  "namedBytes": 2503790,
+  "namedBytesShipperOnly": 2503790,
+  "precision": 0.994339,
+  "precisionShipperOnly": 0.994339,
+  "recall": 0.732868,
+  "recallShipperOnly": 0.732868,
+  "wrongFamilyBytes": 14255,
+  "wrongFamilyBytesShipperOnly": 14255
+ },
+ "truthMethod": "sourcemap"
+}

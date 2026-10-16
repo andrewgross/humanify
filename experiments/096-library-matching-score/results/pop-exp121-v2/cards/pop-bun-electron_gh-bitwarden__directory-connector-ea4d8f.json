@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "3dd6bcdee263b553ff443af1a6355a3bd73786aa981f6a9dda6322a6d2d127ad",
+ "claimedBytes": {
+  "family": 565974,
+  "origin": 205260,
+  "right": 2034390,
+  "unmapped": 11580,
+  "wrongFamily": 6413
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-electron_gh-bitwarden__directory-connector-ea4d8f",
+ "exploratory": {
+  "names": {
+   "bindings": 41104,
+   "bindingsSameVersion": 8616,
+   "bindingsVersionKnown": 41104,
+   "exactBytes": 2422210,
+   "exactUnits": 4487,
+   "sameVersionShare": 0.209615
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.901332,
+  "f1": 0.78685,
+  "namedBytes": 2396932,
+  "precision": 0.998148,
+  "recall": 0.649382
+ },
+ "label": "pop-exp121-v2",
+ "missBytes": {
+  "b": 6458,
+  "c": 66172,
+  "d-absent": 408865,
+  "d-file": 240,
+  "d-variant": 3213,
+  "e-ambig": 9629,
+  "e-other": 99201,
+  "e-support": 896,
+  "e-veto": 15936,
+  "f": 274863
+ },
+ "noDiscovery": null,
+ "reportSha256": "d350db0b9b26df3304143a2f1401d7fcabe400742cc174f28b1ee3082db10d55",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "pop-bun",
+ "statementBytes": {
+  "<app>": 2262,
+  "<unmapped>": 42772,
+  "copy": 732247,
+  "library": 3691097
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 732247,
+  "f05": 0.939011,
+  "f05ShipperOnly": 0.870313,
+  "f1": 0.862853,
+  "f1ShipperOnly": 0.799726,
+  "libraryBytes": 3691097,
+  "namedAsOriginBytes": 205260,
+  "namedAsShipperBytes": 2600364,
+  "namedBytes": 2805624,
+  "namedBytesShipperOnly": 2600364,
+  "precision": 0.997719,
+  "precisionShipperOnly": 0.924726,
+  "recall": 0.760106,
+  "recallShipperOnly": 0.704496,
+  "wrongFamilyBytes": 6413,
+  "wrongFamilyBytesShipperOnly": 211673
+ },
+ "truthMethod": "sourcemap"
+}
