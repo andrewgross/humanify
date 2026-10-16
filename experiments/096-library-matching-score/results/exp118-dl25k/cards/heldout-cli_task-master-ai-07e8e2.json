@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "4b90af14d0687ba66bc819bfd68f0ff9e58138c153949db84a69f2b91500013d",
+ "claimedBytes": {
+  "family": 162846,
+  "origin": 71878,
+  "right": 2490248,
+  "selfOther": 7,
+  "unmapped": 8808,
+  "wrongFamily": 324522
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_task-master-ai-07e8e2",
+ "exploratory": {
+  "names": {
+   "bindings": 32907,
+   "bindingsSameVersion": 23123,
+   "bindingsVersionKnown": 32907,
+   "exactBytes": 2157556,
+   "exactUnits": 3862,
+   "sameVersionShare": 0.702677
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.778192,
+  "f1": 0.663747,
+  "namedBytes": 2299979,
+  "precision": 0.879262,
+  "recall": 0.533083
+ },
+ "label": "exp118-dl25k",
+ "missBytes": {
+  "a": 207054,
+  "b": 401637,
+  "c": 43505,
+  "d-absent": 144004,
+  "d-file": 44053,
+  "d-variant": 81,
+  "e-ambig": 24945,
+  "e-other": 18543,
+  "e-spec": 1235,
+  "e-support": 2602,
+  "e-veto": 36725,
+  "f": 665129
+ },
+ "noDiscovery": null,
+ "reportSha256": "df375413a074c5c599c7374b5e91a84c7246bcfff1612d208e6840551aa60c66",
+ "rule": "structural",
+ "schema": "exp096-score/8",
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 1110356,
+  "<unmapped>": 38731,
+  "copy": 1011691,
+  "library": 4314485
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 1011691,
+  "f05": 0.825126,
+  "f05ShipperOnly": 0.803361,
+  "f1": 0.740082,
+  "f1ShipperOnly": 0.72056,
+  "libraryBytes": 4314485,
+  "namedAsOriginBytes": 71878,
+  "namedAsShipperBytes": 2653094,
+  "namedBytes": 2724972,
+  "namedBytesShipperOnly": 2653094,
+  "precision": 0.893582,
+  "precisionShipperOnly": 0.870011,
+  "recall": 0.631587,
+  "recallShipperOnly": 0.614927,
+  "wrongFamilyBytes": 324522,
+  "wrongFamilyBytesShipperOnly": 396400
+ },
+ "truthMethod": "sourcemap"
+}
