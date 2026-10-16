@@ -1,0 +1,154 @@
+{
+  "detail": {
+    "apps-esbuild": {
+      "rows:some": 0.003,
+      "sponge:bundler-marker:copy": 0.359,
+      "sponge:bundler-marker:own": 1.716,
+      "sponge:vendored-path": 0.025
+    },
+    "apps-rollup": {
+      "deep:no-exports": 0.008,
+      "dep-only:other": 0.046,
+      "rows:none": 1.218,
+      "rows:some": 0.218,
+      "sponge:bundler-marker:copy": 0.172,
+      "sponge:bundler-marker:own": 0.468,
+      "sponge:vendored-path": 0.007
+    },
+    "apps-webpack": {
+      "deep:no-exports": 0.006,
+      "dep-only:other": 0.003,
+      "dep-only:sponge:bundler-marker:copy": 0.034,
+      "dep-only:sponge:bundler-marker:own": 0.0,
+      "rows:none": 0.031,
+      "rows:some": 0.065,
+      "sponge:vendored-path": 0.027
+    },
+    "esbuild-app": {
+      "exports:node-set": 0.01,
+      "file-not-in-package": 1.734,
+      "rows:some": 0.003,
+      "sponge:vendored-path": 0.002
+    },
+    "heldout": {
+      "dep-only:sponge:bundler-marker:own": 0.107,
+      "dep-only:sponge:vendored-path": 0.046,
+      "exports:node-set": 0.002,
+      "field:main": 0.003,
+      "rows:some": 0.232,
+      "sponge:bundler-marker:copy": 0.021,
+      "sponge:bundler-marker:own": 0.296,
+      "sponge:vendored-path": 0.014
+    },
+    "pop-bun": {
+      "dep-only:other": 0.001,
+      "dep-only:sponge:bundler-marker:copy": 0.089,
+      "dep-only:sponge:bundler-marker:own": 0.361,
+      "exports:node-set": 0.003,
+      "exports:node-set(selected)": 0.006,
+      "rows:some": 0.185,
+      "sponge:bundler-marker:copy": 1.15,
+      "sponge:bundler-marker:own": 0.864,
+      "sponge:vendored-path": 0.024
+    },
+    "pop-esbuild": {
+      "dep-only:sponge:bundler-marker:copy": 0.084,
+      "dep-only:sponge:bundler-marker:own": 0.312,
+      "file-not-in-package": 0.06,
+      "rows:some": 0.004,
+      "sponge:bundler-marker:copy": 1.157,
+      "sponge:bundler-marker:own": 0.771,
+      "sponge:vendored-path": 0.032
+    },
+    "wrangler": {
+      "dep-only:other": 4.205,
+      "field:module": 0.487,
+      "file-not-in-package": 0.018,
+      "rows:some": 0.473,
+      "sponge:vendored-path": 0.506
+    }
+  },
+  "grouped": {
+    "apps-esbuild": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0,
+      "file emitted, no row of it (attribution)": 0,
+      "file emitted, rows of it, not this statement": 0.003,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 0.359,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 1.716,
+      "truth file not in the npm package (chained source)": 0,
+      "vendored-path sponge": 0.025,
+      "version only a dependency of another root, no sponge": 0
+    },
+    "apps-rollup": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0.008,
+      "file emitted, no row of it (attribution)": 1.218,
+      "file emitted, rows of it, not this statement": 0.218,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 0.172,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 0.468,
+      "truth file not in the npm package (chained source)": 0,
+      "vendored-path sponge": 0.007,
+      "version only a dependency of another root, no sponge": 0.046
+    },
+    "apps-webpack": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0.006,
+      "file emitted, no row of it (attribution)": 0.031,
+      "file emitted, rows of it, not this statement": 0.065,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 0.034,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 0.0,
+      "truth file not in the npm package (chained source)": 0,
+      "vendored-path sponge": 0.027,
+      "version only a dependency of another root, no sponge": 0.003
+    },
+    "esbuild-app": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0.01,
+      "file emitted, no row of it (attribution)": 0,
+      "file emitted, rows of it, not this statement": 0.003,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 0,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 0,
+      "truth file not in the npm package (chained source)": 1.734,
+      "vendored-path sponge": 0.002,
+      "version only a dependency of another root, no sponge": 0
+    },
+    "heldout": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0.005,
+      "file emitted, no row of it (attribution)": 0,
+      "file emitted, rows of it, not this statement": 0.232,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 0.021,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 0.403,
+      "truth file not in the npm package (chained source)": 0,
+      "vendored-path sponge": 0.06,
+      "version only a dependency of another root, no sponge": 0
+    },
+    "pop-bun": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0.009,
+      "file emitted, no row of it (attribution)": 0,
+      "file emitted, rows of it, not this statement": 0.185,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 1.239,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 1.225,
+      "truth file not in the npm package (chained source)": 0,
+      "vendored-path sponge": 0.024,
+      "version only a dependency of another root, no sponge": 0.001
+    },
+    "pop-esbuild": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0,
+      "file emitted, no row of it (attribution)": 0,
+      "file emitted, rows of it, not this statement": 0.004,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 1.241,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 1.083,
+      "truth file not in the npm package (chained source)": 0.06,
+      "vendored-path sponge": 0.032,
+      "version only a dependency of another root, no sponge": 0
+    },
+    "wrangler": {
+      "entry-coverage (exports conditions, fields, deep imports)": 0.487,
+      "file emitted, no row of it (attribution)": 0,
+      "file emitted, rows of it, not this statement": 0.473,
+      "own pre-bundled file dropped as a sponge: unit is a recognised copy": 0,
+      "own pre-bundled file dropped as a sponge: unit is the package's own code": 0,
+      "truth file not in the npm package (chained source)": 0.018,
+      "vendored-path sponge": 0.506,
+      "version only a dependency of another root, no sponge": 4.205
+    }
+  },
+  "unit": "points of the set's library bytes (scorer 9, exp119-k2all-st labels; exp122's not-emitted class-d units, decomposed)"
+}
