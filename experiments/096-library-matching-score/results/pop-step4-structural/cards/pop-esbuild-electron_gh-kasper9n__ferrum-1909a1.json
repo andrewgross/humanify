@@ -1,8 +1,8 @@
 {
  "bundleSha256": "37020d428c19fd6c0bdff7fc8b12e531f35cb9e25ac704c1f23062fb54d48459",
  "claimedBytes": {
-  "family": 84345,
-  "right": 108981,
+  "family": 986,
+  "right": 192340,
   "wrongFamily": 183
  },
  "detected": {
@@ -14,11 +14,11 @@
  "exploratory": {
   "names": {
    "bindings": 2339,
-   "bindingsSameVersion": 1796,
-   "bindingsVersionKnown": 2290,
+   "bindingsSameVersion": 1845,
+   "bindingsVersionKnown": 2339,
    "exactBytes": 183758,
    "exactUnits": 304,
-   "sameVersionShare": 0.784279
+   "sameVersionShare": 0.788799
   }
  },
  "indexId": "0999ad6ee9e9f9d7d5e18080bbb5f2a618370329cc34924b2cc443c2b1e90542",
@@ -43,7 +43,7 @@
  "noDiscovery": null,
  "reportSha256": "8cb33ab767be0a95f1b7d607b5b296d65c25aa58f49e70da8970a518ccb2c8b8",
  "rule": "structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "set": "pop-esbuild",
  "statementBytes": {
   "<app>": 624,

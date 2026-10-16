@@ -1,0 +1,517 @@
+{
+  "apps-exp112-k2-rec": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "apps-exp112-k2-rec-dcap": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp107-cont-agreement": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp107-cont-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp107-main-agreement": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp107-main-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp109-apps-c2-none-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp109-apps-c2-rec-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp109-final-k2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp109-final-wr-apps-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp113-k2-apps-p0": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp113-k2all-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      },
+      "apps-rollup": {
+        "WRONG->GOOD": 267643,
+        "WRONG->GOOD:fork": 53641,
+        "WRONG->GOOD:repo": 214002
+      },
+      "apps-webpack": {
+        "WRONG->GOOD": 423703,
+        "WRONG->GOOD:chain": 363,
+        "WRONG->GOOD:fork": 55093,
+        "WRONG->GOOD:repo": 368247
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496],
+      ["apps-rollup", "fork", "wrongFamily", "family", 53641],
+      ["apps-rollup", "repo", "wrongFamily", "family", 214002],
+      ["apps-webpack", "chain", "wrongFamily", "family", 363],
+      ["apps-webpack", "fork", "wrongFamily", "family", 55093],
+      ["apps-webpack", "repo", "wrongFamily", "family", 368247]
+    ]
+  },
+  "exp113-opq2-k2-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp113-opq2-wr-apps": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp113-own-k2-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp113-own-wr-apps": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp113-wr-apps-base": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp113-wr-apps-p0": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp114-allf-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-both-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-both2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-cp-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-cp8-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-cpf-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-st-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp114-st2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp117-base-k2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp117-base-wr-apps-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-cpf-k2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp117-cpf-wr-apps-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-dmb-k2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp117-dmb-wr-apps-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-flip3-k2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp117-flip3-wr-apps-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-flip4-k2-apps-structural": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496]
+    ]
+  },
+  "exp117-flip4-wr-apps-structural": {
+    "corpus": "apps",
+    "perSet": {},
+    "transitions": []
+  },
+  "exp117-k2all-cpf-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      },
+      "apps-rollup": {
+        "WRONG->GOOD": 267643,
+        "WRONG->GOOD:fork": 53641,
+        "WRONG->GOOD:repo": 214002
+      },
+      "apps-webpack": {
+        "WRONG->GOOD": 423703,
+        "WRONG->GOOD:chain": 363,
+        "WRONG->GOOD:fork": 55093,
+        "WRONG->GOOD:repo": 368247
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496],
+      ["apps-rollup", "fork", "wrongFamily", "family", 53641],
+      ["apps-rollup", "repo", "wrongFamily", "family", 214002],
+      ["apps-webpack", "chain", "wrongFamily", "family", 363],
+      ["apps-webpack", "fork", "wrongFamily", "family", 55093],
+      ["apps-webpack", "repo", "wrongFamily", "family", 368247]
+    ]
+  },
+  "exp117-k2all-cpfdmb-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      },
+      "apps-rollup": {
+        "WRONG->GOOD": 267643,
+        "WRONG->GOOD:fork": 53641,
+        "WRONG->GOOD:repo": 214002
+      },
+      "apps-webpack": {
+        "WRONG->GOOD": 423703,
+        "WRONG->GOOD:chain": 363,
+        "WRONG->GOOD:fork": 55093,
+        "WRONG->GOOD:repo": 368247
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496],
+      ["apps-rollup", "fork", "wrongFamily", "family", 53641],
+      ["apps-rollup", "repo", "wrongFamily", "family", 214002],
+      ["apps-webpack", "chain", "wrongFamily", "family", 363],
+      ["apps-webpack", "fork", "wrongFamily", "family", 55093],
+      ["apps-webpack", "repo", "wrongFamily", "family", 368247]
+    ]
+  },
+  "exp117-k2all-flip4-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      },
+      "apps-rollup": {
+        "WRONG->GOOD": 267643,
+        "WRONG->GOOD:fork": 53641,
+        "WRONG->GOOD:repo": 214002
+      },
+      "apps-webpack": {
+        "WRONG->GOOD": 423703,
+        "WRONG->GOOD:fork": 55456,
+        "WRONG->GOOD:repo": 368247
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496],
+      ["apps-rollup", "fork", "wrongFamily", "family", 53641],
+      ["apps-rollup", "repo", "wrongFamily", "family", 214002],
+      ["apps-webpack", "fork", "wrongFamily", "family", 55456],
+      ["apps-webpack", "repo", "wrongFamily", "family", 368247]
+    ]
+  },
+  "exp119-k2all-def-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      },
+      "apps-rollup": {
+        "WRONG->GOOD": 267643,
+        "WRONG->GOOD:fork": 53641,
+        "WRONG->GOOD:repo": 214002
+      },
+      "apps-webpack": {
+        "WRONG->GOOD": 428305,
+        "WRONG->GOOD:chain": 5563,
+        "WRONG->GOOD:fork": 54495,
+        "WRONG->GOOD:repo": 368247
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496],
+      ["apps-rollup", "fork", "wrongFamily", "family", 53641],
+      ["apps-rollup", "repo", "wrongFamily", "family", 214002],
+      ["apps-webpack", "chain", "wrongFamily", "family", 5563],
+      ["apps-webpack", "fork", "wrongFamily", "family", 54495],
+      ["apps-webpack", "repo", "wrongFamily", "family", 368247]
+    ]
+  },
+  "exp119-k2all-st-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 50770,
+        "WRONG->GOOD:npmchain": 50770
+      },
+      "apps-rollup": {
+        "WRONG->GOOD": 267643,
+        "WRONG->GOOD:fork": 53641,
+        "WRONG->GOOD:repo": 214002
+      },
+      "apps-webpack": {
+        "WRONG->GOOD": 428305,
+        "WRONG->GOOD:chain": 5563,
+        "WRONG->GOOD:fork": 54495,
+        "WRONG->GOOD:repo": 368247
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "npmchain", "wrongFamily", "family", 43274],
+      ["apps-esbuild", "npmchain", "wrongFamily", "right", 7496],
+      ["apps-rollup", "fork", "wrongFamily", "family", 53641],
+      ["apps-rollup", "repo", "wrongFamily", "family", 214002],
+      ["apps-webpack", "chain", "wrongFamily", "family", 5563],
+      ["apps-webpack", "fork", "wrongFamily", "family", 54495],
+      ["apps-webpack", "repo", "wrongFamily", "family", 368247]
+    ]
+  }
+}

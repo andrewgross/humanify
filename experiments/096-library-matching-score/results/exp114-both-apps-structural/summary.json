@@ -10,11 +10,12 @@
  "config": {
   "binarySha256": "e5ec3ff10f1d7ae2ff1f566c15d65f658e2e6ac98a1a7dd6ba492d4afd9104a0",
   "buildCommit": "c82b0cd515cd9665e2734bdf76a29eb41254a0e2",
+  "chained9Sha256": "5c6fa065d257f605e9a74d1db3f94ab4581baa18d21d87dcc6c5fa661694d245",
   "chainedSha256": "6260ae974e5d1d50e535ded285d7d45e83fef13919af8458b61ebe74e0e1628f",
   "copiesSha256": "aeb5a27e9ebf936e0bb3c90c2f5999e0e59937e3c26e45391a063d1bd56323ca",
   "corpus": "apps",
   "corpusSha256": "98b06b6770a0a73eb0fea4afd294511d4d4fa5e60cfaafe0a55b35ff3ef23e6f",
-  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 4646716206,
   "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
   "origins7Sha256": "70391e6705f62676e1669a714752f3e620f6fbff4c2bb6c990ed1d1c9e174beb",
@@ -30,7 +31,7 @@
   ]
  },
  "label": "exp114-both-apps-structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "sets": {
   "apps-esbuild": {
    "appClaimedBytes": 0,
@@ -39,20 +40,20 @@
    "discoveryRan": 39,
    "entries": 39,
    "exploratoryNames": {
-    "bindings": 156406,
-    "bindingsSameVersion": 144782,
-    "bindingsVersionKnown": 156372,
-    "exactBytes": 14887841,
-    "exactUnits": 13579,
-    "sameVersionShare": 0.925882
+    "bindings": 157115,
+    "bindingsSameVersion": 144870,
+    "bindingsVersionKnown": 157081,
+    "exactBytes": 14930569,
+    "exactUnits": 13694,
+    "sameVersionShare": 0.922263
    },
-   "f05": 0.967961,
-   "f05ShipperOnly": 0.955963,
-   "f1": 0.94048,
-   "f1ShipperOnly": 0.928823,
+   "f05": 0.970095,
+   "f05ShipperOnly": 0.958097,
+   "f1": 0.942553,
+   "f1ShipperOnly": 0.930897,
    "libraryBytes": 25643725,
    "missShares": {
-    "a": 0.029319,
+    "a": 0.027339,
     "b": 0.018253,
     "c": 0.008304,
     "d-absent": 0.023184,
@@ -65,15 +66,15 @@
     "f": 0.017252
    },
    "namedAsOriginBytes": 285428,
-   "namedAsShipperBytes": 22742368,
-   "namedBytes": 23027796,
-   "precision": 0.987191,
-   "precisionShipperOnly": 0.974955,
-   "recall": 0.89799,
-   "recallShipperOnly": 0.886859,
+   "namedAsShipperBytes": 22793138,
+   "namedBytes": 23078566,
+   "precision": 0.989368,
+   "precisionShipperOnly": 0.977132,
+   "recall": 0.899969,
+   "recallShipperOnly": 0.888839,
    "selfOriginBytes": 10183,
    "selfOtherBytes": 857,
-   "wrongFamilyBytes": 298780
+   "wrongFamilyBytes": 248010
   }
  }
 }

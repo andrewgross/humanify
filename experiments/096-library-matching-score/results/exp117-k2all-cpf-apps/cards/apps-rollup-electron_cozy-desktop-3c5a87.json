@@ -1,10 +1,10 @@
 {
  "bundleSha256": "983e01be3170d4ff844fbb3216d81f9ec52506b876d8dadc317552cab9f00964",
  "claimedBytes": {
-  "family": 36077,
+  "family": 54194,
   "right": 3305612,
   "unmapped": 35062,
-  "wrongFamily": 165639
+  "wrongFamily": 147522
  },
  "detected": {
   "bundler": "rollup",
@@ -14,26 +14,26 @@
  "entry": "apps-rollup-electron_cozy-desktop-3c5a87",
  "exploratory": {
   "names": {
-   "bindings": 37101,
+   "bindings": 37174,
    "bindingsSameVersion": 36203,
-   "bindingsVersionKnown": 37101,
-   "exactBytes": 2866829,
-   "exactUnits": 2191,
-   "sameVersionShare": 0.975796
+   "bindingsVersionKnown": 37174,
+   "exactBytes": 2869699,
+   "exactUnits": 2204,
+   "sameVersionShare": 0.97388
   }
  },
  "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.914081,
-  "f1": 0.840329,
-  "namedBytes": 3194159,
-  "precision": 0.970888,
-  "recall": 0.740721
+  "f05": 0.918239,
+  "f1": 0.844152,
+  "namedBytes": 3208691,
+  "precision": 0.975305,
+  "recall": 0.744091
  },
  "label": "exp117-k2all-cpf-apps",
  "missBytes": {
-  "a": 553338,
+  "a": 535221,
   "b": 34780,
   "c": 77484,
   "d-absent": 34925,
@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "38ae93cdf43b40d22299e58d8e7b724f364f3bb4c199d099de35a411b5ab2929",
  "rule": "structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "set": "apps-rollup",
  "statementBytes": {
   "<app>": 2717,
@@ -66,21 +66,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 20683,
-  "f05": 0.910962,
-  "f05ShipperOnly": 0.910962,
-  "f1": 0.8547,
-  "f1ShipperOnly": 0.8547,
+  "f05": 0.915901,
+  "f05ShipperOnly": 0.915901,
+  "f1": 0.859334,
+  "f1ShipperOnly": 0.859334,
   "libraryBytes": 4312227,
   "namedAsOriginBytes": 0,
-  "namedAsShipperBytes": 3341689,
-  "namedBytes": 3341689,
-  "namedBytesShipperOnly": 3341689,
-  "precision": 0.952773,
-  "precisionShipperOnly": 0.952773,
-  "recall": 0.774933,
-  "recallShipperOnly": 0.774933,
-  "wrongFamilyBytes": 165639,
-  "wrongFamilyBytesShipperOnly": 165639
+  "namedAsShipperBytes": 3359806,
+  "namedBytes": 3359806,
+  "namedBytesShipperOnly": 3359806,
+  "precision": 0.957939,
+  "precisionShipperOnly": 0.957939,
+  "recall": 0.779135,
+  "recallShipperOnly": 0.779135,
+  "wrongFamilyBytes": 147522,
+  "wrongFamilyBytesShipperOnly": 147522
  },
  "truthMethod": "sourcemap"
 }

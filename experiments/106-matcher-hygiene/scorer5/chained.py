@@ -40,19 +40,15 @@ def package_maps(nm_dirs):
                     yield os.path.join(root, f)
 
 
-def entry_layer(entry, truth):
-    base = os.path.dirname(entry["files"]["bundle"]["origin"])
-    smap = json.load(open(lib096.corpus_path(entry, "innerMap" if "innerMap" in entry["files"] else "map")))
-    srcs = smap["sources"]
-    missing = collections.defaultdict(list)  # resolved path -> source indices (a map may list one path twice)
-    for i, (s, r) in enumerate(zip(srcs, truth["sources"])):
-        if r[0] == "<app>" and "?commonjs-" not in s and not os.path.exists(os.path.normpath(os.path.join(base, s))):
-            missing[os.path.normpath(os.path.join(base, s))].append(i)
-    if not missing:
-        return {}, 0
-    # where the app's packages live: the node_modules prefixes of the sources that DO resolve into a package
-    nm = sorted({os.path.normpath(os.path.join(base, s)).rsplit("/node_modules/", 1)[0] + "/node_modules"
-                 for s in srcs if "node_modules/" in s})
+def install_dirs(base, srcs):
+    """Where the app's packages live: the node_modules prefixes of the sources that DO resolve into a package."""
+    return sorted({os.path.normpath(os.path.join(base, s)).rsplit("/node_modules/", 1)[0] + "/node_modules"
+                   for s in srcs if isinstance(s, str) and "node_modules/" in s})
+
+
+def map_holders(missing, nm):
+    """For each resolved path in `missing`, the installed package maps (under the `nm` dirs) whose `sources`,
+    resolved against the map's directory and `sourceRoot`, list it, in path order."""
     holders = collections.defaultdict(list)
     stems = {os.path.basename(p).encode() for p in missing}
     for mp in package_maps(nm):
@@ -73,20 +69,40 @@ def entry_layer(entry, truth):
                 p = os.path.normpath(os.path.join(d, s))
                 if p in missing:
                     holders[p].append(mp)
+    return holders
+
+
+def holder_row(maps, p):
+    """[package, version, path relative to its node_modules] of the FIRST map's package (path order), or None."""
+    pr = T.package_root(maps[0]) if maps else None
+    if pr is None:
+        return None
+    pkg, root, _ = pr
+    try:
+        ver = json.load(open(os.path.join(root, "package.json"))).get("version")
+    except (OSError, ValueError):
+        ver = None
+    return [pkg, ver, os.path.relpath(p, os.path.dirname(root))]
+
+
+def entry_layer(entry, truth):
+    base = os.path.dirname(entry["files"]["bundle"]["origin"])
+    smap = json.load(open(lib096.corpus_path(entry, "innerMap" if "innerMap" in entry["files"] else "map")))
+    srcs = smap["sources"]
+    missing = collections.defaultdict(list)  # resolved path -> source indices (a map may list one path twice)
+    for i, (s, r) in enumerate(zip(srcs, truth["sources"])):
+        if r[0] == "<app>" and "?commonjs-" not in s and not os.path.exists(os.path.normpath(os.path.join(base, s))):
+            missing[os.path.normpath(os.path.join(base, s))].append(i)
+    if not missing:
+        return {}, 0
+    holders = map_holders(missing, install_dirs(base, srcs))
     out = {}
     for p, idx in sorted(missing.items(), key=lambda kv: kv[1]):
-        maps = holders.get(p)
-        pr = T.package_root(maps[0]) if maps else None
-        if pr is None:
+        row = holder_row(holders.get(p), p)
+        if row is None:
             continue
-        pkg, root, _ = pr
-        try:
-            ver = json.load(open(os.path.join(root, "package.json"))).get("version")
-        except (OSError, ValueError):
-            ver = None
-        rel = os.path.relpath(p, os.path.dirname(root))
         for i in idx:
-            out[str(i)] = [pkg, ver, rel]
+            out[str(i)] = row
     return out, sum(len(v) for v in missing.values())
 
 

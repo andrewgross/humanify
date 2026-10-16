@@ -1,10 +1,10 @@
 {
  "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
  "claimedBytes": {
-  "family": 127219,
+  "family": 126313,
   "foreign": 23428,
   "origin": 19797,
-  "right": 1331795,
+  "right": 1332701,
   "unmapped": 7453,
   "wrongFamily": 127887
  },
@@ -18,10 +18,10 @@
   "names": {
    "bindings": 20838,
    "bindingsSameVersion": 17378,
-   "bindingsVersionKnown": 20778,
+   "bindingsVersionKnown": 20784,
    "exactBytes": 1274533,
    "exactUnits": 2534,
-   "sameVersionShare": 0.836365
+   "sameVersionShare": 0.836124
   }
  },
  "indexId": "6edf4f3d7860d03cc2ed419318780d3844a929ed89d4e428b7055aa2d6203435",
@@ -35,8 +35,8 @@
  },
  "label": "exp101-call2k-guards-agreement",
  "missBytes": {
-  "a": 1573059,
-  "b": 694721,
+  "a": 1378174,
+  "b": 889606,
   "c": 65766,
   "d-absent": 125828,
   "d-file": 18213,
@@ -52,7 +52,7 @@
  "noDiscovery": null,
  "reportSha256": "5e4a18b7f73da676a0c5cac80cd6556f9ee1d91b31621d7c3e068a37b763e212",
  "rule": "agreement",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "set": "esbuild-app",
  "statementBytes": {
   "<foreign>": 80010,

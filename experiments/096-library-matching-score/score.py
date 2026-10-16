@@ -94,7 +94,14 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    the default index k2-all plus the earlier universe (17,316 names): same repository, renamed-to, GitHub-recorded
 #    fork, pairwise. family() reads more links, nothing else changed; the frozen copies layers keep the families
 #    they were built with. Same reports, re-scored (experiments/119-families-full/README.md, ledger.py).
-SCORER_VERSION = "exp096-score/8"
+# 9: exp120, two truth-side fixes (experiments/120-truth-families/README.md). (a) families-derived.json re-derived
+#    (exp104's rules unchanged) over the exp119 universe plus every package NAME any corpus's truth labels with (the
+#    truths' source tables, chained, origin and copies layers): a truth package outside the universe (a fork such
+#    as @snyk/graphlib) was in no derived family. (b) rule `npmchain` (truth_audit RULES9, frozen layer chained9):
+#    a chained source whose path names a package npm does not have (`@primevue/src`, from @primevue/core's own map)
+#    keeps the real package whose map listed it. Same reports, re-scored; RULES9 off + scorer 8's links file
+#    reproduces scorer 8's cards.
+SCORER_VERSION = "exp096-score/9"
 
 
 def r6(x):
@@ -504,6 +511,9 @@ def main():
     chm = truth_audit.load_chained_manifest()
     if chm["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the chained-sources layer was frozen for another corpus manifest")
+    c9m = truth_audit.load_chained9_manifest()
+    if c9m is not None and c9m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 9 chained layer was frozen for another corpus manifest")
     o7m = truth_audit.load_origins7_manifest()
     if o7m is not None and o7m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 7 origin layer was frozen for another corpus manifest")
@@ -560,6 +570,7 @@ def main():
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
+                   **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},
