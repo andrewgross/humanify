@@ -152,6 +152,10 @@ shadow_ties = true
 presence_fence = true
 # A declared seed (an inlined package.json, a scoped error prefix) whose statement is bigger than this many bytes is no seed: a manifest inside a huge statement names one of its packages, not the statement (exp112; 0 = off).
 declared_max_bytes = 65536
+# A package whose every index seed is a copy seed (another package holds at least this share of the nodes its prints cover there, in index modules copy_presence_factor times smaller: the origin its dist inlined) is no seed: a sponge, not shown in the bundle by code of its own (exp121; 0 = off).
+copy_presence = 0.0
+# How many times smaller the origin's index module must be than the sponge's for copy_presence (exp121).
+copy_presence_factor = 0
 
 [unpack]
 # Force the bundler verdict.

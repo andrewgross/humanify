@@ -224,6 +224,19 @@ pub struct DiscoveryOptions {
     /// factory holding many packages) says that package is somewhere in
     /// it, not that the statement is that package's.
     pub declared_max_bytes: u32,
+    /// The copy-presence share (exp121; 0 = off): an index seed of P is a
+    /// COPY seed when another family Q holds at least this share of the
+    /// nodes P's own prints cover there, each in an index module at most
+    /// 1/[`Self::copy_presence_factor`] of P's module for the same print —
+    /// Q is the smaller context, the origin P's dist inlined (a sponge: a
+    /// package whose published build bundles its dependencies). A package
+    /// whose EVERY index seed is a copy seed, and that has no declared or
+    /// banner seed, is no seed: the bundle never shows P's own code
+    /// ([`presence`]; fenced with [`Self::presence_fence`]).
+    pub copy_presence: f64,
+    /// The copy-presence factor (exp121): how much smaller the origin's
+    /// module must be than the sponge's.
+    pub copy_presence_factor: u64,
 }
 
 impl Default for DiscoveryOptions {
@@ -246,6 +259,8 @@ impl Default for DiscoveryOptions {
             shadow_ties: false,
             presence_fence: false,
             declared_max_bytes: 0,
+            copy_presence: 0.0,
+            copy_presence_factor: 0,
         }
     }
 }
@@ -963,6 +978,86 @@ impl<'c> Containment<'c> {
             .min()
     }
 
+    /// The copy share of unit `u` as `package`'s (exp121,
+    /// [`DiscoveryOptions::copy_presence`]): over the prints `package`'s
+    /// family covers `u` with (the whole print when it holds it within the
+    /// lookup's specificity, else its largest non-overlapping such function
+    /// prints, at the row floor), the largest share of those nodes ONE other
+    /// family holds in an index module at most 1/`factor` of the package's
+    /// smallest module for the same print. None when the package covers
+    /// nothing.
+    fn copy_share(&self, u: u32, package: &str, factor: u64) -> Option<f64> {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return None;
+        };
+        let query = self.module_bytes[u as usize];
+        let specific = |m: u64| {
+            self.rules
+                .specificity
+                .is_none_or(|(f, slack)| m <= f * query + slack)
+        };
+        // The package's smallest module holding `p`, when it holds `p`
+        // within the specificity bound.
+        let own = |p: &crate::libindex::units::UnitPrint| -> Option<u64> {
+            self.index
+                .candidates(&p.hash)
+                .iter()
+                .filter(|h| self.owner_is(h.owner, package) && specific(h.module_bytes))
+                .map(|h| h.module_bytes)
+                .min()
+        };
+        let mut covering: Vec<(&crate::libindex::units::UnitPrint, u64)> = Vec::new();
+        if prints.whole.nodes >= UNIT_ROW_MIN_NODES
+            && let Some(m) = own(&prints.whole)
+        {
+            covering.push((&prints.whole, m));
+        } else {
+            let mut held: Vec<(&crate::libindex::units::UnitPrint, u64)> = prints
+                .functions
+                .iter()
+                .filter(|p| p.nodes >= UNIT_ROW_MIN_NODES)
+                .filter_map(|p| own(p).map(|m| (p, m)))
+                .collect();
+            held.sort_by_key(|(p, _)| std::cmp::Reverse(p.nodes));
+            for (p, m) in held {
+                let (s, e) = (p.span.start, p.span.end);
+                if covering
+                    .iter()
+                    .any(|(q, _)| !(e <= q.span.start || s >= q.span.end))
+                {
+                    continue;
+                }
+                covering.push((p, m));
+            }
+        }
+        let cover: u64 = covering.iter().map(|(p, _)| u64::from(p.nodes)).sum();
+        if cover == 0 {
+            return None;
+        }
+        let mut co: BTreeMap<&str, u64> = BTreeMap::new();
+        for (p, mine) in &covering {
+            let mut smallest: BTreeMap<&str, u64> = BTreeMap::new();
+            for h in self.index.candidates(&p.hash).iter() {
+                if self.owner_is(h.owner, package) {
+                    continue;
+                }
+                let m = smallest
+                    .entry(self.owner_family[h.owner as usize].as_str())
+                    .or_insert(u64::MAX);
+                *m = (*m).min(h.module_bytes);
+            }
+            for (f, m) in smallest {
+                if m.saturating_mul(factor) <= *mine {
+                    *co.entry(f).or_default() += u64::from(p.nodes);
+                }
+            }
+        }
+        let best = co.values().copied().max().unwrap_or(0);
+        Some(best as f64 / cover as f64)
+    }
+
     /// Does the index contradict unit `u` being `package`'s? (type doc)
     fn contradicts(&self, u: u32, package: &str) -> bool {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
@@ -1444,7 +1539,7 @@ fn presence(
     families: &PackageFamilies,
     options: DiscoveryOptions,
 ) -> Vec<Seed> {
-    if options.context_presence <= 0.0 && !options.shadow_ties {
+    if options.context_presence <= 0.0 && !options.shadow_ties && options.copy_presence <= 0.0 {
         return seeds;
     }
     // A family key per package: one family judgement joins packages.
@@ -1484,6 +1579,29 @@ fn presence(
                     });
             judged.insert(k);
             if !oversized {
+                present.insert(k);
+            }
+        }
+        for (slot, &k) in keep.iter_mut().zip(&keys) {
+            if judged.contains(&k) && !present.contains(&k) {
+                dropped_units.extend(slot.take().map(|s| s.unit));
+            }
+        }
+    }
+    if options.copy_presence > 0.0 {
+        // A family is present when one index seed of it stands on code no
+        // smaller context holds (or it has a declared seed).
+        let mut present: BTreeSet<usize> = declared.clone();
+        let mut judged: BTreeSet<usize> = BTreeSet::new();
+        for (s, &k) in keep.iter().zip(&keys) {
+            let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
+                continue;
+            };
+            judged.insert(k);
+            let copy = containment
+                .copy_share(s.unit, &s.package, options.copy_presence_factor)
+                .is_some_and(|share| share >= options.copy_presence);
+            if !copy {
                 present.insert(k);
             }
         }

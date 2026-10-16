@@ -737,6 +737,27 @@ pub static KEYS: &[Key] = &[
          bigger than this many bytes is no seed: a manifest inside a huge statement names one of \
          its packages, not the statement (exp112; 0 = off).",
     ),
+    Key {
+        section: "library.discovery",
+        name: "copy_presence",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().copy_presence),
+        unset: "",
+        doc: "A package whose every index seed is a copy seed (another package holds at least this \
+              share of the nodes its prints cover there, in index modules copy_presence_factor \
+              times smaller: the origin its dist inlined) is no seed: a sponge, not shown in the \
+              bundle by code of its own (exp121; 0 = off).",
+    },
+    lib_int(
+        "library.discovery",
+        "copy_presence_factor",
+        0,
+        U32,
+        || int(discovery().copy_presence_factor),
+        "How many times smaller the origin's index module must be than the sponge's for \
+         copy_presence (exp121).",
+    ),
     // [unpack]
     Key {
         section: "unpack",
