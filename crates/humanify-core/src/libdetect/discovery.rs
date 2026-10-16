@@ -993,8 +993,8 @@ impl<'c> Containment<'c> {
 
     /// The copy share of unit `u` as `package`'s (exp121,
     /// [`DiscoveryOptions::copy_presence`]): over the prints `package`'s
-    /// family covers `u` with (the whole print when it holds it within the
-    /// lookup's specificity, else its largest non-overlapping such function
+    /// family covers `u` with (the whole print when the lookup reads it
+    /// for the package, else its largest non-overlapping such function
     /// prints, at the row floor), the largest share of those nodes ONE other
     /// family holds in an index module at most 1/`factor` of the package's
     /// smallest module for the same print, with that family's owner holding
@@ -1012,9 +1012,15 @@ impl<'c> Containment<'c> {
                 .specificity
                 .is_none_or(|(f, slack)| m <= f * query + slack)
         };
-        // The package's smallest module holding `p`, when it holds `p`
-        // within the specificity bound.
+        // The package's smallest module holding `p`, when `p` is a print
+        // the lookup reads (held within the specificity bound by at most
+        // `max_packages` owners) and the package is one of its owners: a
+        // print too common to seed anyone says nothing about origins either.
         let own = |p: &crate::libindex::units::UnitPrint| -> Option<u64> {
+            let owners = self.index.look(&p.hash, query, &self.rules)?;
+            if !owners.iter().any(|&o| self.owner_is(o, package)) {
+                return None;
+            }
             self.index
                 .candidates(&p.hash)
                 .iter()

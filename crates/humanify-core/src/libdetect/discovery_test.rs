@@ -1434,3 +1434,29 @@ fn copy_presence_own_needs_a_share_of_the_package_s_seed_bytes_to_vouch_for_it()
     let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], share);
     assert_eq!(claim_of(&rows, "var lib"), None);
 }
+
+/// lib with three inner functions, a, b and c, of about a third each.
+const COPIED3: &str = "var lib = function (t) { var a = function (x) { return x.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, x.length); }; var b = function (y) { return [y, y + 1, y * 2, y % 7, String(y), y.toFixed(2), y.toString(16)].join(\",\"); }; var c = function (z) { return [z, z - 3, z / 2, z % 5, String(z), z.toFixed(4), z.toString(2)].join(\";\"); }; return tiny(a(t) + b(t.length) + c(1)); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
+
+#[test]
+fn copy_presence_reads_only_the_prints_the_lookup_reads() {
+    // a is held by S and by three small-module packages: more owners than
+    // the lookup reads (max_packages), so it is generic code that neither
+    // seeds S nor says where S's copy came from. S's cover is b and c, no
+    // smaller context holds them: S is no sponge here.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (z)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::inner("var lib", "function (x)", "R1", 500),
+        Held::inner("var lib", "function (x)", "R2", 500),
+    ];
+    let on = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED3, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+}
