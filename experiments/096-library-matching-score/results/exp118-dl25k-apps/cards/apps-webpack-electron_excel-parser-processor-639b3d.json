@@ -1,0 +1,80 @@
+{
+ "bundleSha256": "9f3030491dabca3c34e5850e4f4d3026aea07e4ca5a3c988e815784453ca8930",
+ "claimedBytes": {
+  "family": 21949,
+  "right": 600165,
+  "unmapped": 107,
+  "wrongFamily": 571
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_excel-parser-processor-639b3d",
+ "exploratory": {
+  "names": {
+   "bindings": 14542,
+   "bindingsSameVersion": 14535,
+   "bindingsVersionKnown": 14542,
+   "exactBytes": 608393,
+   "exactUnits": 1377,
+   "sameVersionShare": 0.999519
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.850006,
+  "f1": 0.694504,
+  "namedBytes": 583537,
+  "precision": 0.999147,
+  "recall": 0.532227
+ },
+ "label": "exp118-dl25k-apps",
+ "missBytes": {
+  "a": 380219,
+  "c": 37277,
+  "e-ambig": 116,
+  "e-support": 848,
+  "e-veto": 55335,
+  "f": 498
+ },
+ "noDiscovery": null,
+ "reportSha256": "1acc073152f4231c68662e0fec5071fa7d6a19ae5f435176d4e99847ede093fd",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 533,
+  "<unmapped>": 394209,
+  "copy": 375,
+  "library": 1096407
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 375,
+  "f05": 0.867143,
+  "f05ShipperOnly": 0.867143,
+  "f1": 0.723771,
+  "f1ShipperOnly": 0.723771,
+  "libraryBytes": 1096407,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 622114,
+  "namedBytes": 622114,
+  "namedBytesShipperOnly": 622114,
+  "precision": 0.999083,
+  "precisionShipperOnly": 0.999083,
+  "recall": 0.567412,
+  "recallShipperOnly": 0.567412,
+  "wrongFamilyBytes": 571,
+  "wrongFamilyBytesShipperOnly": 571
+ },
+ "truthMethod": "sourcemap"
+}

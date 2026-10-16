@@ -23,7 +23,10 @@
 - **Scorer 9** (`exp096-score/9`). With both changes undone (RULES9 off, scorer 8's links file) it reproduces the
   committed scorer-8 output exactly: `verify_s8.py` on `exp119-head`, `pop-exp119-k2all-st` and
   `exp119-k2all-st-apps`, every card and summary IDENTICAL. **All 237 committed labels were re-scored once**
-  (dev 81, apps 41, bundlers 18, pop 16, test 56, test2 25; the six `*exp120*` labels were scored at run time).
+  (dev 81, apps 41, bundlers 18, pop 16, test 56, test2 25; the six `*exp120*` labels were scored at run time). After main `d2d08a05` (exp118) was merged in, its six `*exp118-dl25k*` labels were re-scored once
+  under scorer 9 with `rescore_many.py` (test and test2: summaries only). No set's wrong-family bytes rose; they
+  fell on apps (esbuild -50,002, rollup -213,386, webpack -368,247), pop (bun -24,558, esbuild -99,124) and
+  test2-esbuild (-5,959). App claimed is 0. The ledger was not re-run for these six labels.
 - **Ledger, both directions, every label: right -> wrong = 0 bytes everywhere.** No GOOD -> WRONG, GOOD ->
   UNJUDGED or WRONG -> UNJUDGED transition on any label of any corpus. Every move is WRONG -> GOOD or GOOD ->
   GOOD (`family` -> `right` when a chained source now carries the claimed package itself).
