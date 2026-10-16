@@ -337,6 +337,7 @@ impl Library {
             declared_max_bytes: d.declared_max_bytes,
             copy_presence: d.copy_presence,
             copy_presence_factor: d.copy_presence_factor,
+            copy_presence_origin: d.copy_presence_origin,
         }
     }
 
@@ -432,6 +433,7 @@ pub struct LibraryDiscovery {
     pub declared_max_bytes: u32,
     pub copy_presence: f64,
     pub copy_presence_factor: u64,
+    pub copy_presence_origin: bool,
 }
 
 fn serialize_banner_names<S: serde::Serializer>(
@@ -614,6 +616,7 @@ fn library_of(r: &Resolved) -> Library {
             declared_max_bytes: n("library.discovery.declared_max_bytes") as u32,
             copy_presence: r.float("library.discovery.copy_presence"),
             copy_presence_factor: n("library.discovery.copy_presence_factor"),
+            copy_presence_origin: r.flag_on("library.discovery.copy_presence_origin"),
         },
     }
 }

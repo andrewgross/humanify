@@ -1386,3 +1386,25 @@ fn copy_presence_drops_a_package_whose_every_seed_is_an_inlined_copy_of_a_smalle
     let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], thin);
     assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
 }
+
+#[test]
+fn copy_presence_origin_gives_a_sponge_s_copy_seeds_to_the_origin() {
+    // As above, with the origin preferred: S's copy seed of lib becomes
+    // Q's (the family co-holding most of S's cover in the smaller context),
+    // and Q's claim propagates like any seed.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+    ];
+    let on = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        copy_presence_origin: true,
+        presence_fence: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var tiny"), Some(("Q".into(), Rule::Down)));
+}

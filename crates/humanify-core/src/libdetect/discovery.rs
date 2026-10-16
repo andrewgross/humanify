@@ -238,6 +238,10 @@ pub struct DiscoveryOptions {
     /// The copy-presence factor (exp121): how much smaller the origin's
     /// module must be than the sponge's.
     pub copy_presence_factor: u64,
+    /// Prefer the origin (exp121): what [`Self::copy_presence`] drops
+    /// becomes the seed of the owner co-holding the most of it in the
+    /// smaller context (the code's origin), instead of no one's.
+    pub copy_presence_origin: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -262,6 +266,7 @@ impl Default for DiscoveryOptions {
             declared_max_bytes: 0,
             copy_presence: 0.0,
             copy_presence_factor: 0,
+            copy_presence_origin: false,
         }
     }
 }
@@ -985,9 +990,10 @@ impl<'c> Containment<'c> {
     /// lookup's specificity, else its largest non-overlapping such function
     /// prints, at the row floor), the largest share of those nodes ONE other
     /// family holds in an index module at most 1/`factor` of the package's
-    /// smallest module for the same print. None when the package covers
-    /// nothing.
-    fn copy_share(&self, u: u32, package: &str, factor: u64) -> Option<f64> {
+    /// smallest module for the same print, with that family's owner holding
+    /// the code in the smallest module (the origin). None when the package
+    /// covers nothing.
+    fn copy_share(&self, u: u32, package: &str, factor: u64) -> Option<(f64, Option<u32>)> {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         use crate::matching::store::ReferenceStore;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
@@ -1037,26 +1043,37 @@ impl<'c> Containment<'c> {
         if cover == 0 {
             return None;
         }
-        let mut co: BTreeMap<&str, u64> = BTreeMap::new();
+        // Per other family: co-held nodes, and its owner in the smallest
+        // module seen (module bytes, owner).
+        let mut co: BTreeMap<&str, (u64, (u64, u32))> = BTreeMap::new();
         for (p, mine) in &covering {
-            let mut smallest: BTreeMap<&str, u64> = BTreeMap::new();
+            let mut smallest: BTreeMap<&str, (u64, u32)> = BTreeMap::new();
             for h in self.index.candidates(&p.hash).iter() {
                 if self.owner_is(h.owner, package) {
                     continue;
                 }
                 let m = smallest
                     .entry(self.owner_family[h.owner as usize].as_str())
-                    .or_insert(u64::MAX);
-                *m = (*m).min(h.module_bytes);
+                    .or_insert((u64::MAX, h.owner));
+                *m = (*m).min((h.module_bytes, h.owner));
             }
             for (f, m) in smallest {
-                if m.saturating_mul(factor) <= *mine {
-                    *co.entry(f).or_default() += u64::from(p.nodes);
+                if m.0.saturating_mul(factor) <= *mine {
+                    let e = co.entry(f).or_insert((0, m));
+                    e.0 += u64::from(p.nodes);
+                    e.1 = e.1.min(m);
                 }
             }
         }
-        let best = co.values().copied().max().unwrap_or(0);
-        Some(best as f64 / cover as f64)
+        // The best family: most co-held nodes, then the smaller module.
+        let best = co
+            .values()
+            .max_by_key(|(n, m)| (*n, std::cmp::Reverse(*m)))
+            .copied();
+        Some(match best {
+            Some((n, (_, owner))) => (n as f64 / cover as f64, Some(owner)),
+            None => (0.0, None),
+        })
     }
 
     /// Does the index contradict unit `u` being `package`'s? (type doc)
@@ -1554,7 +1571,7 @@ fn presence(
             }
         }
     };
-    let keys: Vec<usize> = seeds.iter().map(|s| key_of(&s.package)).collect();
+    let mut keys: Vec<usize> = seeds.iter().map(|s| key_of(&s.package)).collect();
     let declared: BTreeSet<usize> = seeds
         .iter()
         .zip(&keys)
@@ -1590,37 +1607,15 @@ fn presence(
         }
     }
     if options.copy_presence > 0.0 {
-        // Judged per PACKAGE, not per family: a scope sibling's own code
-        // (`@scope/core`) says nothing about whether `@scope/server`'s seeds
-        // are copies. A package is present when one index seed of it stands
-        // on code no smaller context holds, or its family has a declared or
-        // banner seed.
-        let mut present: BTreeSet<&str> = BTreeSet::new();
-        let mut judged: BTreeSet<&str> = BTreeSet::new();
-        for (s, k) in keep.iter().zip(&keys) {
-            let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
-                continue;
-            };
-            if declared.contains(k) {
-                continue;
-            }
-            judged.insert(&s.package);
-            let copy = containment
-                .copy_share(s.unit, &s.package, options.copy_presence_factor)
-                .is_some_and(|share| share >= options.copy_presence);
-            if !copy {
-                present.insert(&s.package);
-            }
-        }
-        let drop: BTreeSet<String> = judged.difference(&present).map(|p| p.to_string()).collect();
-        for slot in keep.iter_mut() {
-            if slot
-                .as_ref()
-                .is_some_and(|s| s.evidence.is_index() && drop.contains(&s.package))
-            {
-                dropped_units.extend(slot.take().map(|s| s.unit));
-            }
-        }
+        copy_presence(
+            &mut keep,
+            &mut keys,
+            &declared,
+            containment,
+            options,
+            &mut key_of,
+            &mut dropped_units,
+        );
     }
     let before: Vec<u32> = keep.iter().flatten().map(|s| s.unit).collect();
     if options.shadow_ties {
@@ -1660,6 +1655,63 @@ fn unfence(mut found: Discovery) -> Discovery {
     }
     found.queue.retain(|q| !q.uses.is_empty());
     found
+}
+
+/// [`DiscoveryOptions::copy_presence`] over the kept seeds (see [`presence`]):
+/// a package whose every index seed is a copy seed loses them — to the
+/// origin with [`DiscoveryOptions::copy_presence_origin`], else to no one
+/// (`dropped`, which the fence holds).
+fn copy_presence(
+    keep: &mut [Option<Seed>],
+    keys: &mut [usize],
+    declared: &BTreeSet<usize>,
+    containment: &Containment<'_>,
+    options: DiscoveryOptions,
+    key_of: &mut dyn FnMut(&str) -> usize,
+    dropped_units: &mut Vec<u32>,
+) {
+    // Judged per PACKAGE, not per family: a scope sibling's own code
+    // (`@scope/core`) says nothing about whether `@scope/server`'s seeds
+    // are copies. A package is present when one index seed of it stands
+    // on code no smaller context holds, or its family has a declared or
+    // banner seed.
+    let mut present: BTreeSet<String> = BTreeSet::new();
+    let mut judged: BTreeSet<String> = BTreeSet::new();
+    let mut origin: BTreeMap<usize, u32> = BTreeMap::new();
+    for (i, (s, k)) in keep.iter().zip(keys.iter()).enumerate() {
+        let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
+            continue;
+        };
+        if declared.contains(k) {
+            continue;
+        }
+        judged.insert(s.package.clone());
+        match containment.copy_share(s.unit, &s.package, options.copy_presence_factor) {
+            Some((share, owner)) if share >= options.copy_presence => {
+                if let Some(o) = owner {
+                    origin.insert(i, o);
+                }
+            }
+            _ => {
+                present.insert(s.package.clone());
+            }
+        }
+    }
+    for (i, (slot, key)) in keep.iter_mut().zip(keys.iter_mut()).enumerate() {
+        let copy = slot.as_ref().is_some_and(|s| {
+            s.evidence.is_index() && judged.contains(&s.package) && !present.contains(&s.package)
+        });
+        if !copy {
+            continue;
+        }
+        match (options.copy_presence_origin, origin.get(&i), slot.as_mut()) {
+            (true, Some(&o), Some(s)) => {
+                s.package = containment.name(o).to_string();
+                *key = key_of(&s.package);
+            }
+            _ => dropped_units.extend(slot.take().map(|s| s.unit)),
+        }
+    }
 }
 
 /// [`DiscoveryOptions::shadow_ties`] over the kept seeds (see [`presence`]).

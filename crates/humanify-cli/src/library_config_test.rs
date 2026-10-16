@@ -351,14 +351,16 @@ fn the_exp121_copy_presence_keys_set_from_the_file() {
     let d = build(&["in.js"], "").unwrap().library.discovery_options();
     assert_eq!(d.copy_presence, 0.0);
     assert_eq!(d.copy_presence_factor, 0);
+    assert!(!d.copy_presence_origin);
     let on = build(
         &["in.js"],
-        "[library.discovery]\ncopy_presence = 0.1\ncopy_presence_factor = 4\n",
+        "[library.discovery]\ncopy_presence = 0.1\ncopy_presence_factor = 4\ncopy_presence_origin = true\n",
     )
     .unwrap();
     let o = on.library.discovery_options();
     assert_eq!(o.copy_presence, 0.1);
     assert_eq!(o.copy_presence_factor, 4);
+    assert!(o.copy_presence_origin);
 }
 
 /// exp112's declared cap: 65536 by default since exp117, 0 turns it off.

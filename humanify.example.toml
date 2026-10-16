@@ -156,6 +156,8 @@ declared_max_bytes = 65536
 copy_presence = 0.0
 # How many times smaller the origin's index module must be than the sponge's for copy_presence (exp121).
 copy_presence_factor = 0
+# What copy_presence drops becomes the seed of its origin (the package co-holding the most of it in the smaller module) instead of no one's (exp121).
+copy_presence_origin = false
 
 [unpack]
 # Force the bundler verdict.

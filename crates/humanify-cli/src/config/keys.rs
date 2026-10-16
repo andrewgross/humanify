@@ -758,6 +758,16 @@ pub static KEYS: &[Key] = &[
         "How many times smaller the origin's index module must be than the sponge's for \
          copy_presence (exp121).",
     ),
+    Key {
+        section: "library.discovery",
+        name: "copy_presence_origin",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().copy_presence_origin)),
+        unset: "",
+        doc: "What copy_presence drops becomes the seed of its origin (the package co-holding the \
+              most of it in the smaller module) instead of no one's (exp121).",
+    },
     // [unpack]
     Key {
         section: "unpack",
