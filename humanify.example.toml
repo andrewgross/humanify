@@ -158,6 +158,8 @@ copy_presence = 0.0
 copy_presence_factor = 0
 # What copy_presence drops becomes the seed of its origin (the package co-holding the most of it in the smaller module) instead of no one's (exp121).
 copy_presence_origin = false
+# For copy_presence, a package shows in the bundle only when its non-copy index seeds hold at least this share of its index seed bytes; otherwise its copy seeds go (exp121; 0 = any one non-copy seed vouches).
+copy_presence_own = 0.0
 
 [unpack]
 # Force the bundler verdict.

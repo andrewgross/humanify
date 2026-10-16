@@ -1408,3 +1408,29 @@ fn copy_presence_origin_gives_a_sponge_s_copy_seeds_to_the_origin() {
     assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Seed)));
     assert_eq!(claim_of(&rows, "var tiny"), Some(("Q".into(), Rule::Down)));
 }
+
+#[test]
+fn copy_presence_own_needs_a_share_of_the_package_s_seed_bytes_to_vouch_for_it() {
+    // S's one own seed (other) is smaller than its copy seed (lib): under
+    // copy_presence_own = 0.6 it is too small a share of S's seed bytes to
+    // show S in the bundle, so lib (the copy) goes; at 0 any own seed vouches.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::whole("var other", "S"),
+    ];
+    let any = DiscoveryOptions {
+        copy_presence: 0.1,
+        copy_presence_factor: 4,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], any);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    let share = DiscoveryOptions {
+        copy_presence_own: 0.6,
+        ..any
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], share);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+}

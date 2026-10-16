@@ -768,6 +768,17 @@ pub static KEYS: &[Key] = &[
         doc: "What copy_presence drops becomes the seed of its origin (the package co-holding the \
               most of it in the smaller module) instead of no one's (exp121).",
     },
+    Key {
+        section: "library.discovery",
+        name: "copy_presence_own",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().copy_presence_own),
+        unset: "",
+        doc: "For copy_presence, a package shows in the bundle only when its non-copy index seeds \
+              hold at least this share of its index seed bytes; otherwise its copy seeds go \
+              (exp121; 0 = any one non-copy seed vouches).",
+    },
     // [unpack]
     Key {
         section: "unpack",

@@ -242,6 +242,12 @@ pub struct DiscoveryOptions {
     /// becomes the seed of the owner co-holding the most of it in the
     /// smaller context (the code's origin), instead of no one's.
     pub copy_presence_origin: bool,
+    /// The copy-presence own share (exp121; 0 = any): a package shows in
+    /// the bundle only when its NON-copy index seeds hold at least this
+    /// share of its index seed bytes there; otherwise its copy seeds go
+    /// (its own seeds stay). A sponge's one stray seed on its own code
+    /// does not vouch for megabytes of inlined dependencies.
+    pub copy_presence_own: f64,
 }
 
 impl Default for DiscoveryOptions {
@@ -267,6 +273,7 @@ impl Default for DiscoveryOptions {
             copy_presence: 0.0,
             copy_presence_factor: 0,
             copy_presence_origin: false,
+            copy_presence_own: 0.0,
         }
     }
 }
@@ -1608,6 +1615,7 @@ fn presence(
     }
     if options.copy_presence > 0.0 {
         copy_presence(
+            graph,
             &mut keep,
             &mut keys,
             &declared,
@@ -1661,7 +1669,9 @@ fn unfence(mut found: Discovery) -> Discovery {
 /// a package whose every index seed is a copy seed loses them — to the
 /// origin with [`DiscoveryOptions::copy_presence_origin`], else to no one
 /// (`dropped`, which the fence holds).
+#[allow(clippy::too_many_arguments)]
 fn copy_presence(
+    graph: &ReferenceGraph,
     keep: &mut [Option<Seed>],
     keys: &mut [usize],
     declared: &BTreeSet<usize>,
@@ -1672,12 +1682,12 @@ fn copy_presence(
 ) {
     // Judged per PACKAGE, not per family: a scope sibling's own code
     // (`@scope/core`) says nothing about whether `@scope/server`'s seeds
-    // are copies. A package is present when one index seed of it stands
-    // on code no smaller context holds, or its family has a declared or
-    // banner seed.
-    let mut present: BTreeSet<String> = BTreeSet::new();
-    let mut judged: BTreeSet<String> = BTreeSet::new();
-    let mut origin: BTreeMap<usize, u32> = BTreeMap::new();
+    // are copies. A package is present when its index seeds on code no
+    // smaller context holds carry at least `copy_presence_own` of its seed
+    // bytes (any one, at 0), or its family has a declared or banner seed.
+    let mut total: BTreeMap<String, u64> = BTreeMap::new();
+    let mut own: BTreeMap<String, u64> = BTreeMap::new();
+    let mut copies: BTreeMap<usize, Option<u32>> = BTreeMap::new();
     for (i, (s, k)) in keep.iter().zip(keys.iter()).enumerate() {
         let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
             continue;
@@ -1685,27 +1695,28 @@ fn copy_presence(
         if declared.contains(k) {
             continue;
         }
-        judged.insert(s.package.clone());
+        let bytes = u64::from(graph.units[s.unit as usize].bytes);
+        *total.entry(s.package.clone()).or_default() += bytes;
         match containment.copy_share(s.unit, &s.package, options.copy_presence_factor) {
             Some((share, owner)) if share >= options.copy_presence => {
-                if let Some(o) = owner {
-                    origin.insert(i, o);
-                }
+                copies.insert(i, owner);
             }
-            _ => {
-                present.insert(s.package.clone());
-            }
+            _ => *own.entry(s.package.clone()).or_default() += bytes,
         }
     }
+    let absent = |p: &str| {
+        let mine = own.get(p).copied().unwrap_or(0);
+        mine == 0 || (mine as f64) < options.copy_presence_own * total[p] as f64
+    };
     for (i, (slot, key)) in keep.iter_mut().zip(keys.iter_mut()).enumerate() {
-        let copy = slot.as_ref().is_some_and(|s| {
-            s.evidence.is_index() && judged.contains(&s.package) && !present.contains(&s.package)
-        });
-        if !copy {
+        let Some(&owner) = copies.get(&i) else {
+            continue;
+        };
+        if !slot.as_ref().is_some_and(|s| absent(&s.package)) {
             continue;
         }
-        match (options.copy_presence_origin, origin.get(&i), slot.as_mut()) {
-            (true, Some(&o), Some(s)) => {
+        match (options.copy_presence_origin, owner, slot.as_mut()) {
+            (true, Some(o), Some(s)) => {
                 s.package = containment.name(o).to_string();
                 *key = key_of(&s.package);
             }

@@ -338,6 +338,7 @@ impl Library {
             copy_presence: d.copy_presence,
             copy_presence_factor: d.copy_presence_factor,
             copy_presence_origin: d.copy_presence_origin,
+            copy_presence_own: d.copy_presence_own,
         }
     }
 
@@ -434,6 +435,7 @@ pub struct LibraryDiscovery {
     pub copy_presence: f64,
     pub copy_presence_factor: u64,
     pub copy_presence_origin: bool,
+    pub copy_presence_own: f64,
 }
 
 fn serialize_banner_names<S: serde::Serializer>(
@@ -617,6 +619,7 @@ fn library_of(r: &Resolved) -> Library {
             copy_presence: r.float("library.discovery.copy_presence"),
             copy_presence_factor: n("library.discovery.copy_presence_factor"),
             copy_presence_origin: r.flag_on("library.discovery.copy_presence_origin"),
+            copy_presence_own: r.float("library.discovery.copy_presence_own"),
         },
     }
 }
