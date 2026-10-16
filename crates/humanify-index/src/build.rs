@@ -45,9 +45,35 @@ const PURITY: f64 = 0.9;
 /// step 3); 3 = the same rows, and the shard's notes now record the drops
 /// (2's shards carried empty sponge notes); 4 = no file-name evidence, and
 /// only a strict module-marker comment counts (2/3 dropped right rows:
-/// esquery's own min build, glob comments that mention node_modules). In
-/// every module shard's key.
-pub const UNIT_ROWS_VERSION: &str = "unit-rows/4";
+/// esquery's own min build, glob comments that mention node_modules); 5 =
+/// region-aware (exp124): a marker drops only the units inside the region
+/// it opens, the file's own code outside every foreign region keeps its
+/// rows ([`SpongeRegions`] says what the foreign regions become). In every
+/// module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/5";
+
+/// What the units inside a FOREIGN region of a pre-bundled file become (a
+/// region whose bundler module marker names another package's
+/// `node_modules` path; exp124).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SpongeRegions {
+    /// No rows: the copy is nobody's here.
+    #[default]
+    Drop,
+    /// Rows of the package the marker names, at the version its pnpm
+    /// store path spells, as that package's file (no version: dropped).
+    Origin,
+}
+
+impl SpongeRegions {
+    /// The unit-rows version this mode's module shards are keyed by.
+    fn unit_rows_version(self) -> String {
+        match self {
+            SpongeRegions::Drop => UNIT_ROWS_VERSION.to_string(),
+            SpongeRegions::Origin => format!("{UNIT_ROWS_VERSION}+origin"),
+        }
+    }
+}
 
 use humanify_core::libindex::units::UNIT_ROW_MIN_NODES;
 
@@ -73,6 +99,8 @@ pub struct BuildConfig {
     /// Build nothing: merge the shards the store already holds (a version
     /// with none is refused `no-shard`).
     pub merge_only: bool,
+    /// What a pre-bundled file's foreign regions become.
+    pub sponge_regions: SpongeRegions,
 }
 
 /// One `package@version` to index.
@@ -174,7 +202,12 @@ fn slice_records(
 }
 
 /// The shard inputs of one `package@version`: literals, then each slice.
-fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardInputs> {
+fn shard_inputs(
+    name: &str,
+    version: &str,
+    slices: &[SliceRecord],
+    regions: SpongeRegions,
+) -> Vec<ShardInputs> {
     let f = fingerprint_versions();
     // The literal rows are the files these builds contain, so the
     // recipes and bundlers that decide them are part of the shard's key.
@@ -200,7 +233,7 @@ fn shard_inputs(name: &str, version: &str, slices: &[SliceRecord]) -> Vec<ShardI
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
             recipe: format!("{RECIPE_VERSION} {}", s.recipe),
-            fingerprint: format!("{}+{}+{UNIT_ROWS_VERSION}", f.module, f.units),
+            fingerprint: format!("{}+{}+{}", f.module, f.units, regions.unit_rows_version()),
         });
     }
     out
@@ -236,7 +269,7 @@ pub fn plan(cfg: &BuildConfig) -> Result<Plan, String> {
         }));
         for s in chosen.selected {
             let (mut missing, mut reused) = (Vec::new(), Vec::new());
-            for inputs in shard_inputs(&name, &s.version, &slices) {
+            for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions) {
                 match read_current(&cfg.store, &inputs) {
                     Some(_) => reused.push(inputs),
                     None => missing.push(inputs),
@@ -490,9 +523,10 @@ fn bundled_files(dir: &Path, recipes: &[Recipe]) -> BTreeSet<PathBuf> {
             let Ok(text) = std::fs::read_to_string(build.join("out.js.map")) else {
                 continue;
             };
-            let Ok(map) = SourceMap::parse(&text) else {
+            let Ok(mut map) = SourceMap::parse(&text) else {
                 continue;
             };
+            map.relocate(&build);
             for s in map.mapped_sources() {
                 out.insert(canonical(&build.join(&map.sources[s as usize])));
             }
@@ -591,10 +625,12 @@ pub(crate) fn fingerprint_bundle(
     recipe: Recipe,
     out: &Path,
     shard: &mut Shard,
+    regions: SpongeRegions,
 ) -> Result<(), String> {
     let code = std::fs::read_to_string(out.join("out.js")).map_err(|e| e.to_string())?;
     let map_text = std::fs::read_to_string(out.join("out.js.map")).map_err(|e| e.to_string())?;
-    let map = SourceMap::parse(&map_text)?;
+    let mut map = SourceMap::parse(&map_text)?;
+    map.relocate(out);
     let toolchain = humanify_core::toolchain::resolve_toolchain(
         &humanify_core::detect::detect_bundle(&code),
         Some(recipe.bundler.bundler_type()),
@@ -651,7 +687,7 @@ pub(crate) fn fingerprint_bundle(
             key: key.clone(),
         });
     }
-    let (units, notes) = unit_rows(recipe, &code, &map, out);
+    let (units, notes) = unit_rows(recipe, &code, &map, out, regions);
     let (made, kept_before) = (units.len(), shard.units.len());
     shard.units.extend(
         units
@@ -677,6 +713,7 @@ pub fn unit_rows(
     code: &str,
     map: &SourceMap,
     out: &Path,
+    regions: SpongeRegions,
 ) -> (Vec<ShardUnit>, ShardNotes) {
     let mut notes = ShardNotes::default();
     let toolchain = humanify_core::toolchain::resolve_toolchain(
@@ -702,22 +739,24 @@ pub fn unit_rows(
         .map(|(u, _)| (u.span.start, u.span.end))
         .collect();
     let mut cache = HashMap::new();
-    let mut sponges: HashMap<u32, Option<&'static str>> = HashMap::new();
+    let mut sponges: HashMap<u32, Sponge> = HashMap::new();
     let mut sponge_files: BTreeSet<u32> = BTreeSet::new();
     let mut owned = Vec::new();
-    for ((unit, prints), tally) in units.iter().zip(map.tally(code, &spans)) {
+    for ((unit, prints), segs) in units.iter().zip(map.span_segments(code, &spans)) {
+        let tally = crate::sourcemap::tally_of(&segs);
         match unit_owner(map, out, &tally, &mut cache) {
             UnitOwner::Owned(owner, src) => {
-                let evidence = *sponges.entry(src).or_insert_with(|| {
+                let evidence = sponges.entry(src).or_insert_with(|| {
                     sponge_evidence(&owner, &lexical(&out.join(&map.sources[src as usize])))
                 });
-                if let Some(kind) = evidence {
+                let Some(owner) = evidence.unit_owner(owner, src, &segs, regions) else {
                     if sponge_files.insert(src) {
+                        let kind = evidence.kind().unwrap_or("bundler-marker");
                         *notes.sponge_unit_files.entry(kind.to_string()).or_default() += 1;
                     }
                     notes.sponge_unit_rows += 1;
                     continue;
-                }
+                };
                 owned.push((owner, u64::from(unit.bytes), prints));
             }
             UnitOwner::Mixed => notes.mixed_spans += 1,
@@ -750,30 +789,209 @@ pub fn unit_rows(
     (rows, notes)
 }
 
-/// Why a package's source file is a pre-bundled copy of OTHER packages
-/// ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the file
-/// itself; None for the package's own code. In order: a vendored directory,
-/// then a bundler MODULE MARKER naming another package's `node_modules`
-/// path ([`module_marker_path`]). A file NAME is not evidence here (unlike
-/// the literal table's [`is_sponge_file`]): a package's own minified build
-/// is its own code — esquery's main IS `dist/esquery.min.js` (measured:
-/// the name rule cost 74 KB of right esquery claims on the held-out apps).
-pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&'static str> {
+/// Whether a package's source file holds pre-bundled copies of OTHER
+/// packages ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the
+/// file itself. A file NAME is not evidence here (unlike the literal
+/// table's [`is_sponge_file`]): a package's own minified build is its own
+/// code — esquery's main IS `dist/esquery.min.js` (measured: the name rule
+/// cost 74 KB of right esquery claims on the held-out apps).
+#[derive(Debug)]
+pub enum Sponge {
+    /// The package's own code.
+    Own,
+    /// A vendored directory: the whole file is a copy.
+    VendoredPath,
+    /// A bundle that kept its bundler's MODULE MARKERS, at least one naming
+    /// another package's `node_modules` path ([`module_marker`]): the
+    /// file's regions in line order (exp124: only the foreign ones are
+    /// copies).
+    Regions(Vec<Region>),
+}
+
+/// One module region of a pre-bundled file: from `start` (a 0-based line)
+/// to the next region's start. `origin` is the OTHER package its marker
+/// names, None for the file's own code (a marker naming the package
+/// itself or a path outside `node_modules`, an `//#endregion`).
+#[derive(Debug, PartialEq, Eq)]
+pub struct Region {
+    pub start: u32,
+    pub origin: Option<Origin>,
+}
+
+/// The package a foreign region's marker names, the version its pnpm store
+/// path spells (`.pnpm/<name>@<version>/`), and the file inside it.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Origin {
+    pub package: String,
+    pub version: Option<String>,
+    pub file: String,
+}
+
+impl Sponge {
+    /// The sponge note kind, None for the package's own code.
+    pub fn kind(&self) -> Option<&'static str> {
+        match self {
+            Sponge::Own => None,
+            Sponge::VendoredPath => Some("vendored-path"),
+            Sponge::Regions(_) => Some("bundler-marker"),
+        }
+    }
+
+    /// Who a unit of this file belongs to, from its segments' (source,
+    /// original line): the file's owner when at least [`PURITY`] of the
+    /// segments in this file lie outside every foreign region; with
+    /// [`SpongeRegions::Origin`], the origin holding [`PURITY`] of them
+    /// (when its version is known). None: the unit has no row.
+    fn unit_owner(
+        &self,
+        owner: crate::sourcemap::Owner,
+        src: u32,
+        segs: &[(u32, u32)],
+        mode: SpongeRegions,
+    ) -> Option<crate::sourcemap::Owner> {
+        let regions = match self {
+            Sponge::Own => return Some(owner),
+            Sponge::VendoredPath => return None,
+            Sponge::Regions(r) => r,
+        };
+        let mut by: BTreeMap<Option<&Origin>, usize> = BTreeMap::new();
+        let mut total = 0usize;
+        for &(s, line) in segs {
+            if s != src {
+                continue;
+            }
+            total += 1;
+            let at = regions.partition_point(|r| r.start <= line);
+            let origin = at.checked_sub(1).and_then(|i| regions[i].origin.as_ref());
+            *by.entry(origin).or_default() += 1;
+        }
+        let (origin, n) = by.into_iter().max_by_key(|&(_, n)| n)?;
+        if (n as f64) < PURITY * total as f64 {
+            return None;
+        }
+        match (origin, mode) {
+            (None, _) => Some(owner),
+            (Some(_), SpongeRegions::Drop) => None,
+            (Some(o), SpongeRegions::Origin) => Some(crate::sourcemap::Owner {
+                package: o.package.clone(),
+                version: o.version.clone()?,
+                file: o.file.clone(),
+            }),
+        }
+    }
+}
+
+/// Read a package's source file for [`Sponge`] evidence: a vendored
+/// directory, else its module regions when a marker names another
+/// package.
+pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Sponge {
     let vendored = ["vendor", "vendored", "third_party", "third-party"];
     let mut parts = owner.file.split('/').collect::<Vec<_>>();
     let name = parts.pop().unwrap_or_default();
     if parts.iter().any(|p| vendored.contains(p)) || name.starts_with("third-party.") {
-        return Some("vendored-path");
+        return Sponge::VendoredPath;
     }
     if std::fs::metadata(path).map_or(true, |m| m.len() > MAX_SOURCE_BYTES) {
-        return None;
+        return Sponge::Own;
     }
-    let text = std::fs::read_to_string(path).ok()?;
-    text.lines()
-        .filter_map(module_marker_path)
-        .filter_map(marker_package)
-        .any(|p| p != owner.package)
-        .then_some("bundler-marker")
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Sponge::Own;
+    };
+    let regions = module_regions(&owner.package, &text);
+    if regions.iter().any(|r| r.origin.is_some()) {
+        Sponge::Regions(regions)
+    } else {
+        Sponge::Own
+    }
+}
+
+/// A bundled file's module regions, in line order (the truth's marker rule,
+/// experiments/096-library-matching-score/origins.py `marker_regions7`):
+/// every module marker opens a region ([`module_marker`]); rolldown's
+/// `//#endregion` returns to the file's own code, except that a lazily
+/// initialised module's body right after it (`__esm(` / `__esmMin(`) stays
+/// the module's until the next marker or a top-level `export`.
+pub fn module_regions(owner: &str, text: &str) -> Vec<Region> {
+    let mut out: Vec<Region> = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+    let mut last: Option<Origin> = None;
+    let mut lazy = false;
+    for (i, line) in lines.iter().enumerate() {
+        let at = i as u32;
+        if line.starts_with("//#endregion") {
+            let body = last
+                .take()
+                .filter(|_| lines.get(i + 1).is_some_and(|next| is_lazy_body(next)));
+            out.push(Region {
+                start: at,
+                origin: None,
+            });
+            if let Some(o) = body {
+                out.push(Region {
+                    start: at + 1,
+                    origin: Some(o),
+                });
+                lazy = true;
+            }
+            continue;
+        }
+        if lazy && is_export(line) {
+            out.push(Region {
+                start: at,
+                origin: None,
+            });
+            lazy = false;
+            continue;
+        }
+        if let Some(path) = module_marker(line) {
+            let origin = marker_origin(path).filter(|o| o.package != owner);
+            last = origin.clone();
+            out.push(Region { start: at, origin });
+            lazy = false;
+        }
+    }
+    out
+}
+
+/// A top-level `export` statement (`^export\b`).
+fn is_export(line: &str) -> bool {
+    line.strip_prefix("export").is_some_and(|rest| {
+        !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_' || c == '$')
+    })
+}
+
+/// A lazily initialised module's body (rolldown/tsdown): `__esm(` or
+/// `__esmMin(`, optionally assigned (`var init_x = __esmMin(`).
+fn is_lazy_body(line: &str) -> bool {
+    let l = line.trim_start();
+    let l = ["var ", "let ", "const "]
+        .iter()
+        .find_map(|k| l.strip_prefix(k))
+        .and_then(|rest| {
+            let name_end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))?;
+            (name_end > 0).then(|| rest[name_end..].strip_prefix(" = "))?
+        })
+        .unwrap_or(l);
+    l.starts_with("__esm(") || l.starts_with("__esmMin(")
+}
+
+/// The package a marker path names (its LAST `node_modules/` segment), the
+/// version a pnpm store path spells for it, and the file inside it.
+fn marker_origin(path: &str) -> Option<Origin> {
+    let package = marker_package(path)?.to_string();
+    let at = path.rfind("node_modules/")? + "node_modules/".len() + package.len();
+    let file = path[at..].trim_start_matches('/').to_string();
+    let store = format!("{}@", package.replace('/', "+"));
+    let version = path.split('/').find_map(|seg| {
+        let v = seg.strip_prefix(&store)?;
+        let v = v.split(['_', '(']).next()?;
+        (!v.is_empty()).then(|| v.to_string())
+    });
+    Some(Origin {
+        package,
+        version,
+        file,
+    })
 }
 
 /// The module path a bundler's module-boundary comment names, when the
@@ -781,7 +999,7 @@ pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&
 /// ignoring `node_modules` are not markers): esbuild / Bun `// <path>` (the
 /// whole comment one source path), rolldown `//#region <path>`, webpack
 /// `/***/ "<path>":` and `/*!*** <path> ***!*/`.
-fn module_marker_path(line: &str) -> Option<&str> {
+fn module_marker(line: &str) -> Option<&str> {
     let l = line.trim();
     let path = if let Some(rest) = l.strip_prefix("//#region ") {
         rest.trim()
@@ -800,7 +1018,7 @@ fn module_marker_path(line: &str) -> Option<&str> {
         (!rest.contains(char::is_whitespace) && source.iter().any(|e| rest.ends_with(e)))
             .then_some(rest)?
     };
-    path.contains("node_modules/").then_some(path)
+    (!path.is_empty()).then_some(path)
 }
 
 /// The package a marker path's LAST `node_modules/` segment names.
@@ -878,12 +1096,17 @@ fn ensure_build(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Re
 }
 
 /// The module shard of one slice: both entries built and fingerprinted.
-fn module_shard(dir: &Path, recipe: &RecipeBuild, inputs: &ShardInputs) -> Shard {
+fn module_shard(
+    dir: &Path,
+    recipe: &RecipeBuild,
+    inputs: &ShardInputs,
+    regions: SpongeRegions,
+) -> Shard {
     let mut shard = Shard::new(inputs);
     for (tag, entry) in ENTRIES {
         let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
         let result = ensure_build(recipe, dir, entry, &out)
-            .and_then(|()| fingerprint_bundle(recipe.recipe, &out, &mut shard));
+            .and_then(|()| fingerprint_bundle(recipe.recipe, &out, &mut shard, regions));
         let status = match result {
             Ok(()) => "ok".to_string(),
             Err(e) => e,
@@ -923,7 +1146,7 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
                     .iter()
                     .find(|r| r.recipe == want)
                     .ok_or("no recipe for slice")?;
-                module_shard(&dir, recipe, inputs)
+                module_shard(&dir, recipe, inputs, cfg.sponge_regions)
             }
         };
         write_shard(&cfg.store, &shard)?;
@@ -984,7 +1207,7 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
         .iter()
         .enumerate()
         .flat_map(|(i, t)| {
-            shard_inputs(&t.name, &t.version, &plan.slices)
+            shard_inputs(&t.name, &t.version, &plan.slices, cfg.sponge_regions)
                 .into_iter()
                 .map(move |s| (s.label(), i, s))
         })

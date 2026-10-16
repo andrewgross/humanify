@@ -10,11 +10,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Component, Path, PathBuf};
 
 /// A decoded sourcemap: its sources and every segment that names one, as
-/// (generated line, generated UTF-16 column, source index).
+/// (generated line, generated UTF-16 column, source index, original line).
 #[derive(Clone, Debug, Default)]
 pub struct SourceMap {
     pub sources: Vec<String>,
-    pub segments: Vec<(u32, u32, u32)>,
+    pub segments: Vec<(u32, u32, u32, u32)>,
 }
 
 fn vlq_digit(c: u8) -> Option<i64> {
@@ -54,11 +54,11 @@ fn decode_segment(seg: &[u8]) -> Result<Vec<i64>, String> {
     Ok(out)
 }
 
-/// Source map v3 `mappings` → (line, column, source) for every segment
-/// with a source.
-pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32)>, String> {
+/// Source map v3 `mappings` → (line, column, source, original line) for
+/// every segment with a source.
+pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32, u32)>, String> {
     let mut out = Vec::new();
-    let mut src: i64 = 0;
+    let (mut src, mut orig): (i64, i64) = (0, 0);
     for (line, text) in mappings.split(';').enumerate() {
         let mut col: i64 = 0;
         for seg in text.split(',').filter(|s| !s.is_empty()) {
@@ -66,17 +66,18 @@ pub fn decode_mappings(mappings: &str) -> Result<Vec<(u32, u32, u32)>, String> {
             col += f[0];
             if f.len() >= 4 {
                 src += f[1];
-                out.push((line as u32, col as u32, src as u32));
+                orig += f[2];
+                out.push((line as u32, col as u32, src as u32, orig as u32));
             }
         }
     }
     Ok(out)
 }
 
-/// Segments (line, column, source) → `mappings` (test fixtures; original
-/// line and column are always 0).
+/// Segments (line, column, source, original line) → `mappings` (test
+/// fixtures; the original column is always 0).
 #[cfg(test)]
-pub fn encode_mappings(segments: &[(u32, u32, u32)]) -> String {
+pub fn encode_mappings(segments: &[(u32, u32, u32, u32)]) -> String {
     fn vlq(v: i64, out: &mut String) {
         let mut x = if v < 0 { ((-v) << 1) | 1 } else { v << 1 };
         const B64: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -93,8 +94,8 @@ pub fn encode_mappings(segments: &[(u32, u32, u32)]) -> String {
         }
     }
     let mut out = String::new();
-    let (mut line, mut col, mut src) = (0u32, 0i64, 0i64);
-    for (i, &(l, c, s)) in segments.iter().enumerate() {
+    let (mut line, mut col, mut src, mut orig) = (0u32, 0i64, 0i64, 0i64);
+    for (i, &(l, c, s, o)) in segments.iter().enumerate() {
         while line < l {
             out.push(';');
             line += 1;
@@ -105,10 +106,11 @@ pub fn encode_mappings(segments: &[(u32, u32, u32)]) -> String {
         }
         vlq(i64::from(c) - col, &mut out);
         vlq(i64::from(s) - src, &mut out);
-        vlq(0, &mut out);
+        vlq(i64::from(o) - orig, &mut out);
         vlq(0, &mut out);
         col = i64::from(c);
         src = i64::from(s);
+        orig = i64::from(o);
     }
     out
 }
@@ -172,33 +174,66 @@ impl SourceMap {
         })
     }
 
+    /// Re-anchor sources that point nowhere from `out` (a build dir,
+    /// `<install>/build/<slice>/<tag>`) because the build was made in
+    /// another work dir and the bundler wrote paths relative to the
+    /// install's REAL location: a source whose path holds the install's dir
+    /// name becomes `<install>/<rest after it>`, when that exists. A source
+    /// that resolves, or names no such dir, is left alone.
+    pub fn relocate(&mut self, out: &Path) {
+        let Some(install) = out.ancestors().nth(3) else {
+            return;
+        };
+        let Some(name) = install.file_name() else {
+            return;
+        };
+        for source in &mut self.sources {
+            if lexical(&out.join(&*source)).exists() {
+                continue;
+            }
+            let parts: Vec<Component> = Path::new(&*source).components().collect();
+            let Some(at) = parts.iter().rposition(|c| c.as_os_str() == name) else {
+                continue;
+            };
+            let moved: PathBuf = install.join(parts[at + 1..].iter().collect::<PathBuf>());
+            if moved.exists() {
+                *source = moved.to_string_lossy().into_owned();
+            }
+        }
+    }
+
     /// The sources at least one mapping segment points into (a source the
     /// bundler lists but maps no code to is not in the bundle).
     pub fn mapped_sources(&self) -> std::collections::BTreeSet<u32> {
-        self.segments.iter().map(|&(_, _, s)| s).collect()
+        self.segments.iter().map(|&(_, _, s, _)| s).collect()
     }
 
-    /// For each byte span of `code`: how many mapping segments inside it
-    /// name each source (source index, count), by source index.
-    pub fn tally(&self, code: &str, spans: &[(u32, u32)]) -> Vec<Vec<(u32, usize)>> {
-        let positions: Vec<(u32, u32)> = self.segments.iter().map(|&(l, c, _)| (l, c)).collect();
-        let mut at: Vec<(usize, u32)> = utf16_to_byte_offsets(code, &positions)
+    /// For each byte span of `code`: the mapping segments inside it, as
+    /// (source index, original line), in byte order.
+    pub fn span_segments(&self, code: &str, spans: &[(u32, u32)]) -> Vec<Vec<(u32, u32)>> {
+        let positions: Vec<(u32, u32)> = self.segments.iter().map(|&(l, c, _, _)| (l, c)).collect();
+        let mut at: Vec<(usize, u32, u32)> = utf16_to_byte_offsets(code, &positions)
             .into_iter()
             .zip(&self.segments)
-            .filter_map(|(o, &(_, _, s))| o.map(|o| (o, s)))
+            .filter_map(|(o, &(_, _, s, ol))| o.map(|o| (o, s, ol)))
             .collect();
         at.sort_unstable();
         spans
             .iter()
             .map(|&(s, e)| {
-                let lo = at.partition_point(|&(o, _)| o < s as usize);
-                let hi = at.partition_point(|&(o, _)| o < e as usize);
-                let mut tally: BTreeMap<u32, usize> = BTreeMap::new();
-                for &(_, src) in &at[lo..hi] {
-                    *tally.entry(src).or_default() += 1;
-                }
-                tally.into_iter().collect()
+                let lo = at.partition_point(|&(o, _, _)| o < s as usize);
+                let hi = at.partition_point(|&(o, _, _)| o < e as usize);
+                at[lo..hi].iter().map(|&(_, src, ol)| (src, ol)).collect()
             })
+            .collect()
+    }
+
+    /// For each byte span of `code`: how many mapping segments inside it
+    /// name each source (source index, count), by source index.
+    pub fn tally(&self, code: &str, spans: &[(u32, u32)]) -> Vec<Vec<(u32, usize)>> {
+        self.span_segments(code, spans)
+            .iter()
+            .map(|segs| tally_of(segs))
             .collect()
     }
 
@@ -216,6 +251,15 @@ impl SourceMap {
             })
             .collect()
     }
+}
+
+/// Segments (source, original line) → (source index, count), by source.
+pub fn tally_of(segments: &[(u32, u32)]) -> Vec<(u32, usize)> {
+    let mut tally: BTreeMap<u32, usize> = BTreeMap::new();
+    for &(src, _) in segments {
+        *tally.entry(src).or_default() += 1;
+    }
+    tally.into_iter().collect()
 }
 
 /// A bundled module's owner.
