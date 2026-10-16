@@ -19,6 +19,7 @@ number is scorer 9, the structural rule, main's defaults plus the keys named.
   module). Without it, nobody gets it (it is fenced with `presence_fence`).
 
   The measured setting is `v2`: 0.1 / factor 4 / origin on / own 0.1.
+
 - **On k2-all-dl25k (the bigger index):**
   - It removes the sponge class that exp118 found: held-out F0.5 goes 90.42 -> **95.26** (P 99.24 -> **99.56**).
   - pop, apps-rollup and apps-webpack beat k2-all. Every test2 set does too, or ties (bun +0.76, esbuild +0.57,
@@ -41,27 +42,27 @@ number is scorer 9, the structural rule, main's defaults plus the keys named.
 before = `*exp119-k2all-st*` (k2-all, main defaults), dl25k = `*exp118-dl25k*` (re-scored under scorer 9), v2 =
 `*exp121-v2*` (k2-all-dl25k + v2), k2+v2 = `*exp121-k2-v2*` (k2-all + v2).
 
-| set | k2-all (before) | k2-all-dl25k | **dl25k + v2** | **k2-all + v2** |
-|---|---|---|---|---|
-| held-out | 99.24 / 66.69 / **90.42** (155) | 98.30 / 80.16 / 94.05 (+3.63; 420) | 99.56 / 81.23 / **95.26** (+4.84; 109) | 99.25 / 66.70 / 90.42 (+0.01; 154) |
-| task-master (esbuild-app) | 96.25 / 65.50 / **87.99** (126) | 89.71 / 60.54 / 81.83 (-6.16; 341) | 98.53 / 66.50 / **89.87** (+1.89; 49) | = |
-| wrangler | 95.99 / 18.53 / **52.28** | 99.37 / 20.92 / 56.79 (+4.51) | 99.37 / 20.92 / 56.79 (+4.51) | = |
-| Claude Code | 100 / 81.90 / **95.77** | 100 / 82.46 / 95.92 (+0.15) | 100 / 82.46 / 95.92 (+0.15) | = |
-| apps-esbuild | 98.95 / 89.91 / **97.00** (245) | 98.94 / 88.66 / 96.70 (-0.30) | 99.12 / 88.81 / 96.87 (-0.13; 203) | 99.16 / 90.09 / **97.20** (+0.20; 197) |
-| apps-rollup | 98.92 / 77.40 / **93.71** | 98.98 / 80.87 / 94.74 (+1.03) | 99.00 / 80.90 / 94.76 (+1.05) | 93.72 (+0.01) |
-| apps-webpack | 99.39 / 73.33 / **92.79** | 99.33 / 75.01 / 93.28 (+0.49) | 99.33 / 75.04 / 93.30 (+0.50) | = |
-| dev-rollup | 99.87 / 77.53 / **94.43** | 94.37 (-0.06) | 94.37 (-0.06) | = |
-| dev-webpack | 99.64 / 62.89 / **89.22** | 89.11 (-0.11) | 89.11 (-0.11) | = |
-| pop-bun | 95.13 / 77.17 / **90.90** (3,998) | 95.89 / 76.92 / 91.38 (+0.48) | 96.40 / 77.35 / **91.87** (+0.97; 2,927) | 95.37 / 77.38 / 91.13 (+0.23) |
-| pop-esbuild | 93.65 / 79.66 / **90.47** (5,484) | 94.85 / 79.58 / 91.34 (+0.87) | 95.32 / 79.98 / **91.80** (+1.33; 3,984) | 93.93 / 79.89 / 90.74 (+0.27) |
-| TEST bun | 97.23 / 66.39 / **88.96** (1,236) | 91.46 / 63.52 / 84.06 (-4.90) | 91.51 / 63.56 / 84.11 (**-4.85**; 3,849) | 97.79 / 66.54 / **89.39** (+0.43; 981) |
-| TEST esbuild | 96.42 / 75.96 / **91.49** (1,947) | 92.23 / 72.79 / 87.55 (-3.94) | 92.32 / 72.88 / 87.64 (**-3.84**; 4,180) | 96.96 / 76.17 / **91.94** (+0.45; 1,646) |
-| TEST rollup | 97.89 / 68.39 / **90.12** | 96.40 / 70.58 / 89.83 (-0.29) | 96.41 / 70.61 / 89.85 (-0.27) | 90.13 (+0.02) |
-| TEST webpack | 99.19 / 70.51 / **91.73** | 97.95 / 74.02 / 92.00 (+0.27) | 97.95 / 74.02 / 92.00 (+0.27) | 91.78 (+0.05) |
-| TEST2 bun | 98.71 / 77.70 / **93.64** (424) | 96.15 / 78.25 / 91.94 (-1.70) | 98.72 / 80.34 / **94.40** (+0.76; 433) | = |
-| TEST2 esbuild | 99.43 / 74.23 / **93.10** (185) | 96.86 / 73.81 / 91.17 (-1.94) | 99.52 / 75.84 / **93.67** (+0.57; 157) | = |
-| TEST2 rollup | 96.18 / 74.74 / **90.96** | 96.10 / 74.84 / 90.94 (-0.02) | 96.11 / 74.90 / 90.96 (-0.00) | 96.28 / 74.90 / 91.08 (+0.12) |
-| TEST2 webpack | 99.14 / 69.22 / **91.25** | 99.25 / 71.30 / 92.04 (+0.79) | 99.27 / 71.32 / 92.05 (+0.80) | 99.20 / 69.26 / 91.31 (+0.06) |
+| set                       | k2-all (before)                   | k2-all-dl25k                       | **dl25k + v2**                           | **k2-all + v2**                          |
+| ------------------------- | --------------------------------- | ---------------------------------- | ---------------------------------------- | ---------------------------------------- |
+| held-out                  | 99.24 / 66.69 / **90.42** (155)   | 98.30 / 80.16 / 94.05 (+3.63; 420) | 99.56 / 81.23 / **95.26** (+4.84; 109)   | 99.25 / 66.70 / 90.42 (+0.01; 154)       |
+| task-master (esbuild-app) | 96.25 / 65.50 / **87.99** (126)   | 89.71 / 60.54 / 81.83 (-6.16; 341) | 98.53 / 66.50 / **89.87** (+1.89; 49)    | =                                        |
+| wrangler                  | 95.99 / 18.53 / **52.28**         | 99.37 / 20.92 / 56.79 (+4.51)      | 99.37 / 20.92 / 56.79 (+4.51)            | =                                        |
+| Claude Code               | 100 / 81.90 / **95.77**           | 100 / 82.46 / 95.92 (+0.15)        | 100 / 82.46 / 95.92 (+0.15)              | =                                        |
+| apps-esbuild              | 98.95 / 89.91 / **97.00** (245)   | 98.94 / 88.66 / 96.70 (-0.30)      | 99.12 / 88.81 / 96.87 (-0.13; 203)       | 99.16 / 90.09 / **97.20** (+0.20; 197)   |
+| apps-rollup               | 98.92 / 77.40 / **93.71**         | 98.98 / 80.87 / 94.74 (+1.03)      | 99.00 / 80.90 / 94.76 (+1.05)            | 93.72 (+0.01)                            |
+| apps-webpack              | 99.39 / 73.33 / **92.79**         | 99.33 / 75.01 / 93.28 (+0.49)      | 99.33 / 75.04 / 93.30 (+0.50)            | =                                        |
+| dev-rollup                | 99.87 / 77.53 / **94.43**         | 94.37 (-0.06)                      | 94.37 (-0.06)                            | =                                        |
+| dev-webpack               | 99.64 / 62.89 / **89.22**         | 89.11 (-0.11)                      | 89.11 (-0.11)                            | =                                        |
+| pop-bun                   | 95.13 / 77.17 / **90.90** (3,998) | 95.89 / 76.92 / 91.38 (+0.48)      | 96.40 / 77.35 / **91.87** (+0.97; 2,927) | 95.37 / 77.38 / 91.13 (+0.23)            |
+| pop-esbuild               | 93.65 / 79.66 / **90.47** (5,484) | 94.85 / 79.58 / 91.34 (+0.87)      | 95.32 / 79.98 / **91.80** (+1.33; 3,984) | 93.93 / 79.89 / 90.74 (+0.27)            |
+| TEST bun                  | 97.23 / 66.39 / **88.96** (1,236) | 91.46 / 63.52 / 84.06 (-4.90)      | 91.51 / 63.56 / 84.11 (**-4.85**; 3,849) | 97.79 / 66.54 / **89.39** (+0.43; 981)   |
+| TEST esbuild              | 96.42 / 75.96 / **91.49** (1,947) | 92.23 / 72.79 / 87.55 (-3.94)      | 92.32 / 72.88 / 87.64 (**-3.84**; 4,180) | 96.96 / 76.17 / **91.94** (+0.45; 1,646) |
+| TEST rollup               | 97.89 / 68.39 / **90.12**         | 96.40 / 70.58 / 89.83 (-0.29)      | 96.41 / 70.61 / 89.85 (-0.27)            | 90.13 (+0.02)                            |
+| TEST webpack              | 99.19 / 70.51 / **91.73**         | 97.95 / 74.02 / 92.00 (+0.27)      | 97.95 / 74.02 / 92.00 (+0.27)            | 91.78 (+0.05)                            |
+| TEST2 bun                 | 98.71 / 77.70 / **93.64** (424)   | 96.15 / 78.25 / 91.94 (-1.70)      | 98.72 / 80.34 / **94.40** (+0.76; 433)   | =                                        |
+| TEST2 esbuild             | 99.43 / 74.23 / **93.10** (185)   | 96.86 / 73.81 / 91.17 (-1.94)      | 99.52 / 75.84 / **93.67** (+0.57; 157)   | =                                        |
+| TEST2 rollup              | 96.18 / 74.74 / **90.96**         | 96.10 / 74.84 / 90.94 (-0.02)      | 96.11 / 74.90 / 90.96 (-0.00)            | 96.28 / 74.90 / 91.08 (+0.12)            |
+| TEST2 webpack             | 99.14 / 69.22 / **91.25**         | 99.25 / 71.30 / 92.04 (+0.79)      | 99.27 / 71.32 / 92.05 (+0.80)            | 99.20 / 69.26 / 91.31 (+0.06)            |
 
 "=" means identical to k2-all. App claimed is 0 on every label. test and test2 are summaries only; neither was
 diagnosed.
@@ -110,13 +111,13 @@ signal `copy_presence` reads.
 
 At the package level (P's every seed is a copy seed), factor 4, share 0.1, on the dl25k labels, the rule removes:
 
-| set | wrong | good |
-|---|---|---|
-| held-out | 295 KB | 0 |
-| task-master | 293 KB | 0 |
-| pop-bun | 344 KB | 0 |
-| pop-esbuild | 315 KB | 8.6 KB |
-| apps (all three) | 15 KB | 0 |
+| set              | wrong  | good   |
+| ---------------- | ------ | ------ |
+| held-out         | 295 KB | 0      |
+| task-master      | 293 KB | 0      |
+| pop-bun          | 344 KB | 0      |
+| pop-esbuild      | 315 KB | 8.6 KB |
+| apps (all three) | 15 KB  | 0      |
 
 Removing each copy seed on its own (seed level) costs 67-891 KB of good per set at any setting, so the rule must
 be package-level. That is the same lesson as exp115.
@@ -133,24 +134,24 @@ vouch for its copies. Lab: +20 KB wrong removed on apps-esbuild and +19 / +62 KB
 
 ## 3. Hand-reads (dev; `../114-dev-precision/handread.py` dl25k -> cpo10f4, 8 groups each from dev and pop)
 
-| # | bundle | was | now | truth | verdict |
-|---|---|---|---|---|---|
-| 1 | held-out vite | @likec4/core (seed) | remeda | rolldown chunk, origin remeda | fixed: remeda's `purry` |
-| 2 | held-out dotenvx | ora (seed) | unclaimed | yoctocolors base.js | wrong removed: yoctocolors' `format(0,0)` table |
-| 3 | held-out swc_cli | @japa/core (seed) | unclaimed | time-span index.js | wrong removed |
-| 4 | held-out vite | @rollup/wasm-node (seed, selfOther) | magic-string (selfOrigin) | `<self>`, origin magic-string | fixed: the MagicString class |
-| 5 | task-master (esbuild) | @mastra/server (seed) | ajv (right) | ajv dist/core.js | fixed: ajv's codegen (`_Code`, `Name`) |
-| 6 | held-out task-master | @mastra/server (seed) | ajv (origin) | @modelcontextprotocol/client, origin ajv | fixed |
-| 7 | held-out vite | @rollup/wasm-node (seed) | unplugin | `<self>`, no origin | neutral (self both ways) |
-| 8 | held-out vite | @rollup/wasm-node (down) | unclaimed | `<self>`, origin sourcemap-codec | wrong removed |
-| 9 | pop-esbuild eslint-config-inspector | @mastra/server (seed) | ajv (right) | ajv dist/core.js | fixed |
-| 10 | pop-esbuild romie | @rsdoctor/utils (down, 2 B) | obug (origin) | vite chunk, origin obug | fixed |
-| 11 | pop-bun hackdesk | @uiw/react-codemirror (seed) | crelt (right) | crelt index.js | fixed |
-| 12 | pop-esbuild ng-packagr | @likec4/core (seed) | remeda (origin) | rolldown chunk, origin remeda | fixed |
-| 13 | pop-esbuild romie | @rslib/core (seed) | resolve-pkg-maps (wrong) | tsx chunk, no origin | wrong -> wrong. tsx's chunk inlines resolve-pkg-maps-style code; arguably a truth gap |
-| 14 | pop-bun opennextjs | webpackbar (seed) | wrap-ansi (right) | wrap-ansi index.js | fixed |
-| 15 | pop-bun eslint-config-inspector | @mastra/server (seed) | ajv (origin) | @modelcontextprotocol/server, origin ajv | fixed |
-| 16 | pop-esbuild romie | @likec4/core (seed) | remeda (origin) | as 12 | fixed |
+| #   | bundle                              | was                                 | now                       | truth                                    | verdict                                                                               |
+| --- | ----------------------------------- | ----------------------------------- | ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
+| 1   | held-out vite                       | @likec4/core (seed)                 | remeda                    | rolldown chunk, origin remeda            | fixed: remeda's `purry`                                                               |
+| 2   | held-out dotenvx                    | ora (seed)                          | unclaimed                 | yoctocolors base.js                      | wrong removed: yoctocolors' `format(0,0)` table                                       |
+| 3   | held-out swc_cli                    | @japa/core (seed)                   | unclaimed                 | time-span index.js                       | wrong removed                                                                         |
+| 4   | held-out vite                       | @rollup/wasm-node (seed, selfOther) | magic-string (selfOrigin) | `<self>`, origin magic-string            | fixed: the MagicString class                                                          |
+| 5   | task-master (esbuild)               | @mastra/server (seed)               | ajv (right)               | ajv dist/core.js                         | fixed: ajv's codegen (`_Code`, `Name`)                                                |
+| 6   | held-out task-master                | @mastra/server (seed)               | ajv (origin)              | @modelcontextprotocol/client, origin ajv | fixed                                                                                 |
+| 7   | held-out vite                       | @rollup/wasm-node (seed)            | unplugin                  | `<self>`, no origin                      | neutral (self both ways)                                                              |
+| 8   | held-out vite                       | @rollup/wasm-node (down)            | unclaimed                 | `<self>`, origin sourcemap-codec         | wrong removed                                                                         |
+| 9   | pop-esbuild eslint-config-inspector | @mastra/server (seed)               | ajv (right)               | ajv dist/core.js                         | fixed                                                                                 |
+| 10  | pop-esbuild romie                   | @rsdoctor/utils (down, 2 B)         | obug (origin)             | vite chunk, origin obug                  | fixed                                                                                 |
+| 11  | pop-bun hackdesk                    | @uiw/react-codemirror (seed)        | crelt (right)             | crelt index.js                           | fixed                                                                                 |
+| 12  | pop-esbuild ng-packagr              | @likec4/core (seed)                 | remeda (origin)           | rolldown chunk, origin remeda            | fixed                                                                                 |
+| 13  | pop-esbuild romie                   | @rslib/core (seed)                  | resolve-pkg-maps (wrong)  | tsx chunk, no origin                     | wrong -> wrong. tsx's chunk inlines resolve-pkg-maps-style code; arguably a truth gap |
+| 14  | pop-bun opennextjs                  | webpackbar (seed)                   | wrap-ansi (right)         | wrap-ansi index.js                       | fixed                                                                                 |
+| 15  | pop-bun eslint-config-inspector     | @mastra/server (seed)               | ajv (origin)              | @modelcontextprotocol/server, origin ajv | fixed                                                                                 |
+| 16  | pop-esbuild romie                   | @likec4/core (seed)                 | remeda (origin)           | as 12                                    | fixed                                                                                 |
 
 Of the 16: 14 were fixes or removed wrong claims, 1 was neutral, and 1 went from wrong to wrong. No right claim was
 lost.
@@ -170,9 +171,11 @@ dev corpus of the test population that reproduces the loss. Until then, download
 
 ## Neutrality
 
-All four keys are default off, so the pipeline cannot move. Warm neutrality vs main `7daf1f0b`, pair 2.1.215 ->
-2.1.216 (`--priors /work/exp050-cold --cache /work/neutrality-cache`, under `flock /work/neutrality.lock`, from a
-clean detached worktree of the branch head): see the commit that adds this README's final status line.
+All four keys are default off. Warm neutrality vs main `7daf1f0b`, pair 2.1.215 -> 2.1.216 (`--priors
+/work/exp050-cold --cache /work/neutrality-cache`, under `flock /work/neutrality.lock`, from a clean detached
+worktree of `29267cf9`): default mode **NEUTRAL, 0 files / 0 lines, cache +0 / +0, exit 0 / 0**; report mode
+(`--pipeline-set library.matching=report --pipeline-set library.index=/work/exp113-data/ix/k2-all`) **NEUTRAL,
+0 / 0, +0 / +0, exit 0 / 0**, and `.humanify/library-report.json` is byte-identical.
 
 ## Reproduce
 
