@@ -1367,6 +1367,17 @@ fn copy_presence_drops_a_package_whose_every_seed_is_an_inlined_copy_of_a_smalle
     ];
     let (_, _, rows) = run_indexed_with(COPIED, &present, vec![], on);
     assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    // A scope sibling's own seed does not vouch for the sponge's copies:
+    // judged per package, @acme/server is dropped though @acme/core (one
+    // family) is present.
+    let sibling = [
+        Held::inner("var lib", "function (x)", "@acme/server", 4000),
+        Held::inner("var lib", "function (y)", "@acme/server", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+        Held::whole("var other", "@acme/core"),
+    ];
+    let (_, _, rows) = run_indexed_with(COPIED, &sibling, vec![], on);
+    assert_eq!(claim_of(&rows, "var lib"), None);
     // Under the share: Q co-holds a, about half of S's cover, under 0.9.
     let thin = DiscoveryOptions {
         copy_presence: 0.9,

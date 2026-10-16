@@ -230,9 +230,10 @@ pub struct DiscoveryOptions {
     /// 1/[`Self::copy_presence_factor`] of P's module for the same print —
     /// Q is the smaller context, the origin P's dist inlined (a sponge: a
     /// package whose published build bundles its dependencies). A package
-    /// whose EVERY index seed is a copy seed, and that has no declared or
-    /// banner seed, is no seed: the bundle never shows P's own code
-    /// ([`presence`]; fenced with [`Self::presence_fence`]).
+    /// whose EVERY index seed is a copy seed, and whose family has no
+    /// declared or banner seed, is no seed: the bundle never shows P's own
+    /// code ([`presence`]; fenced with [`Self::presence_fence`]). Judged per
+    /// package: a scope sibling's own seeds do not vouch for P's copies.
     pub copy_presence: f64,
     /// The copy-presence factor (exp121): how much smaller the origin's
     /// module must be than the sponge's.
@@ -1589,24 +1590,34 @@ fn presence(
         }
     }
     if options.copy_presence > 0.0 {
-        // A family is present when one index seed of it stands on code no
-        // smaller context holds (or it has a declared seed).
-        let mut present: BTreeSet<usize> = declared.clone();
-        let mut judged: BTreeSet<usize> = BTreeSet::new();
-        for (s, &k) in keep.iter().zip(&keys) {
+        // Judged per PACKAGE, not per family: a scope sibling's own code
+        // (`@scope/core`) says nothing about whether `@scope/server`'s seeds
+        // are copies. A package is present when one index seed of it stands
+        // on code no smaller context holds, or its family has a declared or
+        // banner seed.
+        let mut present: BTreeSet<&str> = BTreeSet::new();
+        let mut judged: BTreeSet<&str> = BTreeSet::new();
+        for (s, k) in keep.iter().zip(&keys) {
             let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
                 continue;
             };
-            judged.insert(k);
+            if declared.contains(k) {
+                continue;
+            }
+            judged.insert(&s.package);
             let copy = containment
                 .copy_share(s.unit, &s.package, options.copy_presence_factor)
                 .is_some_and(|share| share >= options.copy_presence);
             if !copy {
-                present.insert(k);
+                present.insert(&s.package);
             }
         }
-        for (slot, &k) in keep.iter_mut().zip(&keys) {
-            if judged.contains(&k) && !present.contains(&k) {
+        let drop: BTreeSet<String> = judged.difference(&present).map(|p| p.to_string()).collect();
+        for slot in keep.iter_mut() {
+            if slot
+                .as_ref()
+                .is_some_and(|s| s.evidence.is_index() && drop.contains(&s.package))
+            {
                 dropped_units.extend(slot.take().map(|s| s.unit));
             }
         }
