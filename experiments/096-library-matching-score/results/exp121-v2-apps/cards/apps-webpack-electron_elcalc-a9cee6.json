@@ -1,0 +1,84 @@
+{
+ "bundleSha256": "e10620be0b47f18dce4cf87886f78d763938510d7f32c70fa17c7e9ad7ce1d15",
+ "claimedBytes": {
+  "family": 24386,
+  "right": 9693141,
+  "unmapped": 70,
+  "wrongFamily": 22568
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_elcalc-a9cee6",
+ "exploratory": {
+  "names": {
+   "bindings": 129964,
+   "bindingsSameVersion": 128756,
+   "bindingsVersionKnown": 129964,
+   "exactBytes": 9627580,
+   "exactUnits": 3821,
+   "sameVersionShare": 0.990705
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.91847,
+  "f1": 0.820165,
+  "namedBytes": 9557177,
+  "precision": 0.998235,
+  "recall": 0.696008
+ },
+ "label": "exp121-v2-apps",
+ "missBytes": {
+  "a": 7521,
+  "b": 3746031,
+  "c": 75478,
+  "d-absent": 16520,
+  "e-ambig": 23316,
+  "e-other": 22214,
+  "e-support": 17220,
+  "e-veto": 64776,
+  "f": 38244,
+  "unit-model": 2572
+ },
+ "noDiscovery": null,
+ "reportSha256": "0ac3097d5c0b3c5e3e6f6a6e686fc07db95a7fc645ca09907fedb1a90f75b738",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 519,
+  "<unmapped>": 269601,
+  "copy": 3575,
+  "library": 13731419
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 3575,
+  "f05": 0.92211,
+  "f05ShipperOnly": 0.92211,
+  "f1": 0.828028,
+  "f1ShipperOnly": 0.828028,
+  "libraryBytes": 13731419,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 9717527,
+  "namedBytes": 9717527,
+  "namedBytesShipperOnly": 9717527,
+  "precision": 0.997683,
+  "precisionShipperOnly": 0.997683,
+  "recall": 0.707686,
+  "recallShipperOnly": 0.707686,
+  "wrongFamilyBytes": 22568,
+  "wrongFamilyBytesShipperOnly": 22568
+ },
+ "truthMethod": "sourcemap"
+}

@@ -161,6 +161,10 @@ shadow_ties = true             # exp114, ON since 2026-10-15 (Andrew): fork clai
 presence_fence = true          # exp114, ON since exp117: what context_presence drops is named by no one
 declared_max_bytes = 65536     # exp112, ON since exp117: a declared seed on a statement over N bytes
                                #   is no seed (experiments/112-test-precision, 117-default-flip)
+copy_presence = 0.1            # exp121, ON since 2026-10-16 ("v2", clean on 19 sets on k2-all): a package whose every index seed is an inlined copy of a
+copy_presence_factor = 4       #   smaller-context origin (share >= copy_presence, origin's module <= 1/factor)
+copy_presence_origin = true    #   is no seed; _origin gives the copy seeds to that origin; _own = share of
+copy_presence_own = 0.1        #   seed bytes non-copy seeds need to vouch (experiments/121-sponge-rule)
 ```
 
 Since exp117 (2026-10-15) `context_presence = 1.5`, `context_presence_slack = 16384`,

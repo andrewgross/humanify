@@ -737,6 +737,48 @@ pub static KEYS: &[Key] = &[
          bigger than this many bytes is no seed: a manifest inside a huge statement names one of \
          its packages, not the statement (exp112; 0 = off).",
     ),
+    Key {
+        section: "library.discovery",
+        name: "copy_presence",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().copy_presence),
+        unset: "",
+        doc: "A package whose every index seed is a copy seed (another package holds at least this \
+              share of the nodes its prints cover there, in index modules copy_presence_factor \
+              times smaller: the origin its dist inlined) is no seed: a sponge, not shown in the \
+              bundle by code of its own (exp121; 0 = off).",
+    },
+    lib_int(
+        "library.discovery",
+        "copy_presence_factor",
+        0,
+        U32,
+        || int(discovery().copy_presence_factor),
+        "How many times smaller the origin's index module must be than the sponge's for \
+         copy_presence (exp121).",
+    ),
+    Key {
+        section: "library.discovery",
+        name: "copy_presence_origin",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().copy_presence_origin)),
+        unset: "",
+        doc: "What copy_presence drops becomes the seed of its origin (the package co-holding the \
+              most of it in the smaller module) instead of no one's (exp121).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "copy_presence_own",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().copy_presence_own),
+        unset: "",
+        doc: "For copy_presence, a package shows in the bundle only when its non-copy index seeds \
+              hold at least this share of its index seed bytes; otherwise its copy seeds go \
+              (exp121; 0 = any one non-copy seed vouches).",
+    },
     // [unpack]
     Key {
         section: "unpack",
