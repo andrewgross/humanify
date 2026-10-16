@@ -1,10 +1,10 @@
 {
  "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
  "claimedBytes": {
-  "family": 19342,
+  "family": 18255,
   "foreign": 79357,
   "origin": 112368,
-  "right": 2136181,
+  "right": 2137268,
   "unmapped": 7755,
   "wrongFamily": 142441
  },
@@ -18,10 +18,10 @@
   "names": {
    "bindings": 28981,
    "bindingsSameVersion": 24251,
-   "bindingsVersionKnown": 27911,
+   "bindingsVersionKnown": 27919,
    "exactBytes": 1876494,
    "exactUnits": 3502,
-   "sameVersionShare": 0.868869
+   "sameVersionShare": 0.86862
   }
  },
  "indexId": "6edf4f3d7860d03cc2ed419318780d3844a929ed89d4e428b7055aa2d6203435",
@@ -35,8 +35,8 @@
  },
  "label": "exp101-call2k-guards-structural",
  "missBytes": {
-  "a": 1483976,
-  "b": 683694,
+  "a": 1289272,
+  "b": 878398,
   "c": 26543,
   "d-absent": 122223,
   "d-file": 17662,
@@ -51,7 +51,7 @@
  "noDiscovery": null,
  "reportSha256": "e543e3a5ccc5b30bcbe1ddd2f5fe06ff3334d1ca5a6fe52c8333938bafb1f759",
  "rule": "structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "set": "esbuild-app",
  "statementBytes": {
   "<foreign>": 80010,

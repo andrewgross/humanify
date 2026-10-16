@@ -1,0 +1,402 @@
+{
+  "pop-exp113-k2all": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp113-main-k2": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp113-own-k2": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-base-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-cpf-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-dmb-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-flip3-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-flip4-k2-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-k2all-cpf": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-k2all-cpfdmb": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp117-k2all-flip4": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp119-k2all-def": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 199244,
+        "GOOD->GOOD:npmchain": 199244,
+        "WRONG->GOOD": 116764,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 70436,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 199244],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 70436],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-exp119-k2all-st": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 199244,
+        "GOOD->GOOD:npmchain": 199244,
+        "WRONG->GOOD": 116764,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 70436,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 199244],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 70436],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-k2-rec": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-k2-rec-dcap": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "WRONG->GOOD": 42166,
+        "WRONG->GOOD:fork": 24497,
+        "WRONG->GOOD:repo": 17669
+      },
+      "pop-esbuild": {
+        "GOOD->GOOD": 196491,
+        "GOOD->GOOD:npmchain": 196491,
+        "WRONG->GOOD": 48420,
+        "WRONG->GOOD:fork": 24938,
+        "WRONG->GOOD:npmchain": 2092,
+        "WRONG->GOOD:repo": 21390
+      }
+    },
+    "transitions": [
+      ["pop-bun", "fork", "wrongFamily", "family", 24497],
+      ["pop-bun", "repo", "wrongFamily", "family", 17669],
+      ["pop-esbuild", "fork", "wrongFamily", "family", 24938],
+      ["pop-esbuild", "npmchain", "family", "right", 196491],
+      ["pop-esbuild", "npmchain", "wrongFamily", "family", 2092],
+      ["pop-esbuild", "repo", "wrongFamily", "family", 21390]
+    ]
+  },
+  "pop-step4-structural": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-esbuild": {
+        "GOOD->GOOD": 83359,
+        "GOOD->GOOD:npmchain": 83359
+      }
+    },
+    "transitions": [["pop-esbuild", "npmchain", "family", "right", 83359]]
+  }
+}

@@ -13,10 +13,11 @@
  "config": {
   "binarySha256": "df81578d254db9bd1107483220b4c3a6746b2257308d3e9d4e8fff4fb0d18c49",
   "buildCommit": "53c6247517db19d405218556a5af625daae2f9c9",
+  "chained9Sha256": "2921ed5441bf5375ca2f9061cba9cda83b39bbae971506fc4be116b666d86f61",
   "chainedSha256": "eb426b876b7057250694179d1d283f48a0bb1b4b6c708f8929782e5e2f38c6ec",
   "copiesSha256": "ab20aaeae52ee90ddec0acf3ac0b50ab13d1ddc91d17d3ac63f9707eb110b4c7",
   "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
-  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 577198424,
   "indexId": "4d1db97507a8b2c298a8fc646aa2b6630fce0717855af88ba47a0f2ee27a9a54",
   "origins7Sha256": "0d153d5d80e718b06c0ac00a471361c5a3a11885edc438dfee949c47997f3c7b",
@@ -27,7 +28,7 @@
   ]
  },
  "label": "exp102-ec2-agreement",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,

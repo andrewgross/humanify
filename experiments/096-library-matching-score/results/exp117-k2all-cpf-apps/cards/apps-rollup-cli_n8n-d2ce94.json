@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "ade77c3081c28aba0b1d30f4aedd32234466d415c1cb5731e61e1a41029be9c2",
  "rule": "structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "set": "apps-rollup",
  "statementBytes": {
   "<self>": 5370,

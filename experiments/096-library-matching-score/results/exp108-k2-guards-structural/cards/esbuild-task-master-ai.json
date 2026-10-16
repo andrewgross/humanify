@@ -1,10 +1,10 @@
 {
  "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
  "claimedBytes": {
-  "family": 81484,
+  "family": 79231,
   "foreign": 79357,
   "origin": 71877,
-  "right": 2754520,
+  "right": 2756773,
   "unmapped": 7943,
   "wrongFamily": 144532
  },
@@ -17,11 +17,11 @@
  "exploratory": {
   "names": {
    "bindings": 34644,
-   "bindingsSameVersion": 27218,
-   "bindingsVersionKnown": 33698,
+   "bindingsSameVersion": 27226,
+   "bindingsVersionKnown": 34008,
    "exactBytes": 2394999,
    "exactUnits": 3960,
-   "sameVersionShare": 0.807704
+   "sameVersionShare": 0.800576
   }
  },
  "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
@@ -35,14 +35,15 @@
  },
  "label": "exp108-k2-guards-structural",
  "missBytes": {
-  "a": 475845,
+  "a": 329286,
   "b": 797927,
-  "c": 33969,
-  "d-absent": 91669,
+  "c": 45488,
+  "d-absent": 193598,
   "d-file": 17473,
   "d-variant": 81,
   "e-ambig": 11735,
   "e-other": 316549,
+  "e-spec": 33111,
   "e-support": 4082,
   "e-veto": 11623,
   "f": 248154
@@ -50,7 +51,7 @@
  "noDiscovery": null,
  "reportSha256": "e106429eb13766f9ae29604d5ba770b8f40e270867319a1fa34081c83efee602",
  "rule": "structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "set": "esbuild-app",
  "statementBytes": {
   "<foreign>": 80010,

@@ -13,10 +13,11 @@
  "config": {
   "binarySha256": "7b2c6d0c3823022bf07b992ba29dfea6af8ac26b1bec13569da88e712db865dc",
   "buildCommit": "e12049c0dd4d2c709699198ff5f6322b2540e507",
+  "chained9Sha256": "2921ed5441bf5375ca2f9061cba9cda83b39bbae971506fc4be116b666d86f61",
   "chainedSha256": "eb426b876b7057250694179d1d283f48a0bb1b4b6c708f8929782e5e2f38c6ec",
   "copiesSha256": "ab20aaeae52ee90ddec0acf3ac0b50ab13d1ddc91d17d3ac63f9707eb110b4c7",
   "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
-  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 4646716206,
   "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
   "origins7Sha256": "0d153d5d80e718b06c0ac00a471361c5a3a11885edc438dfee949c47997f3c7b",
@@ -24,7 +25,7 @@
   "rule": "structural"
  },
  "label": "exp113-opq2-k2",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,
@@ -72,11 +73,11 @@
    "entries": 1,
    "exploratoryNames": {
     "bindings": 34665,
-    "bindingsSameVersion": 27239,
-    "bindingsVersionKnown": 33719,
+    "bindingsSameVersion": 27247,
+    "bindingsVersionKnown": 34029,
     "exactBytes": 2395624,
     "exactUnits": 3961,
-    "sameVersionShare": 0.807823
+    "sameVersionShare": 0.800699
    },
    "f05": 0.876009,
    "f05ShipperOnly": 0.856443,
@@ -84,14 +85,15 @@
    "f1ShipperOnly": 0.759991,
    "libraryBytes": 4916988,
    "missShares": {
-    "a": 0.093508,
+    "a": 0.066969,
     "b": 0.162143,
-    "c": 0.006886,
-    "d-absent": 0.018643,
+    "c": 0.00923,
+    "d-absent": 0.036105,
     "d-file": 0.003554,
     "d-variant": 1.6e-05,
     "e-ambig": 0.00226,
     "e-other": 0.004822,
+    "e-spec": 0.006734,
     "e-support": 0.00083,
     "e-veto": 0.002364,
     "f": 0.050469

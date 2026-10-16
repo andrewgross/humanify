@@ -13,10 +13,11 @@
  "config": {
   "binarySha256": "556aada95d6f8a1b6c38db5abbbef5b8709c2f057c763afcb75a865a23223f41",
   "buildCommit": "116090f2577706dabb2d96632761272fbd1ab979",
+  "chained9Sha256": "2921ed5441bf5375ca2f9061cba9cda83b39bbae971506fc4be116b666d86f61",
   "chainedSha256": "eb426b876b7057250694179d1d283f48a0bb1b4b6c708f8929782e5e2f38c6ec",
   "copiesSha256": "ab20aaeae52ee90ddec0acf3ac0b50ab13d1ddc91d17d3ac63f9707eb110b4c7",
   "corpusSha256": "749abc00ec0c228e63b9cf9fc5b43e8f452bd80a609bf76bbce8f42f890e7db5",
-  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 2913858512,
   "indexId": "c9b593a460b802ff80ad6f6dcc0eed0a4f4f41f78cdf9ae853d576433256e97f",
   "origins7Sha256": "0d153d5d80e718b06c0ac00a471361c5a3a11885edc438dfee949c47997f3c7b",
@@ -24,7 +25,7 @@
   "rule": "agreement"
  },
  "label": "exp108-k5-agreement",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,
@@ -74,10 +75,10 @@
    "exploratoryNames": {
     "bindings": 21374,
     "bindingsSameVersion": 18473,
-    "bindingsVersionKnown": 21349,
+    "bindingsVersionKnown": 21374,
     "exactBytes": 1446709,
     "exactUnits": 2452,
-    "sameVersionShare": 0.865286
+    "sameVersionShare": 0.864274
    },
    "f05": 0.731846,
    "f05ShipperOnly": 0.731846,
@@ -85,13 +86,13 @@
    "f1ShipperOnly": 0.523697,
    "libraryBytes": 4916988,
    "missShares": {
-    "a": 0.11194,
-    "b": 0.201869,
-    "c": 0.018801,
-    "d-absent": 0.033851,
+    "a": 0.075872,
+    "b": 0.23739,
+    "c": 0.018847,
+    "d-absent": 0.034184,
     "d-file": 0.003793,
     "d-variant": 1.6e-05,
-    "e-agree": 0.224209,
+    "e-agree": 0.224377,
     "e-ambig": 0.013743,
     "e-other": 0.001493,
     "e-spec": 0.000106,

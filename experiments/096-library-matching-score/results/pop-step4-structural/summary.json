@@ -11,11 +11,12 @@
  "config": {
   "binarySha256": "faa0d4abdf399c105bd17205d1ba07159ab8cf1158765092949c755b5b748e64",
   "buildCommit": "829da98f014e567b4429df4b58ac8a6af30d62b2",
+  "chained9Sha256": "46dde6cefd4a53693174c92811e7dc4efd54fe4fb35860a62cbc3584f586a0fc",
   "chainedSha256": "6b2625b800ef81c2a7d0252e48101e030059c51e565ab3f537366da5c8bde165",
   "copiesSha256": "ab60a31d3d89a1d6be770b8c258f7197c427cb736f46f1ddb555b6cb0e8dbd3a",
   "corpus": "pop",
   "corpusSha256": "626b032b7d7d11fa1aa18e9d08e789cdc83ba5a899c50e03f5a1f93641c02fea",
-  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 538021713,
   "indexId": "0999ad6ee9e9f9d7d5e18080bbb5f2a618370329cc34924b2cc443c2b1e90542",
   "origins7Sha256": "e1ef4764b0ad31ba9abb13160fe4d6ca4d86295d9e4ca6ff4106ff150c48db30",
@@ -23,7 +24,7 @@
   "rule": "structural"
  },
  "label": "pop-step4-structural",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "sets": {
   "pop-bun": {
    "appClaimedBytes": 0,
@@ -77,11 +78,11 @@
    "entries": 46,
    "exploratoryNames": {
     "bindings": 151837,
-    "bindingsSameVersion": 118722,
-    "bindingsVersionKnown": 151373,
+    "bindingsSameVersion": 118771,
+    "bindingsVersionKnown": 151422,
     "exactBytes": 10720672,
     "exactUnits": 18046,
-    "sameVersionShare": 0.784301
+    "sameVersionShare": 0.784371
    },
    "f05": 0.412532,
    "f05ShipperOnly": 0.288724,

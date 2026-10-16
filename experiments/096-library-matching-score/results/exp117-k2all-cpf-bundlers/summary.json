@@ -11,11 +11,12 @@
  "config": {
   "binarySha256": "707f417293e923594c3a2f1282bc45eef5e4db1ca2bef2fee34dd3bc876ebefe",
   "buildCommit": "0b2b136b02f773685a3d5823d4ddf2f7ab592bd2",
+  "chained9Sha256": "8fecf0c2f8e0e8cb495f192ef8e3171b32e1c772706180dd11b2834425ad4a03",
   "chainedSha256": "2d2ec6251a51031362d24f96add76a6257decd613fbb0f342826f09205e4161e",
   "copiesSha256": "01e78709e765c23ac94b21de9cc207026c6e5468d3d8026c914aada64198c408",
   "corpus": "bundlers",
   "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
-  "familiesSha256": "4f31afca448af6556717b950a51cd50dc815a611cf45c2fa9f3e0350c5d1401e",
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 6807877931,
   "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
   "origins7Sha256": "8b6652faafd20967eb565bb668efb2930f44a02ee31102df79eea6f4708e135f",
@@ -28,7 +29,7 @@
   ]
  },
  "label": "exp117-k2all-cpf-bundlers",
- "schema": "exp096-score/8",
+ "schema": "exp096-score/9",
  "sets": {
   "dev-rollup": {
    "appClaimedBytes": 0,

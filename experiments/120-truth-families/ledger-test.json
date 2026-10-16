@@ -1,0 +1,282 @@
+{
+  "test-exp101-c2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp101-call2k-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp101-call2k-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp105-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp105-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp107-cont-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp107-cont-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp107-main-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp107-main-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-c2v3-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-c2v3-guards-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-c2v3-guards-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-c2v3-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-k2-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-k2-guards-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-k2-guards-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-k5-guards-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp108-k5-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp109-c2-rec-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp109-final-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp109-final-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp112-k2-rec": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp112-k2-rec-dcap": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp113-k2all": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp113-opq2-k2": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp113-opq2-wr": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp113-own-k2": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp113-own-wr": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-allf-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-allf-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-both2-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-both2-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-cp-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-cp-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-cpf-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-cpf-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-st2-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp114-st2-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-base-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-base-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-cpf-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-cpf-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-dmb-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-dmb-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-flip3-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-flip3-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-flip4-k2-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-flip4-wr-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-k2all-cpf": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-k2all-cpfdmb": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp117-k2all-flip4": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp119-k2all-def": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-exp119-k2all-st": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-step4f-agreement": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  },
+  "test-step4f-structural": {
+    "corpus": "test",
+    "perSet": {},
+    "transitions": []
+  }
+}

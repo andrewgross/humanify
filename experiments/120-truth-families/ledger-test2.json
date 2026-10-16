@@ -1,0 +1,332 @@
+{
+  "test2-exp113-k2all": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 673,
+        "WRONG->GOOD:rename": 673
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857],
+      ["test2-webpack", "rename", "wrongFamily", "family", 673]
+    ]
+  },
+  "test2-exp113-own-k2": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp113-own-wr": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-base-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp117-base-wr-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-cpf-bun-k2-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-cpf-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp117-cpf-wr-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-dmb-bun-k2-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-dmb-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp117-dmb-wr-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-flip3-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp117-flip3-wr-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-flip4-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 343717,
+        "GOOD->GOOD:npmchain": 343717,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 343717],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp117-flip4-wr-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-exp117-k2all-cpf": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 673,
+        "WRONG->GOOD:rename": 673
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857],
+      ["test2-webpack", "rename", "wrongFamily", "family", 673]
+    ]
+  },
+  "test2-exp117-k2all-cpfdmb": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 673,
+        "WRONG->GOOD:rename": 673
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857],
+      ["test2-webpack", "rename", "wrongFamily", "family", 673]
+    ]
+  },
+  "test2-exp117-k2all-flip4": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 343717,
+        "GOOD->GOOD:npmchain": 343717,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 673,
+        "WRONG->GOOD:rename": 673
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 343717],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857],
+      ["test2-webpack", "rename", "wrongFamily", "family", 673]
+    ]
+  },
+  "test2-exp117-p3-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 343717,
+        "GOOD->GOOD:npmchain": 343717,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 343717],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp117-st-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 343717,
+        "GOOD->GOOD:npmchain": 343717,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 343717],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-exp119-k2all-def": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 673,
+        "WRONG->GOOD:rename": 673
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857],
+      ["test2-webpack", "rename", "wrongFamily", "family", 673]
+    ]
+  },
+  "test2-exp119-k2all-st": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 343717,
+        "GOOD->GOOD:npmchain": 343717,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      },
+      "test2-webpack": {
+        "WRONG->GOOD": 673,
+        "WRONG->GOOD:rename": 673
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 343717],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857],
+      ["test2-webpack", "rename", "wrongFamily", "family", 673]
+    ]
+  },
+  "test2-main-k2-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 335455,
+        "GOOD->GOOD:npmchain": 335455,
+        "WRONG->GOOD": 5959,
+        "WRONG->GOOD:npmchain": 5959
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 335455],
+      ["test2-esbuild", "npmchain", "wrongFamily", "family", 102],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 5857]
+    ]
+  },
+  "test2-main-wr-structural": {
+    "corpus": "test2",
+    "perSet": {},
+    "transitions": []
+  },
+  "test2-ref-wr-structural": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-esbuild": {
+        "GOOD->GOOD": 23452,
+        "GOOD->GOOD:npmchain": 23452,
+        "WRONG->GOOD": 55,
+        "WRONG->GOOD:npmchain": 55
+      }
+    },
+    "transitions": [
+      ["test2-esbuild", "npmchain", "family", "right", 23452],
+      ["test2-esbuild", "npmchain", "wrongFamily", "right", 55]
+    ]
+  }
+}

@@ -1,7 +1,14 @@
 # exp096: a library-matching score we can track over time
 
-## STATUS (2026-10-14)
+## STATUS (2026-10-15)
 
+- **Scorer 9 (exp120, `experiments/120-truth-families/README.md`).** Two truth-side fixes, re-scoring all 237
+  committed labels. (a) `families-derived.json` was re-derived with exp104's rules, unchanged, over the exp119
+  universe plus every package name any corpus's truth labels with. That makes 18,034 names and 5,751 links, a
+  strict superset; for example, `graphlib` and `@snyk/graphlib` are now one family. (b) A new rule, `npmchain`
+  (frozen layer `chained9*.json`): a chained source whose path names a package npm does not have, such as
+  `@primevue/src`, keeps the real package whose own map listed it. The ledger shows right -> wrong = 0 on every
+  label. With both changes off, scorer 9 reproduces scorer 8 exactly (`verify_s8.py`).
 - **Scorer 8 (exp119, `experiments/119-families-full/README.md`).** `families-derived.json` was re-derived with
   exp104's rules, unchanged, over every package of the default index k2-all plus the earlier universe (17,316
   names; 5,562 links, a strict superset of scorer 7's joins). `family()` is the only thing that changed. All 223
