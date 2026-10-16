@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "078867fb2a0a115eaf0253939c18d969d1cc9c5d41b86eaf21b3d866be5a1e89",
+ "claimedBytes": {
+  "family": 60123,
+  "origin": 230071,
+  "right": 4845194,
+  "unmapped": 12600,
+  "wrongFamily": 250156
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-electron_paperarxiv-725a6a",
+ "exploratory": {
+  "names": {
+   "bindings": 67266,
+   "bindingsSameVersion": 66834,
+   "bindingsVersionKnown": 67266,
+   "exactBytes": 4365051,
+   "exactUnits": 3945,
+   "sameVersionShare": 0.993578
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.903009,
+  "f1": 0.801734,
+  "namedBytes": 4220124,
+  "precision": 0.986047,
+  "recall": 0.675474
+ },
+ "label": "exp121-v2-apps",
+ "missBytes": {
+  "a": 2220,
+  "c": 367424,
+  "d-absent": 46003,
+  "d-file": 11173,
+  "e-ambig": 19168,
+  "e-other": 165052,
+  "e-spec": 222959,
+  "e-support": 5763,
+  "e-veto": 10076,
+  "f": 262395,
+  "unit-model": 23
+ },
+ "noDiscovery": null,
+ "reportSha256": "358fb00dadb3f5c12ed648c0494b2b1dafd0ad2c51ec2bbfae7f42574e525bb5",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<unmapped>": 15278,
+  "copy": 531480,
+  "library": 6247644
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 531480,
+  "f05": 0.923969,
+  "f05ShipperOnly": 0.882574,
+  "f1": 0.882886,
+  "f1ShipperOnly": 0.843332,
+  "libraryBytes": 6247644,
+  "namedAsOriginBytes": 230071,
+  "namedAsShipperBytes": 4905317,
+  "namedBytes": 5135388,
+  "namedBytesShipperOnly": 4905317,
+  "precision": 0.95355,
+  "precisionShipperOnly": 0.91083,
+  "recall": 0.821972,
+  "recallShipperOnly": 0.785147,
+  "wrongFamilyBytes": 250156,
+  "wrongFamilyBytesShipperOnly": 480227
+ },
+ "truthMethod": "sourcemap"
+}

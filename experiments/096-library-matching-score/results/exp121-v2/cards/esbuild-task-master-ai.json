@@ -1,0 +1,88 @@
+{
+ "bundleSha256": "0bc31ed9378ef750db6b4bbbc49ff45748a790c4ebad4297e6047462b74c0dd0",
+ "claimedBytes": {
+  "family": 220525,
+  "foreign": 79357,
+  "origin": 49592,
+  "right": 2999558,
+  "unmapped": 8369,
+  "wrongFamily": 48650
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "esbuild-task-master-ai",
+ "exploratory": {
+  "names": {
+   "bindings": 36850,
+   "bindingsSameVersion": 28093,
+   "bindingsVersionKnown": 36459,
+   "exactBytes": 2579851,
+   "exactUnits": 4044,
+   "sameVersionShare": 0.770537
+  }
+ },
+ "indexId": "cae793d81268794a10d57ae9e9387c4a6c389cb762835270d23f44a699f1c19f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.874731,
+  "f1": 0.740323,
+  "namedBytes": 2898001,
+  "precision": 0.995184,
+  "recall": 0.589385
+ },
+ "label": "exp121-v2",
+ "missBytes": {
+  "a": 224660,
+  "b": 886316,
+  "c": 42501,
+  "d-absent": 174737,
+  "d-file": 5207,
+  "e-ambig": 34522,
+  "e-other": 73699,
+  "e-spec": 1235,
+  "e-support": 5828,
+  "e-veto": 28240,
+  "f": 170368
+ },
+ "noDiscovery": null,
+ "reportSha256": "520d91e06b1cd552dd236051e5579bf787f886b60f23d09d2dde1c9c30b9e16c",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "esbuild-app",
+ "statementBytes": {
+  "<foreign>": 80010,
+  "<self>": 1114888,
+  "<unmapped>": 16989,
+  "copy": 263429,
+  "library": 4916988
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 263429,
+  "f05": 0.898742,
+  "f05ShipperOnly": 0.88511,
+  "f1": 0.794062,
+  "f1ShipperOnly": 0.782018,
+  "libraryBytes": 4916988,
+  "namedAsOriginBytes": 49592,
+  "namedAsShipperBytes": 3220083,
+  "namedBytes": 3269675,
+  "namedBytesShipperOnly": 3220083,
+  "precision": 0.985339,
+  "precisionShipperOnly": 0.970394,
+  "recall": 0.664975,
+  "recallShipperOnly": 0.654889,
+  "wrongFamilyBytes": 48650,
+  "wrongFamilyBytesShipperOnly": 98242
+ },
+ "truthMethod": "sourcemap"
+}
