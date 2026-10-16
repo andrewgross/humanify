@@ -344,3 +344,34 @@ fn the_literal_margin_by_family_ignores_a_sibling_holding_the_same_literals() {
     assert_eq!(got.len(), 1, "{got:?}");
     assert_eq!(got[0].package, "@smithy/core");
 }
+
+#[test]
+fn owners_counted_by_family_let_a_family_and_one_carrier_through() {
+    // exp125: a bigger index adds carriers (a package whose dist inlines the
+    // code). Three members of one scope family plus one carrier are FOUR
+    // owners but TWO families: by package the print is too common to say
+    // anything; by family it still names its family.
+    let index = LibraryIndex::from_rows(
+        vec![
+            row("wasm", "@shiki/core", 150, 100),
+            row("wasm", "@shiki/engine", 150, 100),
+            row("wasm", "@shiki/main", 150, 100),
+            row("wasm", "zcarrier", 150, 100),
+            row("many", "a", 150, 100),
+            row("many", "b", 150, 100),
+            row("many", "c", 150, 100),
+            row("many", "d", 150, 100),
+        ],
+        vec![],
+    );
+    let q = [whole("wasm", 150), whole("many", 150)];
+    assert!(claims(&index, &q, structural()).is_empty());
+    let by_family = LookupRules {
+        max_packages_by_family: true,
+        ..structural()
+    };
+    assert_eq!(
+        claims(&index, &q, by_family),
+        vec![(0, "@shiki/core".into())]
+    );
+}

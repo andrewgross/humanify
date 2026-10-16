@@ -57,6 +57,7 @@ from lib096 import HERE, INDEX_CACHE, dump  # noqa: E402
 import mmlib  # noqa: E402  (the misses lane: index table, structural-rule emulation)
 import families_lib  # noqa: E402
 import truth_audit  # noqa: E402
+from origins import VIA  # noqa: E402  (scorer 10: a nested chunk's publisher)
 
 FAMILIES = families_lib.Families()
 same_family = FAMILIES.same
@@ -101,7 +102,11 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    a chained source whose path names a package npm does not have (`@primevue/src`, from @primevue/core's own map)
 #    keeps the real package whose map listed it. Same reports, re-scored; RULES9 off + scorer 8's links file
 #    reproduces scorer 8's cards.
-SCORER_VERSION = "exp096-score/9"
+# 10: exp125, rule `via` (origins.py RULES10, frozen layer origins10): a NESTED chunk (a marker region naming R
+#    whose file inside R is a chunk named after P, R declaring P a build input) credits R beside the origin P: R
+#    published that file, and a claim naming R is judged `origin`, as the claim naming a directly shipped chunk's
+#    publisher is judged right. Same reports, re-scored; `via` off reproduces scorer 9's cards.
+SCORER_VERSION = "exp096-score/10"
 
 
 def r6(x):
@@ -181,7 +186,10 @@ def label_units(truth, units, origins=None, audit=None):
         if origins and lab in by_origin:
             (oi, ki), _ = sorted(by_origin[lab].items(), key=lambda kv: (-kv[1], kv[0]))[0]
             if oi >= 0:
-                row.update(origin=origins["names"][oi], originEvidence=origins["kinds"][ki])
+                kind = origins["kinds"][ki]
+                row.update(origin=origins["names"][oi], originEvidence=kind)
+                if kind.startswith(VIA):
+                    row.update(originEvidence="chunk", via=kind[len(VIA):])
         if audit is not None and lab not in NOT_LIBRARY and "origin" not in row:
             co = audit.copy_origin(s, e, lab)
             if co is not None:
@@ -210,8 +218,8 @@ def judge_origin(claimed, row, app_pkg):
     selfOther is). Returns (new verdict, shipper-only verdict)."""
     old = judge(claimed, row["label"], app_pkg)
     origin = row.get("origin")
-    if origin is not None and old in ("wrongFamily", "selfOther") \
-            and same_family(claimed, origin):
+    if old in ("wrongFamily", "selfOther") and any(
+            o is not None and same_family(claimed, o) for o in (origin, row.get("via"))):
         return ("origin" if old == "wrongFamily" else "selfOrigin"), old
     return old, old
 
@@ -517,6 +525,9 @@ def main():
     o7m = truth_audit.load_origins7_manifest()
     if o7m is not None and o7m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 7 origin layer was frozen for another corpus manifest")
+    o10m = truth_audit.load_origins10_manifest() if o7m is not None else None
+    if o10m is not None and o10m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 10 origin layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -570,6 +581,7 @@ def main():
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
+                   **({"origins10Sha256": truth_audit.origins10_sha()} if o7m and truth_audit.origins10_sha() else {}),
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),

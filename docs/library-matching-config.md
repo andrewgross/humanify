@@ -137,6 +137,7 @@ literal_score = 20.0
 literal_cover = 0.9
 literal_margin = 10.0
 literal_margin_by_family = true    # exp106 (agreement rule only)
+max_packages_by_family = false     # exp125: count a print's owners by FAMILY against max_packages
 
 [library.lookup.targeted]
 min_nodes = 20

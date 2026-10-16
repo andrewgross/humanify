@@ -110,6 +110,8 @@ literal_cover = 0.9
 literal_margin = 10.0
 # Read the literal margin against the best file of another package family, not another package: a sibling holding the same literals is no rival (exp106).
 literal_margin_by_family = true
+# Count a print's owners by package family, not package, against max_packages: a scope's members or a fork and its origin are one identity, and a bigger index's carriers of the same code no longer make it too common (exp125).
+max_packages_by_family = false
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).

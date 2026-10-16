@@ -550,6 +550,17 @@ pub static KEYS: &[Key] = &[
         doc: "Read the literal margin against the best file of another package family, not \
               another package: a sibling holding the same literals is no rival (exp106).",
     },
+    Key {
+        section: "library.lookup",
+        name: "max_packages_by_family",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(rules().max_packages_by_family)),
+        unset: "",
+        doc: "Count a print's owners by package family, not package, against max_packages: \
+              a scope's members or a fork and its origin are one identity, and a bigger \
+              index's carriers of the same code no longer make it too common (exp125).",
+    },
     // [library.lookup.targeted]: the second round, on queued regions.
     lib_int(
         "library.lookup.targeted",
