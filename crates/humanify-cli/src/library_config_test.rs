@@ -345,24 +345,25 @@ fn the_exp114_presence_keys_set_from_the_file() {
     assert!(!on.library.discovery_options().shadow_ties);
 }
 
-/// exp121's copy presence: off by default, set from the file.
+/// exp121's copy presence: on by default since 2026-10-16 at its measured
+/// "v2" setting (clean on all 19 sets on k2-all), turned off from the file.
 #[test]
-fn the_exp121_copy_presence_keys_set_from_the_file() {
+fn the_exp121_copy_presence_keys_default_to_v2_and_set_from_the_file() {
     let d = build(&["in.js"], "").unwrap().library.discovery_options();
-    assert_eq!(d.copy_presence, 0.0);
-    assert_eq!(d.copy_presence_factor, 0);
-    assert!(!d.copy_presence_origin);
-    assert_eq!(d.copy_presence_own, 0.0);
-    let on = build(
+    assert_eq!(d.copy_presence, 0.1);
+    assert_eq!(d.copy_presence_factor, 4);
+    assert!(d.copy_presence_origin);
+    assert_eq!(d.copy_presence_own, 0.1);
+    let off = build(
         &["in.js"],
-        "[library.discovery]\ncopy_presence = 0.1\ncopy_presence_factor = 4\ncopy_presence_origin = true\ncopy_presence_own = 0.1\n",
+        "[library.discovery]\ncopy_presence = 0.0\ncopy_presence_factor = 0\ncopy_presence_origin = false\ncopy_presence_own = 0.0\n",
     )
     .unwrap();
-    let o = on.library.discovery_options();
-    assert_eq!(o.copy_presence, 0.1);
-    assert_eq!(o.copy_presence_factor, 4);
-    assert!(o.copy_presence_origin);
-    assert_eq!(o.copy_presence_own, 0.1);
+    let o = off.library.discovery_options();
+    assert_eq!(o.copy_presence, 0.0);
+    assert_eq!(o.copy_presence_factor, 0);
+    assert!(!o.copy_presence_origin);
+    assert_eq!(o.copy_presence_own, 0.0);
 }
 
 /// exp112's declared cap: 65536 by default since exp117, 0 turns it off.

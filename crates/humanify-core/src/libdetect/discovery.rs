@@ -287,7 +287,9 @@ impl DiscoveryOptions {
     /// with its fence and exp112's declared cap, measured together on every
     /// corpus on k2-all; and since 2026-10-15 (Andrew's call) `shadow_ties`,
     /// which removes fork claims on every webpack/rollup set for 1,035 wrong
-    /// bytes on test2-esbuild. `helper_families` stays off.
+    /// bytes on test2-esbuild; and since 2026-10-16 exp121's copy presence at
+    /// its measured "v2" setting (0.1 / factor 4 / origin / own 0.1), clean
+    /// on all 19 sets on k2-all. `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
     pub fn recommended() -> Self {
@@ -304,6 +306,10 @@ impl DiscoveryOptions {
             presence_fence: true,
             declared_max_bytes: 65536,
             shadow_ties: true,
+            copy_presence: 0.1,
+            copy_presence_factor: 4,
+            copy_presence_origin: true,
+            copy_presence_own: 0.1,
             ..DiscoveryOptions::default()
         }
     }
