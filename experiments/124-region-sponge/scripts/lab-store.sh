@@ -20,29 +20,6 @@ for s in "$SRC"/store/shards/*; do
 done
 # unlink the affected shards IN THE LAB COPY (the k2-all store keeps its link)
 while read -r f; do rm -f "$LAB/store/shards/$f"; done < "$AFF"
-# seed the work dir for the affected versions: manifest hard-linked, node_modules SYMLINKED (read only: an
-# .installed dir is never reinstalled), each FINISHED build hard-linked (a stamped build is never rebuilt; an
-# unstamped one is not seeded, so a retry writes only here)
-SOURCES="$SRC/work /work/exp109-data/work /work/exp101-data/work /work/exp095-index-v2-data/selABC/work /work/exp105-data/work"
-cut -d/ -f2 "$AFF" | sed 's/\.json$//' | sort -u | while read -r dir; do
-  [ -f "$WORK/$dir/.installed" ] && continue
-  from=""
-  for src in $SOURCES; do [ -f "$src/$dir/.installed" ] && { from="$src/$dir"; break; }; done
-  [ -n "$from" ] || { echo "no install: $dir" >&2; continue; }
-  mkdir -p "$WORK/$dir/build"
-  for f in package.json package-lock.json; do
-    [ -e "$from/$f" ] && cp -al "$from/$f" "$WORK/$dir/$f"
-  done
-  [ -e "$from/node_modules" ] && ln -sfn "$from/node_modules" "$WORK/$dir/node_modules"
-  for src in $SOURCES; do  # the first source with a finished build of each slice/tag (seed-work.sh's order)
-    for b in "$src/$dir"/build/*/*; do
-      [ -f "$b/.recipe" ] || continue
-      rel=${b#$src/$dir/}
-      [ -e "$WORK/$dir/$rel" ] && continue
-      mkdir -p "$WORK/$dir/$(dirname "$rel")"
-      cp -al "$b" "$WORK/$dir/$rel"
-    done
-  done
-  touch "$WORK/$dir/.installed"
-done
+cut -d/ -f2 "$AFF" | sed 's/\.json$//' | sort -u > "$LAB/versions.txt"
+"$(dirname "$0")/seed-work.sh" "$LAB/versions.txt" "$WORK"
 echo "affected shards $(wc -l < "$AFF"), versions $(cut -d/ -f2 "$AFF" | sort -u | wc -l)"
