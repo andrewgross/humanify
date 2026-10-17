@@ -104,6 +104,18 @@ def main():
                   f"{r['wrongFamilyBytes'] / 1e3:12.1f}  "
                   f"{pct(m.get('a', 0)):>11s}  {pct(m.get('b', 0)):>7s}  {pct(m.get('c', 0)):>9s}  "
                   f"{pct(dsum):>12s}  {pct(esum):>5s}  {pct(m.get('f', 0)):>9s}  {pct(m.get('no-discovery', 0)):>12s}")
+            if "scopes" in r:
+                print(f"  {'':{w}s}  {scopes_line(r['scopes'])}")
+
+
+def scopes_line(scopes):
+    """Scorer 10: the statement scope (scorers 1-9's whole scope: comparable with history) and the factory scope
+    (bundled CommonJS modules), each P / R / F0.5, and the factory share of library bytes."""
+    st, fa = scopes["statement"], scopes["factory"]
+    lib = st["libraryBytes"] + fa["libraryBytes"]
+    share = fa["libraryBytes"] / lib if lib else 0.0
+    return (f"statement scope {pct(st['precision'])}/{pct(st['recall'])}/F0.5 {pct(st['f05'])}  |  factory scope "
+            f"{pct(fa['precision'])}/{pct(fa['recall'])}/F0.5 {pct(fa['f05'])}  ({pct(share)} of library bytes)")
 
 
 def delta(r, b, key):

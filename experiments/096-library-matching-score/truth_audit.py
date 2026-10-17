@@ -217,7 +217,53 @@ def patch_sources(entry, truth, chm):
         for i, row in load_chained9(entry).items():
             if srcs[i][0] == row[3]:
                 srcs[i] = list(row[:3])
+    if RULES11["notinstalled"]:
+        for i, row in load_chained11(entry).items():
+            if srcs[i][0] == row[3]:
+                srcs[i] = list(row[:3])
     return {**truth, "sources": srcs}
+
+
+# ---------------------------------------------------------------- scorer 11 (exp128): chained, not installed
+
+# scorer 9's npmchain without "P is not on npm": a chained source (path not on disk, listed by an installed
+# package's own map) labelled with a package that is NOT INSTALLED in the app (`node_modules/src/...` from
+# async-validator's `../src/` sources; `src` is a real npm name) keeps the package whose map listed it. Frozen per
+# corpus by experiments/128-cjs-scope/scorer11/chained11.py as <DATA>/truth/<id>.chained11.json.gz +
+# chained11[-<corpus>].json; each row is [package, version, file, old label], applied after scorer 9's rows to a
+# source still carrying that old label. Off: scorer 10's truth exactly.
+RULES11 = {"notinstalled": True}
+_CHAINED11 = {}
+
+
+def chained11_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "chained11.json" if c == "dev" else f"chained11-{c}.json")
+
+
+def load_chained11_manifest():
+    if not RULES11["notinstalled"]:
+        return None
+    p = chained11_manifest_path()
+    if p not in _CHAINED11:
+        with open(p) as fh:
+            _CHAINED11[p] = json.load(fh)
+    return _CHAINED11[p]
+
+
+def chained11_sha():
+    m = load_chained11_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
+def load_chained11(entry):
+    m = load_chained11_manifest()
+    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".chained11.json.gz")
+    got = sha256_file(p)
+    if got != m["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: chained11 {p} sha256 {got[:12]} != {os.path.basename(chained11_manifest_path())}")
+    with gzip.open(p, "rt") as fh:
+        return {int(k): v for k, v in json.load(fh)["sources"].items()}
 
 
 # ---------------------------------------------------------------- scorer 9 (exp120): chained non-npm sources
@@ -293,7 +339,7 @@ def origins7_sha():
 
 
 # scorer 10 (exp125): the scorer 7 layer rebuilt with origins.py's RULES10 (`via`: a nested chunk records the
-# region's package that published it), frozen per corpus by experiments/125-nested-chunk-publisher/scorer10/
+# region's package that published it), frozen per corpus by experiments/125-nested-chunk-publisher/scorer11/
 # origins10.py as <DATA>/truth/<id>.origins10.json.gz + origins10[-<corpus>].json. `via` read as `chunk`: the
 # scorer 7 layer segment for segment (origins10.py verify). When on, origin_layer reads it in place of scorer 7's.
 def origins10_manifest_path():
