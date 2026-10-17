@@ -165,6 +165,8 @@ copy_presence = 0.1            # exp121, ON since 2026-10-16 ("v2", clean on 19 
 copy_presence_factor = 4       #   smaller-context origin (share >= copy_presence, origin's module <= 1/factor)
 copy_presence_origin = true    #   is no seed; _origin gives the copy seeds to that origin; _own = share of
 copy_presence_own = 0.1        #   seed bytes non-copy seeds need to vouch (experiments/121-sponge-rule)
+factory_bodies = false         # exp128, default off: cut each bundled CommonJS module into its body statements
+                               #   (judged and propagated as lazy-module bodies; experiments/128-cjs-scope)
 ```
 
 Since exp117 (2026-10-15) `context_presence = 1.5`, `context_presence_slack = 16384`,

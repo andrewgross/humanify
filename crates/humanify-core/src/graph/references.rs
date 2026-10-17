@@ -64,10 +64,23 @@ impl ReferenceGraph {
         self.locator.unit_at(&self.units, pos)
     }
 
-    /// The external base: runtime helpers and bundled CommonJS modules.
+    /// The external base: runtime helpers and bundled CommonJS modules
+    /// kept whole (a module cut into its body statements is a wrapper, as
+    /// a lazy module is).
     pub fn is_base_external(&self, u: u32) -> bool {
         let unit = &self.units[u as usize];
-        unit.runtime || unit.kind == UnitKind::Factory
+        unit.runtime || (unit.kind == UnitKind::Factory && !self.is_cut_factory(u))
+    }
+
+    /// A bundled CommonJS module cut into its body statements
+    /// ([`build_reference_graph_with`]'s `factory_bodies`): its body units
+    /// follow it.
+    pub fn is_cut_factory(&self, u: u32) -> bool {
+        self.units[u as usize].kind == UnitKind::Factory
+            && self
+                .units
+                .get(u as usize + 1)
+                .is_some_and(|n| n.kind == UnitKind::FactoryBody { module: u })
     }
 
     /// Give every edge its region scope (docs/matching-architecture.md
@@ -248,15 +261,30 @@ fn mark_runtime(graph: &mut ReferenceGraph, seeds: impl Iterator<Item = u32>) {
 /// declarator spans of the bundled CommonJS modules (the unpack's
 /// classification).
 pub fn build_reference_graph<'a>(
-    _code: &str,
+    code: &str,
     semantic: &Semantic<'a>,
     statements: &'a [Statement<'a>],
     factories: &[Span],
     facts: &BundlerFacts,
 ) -> ReferenceGraph {
+    build_reference_graph_with(code, semantic, statements, factories, facts, false)
+}
+
+/// [`build_reference_graph`], and with `factory_bodies` each bundled
+/// CommonJS module cut into its body statements (`FactoryBody` units, the
+/// index side's unit model: exp128), its wrapper pointing at each of them
+/// as a lazy wrapper does.
+pub fn build_reference_graph_with<'a>(
+    _code: &str,
+    semantic: &Semantic<'a>,
+    statements: &'a [Statement<'a>],
+    factories: &[Span],
+    facts: &BundlerFacts,
+    factory_bodies: bool,
+) -> ReferenceGraph {
     let ContainerUnits {
         units, declared, ..
-    } = container_units(statements, factories, facts, false);
+    } = container_units(statements, factories, facts, factory_bodies);
     let mut graph = ReferenceGraph {
         locator: UnitLocator::new(&units),
         units,
@@ -265,7 +293,7 @@ pub fn build_reference_graph<'a>(
     let mutations = init_time_mutations(semantic, &graph, facts);
     let mut edges = binding_edges(semantic, &graph, &mutations);
     for (u, unit) in graph.units.iter().enumerate() {
-        if let UnitKind::LazyBody { module } = unit.kind {
+        if let UnitKind::LazyBody { module } | UnitKind::FactoryBody { module } = unit.kind {
             edges.push(Edge::new(module, u as u32, EdgeKind::LazyWrapper));
         }
     }

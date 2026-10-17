@@ -248,6 +248,13 @@ pub struct DiscoveryOptions {
     /// (its own seeds stay). A sponge's one stray seed on its own code
     /// does not vouch for megabytes of inlined dependencies.
     pub copy_presence_own: f64,
+    /// Cut bundled CommonJS modules into their body statements (exp128;
+    /// default off): each statement of a factory body is a unit with its
+    /// own prints, judged and propagated as a lazy module's body is, the
+    /// factory a wrapper (the index side has always cut them so: its rows
+    /// hold factory bodies). Off, a factory is one external unit the index
+    /// cannot speak for.
+    pub factory_bodies: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -274,6 +281,7 @@ impl Default for DiscoveryOptions {
             copy_presence_factor: 0,
             copy_presence_origin: false,
             copy_presence_own: 0.0,
+            factory_bodies: false,
         }
     }
 }
@@ -423,7 +431,7 @@ fn boundary(st: &State<'_>, groups: &Groups) -> BTreeMap<String, Boundary> {
 fn is_statement(graph: &ReferenceGraph, u: u32) -> bool {
     matches!(
         graph.units[u as usize].kind,
-        UnitKind::Statement | UnitKind::LazyBody { .. }
+        UnitKind::Statement | UnitKind::LazyBody { .. } | UnitKind::FactoryBody { .. }
     )
 }
 
@@ -1960,7 +1968,11 @@ pub fn evidence_seeds(
 fn banner_unit(graph: &ReferenceGraph, comment: oxc_span::Span) -> Option<u32> {
     let next = match graph.unit_at(comment.start) {
         Some(u) if is_statement(graph, u) => return Some(u),
-        Some(u) if graph.units[u as usize].kind == UnitKind::Factory => return None,
+        Some(u)
+            if graph.units[u as usize].kind == UnitKind::Factory && !graph.is_cut_factory(u) =>
+        {
+            return None;
+        }
         // Inside a lazy wrapper, between body statements: the next one.
         _ => graph.units.partition_point(|x| x.span.start < comment.end) as u32,
     };
@@ -1971,7 +1983,9 @@ fn banner_unit(graph: &ReferenceGraph, comment: oxc_span::Span) -> Option<u32> {
             (graph.units.get(body as usize)?.kind == UnitKind::LazyBody { module: next })
                 .then_some(body)
         }
-        UnitKind::Factory | UnitKind::FactoryBody { .. } => None,
+        UnitKind::Factory if graph.is_cut_factory(next) => Some(next + 1),
+        UnitKind::FactoryBody { .. } => Some(next),
+        UnitKind::Factory => None,
     }
 }
 
@@ -2262,7 +2276,8 @@ fn discover_unscoped(
     profile: &LibraryProfile,
 ) -> (ReferenceGraph, Discovery) {
     let semantic = ingest.semantic();
-    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
+    let (statements, facts, graph) =
+        bundle_graph(code, ingest, pieces, factories, options.factory_bodies);
     let families = match (options.derived_families, lookup) {
         (false, _) => PackageFamilies::shipped(),
         (true, Some(l)) => {
@@ -2288,7 +2303,8 @@ fn discover_unscoped(
     if options.banner_names == BannerNames::Known {
         seeds = known_banner_names(seeds, lookup.index);
     }
-    let units = crate::cut::units::container_units(statements, factories, &facts, false);
+    let units =
+        crate::cut::units::container_units(statements, factories, &facts, options.factory_bodies);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);
@@ -2402,6 +2418,7 @@ fn bundle_graph<'a>(
     ingest: &crate::ingest::Ingest<'a>,
     pieces: BundlePieces,
     factories: &[oxc_span::Span],
+    factory_bodies: bool,
 ) -> (
     &'a [oxc_ast::ast::Statement<'a>],
     crate::cut::units::BundlerFacts,
@@ -2420,8 +2437,13 @@ fn bundle_graph<'a>(
         pieces.grammar,
         pieces.interop,
     );
-    let graph = crate::graph::references::build_reference_graph(
-        code, semantic, statements, factories, &facts,
+    let graph = crate::graph::references::build_reference_graph_with(
+        code,
+        semantic,
+        statements,
+        factories,
+        &facts,
+        factory_bodies,
     );
     (statements, facts, graph)
 }
@@ -2475,17 +2497,19 @@ pub struct UnitRow {
 
 /// Every unit of the bundle's reference graph, in graph order, with its
 /// prints (the lookup's: `libindex::units::unit_prints` over the same
-/// units discovery builds).
+/// units discovery builds; `factory_bodies` as the run's
+/// [`DiscoveryOptions::factory_bodies`]).
 pub fn unit_rows(
     code: &str,
     ingest: &crate::ingest::Ingest<'_>,
     pieces: BundlePieces,
     factories: &[oxc_span::Span],
+    factory_bodies: bool,
 ) -> Vec<UnitRow> {
     use crate::cut::units::UnitKind;
     let semantic = ingest.semantic();
-    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
-    let units = crate::cut::units::container_units(statements, factories, &facts, false);
+    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories, factory_bodies);
+    let units = crate::cut::units::container_units(statements, factories, &facts, factory_bodies);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);

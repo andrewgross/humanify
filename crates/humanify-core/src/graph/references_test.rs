@@ -372,3 +372,42 @@ fn esbuild_name_require_and_public_field_helpers_are_runtime_by_shape() {
     let setter = unit(&g, ESBUILD_MINIFIED, "n(b");
     assert!(has(&g, setter, named, EdgeKind::InitMutation));
 }
+
+/// exp128: with `factory_bodies` a bundled CommonJS module is cut into its
+/// body statements, its wrapper points at each (as a lazy wrapper does)
+/// and is no longer external; without it the module stays one external
+/// unit (the default, unchanged).
+#[test]
+fn factory_bodies_cut_a_commonjs_module_into_statements() {
+    let code = "var F = Q((e, m) => { var k = 1; m.exports = k + 1; });\nvar x = F();\n";
+    let factory_text = "F = Q((e, m) => { var k = 1; m.exports = k + 1; })";
+    let whole = graph_of(code, &[factory_text], &BundlerFacts::default());
+    let f = unit(&whole, code, "var F");
+    assert_eq!(whole.units.len(), 2);
+    assert!(whole.is_base_external(f) && !whole.is_cut_factory(f));
+
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    let at = code.find(factory_text).unwrap() as u32;
+    let spans = [oxc_span::Span::new(at, at + factory_text.len() as u32)];
+    let g = crate::graph::references::build_reference_graph_with(
+        code,
+        ingest.semantic(),
+        &ingest.program.body,
+        &spans,
+        &BundlerFacts::default(),
+        true,
+    );
+    let f = unit(&g, code, "var F");
+    let k = unit(&g, code, "var k");
+    let exports = unit(&g, code, "m.exports");
+    assert_eq!(
+        g.units[k as usize].kind,
+        UnitKind::FactoryBody { module: f }
+    );
+    assert!(g.is_cut_factory(f) && !g.is_base_external(f));
+    assert!(has(&g, f, k, EdgeKind::LazyWrapper));
+    assert!(has(&g, f, exports, EdgeKind::LazyWrapper));
+    assert!(has(&g, exports, k, EdgeKind::Read));
+    assert!(has(&g, unit(&g, code, "var x"), f, EdgeKind::Read));
+}

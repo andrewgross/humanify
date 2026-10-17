@@ -160,6 +160,8 @@ copy_presence_factor = 4
 copy_presence_origin = true
 # For copy_presence, a package shows in the bundle only when its non-copy index seeds hold at least this share of its index seed bytes; otherwise its copy seeds go (exp121; 0 = any one non-copy seed vouches).
 copy_presence_own = 0.1
+# Cut each bundled CommonJS module into its body statements, each judged and propagated as a lazy module's body is (the index's rows already hold factory bodies); off, a factory is one external unit no library claim reaches (exp128).
+factory_bodies = false
 
 [unpack]
 # Force the bundler verdict.
