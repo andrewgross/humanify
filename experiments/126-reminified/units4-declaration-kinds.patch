@@ -1,0 +1,290 @@
+diff --git a/crates/humanify-core/src/hash/forms.rs b/crates/humanify-core/src/hash/forms.rs
+index d07c183b7..9bc8efc5f 100644
+--- a/crates/humanify-core/src/hash/forms.rs
++++ b/crates/humanify-core/src/hash/forms.rs
+@@ -106,6 +106,16 @@ pub enum FreeNames {
+     Masked,
+ }
+ 
++/// The keyword of a variable declaration (`const` / `let` / `var`).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum DeclarationKinds {
++    Verbatim,
++    /// `const`, `let` and `var` all walk as `var` (exp126: a library
++    /// re-minified by an app's build, or downlevelled by its own, reaches
++    /// the bundle with the keyword respelled; `using` keeps its own).
++    Unified,
++}
++
+ /// Which object-member node names the walk's parents carry.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub enum ParentNames {
+@@ -137,6 +147,8 @@ pub struct CanonicalForm {
+     /// exp094: a SAFE arrow walks under the `FunctionExpression` token
+     /// (`hash::wrapper_spelling`, the one rule).
+     pub wrapper_spelling: bool,
++    /// exp126: the declaration keyword (`serialize`, the canonical walk).
++    pub declaration_kinds: DeclarationKinds,
+     pub parent_names: ParentNames,
+ }
+ 
+@@ -178,6 +190,7 @@ pub const MATCH_KEY: CanonicalForm = CanonicalForm {
+     privates: Privates::Verbatim,
+     free_names: FreeNames::Verbatim,
+     wrapper_spelling: true,
++    declaration_kinds: DeclarationKinds::Verbatim,
+     parent_names: ParentNames::Oxc,
+ };
+ 
+@@ -197,12 +210,17 @@ pub const MATCH_KEY_PRIVATES_BLINDED: CanonicalForm = CanonicalForm {
+ /// is built offline and read by a later binary. The version also covers
+ /// the UNIT MODEL (what a unit is: `graph::references::container_units`),
+ /// pinned by `libindex::units_test`'s `UNIT_MODEL_PINS`: 3 = esbuild 0.28's
+-/// guarded `__esm` is a lazy module (main's 68b090e3; exp097).
++/// guarded `__esm` is a lazy module (main's 68b090e3; exp097). 4 = exp126:
++/// `const` / `let` / `var` walk as one keyword ([`DeclarationKinds::Unified`]),
++/// so a library re-minified by an app's build (its declarations respelled
++/// `var`) still meets its own index rows. The cross-version forms keep the
++/// keyword.
+ pub const LIBRARY_UNITS: CanonicalForm = CanonicalForm {
+     name: "units",
+-    version: 3,
++    version: 4,
+     stamped_in: Some("library index manifest `units`"),
+     privates: Privates::Blinded,
++    declaration_kinds: DeclarationKinds::Unified,
+     ..MATCH_KEY
+ };
+ 
+@@ -232,6 +250,7 @@ pub const IDENTITY_KEY: CanonicalForm = CanonicalForm {
+     privates: Privates::Verbatim,
+     free_names: FreeNames::Verbatim,
+     wrapper_spelling: false,
++    declaration_kinds: DeclarationKinds::Verbatim,
+     parent_names: ParentNames::Oxc,
+ };
+ 
+@@ -278,6 +297,7 @@ pub const STATEMENT: CanonicalForm = CanonicalForm {
+     privates: Privates::Masked,
+     free_names: FreeNames::Masked,
+     wrapper_spelling: true,
++    declaration_kinds: DeclarationKinds::Verbatim,
+     parent_names: ParentNames::Oxc,
+ };
+ 
+@@ -299,6 +319,7 @@ pub const ALIGN_UNIT: CanonicalForm = CanonicalForm {
+     privates: Privates::Verbatim,
+     free_names: FreeNames::Verbatim,
+     wrapper_spelling: false,
++    declaration_kinds: DeclarationKinds::Verbatim,
+     parent_names: ParentNames::Babel,
+ };
+ 
+diff --git a/crates/humanify-core/src/hash/forms_test.rs b/crates/humanify-core/src/hash/forms_test.rs
+index 87c4421fd..f30a49f4b 100644
+--- a/crates/humanify-core/src/hash/forms_test.rs
++++ b/crates/humanify-core/src/hash/forms_test.rs
+@@ -18,7 +18,7 @@ fn the_persisted_stamps_keep_their_values() {
+     // these; a change is a new era, never a refactor.
+     assert_eq!(MATCH_KEY.version, 4);
+     assert_eq!(STATEMENT.version, 3);
+-    assert_eq!(LIBRARY_UNITS.stamp(), "units/3"); // the unit model moved (exp097)
++    assert_eq!(LIBRARY_UNITS.stamp(), "units/4"); // const/let walk as var (exp126)
+     assert_eq!(VENDOR_CONTENT.stamp(), "vendor-content-key/4");
+     assert_eq!(LIBRARY_LITERALS_VERSION, 1);
+     let stamped: Vec<&str> = FORMS
+@@ -39,12 +39,15 @@ fn derived_forms_move_with_their_base() {
+     assert_eq!(VENDOR_CONTENT.version, MATCH_KEY.version);
+     assert_eq!(MATCH_KEY_PRIVATES_BLINDED.version, MATCH_KEY.version);
+     // The library units differ from the twin gate's masked stream only in
+-    // name and stamp: the same settings.
++    // name, stamp and the declaration-kind rule (exp126): the same settings
++    // otherwise.
++    assert_eq!(LIBRARY_UNITS.declaration_kinds, DeclarationKinds::Unified);
+     assert_eq!(
+         CanonicalForm {
+             name: "",
+             version: 0,
+             stamped_in: None,
++            declaration_kinds: DeclarationKinds::Verbatim,
+             ..LIBRARY_UNITS
+         },
+         CanonicalForm {
+@@ -85,3 +88,16 @@ fn each_form_names_a_walk_that_can_produce_it() {
+     // The identity key is byte-exact: no wrapper-spelling rule.
+     const { assert!(!IDENTITY_KEY.wrapper_spelling && !RENAME_SIGNATURE.wrapper_spelling) };
+ }
++
++#[test]
++fn only_the_library_units_unify_declaration_kinds() {
++    // exp126: a library-side rule. Every cross-version form (match key,
++    // vendor content, statement, identity, align) keeps const/let/var
++    // apart, so the pipeline's own hashes never move with it.
++    let unified: Vec<&str> = FORMS
++        .iter()
++        .filter(|f| f.declaration_kinds == DeclarationKinds::Unified)
++        .map(|f| f.name)
++        .collect();
++    assert_eq!(unified, ["units"]);
++}
+diff --git a/crates/humanify-core/src/hash/serialize.rs b/crates/humanify-core/src/hash/serialize.rs
+index 4fe81ca8f..52ef847b0 100644
+--- a/crates/humanify-core/src/hash/serialize.rs
++++ b/crates/humanify-core/src/hash/serialize.rs
+@@ -40,7 +40,7 @@ use serde_json::Value;
+ use sha2::{Digest, Sha256};
+ 
+ use super::forms::{
+-    CanonicalForm, Locals, Numbers, ParentNames, Privates, PropertyNames, Strings, Walk,
++    CanonicalForm, DeclarationKinds, Locals, Numbers, ParentNames, Privates, PropertyNames, Strings, Walk,
+ };
+ 
+ /// The symbol tables one walk consults: span start -> symbol for
+@@ -132,6 +132,7 @@ pub fn canonical_serialize(
+         keep_strings: form.strings == Strings::Exact,
+         blind_privates: form.privates == Privates::Blinded,
+         wrapper_spelling: form.wrapper_spelling,
++        unify_declaration_kinds: form.declaration_kinds == DeclarationKinds::Unified,
+         parts: String::with_capacity(4096),
+     };
+     serialize_value(root, None, "", &mut state);
+@@ -151,6 +152,7 @@ struct State<'a> {
+     keep_strings: bool,
+     blind_privates: bool,
+     wrapper_spelling: bool,
++    unify_declaration_kinds: bool,
+     parts: String,
+ }
+ 
+@@ -258,7 +260,16 @@ fn serialize_node(node: &Value, parent: Option<&Value>, key: &str, state: &mut S
+         }
+         state.parts.push_str(k);
+         state.parts.push(':');
+-        serialize_value(v, Some(node), k, state);
++        // exp126 (`DeclarationKinds::Unified`): const / let / var walk as `var`.
++        if state.unify_declaration_kinds
++            && k == "kind"
++            && node_type == "VariableDeclaration"
++            && matches!(v.as_str(), Some("const" | "let"))
++        {
++            state.parts.push_str(&json_escape("var"));
++        } else {
++            serialize_value(v, Some(node), k, state);
++        }
+         state.parts.push(';');
+     }
+     state.parts.push('}');
+diff --git a/crates/humanify-core/src/hash/serialize_test.rs b/crates/humanify-core/src/hash/serialize_test.rs
+index 9fe0b00a7..de9724a89 100644
+--- a/crates/humanify-core/src/hash/serialize_test.rs
++++ b/crates/humanify-core/src/hash/serialize_test.rs
+@@ -436,3 +436,38 @@ fn literal_class_keeps_the_template_tail_as_its_own_part() {
+         None
+     );
+ }
++
++/// exp126: the library units' declaration-kind rule. A published library
++/// re-minified by an app's build reaches the bundle with its `const` / `let`
++/// spelled `var` (a minifier's or a downlevel's choice, not the library's
++/// code); the unit form walks all three as `var`. Every cross-version form
++/// keeps the keyword.
++mod declaration_kinds {
++    use super::*;
++    use crate::hash::forms::LIBRARY_UNITS;
++
++    fn units(code: &str) -> String {
++        hash_of(code, &LIBRARY_UNITS)
++    }
++
++    #[test]
++    fn library_units_walk_const_and_let_as_var() {
++        let var = units("var a = f(1), b = [a];");
++        assert_eq!(units("const a = f(1), b = [a];"), var);
++        assert_eq!(units("let a = f(1), b = [a];"), var);
++        assert_eq!(
++            units("function g(){ for (let i = 0; i < 3; i++) { const x = i; h(x); } }"),
++            units("function g(){ for (var i = 0; i < 3; i++) { var x = i; h(x); } }"),
++            "nested declarations unify too"
++        );
++        // only the keyword: the declarations themselves still count
++        assert_ne!(units("const a = f(1);"), units("var a = f(2);"));
++    }
++
++    #[test]
++    fn cross_version_forms_keep_the_keyword() {
++        assert_ne!(matchkey("const a = f(1);"), matchkey("var a = f(1);"));
++        assert_ne!(matchkey("let a = f(1);"), matchkey("var a = f(1);"));
++        assert_ne!(verbatim("const a = f(1);"), verbatim("var a = f(1);"));
++    }
++}
+diff --git a/crates/humanify-core/src/hash_forms_pin_test.rs b/crates/humanify-core/src/hash_forms_pin_test.rs
+index 7b1a879ad..95201968d 100644
+--- a/crates/humanify-core/src/hash_forms_pin_test.rs
++++ b/crates/humanify-core/src/hash_forms_pin_test.rs
+@@ -358,7 +358,8 @@ fn js_files(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+ /// The persisted version stamps: an index manifest, a vendor manifest and
+ /// a split ledger are keyed by them, so step 2 may move where they live
+ /// but never their values. A deliberate era change moves one here (units/3:
+-/// the unit model's esbuild lazy modules, exp097).
++/// the unit model's esbuild lazy modules, exp097; units/4: const / let / var
++/// as one keyword, exp126).
+ #[test]
+ fn version_stamps_are_pinned() {
+     let v = crate::libindex::format::fingerprint_versions();
+@@ -372,7 +373,7 @@ fn version_stamps_are_pinned() {
+     );
+     assert_eq!(
+         got,
+-        "statement=3 factory=4 module=vendor-content-key/4 literals=literals/1 units=units/3"
++        "statement=3 factory=4 module=vendor-content-key/4 literals=literals/1 units=units/4"
+     );
+ }
+ 
+@@ -381,5 +382,7 @@ const PIN_STATEMENT: &str = "9878f404f494a0ce3f235686";
+ const PIN_ALIGN: &str = "35a3c368cd4e0592e48f47b6";
+ const PIN_GRAPH: &str = "34ec479a0bce66b4d9d66e8a";
+ const PIN_MODULES: &str = "9bfa3cd3c7787d97a3f76f25";
+-const PIN_UNITS: &str = "6d469263bd7c2f510f37c083";
++// units/4 (exp126): const / let / var walk as one keyword in the library
++// unit form only (every other section's pin is unchanged).
++const PIN_UNITS: &str = "6cae0107d76bb0ad1719c70a";
+ const PIN_FILES: &str = "911b9df2a0edf0f9b5fbb73a";
+diff --git a/crates/humanify-core/src/libindex/units_test.rs b/crates/humanify-core/src/libindex/units_test.rs
+index 449c16308..d813b5066 100644
+--- a/crates/humanify-core/src/libindex/units_test.rs
++++ b/crates/humanify-core/src/libindex/units_test.rs
+@@ -149,6 +149,12 @@ const UNIT_MODEL_PINS: &[(u64, &str)] = &[
+         3,
+         "3e6f96ad7285928182214b208ff61b84aa50c679b7951585c4d14772524978f7",
+     ),
++    // exp126: const / let / var walk as one keyword (`DeclarationKinds::
++    // Unified`): every fixture holding a const or let moves
++    (
++        4,
++        "3d2b66b11a4693d088dc34a60262ba1251752b645036d5974b0deaaf6d7b31e2",
++    ),
+ ];
+ 
+ /// One esbuild 0.28 minified bundle (guarded `__esm`), the esbuild ESM
+@@ -343,10 +349,17 @@ fn a_rollup_bundle_s_guarded_require_functions_are_lazy_modules() {
+ /// Kept apart so adding the two grammars moved no Bun or esbuild pin.
+ /// (The row was re-pinned once on the exp105 branch, before any index
+ /// held a webpack or rollup slice: webpack's module ids blurred.)
+-const BUNDLER_UNIT_MODEL_PINS: &[(u64, &str)] = &[(
+-    3,
+-    "6f6762668259fc470ac77ca8cab7940ca4bac8e0452875347ac2b7a6178072ff",
+-)];
++const BUNDLER_UNIT_MODEL_PINS: &[(u64, &str)] = &[
++    (
++        3,
++        "6f6762668259fc470ac77ca8cab7940ca4bac8e0452875347ac2b7a6178072ff",
++    ),
++    // exp126: const / let / var walk as one keyword
++    (
++        4,
++        "fcab23db3668dc75fa56f5b1dd3e3f08d221118b8d54bc04f7a2bda810c9e1de",
++    ),
++];
+ 
+ #[test]
+ fn the_webpack_and_rollup_unit_models_cannot_change_under_a_constant_version() {

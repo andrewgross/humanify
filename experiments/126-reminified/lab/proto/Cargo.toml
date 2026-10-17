@@ -1,0 +1,28 @@
+# Throwaway lab tool (exp122): unit prints of a query bundle (discovery's unit
+# model) or of index builds (the builder's unit_rows) under a CANDIDATE
+# normalisation of the unit's ESTree JSON (humanify-core's LAB_NORMALISE
+# hook), plus the canonical streams for diffing. Detached from the repo
+# workspace on purpose — not part of the pipeline or the gate.
+[package]
+name = "exp122-lab"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde_json = { version = "=1.0.142", features = ["unbounded_depth"] }
+humanify-core = { path = "../../../../crates/humanify-core" }
+humanify-index = { path = "../../../../crates/humanify-index" }
+humanify-cli = { path = "../../../../crates/humanify-cli" }
+rayon = "=1.12.0"
+oxc_semantic = "=0.150.0"
+
+[[bin]]
+name = "exp122-lab"
+path = "src/main.rs"
+
+[profile.release]
+debug = false
+codegen-units = 16
