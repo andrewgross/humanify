@@ -74,9 +74,11 @@ pub fn veto_support_name(v: VetoSupport) -> &'static str {
         VetoSupport::AllRules => "all-rules",
     }
 }
+/// `library.lookup.terser_share`'s default (exp127).
+pub const TERSER_SHARE: f64 = 0.1;
 fn terser_slices_choices() -> Vec<String> {
-    humanify_core::libindex::recipe::TerserSlices::ALL
-        .map(|t| t.name().to_string())
+    humanify_core::libindex::recipe::TerserSlices::NAMES
+        .map(String::from)
         .to_vec()
 }
 fn banner_names() -> Vec<String> {
@@ -564,8 +566,16 @@ pub static KEYS: &[Key] = &[
         unset: "",
         doc: "Also read the index's terser-built slices (webpack, rollup) beside the bundle's \
               own: \"off\", \"union\" (every print) or \"fallback\" (a print the bundle's \
-              slice does not hold) — terser-minified code matches terser rows (exp127).",
+              slice does not hold) or \"auto\" (union for a bundle the terser slices alone hold \
+              `terser_share` of) — terser-minified code matches terser rows (exp127).",
     },
+    lib_float(
+        "terser_share",
+        1.0,
+        || float(TERSER_SHARE),
+        "terser_slices = \"auto\": the share of the bundle's looked-up whole-unit nodes the \
+         terser-built slices alone must hold for the bundle to read them (exp127).",
+    ),
     // [library.lookup.targeted]: the second round, on queued regions.
     lib_int(
         "library.lookup.targeted",

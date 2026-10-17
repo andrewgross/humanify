@@ -392,6 +392,15 @@ fn the_terser_slices_key_is_off_by_default_and_takes_union_or_fallback() {
         .unwrap();
         assert_eq!(c.library.lookup.terser_slices, want, "{v}");
     }
+    let auto = build(
+        &["in.js"],
+        "[library.lookup]\nterser_slices = \"auto\"\nterser_share = 0.25\n",
+    )
+    .unwrap();
+    assert_eq!(
+        auto.library.lookup.terser_slices,
+        TerserSlices::Auto { share: 0.25 }
+    );
     let err = ConfigFile::check("cfg.toml", "[library.lookup]\nterser_slices = \"all\"\n")
         .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("terser_slices")), "{err:?}");

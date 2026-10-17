@@ -482,10 +482,69 @@ fn the_loader_reads_the_terser_built_slices_beside_the_chosen_one() {
     );
     let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Union).unwrap();
     assert!(
-        ix.slice_reason.contains("rollup-node-cjs-min")
-            && ix.slice_reason.contains("webpack-node-cjs-min"),
+        ix.slice_reason().contains("rollup-node-cjs-min")
+            && ix.slice_reason().contains("webpack-node-cjs-min"),
         "the reason names the slices read beside it: {}",
-        ix.slice_reason
+        ix.slice_reason()
     );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// exp127: `terser_slices = "auto"` reads the terser-built slices only for
+/// a bundle whose whole-unit prints the terser slices alone hold a share
+/// of (nodes, over the prints either side holds) at least `terser_share`:
+/// a terser-minified bundle, not a bundle the extra rows only add
+/// look-alikes to. Before the bundle's verdict, and below the share, it
+/// reads the chosen slice alone.
+#[test]
+fn auto_reads_the_terser_slices_only_for_a_bundle_they_hold_a_share_of() {
+    use crate::libindex::recipe::{TerserSlices, detect_recipe};
+    use humanify_model::detection::{BundlerType, MinifierType};
+    let dir = std::env::temp_dir().join(format!("humanify-terser-auto-{}", std::process::id()));
+    write_index(
+        &dir,
+        vec![
+            (
+                "esbuild-node-cjs-min",
+                "esbuild:target=node,format=cjs,minify",
+                vec![row("a", "zod", 150, 900)],
+            ),
+            (
+                "rollup-node-cjs-min",
+                "rollup:target=node,format=cjs,minify",
+                vec![row("b", "lodash", 150, 10), row("c", "chalk", 150, 10)],
+            ),
+        ],
+    );
+    let esb = detect_recipe("var a;", BundlerType::Esbuild, MinifierType::Esbuild);
+    let rules = structural();
+    let bundle = |hashes: &[(&str, u32)]| -> Vec<Option<StatementPrints>> {
+        hashes.iter().map(|&(h, n)| Some(whole(h, n))).collect()
+    };
+    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Auto { share: 0.5 }).unwrap();
+    assert!(
+        ix.occurrences(&hx("b")).is_empty(),
+        "no verdict yet: the chosen slice alone"
+    );
+    // a held 150 nodes on the chosen slice, b + c 300 on the terser slice alone: 2/3
+    let share = ix.decide_terser_slices(
+        &bundle(&[("a", 150), ("b", 150), ("c", 150), ("z", 150)]),
+        &rules,
+    );
+    assert!((share - 2.0 / 3.0).abs() < 1e-9, "{share}");
+    assert_eq!(
+        ix.occurrences(&hx("b")),
+        vec![("lodash", 10)],
+        "over the share: union"
+    );
+    assert!(ix.slice_reason().contains("union"), "{}", ix.slice_reason());
+    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Auto { share: 0.5 }).unwrap();
+    let share = ix.decide_terser_slices(&bundle(&[("a", 300), ("b", 150)]), &rules);
+    assert!((share - 1.0 / 3.0).abs() < 1e-9, "{share}");
+    assert!(
+        ix.occurrences(&hx("b")).is_empty(),
+        "under the share: the chosen slice alone"
+    );
+    assert!(ix.slice_reason().contains("off"), "{}", ix.slice_reason());
     std::fs::remove_dir_all(&dir).ok();
 }

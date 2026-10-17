@@ -32,7 +32,7 @@ pub struct LibraryIndex {
     /// The recipe slice read (`bun-bun-cjs-min`) and why it was chosen;
     /// empty when built from rows.
     pub slice: String,
-    pub slice_reason: String,
+    slice_reason: String,
     /// Every owner package, sorted: an owner id is its position.
     packages: Vec<String>,
     units: UnitTable,
@@ -40,6 +40,9 @@ pub struct LibraryIndex {
     /// [`super::recipe::TerserSlices`]); empty when off.
     terser_units: Vec<UnitTable>,
     terser_reading: super::recipe::TerserSlices,
+    /// `auto`'s verdict for the bundle: (read the terser slices, share),
+    /// set once by [`LibraryIndex::decide_terser_slices`].
+    terser_verdict: std::sync::OnceLock<(bool, f64)>,
     literals: LiteralTable,
     /// Every package name the index knows: its owners, and (loaded) the
     /// packages its manifest records registry metadata or builds for.
@@ -59,6 +62,7 @@ impl LibraryIndex {
             units: UnitTable::open(Source::Memory(units)).expect("an encoded unit table opens"),
             terser_units: Vec::new(),
             terser_reading: super::recipe::TerserSlices::Off,
+            terser_verdict: std::sync::OnceLock::new(),
             literals: LiteralTable::open(Source::Memory(LiteralTable::encode(
                 &literals, &packages,
             )))
@@ -66,6 +70,64 @@ impl LibraryIndex {
             known: packages.iter().cloned().collect(),
             packages,
         }
+    }
+
+    /// Why the slice was chosen, and which slices are read beside it (with
+    /// `auto`, the bundle's verdict once made).
+    pub fn slice_reason(&self) -> String {
+        match self.terser_verdict.get() {
+            Some(&(on, share)) => format!(
+                "{}; auto verdict: terser-only share {share:.4} -> {}",
+                self.slice_reason,
+                if on { "union" } else { "off" }
+            ),
+            None => self.slice_reason.clone(),
+        }
+    }
+
+    /// `terser_slices = "auto"`'s verdict for the bundle `prints` are the
+    /// units of: over the whole-unit prints the lookup reads (`min_nodes`,
+    /// `min_content`) that some slice read holds, the share of nodes the
+    /// terser-built slices ALONE hold. At or over the configured share the
+    /// bundle reads the union from here on, else the chosen slice alone.
+    /// Made once (a second call returns the first share); 0 when the
+    /// index reads no terser-built slice. Any other mode: the share only.
+    pub fn decide_terser_slices(
+        &self,
+        prints: &[Option<StatementPrints>],
+        rules: &LookupRules,
+    ) -> f64 {
+        if let Some(&(_, share)) = self.terser_verdict.get() {
+            return share;
+        }
+        if self.terser_units.is_empty() {
+            return 0.0;
+        }
+        let (mut own, mut terser_only) = (0u64, 0u64);
+        for p in prints.iter().flatten() {
+            let w = &p.whole;
+            if w.nodes < rules.min_nodes || w.content < rules.min_content {
+                continue;
+            }
+            if !self.units.hits(&w.hash).is_empty() {
+                own += u64::from(w.nodes);
+            } else if self
+                .terser_units
+                .iter()
+                .any(|t| !t.hits(&w.hash).is_empty())
+            {
+                terser_only += u64::from(w.nodes);
+            }
+        }
+        let share = if own + terser_only == 0 {
+            0.0
+        } else {
+            terser_only as f64 / (own + terser_only) as f64
+        };
+        if let super::recipe::TerserSlices::Auto { share: floor } = self.terser_reading {
+            let _ = self.terser_verdict.set((share >= floor, share));
+        }
+        share
     }
 
     /// Does the index know package `name` (an owner, or a package its
@@ -174,6 +236,7 @@ impl LibraryIndex {
             units,
             terser_units,
             terser_reading: terser,
+            terser_verdict: std::sync::OnceLock::new(),
             literals,
         })
     }
@@ -187,6 +250,7 @@ impl LibraryIndex {
             TerserSlices::Off => false,
             TerserSlices::Union => true,
             TerserSlices::Fallback => hits.is_empty(),
+            TerserSlices::Auto { .. } => self.terser_verdict.get().is_some_and(|v| v.0),
         };
         if !read_terser || self.terser_units.is_empty() {
             return hits;

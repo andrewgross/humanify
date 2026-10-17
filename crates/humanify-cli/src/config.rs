@@ -604,7 +604,12 @@ fn library_of(r: &Resolved) -> Library {
             terser_slices: r
                 .text("library.lookup.terser_slices")
                 .as_deref()
-                .and_then(humanify_core::libindex::recipe::TerserSlices::from_name)
+                .and_then(|t| {
+                    humanify_core::libindex::recipe::TerserSlices::from_name(
+                        t,
+                        r.float("library.lookup.terser_share"),
+                    )
+                })
                 .expect("a checked choice"),
             targeted_min_nodes: n("library.lookup.targeted.min_nodes") as u32,
             targeted_support: n("library.lookup.targeted.support") as usize,

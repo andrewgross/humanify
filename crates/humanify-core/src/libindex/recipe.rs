@@ -284,7 +284,7 @@ pub fn choose_slice<'s>(
 /// terser-built rows far better than its bundler's slice, and the minifier
 /// verdict cannot tell terser from esbuild, so the slice choice cannot
 /// rest on it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum TerserSlices {
     /// The chosen slice alone.
     #[default]
@@ -295,26 +295,35 @@ pub enum TerserSlices {
     /// The terser-built slices only for a print the chosen slice does not
     /// hold.
     Fallback,
+    /// `Union` for a bundle whose whole-unit prints the terser-built slices
+    /// ALONE hold at least this share of (nodes, over the prints either
+    /// side holds; `LibraryIndex::decide_terser_slices`), else `Off`: the
+    /// bundle's own prints say it was minified by terser.
+    Auto { share: f64 },
 }
 
 impl TerserSlices {
+    /// Every mode's spelling, in the config key's order.
+    pub const NAMES: [&'static str; 4] = ["off", "union", "fallback", "auto"];
+
     pub fn name(self) -> &'static str {
         match self {
             TerserSlices::Off => "off",
             TerserSlices::Union => "union",
             TerserSlices::Fallback => "fallback",
+            TerserSlices::Auto { .. } => "auto",
         }
     }
 
-    /// Every spelling, in the config key's order.
-    pub const ALL: [TerserSlices; 3] = [
-        TerserSlices::Off,
-        TerserSlices::Union,
-        TerserSlices::Fallback,
-    ];
-
-    pub fn from_name(name: &str) -> Option<TerserSlices> {
-        TerserSlices::ALL.into_iter().find(|t| t.name() == name)
+    /// The mode `name` spells; `share` is read by `auto` only.
+    pub fn from_name(name: &str, share: f64) -> Option<TerserSlices> {
+        Some(match name {
+            "off" => TerserSlices::Off,
+            "union" => TerserSlices::Union,
+            "fallback" => TerserSlices::Fallback,
+            "auto" => TerserSlices::Auto { share },
+            _ => return None,
+        })
     }
 }
 
