@@ -1,0 +1,74 @@
+{
+ "bundleSha256": "7dc47bc74a994578694721dd853d485ac7e2bdf1d13bf0d70c85b732c5d8af27",
+ "claimedBytes": {
+  "right": 195246,
+  "wrongFamily": 1552
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-esbuild-electron_gh-flaviodelgrosso__reactronite-436d09",
+ "exploratory": {
+  "names": {
+   "bindings": 2839,
+   "bindingsSameVersion": 2839,
+   "bindingsVersionKnown": 2839,
+   "exactBytes": 132715,
+   "exactUnits": 317,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "7e4a4ac07c434cd2979d8a7b98d45891daecfd5c3fa1f37e895b8842ac876d7e",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.917888,
+  "f1": 0.826871,
+  "namedBytes": 155935,
+  "precision": 0.990579,
+  "recall": 0.709599
+ },
+ "label": "remin-exp130-olab",
+ "missBytes": {
+  "a": 11311,
+  "c": 218,
+  "d-file": 12976
+ },
+ "noDiscovery": null,
+ "reportSha256": "cc220b17dfeb64a189feb6acb6b4212816e8c070cb94e2d7f130e99ad42cb6e4",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-esbuild",
+ "statementBytes": {
+  "<app>": 772,
+  "<unmapped>": 42,
+  "library": 219751
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.969499,
+  "f05ShipperOnly": 0.969499,
+  "f1": 0.937445,
+  "f1ShipperOnly": 0.937445,
+  "libraryBytes": 219751,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 195246,
+  "namedBytes": 195246,
+  "namedBytesShipperOnly": 195246,
+  "precision": 0.992114,
+  "precisionShipperOnly": 0.992114,
+  "recall": 0.888487,
+  "recallShipperOnly": 0.888487,
+  "wrongFamilyBytes": 1552,
+  "wrongFamilyBytesShipperOnly": 1552
+ },
+ "truthMethod": "sourcemap"
+}

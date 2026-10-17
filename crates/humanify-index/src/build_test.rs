@@ -1,7 +1,7 @@
 //! The plan: what an as-of build would index, and which shards it would
 //! reuse — no network (a recorded registry), no subprocess (no slices).
 
-use super::build::{BuildConfig, parse_package_spec, plan};
+use super::build::{BuildConfig, SpongeRegions, parse_package_spec, plan};
 use super::shard::{Shard, write_shard};
 use crate::bun_node;
 
@@ -34,6 +34,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         policy: Default::default(),
         pinned: Vec::new(),
         merge_only: false,
+        sponge_regions: SpongeRegions::Drop,
     }
 }
 
@@ -161,7 +162,13 @@ fn unit_rows_are_attributed_through_the_sourcemap() {
             .chain(col(app.len()).map(|c| (1, c, 1, 0)))
             .collect(),
     };
-    let (rows, notes) = unit_rows(bun_node(), &code, &map, &root.join("out"));
+    let (rows, notes) = unit_rows(
+        bun_node(),
+        &code,
+        &map,
+        &root.join("out"),
+        SpongeRegions::Drop,
+    );
     assert_eq!(notes.unowned, 1, "the app entry's statement");
     assert!(!rows.is_empty());
     assert!(
@@ -205,7 +212,13 @@ fn a_unit_spanning_several_files_of_one_package_is_that_packages() {
             .map(|c| (0, c, u32::from(c >= half), 0))
             .collect(),
     };
-    let (rows, notes) = unit_rows(bun_node(), &format!("{lib}\n"), &map, &root.join("out"));
+    let (rows, notes) = unit_rows(
+        bun_node(),
+        &format!("{lib}\n"),
+        &map,
+        &root.join("out"),
+        SpongeRegions::Drop,
+    );
     assert_eq!(notes.mixed_spans, 0);
     assert!(
         !rows.is_empty() && rows.iter().all(|r| r.owner == "dep"),
@@ -333,7 +346,13 @@ fn a_source_file_credited_to_two_modules_labels_neither() {
         fingerprint: "test".into(),
     };
     let mut shard = Shard::new(&inputs);
-    fingerprint_bundle(bun_node(), &root.join("out"), &mut shard).expect("fingerprint");
+    fingerprint_bundle(
+        bun_node(),
+        &root.join("out"),
+        &mut shard,
+        SpongeRegions::Drop,
+    )
+    .expect("fingerprint");
     let files: Vec<&str> = shard.modules.iter().map(|m| m.file.as_str()).collect();
     assert_eq!(files, ["b.js"], "{:?}", shard.notes);
     assert_eq!(shard.notes.multi_module_files, 1);
@@ -461,7 +480,13 @@ fn unit_rows_of_a_pre_bundled_file_are_dropped_by_evidence() {
             .flat_map(|(i, l)| col(l.len()).map(move |c| (i as u32, c, i as u32, 1)))
             .collect(),
     };
-    let (rows, notes) = unit_rows(bun_node(), &code, &map, &root.join("out"));
+    let (rows, notes) = unit_rows(
+        bun_node(),
+        &code,
+        &map,
+        &root.join("out"),
+        SpongeRegions::Drop,
+    );
     let files: std::collections::BTreeSet<&str> = rows.iter().map(|r| r.file.as_str()).collect();
     assert_eq!(
         files,
@@ -566,7 +591,13 @@ fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
         recipe: "test".into(),
         fingerprint: "test".into(),
     });
-    fingerprint_bundle(bun_node(), &root.join("out"), &mut shard).expect("fingerprint");
+    fingerprint_bundle(
+        bun_node(),
+        &root.join("out"),
+        &mut shard,
+        SpongeRegions::Drop,
+    )
+    .expect("fingerprint");
     assert!(shard.units.is_empty(), "{:?}", shard.units);
     assert_eq!(
         shard.notes.sponge_unit_files.get("vendored-path"),
@@ -581,10 +612,15 @@ fn a_shard_records_the_sponge_files_its_units_were_dropped_for() {
 /// A package's own pre-bundled chunk (rolldown/esbuild `dist/chunk.mjs`)
 /// that inlines a few dependencies, each between its bundler's module
 /// markers; one unit per line of interest, mapped to that original line.
-fn region_chunk_rows() -> (Vec<crate::shard::ShardUnit>, crate::shard::ShardNotes) {
+fn region_chunk_rows(
+    mode: SpongeRegions,
+) -> (Vec<crate::shard::ShardUnit>, crate::shard::ShardNotes) {
     use crate::build::unit_rows;
     use crate::sourcemap::SourceMap;
-    let root = std::env::temp_dir().join(format!("humanify-index-regions-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "humanify-index-regions-{mode:?}-{}",
+        std::process::id()
+    ));
     let write = |rel: &str, text: &str| {
         let p = root.join(rel);
         std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
@@ -639,7 +675,7 @@ fn region_chunk_rows() -> (Vec<crate::shard::ShardUnit>, crate::shard::ShardNote
             })
             .collect(),
     };
-    let out = unit_rows(bun_node(), &code, &map, &root.join("out"));
+    let out = unit_rows(bun_node(), &code, &map, &root.join("out"), mode);
     std::fs::remove_dir_all(&root).ok();
     out
 }
@@ -664,7 +700,7 @@ fn a_pre_bundled_file_keeps_its_own_code_outside_the_foreign_regions() {
     // initialised module's body after its `//#endregion`, up to the next
     // marker or the top-level `export`), esbuild `// <path>` up to the next
     // marker. Units outside them are the shipper's own code.
-    let (rows, notes) = region_chunk_rows();
+    let (rows, notes) = region_chunk_rows(SpongeRegions::Drop);
     // 4 own units (lines 4, 6, 10, 17), 2 rows each (statement + function)
     assert_eq!(
         row_groups(&rows),
@@ -675,5 +711,27 @@ fn a_pre_bundled_file_keeps_its_own_code_outside_the_foreign_regions() {
     assert_eq!(
         notes.sponge_unit_files,
         [("bundler-marker".to_string(), 1)].into_iter().collect()
+    );
+}
+
+#[test]
+fn a_foreign_region_can_be_credited_to_the_package_its_marker_names() {
+    // The alternative to dropping: the copy is the ORIGIN's code (the
+    // truth's marker rule says so too), named by the marker's last
+    // node_modules package at the version its pnpm path spells, as that
+    // package's file. A marker without a version is still dropped.
+    let (rows, notes) = region_chunk_rows(SpongeRegions::Origin);
+    assert_eq!(
+        row_groups(&rows),
+        [
+            ("other-pkg".into(), "2.1.0".into(), "lib/parse.js".into(), 2),
+            ("sp".into(), "3.0.0".into(), "dist/chunk.mjs".into(), 8),
+            ("third".into(), "1.0.0".into(), "x.js".into(), 2),
+        ],
+        "{rows:?}"
+    );
+    assert_eq!(
+        notes.sponge_unit_rows, 2,
+        "lazy-pkg's two units: no version"
     );
 }
