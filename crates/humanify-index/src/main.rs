@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use humanify_core::libindex::recipe::{Recipe, RecipeBundler};
 use humanify_index::asof::{VersionPolicy, parse_as_of};
-use humanify_index::build::{BuildConfig, run};
+use humanify_index::build::{BuildConfig, SpongeRegions, run};
 use humanify_index::recipe::RecipeBuild;
 
 #[derive(Parser)]
@@ -94,6 +94,12 @@ enum Command {
         /// build, without retrying the builds that failed.
         #[arg(long)]
         merge_only: bool,
+        /// What the units inside a pre-bundled file's FOREIGN regions (a
+        /// module marker naming another package) become: `drop` (no rows)
+        /// or `origin` (rows of the package the marker names, at its pnpm
+        /// path's version).
+        #[arg(long, default_value = "drop")]
+        sponge_regions: String,
         /// Print the plan (versions, refusals, shards to build or reuse)
         /// and stop.
         #[arg(long)]
@@ -119,6 +125,7 @@ fn main() {
         policy,
         offline,
         merge_only,
+        sponge_regions,
         dry_run,
     } = Cli::parse().command;
     let result = (|| -> Result<String, String> {
@@ -162,6 +169,11 @@ fn main() {
             jobs,
             offline,
             merge_only,
+            sponge_regions: match sponge_regions.as_str() {
+                "drop" => SpongeRegions::Drop,
+                "origin" => SpongeRegions::Origin,
+                other => return Err(format!("unknown --sponge-regions {other} (drop, origin)")),
+            },
             pinned: match &pinned {
                 Some(p) => std::fs::read_to_string(p)
                     .map_err(|e| format!("{}: {e}", p.display()))?

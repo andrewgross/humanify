@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "5704d7a8be5c001f70f164b8eeedc57eef09ade1e8d3de33f91183253571e08f",
+ "claimedBytes": {
+  "family": 38171,
+  "origin": 462242,
+  "right": 5047212,
+  "unmapped": 3076,
+  "wrongFamily": 6794
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_paperarxiv-725a6a",
+ "exploratory": {
+  "names": {
+   "bindings": 73498,
+   "bindingsSameVersion": 60072,
+   "bindingsVersionKnown": 73498,
+   "exactBytes": 4488924,
+   "exactUnits": 3605,
+   "sameVersionShare": 0.817328
+  }
+ },
+ "indexId": "c5fe9a7403c05c4c7ed2ca0fce09a1d7802089c80a769eb61e37b54fd8d73fa3",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.964882,
+  "f1": 0.917103,
+  "namedBytes": 5259328,
+  "precision": 0.999599,
+  "recall": 0.847186
+ },
+ "label": "exp130-origin-apps",
+ "missBytes": {
+  "a": 2361,
+  "c": 390316,
+  "d-absent": 1947,
+  "d-file": 89686,
+  "e-ambig": 4047,
+  "e-other": 16169,
+  "e-spec": 397,
+  "e-support": 5507,
+  "e-veto": 129440,
+  "f": 19290,
+  "unit-model": 1209
+ },
+ "noDiscovery": null,
+ "reportSha256": "91a8a16a8d951e27bcba97e4149a77c711b32f1f5f9e45e4ee816ae3c5091665",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 763,
+  "<unmapped>": 19312,
+  "copy": 516830,
+  "library": 6207994
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 516830,
+  "f05": 0.975813,
+  "f05ShipperOnly": 0.894505,
+  "f1": 0.94328,
+  "f1ShipperOnly": 0.864684,
+  "libraryBytes": 6207994,
+  "namedAsOriginBytes": 462242,
+  "namedAsShipperBytes": 5085383,
+  "namedBytes": 5547625,
+  "namedBytesShipperOnly": 5085383,
+  "precision": 0.998777,
+  "precisionShipperOnly": 0.915556,
+  "recall": 0.893626,
+  "recallShipperOnly": 0.819167,
+  "wrongFamilyBytes": 6794,
+  "wrongFamilyBytesShipperOnly": 469036
+ },
+ "truthMethod": "sourcemap"
+}
