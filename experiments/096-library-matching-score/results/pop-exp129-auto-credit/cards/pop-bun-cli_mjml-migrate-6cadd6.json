@@ -1,0 +1,73 @@
+{
+ "bundleSha256": "6c11f0cf1f9d62e457d10fb26c009f5560121e32873b19c3136ea48b8f468ea0",
+ "claimedBytes": {
+  "right": 314560,
+  "unmapped": 88
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-cli_mjml-migrate-6cadd6",
+ "exploratory": {
+  "names": {
+   "bindings": 4263,
+   "bindingsSameVersion": 4263,
+   "bindingsVersionKnown": 4263,
+   "exactBytes": 312686,
+   "exactUnits": 41,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "e7e2dc348da5fbc5f6673f8c5b465acc8f1a4ee787ffc3b057eeccfae1f9de26",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.99457,
+  "f1": 0.986536,
+  "namedBytes": 310669,
+  "precision": 1.0,
+  "recall": 0.973429
+ },
+ "label": "pop-exp129-auto-credit",
+ "missBytes": {
+  "c": 96,
+  "e-veto": 4493
+ },
+ "noDiscovery": null,
+ "reportSha256": "e43bea6070944d3afb97ed8b42a6eb72e61009a6fdfdf0d86bb9944cee5cd5ba",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "pop-bun",
+ "statementBytes": {
+  "<app>": 18,
+  "<unmapped>": 104,
+  "library": 319149
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.997091,
+  "f05ShipperOnly": 0.997091,
+  "f1": 0.992758,
+  "f1ShipperOnly": 0.992758,
+  "libraryBytes": 319149,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 314560,
+  "namedBytes": 314560,
+  "namedBytesShipperOnly": 314560,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.985621,
+  "recallShipperOnly": 0.985621,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

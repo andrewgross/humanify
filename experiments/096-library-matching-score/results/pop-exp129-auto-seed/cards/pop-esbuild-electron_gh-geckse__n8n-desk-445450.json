@@ -1,0 +1,81 @@
+{
+ "bundleSha256": "7f7b458450a9ffdf06ecf88e0d36c7fd2921980fe99320230d9ee363a25583b3",
+ "claimedBytes": {
+  "family": 10145,
+  "right": 3287853,
+  "unmapped": 4372,
+  "wrongFamily": 5551
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-geckse__n8n-desk-445450",
+ "exploratory": {
+  "names": {
+   "bindings": 34598,
+   "bindingsSameVersion": 31961,
+   "bindingsVersionKnown": 34598,
+   "exactBytes": 3126058,
+   "exactUnits": 2811,
+   "sameVersionShare": 0.923782
+  }
+ },
+ "indexId": "e7e2dc348da5fbc5f6673f8c5b465acc8f1a4ee787ffc3b057eeccfae1f9de26",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.97841,
+  "f1": 0.94959,
+  "namedBytes": 3040500,
+  "precision": 0.998616,
+  "recall": 0.905152
+ },
+ "label": "pop-exp129-auto-seed",
+ "missBytes": {
+  "a": 21339,
+  "b": 8674,
+  "c": 24011,
+  "d-file": 523,
+  "e-ambig": 2085,
+  "e-support": 258,
+  "f": 4215
+ },
+ "noDiscovery": null,
+ "reportSha256": "c0fcdfbaff4253471971bc4125bc61c3647bcb1cb5680c2224a2def7d003d358",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 2291,
+  "<unmapped>": 8126,
+  "copy": 228618,
+  "library": 3359103
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 228618,
+  "f05": 0.994974,
+  "f05ShipperOnly": 0.994974,
+  "f1": 0.989996,
+  "f1ShipperOnly": 0.989996,
+  "libraryBytes": 3359103,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 3297998,
+  "namedBytes": 3297998,
+  "namedBytesShipperOnly": 3297998,
+  "precision": 0.99832,
+  "precisionShipperOnly": 0.99832,
+  "recall": 0.981809,
+  "recallShipperOnly": 0.981809,
+  "wrongFamilyBytes": 5551,
+  "wrongFamilyBytesShipperOnly": 5551
+ },
+ "truthMethod": "sourcemap"
+}

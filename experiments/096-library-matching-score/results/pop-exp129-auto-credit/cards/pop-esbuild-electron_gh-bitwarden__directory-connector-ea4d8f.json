@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "79311a81f78b8c20554955f976eeb5e3e94525c317ec41d73fadccf22e570005",
+ "claimedBytes": {
+  "family": 11867,
+  "origin": 311761,
+  "right": 3063769,
+  "unmapped": 23917,
+  "wrongFamily": 6392
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-bitwarden__directory-connector-ea4d8f",
+ "exploratory": {
+  "names": {
+   "bindings": 47021,
+   "bindingsSameVersion": 15751,
+   "bindingsVersionKnown": 47021,
+   "exactBytes": 2806213,
+   "exactUnits": 4625,
+   "sameVersionShare": 0.334978
+  }
+ },
+ "indexId": "e7e2dc348da5fbc5f6673f8c5b465acc8f1a4ee787ffc3b057eeccfae1f9de26",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.949886,
+  "f1": 0.885374,
+  "namedBytes": 2957711,
+  "precision": 0.998384,
+  "recall": 0.795346
+ },
+ "label": "pop-exp129-auto-credit",
+ "missBytes": {
+  "a": 31876,
+  "b": 1020,
+  "c": 40292,
+  "d-absent": 57886,
+  "d-file": 47447,
+  "d-variant": 4853,
+  "e-ambig": 2654,
+  "e-other": 15470,
+  "e-support": 693,
+  "e-veto": 2618,
+  "f": 126568
+ },
+ "noDiscovery": null,
+ "reportSha256": "d12ba3d9efb7a0ad71ef471db9de09673bf2e4c730a877052ad55c5f7d9f02ab",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 2063,
+  "<unmapped>": 24840,
+  "copy": 745027,
+  "library": 3718774
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 745027,
+  "f05": 0.97936,
+  "f05ShipperOnly": 0.889224,
+  "f1": 0.952511,
+  "f1ShipperOnly": 0.864846,
+  "libraryBytes": 3718774,
+  "namedAsOriginBytes": 311761,
+  "namedAsShipperBytes": 3075636,
+  "namedBytes": 3387397,
+  "namedBytesShipperOnly": 3075636,
+  "precision": 0.998117,
+  "precisionShipperOnly": 0.906254,
+  "recall": 0.910891,
+  "recallShipperOnly": 0.827056,
+  "wrongFamilyBytes": 6392,
+  "wrongFamilyBytesShipperOnly": 318153
+ },
+ "truthMethod": "sourcemap"
+}

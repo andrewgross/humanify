@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "cfd1adcb9d1d02c3a4cb2984e243ea57030a013fa7bc8cd26663512ae0ff795b",
+ "claimedBytes": {
+  "family": 46524,
+  "right": 2842588,
+  "unmapped": 377,
+  "wrongFamily": 4978
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_cozy-desktop-3c5a87",
+ "exploratory": {
+  "names": {
+   "bindings": 41869,
+   "bindingsSameVersion": 40613,
+   "bindingsVersionKnown": 41869,
+   "exactBytes": 2803974,
+   "exactUnits": 3010,
+   "sameVersionShare": 0.970002
+  }
+ },
+ "indexId": "e7e2dc348da5fbc5f6673f8c5b465acc8f1a4ee787ffc3b057eeccfae1f9de26",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.912195,
+  "f1": 0.807397,
+  "namedBytes": 2719857,
+  "precision": 0.998606,
+  "recall": 0.677644
+ },
+ "label": "apps-exp129-auto-seed",
+ "missBytes": {
+  "a": 490314,
+  "b": 12777,
+  "c": 477990,
+  "d-absent": 28904,
+  "d-file": 10377,
+  "d-variant": 5189,
+  "e-ambig": 4329,
+  "e-other": 8536,
+  "e-support": 8738,
+  "e-veto": 72631,
+  "f": 4797
+ },
+ "noDiscovery": null,
+ "reportSha256": "2580f2e2318c88c5063afe20838eb7eb8cb018bfee59ed1a0601b800f089a76d",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 2213,
+  "<unmapped>": 569603,
+  "copy": 15777,
+  "library": 4013694
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 15777,
+  "f05": 0.926588,
+  "f05ShipperOnly": 0.926588,
+  "f1": 0.83648,
+  "f1ShipperOnly": 0.83648,
+  "libraryBytes": 4013694,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 2889112,
+  "namedBytes": 2889112,
+  "namedBytesShipperOnly": 2889112,
+  "precision": 0.99828,
+  "precisionShipperOnly": 0.99828,
+  "recall": 0.719814,
+  "recallShipperOnly": 0.719814,
+  "wrongFamilyBytes": 4978,
+  "wrongFamilyBytesShipperOnly": 4978
+ },
+ "truthMethod": "sourcemap"
+}
