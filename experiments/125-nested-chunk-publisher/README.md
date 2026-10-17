@@ -31,8 +31,8 @@ records its region's package R, and a claim naming R's family is judged `origin`
 
 **The test split, after `via` (scorer 10, dl25k + v2 vs k2-all + v2):**
 
-| set          | before (s9)        | after (s10)            |
-| ------------ | ------------------ | ---------------------- |
+| set          | before (s9)            | after (s10)                |
+| ------------ | ---------------------- | -------------------------- |
 | test-bun     | 84.11 vs 88.96 (-4.85) | **90.72 vs 89.39 (+1.33)** |
 | test-esbuild | 87.64 vs 91.49 (-3.84) | **93.38 vs 91.94 (+1.44)** |
 | test-rollup  | 89.85 vs 90.12 (-0.27) | **91.72 vs 90.13 (+1.59)** |
@@ -72,13 +72,13 @@ first). It counts a print's owners by family against `max_packages`.
 **Side finding (biggest number here):** under scorer 10, exp124's refuted `--sponge-regions origin` index variant
 (labels `*exp124-orig*`) is better than k2-all-r5 on 14 of 19 sets, equal on 4 and lower on 1:
 
-| set          | dF0.5 vs k2-all-r5 | precision        |
-| ------------ | ------------------ | ---------------- |
-| test-bun     | +3.09              | 99.31            |
-| test-esbuild | +3.10              |                  |
-| pop          | +4.11 / +4.26      |                  |
-| apps-esbuild | +0.44              |                  |
-| test2-esbuild | **-0.03**         | 99.46 vs 99.49   |
+| set           | dF0.5 vs k2-all-r5 | precision      |
+| ------------- | ------------------ | -------------- |
+| test-bun      | +3.09              | 99.31          |
+| test-esbuild  | +3.10              |                |
+| pop           | +4.11 / +4.26      |                |
+| apps-esbuild  | +0.44              |                |
+| test2-esbuild | **-0.03**          | 99.46 vs 99.49 |
 
 It was refuted on exactly this truth gap ("test-bun P 97.79 -> 92.59"): its ledger moves 3.26 / 3.29 MB on test and
 3.30 / 3.33 MB on pop, WRONG -> GOOD. **Recommend re-judging `origin` mode under scorer 10**, and rebuilding
@@ -103,15 +103,15 @@ pop is. **exp121's pop lab numbers were read through it.**
 
 New wrong-family bytes (claims that changed package and are wrong under dl25k):
 
-| class                                                                 | test-bun        | test-esbuild    |
-| --------------------------------------------------------------------- | --------------- | --------------- |
-| **nested chunk: the claim names the chunk's publisher R (`via`)**     | 3,259,905 (93.4%) | 3,287,730 (92.7%) |
-| new index seed on unclaimed code, no origin                            | 65,736 (1.9%)   | 67,142 (1.9%)   |
-| seed replacing a good claim, copy with an origin                       | 19,178 (0.5%)   | 63,372 (1.8%)   |
-| propagated over a good claim, copy with an origin                      | 76,070 (2.2%)   | 7,019 (0.2%)    |
-| propagated into unclaimed code                                         | 35,019 (1.0%)   | 68,440 (2.0%)   |
-| other (seed / propagation replacing good or wrong, no origin)          | 35,559 (1.0%)   | 53,396 (1.5%)   |
-| **total new wrong**                                                    | **3,491,467**   | **3,547,099**   |
+| class                                                             | test-bun          | test-esbuild      |
+| ----------------------------------------------------------------- | ----------------- | ----------------- |
+| **nested chunk: the claim names the chunk's publisher R (`via`)** | 3,259,905 (93.4%) | 3,287,730 (92.7%) |
+| new index seed on unclaimed code, no origin                       | 65,736 (1.9%)     | 67,142 (1.9%)     |
+| seed replacing a good claim, copy with an origin                  | 19,178 (0.5%)     | 63,372 (1.8%)     |
+| propagated over a good claim, copy with an origin                 | 76,070 (2.2%)     | 7,019 (0.2%)      |
+| propagated into unclaimed code                                    | 35,019 (1.0%)     | 68,440 (2.0%)     |
+| other (seed / propagation replacing good or wrong, no origin)     | 35,559 (1.0%)     | 53,396 (1.5%)     |
+| **total new wrong**                                               | **3,491,467**     | **3,547,099**     |
 
 Against that, dl25k removes 0.60 / 1.00 MB of k2-all's wrong. The net is +2.87 / +2.53 MB, which is exp121's
 "+2.6 / +2.2 MB".
@@ -162,13 +162,13 @@ JSON in `ledger/`):
 - 313 labels: dev 93, apps 53, bundlers 30, pop 28, test 65, test2 35, remin 9.
 - Moved, all WRONG -> GOOD:
 
-  | labels                                                   | moved                                                                |
-  | -------------------------------------------------------- | -------------------------------------------------------------------- |
-  | dl25k labels (`exp118-dl25k*`, `exp121-v2*`)             | test bun / esbuild / rollup / webpack 3,259,905 / 3,287,730 / 1,609,140 / 1,604,830 B; pop 1,637,099 / 1,650,726 B |
-  | `*exp124-orig*`                                          | test about the same; pop 3,303,105 / 3,331,289 B                     |
-  | one apps-rollup unit (3,610 B)                           | see below                                                            |
-  | some k2-all / k2-all-r5 test labels (k2-v2, exp124 base/drop/r5, exp127) | 8 B per test-bun / test-esbuild set                     |
-  | everything else (all of dev, bundlers, test2, remin)     | 0 B                                                                  |
+  | labels                                                                   | moved                                                                                                              |
+  | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+  | dl25k labels (`exp118-dl25k*`, `exp121-v2*`)                             | test bun / esbuild / rollup / webpack 3,259,905 / 3,287,730 / 1,609,140 / 1,604,830 B; pop 1,637,099 / 1,650,726 B |
+  | `*exp124-orig*`                                                          | test about the same; pop 3,303,105 / 3,331,289 B                                                                   |
+  | one apps-rollup unit (3,610 B)                                           | see below                                                                                                          |
+  | some k2-all / k2-all-r5 test labels (k2-v2, exp124 base/drop/r5, exp127) | 8 B per test-bun / test-esbuild set                                                                                |
+  | everything else (all of dev, bundlers, test2, remin)                     | 0 B                                                                                                                |
 
 - The apps-rollup unit: a file of http-proxy-3 (`.../passes/ws-incoming.js`). The chunk rule misread it as a chunk
   of `ws`, because `ws` is the stem's `-`-prefix and a devDependency. The unit is http-proxy-3's own code, so the
@@ -192,27 +192,27 @@ bundlers 30, pop 28, test 65, test2 35, remin 9). Cards move only where the ledg
 - dlf = `*exp125-dlf*`: dl + `max_packages_by_family`.
 - orig = `*exp124-orig*`: exp124's `--sponge-regions origin` r5 build.
 
-| set           | r5 (default)              | k2               | **dl (dl25k + v2 + via)**               | dlf              | orig             |
-| ------------- | ------------------------- | ---------------- | --------------------------------------- | ---------------- | ---------------- |
-| cc            | 100.00 / 81.90 / **95.77** | 95.77 (+0.00)    | 100.00 / 82.46 / **95.92 (+0.15)**      | 95.95 (+0.18)    | 95.77 (+0.00)    |
-| esbuild-app   | 96.60 / 69.44 / **89.59** | 87.99 (-1.60)    | 98.53 / 66.50 / **89.87 (+0.29)**       | 89.88 (+0.29)    | 89.65 (+0.06)    |
-| held-out      | 99.31 / 67.60 / **90.79** | 90.42 (-0.37)    | 99.56 / 81.23 / **95.26 (+4.47)**       | 95.26 (+4.47)    | 90.87 (+0.08)    |
-| wrangler      | 95.99 / 18.53 / **52.28** | 52.28 (+0.00)    | 99.37 / 20.92 / **56.79 (+4.51)**       | 57.28 (+4.99)    | 56.12 (+3.84)    |
-| apps-esbuild  | 99.29 / 92.15 / **97.78** | 97.20 (-0.58)    | 99.12 / 88.81 / **96.87 (-0.91)** LOSS  | 96.85 (-0.93)    | 98.21 (+0.44)    |
-| apps-rollup   | 98.98 / 78.66 / **94.12** | 93.72 (-0.40)    | 99.00 / 80.91 / **94.76 (+0.64)**       | 94.79 (+0.67)    | 94.35 (+0.24)    |
-| apps-webpack  | 99.39 / 73.30 / **92.79** | 92.79 (+0.01)    | 99.33 / 75.04 / **93.30 (+0.51)**       | 93.32 (+0.54)    | 92.80 (+0.01)    |
-| dev-rollup    | 99.87 / 77.53 / **94.43** | 94.43 (+0.00)    | 99.87 / 77.35 / **94.37 (-0.06)** LOSS  | 94.38 (-0.05)    | 94.43 (+0.00)    |
-| dev-webpack   | 99.64 / 62.89 / **89.22** | 89.22 (+0.00)    | 99.64 / 62.63 / **89.11 (-0.11)** LOSS  | 89.09 (-0.12)    | 89.22 (+0.00)    |
-| pop-bun       | 95.51 / 79.34 / **91.77** | 91.13 (-0.64)    | 98.41 / 78.96 / **93.79 (+2.02)**       | 93.75 (+1.98)    | 95.88 (+4.11)    |
-| pop-esbuild   | 94.08 / 81.42 / **91.24** | 90.74 (-0.50)    | 97.26 / 81.61 / **93.67 (+2.43)**       | 93.67 (+2.43)    | 95.50 (+4.26)    |
-| TEST bun      | 97.85 / 67.56 / **89.80** | 89.39 (-0.40)    | 98.70 / 68.55 / **90.72 (+0.92)**       | 90.72 (+0.92)    | 92.89 (+3.09)    |
-| TEST esbuild  | 97.00 / 76.80 / **92.16** | 91.94 (-0.21)    | 98.36 / 77.65 / **93.38 (+1.22)**       | 93.38 (+1.22)    | 95.25 (+3.10)    |
-| TEST rollup   | 97.94 / 68.80 / **90.29** | 90.13 (-0.16)    | 98.43 / 72.09 / **91.72 (+1.43)**       | 91.74 (+1.45)    | 91.94 (+1.65)    |
-| TEST webpack  | 99.24 / 70.62 / **91.80** | 91.78 (-0.03)    | 99.37 / 75.09 / **93.33 (+1.53)**       | 93.36 (+1.56)    | 92.49 (+0.68)    |
-| TEST2 bun     | 98.85 / 79.30 / **94.21** | 93.64 (-0.56)    | 98.72 / 80.34 / **94.40 (+0.20)** P lower | 94.37 (+0.17)  | 94.28 (+0.07)    |
-| TEST2 esbuild | 99.49 / 75.80 / **93.64** | 93.10 (-0.53)    | 99.52 / 75.84 / **93.67 (+0.04)**       | 93.71 (+0.07)    | 93.61 (-0.03)    |
-| TEST2 rollup  | 96.33 / 75.35 / **91.25** | 91.08 (-0.16)    | 96.11 / 74.90 / **90.96 (-0.29)** LOSS, P lower | 91.05 (-0.20) | 91.35 (+0.10) |
-| TEST2 webpack | 99.27 / 70.08 / **91.64** | 91.31 (-0.33)    | 99.27 / 71.32 / **92.05 (+0.41)**       | 92.12 (+0.48)    | 91.64 (+0.00)    |
+| set           | r5 (default)               | k2            | **dl (dl25k + v2 + via)**                       | dlf           | orig          |
+| ------------- | -------------------------- | ------------- | ----------------------------------------------- | ------------- | ------------- |
+| cc            | 100.00 / 81.90 / **95.77** | 95.77 (+0.00) | 100.00 / 82.46 / **95.92 (+0.15)**              | 95.95 (+0.18) | 95.77 (+0.00) |
+| esbuild-app   | 96.60 / 69.44 / **89.59**  | 87.99 (-1.60) | 98.53 / 66.50 / **89.87 (+0.29)**               | 89.88 (+0.29) | 89.65 (+0.06) |
+| held-out      | 99.31 / 67.60 / **90.79**  | 90.42 (-0.37) | 99.56 / 81.23 / **95.26 (+4.47)**               | 95.26 (+4.47) | 90.87 (+0.08) |
+| wrangler      | 95.99 / 18.53 / **52.28**  | 52.28 (+0.00) | 99.37 / 20.92 / **56.79 (+4.51)**               | 57.28 (+4.99) | 56.12 (+3.84) |
+| apps-esbuild  | 99.29 / 92.15 / **97.78**  | 97.20 (-0.58) | 99.12 / 88.81 / **96.87 (-0.91)** LOSS          | 96.85 (-0.93) | 98.21 (+0.44) |
+| apps-rollup   | 98.98 / 78.66 / **94.12**  | 93.72 (-0.40) | 99.00 / 80.91 / **94.76 (+0.64)**               | 94.79 (+0.67) | 94.35 (+0.24) |
+| apps-webpack  | 99.39 / 73.30 / **92.79**  | 92.79 (+0.01) | 99.33 / 75.04 / **93.30 (+0.51)**               | 93.32 (+0.54) | 92.80 (+0.01) |
+| dev-rollup    | 99.87 / 77.53 / **94.43**  | 94.43 (+0.00) | 99.87 / 77.35 / **94.37 (-0.06)** LOSS          | 94.38 (-0.05) | 94.43 (+0.00) |
+| dev-webpack   | 99.64 / 62.89 / **89.22**  | 89.22 (+0.00) | 99.64 / 62.63 / **89.11 (-0.11)** LOSS          | 89.09 (-0.12) | 89.22 (+0.00) |
+| pop-bun       | 95.51 / 79.34 / **91.77**  | 91.13 (-0.64) | 98.41 / 78.96 / **93.79 (+2.02)**               | 93.75 (+1.98) | 95.88 (+4.11) |
+| pop-esbuild   | 94.08 / 81.42 / **91.24**  | 90.74 (-0.50) | 97.26 / 81.61 / **93.67 (+2.43)**               | 93.67 (+2.43) | 95.50 (+4.26) |
+| TEST bun      | 97.85 / 67.56 / **89.80**  | 89.39 (-0.40) | 98.70 / 68.55 / **90.72 (+0.92)**               | 90.72 (+0.92) | 92.89 (+3.09) |
+| TEST esbuild  | 97.00 / 76.80 / **92.16**  | 91.94 (-0.21) | 98.36 / 77.65 / **93.38 (+1.22)**               | 93.38 (+1.22) | 95.25 (+3.10) |
+| TEST rollup   | 97.94 / 68.80 / **90.29**  | 90.13 (-0.16) | 98.43 / 72.09 / **91.72 (+1.43)**               | 91.74 (+1.45) | 91.94 (+1.65) |
+| TEST webpack  | 99.24 / 70.62 / **91.80**  | 91.78 (-0.03) | 99.37 / 75.09 / **93.33 (+1.53)**               | 93.36 (+1.56) | 92.49 (+0.68) |
+| TEST2 bun     | 98.85 / 79.30 / **94.21**  | 93.64 (-0.56) | 98.72 / 80.34 / **94.40 (+0.20)** P lower       | 94.37 (+0.17) | 94.28 (+0.07) |
+| TEST2 esbuild | 99.49 / 75.80 / **93.64**  | 93.10 (-0.53) | 99.52 / 75.84 / **93.67 (+0.04)**               | 93.71 (+0.07) | 93.61 (-0.03) |
+| TEST2 rollup  | 96.33 / 75.35 / **91.25**  | 91.08 (-0.16) | 96.11 / 74.90 / **90.96 (-0.29)** LOSS, P lower | 91.05 (-0.20) | 91.35 (+0.10) |
+| TEST2 webpack | 99.27 / 70.08 / **91.64**  | 91.31 (-0.33) | 99.27 / 71.32 / **92.05 (+0.41)**               | 92.12 (+0.48) | 91.64 (+0.00) |
 
 App claimed is 0 on every label. test and test2 are summaries only. The full table is reproduced by
 `python3 -I table.py exp124-r5 exp124-orig exp121-k2-v2 exp121-v2 exp125-dlf exp125-k2f`.

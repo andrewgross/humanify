@@ -1,110 +1,110 @@
 {
- "corpus": "test",
- "labels": {
-  "test-exp101-c2-structural": {},
-  "test-exp101-call2k-agreement": {},
-  "test-exp101-call2k-structural": {},
-  "test-exp105-agreement": {},
-  "test-exp105-structural": {},
-  "test-exp107-cont-agreement": {},
-  "test-exp107-cont-structural": {},
-  "test-exp108-c2v3-agreement": {},
-  "test-exp108-c2v3-guards-agreement": {},
-  "test-exp108-c2v3-guards-structural": {},
-  "test-exp108-c2v3-structural": {},
-  "test-exp108-k2-agreement": {},
-  "test-exp108-k2-guards-agreement": {},
-  "test-exp108-k2-guards-structural": {},
-  "test-exp108-k2-structural": {},
-  "test-exp108-k5-guards-structural": {},
-  "test-exp108-k5-structural": {},
-  "test-exp109-c2-rec-structural": {},
-  "test-exp109-final-k2-structural": {},
-  "test-exp109-final-wr-structural": {},
-  "test-exp112-k2-rec": {},
-  "test-exp112-k2-rec-dcap": {},
-  "test-exp113-k2all": {},
-  "test-exp113-opq2-k2": {},
-  "test-exp113-opq2-wr": {},
-  "test-exp113-own-k2": {},
-  "test-exp113-own-wr": {},
-  "test-exp114-allf-k2-structural": {},
-  "test-exp114-allf-wr-structural": {},
-  "test-exp114-both2-k2-structural": {},
-  "test-exp114-both2-wr-structural": {},
-  "test-exp114-cp-k2-structural": {},
-  "test-exp114-cp-wr-structural": {},
-  "test-exp114-cpf-k2-structural": {},
-  "test-exp114-cpf-wr-structural": {},
-  "test-exp114-st2-k2-structural": {},
-  "test-exp114-st2-wr-structural": {},
-  "test-exp117-base-k2-structural": {},
-  "test-exp117-base-wr-structural": {},
-  "test-exp117-cpf-k2-structural": {},
-  "test-exp117-cpf-wr-structural": {},
-  "test-exp117-dmb-k2-structural": {},
-  "test-exp117-dmb-wr-structural": {},
-  "test-exp117-flip3-k2-structural": {},
-  "test-exp117-flip3-wr-structural": {},
-  "test-exp117-flip4-k2-structural": {},
-  "test-exp117-flip4-wr-structural": {},
-  "test-exp117-k2all-cpf": {},
-  "test-exp117-k2all-cpfdmb": {},
-  "test-exp117-k2all-flip4": {},
-  "test-exp118-dl25k": {
-   "test-bun WRONG->GOOD": 3259905,
-   "test-esbuild WRONG->GOOD": 3287730,
-   "test-rollup WRONG->GOOD": 1609140,
-   "test-webpack WRONG->GOOD": 1604830
+  "corpus": "test",
+  "labels": {
+    "test-exp101-c2-structural": {},
+    "test-exp101-call2k-agreement": {},
+    "test-exp101-call2k-structural": {},
+    "test-exp105-agreement": {},
+    "test-exp105-structural": {},
+    "test-exp107-cont-agreement": {},
+    "test-exp107-cont-structural": {},
+    "test-exp108-c2v3-agreement": {},
+    "test-exp108-c2v3-guards-agreement": {},
+    "test-exp108-c2v3-guards-structural": {},
+    "test-exp108-c2v3-structural": {},
+    "test-exp108-k2-agreement": {},
+    "test-exp108-k2-guards-agreement": {},
+    "test-exp108-k2-guards-structural": {},
+    "test-exp108-k2-structural": {},
+    "test-exp108-k5-guards-structural": {},
+    "test-exp108-k5-structural": {},
+    "test-exp109-c2-rec-structural": {},
+    "test-exp109-final-k2-structural": {},
+    "test-exp109-final-wr-structural": {},
+    "test-exp112-k2-rec": {},
+    "test-exp112-k2-rec-dcap": {},
+    "test-exp113-k2all": {},
+    "test-exp113-opq2-k2": {},
+    "test-exp113-opq2-wr": {},
+    "test-exp113-own-k2": {},
+    "test-exp113-own-wr": {},
+    "test-exp114-allf-k2-structural": {},
+    "test-exp114-allf-wr-structural": {},
+    "test-exp114-both2-k2-structural": {},
+    "test-exp114-both2-wr-structural": {},
+    "test-exp114-cp-k2-structural": {},
+    "test-exp114-cp-wr-structural": {},
+    "test-exp114-cpf-k2-structural": {},
+    "test-exp114-cpf-wr-structural": {},
+    "test-exp114-st2-k2-structural": {},
+    "test-exp114-st2-wr-structural": {},
+    "test-exp117-base-k2-structural": {},
+    "test-exp117-base-wr-structural": {},
+    "test-exp117-cpf-k2-structural": {},
+    "test-exp117-cpf-wr-structural": {},
+    "test-exp117-dmb-k2-structural": {},
+    "test-exp117-dmb-wr-structural": {},
+    "test-exp117-flip3-k2-structural": {},
+    "test-exp117-flip3-wr-structural": {},
+    "test-exp117-flip4-k2-structural": {},
+    "test-exp117-flip4-wr-structural": {},
+    "test-exp117-k2all-cpf": {},
+    "test-exp117-k2all-cpfdmb": {},
+    "test-exp117-k2all-flip4": {},
+    "test-exp118-dl25k": {
+      "test-bun WRONG->GOOD": 3259905,
+      "test-esbuild WRONG->GOOD": 3287730,
+      "test-rollup WRONG->GOOD": 1609140,
+      "test-webpack WRONG->GOOD": 1604830
+    },
+    "test-exp119-k2all-def": {},
+    "test-exp119-k2all-st": {},
+    "test-exp121-k2-v2": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp121-v2": {
+      "test-bun WRONG->GOOD": 3259905,
+      "test-esbuild WRONG->GOOD": 3287730,
+      "test-rollup WRONG->GOOD": 1609140,
+      "test-webpack WRONG->GOOD": 1604830
+    },
+    "test-exp124-base": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp124-drop": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp124-orig": {
+      "test-bun WRONG->GOOD": 3259913,
+      "test-esbuild WRONG->GOOD": 3287602,
+      "test-rollup WRONG->GOOD": 1603040,
+      "test-webpack WRONG->GOOD": 1604830
+    },
+    "test-exp124-r5": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp127-auto20": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp127-fallback": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp127-off": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-exp127-union": {
+      "test-bun WRONG->GOOD": 8,
+      "test-esbuild WRONG->GOOD": 8
+    },
+    "test-step4f-agreement": {},
+    "test-step4f-structural": {}
   },
-  "test-exp119-k2all-def": {},
-  "test-exp119-k2all-st": {},
-  "test-exp121-k2-v2": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp121-v2": {
-   "test-bun WRONG->GOOD": 3259905,
-   "test-esbuild WRONG->GOOD": 3287730,
-   "test-rollup WRONG->GOOD": 1609140,
-   "test-webpack WRONG->GOOD": 1604830
-  },
-  "test-exp124-base": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp124-drop": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp124-orig": {
-   "test-bun WRONG->GOOD": 3259913,
-   "test-esbuild WRONG->GOOD": 3287602,
-   "test-rollup WRONG->GOOD": 1603040,
-   "test-webpack WRONG->GOOD": 1604830
-  },
-  "test-exp124-r5": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp127-auto20": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp127-fallback": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp127-off": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-exp127-union": {
-   "test-bun WRONG->GOOD": 8,
-   "test-esbuild WRONG->GOOD": 8
-  },
-  "test-step4f-agreement": {},
-  "test-step4f-structural": {}
- },
- "schema": "exp125-ledger10/1"
+  "schema": "exp125-ledger10/1"
 }
