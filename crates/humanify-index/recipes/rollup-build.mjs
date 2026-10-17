@@ -2,7 +2,8 @@
 //   node rollup-build.mjs --version                                  -> rollup's version
 //   node rollup-build.mjs <entry> <outdir> <cjs|esm> [external...]   -> <outdir>/out.js + out.js.map
 // rollup 4 + node-resolve + commonjs + json + terser, dynamic imports inlined, node builtins external, a chained
-// source map (the same settings as exp095's lab rollup-build.mjs, min=1, which built exp100's test split).
+// source map without sourcesContent (exp131: the builder never reads it; otherwise the same settings as exp095's lab
+// rollup-build.mjs, min=1, which built exp100's test split).
 // The plugins resolve from this script's own directory: install them beside a copy of this file.
 import path from "node:path";
 import { builtinModules, createRequire } from "node:module";
@@ -31,7 +32,7 @@ try {
     file: path.join(path.resolve(outdir), "out.js"),
     format: fmt === "esm" ? "es" : "cjs",
     sourcemap: true,
-    sourcemapExcludeSources: false,
+    sourcemapExcludeSources: true,
     inlineDynamicImports: true,
     plugins: [terser()],
   });
