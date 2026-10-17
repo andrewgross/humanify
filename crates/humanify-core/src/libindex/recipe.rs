@@ -58,6 +58,17 @@ impl RecipeBundler {
         }
     }
 
+    /// The minifier the recipe's `minify` runs: each bundler's own, and
+    /// terser for webpack 5 (its production minifier) and rollup (the
+    /// recipe's terser plugin).
+    pub fn minifier(self) -> MinifierType {
+        match self {
+            RecipeBundler::Bun => MinifierType::Bun,
+            RecipeBundler::Esbuild => MinifierType::Esbuild,
+            RecipeBundler::Webpack | RecipeBundler::Rollup => MinifierType::Terser,
+        }
+    }
+
     /// The recipe bundler a run's bundler is looked up under; None: no
     /// index slice can exist for it.
     pub fn for_bundler(bundler: BundlerType) -> Option<RecipeBundler> {
@@ -265,4 +276,63 @@ pub fn choose_slice<'s>(
             has.join(", ")
         )
     })
+}
+
+/// Which slices a run reads beside the one [`choose_slice`] picked (exp127,
+/// `library.lookup.terser_slices`). Code minified by terser — a package's
+/// own published `.min` dist, or a whole bundle re-minified — matches the
+/// terser-built rows far better than its bundler's slice, and the minifier
+/// verdict cannot tell terser from esbuild, so the slice choice cannot
+/// rest on it.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum TerserSlices {
+    /// The chosen slice alone.
+    #[default]
+    Off,
+    /// The chosen slice plus every terser-built slice, each owner once at
+    /// its smallest module.
+    Union,
+    /// The terser-built slices only for a print the chosen slice does not
+    /// hold.
+    Fallback,
+    /// `Union` for a bundle whose whole-unit prints the terser-built slices
+    /// ALONE hold at least this share of (nodes, over the prints either
+    /// side holds; `LibraryIndex::decide_terser_slices`), else `Off`: the
+    /// bundle's own prints say it was minified by terser.
+    Auto { share: f64 },
+}
+
+impl TerserSlices {
+    /// Every mode's spelling, in the config key's order.
+    pub const NAMES: [&'static str; 4] = ["off", "union", "fallback", "auto"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TerserSlices::Off => "off",
+            TerserSlices::Union => "union",
+            TerserSlices::Fallback => "fallback",
+            TerserSlices::Auto { .. } => "auto",
+        }
+    }
+
+    /// The mode `name` spells; `share` is read by `auto` only.
+    pub fn from_name(name: &str, share: f64) -> Option<TerserSlices> {
+        Some(match name {
+            "off" => TerserSlices::Off,
+            "union" => TerserSlices::Union,
+            "fallback" => TerserSlices::Fallback,
+            "auto" => TerserSlices::Auto { share },
+            _ => return None,
+        })
+    }
+}
+
+/// The index's terser-built slices other than `chosen`, in manifest order:
+/// every minified slice whose bundler minifies with terser.
+pub fn terser_slices<'s>(slices: &'s [(Recipe, bool)], chosen: &Recipe) -> Vec<&'s Recipe> {
+    slices
+        .iter()
+        .map(|r| &r.0)
+        .filter(|r| r.minify && r.bundler.minifier() == MinifierType::Terser && *r != chosen)
+        .collect()
 }

@@ -372,3 +372,36 @@ fn the_exp112_declared_cap_turns_off() {
     let off = build(&["in.js"], "[library.discovery]\ndeclared_max_bytes = 0\n").unwrap();
     assert_eq!(off.library.discovery_options().declared_max_bytes, 0);
 }
+
+/// exp127: `library.lookup.terser_slices` — off by default; union and
+/// fallback read the index's terser-built slices beside the chosen one.
+#[test]
+fn the_terser_slices_key_is_off_by_default_and_takes_union_or_fallback() {
+    use humanify_core::libindex::recipe::TerserSlices;
+    let d = build(&["in.js"], "").unwrap();
+    assert_eq!(d.library.lookup.terser_slices, TerserSlices::Off);
+    for (v, want) in [
+        ("off", TerserSlices::Off),
+        ("union", TerserSlices::Union),
+        ("fallback", TerserSlices::Fallback),
+    ] {
+        let c = build(
+            &["in.js"],
+            &format!("[library.lookup]\nterser_slices = \"{v}\"\n"),
+        )
+        .unwrap();
+        assert_eq!(c.library.lookup.terser_slices, want, "{v}");
+    }
+    let auto = build(
+        &["in.js"],
+        "[library.lookup]\nterser_slices = \"auto\"\nterser_share = 0.25\n",
+    )
+    .unwrap();
+    assert_eq!(
+        auto.library.lookup.terser_slices,
+        TerserSlices::Auto { share: 0.25 }
+    );
+    let err = ConfigFile::check("cfg.toml", "[library.lookup]\nterser_slices = \"all\"\n")
+        .expect_err("an unknown choice is refused");
+    assert!(err.iter().any(|e| e.contains("terser_slices")), "{err:?}");
+}

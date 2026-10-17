@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "078867fb2a0a115eaf0253939c18d969d1cc9c5d41b86eaf21b3d866be5a1e89",
+ "claimedBytes": {
+  "family": 26446,
+  "origin": 201746,
+  "right": 4857899,
+  "unmapped": 12616,
+  "wrongFamily": 228852
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-electron_paperarxiv-725a6a",
+ "exploratory": {
+  "names": {
+   "bindings": 65182,
+   "bindingsSameVersion": 64378,
+   "bindingsVersionKnown": 65182,
+   "exactBytes": 4336446,
+   "exactUnits": 4041,
+   "sameVersionShare": 0.987665
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.904652,
+  "f1": 0.800728,
+  "namedBytes": 4198758,
+  "precision": 0.990341,
+  "recall": 0.672055
+ },
+ "label": "apps-exp127-union",
+ "missBytes": {
+  "a": 2220,
+  "c": 366294,
+  "d-absent": 15163,
+  "d-file": 61904,
+  "e-ambig": 74999,
+  "e-other": 11326,
+  "e-spec": 220916,
+  "e-support": 5971,
+  "e-veto": 7384,
+  "f": 395353,
+  "unit-model": 23
+ },
+ "noDiscovery": null,
+ "reportSha256": "a5bfc527e0833606fa0a1d5d4753d462f240628c46ac56d5cb675a36c7ecbc0d",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<unmapped>": 15278,
+  "copy": 531480,
+  "library": 6247644
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 531480,
+  "f05": 0.924495,
+  "f05ShipperOnly": 0.887824,
+  "f1": 0.87975,
+  "f1ShipperOnly": 0.844854,
+  "libraryBytes": 6247644,
+  "namedAsOriginBytes": 201746,
+  "namedAsShipperBytes": 4884345,
+  "namedBytes": 5086091,
+  "namedBytesShipperOnly": 4884345,
+  "precision": 0.956942,
+  "precisionShipperOnly": 0.918984,
+  "recall": 0.814081,
+  "recallShipperOnly": 0.78179,
+  "wrongFamilyBytes": 228852,
+  "wrongFamilyBytesShipperOnly": 430598
+ },
+ "truthMethod": "sourcemap"
+}
