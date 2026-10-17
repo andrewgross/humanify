@@ -1,0 +1,69 @@
+{
+ "bundleSha256": "510002b72571d6cd7872ff6dd3f40fab861ce3280a97464e22e673c6476d17e9",
+ "claimedBytes": {
+  "right": 1608
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-electron_neucalculator-cf43f1",
+ "exploratory": {
+  "names": {
+   "bindings": 11,
+   "bindingsSameVersion": 11,
+   "bindingsVersionKnown": 11,
+   "exactBytes": 1517,
+   "exactUnits": 4,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.988145,
+  "f1": 0.97088,
+  "namedBytes": 1517,
+  "precision": 1.0,
+  "recall": 0.943408
+ },
+ "label": "apps-exp127-fallback",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "14656aa20f0fc2d10bcf392b6f09d05e344231a2e46558e02d108784ff56dba1",
+ "rule": "structural",
+ "schema": "exp096-score/9",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<app>": 1989,
+  "<unmapped>": 2933,
+  "library": 1608
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 1.0,
+  "f05ShipperOnly": 1.0,
+  "f1": 1.0,
+  "f1ShipperOnly": 1.0,
+  "libraryBytes": 1608,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 1608,
+  "namedBytes": 1608,
+  "namedBytesShipperOnly": 1608,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 1.0,
+  "recallShipperOnly": 1.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}
