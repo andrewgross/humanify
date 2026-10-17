@@ -1,0 +1,76 @@
+{
+ "bundleSha256": "3d83fd5c8725a93db2f2c2d2d2fc0c76501f98a7f4024bb6aa07f2903b1a1e7d",
+ "claimedBytes": {
+  "right": 46210,
+  "unmapped": 2309618
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-cli_knip-920662",
+ "exploratory": {
+  "names": {
+   "bindings": 588,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 45970,
+   "exactUnits": 15,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "ac6a6b83d097ea9f3b60ce8da45ca7bf2de5b89920c38d4edcf9fed3d85ac31a",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.987577,
+  "f1": 0.96951,
+  "namedBytes": 44931,
+  "precision": 1.0,
+  "recall": 0.940825
+ },
+ "label": "exp124-orig-apps",
+ "missBytes": {
+  "a": 143,
+  "b": 892,
+  "e-other": 255,
+  "e-veto": 257
+ },
+ "noDiscovery": null,
+ "reportSha256": "7c89696b4a65338635c2d78c8021efdd78f4354b14935b55a453ab79dddc5bce",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 28,
+  "<self>": 180,
+  "<unmapped>": 2978669,
+  "library": 47757
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.993349,
+  "f05ShipperOnly": 0.993349,
+  "f1": 0.983537,
+  "f1ShipperOnly": 0.983537,
+  "libraryBytes": 47757,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 46210,
+  "namedBytes": 46210,
+  "namedBytesShipperOnly": 46210,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.967607,
+  "recallShipperOnly": 0.967607,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

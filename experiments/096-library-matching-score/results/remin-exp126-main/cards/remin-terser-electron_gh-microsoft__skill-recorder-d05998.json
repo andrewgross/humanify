@@ -1,0 +1,83 @@
+{
+ "bundleSha256": "5db9ed9a440536c0009ec1675f0839144b6adcbe7130dd83c023734f850041fb",
+ "claimedBytes": {
+  "family": 2043,
+  "right": 326961,
+  "unmapped": 11,
+  "wrongFamily": 524
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-terser-electron_gh-microsoft__skill-recorder-d05998",
+ "exploratory": {
+  "names": {
+   "bindings": 580,
+   "bindingsSameVersion": 547,
+   "bindingsVersionKnown": 580,
+   "exactBytes": 46918,
+   "exactUnits": 99,
+   "sameVersionShare": 0.943103
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.266884,
+  "f1": 0.127164,
+  "namedBytes": 51779,
+  "precision": 0.997669,
+  "recall": 0.06791
+ },
+ "label": "remin-exp126-main",
+ "missBytes": {
+  "a": 46981,
+  "b": 23583,
+  "c": 7412,
+  "d-absent": 314409,
+  "d-file": 38860,
+  "e-ambig": 182,
+  "e-support": 260,
+  "e-veto": 1672,
+  "f": 97
+ },
+ "noDiscovery": null,
+ "reportSha256": "9f552469b31d7e373d81e95cdbf59e46573175c71a5b3a8c6f11c20c24198f52",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-terser",
+ "statementBytes": {
+  "<app>": 1468,
+  "<unmapped>": 609,
+  "copy": 1262,
+  "library": 762460
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 1262,
+  "f05": 0.790657,
+  "f05ShipperOnly": 0.790657,
+  "f1": 0.602578,
+  "f1ShipperOnly": 0.602578,
+  "libraryBytes": 762460,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 329004,
+  "namedBytes": 329004,
+  "namedBytesShipperOnly": 329004,
+  "precision": 0.99841,
+  "precisionShipperOnly": 0.99841,
+  "recall": 0.431503,
+  "recallShipperOnly": 0.431503,
+  "wrongFamilyBytes": 524,
+  "wrongFamilyBytesShipperOnly": 524
+ },
+ "truthMethod": "sourcemap"
+}

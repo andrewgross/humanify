@@ -1,0 +1,68 @@
+{
+ "bundleSha256": "99504032058b8db1ea3f105e064d8ec162226b5925b1479e6e8a52b34f0d88f7",
+ "claimedBytes": {
+  "right": 4909
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_cordova-ed3406",
+ "exploratory": {
+  "names": {
+   "bindings": 125,
+   "bindingsSameVersion": 125,
+   "bindingsVersionKnown": 125,
+   "exactBytes": 4646,
+   "exactUnits": 9,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "ac6a6b83d097ea9f3b60ce8da45ca7bf2de5b89920c38d4edcf9fed3d85ac31a",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.980168,
+  "f1": 0.951852,
+  "namedBytes": 4458,
+  "precision": 1.0,
+  "recall": 0.908128
+ },
+ "label": "exp124-orig-apps",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "b034cd25659177e41ab9d41aadfab6f30443e5eda6fdbda783e9cd25a1810d2b",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<app>": 24,
+  "library": 4909
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 1.0,
+  "f05ShipperOnly": 1.0,
+  "f1": 1.0,
+  "f1ShipperOnly": 1.0,
+  "libraryBytes": 4909,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 4909,
+  "namedBytes": 4909,
+  "namedBytesShipperOnly": 4909,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 1.0,
+  "recallShipperOnly": 1.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

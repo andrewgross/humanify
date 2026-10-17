@@ -1,0 +1,74 @@
+{
+ "bundleSha256": "7dc47bc74a994578694721dd853d485ac7e2bdf1d13bf0d70c85b732c5d8af27",
+ "claimedBytes": {
+  "right": 197472,
+  "wrongFamily": 1552
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-esbuild-electron_gh-flaviodelgrosso__reactronite-436d09",
+ "exploratory": {
+  "names": {
+   "bindings": 2839,
+   "bindingsSameVersion": 2839,
+   "bindingsVersionKnown": 2839,
+   "exactBytes": 132715,
+   "exactUnits": 317,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.921254,
+  "f1": 0.833594,
+  "namedBytes": 158109,
+  "precision": 0.990708,
+  "recall": 0.719492
+ },
+ "label": "remin-exp127-fallback",
+ "missBytes": {
+  "a": 11311,
+  "c": 149,
+  "d-file": 10819
+ },
+ "noDiscovery": null,
+ "reportSha256": "46af0822441c49b373270b55513c28097067386a3e084d382e04700c9653dccd",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-esbuild",
+ "statementBytes": {
+  "<app>": 772,
+  "<unmapped>": 42,
+  "library": 219751
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.971957,
+  "f05ShipperOnly": 0.971957,
+  "f1": 0.943094,
+  "f1ShipperOnly": 0.943094,
+  "libraryBytes": 219751,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 197472,
+  "namedBytes": 197472,
+  "namedBytesShipperOnly": 197472,
+  "precision": 0.992202,
+  "precisionShipperOnly": 0.992202,
+  "recall": 0.898617,
+  "recallShipperOnly": 0.898617,
+  "wrongFamilyBytes": 1552,
+  "wrongFamilyBytesShipperOnly": 1552
+ },
+ "truthMethod": "sourcemap"
+}

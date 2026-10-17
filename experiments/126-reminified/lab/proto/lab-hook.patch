@@ -1,0 +1,29 @@
+diff --git a/crates/humanify-core/src/libindex/units.rs b/crates/humanify-core/src/libindex/units.rs
+index 6e927e866..83bedac72 100644
+--- a/crates/humanify-core/src/libindex/units.rs
++++ b/crates/humanify-core/src/libindex/units.rs
+@@ -213,6 +213,14 @@ pub fn bundle_unit_prints(
+         .collect()
+ }
+ 
++/// LAB ONLY (exp122, never set by a shipped binary): a process-wide
++/// rewrite of every unit's ESTree JSON before its prints, so a lab tool
++/// can measure a candidate normalisation on both sides (index builder and
++/// discovery) through the one unit model.
++#[doc(hidden)]
++pub static LAB_NORMALISE: std::sync::OnceLock<fn(&mut Value, &SymbolTables)> =
++    std::sync::OnceLock::new();
++
+ /// The prints of every unit (None for a container), parallel to `units`.
+ /// The AST is serialized on this thread; the hashing runs in parallel.
+ /// `blurred`: the start offsets of number literals read as `0` (the run's
+@@ -243,6 +251,9 @@ pub fn unit_prints(
+         if !blurred.is_empty() {
+             blur_numbers(&mut json, blurred);
+         }
++        if let Some(normalise) = LAB_NORMALISE.get() {
++            normalise(&mut json, tables);
++        }
+         Some(statement_prints(&json, tables))
+     })
+ }

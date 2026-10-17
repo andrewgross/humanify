@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "308f229a97cfb08849bd527e6904724e3b80e5c179f1a03640f009520f7deb72",
+ "claimedBytes": {
+  "family": 51583,
+  "origin": 38191,
+  "right": 4788663,
+  "self": 16369,
+  "unmapped": 2877,
+  "wrongFamily": 4913
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_prisma_cli-1a0b5c",
+ "exploratory": {
+  "names": {
+   "bindings": 48586,
+   "bindingsSameVersion": 44595,
+   "bindingsVersionKnown": 48552,
+   "exactBytes": 4548561,
+   "exactUnits": 4497,
+   "sameVersionShare": 0.9185
+  }
+ },
+ "indexId": "ac6a6b83d097ea9f3b60ce8da45ca7bf2de5b89920c38d4edcf9fed3d85ac31a",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.950264,
+  "f1": 0.885016,
+  "namedBytes": 4420469,
+  "precision": 0.999383,
+  "recall": 0.794137
+ },
+ "label": "exp124-orig-apps",
+ "missBytes": {
+  "a": 1614,
+  "b": 467419,
+  "c": 19385,
+  "d-absent": 33598,
+  "d-file": 25741,
+  "e-ambig": 13629,
+  "e-other": 118468,
+  "e-support": 2526,
+  "e-veto": 1785,
+  "f": 3781
+ },
+ "noDiscovery": null,
+ "reportSha256": "9487e38502c09cbc40b1c2a1a0a4c7e0eb825eb9564f7d1d54baa8272327fc92",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<self>": 306244,
+  "<unmapped>": 5775,
+  "copy": 264373,
+  "library": 5566383
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 264373,
+  "f05": 0.971809,
+  "f05ShipperOnly": 0.964201,
+  "f1": 0.933696,
+  "f1ShipperOnly": 0.926387,
+  "libraryBytes": 5566383,
+  "namedAsOriginBytes": 38191,
+  "namedAsShipperBytes": 4840246,
+  "namedBytes": 4878437,
+  "namedBytesShipperOnly": 4840246,
+  "precision": 0.998994,
+  "precisionShipperOnly": 0.991173,
+  "recall": 0.876411,
+  "recallShipperOnly": 0.86955,
+  "wrongFamilyBytes": 4913,
+  "wrongFamilyBytesShipperOnly": 43104
+ },
+ "truthMethod": "sourcemap"
+}

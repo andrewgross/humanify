@@ -1,0 +1,73 @@
+{
+ "bundleSha256": "7297b8c90fba6c083bc7fdf7ba3cf116c4e01b35950b1b13954f1e636e1300b2",
+ "claimedBytes": {
+  "right": 29293,
+  "unmapped": 160
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-terser-vscode_gh-onecentlin__laravel-blade-snippets-vscode-4595d7",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 0,
+   "exactUnits": 0,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "26e34e0465d4900491b6ce8fc989743ba6bc784ba5bd167204f1f3b069be31b5",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.968221,
+  "f1": 0.924168,
+  "namedBytes": 27939,
+  "precision": 1.0,
+  "recall": 0.859027
+ },
+ "label": "remin-exp126-lab-rollrows",
+ "missBytes": {
+  "c": 124,
+  "d-file": 3107
+ },
+ "noDiscovery": null,
+ "reportSha256": "7a66f70dcec05af1a6cd5be0d444727cd4d3237f45fe3ff4f0ed6648dad6bc59",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-terser",
+ "statementBytes": {
+  "<app>": 367,
+  "<unmapped>": 387,
+  "library": 32524
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.978416,
+  "f05ShipperOnly": 0.978416,
+  "f1": 0.947733,
+  "f1ShipperOnly": 0.947733,
+  "libraryBytes": 32524,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 29293,
+  "namedBytes": 29293,
+  "namedBytesShipperOnly": 29293,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.900658,
+  "recallShipperOnly": 0.900658,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

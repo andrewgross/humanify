@@ -1,0 +1,43 @@
+{
+  "sets": {
+    "remin-esbuild": {
+      "d": 15.525,
+      "near:inlined": 0.14,
+      "near:interop": 0.383,
+      "near:lazy-init": 0.363,
+      "near:other": 4.227,
+      "norm:I": 0.008,
+      "norm:K": 5.705,
+      "norm:combined": 0.164,
+      "not-emitted": 3.998,
+      "partial": 0.536
+    },
+    "remin-terser": {
+      "d": 30.946,
+      "near:inlined": 2.742,
+      "near:interop": 2.808,
+      "near:lazy-init": 1.515,
+      "near:other": 9.63,
+      "norm:K": 0.752,
+      "norm:M": 0.009,
+      "norm:T": 0.006,
+      "norm:combined": 0.112,
+      "not-emitted": 9.715,
+      "partial": 3.657
+    },
+    "wrangler": {
+      "d": 32.272,
+      "near:inlined": 0.015,
+      "near:interop": 0.869,
+      "near:lazy-init": 5.851,
+      "near:other": 1.408,
+      "norm:A": 0.118,
+      "norm:K": 14.956,
+      "norm:O": 0.115,
+      "norm:combined": 0.658,
+      "not-emitted": 5.796,
+      "partial": 2.488
+    }
+  },
+  "unit": "points of the set's library bytes (scorer 9, exp119-k2all-st labels)"
+}

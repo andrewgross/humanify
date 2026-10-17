@@ -1,0 +1,73 @@
+{
+ "bundleSha256": "ba511de80b2a40575437de1cecc2023ed1cf45aca7a7099a028708f6d7a2e022",
+ "claimedBytes": {
+  "right": 1182
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-terser-cli_electron-installer-debian-45b707",
+ "exploratory": {
+  "names": {
+   "bindings": 8,
+   "bindingsSameVersion": 8,
+   "bindingsVersionKnown": 8,
+   "exactBytes": 433,
+   "exactUnits": 3,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.016777,
+  "f1": 0.006779,
+  "namedBytes": 433,
+  "precision": 1.0,
+  "recall": 0.003401
+ },
+ "label": "remin-exp126-main",
+ "missBytes": {
+  "c": 14269,
+  "d-file": 111880
+ },
+ "noDiscovery": null,
+ "reportSha256": "5f7312a9ba32d1f8c8e68221a002542e8c97a1c95130bb88c85a12e1d7eb3b2e",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-terser",
+ "statementBytes": {
+  "<app>": 29,
+  "<self>": 9687,
+  "<unmapped>": 68,
+  "library": 127331
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.044753,
+  "f05ShipperOnly": 0.044753,
+  "f1": 0.018395,
+  "f1ShipperOnly": 0.018395,
+  "libraryBytes": 127331,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 1182,
+  "namedBytes": 1182,
+  "namedBytesShipperOnly": 1182,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.009283,
+  "recallShipperOnly": 0.009283,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

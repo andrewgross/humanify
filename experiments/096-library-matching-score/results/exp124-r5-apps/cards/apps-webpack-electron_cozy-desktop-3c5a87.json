@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "cfd1adcb9d1d02c3a4cb2984e243ea57030a013fa7bc8cd26663512ae0ff795b",
+ "claimedBytes": {
+  "family": 46524,
+  "right": 2842588,
+  "unmapped": 377,
+  "wrongFamily": 7117
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_cozy-desktop-3c5a87",
+ "exploratory": {
+  "names": {
+   "bindings": 41869,
+   "bindingsSameVersion": 40613,
+   "bindingsVersionKnown": 41869,
+   "exactBytes": 2803974,
+   "exactUnits": 3010,
+   "sameVersionShare": 0.970002
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.911829,
+  "f1": 0.807218,
+  "namedBytes": 2719857,
+  "precision": 0.998058,
+  "recall": 0.677644
+ },
+ "label": "exp124-r5-apps",
+ "missBytes": {
+  "a": 490314,
+  "b": 12777,
+  "c": 477990,
+  "d-absent": 28904,
+  "d-file": 10377,
+  "d-variant": 5189,
+  "e-ambig": 4329,
+  "e-other": 8536,
+  "e-support": 8738,
+  "e-veto": 72631,
+  "f": 4797
+ },
+ "noDiscovery": null,
+ "reportSha256": "9130aa3a43ef4342b17ccc1704766d6b03c1814de1e8e019e4c0eaf3054cafb8",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 2213,
+  "<unmapped>": 569603,
+  "copy": 15777,
+  "library": 4013694
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 15777,
+  "f05": 0.92608,
+  "f05ShipperOnly": 0.92608,
+  "f1": 0.836221,
+  "f1ShipperOnly": 0.836221,
+  "libraryBytes": 4013694,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 2889112,
+  "namedBytes": 2889112,
+  "namedBytesShipperOnly": 2889112,
+  "precision": 0.997543,
+  "precisionShipperOnly": 0.997543,
+  "recall": 0.719814,
+  "recallShipperOnly": 0.719814,
+  "wrongFamilyBytes": 7117,
+  "wrongFamilyBytesShipperOnly": 7117
+ },
+ "truthMethod": "sourcemap"
+}

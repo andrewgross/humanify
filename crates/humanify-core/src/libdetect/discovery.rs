@@ -2298,6 +2298,9 @@ fn discover_unscoped(
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);
+    // exp127: `terser_slices = "auto"` reads the bundle's prints once,
+    // before any lookup
+    lookup.index.decide_terser_slices(&prints, &lookup.rules);
     let looker = Looker {
         code,
         graph: &graph,

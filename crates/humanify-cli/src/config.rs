@@ -407,6 +407,8 @@ pub struct LibraryLookup {
     pub literal_margin: f64,
     pub literal_margin_by_family: bool,
     pub max_packages_by_family: bool,
+    #[serde(serialize_with = "serialize_terser_slices")]
+    pub terser_slices: humanify_core::libindex::recipe::TerserSlices,
     pub targeted_min_nodes: u32,
     pub targeted_support: usize,
 }
@@ -445,6 +447,13 @@ fn serialize_banner_names<S: serde::Serializer>(
     s: S,
 ) -> Result<S::Ok, S::Error> {
     s.serialize_str(keys::banner_names_name(*v))
+}
+
+fn serialize_terser_slices<S: serde::Serializer>(
+    v: &humanify_core::libindex::recipe::TerserSlices,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    s.serialize_str(v.name())
 }
 
 fn serialize_veto<S: serde::Serializer>(
@@ -595,6 +604,16 @@ fn library_of(r: &Resolved) -> Library {
             literal_margin: r.float("library.lookup.literal_margin"),
             literal_margin_by_family: r.flag_on("library.lookup.literal_margin_by_family"),
             max_packages_by_family: r.flag_on("library.lookup.max_packages_by_family"),
+            terser_slices: r
+                .text("library.lookup.terser_slices")
+                .as_deref()
+                .and_then(|t| {
+                    humanify_core::libindex::recipe::TerserSlices::from_name(
+                        t,
+                        r.float("library.lookup.terser_share"),
+                    )
+                })
+                .expect("a checked choice"),
             targeted_min_nodes: n("library.lookup.targeted.min_nodes") as u32,
             targeted_support: n("library.lookup.targeted.support") as usize,
         },

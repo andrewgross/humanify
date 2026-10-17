@@ -45,6 +45,12 @@ CORPORA = {
     "pop": {"manifest": os.path.join(HERE, "corpus-pop.json"), "origins": os.path.join(HERE, "origins-pop.json"),
             "copies": os.path.join(HERE, "copies-pop.json"), "chained": os.path.join(HERE, "chained-pop.json"),
             "data": "/work/exp112-data/pop/frozen"},
+    # exp126's DEV corpus of RE-MINIFIED bundles: exp108 TRAINING apps (never held-out, test, test2, apps or pop)
+    # bundled against the packages' published minified entries, then minified again by terser and by esbuild
+    # (experiments/126-reminified/scripts/dev_remin.py); a dev corpus (cards committed)
+    "remin": {"manifest": os.path.join(HERE, "corpus-remin.json"), "origins": os.path.join(HERE, "origins-remin.json"),
+              "copies": os.path.join(HERE, "copies-remin.json"), "chained": os.path.join(HERE, "chained-remin.json"),
+              "data": "/work/exp126-data/remin/frozen"},
 }
 # frozen judges: a label on one commits per-set aggregates only (no per-bundle cards, no bundle names in its log)
 PRIVATE = ("test", "test2")
@@ -66,12 +72,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|test2|bundlers|apps|pop` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|test2|bundlers|apps|pop|remin` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop")
+        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

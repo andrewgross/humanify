@@ -112,6 +112,10 @@ literal_margin = 10.0
 literal_margin_by_family = true
 # Count a print's owners by package family, not package, against max_packages: a scope's members or a fork and its origin are one identity, and a bigger index's carriers of the same code no longer make it too common (exp125).
 max_packages_by_family = false
+# Also read the index's terser-built slices (webpack, rollup) beside the bundle's own: "off", "union" (every print) or "fallback" (a print the bundle's slice does not hold) or "auto" (union for a bundle the terser slices alone hold `terser_share` of) — terser-minified code matches terser rows (exp127).
+terser_slices = "off"
+# terser_slices = "auto": the share of the bundle's looked-up whole-unit nodes the terser-built slices alone must hold for the bundle to read them (exp127).
+terser_share = 0.2
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).

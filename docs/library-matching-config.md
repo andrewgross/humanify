@@ -138,6 +138,8 @@ literal_cover = 0.9
 literal_margin = 10.0
 literal_margin_by_family = true    # exp106 (agreement rule only)
 max_packages_by_family = false     # exp125: count a print's owners by FAMILY against max_packages
+terser_slices = "off"          # exp127: also read the terser-built slices (webpack, rollup): "union", "fallback",
+terser_share = 0.2             #   or "auto" (union for a bundle the terser slices alone hold >= terser_share of)
 
 [library.lookup.targeted]
 min_nodes = 20

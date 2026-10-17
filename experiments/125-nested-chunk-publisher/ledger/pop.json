@@ -1,0 +1,43 @@
+{
+ "corpus": "pop",
+ "labels": {
+  "pop-exp113-k2all": {},
+  "pop-exp113-main-k2": {},
+  "pop-exp113-own-k2": {},
+  "pop-exp117-base-k2-structural": {},
+  "pop-exp117-cpf-k2-structural": {},
+  "pop-exp117-dmb-k2-structural": {},
+  "pop-exp117-flip3-k2-structural": {},
+  "pop-exp117-flip4-k2-structural": {},
+  "pop-exp117-k2all-cpf": {},
+  "pop-exp117-k2all-cpfdmb": {},
+  "pop-exp117-k2all-flip4": {},
+  "pop-exp118-dl25k": {
+   "pop-bun WRONG->GOOD": 1637099,
+   "pop-esbuild WRONG->GOOD": 1650726
+  },
+  "pop-exp119-k2all-def": {},
+  "pop-exp119-k2all-st": {},
+  "pop-exp121-k2-v2": {},
+  "pop-exp121-v2": {
+   "pop-bun WRONG->GOOD": 1637099,
+   "pop-esbuild WRONG->GOOD": 1650726
+  },
+  "pop-exp124-base": {},
+  "pop-exp124-drop": {},
+  "pop-exp124-orig": {
+   "pop-bun WRONG->GOOD": 3303105,
+   "pop-esbuild WRONG->GOOD": 3331289
+  },
+  "pop-exp124-r5": {},
+  "pop-exp127-auto20": {},
+  "pop-exp127-fallback": {},
+  "pop-exp127-off": {},
+  "pop-exp127-probe": {},
+  "pop-exp127-union": {},
+  "pop-k2-rec": {},
+  "pop-k2-rec-dcap": {},
+  "pop-step4-structural": {}
+ },
+ "schema": "exp125-ledger10/1"
+}

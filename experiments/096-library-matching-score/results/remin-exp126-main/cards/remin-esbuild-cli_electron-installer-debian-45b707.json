@@ -1,0 +1,76 @@
+{
+ "bundleSha256": "5db3ebacb484ecc48036320f2804e45af99ac613f3ac24be99dafaaae44ece12",
+ "claimedBytes": {
+  "right": 663
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-esbuild-cli_electron-installer-debian-45b707",
+ "exploratory": {
+  "names": {
+   "bindings": 9,
+   "bindingsSameVersion": 9,
+   "bindingsVersionKnown": 9,
+   "exactBytes": 454,
+   "exactUnits": 4,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.022681,
+  "f1": 0.009198,
+  "namedBytes": 454,
+  "precision": 1.0,
+  "recall": 0.00462
+ },
+ "label": "remin-exp126-main",
+ "missBytes": {
+  "c": 9379,
+  "d-file": 86706,
+  "e-ambig": 278,
+  "e-support": 515,
+  "e-veto": 720
+ },
+ "noDiscovery": null,
+ "reportSha256": "29620aaa1e4eacaa3444e7e4ff1dcd8dbedce5db236f01770862a86e5de5edd3",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-esbuild",
+ "statementBytes": {
+  "<app>": 23,
+  "<self>": 7982,
+  "<unmapped>": 42,
+  "library": 98261
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.032848,
+  "f05ShipperOnly": 0.032848,
+  "f1": 0.013404,
+  "f1ShipperOnly": 0.013404,
+  "libraryBytes": 98261,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 663,
+  "namedBytes": 663,
+  "namedBytesShipperOnly": 663,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.006747,
+  "recallShipperOnly": 0.006747,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

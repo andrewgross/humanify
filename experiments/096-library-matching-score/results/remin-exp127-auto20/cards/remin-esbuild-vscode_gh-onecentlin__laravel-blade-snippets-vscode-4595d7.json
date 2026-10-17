@@ -1,0 +1,69 @@
+{
+ "bundleSha256": "77c74f794fe5ac28583e6e1417a5f8efbba83416b5522f5a9260f532df5d35f6",
+ "claimedBytes": {
+  "right": 28036
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin-esbuild-vscode_gh-onecentlin__laravel-blade-snippets-vscode-4595d7",
+ "exploratory": {
+  "names": {
+   "bindings": 0,
+   "bindingsSameVersion": 0,
+   "bindingsVersionKnown": 0,
+   "exactBytes": 1975,
+   "exactUnits": 1,
+   "sameVersionShare": 0.0
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.274794,
+  "f1": 0.131618,
+  "namedBytes": 1975,
+  "precision": 1.0,
+  "recall": 0.070445
+ },
+ "label": "remin-exp127-auto20",
+ "missBytes": {},
+ "noDiscovery": null,
+ "reportSha256": "e69d31a584d171bcf22625517b6dd2a686beba5922094e75d19758cc3b5343a6",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "remin-esbuild",
+ "statementBytes": {
+  "<app>": 268,
+  "<unmapped>": 283,
+  "library": 28036
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 1.0,
+  "f05ShipperOnly": 1.0,
+  "f1": 1.0,
+  "f1ShipperOnly": 1.0,
+  "libraryBytes": 28036,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 28036,
+  "namedBytes": 28036,
+  "namedBytesShipperOnly": 28036,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 1.0,
+  "recallShipperOnly": 1.0,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "b514731723fbc80c42b191bcda978bfcf4f0cfd25f49fba1f1c8d8a05c560d58",
+ "claimedBytes": {
+  "family": 222239,
+  "origin": 1644,
+  "right": 6622021,
+  "unmapped": 21356,
+  "wrongFamily": 27045
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-electron_hyper-e7aafe",
+ "exploratory": {
+  "names": {
+   "bindings": 50580,
+   "bindingsSameVersion": 44868,
+   "bindingsVersionKnown": 50580,
+   "exactBytes": 3310289,
+   "exactUnits": 2783,
+   "sameVersionShare": 0.88707
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.966696,
+  "f1": 0.925368,
+  "namedBytes": 6713731,
+  "precision": 0.996362,
+  "recall": 0.863818
+ },
+ "label": "exp125-k2f-apps",
+ "missBytes": {
+  "a": 149402,
+  "b": 1753,
+  "c": 30981,
+  "d-absent": 4329,
+  "d-file": 16411,
+  "e-ambig": 71608,
+  "e-other": 560402,
+  "e-support": 9643,
+  "e-veto": 33813,
+  "f": 47837,
+  "unit-model": 78
+ },
+ "noDiscovery": null,
+ "reportSha256": "11b917c34d82c7c2655a8674cf1ff4c061a5de0e7787bf1d6d6fd80dbfa7ed57",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<unmapped>": 329718,
+  "copy": 49067,
+  "library": 7772161
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 49067,
+  "f05": 0.970666,
+  "f05ShipperOnly": 0.970433,
+  "f1": 0.934907,
+  "f1ShipperOnly": 0.934682,
+  "libraryBytes": 7772161,
+  "namedAsOriginBytes": 1644,
+  "namedAsShipperBytes": 6844260,
+  "namedBytes": 6845904,
+  "namedBytesShipperOnly": 6844260,
+  "precision": 0.996065,
+  "precisionShipperOnly": 0.995826,
+  "recall": 0.880824,
+  "recallShipperOnly": 0.880612,
+  "wrongFamilyBytes": 27045,
+  "wrongFamilyBytesShipperOnly": 28689
+ },
+ "truthMethod": "sourcemap"
+}
