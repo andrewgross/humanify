@@ -4,7 +4,10 @@
 //! minify), named by `--recipe`; everything downstream receives the value.
 //!
 //! Every rule here is part of [`RECIPE_VERSION`], which is in every shard
-//! key: change a rule, bump the version, and the next build rebuilds.
+//! key: change a rule, bump the version, and the next build rebuilds. One
+//! exception, by proof: no recipe writes a map's `sourcesContent` (exp131),
+//! a byte the builder never reads, so the builds cached before it stay
+//! current (index tables byte-identical, `experiments/131-cache-slim/`).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -149,7 +152,7 @@ impl RecipeBuild {
                 if self.recipe.minify {
                     cmd.arg("--minify");
                 }
-                cmd.arg("--sourcemap=external")
+                cmd.args(["--sourcemap=external", "--sources-content=false"])
                     .arg(format!("--outfile={}", out_dir.join("out.js").display()));
                 for x in externals {
                     cmd.arg(format!("--external:{x}"));
@@ -206,6 +209,12 @@ impl RecipeBuild {
                 out_dir.join("out.js.map"),
             )
             .map_err(|e| format!("bun map: {e}"))?;
+        }
+        // Bun has no flag for it: whatever a bundler embedded, the map
+        // keeps only what the builder reads (exp131)
+        let map = out_dir.join("out.js.map");
+        if map.exists() {
+            crate::slim::slim_map_file(&map, None)?;
         }
         Ok(())
     }

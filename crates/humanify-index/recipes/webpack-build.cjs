@@ -22,7 +22,8 @@ const config = {
   target: "node",
   context: process.cwd(),
   entry,
-  devtool: "source-map",
+  // the map without sourcesContent (exp131: the builder reads only sources and mappings)
+  devtool: "nosources-source-map",
   output: {
     path: path.resolve(outdir),
     filename: "out.js",

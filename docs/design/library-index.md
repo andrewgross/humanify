@@ -280,7 +280,13 @@ A structural fingerprint depends on the bundler (Bun vs esbuild agree on
   `crates/humanify-index/recipes/`, run as `node <script> <entry> <out>
   <format> [external…]` from `--webpack` / `--rollup`, because their
   recipes are configuration code). The recipe's version is part of the
-  shard key.
+  shard key. No recipe keeps a map's `sourcesContent` (exp131: esbuild
+  `--sources-content=false`, rollup `sourcemapExcludeSources`, webpack
+  `nosources-source-map`, and every build's map slimmed before it is
+  stamped, since Bun has no flag): the builder reads only `sources` and
+  `mappings`, and the embedded sources were ~3/4 of every map. This did
+  not bump the recipe version — the cached builds stay current, proven
+  table-identical on 1,000 versions.
 - **Bun family vs esbuild:** one Bun slice covers Bun 1.2–1.4 once the
   normaliser lands (SYNTHESIS: 100% / 96.5% agreement after
   normalisation); until then, the bundler version is recorded and the
@@ -453,7 +459,13 @@ runs offline against a registry snapshot except npm installs):
    chunk), then one `build ... --merge-only` (the streaming merge, §4).
    Under the campaign, every build holds `flock /work/index-build.lock` and
    at most 30 cores.
-4. **Check it.** `--dry-run` prints the plan (shards to build vs reuse);
+4. **Slim an old work dir** (builds made before exp131 embed
+   `sourcesContent`), under the build lock and `taskset`:
+   `humanify-index slim-cache --work <dir> --journal <dir>` rewrites each
+   build map in place through its inode (hard links stay shared, symlinks
+   and `node_modules` untouched, an interrupted run finished from the
+   journal on the next).
+5. **Check it.** `--dry-run` prints the plan (shards to build vs reuse);
    the merged index's id is its manifest's sha256.
 
 `experiments/113-k2-all/scripts/build-k2-all.sh` is the k2-all build as
