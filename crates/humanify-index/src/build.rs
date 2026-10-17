@@ -45,9 +45,13 @@ const PURITY: f64 = 0.9;
 /// step 3); 3 = the same rows, and the shard's notes now record the drops
 /// (2's shards carried empty sponge notes); 4 = no file-name evidence, and
 /// only a strict module-marker comment counts (2/3 dropped right rows:
-/// esquery's own min build, glob comments that mention node_modules). In
-/// every module shard's key.
-pub const UNIT_ROWS_VERSION: &str = "unit-rows/4";
+/// esquery's own min build, glob comments that mention node_modules); 5 =
+/// region-aware (exp124): a marker drops only the units inside the region
+/// it opens, the file's own code outside every foreign region keeps its
+/// rows (crediting the foreign regions to the package their marker names
+/// instead was measured and refuted: test-bun precision -5.2). In every
+/// module shard's key.
+pub const UNIT_ROWS_VERSION: &str = "unit-rows/5";
 
 use humanify_core::libindex::units::UNIT_ROW_MIN_NODES;
 
@@ -490,9 +494,10 @@ fn bundled_files(dir: &Path, recipes: &[Recipe]) -> BTreeSet<PathBuf> {
             let Ok(text) = std::fs::read_to_string(build.join("out.js.map")) else {
                 continue;
             };
-            let Ok(map) = SourceMap::parse(&text) else {
+            let Ok(mut map) = SourceMap::parse(&text) else {
                 continue;
             };
+            map.relocate(&build);
             for s in map.mapped_sources() {
                 out.insert(canonical(&build.join(&map.sources[s as usize])));
             }
@@ -594,7 +599,8 @@ pub(crate) fn fingerprint_bundle(
 ) -> Result<(), String> {
     let code = std::fs::read_to_string(out.join("out.js")).map_err(|e| e.to_string())?;
     let map_text = std::fs::read_to_string(out.join("out.js.map")).map_err(|e| e.to_string())?;
-    let map = SourceMap::parse(&map_text)?;
+    let mut map = SourceMap::parse(&map_text)?;
+    map.relocate(out);
     let toolchain = humanify_core::toolchain::resolve_toolchain(
         &humanify_core::detect::detect_bundle(&code),
         Some(recipe.bundler.bundler_type()),
@@ -702,22 +708,24 @@ pub fn unit_rows(
         .map(|(u, _)| (u.span.start, u.span.end))
         .collect();
     let mut cache = HashMap::new();
-    let mut sponges: HashMap<u32, Option<&'static str>> = HashMap::new();
+    let mut sponges: HashMap<u32, Sponge> = HashMap::new();
     let mut sponge_files: BTreeSet<u32> = BTreeSet::new();
     let mut owned = Vec::new();
-    for ((unit, prints), tally) in units.iter().zip(map.tally(code, &spans)) {
+    for ((unit, prints), segs) in units.iter().zip(map.span_segments(code, &spans)) {
+        let tally = crate::sourcemap::tally_of(&segs);
         match unit_owner(map, out, &tally, &mut cache) {
             UnitOwner::Owned(owner, src) => {
-                let evidence = *sponges.entry(src).or_insert_with(|| {
+                let evidence = sponges.entry(src).or_insert_with(|| {
                     sponge_evidence(&owner, &lexical(&out.join(&map.sources[src as usize])))
                 });
-                if let Some(kind) = evidence {
+                let Some(owner) = evidence.unit_owner(owner, src, &segs) else {
                     if sponge_files.insert(src) {
+                        let kind = evidence.kind().unwrap_or("bundler-marker");
                         *notes.sponge_unit_files.entry(kind.to_string()).or_default() += 1;
                     }
                     notes.sponge_unit_rows += 1;
                     continue;
-                }
+                };
                 owned.push((owner, u64::from(unit.bytes), prints));
             }
             UnitOwner::Mixed => notes.mixed_spans += 1,
@@ -750,30 +758,169 @@ pub fn unit_rows(
     (rows, notes)
 }
 
-/// Why a package's source file is a pre-bundled copy of OTHER packages
-/// ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the file
-/// itself; None for the package's own code. In order: a vendored directory,
-/// then a bundler MODULE MARKER naming another package's `node_modules`
-/// path ([`module_marker_path`]). A file NAME is not evidence here (unlike
-/// the literal table's [`is_sponge_file`]): a package's own minified build
-/// is its own code — esquery's main IS `dist/esquery.min.js` (measured:
-/// the name rule cost 74 KB of right esquery claims on the held-out apps).
-pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&'static str> {
+/// Whether a package's source file holds pre-bundled copies of OTHER
+/// packages ("sponge", exp095 SYNTHESIS §8, exp097 step 3), read off the
+/// file itself. A file NAME is not evidence here (unlike the literal
+/// table's [`is_sponge_file`]): a package's own minified build is its own
+/// code — esquery's main IS `dist/esquery.min.js` (measured: the name rule
+/// cost 74 KB of right esquery claims on the held-out apps).
+#[derive(Debug)]
+pub enum Sponge {
+    /// The package's own code.
+    Own,
+    /// A vendored directory: the whole file is a copy.
+    VendoredPath,
+    /// A bundle that kept its bundler's MODULE MARKERS, at least one naming
+    /// another package's `node_modules` path ([`module_marker`]): the
+    /// file's regions in line order (exp124: only the foreign ones are
+    /// copies).
+    Regions(Vec<Region>),
+}
+
+/// One module region of a pre-bundled file: from `start` (a 0-based line)
+/// to the next region's start. `origin` is the OTHER package its marker
+/// names, None for the file's own code (a marker naming the package
+/// itself or a path outside `node_modules`, an `//#endregion`).
+#[derive(Debug, PartialEq, Eq)]
+pub struct Region {
+    pub start: u32,
+    pub origin: Option<String>,
+}
+
+impl Sponge {
+    /// The sponge note kind, None for the package's own code.
+    pub fn kind(&self) -> Option<&'static str> {
+        match self {
+            Sponge::Own => None,
+            Sponge::VendoredPath => Some("vendored-path"),
+            Sponge::Regions(_) => Some("bundler-marker"),
+        }
+    }
+
+    /// Who a unit of this file belongs to, from its segments' (source,
+    /// original line): the file's owner when at least [`PURITY`] of the
+    /// segments in this file lie outside every foreign region. None: the
+    /// unit has no row.
+    fn unit_owner(
+        &self,
+        owner: crate::sourcemap::Owner,
+        src: u32,
+        segs: &[(u32, u32)],
+    ) -> Option<crate::sourcemap::Owner> {
+        let regions = match self {
+            Sponge::Own => return Some(owner),
+            Sponge::VendoredPath => return None,
+            Sponge::Regions(r) => r,
+        };
+        let (mut own, mut total) = (0usize, 0usize);
+        for &(_, line) in segs.iter().filter(|&&(s, _)| s == src) {
+            total += 1;
+            let at = regions.partition_point(|r| r.start <= line);
+            if at
+                .checked_sub(1)
+                .is_none_or(|i| regions[i].origin.is_none())
+            {
+                own += 1;
+            }
+        }
+        (total > 0 && own as f64 >= PURITY * total as f64).then_some(owner)
+    }
+}
+
+/// Read a package's source file for [`Sponge`] evidence: a vendored
+/// directory, else its module regions when a marker names another
+/// package.
+pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Sponge {
     let vendored = ["vendor", "vendored", "third_party", "third-party"];
     let mut parts = owner.file.split('/').collect::<Vec<_>>();
     let name = parts.pop().unwrap_or_default();
     if parts.iter().any(|p| vendored.contains(p)) || name.starts_with("third-party.") {
-        return Some("vendored-path");
+        return Sponge::VendoredPath;
     }
     if std::fs::metadata(path).map_or(true, |m| m.len() > MAX_SOURCE_BYTES) {
-        return None;
+        return Sponge::Own;
     }
-    let text = std::fs::read_to_string(path).ok()?;
-    text.lines()
-        .filter_map(module_marker_path)
-        .filter_map(marker_package)
-        .any(|p| p != owner.package)
-        .then_some("bundler-marker")
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Sponge::Own;
+    };
+    let regions = module_regions(&owner.package, &text);
+    if regions.iter().any(|r| r.origin.is_some()) {
+        Sponge::Regions(regions)
+    } else {
+        Sponge::Own
+    }
+}
+
+/// A bundled file's module regions, in line order (the truth's marker rule,
+/// experiments/096-library-matching-score/origins.py `marker_regions7`):
+/// every module marker opens a region ([`module_marker`]); rolldown's
+/// `//#endregion` returns to the file's own code, except that a lazily
+/// initialised module's body right after it (`__esm(` / `__esmMin(`) stays
+/// the module's until the next marker or a top-level `export`.
+pub fn module_regions(owner: &str, text: &str) -> Vec<Region> {
+    let mut out: Vec<Region> = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+    let mut last: Option<String> = None;
+    let mut lazy = false;
+    for (i, line) in lines.iter().enumerate() {
+        let at = i as u32;
+        if line.starts_with("//#endregion") {
+            let body = last
+                .take()
+                .filter(|_| lines.get(i + 1).is_some_and(|next| is_lazy_body(next)));
+            out.push(Region {
+                start: at,
+                origin: None,
+            });
+            if let Some(o) = body {
+                out.push(Region {
+                    start: at + 1,
+                    origin: Some(o),
+                });
+                lazy = true;
+            }
+            continue;
+        }
+        if lazy && is_export(line) {
+            out.push(Region {
+                start: at,
+                origin: None,
+            });
+            lazy = false;
+            continue;
+        }
+        if let Some(path) = module_marker(line) {
+            let origin = marker_package(path)
+                .filter(|p| *p != owner)
+                .map(str::to_string);
+            last = origin.clone();
+            out.push(Region { start: at, origin });
+            lazy = false;
+        }
+    }
+    out
+}
+
+/// A top-level `export` statement (`^export\b`).
+fn is_export(line: &str) -> bool {
+    line.strip_prefix("export").is_some_and(|rest| {
+        !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_' || c == '$')
+    })
+}
+
+/// A lazily initialised module's body (rolldown/tsdown): `__esm(` or
+/// `__esmMin(`, optionally assigned (`var init_x = __esmMin(`).
+fn is_lazy_body(line: &str) -> bool {
+    let l = line.trim_start();
+    let l = ["var ", "let ", "const "]
+        .iter()
+        .find_map(|k| l.strip_prefix(k))
+        .and_then(|rest| {
+            let name_end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))?;
+            (name_end > 0).then(|| rest[name_end..].strip_prefix(" = "))?
+        })
+        .unwrap_or(l);
+    l.starts_with("__esm(") || l.starts_with("__esmMin(")
 }
 
 /// The module path a bundler's module-boundary comment names, when the
@@ -781,7 +928,7 @@ pub fn sponge_evidence(owner: &crate::sourcemap::Owner, path: &Path) -> Option<&
 /// ignoring `node_modules` are not markers): esbuild / Bun `// <path>` (the
 /// whole comment one source path), rolldown `//#region <path>`, webpack
 /// `/***/ "<path>":` and `/*!*** <path> ***!*/`.
-fn module_marker_path(line: &str) -> Option<&str> {
+fn module_marker(line: &str) -> Option<&str> {
     let l = line.trim();
     let path = if let Some(rest) = l.strip_prefix("//#region ") {
         rest.trim()
@@ -800,7 +947,7 @@ fn module_marker_path(line: &str) -> Option<&str> {
         (!rest.contains(char::is_whitespace) && source.iter().any(|e| rest.ends_with(e)))
             .then_some(rest)?
     };
-    path.contains("node_modules/").then_some(path)
+    (!path.is_empty()).then_some(path)
 }
 
 /// The package a marker path's LAST `node_modules/` segment names.
