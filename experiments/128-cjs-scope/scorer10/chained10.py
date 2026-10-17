@@ -18,6 +18,10 @@ relabelled when
 It then takes H, with H's installed version and the path relative to H's node_modules. Rows carry the old label and
 apply only to a source still carrying it.
 
+Second case, same rule shape: a source written as a URL (`raw-loader:/home/runner/work/<pkg>/...css?raw`) that the
+truth gave `<app>` and an installed package's own map lists VERBATIM takes that package (custom-electron-titlebar's
+inlined theme CSS; scorer 5's `chained` resolves sources as paths, so a URL never matched).
+
 usage: <venv python> -I chained10.py build --corpus dev|apps|bundlers|pop|remin|test|test2
        writes <DATA>/truth/<id>.chained10.json.gz per sourcemap entry and chained10[-<corpus>].json beside
        copies.json. Prints aggregates per set only (no names)."""
@@ -25,6 +29,7 @@ import collections
 import gzip
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +41,10 @@ import lib096  # noqa: E402
 import truth_audit  # noqa: E402
 
 C = C9.C
-SCHEMA = "exp128-chained10/1"
+SCHEMA = "exp128-chained10/2"
+# a source written as a URL (`raw-loader:/home/runner/...`, `webpack://...`): a map lists it verbatim, so it is
+# matched verbatim, never resolved as a path
+SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 def manifest_path(corpus=None):
@@ -67,6 +75,10 @@ def map_holders(missing, nm):
         for s in m["sources"]:
             if not isinstance(s, str):
                 continue
+            if SCHEME.match(s):
+                if s in missing and mp not in holders[s]:
+                    holders[s].append(mp)
+                continue
             for b in bases:
                 p = os.path.normpath(os.path.join(b, s))
                 if p in missing and mp not in holders[p]:
@@ -85,18 +97,25 @@ def entry_layer(entry, truth, npm, agg):
     missing = collections.defaultdict(list)
     for i, (s, r) in enumerate(zip(srcs, truth["sources"])):
         pkg = r[0]
-        if not isinstance(s, str) or not pkg or pkg.startswith("<"):
+        if not isinstance(s, str) or not pkg:
+            continue
+        if pkg == "<app>" and SCHEME.match(s):
+            missing[s].append(i)  # a URL source the truth gave the app: whose map wrote it? (verbatim)
+            continue
+        if pkg.startswith("<"):
             continue
         p = os.path.normpath(os.path.join(base, s))
         if not os.path.exists(p) and not installed(pkg, dirs):
             missing[p].append(i)
     if not missing:
         return {}
-    agg["not-installed package-labelled sources"] += sum(len(v) for v in missing.values())
+    agg["candidate sources (not installed / app URL)"] += sum(len(v) for v in missing.values())
     holders = map_holders(missing, dirs)
     out = {}
     for p, idx in sorted(missing.items(), key=lambda kv: kv[1]):
         row = C.holder_row(holders.get(p), p)
+        if row is not None and SCHEME.match(p):
+            row[2] = p
         if row is None:
             agg["no holder map (kept)"] += len(idx)
             continue
