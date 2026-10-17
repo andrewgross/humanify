@@ -75,7 +75,7 @@ pub fn veto_support_name(v: VetoSupport) -> &'static str {
     }
 }
 /// `library.lookup.terser_share`'s default (exp127).
-pub const TERSER_SHARE: f64 = 0.1;
+pub const TERSER_SHARE: f64 = 0.2;
 fn terser_slices_choices() -> Vec<String> {
     humanify_core::libindex::recipe::TerserSlices::NAMES
         .map(String::from)
