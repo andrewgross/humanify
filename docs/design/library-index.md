@@ -383,7 +383,15 @@ picks one unless `--library-index` names it. The recommendation below is
 what `library.matching = "report"` should be pointed at today, and what the
 eval's library score (`npm run eval -- library`) is judged on.
 
-**Recommended now: `k2-all`** (exp113; `/work/exp113-data/ix/k2-all`, /3,
+**Recommended now: `k2-all-r5`** (exp124; `/work/exp124-data/full/ix/k2-all-r5`, 6.5 GB, index id
+`5867457c...`). It is k2-all re-fingerprinted with `unit-rows/5`: a package's own pre-bundled chunk keeps its rows
+outside the regions its module markers give to other packages. With main's defaults, precision is up or equal on
+all 19 scored sets and F0.5 is up on 15 (held-out +0.37, task-master +1.60, apps-esbuild +0.58, pop +0.5 to +0.64,
+test2-bun +0.56; apps-webpack -0.003). It was re-fingerprinted from k2-all's cached builds
+(`experiments/124-region-sponge/scripts/seed-work.sh`, `lab-build.sh`). The k2-all description below still holds
+for it.
+
+**Previously: `k2-all`** (exp113; `/work/exp113-data/ix/k2-all`, /3,
 6.4 GB, index id `6d503431...`) — exp108's `k2-l12m4` package set (step 4's
 roots and pins plus every package bundled by at least two of 2,155
 independent training apps, at the `year-last12+major4` density) in ALL FIVE

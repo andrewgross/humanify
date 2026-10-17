@@ -41,8 +41,8 @@ Builder-only change (`crates/humanify-index`); humanify-core is untouched, so no
   - k2-all's store, minus the 9,135 module shards whose notes record a bundler-marker drop (the only shards the rule
     can change; 2,143 versions);
   - those shards rebuilt by the new rule from the cached builds, with the old key, then a full merge.
-  - The real re-fingerprint (`unit-rows/5`, every module shard) is `/work/exp124-data/full/ix/k2-all-r5`; see
-    "Full re-fingerprint" below.
+  - The real re-fingerprint (`unit-rows/5`, every module shard), `/work/exp124-data/full/ix/k2-all-r5`, scores
+    IDENTICALLY on every set (§3). It is the recommended default index: k2-all with region-aware sponge rows.
 
 ## 1. Lab first: does the row now exist? (`scripts/lab_hits.py`)
 
@@ -99,17 +99,30 @@ presence and its seeds, wherever the shipper is bundled. That is exp121's sponge
 index. Since the test split cannot be diagnosed, the mechanism is inferred from pop (pop-bun precision -0.34)
 and from exp118/exp121's measurements of the same class.
 
-## 3. Full re-fingerprint (`unit-rows/5`)
+## 3. Full re-fingerprint (`unit-rows/5`): `/work/exp124-data/full/ix/k2-all-r5`
 
-`/work/exp124-data/full/ix/k2-all-r5` re-fingerprints every k2-all module shard from cached builds:
+This re-fingerprints every k2-all module shard, all 68,304 versions in 5 slices, from cached builds:
 
 - the binary is this branch's `humanify-index` at `ab290d8e`;
-- every build is hard-linked into a seeded work dir (`scripts/seed-work.sh`), with node_modules symlinked to the
-  source install;
+- every finished build is hard-linked into a seeded work dir (`scripts/seed-work.sh`), with node_modules
+  symlinked to the source install;
 - literals shards are reused, since their key does not include the unit-rows version;
-- it ran under `flock /work/index-build.lock`, 30 cores (34-63).
+- it ran under `flock /work/index-build.lock` on 30 cores (34-63): 4.2 h of shards, then a 19 min merge at 34.5 GB
+  peak; the result is 6.5 GB, index id `5867457c...`.
 
-RESULT: see the appended line below. The shipped claim is that it equals the lab index's unit rows.
+**Scored on all 6 corpora (`*exp124-r5*`), every set's summary is IDENTICAL to the lab index's.** The merged files
+differ only in a few rows, which no scored bundle reaches:
+
+- Bun slices: byte-identical.
+- rollup: aws-sdk@2.1693.0 has +877 rows. Its k2-all build had timed out (1800 s), and this run rebuilt it.
+- webpack: esrap has +5 rows.
+- esbuild: about 1.5k rows move in 9 packages, mostly electron-updater (-670 rows). The cause: some selABC-built
+  maps name dependency files that only selABC's install had. The seeded work dir links a different source's
+  install (npm laid out nested dependencies differently), so those sources stay unowned even after
+  `relocate`.
+
+Lesson for the next re-fingerprint: seed each version's install from the SAME work dir as its builds. Where the
+builds came from several, the build's own install is the one that resolves.
 
 ## Reproduce
 
