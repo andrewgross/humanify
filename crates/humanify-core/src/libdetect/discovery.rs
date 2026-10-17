@@ -1003,7 +1003,10 @@ impl<'c> Containment<'c> {
             module_bytes: self.module_bytes[u as usize],
             text: "",
         };
-        self.family_count(self.index.structural_owners(&q, &self.rules))
+        self.family_count(
+            self.index
+                .structural_owners(&q, &self.rules, &|a, b| self.families.same(a, b)),
+        )
     }
 
     /// The owners the structural rule would accept for `u` on its own, tie
@@ -1018,7 +1021,8 @@ impl<'c> Containment<'c> {
             module_bytes: self.module_bytes[u as usize],
             text: "",
         };
-        self.index.structural_owners(&q, &self.rules)
+        self.index
+            .structural_owners(&q, &self.rules, &|a, b| self.families.same(a, b))
     }
 
     /// The smallest index module in which `package`'s family holds any of
@@ -1070,7 +1074,9 @@ impl<'c> Containment<'c> {
         // `max_packages` owners) and the package is one of its owners: a
         // print too common to seed anyone says nothing about origins either.
         let own = |p: &crate::libindex::units::UnitPrint| -> Option<u64> {
-            let owners = self.index.look(&p.hash, query, &self.rules)?;
+            let owners = self.index.look(&p.hash, query, &self.rules, &|a, b| {
+                self.families.same(a, b)
+            })?;
             if !owners.iter().any(|&o| self.owner_is(o, package)) {
                 return None;
             }

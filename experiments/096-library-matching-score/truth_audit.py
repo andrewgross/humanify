@@ -292,8 +292,54 @@ def origins7_sha():
     return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
 
 
+# scorer 10 (exp125): the scorer 7 layer rebuilt with origins.py's RULES10 (`via`: a nested chunk records the
+# region's package that published it), frozen per corpus by experiments/125-nested-chunk-publisher/scorer10/
+# origins10.py as <DATA>/truth/<id>.origins10.json.gz + origins10[-<corpus>].json. `via` read as `chunk`: the
+# scorer 7 layer segment for segment (origins10.py verify). When on, origin_layer reads it in place of scorer 7's.
+def origins10_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "origins10.json" if c == "dev" else f"origins10-{c}.json")
+
+
+def rules10():
+    import origins as O
+    return O.RULES10
+
+
+_O10 = {}
+
+
+def load_origins10_manifest():
+    """The scorer 10 layer's manifest for the current corpus, or None when `via` is off."""
+    if not rules10().get("via"):
+        return None
+    c = lib096.CORPUS
+    if c not in _O10:
+        with open(origins10_manifest_path()) as fh:
+            m = json.load(fh)
+        if m["rules"] != rules10():
+            raise SystemExit(f"REFUSED: {origins10_manifest_path()} was frozen with rules {m['rules']}, "
+                             f"not {rules10()}")
+        _O10[c] = m
+    return _O10[c]
+
+
+def origins10_sha():
+    m = load_origins10_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
 def origin_layer(entry, om, o7m):
-    """The entry's origin layer: scorer 7's (o7m, when any RULES7 rule is on) or the frozen scorer 4-6 one."""
+    """The entry's origin layer: scorer 10's (when RULES10 `via` is on), else scorer 7's (o7m, when any RULES7 rule
+    is on), else the frozen scorer 4-6 one."""
+    o10m = load_origins10_manifest() if o7m is not None else None
+    if o10m is not None:
+        p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins10.json.gz")
+        got = sha256_file(p)
+        if got != o10m["entries"].get(entry["id"]):
+            raise SystemExit(f"REFUSED: origins10 {p} sha256 {got[:12]} != {origins10_manifest_path()}")
+        with gzip.open(p, "rt") as fh:
+            return json.load(fh)
     if o7m is None:
         return lib096.load_origins(entry, om)
     p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins7.json.gz")

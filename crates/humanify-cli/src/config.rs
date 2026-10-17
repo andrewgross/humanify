@@ -311,6 +311,7 @@ impl Library {
             literal_cover: l.literal_cover,
             literal_margin: l.literal_margin,
             literal_margin_by_family: l.literal_margin_by_family,
+            max_packages_by_family: l.max_packages_by_family,
         }
     }
 
@@ -406,6 +407,7 @@ pub struct LibraryLookup {
     pub literal_cover: f64,
     pub literal_margin: f64,
     pub literal_margin_by_family: bool,
+    pub max_packages_by_family: bool,
     #[serde(serialize_with = "serialize_terser_slices")]
     pub terser_slices: humanify_core::libindex::recipe::TerserSlices,
     pub targeted_min_nodes: u32,
@@ -611,6 +613,7 @@ fn library_of(r: &Resolved) -> Library {
             literal_cover: r.float("library.lookup.literal_cover"),
             literal_margin: r.float("library.lookup.literal_margin"),
             literal_margin_by_family: r.flag_on("library.lookup.literal_margin_by_family"),
+            max_packages_by_family: r.flag_on("library.lookup.max_packages_by_family"),
             terser_slices: r
                 .text("library.lookup.terser_slices")
                 .as_deref()

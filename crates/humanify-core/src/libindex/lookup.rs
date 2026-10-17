@@ -318,12 +318,15 @@ impl LibraryIndex {
     }
 
     /// The distinct owners holding `hash` in a module no bigger than the
-    /// specificity rule allows; None when there are none or too many.
+    /// specificity rule allows; None when there are none or too many — too
+    /// many PACKAGES, or with [`LookupRules::max_packages_by_family`] too
+    /// many families under `same`.
     pub(crate) fn look(
         &self,
         hash: &str,
         module_bytes: u64,
         rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<BTreeSet<u32>> {
         let owners: BTreeSet<u32> = ReferenceStore::candidates(self, hash)
             .iter()
@@ -334,7 +337,35 @@ impl LibraryIndex {
             })
             .map(|h| h.owner)
             .collect();
-        (!owners.is_empty() && owners.len() <= rules.max_packages).then_some(owners)
+        let many = if rules.max_packages_by_family {
+            self.families_exceed(&owners, rules.max_packages, same)
+        } else {
+            owners.len() > rules.max_packages
+        };
+        (!owners.is_empty() && !many).then_some(owners)
+    }
+
+    /// Do `owners` span more than `max` families under `same`? Stops at the
+    /// first family past `max`, so a print every package holds costs at
+    /// most `max + 1` comparisons per owner.
+    fn families_exceed(
+        &self,
+        owners: &BTreeSet<u32>,
+        max: usize,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> bool {
+        let mut reps: Vec<&str> = Vec::new();
+        for &o in owners {
+            let name = self.package_name(o);
+            if reps.iter().any(|r| same(r, name)) {
+                continue;
+            }
+            reps.push(name);
+            if reps.len() > max {
+                return true;
+            }
+        }
+        false
     }
 
     /// A query literal's weight in bits, by its id when the index holds
@@ -454,8 +485,9 @@ impl LibraryIndex {
         q: &UnitQuery<'_>,
         rules: &LookupRules,
         previous: Option<u32>,
+        same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<(u32, u32)> {
-        let score = self.structural_scores(q, rules);
+        let score = self.structural_scores(q, rules, same);
         let whole = &q.prints.whole;
         let best = *score.values().max()?;
         let mut tied: Vec<u32> = score
@@ -471,10 +503,15 @@ impl LibraryIndex {
     /// Every package the structural rule would accept for `q` on its own
     /// (its covered nodes reach the cover), tie or not: the index's
     /// ambiguity about the unit.
-    pub(crate) fn structural_owners(&self, q: &UnitQuery<'_>, rules: &LookupRules) -> Vec<u32> {
+    pub(crate) fn structural_owners(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Vec<u32> {
         let floor = rules.cover * f64::from(q.prints.whole.nodes.max(1));
         let mut owners: Vec<u32> = self
-            .structural_scores(q, rules)
+            .structural_scores(q, rules, same)
             .into_iter()
             .filter(|&(_, v)| f64::from(v) >= floor)
             .map(|(k, _)| k)
@@ -485,13 +522,18 @@ impl LibraryIndex {
 
     /// The structural rule's scores: per package, the nodes its hits cover
     /// (the whole print, else the largest non-overlapping functions).
-    fn structural_scores(&self, q: &UnitQuery<'_>, rules: &LookupRules) -> HashMap<u32, u32> {
+    fn structural_scores(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> HashMap<u32, u32> {
         let usable =
             |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
         let whole = &q.prints.whole;
         let mut score: HashMap<u32, u32> = HashMap::new();
         if usable(whole, rules.min_content)
-            && let Some(owners) = self.look(&whole.hash, q.module_bytes, rules)
+            && let Some(owners) = self.look(&whole.hash, q.module_bytes, rules, same)
         {
             for p in owners {
                 score.insert(p, whole.nodes);
@@ -503,7 +545,7 @@ impl LibraryIndex {
                 .functions
                 .iter()
                 .filter(|f| usable(f, rules.min_function_content))
-                .filter_map(|f| Some((f, self.look(&f.hash, q.module_bytes, rules)?)))
+                .filter_map(|f| Some((f, self.look(&f.hash, q.module_bytes, rules, same)?)))
                 .collect();
             hits.sort_by_key(|(f, _)| std::cmp::Reverse(f.nodes));
             let mut taken: Vec<(u32, u32)> = Vec::new();
@@ -599,6 +641,11 @@ pub struct LookupRules {
     /// Read the literal margin against the best file of another package
     /// FAMILY, not merely another package (exp106; default off).
     pub literal_margin_by_family: bool,
+    /// Count a print's owners by FAMILY, not package, against
+    /// `max_packages` (exp125; default off): a scope's members, a fork and
+    /// its origin are one identity, and a bigger index adds carriers of the
+    /// same code until a print every one of them holds says nothing.
+    pub max_packages_by_family: bool,
 }
 
 impl Default for LookupRules {
@@ -618,6 +665,7 @@ impl Default for LookupRules {
             literal_cover: 0.9,
             literal_margin: 10.0,
             literal_margin_by_family: false,
+            max_packages_by_family: false,
         }
     }
 }
@@ -670,7 +718,7 @@ pub fn claim_units(
     let structural: Vec<Option<(u32, u32)>> = queries
         .iter()
         .map(|q| {
-            let hit = index.structural(q, &rules, previous);
+            let hit = index.structural(q, &rules, previous, same);
             if let Some((p, _)) = hit {
                 previous = Some(p);
             }

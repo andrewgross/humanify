@@ -45,7 +45,7 @@
  "noDiscovery": null,
  "reportSha256": "37bc7bc77401edca6b7463e6c54bb9f106538dfa478e74eb27ef9de512bfeed2",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "pop-esbuild",
  "statementBytes": {
   "<foreign>": 86059,

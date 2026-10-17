@@ -42,7 +42,7 @@
  "noDiscovery": null,
  "reportSha256": "c4ee31ea0d14c167a25bb0cba29992b9b6a619998dc3d093a0347e16c06f28d4",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "apps-webpack",
  "statementBytes": {
   "<app>": 403,
