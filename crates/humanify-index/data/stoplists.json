@@ -1,5 +1,5 @@
 {
-  "about": "Library-index stop-lists (exp095 scale lane, results/stop-effect.json; docs/design/library-index.md section 7). helperPackages and helperPackagePrefixes are dropped from the index at merge time: their code is inlined into everything and names no library. lookupFilePatterns are applied by the LOOKUP, not the build.",
+  "about": "Library-index stop-lists (exp095 scale lane, results/stop-effect.json; docs/design/library-index.md section 7). helperPackages and helperPackagePrefixes are dropped from the index at merge time: their code is inlined into everything and names no library. lookupFilePatterns are applied by the LOOKUP, not the build. helperSources (exp129) are the helper packages whose own code IS canonical transpiler helper code (tsc, Babel, SWC, oxc emit it inline): their prints are kept in the helper table helpers.jsonl, read by the lookup. @babel/helpers is no source (its dist carries @babel/types and @babel/template code), nor are the core-js runtimes (@babel/runtime-corejs2/3 re-export core-js-pure).",
   "helperPackages": [
     "@babel/helpers",
     "@oxc-project/runtime",
@@ -8,6 +8,13 @@
     "tslib"
   ],
   "helperPackagePrefixes": ["@babel/runtime"],
+  "helperSources": [
+    "@babel/runtime",
+    "@oxc-project/runtime",
+    "@swc/helpers",
+    "regenerator-runtime",
+    "tslib"
+  ],
   "lookupFilePatterns": {
     "stainless": {
       "when": "the package's source carries X-Stainless-Lang (a Stainless-generated SDK)",
