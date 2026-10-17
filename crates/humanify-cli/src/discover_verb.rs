@@ -89,7 +89,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
     // its index would read as a real zero.
     let index = match args.library_index {
         Some(dir) => Some(
-            LibraryIndex::load(Path::new(dir), &recipe)
+            LibraryIndex::load(Path::new(dir), &recipe, args.library.lookup.terser_slices)
                 .map_err(|e| format!("library index {dir}: {e}"))?,
         ),
         None => None,

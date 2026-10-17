@@ -260,23 +260,40 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
     let target_node = detect_recipe("var a;", BundlerType::Bun, MinifierType::Bun);
     write_manifest("units/0");
     assert!(matches!(
-        LibraryIndex::load(&dir, &target_bun),
+        LibraryIndex::load(
+            &dir,
+            &target_bun,
+            crate::libindex::recipe::TerserSlices::Off
+        ),
         Err(LoadError::Unusable(_))
     ));
     write_manifest(&fingerprint_versions().units);
-    let ix = LibraryIndex::load(&dir, &target_bun).expect("loads");
+    let ix = LibraryIndex::load(
+        &dir,
+        &target_bun,
+        crate::libindex::recipe::TerserSlices::Off,
+    )
+    .expect("loads");
     assert_eq!((ix.id.len(), ix.slice.as_str()), (64, "bun-bun-cjs-min"));
     assert_eq!(
         claims(&ix, &[whole("a", 150)], structural()),
         vec![(0, "zod".into())]
     );
-    match LibraryIndex::load(&dir, &target_node) {
+    match LibraryIndex::load(
+        &dir,
+        &target_node,
+        crate::libindex::recipe::TerserSlices::Off,
+    ) {
         Err(LoadError::NoSlice { why, .. }) => assert!(why.contains("bun:target=node"), "{why}"),
         other => panic!("a target-node bundle has no slice here: {:?}", other.err()),
     }
     // the lookup tables are the index: one missing is an unusable index
     std::fs::remove_file(dir.join(crate::libindex::table::LITERALS_FILE)).unwrap();
-    match LibraryIndex::load(&dir, &target_bun) {
+    match LibraryIndex::load(
+        &dir,
+        &target_bun,
+        crate::libindex::recipe::TerserSlices::Off,
+    ) {
         Err(LoadError::Unusable(e)) => assert!(e.contains("literals.bin"), "{e}"),
         other => panic!("no literal table: {:?}", other.err()),
     }
@@ -343,4 +360,132 @@ fn the_literal_margin_by_family_ignores_a_sibling_holding_the_same_literals() {
     let got = claim_units(&index, &queries, by_family, &same);
     assert_eq!(got.len(), 1, "{got:?}");
     assert_eq!(got[0].package, "@smithy/core");
+}
+
+/// An on-disk index of `slices` (slice name, recipe, rows; each its
+/// bundler's default), current stamps.
+fn write_index(dir: &std::path::Path, slices: Vec<(&str, &str, Vec<UnitRow>)>) {
+    use crate::libindex::format::{
+        INDEX_FORMAT, Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions,
+    };
+    std::fs::create_dir_all(dir).unwrap();
+    let records = slices
+        .iter()
+        .map(|(slice, recipe, _)| SliceRecord {
+            slice: slice.to_string(),
+            recipe: recipe.to_string(),
+            recipe_version: RECIPE_VERSION.into(),
+            default_for_bundler: true,
+            bundler: recipe.split(':').next().unwrap().into(),
+            version: "1.0.0".into(),
+            published: None,
+            newest_at_as_of: None,
+            bundler_after_as_of: false,
+        })
+        .collect();
+    let m = Manifest {
+        format: INDEX_FORMAT.into(),
+        as_of: "2026-10-12".into(),
+        fingerprints: fingerprint_versions(),
+        registry: Default::default(),
+        slices: records,
+        packages: vec![],
+        refused: vec![],
+        shards: Default::default(),
+        tables: Default::default(),
+        data: Default::default(),
+    };
+    std::fs::write(
+        dir.join("manifest.json"),
+        serde_json::to_string(&m).unwrap(),
+    )
+    .unwrap();
+    let units = slices
+        .into_iter()
+        .map(|(slice, _, rows)| (slice.to_string(), rows))
+        .collect();
+    for (name, bytes) in crate::libindex::table::lookup_files(&units, &[]).unwrap() {
+        std::fs::write(dir.join(name), bytes).unwrap();
+    }
+}
+
+/// exp127: `terser_slices` reads the index's terser-built slices beside
+/// the chosen one — `union` always (each owner once, at its smallest
+/// module), `fallback` only for a print the chosen slice does not hold —
+/// and `off` (the default) reads the chosen slice alone.
+#[test]
+fn the_loader_reads_the_terser_built_slices_beside_the_chosen_one() {
+    use crate::libindex::recipe::{TerserSlices, detect_recipe};
+    use humanify_model::detection::{BundlerType, MinifierType};
+    let dir = std::env::temp_dir().join(format!("humanify-terser-slices-{}", std::process::id()));
+    write_index(
+        &dir,
+        vec![
+            (
+                "esbuild-node-cjs-min",
+                "esbuild:target=node,format=cjs,minify",
+                vec![row("a", "zod", 150, 900)],
+            ),
+            (
+                "rollup-node-cjs-min",
+                "rollup:target=node,format=cjs,minify",
+                vec![
+                    row("a", "zod", 150, 700),
+                    row("a", "yup", 150, 800),
+                    row("b", "lodash", 150, 10),
+                ],
+            ),
+            (
+                "webpack-node-cjs-min",
+                "webpack:target=node,format=cjs,minify",
+                vec![row("c", "chalk", 150, 10), row("a", "zod", 150, 2000)],
+            ),
+        ],
+    );
+    let esb = detect_recipe("var a;", BundlerType::Esbuild, MinifierType::Esbuild);
+    let hits = |mode| {
+        let ix = LibraryIndex::load(&dir, &esb, mode).expect("loads");
+        assert_eq!(
+            ix.slice, "esbuild-node-cjs-min",
+            "the chosen slice is recorded"
+        );
+        ["a", "b", "c"].map(|h| {
+            ix.occurrences(&hx(h))
+                .into_iter()
+                .map(|(o, m)| (o.to_string(), m))
+                .collect::<Vec<_>>()
+        })
+    };
+    let own = |o: &str, m: u64| (o.to_string(), m);
+    assert_eq!(
+        hits(TerserSlices::Off),
+        [vec![own("zod", 900)], vec![], vec![]],
+        "off reads the chosen slice alone"
+    );
+    assert_eq!(
+        hits(TerserSlices::Union),
+        [
+            vec![own("zod", 700), own("yup", 800)],
+            vec![own("lodash", 10)],
+            vec![own("chalk", 10)]
+        ],
+        "union: each owner once, at its smallest module over the slices read"
+    );
+    assert_eq!(
+        hits(TerserSlices::Fallback),
+        [
+            vec![own("zod", 900)],
+            vec![own("lodash", 10)],
+            vec![own("chalk", 10)]
+        ],
+        "fallback: the terser slices only where the chosen slice holds nothing"
+    );
+    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Union).unwrap();
+    assert!(
+        ix.slice_reason.contains("rollup-node-cjs-min")
+            && ix.slice_reason.contains("webpack-node-cjs-min"),
+        "the reason names the slices read beside it: {}",
+        ix.slice_reason
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }

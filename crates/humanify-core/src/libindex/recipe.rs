@@ -58,6 +58,17 @@ impl RecipeBundler {
         }
     }
 
+    /// The minifier the recipe's `minify` runs: each bundler's own, and
+    /// terser for webpack 5 (its production minifier) and rollup (the
+    /// recipe's terser plugin).
+    pub fn minifier(self) -> MinifierType {
+        match self {
+            RecipeBundler::Bun => MinifierType::Bun,
+            RecipeBundler::Esbuild => MinifierType::Esbuild,
+            RecipeBundler::Webpack | RecipeBundler::Rollup => MinifierType::Terser,
+        }
+    }
+
     /// The recipe bundler a run's bundler is looked up under; None: no
     /// index slice can exist for it.
     pub fn for_bundler(bundler: BundlerType) -> Option<RecipeBundler> {
@@ -265,4 +276,54 @@ pub fn choose_slice<'s>(
             has.join(", ")
         )
     })
+}
+
+/// Which slices a run reads beside the one [`choose_slice`] picked (exp127,
+/// `library.lookup.terser_slices`). Code minified by terser — a package's
+/// own published `.min` dist, or a whole bundle re-minified — matches the
+/// terser-built rows far better than its bundler's slice, and the minifier
+/// verdict cannot tell terser from esbuild, so the slice choice cannot
+/// rest on it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TerserSlices {
+    /// The chosen slice alone.
+    #[default]
+    Off,
+    /// The chosen slice plus every terser-built slice, each owner once at
+    /// its smallest module.
+    Union,
+    /// The terser-built slices only for a print the chosen slice does not
+    /// hold.
+    Fallback,
+}
+
+impl TerserSlices {
+    pub fn name(self) -> &'static str {
+        match self {
+            TerserSlices::Off => "off",
+            TerserSlices::Union => "union",
+            TerserSlices::Fallback => "fallback",
+        }
+    }
+
+    /// Every spelling, in the config key's order.
+    pub const ALL: [TerserSlices; 3] = [
+        TerserSlices::Off,
+        TerserSlices::Union,
+        TerserSlices::Fallback,
+    ];
+
+    pub fn from_name(name: &str) -> Option<TerserSlices> {
+        TerserSlices::ALL.into_iter().find(|t| t.name() == name)
+    }
+}
+
+/// The index's terser-built slices other than `chosen`, in manifest order:
+/// every minified slice whose bundler minifies with terser.
+pub fn terser_slices<'s>(slices: &'s [(Recipe, bool)], chosen: &Recipe) -> Vec<&'s Recipe> {
+    slices
+        .iter()
+        .map(|r| &r.0)
+        .filter(|r| r.minify && r.bundler.minifier() == MinifierType::Terser && *r != chosen)
+        .collect()
 }

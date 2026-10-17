@@ -74,6 +74,11 @@ pub fn veto_support_name(v: VetoSupport) -> &'static str {
         VetoSupport::AllRules => "all-rules",
     }
 }
+fn terser_slices_choices() -> Vec<String> {
+    humanify_core::libindex::recipe::TerserSlices::ALL
+        .map(|t| t.name().to_string())
+        .to_vec()
+}
 fn banner_names() -> Vec<String> {
     ["any", "known"].map(String::from).to_vec()
 }
@@ -549,6 +554,17 @@ pub static KEYS: &[Key] = &[
         unset: "",
         doc: "Read the literal margin against the best file of another package family, not \
               another package: a sibling holding the same literals is no rival (exp106).",
+    },
+    Key {
+        section: "library.lookup",
+        name: "terser_slices",
+        kind: Kind::Choice(terser_slices_choices),
+        flag: None,
+        default: || text(humanify_core::libindex::recipe::TerserSlices::default().name()),
+        unset: "",
+        doc: "Also read the index's terser-built slices (webpack, rollup) beside the bundle's \
+              own: \"off\", \"union\" (every print) or \"fallback\" (a print the bundle's \
+              slice does not hold) — terser-minified code matches terser rows (exp127).",
     },
     // [library.lookup.targeted]: the second round, on queued regions.
     lib_int(

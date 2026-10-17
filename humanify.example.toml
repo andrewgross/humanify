@@ -110,6 +110,8 @@ literal_cover = 0.9
 literal_margin = 10.0
 # Read the literal margin against the best file of another package family, not another package: a sibling holding the same literals is no rival (exp106).
 literal_margin_by_family = true
+# Also read the index's terser-built slices (webpack, rollup) beside the bundle's own: "off", "union" (every print) or "fallback" (a print the bundle's slice does not hold) — terser-minified code matches terser rows (exp127).
+terser_slices = "off"
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).
