@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "a5019aa6cc0927acbc41aa06529c63438dc252864304d5f91d0fda2e91499003",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "wrangler",
  "statementBytes": {
   "<app>": 845382,

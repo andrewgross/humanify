@@ -35,7 +35,7 @@
  "noDiscovery": null,
  "reportSha256": "779f0addd841716ce2edbd627371e4fba3d51eb629b81008613e5548303fafb9",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "pop-esbuild",
  "statementBytes": {
   "<app>": 349,

@@ -709,7 +709,7 @@ fn load_library_index(
         .map_err(Crash)?;
     let recipe =
         humanify_core::libindex::recipe::detect_recipe(code, toolchain.bundler, toolchain.minifier);
-    match LibraryIndex::load(&dir, &recipe) {
+    match LibraryIndex::load(&dir, &recipe, config.library.lookup.terser_slices) {
         Ok(index) => Ok(LibraryLoad {
             index_id: Some(index.id.clone()),
             index: Some(index),

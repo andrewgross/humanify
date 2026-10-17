@@ -74,6 +74,13 @@ pub fn veto_support_name(v: VetoSupport) -> &'static str {
         VetoSupport::AllRules => "all-rules",
     }
 }
+/// `library.lookup.terser_share`'s default (exp127).
+pub const TERSER_SHARE: f64 = 0.2;
+fn terser_slices_choices() -> Vec<String> {
+    humanify_core::libindex::recipe::TerserSlices::NAMES
+        .map(String::from)
+        .to_vec()
+}
 fn banner_names() -> Vec<String> {
     ["any", "known"].map(String::from).to_vec()
 }
@@ -550,6 +557,36 @@ pub static KEYS: &[Key] = &[
         doc: "Read the literal margin against the best file of another package family, not \
               another package: a sibling holding the same literals is no rival (exp106).",
     },
+    Key {
+        section: "library.lookup",
+        name: "max_packages_by_family",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(rules().max_packages_by_family)),
+        unset: "",
+        doc: "Count a print's owners by package family, not package, against max_packages: \
+              a scope's members or a fork and its origin are one identity, and a bigger \
+              index's carriers of the same code no longer make it too common (exp125).",
+    },
+    Key {
+        section: "library.lookup",
+        name: "terser_slices",
+        kind: Kind::Choice(terser_slices_choices),
+        flag: None,
+        default: || text(humanify_core::libindex::recipe::TerserSlices::default().name()),
+        unset: "",
+        doc: "Also read the index's terser-built slices (webpack, rollup) beside the bundle's \
+              own: \"off\", \"union\" (every print) or \"fallback\" (a print the bundle's \
+              slice does not hold) or \"auto\" (union for a bundle the terser slices alone hold \
+              `terser_share` of) — terser-minified code matches terser rows (exp127).",
+    },
+    lib_float(
+        "terser_share",
+        1.0,
+        || float(TERSER_SHARE),
+        "terser_slices = \"auto\": the share of the bundle's looked-up whole-unit nodes the \
+         terser-built slices alone must hold for the bundle to read them (exp127).",
+    ),
     // [library.lookup.targeted]: the second round, on queued regions.
     lib_int(
         "library.lookup.targeted",

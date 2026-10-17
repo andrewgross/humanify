@@ -69,6 +69,14 @@ def marker_regions(content):
 #             collection (`dist/licenses/<P>/LICENSE`, a LICENSE.md `## <P>` section) — and never as a runtime
 #             dependency (a runtime dependency is installed beside it: a file named after one is a wrapper)
 RULES7 = {"lazybody": True, "chunk": True}
+# scorer 10 (exp125): one more rule on the scorer 7 layer.
+#   via       a NESTED chunk (a marker region naming package R, whose file inside R is a chunk named after P that R
+#             declares as a build input) records R beside the origin P: R PUBLISHED that file. The scorer credits
+#             a chunk's own publisher when it ships the file directly (the shipper, judged right), so a claim
+#             naming R for the same bytes inside another package's bundle is the same claim one level down; the
+#             kind is spelled `chunk/via:<R>` (`via` off: exactly scorer 7's layer)
+RULES10 = {**RULES7, "via": True}
+VIA = "chunk/via:"
 LAZY = re.compile(r"^\s*(?:(?:var|let|const) [\w$]+ = )?__esm(?:Min)?\(")
 EXPORT = re.compile(r"^export\b")
 SRC_EXT = re.compile(r"\.(?:[cm]?[jt]sx?)$")
@@ -167,7 +175,8 @@ class Origins:
                         rest = mp.rsplit("node_modules/" + o + "/", 1)[-1] if "node_modules/" + o + "/" in mp else ""
                         nested = chunk_origin(o, path_version(mp, o), rest, inputs, same_family) if rest else None
                         if nested:
-                            r.append((ln, ("chunk", nested)))
+                            # scorer 10 (exp125) `via`: the region's package published this chunk too
+                            r.append((ln, (VIA + o if rules.get("via") else "chunk", nested)))
                             continue
                     r.append((ln, (kind, o)))
             if any(o for _, o in r):

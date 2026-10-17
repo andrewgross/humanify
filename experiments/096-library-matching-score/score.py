@@ -57,6 +57,7 @@ from lib096 import HERE, INDEX_CACHE, dump  # noqa: E402
 import mmlib  # noqa: E402  (the misses lane: index table, structural-rule emulation)
 import families_lib  # noqa: E402
 import truth_audit  # noqa: E402
+from origins import VIA  # noqa: E402  (scorer 10: a nested chunk's publisher)
 
 FAMILIES = families_lib.Families()
 same_family = FAMILIES.same
@@ -101,18 +102,22 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    a chained source whose path names a package npm does not have (`@primevue/src`, from @primevue/core's own map)
 #    keeps the real package whose map listed it. Same reports, re-scored; RULES9 off + scorer 8's links file
 #    reproduces scorer 8's cards.
-# 10: exp128, the FACTORY scope (experiments/128-cjs-scope/README.md). Scorers 1-9 judged statement and lazy-body
+# 10: exp125, rule `via` (origins.py RULES10, frozen layer origins10): a NESTED chunk (a marker region naming R
+#    whose file inside R is a chunk named after P, R declaring P a build input) credits R beside the origin P: R
+#    published that file, and a claim naming R is judged `origin`, as the claim naming a directly shipped chunk's
+#    publisher is judged right. Same reports, re-scored; `via` off reproduces scorer 9's cards.
+# 11: exp128, the FACTORY scope (experiments/128-cjs-scope/README.md). Scorers 1-10 judged statement and lazy-body
 #    units only; a bundled CommonJS module (`Factory`, one external unit in the query graph: no print, never claimed)
-#    was outside every number, and it holds most of an esbuild or Bun bundle (held-out 83%, remin-esbuild 92%).
+#    was outside every number, and it holds most of an esbuild or Bun bundle (held-out 87% of library bytes, remin-esbuild 93%).
 #    Factories are now units under the same truth rules: an external factory is one unit (majority-mapped label), a
 #    factory cut into body statements (`FactoryBody` rows) is judged per statement. totals / f05 cover BOTH scopes;
-#    `scopes.statement` is scorer 9's whole scope, `scopes.factory` the new one; an
+#    `scopes.statement` is scorer 10's whole scope, `scopes.factory` the new one; an
 #    unclaimed external factory's miss class is `factory`. Claude Code's sample holds statement units only: its
-#    factory scope is not judged. And rule `notinstalled` (truth_audit RULES10, frozen layer chained10): scorer 9's
+#    factory scope is not judged. And rule `notinstalled` (truth_audit RULES11, frozen layer chained11): scorer 9's
 #    npmchain without "P is not on npm" — a chained source labelled with a package NOT INSTALLED in the app
 #    (`node_modules/src/...` from async-validator's own map) keeps the package whose map listed it. Same reports,
-#    re-scored; `notinstalled` off makes `scopes.statement` scorer 9's card exactly (verify10.py).
-SCORER_VERSION = "exp096-score/10"
+#    re-scored; `notinstalled` off makes `scopes.statement` scorer 10's card exactly (verify11.py).
+SCORER_VERSION = "exp096-score/11"
 
 
 def r6(x):
@@ -152,13 +157,13 @@ def run_units(report):
 
 
 def statement_units(units):
-    """The STATEMENT scope (scorers 1-9's whole scope, scorer 10's `scopes.statement`): top-level statements and
+    """The STATEMENT scope (scorers 1-10's whole scope, scorer 11's `scopes.statement`): top-level statements and
     lazy-module bodies, bundler runtime excluded."""
     return [u for u in units if u["k"] in ("Statement", "LazyBody") and not u["rt"]]
 
 
 def factory_units(units):
-    """The FACTORY scope (scorer 10, exp128): what bundled CommonJS modules hold. A factory the run cut into its
+    """The FACTORY scope (scorer 11, exp128): what bundled CommonJS modules hold. A factory the run cut into its
     body statements (`FactoryBody` rows) is judged per body statement, exactly as a lazy body is; a factory the run
     kept as ONE external unit (the query graph's default: no body rows, no print) is judged as one unit, its
     majority-mapped package as its label, as a statement is."""
@@ -167,7 +172,7 @@ def factory_units(units):
 
 
 def scored_units(units):
-    """Every unit scorer 10 judges: the statement scope, then the factory scope (disjoint), in unit order."""
+    """Every unit scorer 11 judges: the statement scope, then the factory scope (disjoint), in unit order."""
     keep = {u["i"] for u in statement_units(units)} | {u["i"] for u in factory_units(units)}
     return [u for u in units if u["i"] in keep]
 
@@ -209,7 +214,10 @@ def label_units(truth, units, origins=None, audit=None):
         if origins and lab in by_origin:
             (oi, ki), _ = sorted(by_origin[lab].items(), key=lambda kv: (-kv[1], kv[0]))[0]
             if oi >= 0:
-                row.update(origin=origins["names"][oi], originEvidence=origins["kinds"][ki])
+                kind = origins["kinds"][ki]
+                row.update(origin=origins["names"][oi], originEvidence=kind)
+                if kind.startswith(VIA):
+                    row.update(originEvidence="chunk", via=kind[len(VIA):])
         if audit is not None and lab not in NOT_LIBRARY and "origin" not in row:
             co = audit.copy_origin(s, e, lab)
             if co is not None:
@@ -238,8 +246,8 @@ def judge_origin(claimed, row, app_pkg):
     selfOther is). Returns (new verdict, shipper-only verdict)."""
     old = judge(claimed, row["label"], app_pkg)
     origin = row.get("origin")
-    if origin is not None and old in ("wrongFamily", "selfOther") \
-            and same_family(claimed, origin):
+    if old in ("wrongFamily", "selfOther") and any(
+            o is not None and same_family(claimed, o) for o in (origin, row.get("via"))):
         return ("origin" if old == "wrongFamily" else "selfOrigin"), old
     return old, old
 
@@ -295,8 +303,8 @@ SCOPES = ("statement", "factory")
 
 
 def scope_block(t, claimed, old, misses):
-    """One scope's totals (scorer 10's `scopes.<name>`): the same measures as the card's totals, over that scope's
-    units only. `scopes.statement` is scorers 1-9's whole scope, so its numbers are a scorer-9 card's totals."""
+    """One scope's totals (scorer 11's `scopes.<name>`): the same measures as the card's totals, over that scope's
+    units only. `scopes.statement` is scorers 1-10's whole scope, so its numbers are a scorer-10 card's totals (with `notinstalled` off)."""
     lib = t["library"]
     named = claimed["right"] + claimed["family"] + claimed["origin"]
     old_named = old["right"] + old["family"]
@@ -609,12 +617,15 @@ def main():
     c9m = truth_audit.load_chained9_manifest()
     if c9m is not None and c9m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 9 chained layer was frozen for another corpus manifest")
-    c10m = truth_audit.load_chained10_manifest()
-    if c10m is not None and c10m["corpusSha256"] != pipeline["corpusSha256"]:
-        raise SystemExit("REFUSED: the scorer 10 chained layer was frozen for another corpus manifest")
+    c11m = truth_audit.load_chained11_manifest()
+    if c11m is not None and c11m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 11 chained layer was frozen for another corpus manifest")
     o7m = truth_audit.load_origins7_manifest()
     if o7m is not None and o7m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 7 origin layer was frozen for another corpus manifest")
+    o10m = truth_audit.load_origins10_manifest() if o7m is not None else None
+    if o10m is not None and o10m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 10 origin layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -668,8 +679,9 @@ def main():
                    "copiesSha256": truth_audit.copies_sha(), "familiesSha256": families_lib.derived_sha(),
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
+                   **({"origins10Sha256": truth_audit.origins10_sha()} if o7m and truth_audit.origins10_sha() else {}),
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
-                   **({"chained10Sha256": truth_audit.chained10_sha()} if c10m else {}),
+                   **({"chained11Sha256": truth_audit.chained11_sha()} if c11m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},

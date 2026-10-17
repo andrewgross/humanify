@@ -1,0 +1,87 @@
+{
+ "bundleSha256": "b4f449bee9b00b27e895d001c8462891fd99addc341e76a8f6b984df4b1385af",
+ "claimedBytes": {
+  "family": 6836498,
+  "origin": 246890,
+  "right": 4406758,
+  "selfOrigin": 10183,
+  "selfOther": 426,
+  "unmapped": 50,
+  "wrongFamily": 51891
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-esbuild-cli_astro-82a1ed",
+ "exploratory": {
+  "names": {
+   "bindings": 15337,
+   "bindingsSameVersion": 13286,
+   "bindingsVersionKnown": 15337,
+   "exactBytes": 4390845,
+   "exactUnits": 1837,
+   "sameVersionShare": 0.866271
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.480785,
+  "f1": 0.271671,
+  "namedBytes": 1958268,
+  "precision": 0.987555,
+  "recall": 0.157499
+ },
+ "label": "exp125-k2f-apps",
+ "missBytes": {
+  "a": 7189,
+  "c": 96039,
+  "d-absent": 511889,
+  "d-file": 2848,
+  "e-ambig": 12722,
+  "e-other": 50391,
+  "e-support": 1393,
+  "e-veto": 9236,
+  "f": 251664
+ },
+ "noDiscovery": null,
+ "reportSha256": "713fae9825b0302f6f4f1647816e61b5cf6972d2dcabfd4626a58571e5eec0c1",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-esbuild",
+ "statementBytes": {
+  "<app>": 24,
+  "<self>": 636082,
+  "<unmapped>": 162,
+  "copy": 685046,
+  "library": 12433517
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 685046,
+  "f05": 0.98036,
+  "f05ShipperOnly": 0.959295,
+  "f1": 0.958489,
+  "f1ShipperOnly": 0.937893,
+  "libraryBytes": 12433517,
+  "namedAsOriginBytes": 246890,
+  "namedAsShipperBytes": 11243256,
+  "namedBytes": 11490146,
+  "namedBytesShipperOnly": 11243256,
+  "precision": 0.995504,
+  "precisionShipperOnly": 0.974114,
+  "recall": 0.924127,
+  "recallShipperOnly": 0.90427,
+  "wrongFamilyBytes": 51891,
+  "wrongFamilyBytesShipperOnly": 298781
+ },
+ "truthMethod": "sourcemap"
+}

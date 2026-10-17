@@ -1,0 +1,13 @@
+{
+ "binarySha256": "a170133f18eafc531fb73adfc573dc35ea5a441bbbcf6e7f92a21116212f24ab",
+ "buildCommit": "e72c75ec4287cfd38d2d1a4c58cd794a10345eac",
+ "corpus": "pop",
+ "corpusSha256": "626b032b7d7d11fa1aa18e9d08e789cdc83ba5a899c50e03f5a1f93641c02fea",
+ "indexBytes": 6807877931,
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "instrument": "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml",
+ "rule": "structural",
+ "settings": [
+  "library.lookup.max_packages_by_family=true"
+ ]
+}

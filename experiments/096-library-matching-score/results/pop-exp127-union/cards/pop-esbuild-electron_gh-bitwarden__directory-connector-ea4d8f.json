@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "79311a81f78b8c20554955f976eeb5e3e94525c317ec41d73fadccf22e570005",
+ "claimedBytes": {
+  "family": 11867,
+  "origin": 321483,
+  "right": 3063076,
+  "unmapped": 23917,
+  "wrongFamily": 7238
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-bitwarden__directory-connector-ea4d8f",
+ "exploratory": {
+  "names": {
+   "bindings": 47021,
+   "bindingsSameVersion": 15751,
+   "bindingsVersionKnown": 47021,
+   "exactBytes": 2806213,
+   "exactUnits": 4625,
+   "sameVersionShare": 0.334978
+  }
+ },
+ "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.950377,
+  "f1": 0.886436,
+  "namedBytes": 2964086,
+  "precision": 0.998388,
+  "recall": 0.79706
+ },
+ "label": "pop-exp127-union",
+ "missBytes": {
+  "a": 32569,
+  "b": 1020,
+  "c": 39650,
+  "d-absent": 52606,
+  "d-file": 47447,
+  "d-variant": 4853,
+  "e-ambig": 2161,
+  "e-other": 13051,
+  "e-support": 693,
+  "e-veto": 2618,
+  "f": 125680
+ },
+ "noDiscovery": null,
+ "reportSha256": "bad5dacddd1b8df647890e725e7254f208c77ec884eb1449306fd9398cdc7648",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 2063,
+  "<unmapped>": 24840,
+  "copy": 745027,
+  "library": 3718774
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 745027,
+  "f05": 0.979733,
+  "f05ShipperOnly": 0.886997,
+  "f1": 0.953726,
+  "f1ShipperOnly": 0.863452,
+  "libraryBytes": 3718774,
+  "namedAsOriginBytes": 321483,
+  "namedAsShipperBytes": 3074943,
+  "namedBytes": 3396426,
+  "namedBytesShipperOnly": 3074943,
+  "precision": 0.997873,
+  "precisionShipperOnly": 0.903421,
+  "recall": 0.913319,
+  "recallShipperOnly": 0.82687,
+  "wrongFamilyBytes": 7238,
+  "wrongFamilyBytesShipperOnly": 328721
+ },
+ "truthMethod": "sourcemap"
+}

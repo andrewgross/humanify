@@ -32,10 +32,17 @@ pub struct LibraryIndex {
     /// The recipe slice read (`bun-bun-cjs-min`) and why it was chosen;
     /// empty when built from rows.
     pub slice: String,
-    pub slice_reason: String,
+    slice_reason: String,
     /// Every owner package, sorted: an owner id is its position.
     packages: Vec<String>,
     units: UnitTable,
+    /// The terser-built slices read beside `units` (exp127,
+    /// [`super::recipe::TerserSlices`]); empty when off.
+    terser_units: Vec<UnitTable>,
+    terser_reading: super::recipe::TerserSlices,
+    /// `auto`'s verdict for the bundle: (read the terser slices, share),
+    /// set once by [`LibraryIndex::decide_terser_slices`].
+    terser_verdict: std::sync::OnceLock<(bool, f64)>,
     literals: LiteralTable,
     /// Every package name the index knows: its owners, and (loaded) the
     /// packages its manifest records registry metadata or builds for.
@@ -53,6 +60,9 @@ impl LibraryIndex {
             slice: String::new(),
             slice_reason: String::new(),
             units: UnitTable::open(Source::Memory(units)).expect("an encoded unit table opens"),
+            terser_units: Vec::new(),
+            terser_reading: super::recipe::TerserSlices::Off,
+            terser_verdict: std::sync::OnceLock::new(),
             literals: LiteralTable::open(Source::Memory(LiteralTable::encode(
                 &literals, &packages,
             )))
@@ -60,6 +70,64 @@ impl LibraryIndex {
             known: packages.iter().cloned().collect(),
             packages,
         }
+    }
+
+    /// Why the slice was chosen, and which slices are read beside it (with
+    /// `auto`, the bundle's verdict once made).
+    pub fn slice_reason(&self) -> String {
+        match self.terser_verdict.get() {
+            Some(&(on, share)) => format!(
+                "{}; auto verdict: terser-only share {share:.4} -> {}",
+                self.slice_reason,
+                if on { "union" } else { "off" }
+            ),
+            None => self.slice_reason.clone(),
+        }
+    }
+
+    /// `terser_slices = "auto"`'s verdict for the bundle `prints` are the
+    /// units of: over the whole-unit prints the lookup reads (`min_nodes`,
+    /// `min_content`) that some slice read holds, the share of nodes the
+    /// terser-built slices ALONE hold. At or over the configured share the
+    /// bundle reads the union from here on, else the chosen slice alone.
+    /// Made once (a second call returns the first share); 0 when the
+    /// index reads no terser-built slice. Any other mode: the share only.
+    pub fn decide_terser_slices(
+        &self,
+        prints: &[Option<StatementPrints>],
+        rules: &LookupRules,
+    ) -> f64 {
+        if let Some(&(_, share)) = self.terser_verdict.get() {
+            return share;
+        }
+        if self.terser_units.is_empty() {
+            return 0.0;
+        }
+        let (mut own, mut terser_only) = (0u64, 0u64);
+        for p in prints.iter().flatten() {
+            let w = &p.whole;
+            if w.nodes < rules.min_nodes || w.content < rules.min_content {
+                continue;
+            }
+            if !self.units.hits(&w.hash).is_empty() {
+                own += u64::from(w.nodes);
+            } else if self
+                .terser_units
+                .iter()
+                .any(|t| !t.hits(&w.hash).is_empty())
+            {
+                terser_only += u64::from(w.nodes);
+            }
+        }
+        let share = if own + terser_only == 0 {
+            0.0
+        } else {
+            terser_only as f64 / (own + terser_only) as f64
+        };
+        if let super::recipe::TerserSlices::Auto { share: floor } = self.terser_reading {
+            let _ = self.terser_verdict.set((share >= floor, share));
+        }
+        share
     }
 
     /// Does the index know package `name` (an owner, or a package its
@@ -105,10 +173,12 @@ impl LibraryIndex {
     /// half-matching index would silently half-claim). The slice is chosen
     /// in ONE place, [`super::recipe::choose_slice`]; an index with no
     /// slice for the recipe is [`LoadError::NoSlice`]. Only the tables'
-    /// headers and fences are read here.
+    /// headers and fences are read here. `terser` names the slices read
+    /// beside the chosen one ([`super::recipe::terser_slices`]).
     pub fn load(
         dir: &Path,
         recipe: &super::recipe::DetectedRecipe,
+        terser: super::recipe::TerserSlices,
     ) -> Result<LibraryIndex, LoadError> {
         let read = |name: &str| {
             std::fs::read_to_string(dir.join(name)).map_err(|e| format!("{name}: {e}"))
@@ -132,6 +202,26 @@ impl LibraryIndex {
         let units_name = table::units_file(&slice);
         let units =
             UnitTable::open(open(&units_name)?).map_err(|e| format!("{units_name}: {e}"))?;
+        let mut reason = reason.to_string();
+        let mut terser_units = Vec::new();
+        if terser != super::recipe::TerserSlices::Off {
+            let extra = super::recipe::terser_slices(&recipes, chosen);
+            let names: Vec<String> = extra.iter().map(|r| r.slice_name()).collect();
+            for name in &names {
+                let file = table::units_file(name);
+                terser_units
+                    .push(UnitTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))?);
+            }
+            reason.push_str(&format!(
+                "; terser_slices = {}: also {}",
+                terser.name(),
+                if names.is_empty() {
+                    "none (the index has no terser-built slice)".to_string()
+                } else {
+                    names.join(", ")
+                }
+            ));
+        }
         let literals = LiteralTable::open(open(table::LITERALS_FILE)?)
             .map_err(|e| format!("{}: {e}", table::LITERALS_FILE))?;
         let mut known: BTreeSet<String> = packages.iter().cloned().collect();
@@ -140,10 +230,13 @@ impl LibraryIndex {
         Ok(LibraryIndex {
             id,
             slice,
-            slice_reason: reason.to_string(),
+            slice_reason: reason,
             known,
             packages,
             units,
+            terser_units,
+            terser_reading: terser,
+            terser_verdict: std::sync::OnceLock::new(),
             literals,
         })
     }
@@ -151,7 +244,29 @@ impl LibraryIndex {
     /// Every indexed occurrence of `hash`, in row order (the store's
     /// `candidates`).
     pub fn unit_hits(&self, hash: &str) -> Vec<UnitHit> {
-        self.units.hits(hash)
+        use super::recipe::TerserSlices;
+        let hits = self.units.hits(hash);
+        let read_terser = match self.terser_reading {
+            TerserSlices::Off => false,
+            TerserSlices::Union => true,
+            TerserSlices::Fallback => hits.is_empty(),
+            TerserSlices::Auto { .. } => self.terser_verdict.get().is_some_and(|v| v.0),
+        };
+        if !read_terser || self.terser_units.is_empty() {
+            return hits;
+        }
+        // each owner once, where it is first seen, at its smallest module
+        let mut merged: Vec<UnitHit> = Vec::with_capacity(hits.len());
+        for h in hits
+            .into_iter()
+            .chain(self.terser_units.iter().flat_map(|t| t.hits(hash)))
+        {
+            match merged.iter_mut().find(|m| m.owner == h.owner) {
+                Some(m) => m.module_bytes = m.module_bytes.min(h.module_bytes),
+                None => merged.push(h),
+            }
+        }
+        merged
     }
 
     /// An owner id's package name.
@@ -174,12 +289,15 @@ impl LibraryIndex {
     }
 
     /// The distinct owners holding `hash` in a module no bigger than the
-    /// specificity rule allows; None when there are none or too many.
+    /// specificity rule allows; None when there are none or too many — too
+    /// many PACKAGES, or with [`LookupRules::max_packages_by_family`] too
+    /// many families under `same`.
     pub(crate) fn look(
         &self,
         hash: &str,
         module_bytes: u64,
         rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<BTreeSet<u32>> {
         let owners: BTreeSet<u32> = ReferenceStore::candidates(self, hash)
             .iter()
@@ -190,7 +308,35 @@ impl LibraryIndex {
             })
             .map(|h| h.owner)
             .collect();
-        (!owners.is_empty() && owners.len() <= rules.max_packages).then_some(owners)
+        let many = if rules.max_packages_by_family {
+            self.families_exceed(&owners, rules.max_packages, same)
+        } else {
+            owners.len() > rules.max_packages
+        };
+        (!owners.is_empty() && !many).then_some(owners)
+    }
+
+    /// Do `owners` span more than `max` families under `same`? Stops at the
+    /// first family past `max`, so a print every package holds costs at
+    /// most `max + 1` comparisons per owner.
+    fn families_exceed(
+        &self,
+        owners: &BTreeSet<u32>,
+        max: usize,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> bool {
+        let mut reps: Vec<&str> = Vec::new();
+        for &o in owners {
+            let name = self.package_name(o);
+            if reps.iter().any(|r| same(r, name)) {
+                continue;
+            }
+            reps.push(name);
+            if reps.len() > max {
+                return true;
+            }
+        }
+        false
     }
 
     /// A query literal's weight in bits, by its id when the index holds
@@ -310,8 +456,9 @@ impl LibraryIndex {
         q: &UnitQuery<'_>,
         rules: &LookupRules,
         previous: Option<u32>,
+        same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<(u32, u32)> {
-        let score = self.structural_scores(q, rules);
+        let score = self.structural_scores(q, rules, same);
         let whole = &q.prints.whole;
         let best = *score.values().max()?;
         let mut tied: Vec<u32> = score
@@ -327,10 +474,15 @@ impl LibraryIndex {
     /// Every package the structural rule would accept for `q` on its own
     /// (its covered nodes reach the cover), tie or not: the index's
     /// ambiguity about the unit.
-    pub(crate) fn structural_owners(&self, q: &UnitQuery<'_>, rules: &LookupRules) -> Vec<u32> {
+    pub(crate) fn structural_owners(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Vec<u32> {
         let floor = rules.cover * f64::from(q.prints.whole.nodes.max(1));
         let mut owners: Vec<u32> = self
-            .structural_scores(q, rules)
+            .structural_scores(q, rules, same)
             .into_iter()
             .filter(|&(_, v)| f64::from(v) >= floor)
             .map(|(k, _)| k)
@@ -341,13 +493,18 @@ impl LibraryIndex {
 
     /// The structural rule's scores: per package, the nodes its hits cover
     /// (the whole print, else the largest non-overlapping functions).
-    fn structural_scores(&self, q: &UnitQuery<'_>, rules: &LookupRules) -> HashMap<u32, u32> {
+    fn structural_scores(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> HashMap<u32, u32> {
         let usable =
             |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
         let whole = &q.prints.whole;
         let mut score: HashMap<u32, u32> = HashMap::new();
         if usable(whole, rules.min_content)
-            && let Some(owners) = self.look(&whole.hash, q.module_bytes, rules)
+            && let Some(owners) = self.look(&whole.hash, q.module_bytes, rules, same)
         {
             for p in owners {
                 score.insert(p, whole.nodes);
@@ -359,7 +516,7 @@ impl LibraryIndex {
                 .functions
                 .iter()
                 .filter(|f| usable(f, rules.min_function_content))
-                .filter_map(|f| Some((f, self.look(&f.hash, q.module_bytes, rules)?)))
+                .filter_map(|f| Some((f, self.look(&f.hash, q.module_bytes, rules, same)?)))
                 .collect();
             hits.sort_by_key(|(f, _)| std::cmp::Reverse(f.nodes));
             let mut taken: Vec<(u32, u32)> = Vec::new();
@@ -455,6 +612,11 @@ pub struct LookupRules {
     /// Read the literal margin against the best file of another package
     /// FAMILY, not merely another package (exp106; default off).
     pub literal_margin_by_family: bool,
+    /// Count a print's owners by FAMILY, not package, against
+    /// `max_packages` (exp125; default off): a scope's members, a fork and
+    /// its origin are one identity, and a bigger index adds carriers of the
+    /// same code until a print every one of them holds says nothing.
+    pub max_packages_by_family: bool,
 }
 
 impl Default for LookupRules {
@@ -474,6 +636,7 @@ impl Default for LookupRules {
             literal_cover: 0.9,
             literal_margin: 10.0,
             literal_margin_by_family: false,
+            max_packages_by_family: false,
         }
     }
 }
@@ -526,7 +689,7 @@ pub fn claim_units(
     let structural: Vec<Option<(u32, u32)>> = queries
         .iter()
         .map(|q| {
-            let hit = index.structural(q, &rules, previous);
+            let hit = index.structural(q, &rules, previous, same);
             if let Some((p, _)) = hit {
                 previous = Some(p);
             }

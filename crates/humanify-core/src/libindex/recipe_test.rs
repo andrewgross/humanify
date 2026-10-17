@@ -5,6 +5,7 @@ use humanify_model::detection::{BundlerType, MinifierType};
 
 use super::recipe::{
     DetectedRecipe, Format, Recipe, RecipeBundler, Target, choose_slice, detect_recipe,
+    terser_slices,
 };
 
 #[test]
@@ -169,4 +170,45 @@ fn webpack_and_rollup_are_recipe_bundlers_with_node_slices() {
             Ok(slice.to_string())
         );
     }
+}
+
+/// exp127: the minifier each recipe bundler's slice is built with, and the
+/// terser-built slices a run may read beside the one it chose.
+#[test]
+fn the_terser_built_slices_are_every_minified_webpack_or_rollup_slice_but_the_chosen() {
+    assert_eq!(RecipeBundler::Bun.minifier(), MinifierType::Bun);
+    assert_eq!(RecipeBundler::Esbuild.minifier(), MinifierType::Esbuild);
+    assert_eq!(RecipeBundler::Webpack.minifier(), MinifierType::Terser);
+    assert_eq!(RecipeBundler::Rollup.minifier(), MinifierType::Terser);
+    let s: Vec<(Recipe, bool)> = [
+        "bun:target=bun,format=cjs,minify",
+        "esbuild:target=node,format=cjs,minify",
+        "rollup:target=node,format=cjs,minify",
+        "webpack:target=node,format=cjs,minify",
+        "rollup:target=node,format=esm",
+    ]
+    .iter()
+    .map(|t| (Recipe::parse(t).unwrap(), true))
+    .collect();
+    let names = |chosen: &str| -> Vec<String> {
+        let c = Recipe::parse(chosen).unwrap();
+        terser_slices(&s, &c)
+            .iter()
+            .map(|r| r.slice_name())
+            .collect()
+    };
+    assert_eq!(
+        names("esbuild:target=node,format=cjs,minify"),
+        ["rollup-node-cjs-min", "webpack-node-cjs-min"],
+        "manifest order; an unminified slice is no terser build"
+    );
+    assert_eq!(
+        names("bun:target=bun,format=cjs,minify"),
+        ["rollup-node-cjs-min", "webpack-node-cjs-min"]
+    );
+    assert_eq!(
+        names("rollup:target=node,format=cjs,minify"),
+        ["webpack-node-cjs-min"],
+        "the chosen slice is never its own companion"
+    );
 }

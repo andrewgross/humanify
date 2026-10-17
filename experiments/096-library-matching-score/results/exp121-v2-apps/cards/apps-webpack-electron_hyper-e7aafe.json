@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "1a8958dfe714e9088c54b3efee57ee5929998bde854e9610c8ad22f82a070f91",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "apps-webpack",
  "statementBytes": {
   "<app>": 2320,

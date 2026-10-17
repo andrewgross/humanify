@@ -217,51 +217,51 @@ def patch_sources(entry, truth, chm):
         for i, row in load_chained9(entry).items():
             if srcs[i][0] == row[3]:
                 srcs[i] = list(row[:3])
-    if RULES10["notinstalled"]:
-        for i, row in load_chained10(entry).items():
+    if RULES11["notinstalled"]:
+        for i, row in load_chained11(entry).items():
             if srcs[i][0] == row[3]:
                 srcs[i] = list(row[:3])
     return {**truth, "sources": srcs}
 
 
-# ---------------------------------------------------------------- scorer 10 (exp128): chained, not installed
+# ---------------------------------------------------------------- scorer 11 (exp128): chained, not installed
 
 # scorer 9's npmchain without "P is not on npm": a chained source (path not on disk, listed by an installed
 # package's own map) labelled with a package that is NOT INSTALLED in the app (`node_modules/src/...` from
 # async-validator's `../src/` sources; `src` is a real npm name) keeps the package whose map listed it. Frozen per
-# corpus by experiments/128-cjs-scope/scorer10/chained10.py as <DATA>/truth/<id>.chained10.json.gz +
-# chained10[-<corpus>].json; each row is [package, version, file, old label], applied after scorer 9's rows to a
-# source still carrying that old label. Off: scorer 9's truth exactly.
-RULES10 = {"notinstalled": True}
-_CHAINED10 = {}
+# corpus by experiments/128-cjs-scope/scorer11/chained11.py as <DATA>/truth/<id>.chained11.json.gz +
+# chained11[-<corpus>].json; each row is [package, version, file, old label], applied after scorer 9's rows to a
+# source still carrying that old label. Off: scorer 10's truth exactly.
+RULES11 = {"notinstalled": True}
+_CHAINED11 = {}
 
 
-def chained10_manifest_path():
+def chained11_manifest_path():
     c = lib096.CORPUS
-    return os.path.join(lib096.HERE, "chained10.json" if c == "dev" else f"chained10-{c}.json")
+    return os.path.join(lib096.HERE, "chained11.json" if c == "dev" else f"chained11-{c}.json")
 
 
-def load_chained10_manifest():
-    if not RULES10["notinstalled"]:
+def load_chained11_manifest():
+    if not RULES11["notinstalled"]:
         return None
-    p = chained10_manifest_path()
-    if p not in _CHAINED10:
+    p = chained11_manifest_path()
+    if p not in _CHAINED11:
         with open(p) as fh:
-            _CHAINED10[p] = json.load(fh)
-    return _CHAINED10[p]
+            _CHAINED11[p] = json.load(fh)
+    return _CHAINED11[p]
 
 
-def chained10_sha():
-    m = load_chained10_manifest()
+def chained11_sha():
+    m = load_chained11_manifest()
     return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
 
 
-def load_chained10(entry):
-    m = load_chained10_manifest()
-    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".chained10.json.gz")
+def load_chained11(entry):
+    m = load_chained11_manifest()
+    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".chained11.json.gz")
     got = sha256_file(p)
     if got != m["entries"].get(entry["id"]):
-        raise SystemExit(f"REFUSED: chained10 {p} sha256 {got[:12]} != {os.path.basename(chained10_manifest_path())}")
+        raise SystemExit(f"REFUSED: chained11 {p} sha256 {got[:12]} != {os.path.basename(chained11_manifest_path())}")
     with gzip.open(p, "rt") as fh:
         return {int(k): v for k, v in json.load(fh)["sources"].items()}
 
@@ -338,8 +338,54 @@ def origins7_sha():
     return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
 
 
+# scorer 10 (exp125): the scorer 7 layer rebuilt with origins.py's RULES10 (`via`: a nested chunk records the
+# region's package that published it), frozen per corpus by experiments/125-nested-chunk-publisher/scorer11/
+# origins10.py as <DATA>/truth/<id>.origins10.json.gz + origins10[-<corpus>].json. `via` read as `chunk`: the
+# scorer 7 layer segment for segment (origins10.py verify). When on, origin_layer reads it in place of scorer 7's.
+def origins10_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "origins10.json" if c == "dev" else f"origins10-{c}.json")
+
+
+def rules10():
+    import origins as O
+    return O.RULES10
+
+
+_O10 = {}
+
+
+def load_origins10_manifest():
+    """The scorer 10 layer's manifest for the current corpus, or None when `via` is off."""
+    if not rules10().get("via"):
+        return None
+    c = lib096.CORPUS
+    if c not in _O10:
+        with open(origins10_manifest_path()) as fh:
+            m = json.load(fh)
+        if m["rules"] != rules10():
+            raise SystemExit(f"REFUSED: {origins10_manifest_path()} was frozen with rules {m['rules']}, "
+                             f"not {rules10()}")
+        _O10[c] = m
+    return _O10[c]
+
+
+def origins10_sha():
+    m = load_origins10_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
 def origin_layer(entry, om, o7m):
-    """The entry's origin layer: scorer 7's (o7m, when any RULES7 rule is on) or the frozen scorer 4-6 one."""
+    """The entry's origin layer: scorer 10's (when RULES10 `via` is on), else scorer 7's (o7m, when any RULES7 rule
+    is on), else the frozen scorer 4-6 one."""
+    o10m = load_origins10_manifest() if o7m is not None else None
+    if o10m is not None:
+        p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins10.json.gz")
+        got = sha256_file(p)
+        if got != o10m["entries"].get(entry["id"]):
+            raise SystemExit(f"REFUSED: origins10 {p} sha256 {got[:12]} != {origins10_manifest_path()}")
+        with gzip.open(p, "rt") as fh:
+            return json.load(fh)
     if o7m is None:
         return lib096.load_origins(entry, om)
     p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins7.json.gz")

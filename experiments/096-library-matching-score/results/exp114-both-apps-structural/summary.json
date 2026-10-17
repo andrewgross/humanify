@@ -18,6 +18,7 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 4646716206,
   "indexId": "a2b7154e266f8ea78ce4429a97a592b093d6cf1f2dc064d6d9225459f7849c55",
+  "origins10Sha256": "db10c7324b0bbf6b8a46831d121166021a13332c9d279736893e2d8f26262b84",
   "origins7Sha256": "70391e6705f62676e1669a714752f3e620f6fbff4c2bb6c990ed1d1c9e174beb",
   "originsSha256": "8872eb35102a3cff989b46b2d288fbdc500e955eb6ae3b25993aed2a03e1556b",
   "rule": "structural",
@@ -31,7 +32,7 @@
   ]
  },
  "label": "exp114-both-apps-structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "sets": {
   "apps-esbuild": {
    "appClaimedBytes": 0,
