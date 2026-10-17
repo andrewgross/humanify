@@ -39,7 +39,63 @@
  "noDiscovery": null,
  "reportSha256": "541a8994df22bd4895e2563ef66a2609c1bd6fc5d23ef26eafaf88c0f53fc856",
  "rule": "structural",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/11",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "right": 69698,
+    "unmapped": 65
+   },
+   "copyBytes": 0,
+   "f05": 0.993002,
+   "f05ShipperOnly": 0.993002,
+   "f1": 0.982686,
+   "f1ShipperOnly": 0.982686,
+   "libraryBytes": 72154,
+   "missBytes": {
+    "a": 1206,
+    "c": 427,
+    "e-veto": 783,
+    "unit-model": 40
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 69698,
+   "namedBytesShipperOnly": 69698,
+   "precision": 1.0,
+   "precisionShipperOnly": 1.0,
+   "recall": 0.965962,
+   "recallShipperOnly": 0.965962,
+   "statementBytes": {
+    "<app>": 1045,
+    "<unmapped>": 162188,
+    "library": 72154
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  }
+ },
  "set": "dev-webpack",
  "statementBytes": {
   "<app>": 1045,
