@@ -20,12 +20,13 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 1732103677,
   "indexId": "94aa22740dd6088b1ce18813758555f42717a7adb0a7145b83e8832467de7cbf",
+  "origins10Sha256": "abc965d6504c4dfc8144012748184f4762e6a66be9e6d357c8187fda98b8b122",
   "origins7Sha256": "0d153d5d80e718b06c0ac00a471361c5a3a11885edc438dfee949c47997f3c7b",
   "originsSha256": "0a27c16697b6087247100c7fe7fe855eaf68e9b659ecae49db0e15e6b821754a",
   "rule": "agreement"
  },
  "label": "exp108-base-c2-agreement",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "sets": {
   "cc": {
    "appClaimedBytes": 0,

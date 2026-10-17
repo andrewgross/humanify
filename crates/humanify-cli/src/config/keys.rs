@@ -559,6 +559,17 @@ pub static KEYS: &[Key] = &[
     },
     Key {
         section: "library.lookup",
+        name: "max_packages_by_family",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(rules().max_packages_by_family)),
+        unset: "",
+        doc: "Count a print's owners by package family, not package, against max_packages: \
+              a scope's members or a fork and its origin are one identity, and a bigger \
+              index's carriers of the same code no longer make it too common (exp125).",
+    },
+    Key {
+        section: "library.lookup",
         name: "terser_slices",
         kind: Kind::Choice(terser_slices_choices),
         flag: None,

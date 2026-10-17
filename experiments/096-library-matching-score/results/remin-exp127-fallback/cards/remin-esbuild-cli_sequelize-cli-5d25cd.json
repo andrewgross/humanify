@@ -31,7 +31,7 @@
  "noDiscovery": null,
  "reportSha256": "e8212e7693739c3142871f3bd9c399966f521389e310ea21592ef03ec5835e63",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "remin-esbuild",
  "statementBytes": {
   "<app>": 38

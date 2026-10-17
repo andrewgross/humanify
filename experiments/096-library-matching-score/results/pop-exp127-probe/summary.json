@@ -19,6 +19,7 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 6936646078,
   "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+  "origins10Sha256": "3577aec2e78d81dd11cd4ca22e8c3a399283c393ac0b897eee21c8d7d4c4e406",
   "origins7Sha256": "e1ef4764b0ad31ba9abb13160fe4d6ca4d86295d9e4ca6ff4106ff150c48db30",
   "originsSha256": "bc978300fd198485b3f95037e55246573deadd8f326646372b11bdfed0e16cf6",
   "rule": "structural",
@@ -28,7 +29,7 @@
   ]
  },
  "label": "pop-exp127-probe",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "sets": {
   "pop-bun": {
    "appClaimedBytes": 0,

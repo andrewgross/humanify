@@ -1,0 +1,85 @@
+{
+ "bundleSha256": "e10620be0b47f18dce4cf87886f78d763938510d7f32c70fa17c7e9ad7ce1d15",
+ "claimedBytes": {
+  "family": 24971,
+  "right": 9725470,
+  "unmapped": 114,
+  "wrongFamily": 39213
+ },
+ "detected": {
+  "bundler": "webpack",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-webpack-electron_elcalc-a9cee6",
+ "exploratory": {
+  "names": {
+   "bindings": 129102,
+   "bindingsSameVersion": 127894,
+   "bindingsVersionKnown": 129102,
+   "exactBytes": 9520623,
+   "exactUnits": 3902,
+   "sameVersionShare": 0.990643
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.91898,
+  "f1": 0.822056,
+  "namedBytes": 9600418,
+  "precision": 0.997376,
+  "recall": 0.699157
+ },
+ "label": "exp125-k2f-apps",
+ "missBytes": {
+  "a": 7521,
+  "b": 3745994,
+  "c": 73880,
+  "d-absent": 15261,
+  "e-ambig": 18578,
+  "e-other": 2475,
+  "e-spec": 367,
+  "e-support": 17626,
+  "e-veto": 57201,
+  "f": 39503,
+  "unit-model": 2572
+ },
+ "noDiscovery": null,
+ "reportSha256": "9e067a3eb0e0d60853d55ce528b02e01d0bef43e126c67fec8fc63ec355b669b",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-webpack",
+ "statementBytes": {
+  "<app>": 519,
+  "<unmapped>": 269601,
+  "copy": 3575,
+  "library": 13731419
+ },
+ "toolchain": {
+  "adapter": "webcrack",
+  "bundler": "webpack",
+  "minifier": "terser",
+  "slice": "webpack-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 3575,
+  "f05": 0.921765,
+  "f05ShipperOnly": 0.921765,
+  "f1": 0.829081,
+  "f1ShipperOnly": 0.829081,
+  "libraryBytes": 13731419,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 9750441,
+  "namedBytes": 9750441,
+  "namedBytesShipperOnly": 9750441,
+  "precision": 0.995994,
+  "precisionShipperOnly": 0.995994,
+  "recall": 0.710083,
+  "recallShipperOnly": 0.710083,
+  "wrongFamilyBytes": 39213,
+  "wrongFamilyBytesShipperOnly": 39213
+ },
+ "truthMethod": "sourcemap"
+}

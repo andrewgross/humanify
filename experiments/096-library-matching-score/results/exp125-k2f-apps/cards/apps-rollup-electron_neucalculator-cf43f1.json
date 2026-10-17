@@ -1,0 +1,86 @@
+{
+ "bundleSha256": "3c478b3e96a4124448041841a75a5781739b4647a2abed92a99ba4364dd11616",
+ "claimedBytes": {
+  "family": 72008,
+  "right": 8584578,
+  "unmapped": 204876,
+  "wrongFamily": 220629
+ },
+ "detected": {
+  "bundler": "rollup",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "apps-rollup-electron_neucalculator-cf43f1",
+ "exploratory": {
+  "names": {
+   "bindings": 98717,
+   "bindingsSameVersion": 91892,
+   "bindingsVersionKnown": 98717,
+   "exactBytes": 6872017,
+   "exactUnits": 6547,
+   "sameVersionShare": 0.930863
+  }
+ },
+ "indexId": "6d5034317e3159278c41999a1893ce4f3379793f680ad33795b98415b1f9d00c",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.924278,
+  "f1": 0.855123,
+  "namedBytes": 7877231,
+  "precision": 0.976949,
+  "recall": 0.760312
+ },
+ "label": "exp125-k2f-apps",
+ "missBytes": {
+  "a": 115188,
+  "b": 473848,
+  "c": 227440,
+  "d-absent": 343132,
+  "d-file": 114540,
+  "d-variant": 473,
+  "e-ambig": 98746,
+  "e-other": 6772,
+  "e-spec": 48239,
+  "e-support": 36051,
+  "e-veto": 52827,
+  "f": 186687
+ },
+ "noDiscovery": null,
+ "reportSha256": "0c98d410b8b07ada4e6fc035c2bef40f30dfc100a44b143a998f17b1973c8c1c",
+ "rule": "structural",
+ "schema": "exp096-score/10",
+ "set": "apps-rollup",
+ "statementBytes": {
+  "<app>": 2461,
+  "<unmapped>": 2838875,
+  "copy": 32645,
+  "library": 10360529
+ },
+ "toolchain": {
+  "adapter": "passthrough",
+  "bundler": "rollup",
+  "minifier": "terser",
+  "slice": "rollup-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 32645,
+  "f05": 0.943613,
+  "f05ShipperOnly": 0.943613,
+  "f1": 0.899959,
+  "f1ShipperOnly": 0.899959,
+  "libraryBytes": 10360529,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 8656586,
+  "namedBytes": 8656586,
+  "namedBytesShipperOnly": 8656586,
+  "precision": 0.975147,
+  "precisionShipperOnly": 0.975147,
+  "recall": 0.835535,
+  "recallShipperOnly": 0.835535,
+  "wrongFamilyBytes": 220629,
+  "wrongFamilyBytesShipperOnly": 220629
+ },
+ "truthMethod": "sourcemap"
+}

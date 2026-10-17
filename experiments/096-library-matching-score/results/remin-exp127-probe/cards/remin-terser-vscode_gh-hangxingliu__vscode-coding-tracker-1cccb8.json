@@ -35,7 +35,7 @@
  "noDiscovery": null,
  "reportSha256": "8600c3663fd5b25852552a733a81d971199e3fa7bae2873010b5480d119ba76c",
  "rule": "structural",
- "schema": "exp096-score/9",
+ "schema": "exp096-score/10",
  "set": "remin-terser",
  "statementBytes": {
   "<app>": 293,
