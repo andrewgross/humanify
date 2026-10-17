@@ -777,8 +777,9 @@ const VERBS: Verb[] = [
       "bytes with precision read against the 99.8% bar (under both truths: shipper-only and origin-aware), and why each missed library statement " +
       "was missed; deterministic (measured band 0), so any delta between labels is real",
     cannotProve:
-      "anything about a bundle outside the corpus, about the vendor/ CommonJS modules (whole-module rows are not " +
-      "scored), about names (nothing is renamed), about versions (a right package from the wrong version counts " +
+      "anything about a bundle outside the corpus, about Claude Code's bundled CommonJS modules (its labelled sample " +
+      "holds statement units only; every other set judges them since scorer 10: an unsplit module is ONE unit with " +
+      "its majority-mapped label, so a module mixing packages is judged by its majority), about names (nothing is renamed), about versions (a right package from the wrong version counts " +
       "right), or about the cross-version diff (that is `score`). Claude Code's figures are a 620-unit SAMPLE " +
       "estimate, and its index C labels are fitted to it, not held out",
     run(args) {

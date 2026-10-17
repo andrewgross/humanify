@@ -217,7 +217,53 @@ def patch_sources(entry, truth, chm):
         for i, row in load_chained9(entry).items():
             if srcs[i][0] == row[3]:
                 srcs[i] = list(row[:3])
+    if RULES10["notinstalled"]:
+        for i, row in load_chained10(entry).items():
+            if srcs[i][0] == row[3]:
+                srcs[i] = list(row[:3])
     return {**truth, "sources": srcs}
+
+
+# ---------------------------------------------------------------- scorer 10 (exp128): chained, not installed
+
+# scorer 9's npmchain without "P is not on npm": a chained source (path not on disk, listed by an installed
+# package's own map) labelled with a package that is NOT INSTALLED in the app (`node_modules/src/...` from
+# async-validator's `../src/` sources; `src` is a real npm name) keeps the package whose map listed it. Frozen per
+# corpus by experiments/128-cjs-scope/scorer10/chained10.py as <DATA>/truth/<id>.chained10.json.gz +
+# chained10[-<corpus>].json; each row is [package, version, file, old label], applied after scorer 9's rows to a
+# source still carrying that old label. Off: scorer 9's truth exactly.
+RULES10 = {"notinstalled": True}
+_CHAINED10 = {}
+
+
+def chained10_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "chained10.json" if c == "dev" else f"chained10-{c}.json")
+
+
+def load_chained10_manifest():
+    if not RULES10["notinstalled"]:
+        return None
+    p = chained10_manifest_path()
+    if p not in _CHAINED10:
+        with open(p) as fh:
+            _CHAINED10[p] = json.load(fh)
+    return _CHAINED10[p]
+
+
+def chained10_sha():
+    m = load_chained10_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
+def load_chained10(entry):
+    m = load_chained10_manifest()
+    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".chained10.json.gz")
+    got = sha256_file(p)
+    if got != m["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: chained10 {p} sha256 {got[:12]} != {os.path.basename(chained10_manifest_path())}")
+    with gzip.open(p, "rt") as fh:
+        return {int(k): v for k, v in json.load(fh)["sources"].items()}
 
 
 # ---------------------------------------------------------------- scorer 9 (exp120): chained non-npm sources

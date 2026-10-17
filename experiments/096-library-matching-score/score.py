@@ -106,9 +106,12 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    was outside every number, and it holds most of an esbuild or Bun bundle (held-out 83%, remin-esbuild 92%).
 #    Factories are now units under the same truth rules: an external factory is one unit (majority-mapped label), a
 #    factory cut into body statements (`FactoryBody` rows) is judged per statement. totals / f05 cover BOTH scopes;
-#    `scopes.statement` is scorer 9's whole card (identical numbers: verify10.py), `scopes.factory` the new one; an
+#    `scopes.statement` is scorer 9's whole scope, `scopes.factory` the new one; an
 #    unclaimed external factory's miss class is `factory`. Claude Code's sample holds statement units only: its
-#    factory scope is not judged. Same reports, re-scored.
+#    factory scope is not judged. And rule `notinstalled` (truth_audit RULES10, frozen layer chained10): scorer 9's
+#    npmchain without "P is not on npm" — a chained source labelled with a package NOT INSTALLED in the app
+#    (`node_modules/src/...` from async-validator's own map) keeps the package whose map listed it. Same reports,
+#    re-scored; `notinstalled` off makes `scopes.statement` scorer 9's card exactly (verify10.py).
 SCORER_VERSION = "exp096-score/10"
 
 
@@ -606,6 +609,9 @@ def main():
     c9m = truth_audit.load_chained9_manifest()
     if c9m is not None and c9m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 9 chained layer was frozen for another corpus manifest")
+    c10m = truth_audit.load_chained10_manifest()
+    if c10m is not None and c10m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 10 chained layer was frozen for another corpus manifest")
     o7m = truth_audit.load_origins7_manifest()
     if o7m is not None and o7m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 7 origin layer was frozen for another corpus manifest")
@@ -663,6 +669,7 @@ def main():
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
+                   **({"chained10Sha256": truth_audit.chained10_sha()} if c10m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},

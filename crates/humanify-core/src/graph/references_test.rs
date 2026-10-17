@@ -410,4 +410,7 @@ fn factory_bodies_cut_a_commonjs_module_into_statements() {
     assert!(has(&g, f, exports, EdgeKind::LazyWrapper));
     assert!(has(&g, exports, k, EdgeKind::Read));
     assert!(has(&g, unit(&g, code, "var x"), f, EdgeKind::Read));
+    // the body's reads of the factory's own parameters (`m`) link nothing
+    // back to the module as a whole
+    assert!(!linked(&g, exports, f) && g.out[f as usize] == vec![k, exports]);
 }

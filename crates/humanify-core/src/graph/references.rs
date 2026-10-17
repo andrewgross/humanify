@@ -292,6 +292,16 @@ pub fn build_reference_graph_with<'a>(
     };
     let mutations = init_time_mutations(semantic, &graph, facts);
     let mut edges = binding_edges(semantic, &graph, &mutations);
+    if factory_bodies {
+        // A cut module's body reads its factory's own parameters
+        // (`exports`, `module`, `require`), which the wrapper unit
+        // declares: no dependency on the module as a whole (that is what
+        // a caller's `require_x()` means), so no edge either way beside
+        // the wrapper's own.
+        let units = &graph.units;
+        let own = |a: u32, b: u32| units[a as usize].kind == UnitKind::FactoryBody { module: b };
+        edges.retain(|e| !own(e.from, e.to) && !own(e.to, e.from));
+    }
     for (u, unit) in graph.units.iter().enumerate() {
         if let UnitKind::LazyBody { module } | UnitKind::FactoryBody { module } = unit.kind {
             edges.push(Edge::new(module, u as u32, EdgeKind::LazyWrapper));

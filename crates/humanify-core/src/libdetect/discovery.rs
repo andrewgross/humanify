@@ -729,25 +729,43 @@ fn propose_down(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
     }
 }
 
-/// Does `u`'s closure over unidentified units stay inside group `g`'s
-/// statements?
-fn closed_in(v: &RoundView<'_, '_>, g: u32, u: u32) -> bool {
+/// Per member of group `g` (in `members` order): does its closure over
+/// unidentified units stay inside the group's statements? A member is
+/// LEAKY when it calls an unidentified unit outside the group, or an
+/// unidentified member that is leaky; one reverse pass over the group's
+/// edges answers every member (exp128: a per-member search was quadratic
+/// in a large CommonJS module cut into its body statements).
+fn closed_members(v: &RoundView<'_, '_>, g: u32, members: &[u32]) -> Vec<bool> {
     let inside = |w: u32| v.group_of(w) == Some(g) && v.is_statement(w);
-    let mut seen = BTreeSet::from([u]);
-    let mut stack = vec![u];
-    while let Some(x) = stack.pop() {
+    let index: HashMap<u32, usize> = members.iter().enumerate().map(|(i, &u)| (u, i)).collect();
+    let mut callers: Vec<Vec<usize>> = vec![Vec::new(); members.len()];
+    let mut leaky = vec![false; members.len()];
+    let mut stack = Vec::new();
+    for (i, &x) in members.iter().enumerate() {
         for &w in v.callees(x) {
-            if seen.contains(&w) || v.is_external(w) {
+            if w == x || v.is_external(w) {
                 continue;
             }
-            if !inside(w) {
-                return false;
+            match index.get(&w) {
+                Some(&j) if inside(w) => callers[j].push(i),
+                _ => {
+                    if !leaky[i] {
+                        leaky[i] = true;
+                        stack.push(i);
+                    }
+                }
             }
-            seen.insert(w);
-            stack.push(w);
         }
     }
-    true
+    while let Some(j) = stack.pop() {
+        for &i in &callers[j] {
+            if !leaky[i] {
+                leaky[i] = true;
+                stack.push(i);
+            }
+        }
+    }
+    leaky.into_iter().map(|l| !l).collect()
 }
 
 /// MODULE: a unit of a module whose claims are all one package P, whose
@@ -764,8 +782,9 @@ fn propose_module(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
         ) else {
             continue;
         };
-        for &u in members {
-            if !v.is_external(u) && closed_in(v, g, u) {
+        let closed = closed_members(v, g, members);
+        for (&u, closed) in members.iter().zip(closed) {
+            if !v.is_external(u) && closed {
                 out.push((u, p));
             }
         }
@@ -1865,6 +1884,19 @@ fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry>
         spec: &lib::QUEUE,
     };
     let mut queue = Vec::new();
+    // Units whose closure is already known to pass the cap: a closure
+    // reaching one passes it too (it holds that closure), so the search
+    // stops there (exp128: the same answers, without re-walking a large
+    // CommonJS module's body for every statement that reaches it).
+    let mut memo = ClosureMemo {
+        too_big: vec![false; view.units() as usize],
+        shared: st
+            .graph
+            .units
+            .iter()
+            .any(|u| matches!(u.kind, UnitKind::FactoryBody { .. }))
+            .then(HashMap::new),
+    };
     for v in 0..view.units() {
         if !view.is_statement(v) || view.is_external(v) {
             continue;
@@ -1878,7 +1910,7 @@ fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry>
         if uses.is_empty() {
             continue;
         }
-        if let Some((region, bytes)) = bounded_closure(&view, v, u64::from(cap)) {
+        if let Some((region, bytes)) = bounded_closure(&view, v, u64::from(cap), &mut memo) {
             queue.push(QueueEntry {
                 unit: v,
                 region_units: region.len() as u32,
@@ -1891,23 +1923,91 @@ fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry>
     queue
 }
 
-/// |D(v)| over unidentified units, None past `cap` bytes.
-fn bounded_closure(view: &RoundView<'_, '_>, v: u32, cap: u64) -> Option<(Vec<u32>, u64)> {
+/// What [`bounded_closure`] remembers between candidates.
+struct ClosureMemo {
+    /// Units whose closure passed the cap: a closure reaching one passes
+    /// it too (it holds that closure).
+    too_big: Vec<bool>,
+    /// Only with cut CommonJS modules (exp128; None otherwise, so a run
+    /// without them takes exactly the plain search): each candidate's
+    /// region (search order, sorted, bytes). A candidate reaching a unit
+    /// whose region holds the candidate has that very region (each reaches
+    /// the other) — a module body whose statements all read one binding
+    /// all its statements write is one such cycle, thousands strong.
+    shared: Option<HashMap<u32, std::rc::Rc<SharedRegion>>>,
+}
+
+/// A remembered candidate region: search order, sorted, bytes.
+struct SharedRegion {
+    order: Vec<u32>,
+    sorted: Vec<u32>,
+    bytes: u64,
+}
+
+/// |D(v)| over unidentified units, None past `cap` bytes (the head
+/// first, then search order; a region shared through
+/// [`ClosureMemo::shared`] keeps the first candidate's order after the
+/// head).
+fn bounded_closure(
+    view: &RoundView<'_, '_>,
+    v: u32,
+    cap: u64,
+    memo: &mut ClosureMemo,
+) -> Option<(Vec<u32>, u64)> {
+    // The verdict is the closure's total, whatever the visiting order: a
+    // unit's bytes count when it is first reached, so a unit calling
+    // thousands (a cut CommonJS module's wrapper) stops the search as soon
+    // as the cap is passed (exp128).
+    let size = |u: u32| u64::from(view.st.graph.units[u as usize].bytes);
     let mut seen = BTreeSet::from([v]);
     let mut order = vec![v];
     let mut stack = vec![v];
-    let mut bytes = 0u64;
+    let mut bytes = size(v);
+    let over = |memo: &mut ClosureMemo| {
+        memo.too_big[v as usize] = true;
+        None
+    };
+    if bytes > cap {
+        return over(memo);
+    }
     while let Some(x) = stack.pop() {
-        bytes += u64::from(view.st.graph.units[x as usize].bytes);
-        if bytes > cap {
-            return None;
-        }
         for &w in view.callees(x) {
-            if !view.is_external(w) && seen.insert(w) {
+            if view.is_external(w) {
+                continue;
+            }
+            if memo.too_big[w as usize] {
+                return over(memo);
+            }
+            if let Some(region) = memo.shared.as_ref().and_then(|m| m.get(&w))
+                && region.sorted.binary_search(&v).is_ok()
+            {
+                let region = region.clone();
+                let mut out = vec![v];
+                out.extend(region.order.iter().copied().filter(|&u| u != v));
+                memo.shared.as_mut().map(|m| m.insert(v, region.clone()));
+                return Some((out, region.bytes));
+            }
+            if seen.insert(w) {
+                bytes += size(w);
+                if bytes > cap {
+                    return over(memo);
+                }
                 order.push(w);
                 stack.push(w);
             }
         }
+    }
+    if let Some(m) = memo.shared.as_mut() {
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        m.insert(
+            v,
+            std::rc::Rc::new(SharedRegion {
+                order: order.clone(),
+                sorted,
+                bytes,
+            }),
+        );
     }
     Some((order, bytes))
 }
