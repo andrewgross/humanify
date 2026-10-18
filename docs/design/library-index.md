@@ -184,6 +184,7 @@ run reads.
   packages.json          every owner the lookup tables hold, sorted: an owner id is its position
   units.<slice>.bin      lookup: unit hash (16 hex = u64) -> rows (owner id, smallest module bytes)
   literals.bin           lookup: literal -> package count, files; file -> owner id, literal ids
+  helpers.jsonl          {"hash", "owners"}   the helper SOURCES' own prints, every slice (exp129; absent when none)
   stoplists.json         copied data (§7); its sha256 in the manifest
   families.json          copied data (§7); its sha256 in the manifest
 ```
@@ -309,7 +310,12 @@ library discovery lives in `crates/humanify-core/src/libindex/` because the
 lookup reads it too; both copied into
 every index and hashed in its manifest): the helper packages (tslib,
 `@babel/runtime*`, `@babel/helpers`, `@swc/helpers`, regenerator-runtime,
-`@oxc-project/runtime`) are dropped from the index at merge time; the
+`@oxc-project/runtime`) are dropped from the index at merge time — the
+prints of the helper SOURCES among them (`helperSources`: tslib,
+`@babel/runtime`, `@swc/helpers`, regenerator-runtime, `@oxc-project/runtime`;
+not `@babel/helpers`, whose dist carries @babel/types, nor the core-js
+runtimes) stay behind as the helper table `helpers.jsonl`, which
+`library.discovery.helper_prints` reads (exp129); the
 families (the SYNTHESIS §4 five plus the scale lane's data-driven rule:
 same npm scope, and named scoped forks) are read at lookup time. The
 Stainless and es-shims template rules are file patterns kept in the

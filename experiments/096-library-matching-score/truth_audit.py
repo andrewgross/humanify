@@ -60,9 +60,21 @@ def misattr13_sha():
         return lib096.sha256_bytes(lib096.dump(json.load(fh)).encode())
 
 
+# scorer 12 (exp129): the copies layer v2 (experiments/129-helpers-copies/copies2.py) replaces exp104's: the same
+# rule, its evidence read from the INSTALLED packages (the shipper's own package.json, the shipped file) and the
+# default index's rows over EVERY slice plus its helper table, over every judged unit of the corpus — not from one
+# reference label's run and index slice. Off: exp104's frozen layer (copies.json), i.e. scorer 11's truth.
+COPIES2 = {"on": True}
+
+
 def copies_manifest_path():
-    """copies.json (dev) or copies-test.json (test): read at call time, after lib096.use()."""
-    return lib096.CORPORA[lib096.CORPUS]["copies"]
+    """copies.json (dev) or copies-<corpus>.json, or with COPIES2 on copies2.json / copies2-<corpus>.json: read at
+    call time, after lib096.use()."""
+    p = lib096.CORPORA[lib096.CORPUS]["copies"]
+    if COPIES2["on"]:
+        d, f = os.path.split(p)
+        p = os.path.join(d, f.replace("copies", "copies2", 1))
+    return p
 
 
 def load_copies_manifest():
@@ -75,7 +87,8 @@ def copies_sha():
 
 
 def load_copies(entry, cm):
-    p = os.path.join(lib096.DATA, "truth", entry["id"] + ".copies.json.gz")
+    layer = ".copies2.json.gz" if cm["schema"].startswith("exp129-copies/") else ".copies.json.gz"
+    p = os.path.join(lib096.DATA, "truth", entry["id"] + layer)
     got = sha256_file(p)
     if got != cm["entries"].get(entry["id"]):
         raise SystemExit(f"REFUSED: copies {p} sha256 {got[:12]} != copies.json")
@@ -94,7 +107,9 @@ def carried_verdict(unit_tokens, source_tokens, unverified):
 
 
 class Audit:
-    def __init__(self, entry, truth, cm):
+    def __init__(self, entry, truth, cm, ranges=None):
+        """`ranges`: the copy ranges to read instead of the frozen layer `cm` names (the layer's own builder
+        passes [] to label units without the layer it builds)."""
         self.offs = [s[0] for s in truth["segments"]]
         self.segs = truth["segments"]
         with open(lib096.corpus_path(entry, "bundle"), "rb") as fh:
@@ -105,7 +120,7 @@ class Audit:
         self.tok = {si: set(TOKEN.findall(c)) for si, c in enumerate(contents) if c}
         self.clen = {si: len(c) for si, c in enumerate(contents) if c}
         self.all = set().union(*self.tok.values()) if self.tok else set()
-        ranges = sorted(load_copies(entry, cm))
+        ranges = sorted(load_copies(entry, cm) if ranges is None else ranges)
         self.copy_at = [r[0] for r in ranges]
         self.copies = ranges
         self.mis13 = {(r[0], r[1]): r for r in load_misattr13(entry)} if RULES13["misattributed"] else {}
@@ -124,7 +139,7 @@ class Audit:
 
     def misattributed(self, units):
         """Scorer 13 (exp132, rule `misattributed`): {factory unit i: layer row [start, end, old package, package,
-        version, file, evidence]} for the run's `Factory` units the frozen misattr13 layer relabels (a module the
+        version, file, evidence, old file]} for the run's `Factory` units the frozen misattr13 layer relabels (a module the
         source map credits to a file that does not hold it; experiments/132-factory-precision/scorer13/misattr13.py).
         Matched by span: a factory the reference run did not cut the same way is left alone."""
         if not self.mis13:
@@ -416,9 +431,55 @@ def origins10_sha():
     return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
 
 
+# scorer 12 (exp129): the scorer 10 layer rebuilt with origins.py's RULES12 (`patched`: a marker path may hold `=`,
+# a pnpm patched dependency `.pnpm/<name>@<v>_patch_hash=<h>/`, as the index builder already reads it), frozen per
+# corpus by experiments/129-helpers-copies/scorer12/origins12.py as <DATA>/truth/<id>.origins12.json.gz +
+# origins12[-<corpus>].json; `patched` off rebuilds the scorer 10 layer byte for byte (origins12.py verify). When on,
+# origin_layer reads it in place of scorer 10's.
+def origins12_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "origins12.json" if c == "dev" else f"origins12-{c}.json")
+
+
+def rules12():
+    import origins as O
+    return O.RULES12
+
+
+_O12 = {}
+
+
+def load_origins12_manifest():
+    """The scorer 12 layer's manifest for the current corpus, or None when `patched` is off."""
+    if not rules12().get("patched"):
+        return None
+    c = lib096.CORPUS
+    if c not in _O12:
+        with open(origins12_manifest_path()) as fh:
+            m = json.load(fh)
+        if m["rules"] != rules12():
+            raise SystemExit(f"REFUSED: {origins12_manifest_path()} was frozen with rules {m['rules']}, "
+                             f"not {rules12()}")
+        _O12[c] = m
+    return _O12[c]
+
+
+def origins12_sha():
+    m = load_origins12_manifest()
+    return lib096.sha256_bytes(lib096.dump(m).encode()) if m else None
+
+
 def origin_layer(entry, om, o7m):
-    """The entry's origin layer: scorer 10's (when RULES10 `via` is on), else scorer 7's (o7m, when any RULES7 rule
-    is on), else the frozen scorer 4-6 one."""
+    """The entry's origin layer: scorer 12's (when RULES12 `patched` is on), else scorer 10's (when RULES10 `via`
+    is on), else scorer 7's (o7m, when any RULES7 rule is on), else the frozen scorer 4-6 one."""
+    o12m = load_origins12_manifest() if o7m is not None else None
+    if o12m is not None:
+        p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins12.json.gz")
+        got = sha256_file(p)
+        if got != o12m["entries"].get(entry["id"]):
+            raise SystemExit(f"REFUSED: origins12 {p} sha256 {got[:12]} != {origins12_manifest_path()}")
+        with gzip.open(p, "rt") as fh:
+            return json.load(fh)
     o10m = load_origins10_manifest() if o7m is not None else None
     if o10m is not None:
         p = os.path.join(lib096.DATA, "truth", entry["id"] + ".origins10.json.gz")

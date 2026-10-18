@@ -68,6 +68,9 @@ def main():
                 v0 = score.judge_origin(c["package"], t0, truth["appPackage"])[0]
                 v1 = score.judge_origin(c["package"], t1, truth["appPackage"])[0]
                 mv[f"{v0} -> {v1}"] += u["b"]
+                if draw and v0 in ("right", "family", "origin") and v1 in ("wrongFamily", "app"):
+                    print(f"  right->wrong {entry['id']} @{u['s']} {u['b']} B claim {c['package']} | old {t0['label']} "
+                          f"{t0.get('file')} | new {t1['label']} {t1.get('file')}")
     for s in sorted(agg):
         print(s, dict(agg[s]))
         for k, v in moves[s].most_common():

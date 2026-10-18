@@ -1,0 +1,106 @@
+{
+  "pop-exp127-union": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "UNJUDGED->UNJUDGED": 26065,
+        "UNJUDGED->UNJUDGED:patched": 26065,
+        "WRONG->GOOD": 98981,
+        "WRONG->GOOD:gained": 98981
+      },
+      "pop-esbuild": {
+        "UNJUDGED->UNJUDGED": 25137,
+        "UNJUDGED->UNJUDGED:patched": 25137,
+        "WRONG->GOOD": 378377,
+        "WRONG->GOOD:gained": 378377
+      }
+    },
+    "transitions": [
+      ["pop-bun", "gained", "wrongFamily", "origin", 98981],
+      ["pop-bun", "patched", "selfOther", "selfOrigin", 26065],
+      ["pop-esbuild", "gained", "wrongFamily", "origin", 378377],
+      ["pop-esbuild", "patched", "selfOther", "selfOrigin", 25137]
+    ]
+  },
+  "pop-exp129o-auto-seed": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "UNJUDGED->UNJUDGED": 26065,
+        "UNJUDGED->UNJUDGED:patched": 26065,
+        "WRONG->GOOD": 112054,
+        "WRONG->GOOD:gained": 105618,
+        "WRONG->GOOD:patched": 6436
+      },
+      "pop-esbuild": {
+        "UNJUDGED->UNJUDGED": 25137,
+        "UNJUDGED->UNJUDGED:patched": 25137,
+        "WRONG->GOOD": 394819,
+        "WRONG->GOOD:gained": 388477,
+        "WRONG->GOOD:patched": 6342
+      }
+    },
+    "transitions": [
+      ["pop-bun", "gained", "wrongFamily", "origin", 105618],
+      ["pop-bun", "patched", "selfOther", "selfOrigin", 26065],
+      ["pop-bun", "patched", "wrongFamily", "origin", 6436],
+      ["pop-esbuild", "gained", "wrongFamily", "origin", 388477],
+      ["pop-esbuild", "patched", "selfOther", "selfOrigin", 25137],
+      ["pop-esbuild", "patched", "wrongFamily", "origin", 6342]
+    ]
+  },
+  "pop-exp129o-seed": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "UNJUDGED->UNJUDGED": 26065,
+        "UNJUDGED->UNJUDGED:patched": 26065,
+        "WRONG->GOOD": 112054,
+        "WRONG->GOOD:gained": 105618,
+        "WRONG->GOOD:patched": 6436
+      },
+      "pop-esbuild": {
+        "UNJUDGED->UNJUDGED": 25137,
+        "UNJUDGED->UNJUDGED:patched": 25137,
+        "WRONG->GOOD": 394819,
+        "WRONG->GOOD:gained": 388477,
+        "WRONG->GOOD:patched": 6342
+      }
+    },
+    "transitions": [
+      ["pop-bun", "gained", "wrongFamily", "origin", 105618],
+      ["pop-bun", "patched", "selfOther", "selfOrigin", 26065],
+      ["pop-bun", "patched", "wrongFamily", "origin", 6436],
+      ["pop-esbuild", "gained", "wrongFamily", "origin", 388477],
+      ["pop-esbuild", "patched", "selfOther", "selfOrigin", 25137],
+      ["pop-esbuild", "patched", "wrongFamily", "origin", 6342]
+    ]
+  },
+  "pop-exp130-origin": {
+    "corpus": "pop",
+    "perSet": {
+      "pop-bun": {
+        "UNJUDGED->UNJUDGED": 26065,
+        "UNJUDGED->UNJUDGED:patched": 26065,
+        "WRONG->GOOD": 112054,
+        "WRONG->GOOD:gained": 105618,
+        "WRONG->GOOD:patched": 6436
+      },
+      "pop-esbuild": {
+        "UNJUDGED->UNJUDGED": 25137,
+        "UNJUDGED->UNJUDGED:patched": 25137,
+        "WRONG->GOOD": 394819,
+        "WRONG->GOOD:gained": 388477,
+        "WRONG->GOOD:patched": 6342
+      }
+    },
+    "transitions": [
+      ["pop-bun", "gained", "wrongFamily", "origin", 105618],
+      ["pop-bun", "patched", "selfOther", "selfOrigin", 26065],
+      ["pop-bun", "patched", "wrongFamily", "origin", 6436],
+      ["pop-esbuild", "gained", "wrongFamily", "origin", 388477],
+      ["pop-esbuild", "patched", "selfOther", "selfOrigin", 25137],
+      ["pop-esbuild", "patched", "wrongFamily", "origin", 6342]
+    ]
+  }
+}

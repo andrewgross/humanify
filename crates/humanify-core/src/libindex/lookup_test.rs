@@ -579,3 +579,53 @@ fn auto_reads_the_terser_slices_only_for_a_bundle_they_hold_a_share_of() {
     assert!(ix.slice_reason().contains("off"), "{}", ix.slice_reason());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// exp129: an index's helper table (`helpers.jsonl`, the merge's record of
+/// the prints the helper SOURCES' own builds hold) is read on load; an
+/// index without one has no helper prints.
+#[test]
+fn the_loader_reads_the_helper_table_when_the_index_has_one() {
+    use crate::libindex::format::HelperRow;
+    use crate::libindex::recipe::{TerserSlices, detect_recipe};
+    use humanify_model::detection::{BundlerType, MinifierType};
+    let dir = std::env::temp_dir().join(format!("humanify-helpers-{}", std::process::id()));
+    let slices = || {
+        vec![(
+            "esbuild-node-cjs-min",
+            "esbuild:target=node,format=cjs,minify",
+            vec![row("a", "zod", 150, 900)],
+        )]
+    };
+    write_index(&dir, slices());
+    let esb = detect_recipe("var a;", BundlerType::Esbuild, MinifierType::Esbuild);
+    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Off).expect("loads");
+    assert!(ix.helper_owners(&hx("h")).is_empty(), "no helper table");
+    let line = serde_json::to_string(&HelperRow {
+        hash: hx("h"),
+        owners: vec!["tslib".into()],
+    })
+    .unwrap();
+    std::fs::write(dir.join(crate::libindex::table::HELPERS_FILE), line + "\n").unwrap();
+    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Off).expect("loads");
+    assert!(
+        ix.helper_owners(&hx("h")).is_empty(),
+        "a table the manifest does not list is not the index's"
+    );
+    let mut m: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(dir.join("manifest.json")).unwrap()).unwrap();
+    m["tables"][crate::libindex::table::HELPERS_FILE] = serde_json::json!("sha");
+    std::fs::write(dir.join("manifest.json"), m.to_string()).unwrap();
+    let ix = LibraryIndex::load(&dir, &esb, TerserSlices::Off).expect("loads");
+    assert_eq!(ix.helper_owners(&hx("h")), ["tslib".to_string()]);
+    assert!(ix.helper_owners(&hx("a")).is_empty());
+    assert!(
+        ix.occurrences(&hx("h")).is_empty(),
+        "a helper print is no unit row"
+    );
+    let rows = LibraryIndex::from_rows(vec![], vec![]).with_helpers(vec![HelperRow {
+        hash: hx("h"),
+        owners: vec!["@babel/runtime".into()],
+    }]);
+    assert_eq!(rows.helper_owners(&hx("h")), ["@babel/runtime".to_string()]);
+    std::fs::remove_dir_all(&dir).ok();
+}

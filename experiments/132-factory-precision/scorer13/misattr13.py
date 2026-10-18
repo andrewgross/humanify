@@ -22,7 +22,8 @@ whole bundled dist holding F's code is a copy, not F's file), holding at least m
 sources (sourcesContent), else among the installed files of the packages the map names (`installed`). No such
 file: F keeps its label (the rule relabels only to a file shown to hold the code).
 
-At score time a unit whose module is a layer row's factory, and whose label is still the row's old package, takes
+At score time a unit whose module is a layer row's factory, and whose majority-mapped source is still the row's old
+file S (a body statement mapped to another file of P keeps its label), takes
 the row's package, version and file (truth_audit.Audit.misattributed); its copy origin is then read for the new
 shipper.
 
@@ -43,7 +44,7 @@ import lib096  # noqa: E402
 import score  # noqa: E402
 import truth_audit  # noqa: E402
 
-SCHEMA = "exp132-misattr13/3"
+SCHEMA = "exp132-misattr13/4"
 MIN_TOKENS = 5
 MIN_STRINGS = 3
 OWN = 0.5
@@ -223,7 +224,7 @@ def entry_layer(entry, truth, units, agg):
             continue
         agg["relabelled (" + new[3] + ")"] += 1
         agg["relabelled bytes (" + new[3] + ")"] += e - s
-        rows.append([s, e, pkg] + new)
+        rows.append([s, e, pkg] + new + [srcs[si][2]])
     return rows
 
 
@@ -250,7 +251,7 @@ def build(units_label):
                      "sizeSlack": SIZE_SLACK},
            "about": "scorer 13 rule `misattributed` (experiments/132-factory-precision/scorer13/misattr13.py): per "
                     "entry, the sha256 of <DATA>/truth/<id>.misattr13.json.gz (rows: factory start, end, old "
-                    "package, new package, version, file, evidence)"}
+                    "package, new package, version, file, evidence, old file)"}
     open(manifest_path(), "w").write(lib096.dump(man))
     for s, c in sorted(agg.items()):
         for k, v in sorted(c.items()):

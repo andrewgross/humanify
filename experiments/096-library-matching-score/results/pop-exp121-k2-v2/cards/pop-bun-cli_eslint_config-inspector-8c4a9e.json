@@ -4,8 +4,8 @@
   "family": 77114,
   "origin": 185207,
   "right": 407078,
-  "selfOrigin": 131364,
-  "selfOther": 45385,
+  "selfOrigin": 157429,
+  "selfOther": 19320,
   "unmapped": 293,
   "wrongFamily": 4435
  },
@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "87a8d7d128d5ab73c535000dc151789d280140664e46ae870cd3f9e9005363dd",
  "rule": "structural",
- "schema": "exp096-score/11",
+ "schema": "exp096-score/12",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -82,8 +82,8 @@
     "family": 77114,
     "origin": 185207,
     "right": 407078,
-    "selfOrigin": 131364,
-    "selfOther": 45385,
+    "selfOrigin": 157429,
+    "selfOther": 19320,
     "unmapped": 293,
     "wrongFamily": 4435
    },

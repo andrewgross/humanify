@@ -511,6 +511,9 @@ struct Held<'h> {
     /// Hold the unit's function print whose span starts with this text
     /// (instead of the whole print or the largest function).
     inner: Option<&'h str>,
+    /// A row of the index's HELPER table (exp129: a helper source's own
+    /// print), not of its unit table.
+    helper: bool,
 }
 
 impl<'h> Held<'h> {
@@ -521,6 +524,7 @@ impl<'h> Held<'h> {
             function: false,
             module_bytes: 500,
             inner: None,
+            helper: false,
         }
     }
 
@@ -538,6 +542,14 @@ impl<'h> Held<'h> {
         Held {
             function: true,
             ..Held::whole(head, owner)
+        }
+    }
+
+    /// A helper source's own print (exp129): the index's helper table.
+    fn helper(self) -> Held<'h> {
+        Held {
+            helper: true,
+            ..self
         }
     }
 
@@ -589,6 +601,7 @@ fn run_indexed_factories(
         pieces.interop,
     );
     let mut rows = Vec::new();
+    let mut helpers = Vec::new();
     for h in held {
         let (_, p) = prints
             .iter()
@@ -615,6 +628,13 @@ fn run_indexed_factories(
         } else {
             &p.whole
         };
+        if h.helper {
+            helpers.push(crate::libindex::format::HelperRow {
+                hash: print.hash.clone(),
+                owners: vec![h.owner.into()],
+            });
+            continue;
+        }
         rows.push(UnitRow {
             hash: print.hash.clone(),
             owner: h.owner.into(),
@@ -625,7 +645,7 @@ fn run_indexed_factories(
             versions: vec![("1.0.0".into(), "1.0.0".into())],
         });
     }
-    let index = LibraryIndex::from_rows(rows, literals);
+    let index = LibraryIndex::from_rows(rows, literals).with_helpers(helpers);
     let rules = LookupRules {
         agreement: false,
         support: 0,
@@ -989,6 +1009,53 @@ fn helper_prints_held_by_many_families_seed_and_carry_nothing() {
     // Held by fewer families than the floor: not a helper.
     let (_, _, rows) = run_indexed_with(code, &held, vec![], with(5));
     assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+}
+
+#[test]
+fn a_helper_source_s_own_statement_is_no_other_package_s_seed() {
+    // exp129: lib and dep are statements a helper SOURCE's own build holds
+    // whole (tslib's `function __awaiter`, the index's helper table): P's
+    // rows hold them too because P's dist inlined tslib. Under
+    // helper_prints = "seed" they are no index seed of P's (DOWN from P's
+    // own root may still take them: an inliner's helper in its own module
+    // is its code); under "credit" they are tslib's seeds. own's FUNCTION
+    // is a helper print, its whole statement is not tslib's (tsc's emitted
+    // `var __x = (this && this.__x) || function`): P's seed in every mode.
+    use crate::libdetect::discovery::HelperPrints;
+    let code = "var root = function (r) { return [r.a, r.b, r.c, r.d].map(lib).map(own).map(more).filter(Boolean).join(\";\").concat(r.length); };\nvar more = function (m) { return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); };\nvar lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar own = function (o) { return [o, o + 1, o * 2, String(o), o.toFixed(2), o.toString(16)].join(\",\").concat(o.length); };\nvar app = () => root(\"a\");\n";
+    let mut held: Vec<Held<'_>> = ["var root", "var more", "var lib", "var dep", "var own"]
+        .iter()
+        .map(|h| Held::whole(h, "P"))
+        .collect();
+    held.push(Held::whole("var lib", "tslib").helper());
+    held.push(Held::whole("var dep", "tslib").helper());
+    held.push(Held::function("var own", "tslib").helper());
+    let with = |m: HelperPrints| DiscoveryOptions {
+        helper_prints: m,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(HelperPrints::Off));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(HelperPrints::Seed));
+    assert_eq!(claim_of(&rows, "var root"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var own"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Down)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Down)));
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(HelperPrints::Credit));
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("tslib".into(), Rule::Seed))
+    );
+    assert_eq!(
+        claim_of(&rows, "var dep"),
+        Some(("tslib".into(), Rule::Seed))
+    );
+    assert_eq!(claim_of(&rows, "var own"), Some(("P".into(), Rule::Seed)));
+    // A helper print two helper families hold names neither: no seed.
+    held.push(Held::whole("var lib", "@babel/runtime").helper());
+    let (_, _, rows) = run_indexed_with(code, &held, vec![], with(HelperPrints::Credit));
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Down)));
 }
 
 #[test]

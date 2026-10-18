@@ -4,10 +4,10 @@
 //! function hashes covering half the unit, with neighbour support), the
 //! specificity rule, and agreement with the literal rule.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-use super::format::{LiteralRow, Manifest, UnitRow};
+use super::format::{HelperRow, LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
 use super::table::{self, LiteralTable, Source, UnitTable};
 use super::units::{StatementPrints, UnitPrint};
@@ -47,6 +47,9 @@ pub struct LibraryIndex {
     /// Every package name the index knows: its owners, and (loaded) the
     /// packages its manifest records registry metadata or builds for.
     known: BTreeSet<String>,
+    /// The helper table (exp129): a helper source's print → the helper
+    /// packages holding it; empty for an index whose manifest lists none.
+    helpers: BTreeMap<String, Vec<String>>,
 }
 
 impl LibraryIndex {
@@ -69,7 +72,21 @@ impl LibraryIndex {
             .expect("an encoded literal table opens"),
             known: packages.iter().cloned().collect(),
             packages,
+            helpers: BTreeMap::new(),
         }
+    }
+
+    /// This index with `rows` as its helper table (the tests' constructor;
+    /// rows of one hash are joined, owners sorted).
+    pub fn with_helpers(mut self, rows: Vec<HelperRow>) -> LibraryIndex {
+        self.helpers = helper_table(rows);
+        self
+    }
+
+    /// The helper packages whose own build holds `hash` (exp129: canonical
+    /// transpiler helper code); empty when none does.
+    pub fn helper_owners(&self, hash: &str) -> &[String] {
+        self.helpers.get(hash).map_or(&[], Vec::as_slice)
     }
 
     /// Why the slice was chosen, and which slices are read beside it (with
@@ -224,6 +241,17 @@ impl LibraryIndex {
         }
         let literals = LiteralTable::open(open(table::LITERALS_FILE)?)
             .map_err(|e| format!("{}: {e}", table::LITERALS_FILE))?;
+        let helpers = if manifest.tables.contains_key(table::HELPERS_FILE) {
+            let text = read(table::HELPERS_FILE)?;
+            let rows = text
+                .lines()
+                .map(serde_json::from_str::<HelperRow>)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("{}: {e}", table::HELPERS_FILE))?;
+            helper_table(rows)
+        } else {
+            BTreeMap::new()
+        };
         let mut known: BTreeSet<String> = packages.iter().cloned().collect();
         known.extend(manifest.registry.packuments.keys().cloned());
         known.extend(manifest.packages.iter().map(|p| p.name.clone()));
@@ -238,6 +266,7 @@ impl LibraryIndex {
             terser_reading: terser,
             terser_verdict: std::sync::OnceLock::new(),
             literals,
+            helpers,
         })
     }
 
@@ -728,6 +757,20 @@ pub fn claim_units(
             claim.literal = Some((named.clone(), score));
         }
         out.push(claim);
+    }
+    out
+}
+
+/// Helper rows as the lookup's map: rows of one hash joined, owners sorted
+/// and once each.
+fn helper_table(rows: Vec<HelperRow>) -> BTreeMap<String, Vec<String>> {
+    let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for r in rows {
+        out.entry(r.hash).or_default().extend(r.owners);
+    }
+    for owners in out.values_mut() {
+        owners.sort();
+        owners.dedup();
     }
     out
 }

@@ -4,7 +4,9 @@
 //! Each fingerprint is stored ONCE per owner with the version ranges it
 //! appears in (over the owner's indexed versions, semver order); a key
 //! held by two owners stays two rows (collisions are lookup evidence).
-//! The stop-listed helper packages are dropped. Every table is sorted and
+//! The stop-listed helper packages are dropped; the prints of the helper
+//! SOURCES among them go to the helper table instead (exp129,
+//! `helpers.jsonl`). Every table is sorted and
 //! the manifest's maps are ordered, so the same shards give the same
 //! bytes in any order; the INDEX ID is the manifest's sha256.
 //!
@@ -19,8 +21,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use humanify_core::libindex::format::{
-    INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow, PackageRecord, RefusedRecord,
-    RegistrySnapshot, SliceRecord, UnitRow, fingerprint_versions, sort_versions, version_ranges,
+    HelperRow, INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow, PackageRecord,
+    RefusedRecord, RegistrySnapshot, SliceRecord, UnitRow, fingerprint_versions, sort_versions,
+    version_ranges,
 };
 use humanify_core::libindex::table::unit_key;
 use serde::Serialize;
@@ -53,21 +56,30 @@ pub struct IndexFiles {
     pub id: String,
 }
 
+/// A stop-list's string list `k` (empty when absent).
+fn stop_list(stop: &serde_json::Value, k: &str) -> Vec<String> {
+    stop.get(k)
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
+        .map(str::to_string)
+        .collect()
+}
+
 /// Is `owner` a stop-listed helper package?
 fn is_helper(owner: &str, stop: &serde_json::Value) -> bool {
-    let list = |k: &str| {
-        stop.get(k)
-            .and_then(|v| v.as_array())
-            .into_iter()
-            .flatten()
-            .filter_map(|v| v.as_str())
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-    };
-    list("helperPackages").iter().any(|p| p == owner)
-        || list("helperPackagePrefixes")
+    stop_list(stop, "helperPackages").iter().any(|p| p == owner)
+        || stop_list(stop, "helperPackagePrefixes")
             .iter()
             .any(|p| owner.starts_with(p.as_str()))
+}
+
+/// Is `owner` a helper SOURCE (exp129): a stop-listed package whose own
+/// code is canonical transpiler helper code, its prints kept in the helper
+/// table?
+fn is_helper_source(owner: &str, stop: &serde_json::Value) -> bool {
+    stop_list(stop, "helperSources").iter().any(|p| p == owner)
 }
 
 fn jsonl<T: Serialize>(rows: &[T]) -> Vec<u8> {
@@ -156,6 +168,9 @@ pub struct Merger {
     /// label → shard key, every shard added
     shard_keys: BTreeMap<String, String>,
     last: Option<(String, String)>,
+    /// The helper table (exp129): a helper source's unit hash → the helper
+    /// packages holding it, over every slice.
+    helpers: BTreeMap<u64, BTreeSet<String>>,
 }
 
 impl Default for Merger {
@@ -168,6 +183,7 @@ impl Default for Merger {
             literals: HashMap::new(),
             shard_keys: BTreeMap::new(),
             last: None,
+            helpers: BTreeMap::new(),
         }
     }
 }
@@ -214,9 +230,6 @@ impl Merger {
 
     fn add_units(&mut self, shard: &Shard) -> Result<(), String> {
         for u in &shard.units {
-            if is_helper(&u.owner, &self.stop) {
-                continue;
-            }
             let hash = unit_key(&u.hash).ok_or_else(|| {
                 format!(
                     "shard {}: unit hash {:?} is not 16 lowercase hex digits",
@@ -224,6 +237,15 @@ impl Merger {
                     u.hash
                 )
             })?;
+            if is_helper(&u.owner, &self.stop) {
+                if is_helper_source(&u.owner, &self.stop) {
+                    self.helpers
+                        .entry(hash)
+                        .or_default()
+                        .insert(u.owner.clone());
+                }
+                continue;
+            }
             let (owner, version) = self.seen(&u.owner, &u.version);
             let file = self.strings.id(&u.file);
             let g = self.slices.get_mut(&shard.kind).expect("the shard's slice");
@@ -383,6 +405,20 @@ impl Merger {
             })
             .collect();
         files.insert(LITERAL_FILES.into(), jsonl(&provenance));
+        if !self.helpers.is_empty() {
+            let rows: Vec<HelperRow> = self
+                .helpers
+                .iter()
+                .map(|(hash, owners)| HelperRow {
+                    hash: format!("{hash:016x}"),
+                    owners: owners.iter().cloned().collect(),
+                })
+                .collect();
+            files.insert(
+                humanify_core::libindex::table::HELPERS_FILE.into(),
+                jsonl(&rows),
+            );
+        }
         let data: BTreeMap<String, &str> = [
             ("families.json".to_string(), FAMILIES_JSON),
             ("stoplists.json".to_string(), STOPLISTS_JSON),

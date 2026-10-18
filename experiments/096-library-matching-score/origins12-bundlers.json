@@ -1,0 +1,40 @@
+{
+  "about": "scorer 12 origin layer (experiments/129-helpers-copies/scorer12/origins12.py): origins.py with RULES12; per entry the sha256 of <DATA>/truth/<id>.origins12.json.gz",
+  "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
+  "entries": {
+    "rollup-dev105-app00": "0ce18510685d520cbb4157b61de8df8222260cafd9b87cd56fad7fa6655bc3c0",
+    "rollup-dev105-app01": "c6fbd364f97e02c09503f0602cbc3c606063cb11f9974964d407dff5c958aa40",
+    "rollup-dev105-app02": "0266875af25554d24207457b53d4898859412006666bfe0c7a69fa41be2507f0",
+    "rollup-dev105-app03": "86d415dac4b49d201328d5c404c59602e7565473a3da94380f6577850d48c0b2",
+    "rollup-dev105-app04": "c24455d8a8e6ea27ba5b866138de31fae30873872c303e288affb9e02291b485",
+    "rollup-dev105-app05": "03add3182255c79b9b81d9fb565d6acbec3932ac8e9983c1a64b66d46d37bfc2",
+    "rollup-dev105-app06": "bdd16852785629277d4730d104dabb3e86f7fcc562ddf909c79e6a5d272e4d6b",
+    "rollup-dev105-app07": "0154d5564108e72ae19df884c1c1f8933ac2fd10f10e8da87366e425f33274c1",
+    "rollup-dev105-app08": "7219949c62957638f62295de26deba4b4c075c4b79c4efa2cd7e5d8ccc72939f",
+    "rollup-dev105-app09": "36a7c2db88d17cddbbaf0e233f2c2b762695bd6250588075a4347f0004682aa1",
+    "rollup-dev105-app10": "b6cb71b6db51b138c4fc0113cfb6e46224d72df116dec4fc65a1e556de7baa6e",
+    "rollup-dev105-app11": "860922b526e12991ec191b3f2239563ee024e791baac5b44ac6dd3916a238d64",
+    "rollup-dev105-app12": "2cd7dffb56f47846d11a96d67fdad372539b461568caeb07fe2654eeeb4ba5f3",
+    "rollup-dev105-app13": "8c6886ea91afa02dd4a59de4ac5d6bfadd27b9a902cf1b128adb97cc03c6d12a",
+    "webpack-dev105-app00": "cc8aa0ed44e3890651fabe004e1c1f29e4f1b2da67eff3e81c2d2691fa2741d3",
+    "webpack-dev105-app01": "939e74d9c5b81b2b2df5d7086dbceac58a9b1066865817fb03ec26d205df1ef5",
+    "webpack-dev105-app02": "7ea79757a6e9d7f1d9d0c3b47f1e2502a77f5447732afed0b142a28337a0efb5",
+    "webpack-dev105-app03": "0d127a4a5b0a47f4e6e6a753b7afa85560299928660d6247cd76e525217454d2",
+    "webpack-dev105-app04": "589d32bd1ca66179515f01d4914282a4c99202756fbbf9ec8eb712cf1b0a1192",
+    "webpack-dev105-app05": "fb32a2336c90ed92880e7a6f0988a0a6494c04e7c07c2f84f07c7cbcc3656c1d",
+    "webpack-dev105-app06": "70eada95ef7227fa41b177807a1fdfa0f42565589b92f02cba7075606be8e2e5",
+    "webpack-dev105-app08": "a247ecc3cf611b8df9d6daf86e059d1979c92b6b0f25c0af48e58ec9b9bc161e",
+    "webpack-dev105-app09": "984aad7d82ac80d7e567b49e82d7ef1165b552f81ee473ba6fcd8f7091d62885",
+    "webpack-dev105-app10": "f41fab11f0587a344423b6caec3181d5362851cf2bb083bf46158995602eaa44",
+    "webpack-dev105-app11": "c38d41d859287edb70726e89b3e81d2833c9877f5d636b3c3ef8c22ae3da3e7c",
+    "webpack-dev105-app12": "7c6fdddfca9ea77247576052dd49efc23db4ab78e861f1e81e5ed65071b06a88",
+    "webpack-dev105-app13": "4aa88510964632c039beddefb27d351cfb4a6d26b4b831d91f0be600e0fc725b"
+  },
+  "rules": {
+    "chunk": true,
+    "lazybody": true,
+    "patched": true,
+    "via": true
+  },
+  "schema": "exp129-origins12/1"
+}

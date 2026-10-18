@@ -405,3 +405,32 @@ fn the_terser_slices_key_is_off_by_default_and_takes_union_or_fallback() {
         .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("terser_slices")), "{err:?}");
 }
+
+/// exp129: `helper_prints` (off | seed | credit), default off: a unit whose
+/// whole print a helper source's own build holds is no other package's
+/// index seed (seed), or the helper package's (credit).
+#[test]
+fn the_helper_prints_key_defaults_off_and_sets_from_the_file() {
+    use humanify_core::libdetect::discovery::HelperPrints;
+    let o = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(o.helper_prints, HelperPrints::Off);
+    for (text, want) in [
+        ("seed", HelperPrints::Seed),
+        ("credit", HelperPrints::Credit),
+    ] {
+        let o = build(
+            &["in.js"],
+            &format!("[library.discovery]\nhelper_prints = \"{text}\"\n"),
+        )
+        .unwrap()
+        .library
+        .discovery_options();
+        assert_eq!(o.helper_prints, want);
+    }
+    let err = ConfigFile::check(
+        "cfg.toml",
+        "[library.discovery]\nhelper_prints = \"maybe\"\n",
+    )
+    .expect_err("an unknown choice is refused");
+    assert!(err.iter().any(|e| e.contains("helper_prints")), "{err:?}");
+}

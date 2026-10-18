@@ -1,0 +1,115 @@
+{
+  "apps-exp127-off": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-rollup": {
+        "GOOD->WRONG": 211,
+        "GOOD->WRONG:lost": 211,
+        "WRONG->GOOD": 11768,
+        "WRONG->GOOD:gained": 11768
+      },
+      "apps-webpack": {
+        "GOOD->WRONG": 1119,
+        "GOOD->WRONG:lost": 1119,
+        "WRONG->GOOD": 107913,
+        "WRONG->GOOD:gained": 107913
+      }
+    },
+    "transitions": [
+      ["apps-rollup", "gained", "wrongFamily", "origin", 11768],
+      ["apps-rollup", "lost", "origin", "wrongFamily", 211],
+      ["apps-webpack", "gained", "wrongFamily", "origin", 107913],
+      ["apps-webpack", "lost", "origin", "wrongFamily", 1119]
+    ]
+  },
+  "apps-exp129o-auto-seed": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 3014,
+        "WRONG->GOOD:patched": 3014
+      },
+      "apps-rollup": {
+        "GOOD->WRONG": 211,
+        "GOOD->WRONG:lost": 211,
+        "WRONG->GOOD": 24487,
+        "WRONG->GOOD:gained": 12150,
+        "WRONG->GOOD:patched": 12337
+      },
+      "apps-webpack": {
+        "GOOD->WRONG": 1119,
+        "GOOD->WRONG:lost": 1119,
+        "WRONG->GOOD": 107913,
+        "WRONG->GOOD:gained": 107913
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "patched", "wrongFamily", "origin", 3014],
+      ["apps-rollup", "gained", "wrongFamily", "origin", 12150],
+      ["apps-rollup", "lost", "origin", "wrongFamily", 211],
+      ["apps-rollup", "patched", "wrongFamily", "origin", 12337],
+      ["apps-webpack", "gained", "wrongFamily", "origin", 107913],
+      ["apps-webpack", "lost", "origin", "wrongFamily", 1119]
+    ]
+  },
+  "apps-exp129o-seed": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 3014,
+        "WRONG->GOOD:patched": 3014
+      },
+      "apps-rollup": {
+        "GOOD->WRONG": 211,
+        "GOOD->WRONG:lost": 211,
+        "WRONG->GOOD": 24487,
+        "WRONG->GOOD:gained": 12150,
+        "WRONG->GOOD:patched": 12337
+      },
+      "apps-webpack": {
+        "GOOD->WRONG": 1119,
+        "GOOD->WRONG:lost": 1119,
+        "WRONG->GOOD": 107913,
+        "WRONG->GOOD:gained": 107913
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "patched", "wrongFamily", "origin", 3014],
+      ["apps-rollup", "gained", "wrongFamily", "origin", 12150],
+      ["apps-rollup", "lost", "origin", "wrongFamily", 211],
+      ["apps-rollup", "patched", "wrongFamily", "origin", 12337],
+      ["apps-webpack", "gained", "wrongFamily", "origin", 107913],
+      ["apps-webpack", "lost", "origin", "wrongFamily", 1119]
+    ]
+  },
+  "exp130-origin-apps": {
+    "corpus": "apps",
+    "perSet": {
+      "apps-esbuild": {
+        "WRONG->GOOD": 3014,
+        "WRONG->GOOD:patched": 3014
+      },
+      "apps-rollup": {
+        "GOOD->WRONG": 211,
+        "GOOD->WRONG:lost": 211,
+        "WRONG->GOOD": 24487,
+        "WRONG->GOOD:gained": 12150,
+        "WRONG->GOOD:patched": 12337
+      },
+      "apps-webpack": {
+        "GOOD->WRONG": 1119,
+        "GOOD->WRONG:lost": 1119,
+        "WRONG->GOOD": 107913,
+        "WRONG->GOOD:gained": 107913
+      }
+    },
+    "transitions": [
+      ["apps-esbuild", "patched", "wrongFamily", "origin", 3014],
+      ["apps-rollup", "gained", "wrongFamily", "origin", 12150],
+      ["apps-rollup", "lost", "origin", "wrongFamily", 211],
+      ["apps-rollup", "patched", "wrongFamily", "origin", 12337],
+      ["apps-webpack", "gained", "wrongFamily", "origin", 107913],
+      ["apps-webpack", "lost", "origin", "wrongFamily", 1119]
+    ]
+  }
+}

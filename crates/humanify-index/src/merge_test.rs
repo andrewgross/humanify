@@ -300,3 +300,63 @@ fn a_unit_group_keeps_the_first_shards_nodes_whatever_order_the_list_had() {
         rows(&a.files["units.bun-node-cjs-min.jsonl"]);
     assert_eq!(rows[0].nodes, 40, "label order: 1.0.0 first");
 }
+
+/// exp129: the stop-listed helper packages leave the unit tables, but the
+/// HELPER SOURCES among them (tslib, @babel/runtime, @swc/helpers ... —
+/// packages whose own code is the transpiler helpers every compiled
+/// package inlines) leave their prints behind in `helpers.jsonl`: hash ->
+/// the helper packages holding it, over every slice. @babel/helpers is
+/// dropped but is no source (its dist carries @babel/types' code), nor
+/// are the core-js runtimes (they re-export core-js-pure). An index with
+/// no helper-source rows has no helper table.
+#[test]
+fn helper_sources_leave_their_prints_in_the_helper_table() {
+    use super::shard::ShardUnit;
+    use humanify_core::libindex::format::HelperRow;
+    let unit = |owner: &str, hash: &str| ShardUnit {
+        owner: owner.into(),
+        version: "1.0.0".into(),
+        file: "index.js".into(),
+        hash: hash.into(),
+        nodes: 40,
+        content: 5,
+        module_bytes: 100,
+    };
+    const HB: &str = "00000000000000b0";
+    const HC: &str = "00000000000000c0";
+    let mut a = module_shard("1.0.0", &[]);
+    a.units = vec![
+        unit("ms", H1),
+        unit("tslib", HT),
+        unit("@babel/runtime", HT),
+        unit("@babel/runtime", H2),
+        unit("@babel/helpers", HB),
+        unit("@babel/runtime-corejs3", HC),
+    ];
+    let files = merge(meta(), vec![a]).expect("merges").files;
+    let units = std::str::from_utf8(&files["units.bun-node-cjs-min.jsonl"]).unwrap();
+    assert_eq!(units.lines().count(), 1, "only ms's row is a unit row");
+    let helpers: Vec<HelperRow> = std::str::from_utf8(&files["helpers.jsonl"])
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(
+        helpers,
+        vec![
+            HelperRow {
+                hash: H2.into(),
+                owners: vec!["@babel/runtime".into()]
+            },
+            HelperRow {
+                hash: HT.into(),
+                owners: vec!["@babel/runtime".into(), "tslib".into()]
+            },
+        ]
+    );
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&files["manifest.json"]).expect("json");
+    assert!(manifest["tables"].get("helpers.jsonl").is_some());
+    let plain = merge(meta(), shards()).expect("merges").files;
+    assert!(!plain.contains_key("helpers.jsonl"));
+}

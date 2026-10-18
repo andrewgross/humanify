@@ -81,6 +81,11 @@ fn terser_slices_choices() -> Vec<String> {
         .map(String::from)
         .to_vec()
 }
+fn helper_prints_choices() -> Vec<String> {
+    humanify_core::libdetect::discovery::HelperPrints::NAMES
+        .map(String::from)
+        .to_vec()
+}
 fn banner_names() -> Vec<String> {
     ["any", "known"].map(String::from).to_vec()
 }
@@ -689,6 +694,18 @@ pub static KEYS: &[Key] = &[
         "An index print at least this many package families hold is emitted helper code: a unit \
          such prints cover half of is no seed and no propagated claim (exp106; 0 = off).",
     ),
+    Key {
+        section: "library.discovery",
+        name: "helper_prints",
+        kind: Kind::Choice(helper_prints_choices),
+        flag: None,
+        default: || text(discovery().helper_prints.name()),
+        unset: "",
+        doc: "A unit whose whole print the index's helper table holds (a helper source's own \
+              code: tslib, @babel/runtime, @swc/helpers) is no other package's index seed: \
+              \"off\", \"seed\" (dropped; propagation may still reach it) or \"credit\" (the \
+              helper package's seed when one helper family holds it; exp129).",
+    },
     lib_int(
         "library.discovery",
         "payload_min_bytes",
