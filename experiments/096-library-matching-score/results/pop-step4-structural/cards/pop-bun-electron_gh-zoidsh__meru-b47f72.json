@@ -48,7 +48,7 @@
  "noDiscovery": null,
  "reportSha256": "23b190e6a8793505bc10ed8428d99b301c6a0640acc61975531c205b99c103a4",
  "rule": "structural",
- "schema": "exp096-score/11",
+ "schema": "exp096-score/12",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -86,7 +86,7 @@
     "unmapped": 1297,
     "wrongFamily": 629446
    },
-   "copyBytes": 6266640,
+   "copyBytes": 6306026,
    "f05": 0.751869,
    "f05ShipperOnly": 0.12978,
    "f1": 0.632362,
@@ -113,7 +113,7 @@
    "statementBytes": {
     "<app>": 2966,
     "<unmapped>": 6694,
-    "copy": 6266640,
+    "copy": 6306026,
     "library": 7750639
    },
    "wrongFamilyBytes": 629446,
@@ -124,7 +124,7 @@
  "statementBytes": {
   "<app>": 2966,
   "<unmapped>": 183513,
-  "copy": 10060464,
+  "copy": 10099850,
   "library": 19991213
  },
  "toolchain": {
@@ -135,7 +135,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 10060464,
+  "copyBytes": 10099850,
   "f05": 0.509729,
   "f05ShipperOnly": 0.087984,
   "f1": 0.316366,

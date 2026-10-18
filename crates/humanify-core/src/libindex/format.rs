@@ -167,6 +167,19 @@ pub struct UnitRow {
     pub versions: Vec<(String, String)>,
 }
 
+/// One print of the index's HELPER table (exp129, `helpers.jsonl`): a
+/// unit hash a helper SOURCE's own build holds (tslib, @babel/runtime,
+/// @swc/helpers: the stop-listed packages whose code is the transpiler
+/// helpers every compiled package inlines), with every helper package
+/// holding it, over all slices. Those packages leave the unit tables at
+/// merge time; their prints stay here, so a lookup can tell a package's own
+/// code from the canonical helper code its dist inlined.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HelperRow {
+    pub hash: String,
+    pub owners: Vec<String>,
+}
+
 /// One literal FILE row as the merge computes it: one source file's
 /// literal set, per owner, with the versions in which that file had
 /// exactly this set. On disk it is split (`humanify-library-index/3`): the

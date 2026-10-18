@@ -41,6 +41,9 @@ use super::lookup::UnitHit;
 pub const PACKAGES_FILE: &str = "packages.json";
 /// The literal lookup table.
 pub const LITERALS_FILE: &str = "literals.bin";
+/// The helper table (exp129, [`super::format::HelperRow`] lines); an index
+/// whose manifest lists none has no helper prints.
+pub const HELPERS_FILE: &str = "helpers.jsonl";
 
 /// A slice's unit lookup table.
 pub fn units_file(slice: &str) -> String {

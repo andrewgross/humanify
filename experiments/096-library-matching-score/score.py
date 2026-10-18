@@ -117,7 +117,17 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    npmchain without "P is not on npm" — a chained source labelled with a package NOT INSTALLED in the app
 #    (`node_modules/src/...` from async-validator's own map) keeps the package whose map listed it. Same reports,
 #    re-scored; `notinstalled` off makes `scopes.statement` scorer 10's card exactly (verify11.py).
-SCORER_VERSION = "exp096-score/11"
+# 12: exp129, two truth-side changes (experiments/129-helpers-copies/README.md). (a) The copies layer v2
+#    (experiments/129-helpers-copies/copies2.py, truth_audit COPIES2, frozen layers copies2*.json): exp104's copies
+#    rule (code + declared dependency + the shipped file naming the origin + one passing origin), its evidence read
+#    from the INSTALLED packages (the shipper's own package.json, the shipped file) and from every row table of the
+#    evidence indexes (every slice of k2-all-r5, k2-all-r5-origin and their helper tables, and of the step-4 index
+#    exp104's layers were built on), over every judged unit (statements, lazy bodies, factory body statements) —
+#    not one reference label's run and index slice; a module specifier (`from "O"`, `require("O")`) no longer names
+#    O. (b) Rule `patched` (origins.py RULES12, frozen layer origins12): a marker path may hold `=` (a pnpm patched
+#    dependency `.pnpm/<name>@<v>_patch_hash=<h>/`), as the index builder reads it (exp130's declared difference).
+#    Same reports, re-scored; both off reproduces scorer 11's cards (experiments/129-helpers-copies/verify_s11.py).
+SCORER_VERSION = "exp096-score/12"
 
 
 def r6(x):
@@ -626,6 +636,9 @@ def main():
     o10m = truth_audit.load_origins10_manifest() if o7m is not None else None
     if o10m is not None and o10m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 10 origin layer was frozen for another corpus manifest")
+    o12m = truth_audit.load_origins12_manifest() if o7m is not None else None
+    if o12m is not None and o12m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 12 origin layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -680,6 +693,7 @@ def main():
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
                    **({"origins10Sha256": truth_audit.origins10_sha()} if o7m and truth_audit.origins10_sha() else {}),
+                   **({"origins12Sha256": truth_audit.origins12_sha()} if o7m and truth_audit.origins12_sha() else {}),
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
                    **({"chained11Sha256": truth_audit.chained11_sha()} if c11m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),

@@ -140,6 +140,46 @@ pub enum BannerNames {
     Known,
 }
 
+/// What a helper source's own print says about an index seed (exp129,
+/// [`DiscoveryOptions::helper_prints`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HelperPrints {
+    /// The helper table is not read (the default).
+    Off,
+    /// A unit whose WHOLE print a helper source's own build holds is no
+    /// index seed of any other family: the package whose rows also hold it
+    /// inlined the helper (tsc / Babel output, a bundled tslib), and the
+    /// statement says nothing about which package's dist it came from.
+    /// Propagation may still reach it (an inliner's helper in its own
+    /// module is its code).
+    Seed,
+    /// As `Seed`, and the seed becomes the helper package's when ONE
+    /// helper family holds the print (the code is that package's).
+    Credit,
+}
+
+impl HelperPrints {
+    /// The config spellings, in this order.
+    pub const NAMES: [&'static str; 3] = ["off", "seed", "credit"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            HelperPrints::Off => "off",
+            HelperPrints::Seed => "seed",
+            HelperPrints::Credit => "credit",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<HelperPrints> {
+        match text {
+            "off" => Some(HelperPrints::Off),
+            "seed" => Some(HelperPrints::Seed),
+            "credit" => Some(HelperPrints::Credit),
+            _ => None,
+        }
+    }
+}
+
 /// The tunables (design §5): the content floor a DOWN-CLASS start needs,
 /// the largest region queued for an index lookup, and what may support a
 /// seed against the isolation veto.
@@ -170,6 +210,12 @@ pub struct DiscoveryOptions {
     /// identity. A unit such prints cover at least half of is no seed and
     /// is refused to propagation ([`Containment::helper_dominated`]).
     pub helper_families: u32,
+    /// Helper-source prints (exp129; default off): an index seed whose
+    /// unit's whole print the index's helper table holds is dropped
+    /// ([`HelperPrints::Seed`]) or becomes the helper package's
+    /// ([`HelperPrints::Credit`]). Unlike `helper_families`, commonness is
+    /// not inferred: the helper table is the helper packages' own code.
+    pub helper_prints: HelperPrints,
     /// The payload floor (exp106; 0 = off): a propagated unit of at least
     /// this many OWN bytes (exp113: a module wrapper is not its body), nine
     /// tenths of them inside string literals (a base64 wasm blob, an
@@ -269,6 +315,7 @@ impl Default for DiscoveryOptions {
             contested_cover: 0.0,
             banner_names: BannerNames::Any,
             helper_families: 0,
+            helper_prints: HelperPrints::Off,
             payload_min_bytes: 0,
             specific_rivals: false,
             derived_families: false,
@@ -1314,6 +1361,35 @@ impl<'c> Containment<'c> {
             covered += p.nodes;
         }
         whole.nodes > 0 && 2 * covered >= whole.nodes
+    }
+
+    /// The helper packages whose own build holds unit `u`'s WHOLE print
+    /// (exp129; at or over the row floor), empty when none does.
+    fn helper_source_owners(&self, u: u32) -> &[String] {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        match self.prints.get(u as usize) {
+            Some(Some(p)) if p.whole.nodes >= UNIT_ROW_MIN_NODES => {
+                self.index.helper_owners(&p.whole.hash)
+            }
+            _ => &[],
+        }
+    }
+
+    /// An index seed under [`DiscoveryOptions::helper_prints`]: kept, made
+    /// the helper package's, or dropped (None).
+    fn helper_seed(&self, s: Seed, mode: HelperPrints) -> Option<Seed> {
+        if mode == HelperPrints::Off {
+            return Some(s);
+        }
+        let owners = self.helper_source_owners(s.unit);
+        if owners.is_empty() || owners.iter().any(|o| self.families.same(o, &s.package)) {
+            return Some(s);
+        }
+        let one = owners.iter().all(|o| self.families.same(o, &owners[0]));
+        (mode == HelperPrints::Credit && one).then(|| Seed {
+            package: owners[0].clone(),
+            ..s
+        })
     }
 }
 
@@ -2448,7 +2524,8 @@ fn discover_unscoped(
         looker
             .claims(lookup.index, &everything, lookup.rules, Evidence::Index)
             .into_iter()
-            .filter(unconflicted),
+            .filter(unconflicted)
+            .filter_map(|s| containment.helper_seed(s, options.helper_prints)),
     );
     let present = |seeds: &[Seed]| {
         presence(
@@ -2484,7 +2561,8 @@ fn discover_unscoped(
                 .claims(lookup.index, &region, targeted, Evidence::QueueIndex)
                 .into_iter()
                 .filter(|s| q.uses.iter().any(|used| families.same(used, &s.package)))
-                .filter(unconflicted),
+                .filter(unconflicted)
+                .filter_map(|s| containment.helper_seed(s, options.helper_prints)),
         );
     }
     if more.is_empty() {

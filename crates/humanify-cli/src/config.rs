@@ -328,6 +328,7 @@ impl Library {
             contested_cover: d.contested_cover,
             banner_names: d.banner_names,
             helper_families: d.helper_families,
+            helper_prints: d.helper_prints,
             payload_min_bytes: d.payload_min_bytes,
             specific_rivals: d.specific_rivals,
             derived_families: d.derived_families,
@@ -429,6 +430,8 @@ pub struct LibraryDiscovery {
     #[serde(serialize_with = "serialize_banner_names")]
     pub banner_names: humanify_core::libdetect::discovery::BannerNames,
     pub helper_families: u32,
+    #[serde(serialize_with = "serialize_helper_prints")]
+    pub helper_prints: humanify_core::libdetect::discovery::HelperPrints,
     pub payload_min_bytes: u32,
     pub specific_rivals: bool,
     pub derived_families: bool,
@@ -449,6 +452,13 @@ fn serialize_banner_names<S: serde::Serializer>(
     s: S,
 ) -> Result<S::Ok, S::Error> {
     s.serialize_str(keys::banner_names_name(*v))
+}
+
+fn serialize_helper_prints<S: serde::Serializer>(
+    v: &humanify_core::libdetect::discovery::HelperPrints,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    s.serialize_str(v.name())
 }
 
 fn serialize_terser_slices<S: serde::Serializer>(
@@ -632,6 +642,11 @@ fn library_of(r: &Resolved) -> Library {
                 _ => humanify_core::libdetect::discovery::BannerNames::Any,
             },
             helper_families: n("library.discovery.helper_families") as u32,
+            helper_prints: r
+                .text("library.discovery.helper_prints")
+                .as_deref()
+                .and_then(humanify_core::libdetect::discovery::HelperPrints::parse)
+                .unwrap_or(humanify_core::libdetect::discovery::HelperPrints::Off),
             payload_min_bytes: n("library.discovery.payload_min_bytes") as u32,
             specific_rivals: r.flag_on("library.discovery.specific_rivals"),
             derived_families: r.flag_on("library.discovery.derived_families"),

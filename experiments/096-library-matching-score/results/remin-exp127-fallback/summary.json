@@ -14,13 +14,14 @@
   "chained11Sha256": "49968984e2ecd18b92da921bcc83187a7abcb8a054ddb80f85250c2fcbc21c8c",
   "chained9Sha256": "fbb467806b505b889ee75f6087e2e8eec87707acf1a7840f42ecb87b591dcd16",
   "chainedSha256": "f912dd79dd50a33915ec480ef982d616cfe11b5347b9bfa0e6e6a5fd5ade7bbf",
-  "copiesSha256": "051efb31d674e0e9d1bc107e6abe604992af0d7c81c2824a4aa4ed7ebcb74b32",
+  "copiesSha256": "c17799dd8fa59d72d00e7be6399391fdc8ac3f8fb51c6722e235e54fe1e3af93",
   "corpus": "remin",
   "corpusSha256": "2140b7be1c132d909d6e4bd1d3d6baa7b5cbd23f012a439f755e3bae68861f45",
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 6936646078,
   "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
   "origins10Sha256": "ca36abae7b9829cd97c217a698f712e80fbf18e40f7dc6e487f4058963297f73",
+  "origins12Sha256": "46e6ee87925a623377ee5b3a5c00ef5052033fa939ee00c085c3a4655eefdabe",
   "origins7Sha256": "11e7db2618d2dee8a48a44134e95f0f0eb17f8652b17338c62f01ef5b2f1aead",
   "originsSha256": "793de11f7e06202a2b6bd4554ab38964aeffaa54bc1c667ef2710758b8dcc47f",
   "rule": "structural",
@@ -29,12 +30,12 @@
   ]
  },
  "label": "remin-exp127-fallback",
- "schema": "exp096-score/11",
+ "schema": "exp096-score/12",
  "sets": {
   "remin-esbuild": {
    "appClaimedBytes": 0,
    "bundlerDetected": 36,
-   "copyBytes": 153753,
+   "copyBytes": 326582,
    "discoveryRan": 36,
    "entries": 36,
    "exploratoryNames": {
@@ -74,7 +75,7 @@
    "scopes": {
     "factory": {
      "appClaimedBytes": 0,
-     "copyBytes": 118733,
+     "copyBytes": 237092,
      "f05": 0.0,
      "f05ShipperOnly": 0.0,
      "f1": 0.0,
@@ -95,7 +96,7 @@
     },
     "statement": {
      "appClaimedBytes": 0,
-     "copyBytes": 35020,
+     "copyBytes": 89490,
      "f05": 0.947627,
      "f05ShipperOnly": 0.945276,
      "f1": 0.889541,
@@ -132,7 +133,7 @@
   "remin-terser": {
    "appClaimedBytes": 0,
    "bundlerDetected": 36,
-   "copyBytes": 140916,
+   "copyBytes": 421603,
    "discoveryRan": 36,
    "entries": 36,
    "exploratoryNames": {
@@ -143,9 +144,9 @@
     "exactUnits": 880,
     "sameVersionShare": 0.983137
    },
-   "f05": 0.252425,
+   "f05": 0.253013,
    "f05ShipperOnly": 0.252079,
-   "f1": 0.119288,
+   "f1": 0.119566,
    "f1ShipperOnly": 0.119124,
    "libraryBytes": 96169428,
    "missShares": {
@@ -158,20 +159,20 @@
     "e-spec": 1e-06,
     "e-support": 3e-05,
     "e-veto": 2.4e-05,
-    "f": 0.00022,
+    "f": 7.2e-05,
     "factory": 0.923369
    },
-   "namedAsOriginBytes": 8336,
+   "namedAsOriginBytes": 22599,
    "namedAsShipperBytes": 6096780,
-   "namedBytes": 6105116,
-   "precision": 0.986282,
+   "namedBytes": 6119379,
+   "precision": 0.988586,
    "precisionShipperOnly": 0.984935,
-   "recall": 0.063483,
+   "recall": 0.063631,
    "recallShipperOnly": 0.063396,
    "scopes": {
     "factory": {
      "appClaimedBytes": 0,
-     "copyBytes": 116954,
+     "copyBytes": 332303,
      "f05": 0.0,
      "f05ShipperOnly": 0.0,
      "f1": 0.0,
@@ -192,10 +193,10 @@
     },
     "statement": {
      "appClaimedBytes": 0,
-     "copyBytes": 23962,
-     "f05": 0.950075,
+     "copyBytes": 89300,
+     "f05": 0.952294,
      "f05ShipperOnly": 0.948777,
-     "f1": 0.900488,
+     "f1": 0.902591,
      "f1ShipperOnly": 0.899258,
      "libraryBytes": 7369545,
      "missShares": {
@@ -208,22 +209,22 @@
       "e-spec": 1.5e-05,
       "e-support": 0.000394,
       "e-veto": 0.000316,
-      "f": 0.002875
+      "f": 0.000939
      },
-     "namedAsOriginBytes": 8336,
-     "namedBytes": 6105116,
+     "namedAsOriginBytes": 22599,
+     "namedBytes": 6119379,
      "namedBytesShipperOnly": 6096780,
-     "precision": 0.986282,
+     "precision": 0.988586,
      "precisionShipperOnly": 0.984935,
-     "recall": 0.828425,
+     "recall": 0.83036,
      "recallShipperOnly": 0.827294,
-     "wrongFamilyBytes": 84917,
+     "wrongFamilyBytes": 70654,
      "wrongFamilyBytesShipperOnly": 93253
     }
    },
    "selfOriginBytes": 0,
    "selfOtherBytes": 47,
-   "wrongFamilyBytes": 84917
+   "wrongFamilyBytes": 70654
   }
  }
 }
