@@ -168,6 +168,12 @@ copy_presence_origin = true
 copy_presence_own = 0.1
 # Cut each bundled CommonJS module into its body statements, each judged and propagated as a lazy module's body is (the index's rows already hold factory bodies); off, a factory is one external unit no library claim reaches (exp128).
 factory_bodies = false
+# With factory_bodies: a bundled CommonJS module whose every index seed is a tie the structural rule accepts for two or more families (a fork, a sponge carrying it verbatim, generated code) and which has no untied, declared or banner seed is claimed by no one (exp132).
+factory_tie_fence = false
+# With factory_bodies: a package names a bundled CommonJS module's statements only when one of its index seeds there is a whole statement its family's index holds (or a declared or banner seed); function-print seeds alone are dropped, and a module left with no seed is claimed by no one (exp132).
+factory_whole_seed = false
+# With factory_bodies: a /*! banner seed on a bundled CommonJS module's statement is refused when another family's index prints cover more of that statement than the banner family's (exp132).
+factory_banner_index = false
 
 [unpack]
 # Force the bundler verdict.

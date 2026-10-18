@@ -557,6 +557,18 @@ fn run_indexed_with(
     literals: Vec<crate::libindex::format::LiteralRow>,
     options: DiscoveryOptions,
 ) -> (ReferenceGraph, Discovery, ClaimRows) {
+    run_indexed_factories(code, false, held, literals, options)
+}
+
+/// [`run_indexed_with`], with the bundle's CommonJS modules (the grammar's
+/// classification, as a run reads them) when `modules`.
+fn run_indexed_factories(
+    code: &str,
+    modules: bool,
+    held: &[Held<'_>],
+    literals: Vec<crate::libindex::format::LiteralRow>,
+    options: DiscoveryOptions,
+) -> (ReferenceGraph, Discovery, ClaimRows) {
     use crate::libdetect::discovery::{BundlePieces, IndexLookup, discover_in_bundle};
     use crate::libindex::format::UnitRow;
     use crate::libindex::lookup::{LibraryIndex, LookupRules};
@@ -619,11 +631,26 @@ fn run_indexed_with(
         support: 0,
         ..LookupRules::default()
     };
+    let spans: Vec<oxc_span::Span> = if modules {
+        let semantic = ingest.semantic();
+        let body = pieces
+            .layout
+            .find_wrapper(ingest.program, semantic)
+            .map(|w| w.body_span);
+        let tables = crate::hash::serialize::SymbolTables::build(semantic);
+        pieces
+            .grammar
+            .classify_factories(code, ingest.program, semantic, body, &tables)
+            .map(|c| c.factories.iter().map(|f| f.span).collect())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let (graph, found) = discover_in_bundle(
         code,
         &ingest,
         pieces,
-        &[],
+        &spans,
         &[],
         Some(IndexLookup {
             index: &index,
@@ -1459,4 +1486,133 @@ fn copy_presence_reads_only_the_prints_the_lookup_reads() {
     };
     let (_, _, rows) = run_indexed_with(COPIED3, &held, vec![], on);
     assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+}
+
+// ---- exp132 factory precision ------------------------------------------------
+
+/// Two bundled CommonJS modules (Bun's `__commonJS`, minified as `Q`): F
+/// holds lib and dep (lib calls dep), G holds other.
+const MODULES: &str = "var Q = (n, e) => () => (e || n((e = { exports: {} }).exports, e), e.exports);\nvar F = Q((x, m) => { var lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); }; var dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); }; m.exports = lib; });\nvar G = Q((x, m) => { var other = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16)].join(\",\"); }; m.exports = other; });\nvar app = () => F()(\"a\") + G()(1);\n";
+
+#[test]
+fn factory_tie_fence_names_no_one_for_a_module_every_seed_of_which_two_families_tie() {
+    let cut = DiscoveryOptions {
+        factory_bodies: true,
+        ..DiscoveryOptions::default()
+    };
+    let fence = DiscoveryOptions {
+        factory_tie_fence: true,
+        ..cut
+    };
+    // P and Q both hold all of F (a fork; a sponge carrying the file): the
+    // lookup gives every tie to P by name order. G is Q's alone.
+    let tied = [
+        Held::whole("var lib", "P"),
+        Held::whole("var lib", "Q"),
+        Held::whole("var dep", "P"),
+        Held::whole("var dep", "Q"),
+        Held::whole("var other", "Q"),
+    ];
+    let run = |held: &[Held<'_>], o| run_indexed_factories(MODULES, true, held, vec![], o).2;
+    let rows = run(&tied, cut);
+    let g = claim_of(&rows, "var other");
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    // Fenced: F's code says nothing about which of the two shipped it.
+    let rows = run(&tied, fence);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert_eq!(claim_of(&rows, "m.exports"), None);
+    // G is judged on its own (unchanged)
+    assert_eq!(claim_of(&rows, "var other"), g);
+    // One statement of F only P holds (the fork's own patch): F is P's, the
+    // ties with it.
+    let untied = [
+        Held::whole("var lib", "P"),
+        Held::whole("var lib", "Q"),
+        Held::whole("var dep", "P"),
+        Held::whole("var other", "Q"),
+    ];
+    let rows = run(&untied, fence);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    // Off by default, and a no-op without cut factories.
+    let rows = run(
+        &tied,
+        DiscoveryOptions {
+            factory_tie_fence: true,
+            ..DiscoveryOptions::default()
+        },
+    );
+    assert!(
+        rows.iter()
+            .all(|(h, c)| !h.starts_with("var lib") || c.is_none())
+    );
+}
+
+/// [`MODULES`] with longer functions (their prints over the lookup's node
+/// floor on their own).
+const LONG_MODULES: &str = "var Q = (n, e) => () => (e || n((e = { exports: {} }).exports, e), e.exports);\nvar F = Q((x, m) => { var lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).map(function (s) { return s + s.length + t.indexOf(s); }).join(\"|\").concat(t.length, t.trim(), t.toUpperCase()); }; var dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); }; m.exports = lib; });\nvar G = Q((x, m) => { var other = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16)].join(\",\"); }; m.exports = other; });\nvar app = () => F()(\"a\") + G()(1);\n";
+
+#[test]
+fn factory_whole_seed_needs_one_whole_statement_of_the_module_in_the_family_s_index() {
+    let cut = DiscoveryOptions {
+        factory_bodies: true,
+        ..DiscoveryOptions::default()
+    };
+    let whole = DiscoveryOptions {
+        factory_whole_seed: true,
+        ..cut
+    };
+    let run = |held: &[Held<'_>], o| run_indexed_factories(LONG_MODULES, true, held, vec![], o).2;
+    // P's index holds only the FUNCTIONS of F's statements (a shared helper,
+    // an inlined copy's inner functions): the lookup seeds them all the same.
+    let functions = [
+        Held::inner("var lib", "function (t)", "P", 100),
+        Held::inner("var dep", "function (e)", "P", 100),
+    ];
+    let rows = run(&functions, cut);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+    // No whole statement of F is P's: F is claimed by no one.
+    let rows = run(&functions, whole);
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    assert_eq!(claim_of(&rows, "m.exports"), None);
+    // One whole statement of F in P's index backs P's other seeds there.
+    let backed = [
+        Held::inner("var lib", "function (t)", "P", 100),
+        Held::whole("var dep", "P"),
+    ];
+    let rows = run(&backed, whole);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("P".into(), Rule::Seed)));
+}
+
+#[test]
+fn factory_banner_index_refuses_a_banner_the_module_s_own_code_contradicts() {
+    // A banner kept ahead of F names R, but F's statements are P's in the
+    // index: the comment beside the code loses to the code.
+    let code: &'static str = Box::leak(
+        MODULES
+            .replace("var F = Q(", "/*! R v1.0.0 */\nvar F = Q(")
+            .into_boxed_str(),
+    );
+    let cut = DiscoveryOptions {
+        factory_bodies: true,
+        ..DiscoveryOptions::default()
+    };
+    let check = DiscoveryOptions {
+        factory_banner_index: true,
+        ..cut
+    };
+    let held = [Held::whole("var lib", "P"), Held::whole("var dep", "P")];
+    let run = |held: &[Held<'_>], o| run_indexed_factories(code, true, held, vec![], o).2;
+    let rows = run(&held, cut);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("R".into(), Rule::Seed)));
+    let rows = run(&held, check);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+    // The index silent (or agreeing) on the statement: the banner stands.
+    let rows = run(&held[1..], check);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("R".into(), Rule::Seed)));
 }

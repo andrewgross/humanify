@@ -827,6 +827,41 @@ pub static KEYS: &[Key] = &[
               propagated as a lazy module's body is (the index's rows already hold factory \
               bodies); off, a factory is one external unit no library claim reaches (exp128).",
     },
+    Key {
+        section: "library.discovery",
+        name: "factory_tie_fence",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().factory_tie_fence)),
+        unset: "",
+        doc: "With factory_bodies: a bundled CommonJS module whose every index seed is a tie \
+              the structural rule accepts for two or more families (a fork, a sponge carrying \
+              it verbatim, generated code) and which has no untied, declared or banner seed is \
+              claimed by no one (exp132).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "factory_whole_seed",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().factory_whole_seed)),
+        unset: "",
+        doc: "With factory_bodies: a package names a bundled CommonJS module's statements only \
+              when one of its index seeds there is a whole statement its family's index holds \
+              (or a declared or banner seed); function-print seeds alone are dropped, and a \
+              module left with no seed is claimed by no one (exp132).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "factory_banner_index",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().factory_banner_index)),
+        unset: "",
+        doc: "With factory_bodies: a /*! banner seed on a bundled CommonJS module's statement is \
+              refused when another family's index prints cover more of that statement than \
+              the banner family's (exp132).",
+    },
     // [unpack]
     Key {
         section: "unpack",
