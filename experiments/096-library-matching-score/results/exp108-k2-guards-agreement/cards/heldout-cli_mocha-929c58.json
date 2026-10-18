@@ -35,18 +35,83 @@
   "c": 5697,
   "e-agree": 114405,
   "e-other": 833,
-  "e-support": 581
+  "e-support": 581,
+  "factory": 224976
  },
  "noDiscovery": null,
  "reportSha256": "1e4bf98f420f4dbe57cd433e46602f637b64da8d5a3a463497c1976f338e7051",
  "rule": "agreement",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 224976,
+   "missBytes": {
+    "factory": 224976
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<self>": 46298,
+    "<unmapped>": 6179,
+    "library": 224976
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "self": 64687,
+    "unmapped": 971,
+    "wrongFamily": 2543
+   },
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 121516,
+   "missBytes": {
+    "c": 5697,
+    "e-agree": 114405,
+    "e-other": 833,
+    "e-support": 581
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<app>": 18,
+    "<self>": 78531,
+    "<unmapped>": 2275,
+    "library": 121516
+   },
+   "wrongFamilyBytes": 2543,
+   "wrongFamilyBytesShipperOnly": 2543
+  }
+ },
  "set": "heldout",
  "statementBytes": {
   "<app>": 18,
-  "<self>": 78531,
-  "<unmapped>": 2275,
-  "library": 121516
+  "<self>": 124829,
+  "<unmapped>": 8454,
+  "library": 346492
  },
  "toolchain": {
   "adapter": "bun",
@@ -61,7 +126,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 121516,
+  "libraryBytes": 346492,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

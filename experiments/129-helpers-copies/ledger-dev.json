@@ -1,0 +1,2039 @@
+{
+ "exp097-s1-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp097-s1-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "exp097-s2-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp097-s2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "exp097-s2m-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "exp097-s3-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp097-s3-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "exp097-s3b-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp097-s3b-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "exp097-s4-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp097-s4-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "exp101-c2-guards-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp101-c2-guards-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 873,
+    "UNJUDGED->UNJUDGED:patched": 873
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    873
+   ]
+  ]
+ },
+ "exp101-c2-l12m4-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp101-c2-l12m4-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 873,
+    "UNJUDGED->UNJUDGED:patched": 873
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    873
+   ]
+  ]
+ },
+ "exp101-call2k-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp101-call2k-guards-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp101-call2k-guards-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 558,
+    "UNJUDGED->UNJUDGED:patched": 558
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    558
+   ]
+  ]
+ },
+ "exp101-call2k-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 558,
+    "UNJUDGED->UNJUDGED:patched": 558
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    558
+   ]
+  ]
+ },
+ "exp102-cc10-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp102-cconly-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp102-ctl2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp102-ec2-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp102-ec2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp102-final-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp102-final-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp102-lc-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp102-lc-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp105-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp105-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ },
+ "exp108-base-c2-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp108-base-c2-guards-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp108-base-c2-guards-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 873,
+    "UNJUDGED->UNJUDGED:patched": 873
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    873
+   ]
+  ]
+ },
+ "exp108-base-c2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 873,
+    "UNJUDGED->UNJUDGED:patched": 873
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    873
+   ]
+  ]
+ },
+ "exp108-k2-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp108-k2-guards-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp108-k2-guards-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp108-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp108-k5-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp108-k5-guards-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "exp108-k5-guards-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp108-k5-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp109-final-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp112-k2-rec": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp112-k2-rec-dcap": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp113-k2-base": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp113-k2-p0": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp113-k2all": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp113-opq2-k2": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp113-own-k2": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-allf-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-both-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-both2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-cp-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-cp8-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-cpf-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-st-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp114-st2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-base-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-cpf-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-dmb-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-flip3-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-flip4-k2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-k2all-cpf": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-k2all-cpfdmb": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-k2all-flip4": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp117-k2all-head": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp118-dl25k": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 5217,
+    "WRONG->GOOD:gained": 5217
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    5217
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp119-head": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp119-k2all-def": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp119-k2all-st": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp121-k2-v2": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp121-v2": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 5217,
+    "WRONG->GOOD:gained": 5217
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    5217
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp124-base": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp124-drop": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp124-orig": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp124-r5": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp125-dlf": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 5217,
+    "WRONG->GOOD:gained": 5217
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    5217
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp125-k2f": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 3504,
+    "WRONG->GOOD:gained": 3504
+   },
+   "heldout": {
+    "WRONG->GOOD": 9474,
+    "WRONG->GOOD:gained": 9474
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    3504
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    9474
+   ]
+  ]
+ },
+ "exp127-auto20": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp127-fallback": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10279,
+    "WRONG->GOOD:gained": 10279
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10279
+   ]
+  ]
+ },
+ "exp127-off": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp127-probe": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp127-union": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10279,
+    "WRONG->GOOD:gained": 10279
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10279
+   ]
+  ]
+ },
+ "exp128-fb2": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   },
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 63715,
+    "UNJUDGED->UNJUDGED:patched": 63715,
+    "WRONG->GOOD": 395821,
+    "WRONG->GOOD:gained": 395821
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    395821
+   ],
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    63715
+   ]
+  ]
+ },
+ "exp128-fbo": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   },
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 63715,
+    "UNJUDGED->UNJUDGED:patched": 63715,
+    "WRONG->GOOD": 395821,
+    "WRONG->GOOD:gained": 395821
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ],
+   [
+    "heldout",
+    "gained",
+    "wrongFamily",
+    "origin",
+    395821
+   ],
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    63715
+   ]
+  ]
+ },
+ "exp129-auto-credit": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp129-auto-seed": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp129-credit": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp129-seed": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp129o-auto": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp129o-auto-seed": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp129o-seed": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp130-olab": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp130-origin": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "exp130-r5": {
+  "corpus": "dev",
+  "perSet": {
+   "esbuild-app": {
+    "WRONG->GOOD": 10045,
+    "WRONG->GOOD:gained": 10045
+   }
+  },
+  "transitions": [
+   [
+    "esbuild-app",
+    "gained",
+    "wrongFamily",
+    "origin",
+    10045
+   ]
+  ]
+ },
+ "integ-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "integ-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "integ2-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "integ2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "ix-v2-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "ix-v2-agreement-repeat": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "ix-v2-ccexact-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "ix-v2-ccexact-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "ix-v2-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37076,
+    "UNJUDGED->UNJUDGED:patched": 37076
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37076
+   ]
+  ]
+ },
+ "step4f-agreement": {
+  "corpus": "dev",
+  "perSet": {},
+  "transitions": []
+ },
+ "step4f-structural": {
+  "corpus": "dev",
+  "perSet": {
+   "heldout": {
+    "UNJUDGED->UNJUDGED": 37078,
+    "UNJUDGED->UNJUDGED:patched": 37078
+   }
+  },
+  "transitions": [
+   [
+    "heldout",
+    "patched",
+    "selfOther",
+    "selfOrigin",
+    37078
+   ]
+  ]
+ }
+}

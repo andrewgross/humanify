@@ -49,11 +49,77 @@
  "noDiscovery": null,
  "reportSha256": "86b4d146fd1211a0439b5a1075f9c141b02f310ac4671b5b9d0c2beb743baf0e",
  "rule": "structural",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 220689,
+    "origin": 1644,
+    "right": 7240137,
+    "unmapped": 21606,
+    "wrongFamily": 22795
+   },
+   "copyBytes": 48934,
+   "f05": 0.989371,
+   "f05ShipperOnly": 0.989152,
+   "f1": 0.978209,
+   "f1ShipperOnly": 0.977993,
+   "libraryBytes": 7772161,
+   "missBytes": {
+    "a": 149402,
+    "b": 1793,
+    "c": 30690,
+    "d-absent": 946,
+    "d-file": 8264,
+    "e-ambig": 4609,
+    "e-other": 12452,
+    "e-support": 9605,
+    "e-veto": 46425,
+    "f": 45427,
+    "unit-model": 78
+   },
+   "namedAsOriginBytes": 1644,
+   "namedBytes": 7462470,
+   "namedBytesShipperOnly": 7460826,
+   "precision": 0.996955,
+   "precisionShipperOnly": 0.996735,
+   "recall": 0.960154,
+   "recallShipperOnly": 0.959942,
+   "statementBytes": {
+    "<unmapped>": 329718,
+    "copy": 48934,
+    "library": 7772161
+   },
+   "wrongFamilyBytes": 22795,
+   "wrongFamilyBytesShipperOnly": 24439
+  }
+ },
  "set": "apps-rollup",
  "statementBytes": {
   "<unmapped>": 329718,
-  "copy": 49067,
+  "copy": 48934,
   "library": 7772161
  },
  "toolchain": {
@@ -64,7 +130,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 49067,
+  "copyBytes": 48934,
   "f05": 0.989371,
   "f05ShipperOnly": 0.989152,
   "f1": 0.978209,

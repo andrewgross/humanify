@@ -30,17 +30,79 @@
  },
  "label": "pop-exp113-k2all",
  "missBytes": {
-  "a": 11409
+  "a": 11409,
+  "factory": 2821937
  },
  "noDiscovery": null,
  "reportSha256": "c6eaae74084511c1396483b95968a53c2a30b8b5bfa4625b082b1dd58f95f78d",
  "rule": "structural",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 36620,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 2821937,
+   "missBytes": {
+    "factory": 2821937
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<foreign>": 273060,
+    "<unmapped>": 54,
+    "copy": 36620,
+    "library": 2821937
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "wrongFamily": 1707
+   },
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 11409,
+   "missBytes": {
+    "a": 11409
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<app>": 349,
+    "<unmapped>": 341,
+    "library": 11409
+   },
+   "wrongFamilyBytes": 1707,
+   "wrongFamilyBytesShipperOnly": 1707
+  }
+ },
  "set": "pop-esbuild",
  "statementBytes": {
   "<app>": 349,
-  "<unmapped>": 341,
-  "library": 11409
+  "<foreign>": 273060,
+  "<unmapped>": 395,
+  "copy": 36620,
+  "library": 2833346
  },
  "toolchain": {
   "adapter": "esbuild",
@@ -50,12 +112,12 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 0,
+  "copyBytes": 36620,
   "f05": 0.0,
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 11409,
+  "libraryBytes": 2833346,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

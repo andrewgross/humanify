@@ -28,6 +28,10 @@ struct Cli {
 }
 
 #[derive(clap::Subcommand)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "parsed once per process; boxing clap's arguments buys nothing"
+)]
 enum Command {
     /// Plan, build the missing shards, merge them into an index.
     Build {
@@ -105,9 +109,59 @@ enum Command {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Slim the builds a work dir already holds (exp131): every build map
+    /// loses its `sourcesContent` (the builder never reads it), rewritten
+    /// in place through its inode, so hard links across work dirs stay one
+    /// shared file. Symlinks and `node_modules` are never touched. Parallel
+    /// over the process's CPUs: bound it with `taskset`. Nothing may read
+    /// the work dirs meanwhile (take the build lock).
+    SlimCache {
+        /// A work dir (repeatable): its `<install>/build/**/*.map`.
+        #[arg(long = "work", required = true)]
+        work: Vec<PathBuf>,
+        /// Where each rewrite is journaled first (a rerun finishes an
+        /// interrupted one).
+        #[arg(long)]
+        journal: PathBuf,
+    },
+}
+
+/// `slim-cache`: progress on stderr, the report as JSON on stdout; an
+/// error on any map fails the run (the maps it did slim stay slimmed).
+fn slim_cache(work: &[PathBuf], journal: &std::path::Path) -> Result<(), String> {
+    let line = |r: &humanify_index::slim::SlimReport| {
+        serde_json::json!({
+            "maps": r.maps, "stripped": r.stripped, "absent": r.absent,
+            "bytes_before": r.bytes_before, "bytes_after": r.bytes_after,
+            "skipped_symlinks": r.skipped_symlinks, "recovered": r.recovered,
+            "unreadable": r.unreadable.len(), "errors": r.errors.len(),
+        })
+    };
+    let report =
+        humanify_index::slim::slim_cache(work, journal, &mut |r| eprintln!("{}", line(r)))?;
+    for (p, e) in &report.unreadable {
+        eprintln!("UNREADABLE {}: {e}", p.display());
+    }
+    for e in &report.errors {
+        eprintln!("ERROR {e}");
+    }
+    println!("{}", line(&report));
+    if report.errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("{} maps failed", report.errors.len()))
+    }
 }
 
 fn main() {
+    let command = Cli::parse().command;
+    if let Command::SlimCache { work, journal } = &command {
+        if let Err(e) = slim_cache(work, journal) {
+            eprintln!("ERROR: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let Command::Build {
         packages,
         pinned,
@@ -127,7 +181,10 @@ fn main() {
         merge_only,
         sponge_regions,
         dry_run,
-    } = Cli::parse().command;
+    } = command
+    else {
+        unreachable!("slim-cache returned above")
+    };
     let result = (|| -> Result<String, String> {
         let as_of = parse_as_of(&as_of)?;
         let specs = std::fs::read_to_string(&packages)

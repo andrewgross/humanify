@@ -1,0 +1,115 @@
+{
+ "maxPeakRssMb": 222,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "rollup-dev105-app00": {
+   "peakRssMb": 194,
+   "wallSeconds": 1.21
+  },
+  "rollup-dev105-app01": {
+   "peakRssMb": 200,
+   "wallSeconds": 0.76
+  },
+  "rollup-dev105-app02": {
+   "peakRssMb": 199,
+   "wallSeconds": 0.61
+  },
+  "rollup-dev105-app03": {
+   "peakRssMb": 191,
+   "wallSeconds": 0.51
+  },
+  "rollup-dev105-app04": {
+   "peakRssMb": 192,
+   "wallSeconds": 1.18
+  },
+  "rollup-dev105-app05": {
+   "peakRssMb": 222,
+   "wallSeconds": 0.62
+  },
+  "rollup-dev105-app06": {
+   "peakRssMb": 201,
+   "wallSeconds": 1.02
+  },
+  "rollup-dev105-app07": {
+   "peakRssMb": 186,
+   "wallSeconds": 0.32
+  },
+  "rollup-dev105-app08": {
+   "peakRssMb": 192,
+   "wallSeconds": 0.6
+  },
+  "rollup-dev105-app09": {
+   "peakRssMb": 190,
+   "wallSeconds": 0.76
+  },
+  "rollup-dev105-app10": {
+   "peakRssMb": 201,
+   "wallSeconds": 0.79
+  },
+  "rollup-dev105-app11": {
+   "peakRssMb": 192,
+   "wallSeconds": 0.46
+  },
+  "rollup-dev105-app12": {
+   "peakRssMb": 222,
+   "wallSeconds": 0.53
+  },
+  "rollup-dev105-app13": {
+   "peakRssMb": 189,
+   "wallSeconds": 0.54
+  },
+  "webpack-dev105-app00": {
+   "peakRssMb": 200,
+   "wallSeconds": 0.92
+  },
+  "webpack-dev105-app01": {
+   "peakRssMb": 192,
+   "wallSeconds": 0.9
+  },
+  "webpack-dev105-app02": {
+   "peakRssMb": 196,
+   "wallSeconds": 0.71
+  },
+  "webpack-dev105-app03": {
+   "peakRssMb": 192,
+   "wallSeconds": 0.67
+  },
+  "webpack-dev105-app04": {
+   "peakRssMb": 192,
+   "wallSeconds": 0.9
+  },
+  "webpack-dev105-app05": {
+   "peakRssMb": 211,
+   "wallSeconds": 0.64
+  },
+  "webpack-dev105-app06": {
+   "peakRssMb": 191,
+   "wallSeconds": 1.2
+  },
+  "webpack-dev105-app08": {
+   "peakRssMb": 191,
+   "wallSeconds": 0.74
+  },
+  "webpack-dev105-app09": {
+   "peakRssMb": 200,
+   "wallSeconds": 0.91
+  },
+  "webpack-dev105-app10": {
+   "peakRssMb": 195,
+   "wallSeconds": 0.66
+  },
+  "webpack-dev105-app11": {
+   "peakRssMb": 185,
+   "wallSeconds": 0.7
+  },
+  "webpack-dev105-app12": {
+   "peakRssMb": 219,
+   "wallSeconds": 0.79
+  },
+  "webpack-dev105-app13": {
+   "peakRssMb": 194,
+   "wallSeconds": 0.53
+  }
+ },
+ "totalWallSeconds": 20.2
+}

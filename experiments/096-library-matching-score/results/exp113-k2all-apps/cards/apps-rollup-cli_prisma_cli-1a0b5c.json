@@ -49,12 +49,79 @@
  "noDiscovery": null,
  "reportSha256": "63fdd8a3ead31b49859a7238aa9e9a8756a39074668b67336b0be39025e32f55",
  "rule": "structural",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 11388,
+    "origin": 91330,
+    "right": 4582130,
+    "self": 7666,
+    "unmapped": 10918,
+    "wrongFamily": 53290
+   },
+   "copyBytes": 283262,
+   "f05": 0.932624,
+   "f05ShipperOnly": 0.914443,
+   "f1": 0.859442,
+   "f1ShipperOnly": 0.842688,
+   "libraryBytes": 6163928,
+   "missBytes": {
+    "b": 641984,
+    "c": 151014,
+    "d-absent": 118358,
+    "d-file": 305239,
+    "e-ambig": 52798,
+    "e-other": 39538,
+    "e-spec": 6378,
+    "e-support": 4561,
+    "e-veto": 65001,
+    "f": 94209
+   },
+   "namedAsOriginBytes": 91330,
+   "namedBytes": 4684848,
+   "namedBytesShipperOnly": 4593518,
+   "precision": 0.988753,
+   "precisionShipperOnly": 0.969477,
+   "recall": 0.760043,
+   "recallShipperOnly": 0.745226,
+   "statementBytes": {
+    "<self>": 356329,
+    "<unmapped>": 57453,
+    "copy": 283262,
+    "library": 6163928
+   },
+   "wrongFamilyBytes": 53290,
+   "wrongFamilyBytesShipperOnly": 144620
+  }
+ },
  "set": "apps-rollup",
  "statementBytes": {
   "<self>": 356329,
   "<unmapped>": 57453,
-  "copy": 282990,
+  "copy": 283262,
   "library": 6163928
  },
  "toolchain": {
@@ -65,7 +132,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 282990,
+  "copyBytes": 283262,
   "f05": 0.932624,
   "f05ShipperOnly": 0.914443,
   "f1": 0.859442,

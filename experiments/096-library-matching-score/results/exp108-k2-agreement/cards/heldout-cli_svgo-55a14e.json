@@ -39,17 +39,83 @@
   "e-other": 830,
   "e-spec": 1079,
   "e-support": 342,
-  "f": 1342
+  "f": 1342,
+  "factory": 65900
  },
  "noDiscovery": null,
  "reportSha256": "8fd711e7302556f6aa8ffc65699798651b98cba33aecc0fdb4db6823c35d6508",
  "rule": "agreement",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 65900,
+   "missBytes": {
+    "factory": 65900
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "library": 65900
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "self": 44097,
+    "unmapped": 20,
+    "wrongFamily": 6371
+   },
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 267883,
+   "missBytes": {
+    "c": 44062,
+    "d-file": 15864,
+    "e-agree": 188825,
+    "e-ambig": 15539,
+    "e-other": 830,
+    "e-spec": 1079,
+    "e-support": 342,
+    "f": 1342
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<self>": 132363,
+    "<unmapped>": 9385,
+    "library": 267883
+   },
+   "wrongFamilyBytes": 6371,
+   "wrongFamilyBytesShipperOnly": 6371
+  }
+ },
  "set": "heldout",
  "statementBytes": {
   "<self>": 132363,
   "<unmapped>": 9385,
-  "library": 267883
+  "library": 333783
  },
  "toolchain": {
   "adapter": "bun",
@@ -64,7 +130,7 @@
   "f05ShipperOnly": 0.0,
   "f1": 0.0,
   "f1ShipperOnly": 0.0,
-  "libraryBytes": 267883,
+  "libraryBytes": 333783,
   "namedAsOriginBytes": 0,
   "namedAsShipperBytes": 0,
   "namedBytes": 0,

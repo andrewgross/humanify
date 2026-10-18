@@ -48,12 +48,78 @@
  "noDiscovery": null,
  "reportSha256": "ab38b7e0da127abbc69b1f684a1b75f11fa03955270aad659ee20229fa76c16e",
  "rule": "structural",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 61826,
+    "right": 3486889,
+    "unmapped": 35595,
+    "wrongFamily": 32088
+   },
+   "copyBytes": 20951,
+   "f05": 0.952142,
+   "f05ShipperOnly": 0.952142,
+   "f1": 0.899203,
+   "f1ShipperOnly": 0.899203,
+   "libraryBytes": 4312227,
+   "missBytes": {
+    "a": 527866,
+    "b": 35353,
+    "c": 63239,
+    "d-absent": 31838,
+    "d-file": 42910,
+    "e-ambig": 3818,
+    "e-other": 3085,
+    "e-spec": 2535,
+    "e-support": 12982,
+    "e-veto": 36133,
+    "f": 3753
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 3548715,
+   "namedBytesShipperOnly": 3548715,
+   "precision": 0.991039,
+   "precisionShipperOnly": 0.991039,
+   "recall": 0.822943,
+   "recallShipperOnly": 0.822943,
+   "statementBytes": {
+    "<app>": 2717,
+    "<unmapped>": 710581,
+    "copy": 20951,
+    "library": 4312227
+   },
+   "wrongFamilyBytes": 32088,
+   "wrongFamilyBytesShipperOnly": 32088
+  }
+ },
  "set": "apps-rollup",
  "statementBytes": {
   "<app>": 2717,
   "<unmapped>": 710581,
-  "copy": 20683,
+  "copy": 20951,
   "library": 4312227
  },
  "toolchain": {
@@ -64,7 +130,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 20683,
+  "copyBytes": 20951,
   "f05": 0.952142,
   "f05ShipperOnly": 0.952142,
   "f1": 0.899203,

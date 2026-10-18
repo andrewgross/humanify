@@ -5,6 +5,7 @@ pub mod merge;
 pub mod recipe;
 pub mod registry;
 pub mod shard;
+pub mod slim;
 pub mod sourcemap;
 
 #[cfg(test)]
@@ -17,6 +18,8 @@ mod merge_test;
 mod recipe_test;
 #[cfg(test)]
 mod shard_test;
+#[cfg(test)]
+mod slim_test;
 #[cfg(test)]
 mod sourcemap_test;
 

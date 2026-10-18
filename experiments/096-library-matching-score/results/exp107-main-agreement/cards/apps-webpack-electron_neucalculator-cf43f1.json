@@ -48,12 +48,78 @@
  "noDiscovery": null,
  "reportSha256": "700c0a702dcf8ccae748c76b7eaec55646f8143a13c062f7c5bb4c4053b5b54f",
  "rule": "agreement",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 2895,
+    "right": 3986543,
+    "unmapped": 6570
+   },
+   "copyBytes": 144289,
+   "f05": 0.743055,
+   "f05ShipperOnly": 0.743055,
+   "f1": 0.53634,
+   "f1ShipperOnly": 0.53634,
+   "libraryBytes": 10887079,
+   "missBytes": {
+    "a": 1454878,
+    "b": 517274,
+    "c": 552602,
+    "d-absent": 119931,
+    "d-file": 21942,
+    "d-variant": 2055,
+    "e-agree": 4079465,
+    "e-ambig": 20972,
+    "e-other": 8212,
+    "e-support": 22248,
+    "e-veto": 54605,
+    "f": 43457
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 3989438,
+   "namedBytesShipperOnly": 3989438,
+   "precision": 1.0,
+   "precisionShipperOnly": 1.0,
+   "recall": 0.366438,
+   "recallShipperOnly": 0.366438,
+   "statementBytes": {
+    "<app>": 2225,
+    "<unmapped>": 2788612,
+    "copy": 144289,
+    "library": 10887079
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  }
+ },
  "set": "apps-webpack",
  "statementBytes": {
   "<app>": 2225,
   "<unmapped>": 2788612,
-  "copy": 38737,
+  "copy": 144289,
   "library": 10887079
  },
  "toolchain": {
@@ -64,7 +130,7 @@
  },
  "totals": {
   "appClaimedBytes": 0,
-  "copyBytes": 38737,
+  "copyBytes": 144289,
   "f05": 0.743055,
   "f05ShipperOnly": 0.743055,
   "f1": 0.53634,

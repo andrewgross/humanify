@@ -27,14 +27,60 @@
   "recall": 0.0
  },
  "label": "exp109-final-wr-apps-structural",
- "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran)",
+ "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran; all in the statement scope, as scorers 1-9 counted them)",
  "missBytes": {
   "no-discovery": 3064342
  },
  "noDiscovery": "the passthrough adapter ran no library discovery (the input does not parse)",
  "reportSha256": "649e12af99c6c0c2667382af076333b111b82f238423b4ae0418712ebde4b61a",
  "rule": "structural",
- "schema": "exp096-score/10",
+ "schema": "exp096-score/12",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 3064342,
+   "missBytes": {
+    "no-discovery": 3064342
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {},
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  }
+ },
  "set": "apps-rollup",
  "statementBytes": {},
  "toolchain": {

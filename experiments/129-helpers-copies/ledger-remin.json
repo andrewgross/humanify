@@ -1,0 +1,314 @@
+{
+ "remin-exp126-lab-rollrows": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp126-main": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp127-auto20": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp127-fallback": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp127-off": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp127-probe": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp127-union": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp127-union-hf12": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp127-union-hf8": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp128-fb2": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-esbuild": {
+    "WRONG->GOOD": 40824,
+    "WRONG->GOOD:gained": 40824
+   },
+   "remin-terser": {
+    "WRONG->GOOD": 15978,
+    "WRONG->GOOD:gained": 15978
+   }
+  },
+  "transitions": [
+   [
+    "remin-esbuild",
+    "gained",
+    "wrongFamily",
+    "origin",
+    40824
+   ],
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    15978
+   ]
+  ]
+ },
+ "remin-exp128-fbo": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-esbuild": {
+    "WRONG->GOOD": 40824,
+    "WRONG->GOOD:gained": 40824
+   },
+   "remin-terser": {
+    "WRONG->GOOD": 15978,
+    "WRONG->GOOD:gained": 15978
+   }
+  },
+  "transitions": [
+   [
+    "remin-esbuild",
+    "gained",
+    "wrongFamily",
+    "origin",
+    40824
+   ],
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    15978
+   ]
+  ]
+ },
+ "remin-exp129-auto-credit": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp129-auto-seed": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 14263,
+    "WRONG->GOOD:gained": 14263
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    14263
+   ]
+  ]
+ },
+ "remin-exp129-credit": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp129-fbunits": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-esbuild": {
+    "WRONG->GOOD": 40824,
+    "WRONG->GOOD:gained": 40824
+   },
+   "remin-terser": {
+    "WRONG->GOOD": 15978,
+    "WRONG->GOOD:gained": 15978
+   }
+  },
+  "transitions": [
+   [
+    "remin-esbuild",
+    "gained",
+    "wrongFamily",
+    "origin",
+    40824
+   ],
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    15978
+   ]
+  ]
+ },
+ "remin-exp129-seed": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp129o-auto": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 65116,
+    "WRONG->GOOD:gained": 65116
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    65116
+   ]
+  ]
+ },
+ "remin-exp129o-auto-seed": {
+  "corpus": "remin",
+  "perSet": {
+   "remin-terser": {
+    "WRONG->GOOD": 65116,
+    "WRONG->GOOD:gained": 65116
+   }
+  },
+  "transitions": [
+   [
+    "remin-terser",
+    "gained",
+    "wrongFamily",
+    "origin",
+    65116
+   ]
+  ]
+ },
+ "remin-exp129o-seed": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp130-olab": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp130-origin": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ },
+ "remin-exp130-r5": {
+  "corpus": "remin",
+  "perSet": {},
+  "transitions": []
+ }
+}

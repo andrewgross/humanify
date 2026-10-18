@@ -1,11 +1,23 @@
 """exp129: per set, P / F0.5 (and deltas vs off) of the helper_prints and terser_slices labels, from committed
-summaries. usage: python3 -I compare.py"""
+summaries. usage: python3 -I compare.py [final [statement|factory]]   (final: the k2-all-r5-origin labels; default:
+the k2-all-r5h ones; a scope name reads that scope's block instead of the card totals, which cover both scopes)"""
+import sys
 import json
 import os
 
 RES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../096-library-matching-score/results")
 CORPORA = ["dev", "apps", "bundlers", "pop", "remin", "test", "test2"]
 ARMS = ["off", "seed", "credit", "auto", "auto-seed", "auto-credit"]
+
+
+FINAL_ARMS = ["off", "seed", "auto", "auto-seed"]
+
+
+def final_label(c, arm):
+    if arm == "off":
+        return "exp130-origin" if c == "dev" else (f"exp130-origin-{c}" if c in ("apps", "bundlers")
+                                                   else f"{c}-exp130-origin")
+    return f"exp129o-{arm}" if c == "dev" else f"{c}-exp129o-{arm}"
 
 
 def label(c, arm):
@@ -18,6 +30,10 @@ def label(c, arm):
 
 
 def main():
+    global ARMS, label
+    if sys.argv[1:2] == ["final"]:
+        ARMS, label = FINAL_ARMS, final_label
+    scope = sys.argv[2] if len(sys.argv) > 2 else None  # "statement" / "factory": that scope's block
     print("| set | schema | " + " | ".join(f"{a} P / F0.5" for a in ARMS) + " |")
     print("|---" * (len(ARMS) + 2) + "|")
     for c in CORPORA:
@@ -29,12 +45,14 @@ def main():
         schema = sums["off"]["schema"]
         for s in sorted(sums["off"]["sets"]):
             cells = []
-            o = sums["off"]["sets"][s]
+            def pick(d):
+                return d["scopes"][scope] if scope and "scopes" in d else d
+            o = pick(sums["off"]["sets"][s])
             for a in ARMS:
                 if sums[a] is None:
                     cells.append("=off (exp127)" if a == "auto" else "-")
                     continue
-                r = sums[a]["sets"][s]
+                r = pick(sums[a]["sets"][s])
                 cell = f"{100 * r['precision']:.2f} / {100 * r['f05']:.2f}"
                 if a != "off":
                     cell += f" ({100 * (r['precision'] - o['precision']):+.3f} / {100 * (r['f05'] - o['f05']):+.3f})"

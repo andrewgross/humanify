@@ -294,6 +294,13 @@ pub struct DiscoveryOptions {
     /// (its own seeds stay). A sponge's one stray seed on its own code
     /// does not vouch for megabytes of inlined dependencies.
     pub copy_presence_own: f64,
+    /// Cut bundled CommonJS modules into their body statements (exp128;
+    /// default off): each statement of a factory body is a unit with its
+    /// own prints, judged and propagated as a lazy module's body is, the
+    /// factory a wrapper (the index side has always cut them so: its rows
+    /// hold factory bodies). Off, a factory is one external unit the index
+    /// cannot speak for.
+    pub factory_bodies: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -321,6 +328,7 @@ impl Default for DiscoveryOptions {
             copy_presence_factor: 0,
             copy_presence_origin: false,
             copy_presence_own: 0.0,
+            factory_bodies: false,
         }
     }
 }
@@ -470,7 +478,7 @@ fn boundary(st: &State<'_>, groups: &Groups) -> BTreeMap<String, Boundary> {
 fn is_statement(graph: &ReferenceGraph, u: u32) -> bool {
     matches!(
         graph.units[u as usize].kind,
-        UnitKind::Statement | UnitKind::LazyBody { .. }
+        UnitKind::Statement | UnitKind::LazyBody { .. } | UnitKind::FactoryBody { .. }
     )
 }
 
@@ -768,25 +776,43 @@ fn propose_down(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
     }
 }
 
-/// Does `u`'s closure over unidentified units stay inside group `g`'s
-/// statements?
-fn closed_in(v: &RoundView<'_, '_>, g: u32, u: u32) -> bool {
+/// Per member of group `g` (in `members` order): does its closure over
+/// unidentified units stay inside the group's statements? A member is
+/// LEAKY when it calls an unidentified unit outside the group, or an
+/// unidentified member that is leaky; one reverse pass over the group's
+/// edges answers every member (exp128: a per-member search was quadratic
+/// in a large CommonJS module cut into its body statements).
+fn closed_members(v: &RoundView<'_, '_>, g: u32, members: &[u32]) -> Vec<bool> {
     let inside = |w: u32| v.group_of(w) == Some(g) && v.is_statement(w);
-    let mut seen = BTreeSet::from([u]);
-    let mut stack = vec![u];
-    while let Some(x) = stack.pop() {
+    let index: HashMap<u32, usize> = members.iter().enumerate().map(|(i, &u)| (u, i)).collect();
+    let mut callers: Vec<Vec<usize>> = vec![Vec::new(); members.len()];
+    let mut leaky = vec![false; members.len()];
+    let mut stack = Vec::new();
+    for (i, &x) in members.iter().enumerate() {
         for &w in v.callees(x) {
-            if seen.contains(&w) || v.is_external(w) {
+            if w == x || v.is_external(w) {
                 continue;
             }
-            if !inside(w) {
-                return false;
+            match index.get(&w) {
+                Some(&j) if inside(w) => callers[j].push(i),
+                _ => {
+                    if !leaky[i] {
+                        leaky[i] = true;
+                        stack.push(i);
+                    }
+                }
             }
-            seen.insert(w);
-            stack.push(w);
         }
     }
-    true
+    while let Some(j) = stack.pop() {
+        for &i in &callers[j] {
+            if !leaky[i] {
+                leaky[i] = true;
+                stack.push(i);
+            }
+        }
+    }
+    leaky.into_iter().map(|l| !l).collect()
 }
 
 /// MODULE: a unit of a module whose claims are all one package P, whose
@@ -803,8 +829,9 @@ fn propose_module(v: &RoundView<'_, '_>, out: &mut Vec<(u32, u32)>) {
         ) else {
             continue;
         };
-        for &u in members {
-            if !v.is_external(u) && closed_in(v, g, u) {
+        let closed = closed_members(v, g, members);
+        for (&u, closed) in members.iter().zip(closed) {
+            if !v.is_external(u) && closed {
                 out.push((u, p));
             }
         }
@@ -1939,6 +1966,19 @@ fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry>
         spec: &lib::QUEUE,
     };
     let mut queue = Vec::new();
+    // Units whose closure is already known to pass the cap: a closure
+    // reaching one passes it too (it holds that closure), so the search
+    // stops there (exp128: the same answers, without re-walking a large
+    // CommonJS module's body for every statement that reaches it).
+    let mut memo = ClosureMemo {
+        too_big: vec![false; view.units() as usize],
+        shared: st
+            .graph
+            .units
+            .iter()
+            .any(|u| matches!(u.kind, UnitKind::FactoryBody { .. }))
+            .then(HashMap::new),
+    };
     for v in 0..view.units() {
         if !view.is_statement(v) || view.is_external(v) {
             continue;
@@ -1952,7 +1992,7 @@ fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry>
         if uses.is_empty() {
             continue;
         }
-        if let Some((region, bytes)) = bounded_closure(&view, v, u64::from(cap)) {
+        if let Some((region, bytes)) = bounded_closure(&view, v, u64::from(cap), &mut memo) {
             queue.push(QueueEntry {
                 unit: v,
                 region_units: region.len() as u32,
@@ -1965,23 +2005,91 @@ fn candidate_queue(st: &State<'_>, groups: &Groups, cap: u32) -> Vec<QueueEntry>
     queue
 }
 
-/// |D(v)| over unidentified units, None past `cap` bytes.
-fn bounded_closure(view: &RoundView<'_, '_>, v: u32, cap: u64) -> Option<(Vec<u32>, u64)> {
+/// What [`bounded_closure`] remembers between candidates.
+struct ClosureMemo {
+    /// Units whose closure passed the cap: a closure reaching one passes
+    /// it too (it holds that closure).
+    too_big: Vec<bool>,
+    /// Only with cut CommonJS modules (exp128; None otherwise, so a run
+    /// without them takes exactly the plain search): each candidate's
+    /// region (search order, sorted, bytes). A candidate reaching a unit
+    /// whose region holds the candidate has that very region (each reaches
+    /// the other) — a module body whose statements all read one binding
+    /// all its statements write is one such cycle, thousands strong.
+    shared: Option<HashMap<u32, std::rc::Rc<SharedRegion>>>,
+}
+
+/// A remembered candidate region: search order, sorted, bytes.
+struct SharedRegion {
+    order: Vec<u32>,
+    sorted: Vec<u32>,
+    bytes: u64,
+}
+
+/// |D(v)| over unidentified units, None past `cap` bytes (the head
+/// first, then search order; a region shared through
+/// [`ClosureMemo::shared`] keeps the first candidate's order after the
+/// head).
+fn bounded_closure(
+    view: &RoundView<'_, '_>,
+    v: u32,
+    cap: u64,
+    memo: &mut ClosureMemo,
+) -> Option<(Vec<u32>, u64)> {
+    // The verdict is the closure's total, whatever the visiting order: a
+    // unit's bytes count when it is first reached, so a unit calling
+    // thousands (a cut CommonJS module's wrapper) stops the search as soon
+    // as the cap is passed (exp128).
+    let size = |u: u32| u64::from(view.st.graph.units[u as usize].bytes);
     let mut seen = BTreeSet::from([v]);
     let mut order = vec![v];
     let mut stack = vec![v];
-    let mut bytes = 0u64;
+    let mut bytes = size(v);
+    let over = |memo: &mut ClosureMemo| {
+        memo.too_big[v as usize] = true;
+        None
+    };
+    if bytes > cap {
+        return over(memo);
+    }
     while let Some(x) = stack.pop() {
-        bytes += u64::from(view.st.graph.units[x as usize].bytes);
-        if bytes > cap {
-            return None;
-        }
         for &w in view.callees(x) {
-            if !view.is_external(w) && seen.insert(w) {
+            if view.is_external(w) {
+                continue;
+            }
+            if memo.too_big[w as usize] {
+                return over(memo);
+            }
+            if let Some(region) = memo.shared.as_ref().and_then(|m| m.get(&w))
+                && region.sorted.binary_search(&v).is_ok()
+            {
+                let region = region.clone();
+                let mut out = vec![v];
+                out.extend(region.order.iter().copied().filter(|&u| u != v));
+                memo.shared.as_mut().map(|m| m.insert(v, region.clone()));
+                return Some((out, region.bytes));
+            }
+            if seen.insert(w) {
+                bytes += size(w);
+                if bytes > cap {
+                    return over(memo);
+                }
                 order.push(w);
                 stack.push(w);
             }
         }
+    }
+    if let Some(m) = memo.shared.as_mut() {
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        m.insert(
+            v,
+            std::rc::Rc::new(SharedRegion {
+                order: order.clone(),
+                sorted,
+                bytes,
+            }),
+        );
     }
     Some((order, bytes))
 }
@@ -2042,7 +2150,11 @@ pub fn evidence_seeds(
 fn banner_unit(graph: &ReferenceGraph, comment: oxc_span::Span) -> Option<u32> {
     let next = match graph.unit_at(comment.start) {
         Some(u) if is_statement(graph, u) => return Some(u),
-        Some(u) if graph.units[u as usize].kind == UnitKind::Factory => return None,
+        Some(u)
+            if graph.units[u as usize].kind == UnitKind::Factory && !graph.is_cut_factory(u) =>
+        {
+            return None;
+        }
         // Inside a lazy wrapper, between body statements: the next one.
         _ => graph.units.partition_point(|x| x.span.start < comment.end) as u32,
     };
@@ -2053,7 +2165,9 @@ fn banner_unit(graph: &ReferenceGraph, comment: oxc_span::Span) -> Option<u32> {
             (graph.units.get(body as usize)?.kind == UnitKind::LazyBody { module: next })
                 .then_some(body)
         }
-        UnitKind::Factory | UnitKind::FactoryBody { .. } => None,
+        UnitKind::Factory if graph.is_cut_factory(next) => Some(next + 1),
+        UnitKind::FactoryBody { .. } => Some(next),
+        UnitKind::Factory => None,
     }
 }
 
@@ -2344,7 +2458,8 @@ fn discover_unscoped(
     profile: &LibraryProfile,
 ) -> (ReferenceGraph, Discovery) {
     let semantic = ingest.semantic();
-    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
+    let (statements, facts, graph) =
+        bundle_graph(code, ingest, pieces, factories, options.factory_bodies);
     let families = match (options.derived_families, lookup) {
         (false, _) => PackageFamilies::shipped(),
         (true, Some(l)) => {
@@ -2370,7 +2485,8 @@ fn discover_unscoped(
     if options.banner_names == BannerNames::Known {
         seeds = known_banner_names(seeds, lookup.index);
     }
-    let units = crate::cut::units::container_units(statements, factories, &facts, false);
+    let units =
+        crate::cut::units::container_units(statements, factories, &facts, options.factory_bodies);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);
@@ -2489,6 +2605,7 @@ fn bundle_graph<'a>(
     ingest: &crate::ingest::Ingest<'a>,
     pieces: BundlePieces,
     factories: &[oxc_span::Span],
+    factory_bodies: bool,
 ) -> (
     &'a [oxc_ast::ast::Statement<'a>],
     crate::cut::units::BundlerFacts,
@@ -2507,8 +2624,13 @@ fn bundle_graph<'a>(
         pieces.grammar,
         pieces.interop,
     );
-    let graph = crate::graph::references::build_reference_graph(
-        code, semantic, statements, factories, &facts,
+    let graph = crate::graph::references::build_reference_graph_with(
+        code,
+        semantic,
+        statements,
+        factories,
+        &facts,
+        factory_bodies,
     );
     (statements, facts, graph)
 }
@@ -2562,17 +2684,19 @@ pub struct UnitRow {
 
 /// Every unit of the bundle's reference graph, in graph order, with its
 /// prints (the lookup's: `libindex::units::unit_prints` over the same
-/// units discovery builds).
+/// units discovery builds; `factory_bodies` as the run's
+/// [`DiscoveryOptions::factory_bodies`]).
 pub fn unit_rows(
     code: &str,
     ingest: &crate::ingest::Ingest<'_>,
     pieces: BundlePieces,
     factories: &[oxc_span::Span],
+    factory_bodies: bool,
 ) -> Vec<UnitRow> {
     use crate::cut::units::UnitKind;
     let semantic = ingest.semantic();
-    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories);
-    let units = crate::cut::units::container_units(statements, factories, &facts, false);
+    let (statements, facts, graph) = bundle_graph(code, ingest, pieces, factories, factory_bodies);
+    let units = crate::cut::units::container_units(statements, factories, &facts, factory_bodies);
     let tables = crate::hash::serialize::SymbolTables::build(semantic);
     let blurred = facts.grammar.blurred_literals(statements, semantic);
     let prints = crate::libindex::units::unit_prints(&units, &tables, &blurred);

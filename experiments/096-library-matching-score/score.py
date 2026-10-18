@@ -63,7 +63,7 @@ FAMILIES = families_lib.Families()
 same_family = FAMILIES.same
 
 MISS_CLASSES = ["no-discovery", "a", "b", "c", "d-file", "d-variant", "d-absent", "d-nofile", "e-veto", "e-agree", "e-support",
-                "e-spec", "e-ambig", "e-other", "f", "unit-model"]
+                "e-spec", "e-ambig", "e-other", "f", "unit-model", "factory"]
 PRECISION_BAR = 0.998
 # truth labels that are not a library package: app code, the app's own package, no mapping, a chained URL source
 NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
@@ -106,7 +106,28 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    whose file inside R is a chunk named after P, R declaring P a build input) credits R beside the origin P: R
 #    published that file, and a claim naming R is judged `origin`, as the claim naming a directly shipped chunk's
 #    publisher is judged right. Same reports, re-scored; `via` off reproduces scorer 9's cards.
-SCORER_VERSION = "exp096-score/10"
+# 11: exp128, the FACTORY scope (experiments/128-cjs-scope/README.md). Scorers 1-10 judged statement and lazy-body
+#    units only; a bundled CommonJS module (`Factory`, one external unit in the query graph: no print, never claimed)
+#    was outside every number, and it holds most of an esbuild or Bun bundle (held-out 87% of library bytes, remin-esbuild 93%).
+#    Factories are now units under the same truth rules: an external factory is one unit (majority-mapped label), a
+#    factory cut into body statements (`FactoryBody` rows) is judged per statement. totals / f05 cover BOTH scopes;
+#    `scopes.statement` is scorer 10's whole scope, `scopes.factory` the new one; an
+#    unclaimed external factory's miss class is `factory`. Claude Code's sample holds statement units only: its
+#    factory scope is not judged. And rule `notinstalled` (truth_audit RULES11, frozen layer chained11): scorer 9's
+#    npmchain without "P is not on npm" — a chained source labelled with a package NOT INSTALLED in the app
+#    (`node_modules/src/...` from async-validator's own map) keeps the package whose map listed it. Same reports,
+#    re-scored; `notinstalled` off makes `scopes.statement` scorer 10's card exactly (verify11.py).
+# 12: exp129, two truth-side changes (experiments/129-helpers-copies/README.md). (a) The copies layer v2
+#    (experiments/129-helpers-copies/copies2.py, truth_audit COPIES2, frozen layers copies2*.json): exp104's copies
+#    rule (code + declared dependency + the shipped file naming the origin + one passing origin), its evidence read
+#    from the INSTALLED packages (the shipper's own package.json, the shipped file) and from every row table of the
+#    evidence indexes (every slice of k2-all-r5, k2-all-r5-origin and their helper tables, and of the step-4 index
+#    exp104's layers were built on), over every judged unit (statements, lazy bodies, factory body statements) —
+#    not one reference label's run and index slice; a module specifier (`from "O"`, `require("O")`) no longer names
+#    O. (b) Rule `patched` (origins.py RULES12, frozen layer origins12): a marker path may hold `=` (a pnpm patched
+#    dependency `.pnpm/<name>@<v>_patch_hash=<h>/`), as the index builder reads it (exp130's declared difference).
+#    Same reports, re-scored; both off reproduces scorer 11's cards (experiments/129-helpers-copies/verify_s11.py).
+SCORER_VERSION = "exp096-score/12"
 
 
 def r6(x):
@@ -136,7 +157,7 @@ def run_units(report):
     out = []
     for i, r in enumerate(report["unitRows"]):
         u = {"i": i, "s": r["start"], "e": r["end"], "b": r["bytes"], "k": r["kind"], "rt": r["runtime"],
-             "mb": r["moduleBytes"], "bindings": r["bindings"]}
+             "mb": r["moduleBytes"], "bindings": r["bindings"], "m": r.get("module")}
         if "whole" in r:
             w = r["whole"]
             u["w"] = [w["hash"], w["nodes"], w["content"]]
@@ -146,7 +167,24 @@ def run_units(report):
 
 
 def statement_units(units):
+    """The STATEMENT scope (scorers 1-10's whole scope, scorer 11's `scopes.statement`): top-level statements and
+    lazy-module bodies, bundler runtime excluded."""
     return [u for u in units if u["k"] in ("Statement", "LazyBody") and not u["rt"]]
+
+
+def factory_units(units):
+    """The FACTORY scope (scorer 11, exp128): what bundled CommonJS modules hold. A factory the run cut into its
+    body statements (`FactoryBody` rows) is judged per body statement, exactly as a lazy body is; a factory the run
+    kept as ONE external unit (the query graph's default: no body rows, no print) is judged as one unit, its
+    majority-mapped package as its label, as a statement is."""
+    cut = {u["m"] for u in units if u["k"] == "FactoryBody"}
+    return [u for u in units if not u["rt"] and (u["k"] == "FactoryBody" or (u["k"] == "Factory" and u["i"] not in cut))]
+
+
+def scored_units(units):
+    """Every unit scorer 11 judges: the statement scope, then the factory scope (disjoint), in unit order."""
+    keep = {u["i"] for u in statement_units(units)} | {u["i"] for u in factory_units(units)}
+    return [u for u in units if u["i"] in keep]
 
 
 def label_units(truth, units, origins=None, audit=None):
@@ -161,7 +199,7 @@ def label_units(truth, units, origins=None, audit=None):
     offs = [s[0] for s in segs]
     run_at = [r[0] for r in origins["runs"]] if origins else []
     out = {}
-    for u in statement_units(units):
+    for u in scored_units(units):
         s, e = u["s"], u["e"]
         k = max(bisect.bisect_right(offs, s) - 1, 0)
         votes, files = collections.Counter(), collections.Counter()
@@ -271,41 +309,79 @@ def rule_name(rule):
     return {"agreement": "agree", "structural": "struct"}[rule]
 
 
+SCOPES = ("statement", "factory")
+
+
+def scope_block(t, claimed, old, misses):
+    """One scope's totals (scorer 11's `scopes.<name>`): the same measures as the card's totals, over that scope's
+    units only. `scopes.statement` is scorers 1-10's whole scope, so its numbers are a scorer-10 card's totals (with `notinstalled` off)."""
+    lib = t["library"]
+    named = claimed["right"] + claimed["family"] + claimed["origin"]
+    old_named = old["right"] + old["family"]
+    return {"libraryBytes": lib, "namedBytes": named, **prf(named, claimed["wrongFamily"], claimed["app"], lib),
+            "appClaimedBytes": claimed["app"], "wrongFamilyBytes": claimed["wrongFamily"],
+            "namedAsOriginBytes": claimed["origin"], "copyBytes": t["copy"],
+            "namedBytesShipperOnly": old_named,
+            **prf(old_named, old["wrongFamily"], old["app"], lib, "ShipperOnly"),
+            "wrongFamilyBytesShipperOnly": old["wrongFamily"],
+            "statementBytes": {k: t[k] for k in sorted(t)},
+            "claimedBytes": {k: claimed[k] for k in sorted(claimed)},
+            "missBytes": {k: misses[k] for k in MISS_CLASSES if misses[k]}}
+
+
+def totals_scope(lib, named, wrong, app, misses):
+    """A scope block for a card with no per-unit verdicts of its own (the Claude Code sample, a floored bundle):
+    every named byte is named as the shipper, no copies."""
+    return {"libraryBytes": lib, "namedBytes": named, **prf(named, wrong, app, lib), "appClaimedBytes": app,
+            "wrongFamilyBytes": wrong, "namedAsOriginBytes": 0, "copyBytes": 0, "namedBytesShipperOnly": named,
+            **prf(named, wrong, app, lib, "ShipperOnly"), "wrongFamilyBytesShipperOnly": wrong,
+            "statementBytes": {}, "claimedBytes": {}, "missBytes": misses}
+
+
 def score_map(entry, report, truth, ix, rule, origins, audit):
     units = run_units(report)
     by_i = {u["i"]: u for u in units}
     st = statement_units(units)
+    scope_of = {u["i"]: "statement" for u in st}
+    scope_of.update({u["i"]: "factory" for u in factory_units(units)})
+    every = scored_units(units)
     labels = label_units(truth, units, origins, audit)
     app_pkg = truth["appPackage"]
-    key = {(u["s"], u["e"]): u["i"] for u in st}
+    key = {(u["s"], u["e"]): u["i"] for u in every}
     claims_all = report.get("claims", [])
     claims = {key[(c["start"], c["end"])]: c for c in claims_all if (c["start"], c["end"]) in key}
     vetoed = {key[k]: p for k, p in spans(report.get("vetoed", [])).items() if k in key}
-    total = collections.Counter()
-    for u in st:
+    by_scope = {sc: [collections.Counter() for _ in range(4)] for sc in SCOPES}  # total, claimed, old, misses
+    for u in every:
         lab = labels[u["i"]]["label"]
-        total["library" if lab not in NOT_LIBRARY else lab] += u["b"]
+        tot = by_scope[scope_of[u["i"]]][0]
+        tot["library" if lab not in NOT_LIBRARY else lab] += u["b"]
         if lab not in NOT_LIBRARY and "origin" in labels[u["i"]]:
-            total["copy"] += u["b"]
-    claimed, seeds, old = collections.Counter(), collections.Counter(), collections.Counter()
+            tot["copy"] += u["b"]
+    seeds = collections.Counter()
     names = Names()
     for i, c in claims.items():
         v, vo = judge_origin(c["package"], labels[i], app_pkg)
-        claimed[v] += by_i[i]["b"]
-        old[vo] += by_i[i]["b"]
+        _, cl, ol, _ = by_scope[scope_of[i]]
+        cl[v] += by_i[i]["b"]
+        ol[vo] += by_i[i]["b"]
         if c["rule"] == "seed" and (c.get("evidence") or {}).get("kind") in ("index", "queueIndex"):
             seeds[v] += by_i[i]["b"]
         if v in ("right", "family"):
             names.add(ix, by_i[i], c["package"], labels[i])
-    # misses: every library unit not named right / same family, one cause (decompose.classify, unchanged)
+    # misses: every library unit not named right / same family, one cause (decompose.classify, unchanged); a
+    # factory the run kept as one external unit has no print to classify: `factory`
     struct_claims = mmlib.claim_all(ix, st) if rule == "agreement" else {}
-    misses = collections.Counter()
-    for u in st:
+    for u in every:
         t = labels[u["i"]]
         if "pkg" not in t:
             continue
         c = claims.get(u["i"])
         if c and judge_origin(c["package"], t, app_pkg)[0] in ("right", "family", "origin"):
+            continue
+        misses = by_scope[scope_of[u["i"]]][3]
+        if u["k"] == "Factory":
+            misses["factory"] += u["b"]
             continue
         if "w" not in u:
             misses["unit-model"] += u["b"]
@@ -313,6 +389,7 @@ def score_map(entry, report, truth, ix, rule, origins, audit):
         import decompose
         misses[decompose.classify(ix, u, t, c["package"] if c else None, vetoed, struct_claims,
                                   rule_name(rule))] += u["b"]
+    total, claimed, old, misses = (sum((by_scope[sc][j] for sc in SCOPES), collections.Counter()) for j in range(4))
     lib = total["library"]
     as_shipper = claimed["right"] + claimed["family"]
     named = as_shipper + claimed["origin"]
@@ -332,6 +409,7 @@ def score_map(entry, report, truth, ix, rule, origins, audit):
             **prf(old_named, old["wrongFamily"], old["app"], lib, "ShipperOnly"),
             "wrongFamilyBytesShipperOnly": old["wrongFamily"],
         },
+        "scopes": {sc: scope_block(*by_scope[sc]) for sc in SCOPES},
         "statementBytes": {k: total[k] for k in sorted(total)},
         "claimedBytes": {k: claimed[k] for k in sorted(claimed)},
         "indexSeeds": {"namedBytes": seed_named, **prf(seed_named, seeds["wrongFamily"], seeds["app"], lib),
@@ -415,6 +493,11 @@ def score_sample(entry, report, truth, ix, rule):
             **prf(named, claimed["wrongFamily"], claimed["app"], lib, "ShipperOnly"),
             "wrongFamilyBytesShipperOnly": round(claimed["wrongFamily"]),
         },
+        "scopes": {"statement": totals_scope(round(lib), round(named), round(claimed["wrongFamily"]),
+                                             round(claimed["app"]), {k: round(misses[k]) for k in MISS_CLASSES
+                                                                     if misses[k]}),
+                   "factory": totals_scope(0, 0, 0, 0, {})},
+        "factoryScope": "not judged: the labelled sample holds statement units only",
         "originTruth": "none: sample truth (hand-labelled units)",
         "estimate": "stratified ratio estimate from the 620-unit labelled sample (bytes are src-wide estimates)",
         "statementBytes": {k: round(total[k]) for k in sorted(total)},
@@ -445,7 +528,10 @@ def score_floor(entry, truth):
                    "wrongFamilyBytes": 0,
                    "namedAsShipperBytes": 0, "namedAsOriginBytes": 0, "copyBytes": 0, "namedBytesShipperOnly": 0,
                    **prf(0, 0, 0, lib, "ShipperOnly"), "wrongFamilyBytesShipperOnly": 0},
-        "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran)",
+        "scopes": {"statement": totals_scope(lib, 0, 0, 0, {"no-discovery": lib}),
+                   "factory": totals_scope(0, 0, 0, 0, {})},
+        "libraryBytesBasis": "mapped library bytes (no unit model: discovery never ran; all in the statement scope, "
+                             "as scorers 1-9 counted them)",
         "statementBytes": {}, "claimedBytes": {},
         "indexSeeds": {"namedBytes": 0, **prf(0, 0, 0, lib), "appClaimedBytes": 0},
         "missBytes": {"no-discovery": lib},
@@ -460,6 +546,23 @@ def load_index(index_dir, slice_, index_id):
     mmlib.MM = os.path.join(INDEX_CACHE, "ix-" + index_id[:16])
     os.makedirs(mmlib.MM, exist_ok=True)
     return mmlib.Index(slice_)
+
+
+SCOPE_SUMS = ("libraryBytes", "namedBytes", "appClaimedBytes", "wrongFamilyBytes", "namedAsOriginBytes", "copyBytes",
+              "namedBytesShipperOnly", "wrongFamilyBytesShipperOnly")
+
+
+def aggregate_scope(blocks):
+    t, mb = collections.Counter(), collections.Counter()
+    for b in blocks:
+        for k in SCOPE_SUMS:
+            t[k] += b[k]
+        mb.update(b["missBytes"])
+    return {**{k: t[k] for k in SCOPE_SUMS},
+            **prf(t["namedBytes"], t["wrongFamilyBytes"], t["appClaimedBytes"], t["libraryBytes"]),
+            **prf(t["namedBytesShipperOnly"], t["wrongFamilyBytesShipperOnly"], t["appClaimedBytes"],
+                  t["libraryBytes"], "ShipperOnly"),
+            "missShares": {k: share(mb[k], t["libraryBytes"]) for k in MISS_CLASSES if mb[k]}}
 
 
 def aggregate(cards):
@@ -493,8 +596,10 @@ def aggregate(cards):
             "exploratoryNames": {**{k: nm[k] for k in sorted(nm)},
                                  "sameVersionShare": share(nm["bindingsSameVersion"], nm["bindingsVersionKnown"])},
         }
+        row["scopes"] = {sc: aggregate_scope([c["scopes"][sc] for c in cs]) for sc in SCOPES}
         if set_ == "cc":
             row["appClaimedSampleUnits"] = cs[0]["totals"]["appClaimedSampleUnits"]
+            row["factoryScope"] = cs[0]["factoryScope"]
         out[set_] = row
     return out
 
@@ -522,12 +627,18 @@ def main():
     c9m = truth_audit.load_chained9_manifest()
     if c9m is not None and c9m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 9 chained layer was frozen for another corpus manifest")
+    c11m = truth_audit.load_chained11_manifest()
+    if c11m is not None and c11m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 11 chained layer was frozen for another corpus manifest")
     o7m = truth_audit.load_origins7_manifest()
     if o7m is not None and o7m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 7 origin layer was frozen for another corpus manifest")
     o10m = truth_audit.load_origins10_manifest() if o7m is not None else None
     if o10m is not None and o10m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 10 origin layer was frozen for another corpus manifest")
+    o12m = truth_audit.load_origins12_manifest() if o7m is not None else None
+    if o12m is not None and o12m["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 12 origin layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -582,7 +693,9 @@ def main():
                    "chainedSha256": truth_audit.chained_sha(),
                    **({"origins7Sha256": truth_audit.origins7_sha()} if o7m else {}),
                    **({"origins10Sha256": truth_audit.origins10_sha()} if o7m and truth_audit.origins10_sha() else {}),
+                   **({"origins12Sha256": truth_audit.origins12_sha()} if o7m and truth_audit.origins12_sha() else {}),
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
+                   **({"chained11Sha256": truth_audit.chained11_sha()} if c11m else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},

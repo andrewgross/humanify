@@ -177,3 +177,56 @@ fn the_entries_reach_every_subpath_export_a_node_app_can_load() {
 fn files_of(names: &[&str]) -> Vec<String> {
     names.iter().map(|s| s.to_string()).collect()
 }
+
+/// exp131: the builder never reads a map's `sourcesContent` (only `sources`
+/// and `mappings`), and it was ~3/4 of every map: no recipe writes it.
+#[test]
+fn no_recipe_writes_sources_content() {
+    let build = RecipeBuild {
+        recipe: Recipe::parse("esbuild:target=node,format=cjs,minify").unwrap(),
+        bin: PathBuf::from("/t/esbuild"),
+    };
+    let args = args_of(&build.command(Path::new("/w"), "e.cjs", Path::new("/o"), &[], false));
+    assert!(
+        args.iter().any(|a| a == "--sources-content=false"),
+        "{args:?}"
+    );
+    let rollup = include_str!("../recipes/rollup-build.mjs");
+    assert!(rollup.contains("sourcemapExcludeSources: true"));
+    assert!(!rollup.contains("sourcemapExcludeSources: false"));
+    let webpack = include_str!("../recipes/webpack-build.cjs");
+    assert!(webpack.contains(r#"devtool: "nosources-source-map""#));
+}
+
+/// Bun has no flag for it: whatever a bundler wrote, the build's map is
+/// slimmed before the build is stamped.
+#[test]
+fn a_finished_build_keeps_no_sources_content() {
+    let root =
+        std::env::temp_dir().join(format!("humanify-index-slimbuild-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    // a stand-in esbuild: writes --outfile and its map, sourcesContent included
+    let fake = root.join("fake-esbuild");
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\nfor a in \"$@\"; do case \"$a\" in --outfile=*) o=\"${a#--outfile=}\";; esac; done\n\
+         printf 'x\\n' > \"$o\"\n\
+         printf '{\"version\":3,\"sources\":[\"a.js\"],\"sourcesContent\":[\"var a = 1;\"],\"mappings\":\"AAAA\"}' > \"$o.map\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let build = RecipeBuild {
+        recipe: Recipe::parse("esbuild:target=node,format=cjs,minify").unwrap(),
+        bin: fake,
+    };
+    let out = root.join("build/esbuild-node-cjs-min/req");
+    build
+        .build(&root, "e.cjs", &out, &[], false)
+        .expect("builds");
+    assert_eq!(
+        std::fs::read_to_string(out.join("out.js.map")).unwrap(),
+        r#"{"version":3,"sources":["a.js"],"mappings":"AAAA"}"#
+    );
+    std::fs::remove_dir_all(&root).ok();
+}

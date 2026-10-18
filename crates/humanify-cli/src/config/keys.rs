@@ -833,6 +833,17 @@ pub static KEYS: &[Key] = &[
               hold at least this share of its index seed bytes; otherwise its copy seeds go \
               (exp121; 0 = any one non-copy seed vouches).",
     },
+    Key {
+        section: "library.discovery",
+        name: "factory_bodies",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().factory_bodies)),
+        unset: "",
+        doc: "Cut each bundled CommonJS module into its body statements, each judged and \
+              propagated as a lazy module's body is (the index's rows already hold factory \
+              bodies); off, a factory is one external unit no library claim reaches (exp128).",
+    },
     // [unpack]
     Key {
         section: "unpack",

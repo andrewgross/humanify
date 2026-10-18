@@ -76,6 +76,13 @@ RULES7 = {"lazybody": True, "chunk": True}
 #             naming R for the same bytes inside another package's bundle is the same claim one level down; the
 #             kind is spelled `chunk/via:<R>` (`via` off: exactly scorer 7's layer)
 RULES10 = {**RULES7, "via": True}
+# scorer 12 (exp129, from exp130's declared builder/truth difference): one more rule on the scorer 10 layer.
+#   patched   a marker path may hold `=`: pnpm spells a PATCHED dependency `.pnpm/<name>@<version>_patch_hash=<h>/`,
+#             and PATHLIKE refused the marker, so the region read as the shipper's own code while the index builder
+#             (humanify_index::build, any marker path) read it as the named package's (`patched` off: exactly
+#             scorer 10's layer)
+RULES12 = {**RULES10, "patched": True}
+PATHLIKE12 = re.compile(r"^(?:\.{0,2}/)*[\w@.-]+(?:/[\w@.+=-]+)*\.(?:[cm]?[jt]sx?|json)$")
 VIA = "chunk/via:"
 LAZY = re.compile(r"^\s*(?:(?:var|let|const) [\w$]+ = )?__esm(?:Min)?\(")
 EXPORT = re.compile(r"^export\b")
@@ -85,9 +92,11 @@ RUNTIME_KEYS = ("dependencies", "peerDependencies", "optionalDependencies")
 BUILD_KEYS = ("devDependencies", "bundleDependencies", "bundledDependencies")
 
 
-def marker_regions7(content, lazybody):
+def marker_regions7(content, lazybody, patched=False):
     """[(first line, origin package or None, marker path or None, kind)]: marker_regions (kind "marker"), plus
-    (lazybody) each region's lazy body after its `//#endregion` (kind "lazybody")."""
+    (lazybody) each region's lazy body after its `//#endregion` (kind "lazybody"); (patched, scorer 12) a marker
+    path may hold `=` (a pnpm patched dependency)."""
+    pathlike = PATHLIKE12 if patched else PATHLIKE
     out = []
     lines = content.split("\n")
     last = None  # (origin, path) of the last region opened
@@ -106,7 +115,7 @@ def marker_regions7(content, lazybody):
             continue
         for rx in MARKERS:
             m = rx.match(line)
-            if m and PATHLIKE.match(m.group(1)):
+            if m and pathlike.match(m.group(1)):
                 pkgs = NODE_MODULES_PKG.findall(m.group(1))
                 last = (pkgs[-1] if pkgs else None, m.group(1))
                 out.append((i, last[0], m.group(1), "marker"))
@@ -167,7 +176,7 @@ class Origins:
                 continue
             r = []
             if c:
-                for ln, o, mp, kind in marker_regions7(c, rules.get("lazybody")):
+                for ln, o, mp, kind in marker_regions7(c, rules.get("lazybody"), rules.get("patched")):
                     if o is None or o == ship:
                         r.append((ln, None))
                         continue

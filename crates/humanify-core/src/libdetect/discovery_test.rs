@@ -454,7 +454,7 @@ fn unit_rows_list_every_graph_unit_with_its_prints_and_bindings() {
         grammar: ModuleWrapperGrammar::BunAndEsbuild,
         interop: InteropHelpers::Bun,
     };
-    let rows = unit_rows(code, &ingest, pieces, &[]);
+    let rows = unit_rows(code, &ingest, pieces, &[], false);
     let (graph, _) = discover_in_bundle(
         code,
         &ingest,
