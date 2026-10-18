@@ -1,0 +1,42 @@
+{
+  "test-exp129o-auto-seed": {
+    "corpus": "test",
+    "perSet": {
+      "test-bun": {
+        "WRONG->GOOD": 8951,
+        "WRONG->GOOD:gained": 7260,
+        "WRONG->GOOD:patched": 1691
+      },
+      "test-esbuild": {
+        "WRONG->GOOD": 8141,
+        "WRONG->GOOD:gained": 6480,
+        "WRONG->GOOD:patched": 1661
+      },
+      "test-rollup": {
+        "WRONG->GOOD": 224105,
+        "WRONG->GOOD:gained": 184540,
+        "WRONG->GOOD:patched": 39565
+      }
+    }
+  },
+  "test-exp130-origin": {
+    "corpus": "test",
+    "perSet": {
+      "test-bun": {
+        "WRONG->GOOD": 8951,
+        "WRONG->GOOD:gained": 7260,
+        "WRONG->GOOD:patched": 1691
+      },
+      "test-esbuild": {
+        "WRONG->GOOD": 8141,
+        "WRONG->GOOD:gained": 6480,
+        "WRONG->GOOD:patched": 1661
+      },
+      "test-rollup": {
+        "WRONG->GOOD": 224105,
+        "WRONG->GOOD:gained": 184540,
+        "WRONG->GOOD:patched": 39565
+      }
+    }
+  }
+}

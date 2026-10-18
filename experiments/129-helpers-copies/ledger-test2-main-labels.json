@@ -1,0 +1,56 @@
+{
+  "test2-exp129o-auto-seed": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "GOOD->WRONG": 102048,
+        "GOOD->WRONG:lost": 102048,
+        "WRONG->GOOD": 274,
+        "WRONG->GOOD:gained": 274
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 291496,
+        "WRONG->GOOD:gained": 291496
+      },
+      "test2-rollup": {
+        "GOOD->WRONG": 26412,
+        "GOOD->WRONG:lost": 26412,
+        "WRONG->GOOD": 29809,
+        "WRONG->GOOD:gained": 29809
+      },
+      "test2-webpack": {
+        "GOOD->WRONG": 123,
+        "GOOD->WRONG:lost": 123,
+        "WRONG->GOOD": 888,
+        "WRONG->GOOD:gained": 888
+      }
+    }
+  },
+  "test2-exp130-origin": {
+    "corpus": "test2",
+    "perSet": {
+      "test2-bun": {
+        "GOOD->WRONG": 102048,
+        "GOOD->WRONG:lost": 102048,
+        "WRONG->GOOD": 274,
+        "WRONG->GOOD:gained": 274
+      },
+      "test2-esbuild": {
+        "WRONG->GOOD": 291496,
+        "WRONG->GOOD:gained": 291496
+      },
+      "test2-rollup": {
+        "GOOD->WRONG": 26412,
+        "GOOD->WRONG:lost": 26412,
+        "WRONG->GOOD": 29809,
+        "WRONG->GOOD:gained": 29809
+      },
+      "test2-webpack": {
+        "GOOD->WRONG": 123,
+        "GOOD->WRONG:lost": 123,
+        "WRONG->GOOD": 888,
+        "WRONG->GOOD:gained": 888
+      }
+    }
+  }
+}
