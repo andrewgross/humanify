@@ -434,3 +434,28 @@ fn the_helper_prints_key_defaults_off_and_sets_from_the_file() {
     .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("helper_prints")), "{err:?}");
 }
+
+/// exp132: cutting bundled CommonJS modules into body statements, with its
+/// three module-level precision keys, is on by default since 2026-10-21
+/// (precision at or above the previous default on every set, F0.5 +29..62
+/// over both scopes); each turns off from the file.
+#[test]
+fn the_exp132_factory_keys_default_on_and_turn_off() {
+    let d = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert!(d.factory_bodies);
+    assert!(d.factory_tie_fence);
+    assert!(d.factory_banner_index);
+    assert!(d.factory_whole_seed);
+    let off = build(
+        &["in.js"],
+        "[library.discovery]\nfactory_bodies = false\nfactory_tie_fence = false\nfactory_banner_index = false\nfactory_whole_seed = false\n",
+    )
+    .unwrap();
+    let o = off.library.discovery_options();
+    assert!(
+        !o.factory_bodies
+            && !o.factory_tie_fence
+            && !o.factory_banner_index
+            && !o.factory_whole_seed
+    );
+}

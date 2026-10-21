@@ -170,13 +170,13 @@ copy_presence = 0.1            # exp121, ON since 2026-10-16 ("v2", clean on 19 
 copy_presence_factor = 4       #   smaller-context origin (share >= copy_presence, origin's module <= 1/factor)
 copy_presence_origin = true    #   is no seed; _origin gives the copy seeds to that origin; _own = share of
 copy_presence_own = 0.1        #   seed bytes non-copy seeds need to vouch (experiments/121-sponge-rule)
-factory_bodies = false         # exp128, default off: cut each bundled CommonJS module into its body statements
+factory_bodies = true          # ON since 2026-10-21; exp128: cut each bundled CommonJS module into its body statements
                                #   (judged and propagated as lazy-module bodies; experiments/128-cjs-scope)
-factory_tie_fence = false      # exp132, default off: a cut factory whose every index seed is a cross-family
+factory_tie_fence = true       # ON since 2026-10-21; exp132: a cut factory whose every index seed is a cross-family
                                #   tie (no untied/declared/banner seed) is claimed by no one (experiments/132-factory-precision)
-factory_whole_seed = false     # exp132, default off: a package names a cut factory only with one whole-statement
+factory_whole_seed = true      # ON since 2026-10-21; exp132: a package names a cut factory only with one whole-statement
                                #   index seed (or a declared/banner seed) there; function-print seeds alone are dropped
-factory_banner_index = false   # exp132, default off: a banner seed on a cut factory's statement another family's
+factory_banner_index = true    # ON since 2026-10-21; exp132: a banner seed on a cut factory's statement another family's
                                #   index prints cover more of is refused
 ```
 

@@ -375,7 +375,10 @@ impl DiscoveryOptions {
     /// which removes fork claims on every webpack/rollup set for 1,035 wrong
     /// bytes on test2-esbuild; and since 2026-10-16 exp121's copy presence at
     /// its measured "v2" setting (0.1 / factor 4 / origin / own 0.1), clean
-    /// on all 19 sets on k2-all. `helper_families` stays off.
+    /// on all 19 sets on k2-all; and since 2026-10-21 exp128/exp132's
+    /// factory_bodies with its tie fence, banner-index and whole-seed keys
+    /// (precision at or above the previous default on every set, F0.5
+    /// +29..62 over both scopes). `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
     pub fn recommended() -> Self {
@@ -396,6 +399,10 @@ impl DiscoveryOptions {
             copy_presence_factor: 4,
             copy_presence_origin: true,
             copy_presence_own: 0.1,
+            factory_bodies: true,
+            factory_tie_fence: true,
+            factory_banner_index: true,
+            factory_whole_seed: true,
             ..DiscoveryOptions::default()
         }
     }
