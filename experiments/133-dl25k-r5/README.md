@@ -77,29 +77,29 @@ index). All use main `4b1d1a49`'s plain defaults, or `f28cf5c3` with the four fa
 `*exp133-old*` (identical crates behaviour). Scorer 13, structural rule, both scopes. test / test2 are summaries
 only, and test2 was never diagnosed. Values are P / R / F0.5 in %. Bar = F0.5 up AND P at or above base, app 0.
 
-| set | k2-all-r5-origin | k2-all-r5-origin-dl25k | dP | dF0.5 | wrong KB | bar |
-|---|--:|--:|--:|--:|--:|---|
-| cc | 100.00 / 81.90 / 95.77 | 100.00 / 82.46 / 95.92 | +0.00 | +0.15 | 0.0 -> 0.0 | PASS |
-| esbuild-app | 99.07 / 74.74 / 93.01 | 97.49 / 74.24 / 91.75 | -1.57 | -1.27 | 131.1 -> 354.7 | fail |
-| heldout | 99.41 / 67.71 / 90.90 | 98.99 / 69.70 / 91.32 | -0.42 | +0.42 | 938.2 -> 1664.4 | fail |
-| wrangler | 99.07 / 33.14 / 70.87 | 99.88 / 33.26 / 71.31 | +0.81 | +0.44 | 5.8 -> 0.7 | PASS |
-| apps-esbuild | 99.89 / 77.65 / 94.48 | 99.76 / 79.06 / 94.80 | -0.12 | +0.32 | 135.0 -> 285.9 | fail |
-| apps-rollup | 99.09 / 79.31 / 94.38 | 98.97 / 82.51 / 95.17 | -0.12 | +0.79 | 710.6 -> 838.2 | fail |
-| apps-webpack | 99.58 / 73.50 / 92.98 | 99.60 / 74.91 / 93.44 | +0.02 | +0.46 | 230.8 -> 222.5 | PASS |
-| dev-rollup | 99.87 / 77.53 / 94.43 | 99.87 / 77.29 / 94.36 | -0.00 | -0.07 | 2.1 -> 2.1 | fail |
-| dev-webpack | 99.64 / 62.89 / 89.22 | 99.64 / 62.63 / 89.11 | -0.00 | -0.11 | 4.1 -> 4.1 | fail |
-| pop-bun | 99.44 / 76.61 / 93.85 | 99.31 / 76.99 / 93.87 | -0.13 | +0.02 | 1400.8 -> 1750.0 | fail |
-| pop-esbuild | 99.30 / 78.71 / 94.37 | 98.99 / 80.33 / 94.60 | -0.31 | +0.23 | 1799.4 -> 2662.2 | fail |
-| remin-esbuild | 99.69 / 51.76 / 84.11 | 99.70 / 50.36 / 83.37 | +0.01 | -0.75 | 160.0 -> 148.5 | fail |
-| remin-terser | 99.90 / 20.33 / 56.04 | 99.66 / 18.28 / 52.72 | -0.25 | -3.32 | 18.6 -> 59.0 | fail |
-| test-bun | 99.51 / 68.99 / 91.42 | 99.58 / 70.11 / 91.86 | +0.07 | +0.44 | 1029.7 -> 888.1 | PASS |
-| test-esbuild | 99.26 / 73.37 / 92.72 | 99.24 / 74.38 / 93.02 | -0.02 | +0.30 | 1740.0 -> 1821.1 | fail |
-| test-rollup | 98.96 / 72.43 / 92.21 | 98.89 / 74.89 / 92.93 | -0.07 | +0.73 | 829.8 -> 919.1 | fail |
-| test-webpack | 99.48 / 72.19 / 92.49 | 99.40 / 75.50 / 93.48 | -0.07 | +1.00 | 568.4 -> 677.6 | fail |
-| test2-bun | 99.15 / 68.12 / 90.87 | 98.53 / 69.02 / 90.77 | -0.61 | -0.10 | 1445.6 -> 2530.3 | fail |
-| test2-esbuild | 99.63 / 71.04 / 92.21 | 99.03 / 71.63 / 92.00 | -0.59 | -0.21 | 723.1 -> 1894.5 | fail |
-| test2-rollup | 96.35 / 75.65 / 91.35 | 96.29 / 76.18 / 91.46 | -0.06 | +0.11 | 1693.7 -> 1733.5 | fail |
-| test2-webpack | 99.27 / 70.09 / 91.64 | 99.59 / 72.06 / 92.52 | +0.31 | +0.88 | 874.1 -> 509.9 | PASS |
+| set           |       k2-all-r5-origin | k2-all-r5-origin-dl25k |    dP | dF0.5 |         wrong KB | bar  |
+| ------------- | ---------------------: | ---------------------: | ----: | ----: | ---------------: | ---- |
+| cc            | 100.00 / 81.90 / 95.77 | 100.00 / 82.46 / 95.92 | +0.00 | +0.15 |       0.0 -> 0.0 | PASS |
+| esbuild-app   |  99.07 / 74.74 / 93.01 |  97.49 / 74.24 / 91.75 | -1.57 | -1.27 |   131.1 -> 354.7 | fail |
+| heldout       |  99.41 / 67.71 / 90.90 |  98.99 / 69.70 / 91.32 | -0.42 | +0.42 |  938.2 -> 1664.4 | fail |
+| wrangler      |  99.07 / 33.14 / 70.87 |  99.88 / 33.26 / 71.31 | +0.81 | +0.44 |       5.8 -> 0.7 | PASS |
+| apps-esbuild  |  99.89 / 77.65 / 94.48 |  99.76 / 79.06 / 94.80 | -0.12 | +0.32 |   135.0 -> 285.9 | fail |
+| apps-rollup   |  99.09 / 79.31 / 94.38 |  98.97 / 82.51 / 95.17 | -0.12 | +0.79 |   710.6 -> 838.2 | fail |
+| apps-webpack  |  99.58 / 73.50 / 92.98 |  99.60 / 74.91 / 93.44 | +0.02 | +0.46 |   230.8 -> 222.5 | PASS |
+| dev-rollup    |  99.87 / 77.53 / 94.43 |  99.87 / 77.29 / 94.36 | -0.00 | -0.07 |       2.1 -> 2.1 | fail |
+| dev-webpack   |  99.64 / 62.89 / 89.22 |  99.64 / 62.63 / 89.11 | -0.00 | -0.11 |       4.1 -> 4.1 | fail |
+| pop-bun       |  99.44 / 76.61 / 93.85 |  99.31 / 76.99 / 93.87 | -0.13 | +0.02 | 1400.8 -> 1750.0 | fail |
+| pop-esbuild   |  99.30 / 78.71 / 94.37 |  98.99 / 80.33 / 94.60 | -0.31 | +0.23 | 1799.4 -> 2662.2 | fail |
+| remin-esbuild |  99.69 / 51.76 / 84.11 |  99.70 / 50.36 / 83.37 | +0.01 | -0.75 |   160.0 -> 148.5 | fail |
+| remin-terser  |  99.90 / 20.33 / 56.04 |  99.66 / 18.28 / 52.72 | -0.25 | -3.32 |     18.6 -> 59.0 | fail |
+| test-bun      |  99.51 / 68.99 / 91.42 |  99.58 / 70.11 / 91.86 | +0.07 | +0.44 |  1029.7 -> 888.1 | PASS |
+| test-esbuild  |  99.26 / 73.37 / 92.72 |  99.24 / 74.38 / 93.02 | -0.02 | +0.30 | 1740.0 -> 1821.1 | fail |
+| test-rollup   |  98.96 / 72.43 / 92.21 |  98.89 / 74.89 / 92.93 | -0.07 | +0.73 |   829.8 -> 919.1 | fail |
+| test-webpack  |  99.48 / 72.19 / 92.49 |  99.40 / 75.50 / 93.48 | -0.07 | +1.00 |   568.4 -> 677.6 | fail |
+| test2-bun     |  99.15 / 68.12 / 90.87 |  98.53 / 69.02 / 90.77 | -0.61 | -0.10 | 1445.6 -> 2530.3 | fail |
+| test2-esbuild |  99.63 / 71.04 / 92.21 |  99.03 / 71.63 / 92.00 | -0.59 | -0.21 |  723.1 -> 1894.5 | fail |
+| test2-rollup  |  96.35 / 75.65 / 91.35 |  96.29 / 76.18 / 91.46 | -0.06 | +0.11 | 1693.7 -> 1733.5 | fail |
+| test2-webpack |  99.27 / 70.09 / 91.64 |  99.59 / 72.06 / 92.52 | +0.31 | +0.88 |   874.1 -> 509.9 | PASS |
 
 **The ship bar, read honestly.**
 
@@ -127,12 +127,12 @@ are claimed by packages base never claimed (newly indexed). On pop-esbuild it is
 packages whose seeds and factory propagation newly reach modules base left unclaimed. Almost all are index seeds,
 and the rest is propagation off them:
 
-| set | new wrong | dominant class |
-|---|--:|---|
-| held-out | 913 KB | factory-scope seeds on modules base left unclaimed, truth family not held for the unit (483 KB); statement seeds outscoring the truth's origin, which base named (295 KB) |
-| esbuild-app | 324 KB | one carrier outscoring ajv on two 146 KB lazy-init bodies (293 KB): the carrier's rows hold an 865-node function the origin's rows do not |
-| apps-rollup / -esbuild / -webpack | 393 / 195 / 58 KB | exact ties won by the scoped carrier on name order (290 KB), and propagation off them |
-| pop-esbuild / pop-bun | 1,127 / 624 KB | the same carriers (pdfjs-dist, mermaid and ajv carriers) by outscoring, plus 326 KB of factory propagation |
+| set                               |         new wrong | dominant class                                                                                                                                                            |
+| --------------------------------- | ----------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| held-out                          |            913 KB | factory-scope seeds on modules base left unclaimed, truth family not held for the unit (483 KB); statement seeds outscoring the truth's origin, which base named (295 KB) |
+| esbuild-app                       |            324 KB | one carrier outscoring ajv on two 146 KB lazy-init bodies (293 KB): the carrier's rows hold an 865-node function the origin's rows do not                                 |
+| apps-rollup / -esbuild / -webpack | 393 / 195 / 58 KB | exact ties won by the scoped carrier on name order (290 KB), and propagation off them                                                                                     |
+| pop-esbuild / pop-bun             |    1,127 / 624 KB | the same carriers (pdfjs-dist, mermaid and ajv carriers) by outscoring, plus 326 KB of factory propagation                                                                |
 
 Named dev claimers, held-out excepted: @mastra/mcp (ajv, and the MCP SDK's copy of ajv), @mermaid-js/layout-elk
 (mermaid), unpdf / pdf-parse (pdfjs-dist), @newrelic/rrweb (@rrweb/replay), @googleapis/sqladmin (googleapis),
@@ -154,15 +154,15 @@ claim settles goes to the tied package holding the unit's prints in the smallest
 used only among equal contexts. The origin is the smaller context. On the dl25k index (lab labels
 `*lab133-tc*`, `*lab133-tc4*`, dev corpora only), deltas against `*exp133-dl*` are P / F0.5:
 
-| set | sort by context | context only when decisive (> 4x + 4096) |
-|---|--:|--:|
-| cc | +0.00 / -1.24 (R 82.46 -> 78.06) | 0 / 0 |
-| apps-esbuild | +0.12 / +0.14 | -0.01 / -0.01 |
-| apps-rollup | +0.38 / +0.41 | +0.15 / +0.15 |
-| apps-webpack | +0.12 / +0.17 | -0.03 / -0.02 |
-| dev-webpack | -0.45 / -0.40 | 0 / 0 |
-| remin-terser | -0.21 / +0.04 | +0.02 / +0.01 |
-| held-out, pop, esbuild-app | <= ±0.10 | <= ±0.02 |
+| set                        |                  sort by context | context only when decisive (> 4x + 4096) |
+| -------------------------- | -------------------------------: | ---------------------------------------: |
+| cc                         | +0.00 / -1.24 (R 82.46 -> 78.06) |                                    0 / 0 |
+| apps-esbuild               |                    +0.12 / +0.14 |                            -0.01 / -0.01 |
+| apps-rollup                |                    +0.38 / +0.41 |                            +0.15 / +0.15 |
+| apps-webpack               |                    +0.12 / +0.17 |                            -0.03 / -0.02 |
+| dev-webpack                |                    -0.45 / -0.40 |                                    0 / 0 |
+| remin-terser               |                    -0.21 / +0.04 |                            +0.02 / +0.01 |
+| held-out, pop, esbuild-app |                         <= ±0.10 |                                 <= ±0.02 |
 
 Sorting by context fixes the apps' carrier ties but costs Claude Code recall. Switching the package per unit
 breaks the previous-claim runs that support reads. It also costs dev-webpack and remin-terser precision. The
