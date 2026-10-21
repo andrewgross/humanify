@@ -48,7 +48,7 @@
  "noDiscovery": null,
  "reportSha256": "f23b4e7fa4f79189f45210b8e48a6cd6b5924e23332bfa20f3ec252d50812e10",
  "rule": "structural",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,

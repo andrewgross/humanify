@@ -127,7 +127,13 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    O. (b) Rule `patched` (origins.py RULES12, frozen layer origins12): a marker path may hold `=` (a pnpm patched
 #    dependency `.pnpm/<name>@<v>_patch_hash=<h>/`), as the index builder reads it (exp130's declared difference).
 #    Same reports, re-scored; both off reproduces scorer 11's cards (experiments/129-helpers-copies/verify_s11.py).
-SCORER_VERSION = "exp096-score/12"
+# 13: exp132, rule `misattributed` (truth_audit.Audit.misattributed, frozen layer misattr13 built by
+#    experiments/132-factory-precision/scorer13/misattr13.py): a bundled CommonJS module the source map credits to a
+#    file that is ALSO the majority source of another module of the bundle (one file, two modules: Bun 1.4's maps
+#    of large bundles) and that holds none of the module's rare tokens / long strings takes the smallest
+#    module-sized file of another package that does (a map source, else an installed file). Factory scope only.
+#    Same reports, re-scored; the rule off reproduces scorer 12's cards.
+SCORER_VERSION = "exp096-score/13"
 
 
 def r6(x):
@@ -198,6 +204,7 @@ def label_units(truth, units, origins=None, audit=None):
     srcs = truth["sources"]
     offs = [s[0] for s in segs]
     run_at = [r[0] for r in origins["runs"]] if origins else []
+    mis = audit.misattributed(units) if audit is not None else {}
     out = {}
     for u in scored_units(units):
         s, e = u["s"], u["e"]
@@ -216,6 +223,16 @@ def label_units(truth, units, origins=None, audit=None):
         lab = votes.most_common(1)[0][0] if votes else "<unmapped>"
         if audit is not None and lab != "<unmapped>" and audit.carried(s, e):
             out[u["i"]] = {"label": "<unmapped>", "carriedFrom": lab}
+            continue
+        module = u["m"] if u["k"] == "FactoryBody" else u["i"] if u["k"] == "Factory" else None
+        src_file = srcs[max(files.items(), key=lambda kv: (kv[1], -kv[0]))[0]][2] if files else None
+        if module in mis and lab == mis[module][2] and src_file == mis[module][7]:
+            new = mis[module][3:6]
+            out[u["i"]] = {"label": new[0], "pkg": new[0], "version": new[1], "file": new[2],
+                           "misattributedFrom": lab}
+            co = audit.copy_origin(s, e, new[0])
+            if co is not None:
+                out[u["i"]].update(origin=co[0], originEvidence="copy")
             continue
         row = {"label": lab}
         if lab not in NOT_LIBRARY:
@@ -696,6 +713,7 @@ def main():
                    **({"origins12Sha256": truth_audit.origins12_sha()} if o7m and truth_audit.origins12_sha() else {}),
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
                    **({"chained11Sha256": truth_audit.chained11_sha()} if c11m else {}),
+                   **({"misattr13Sha256": truth_audit.misattr13_sha()} if truth_audit.RULES13["misattributed"] else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},

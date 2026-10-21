@@ -29,6 +29,35 @@ from lib096 import sha256_file
 TOKEN = re.compile(r"[A-Za-z_$][\w$]{3,}|\d{3,}")
 MIN_TOKENS = 3
 CARRIED_SHARE = 0.5
+# scorer 13 (exp132): Audit.misattributed over the frozen layer misattr13. Off: scorer 12's cards exactly.
+RULES13 = {"misattributed": True}
+_MIS13 = {}
+
+
+def misattr13_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "misattr13.json" if c == "dev" else f"misattr13-{c}.json")
+
+
+def load_misattr13(entry):
+    p = misattr13_manifest_path()
+    if p not in _MIS13:
+        with open(p) as fh:
+            _MIS13[p] = json.load(fh)
+    m = _MIS13[p]
+    f = os.path.join(lib096.DATA, "truth", entry["id"] + ".misattr13.json.gz")
+    got = sha256_file(f)
+    if got != m["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: misattr13 {f} sha256 {got[:12]} != {os.path.basename(p)}")
+    with gzip.open(f, "rt") as fh:
+        return json.load(fh)["rows"]
+
+
+def misattr13_sha():
+    if not RULES13["misattributed"]:
+        return None
+    with open(misattr13_manifest_path()) as fh:
+        return lib096.sha256_bytes(lib096.dump(json.load(fh)).encode())
 
 
 # scorer 12 (exp129): the copies layer v2 (experiments/129-helpers-copies/copies2.py) replaces exp104's: the same
@@ -89,10 +118,12 @@ class Audit:
         with open(mp) as fh:
             contents = json.load(fh).get("sourcesContent") or []
         self.tok = {si: set(TOKEN.findall(c)) for si, c in enumerate(contents) if c}
+        self.clen = {si: len(c) for si, c in enumerate(contents) if c}
         self.all = set().union(*self.tok.values()) if self.tok else set()
         ranges = sorted(load_copies(entry, cm) if ranges is None else ranges)
         self.copy_at = [r[0] for r in ranges]
         self.copies = ranges
+        self.mis13 = {(r[0], r[1]): r for r in load_misattr13(entry)} if RULES13["misattributed"] else {}
 
     def carried(self, s, e):
         """True when the unit [s, e) has no mapping of its own and its tokens are mostly absent from the source
@@ -105,6 +136,16 @@ class Audit:
             return False
         t = set(TOKEN.findall(self.text[s:e].decode("utf8", "replace"))) & self.all
         return carried_verdict(t, self.tok[si], RULES6["unverified"])
+
+    def misattributed(self, units):
+        """Scorer 13 (exp132, rule `misattributed`): {factory unit i: layer row [start, end, old package, package,
+        version, file, evidence, old file]} for the run's `Factory` units the frozen misattr13 layer relabels (a module the
+        source map credits to a file that does not hold it; experiments/132-factory-precision/scorer13/misattr13.py).
+        Matched by span: a factory the reference run did not cut the same way is left alone."""
+        if not self.mis13:
+            return {}
+        return {u["i"]: self.mis13[(u["s"], u["e"])] for u in units
+                if u["k"] == "Factory" and (u["s"], u["e"]) in self.mis13}
 
     def copy_origin(self, s, e, shipper):
         """(origin, declaring dependency) when most of [s, e) lies in one origin's copy ranges of this shipper."""

@@ -20,6 +20,7 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 6961472365,
   "indexId": "c5fe9a7403c05c4c7ed2ca0fce09a1d7802089c80a769eb61e37b54fd8d73fa3",
+  "misattr13Sha256": "76156880e6f8e7001cf9cc88f23274a31328b103dff9eaa59b0173f1e2f1d4dc",
   "origins10Sha256": "ca36abae7b9829cd97c217a698f712e80fbf18e40f7dc6e487f4058963297f73",
   "origins12Sha256": "46e6ee87925a623377ee5b3a5c00ef5052033fa939ee00c085c3a4655eefdabe",
   "origins7Sha256": "11e7db2618d2dee8a48a44134e95f0f0eb17f8652b17338c62f01ef5b2f1aead",
@@ -30,7 +31,7 @@
   ]
  },
  "label": "remin-exp128-fbo",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "sets": {
   "remin-esbuild": {
    "appClaimedBytes": 0,
@@ -54,7 +55,7 @@
    "missShares": {
     "a": 0.013256,
     "b": 0.111905,
-    "c": 0.056626,
+    "c": 0.056625,
     "d-absent": 0.071135,
     "d-file": 0.134473,
     "d-variant": 0.011003,
@@ -83,8 +84,8 @@
      "libraryBytes": 92371996,
      "missShares": {
       "a": 0.012239,
-      "b": 0.119957,
-      "c": 0.059654,
+      "b": 0.119958,
+      "c": 0.059653,
       "d-absent": 0.071683,
       "d-file": 0.138414,
       "d-variant": 0.011787,

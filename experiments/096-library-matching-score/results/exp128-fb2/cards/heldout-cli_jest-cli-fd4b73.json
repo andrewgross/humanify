@@ -1,8 +1,8 @@
 {
  "bundleSha256": "f391d00767f0a84fd0556aa20e242151d810caacfa246ba5e88510094c7be30a",
  "claimedBytes": {
-  "family": 1845,
-  "right": 2398046,
+  "family": 754,
+  "right": 2399137,
   "self": 22660,
   "unmapped": 9316,
   "wrongFamily": 9366
@@ -47,13 +47,13 @@
  "noDiscovery": null,
  "reportSha256": "44b20f12c6c714897fb234a9759a90afc7c333fb9e7bd0564114204ab9bfcb68",
  "rule": "structural",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
    "claimedBytes": {
-    "family": 1845,
-    "right": 2398046,
+    "family": 754,
+    "right": 2399137,
     "self": 22660,
     "unmapped": 9316,
     "wrongFamily": 9366

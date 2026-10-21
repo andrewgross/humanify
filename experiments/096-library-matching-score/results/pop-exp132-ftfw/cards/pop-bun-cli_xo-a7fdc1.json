@@ -1,0 +1,174 @@
+{
+ "bundleSha256": "2e3ef95adbaaa2e192f045ef232196921d886ba18e4e50375896a39287074f56",
+ "claimedBytes": {
+  "family": 36580,
+  "origin": 44454,
+  "right": 11465910,
+  "unmapped": 50117,
+  "wrongFamily": 105157
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-cli_xo-a7fdc1",
+ "exploratory": {
+  "names": {
+   "bindings": 133893,
+   "bindingsSameVersion": 119251,
+   "bindingsVersionKnown": 133893,
+   "exactBytes": 10420816,
+   "exactUnits": 14223,
+   "sameVersionShare": 0.890644
+  }
+ },
+ "indexId": "c5fe9a7403c05c4c7ed2ca0fce09a1d7802089c80a769eb61e37b54fd8d73fa3",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.866818,
+  "f1": 0.729532,
+  "namedBytes": 10217422,
+  "precision": 0.991164,
+  "recall": 0.577178
+ },
+ "label": "pop-exp132-ftfw",
+ "missBytes": {
+  "a": 4800,
+  "b": 163168,
+  "c": 270540,
+  "d-absent": 172700,
+  "d-file": 770756,
+  "d-variant": 23237,
+  "e-ambig": 153645,
+  "e-other": 3945656,
+  "e-spec": 382436,
+  "e-support": 7506,
+  "e-veto": 159704,
+  "f": 101284
+ },
+ "noDiscovery": null,
+ "reportSha256": "07eb44ea5e6c09d924ec2048b132dfcc03ae6e9eab908f7ab8ec9b4e2e7a0ec4",
+ "rule": "structural",
+ "schema": "exp096-score/13",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 34444,
+    "origin": 921,
+    "right": 4791023,
+    "unmapped": 35358,
+    "wrongFamily": 2010
+   },
+   "copyBytes": 35939,
+   "f05": 0.840205,
+   "f05ShipperOnly": 0.840044,
+   "f1": 0.678039,
+   "f1ShipperOnly": 0.67791,
+   "libraryBytes": 9407912,
+   "missBytes": {
+    "b": 104558,
+    "c": 31177,
+    "d-absent": 172700,
+    "d-file": 179167,
+    "e-ambig": 45100,
+    "e-other": 3927646,
+    "e-support": 3824,
+    "e-veto": 114011,
+    "f": 3341
+   },
+   "namedAsOriginBytes": 921,
+   "namedBytes": 4826388,
+   "namedBytesShipperOnly": 4825467,
+   "precision": 0.999584,
+   "precisionShipperOnly": 0.999393,
+   "recall": 0.513014,
+   "recallShipperOnly": 0.512916,
+   "statementBytes": {
+    "<unmapped>": 998376,
+    "copy": 35939,
+    "library": 9407912
+   },
+   "wrongFamilyBytes": 2010,
+   "wrongFamilyBytesShipperOnly": 2931
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 2136,
+    "origin": 43533,
+    "right": 6674887,
+    "unmapped": 14759,
+    "wrongFamily": 103147
+   },
+   "copyBytes": 287364,
+   "f05": 0.944183,
+   "f05ShipperOnly": 0.938067,
+   "f1": 0.88907,
+   "f1ShipperOnly": 0.883311,
+   "libraryBytes": 8294464,
+   "missBytes": {
+    "a": 4800,
+    "b": 58610,
+    "c": 239363,
+    "d-file": 591589,
+    "d-variant": 23237,
+    "e-ambig": 108545,
+    "e-other": 18010,
+    "e-spec": 382436,
+    "e-support": 3682,
+    "e-veto": 45693,
+    "f": 97943
+   },
+   "namedAsOriginBytes": 43533,
+   "namedBytes": 6720556,
+   "namedBytesShipperOnly": 6677023,
+   "precision": 0.984884,
+   "precisionShipperOnly": 0.978504,
+   "recall": 0.810246,
+   "recallShipperOnly": 0.804998,
+   "statementBytes": {
+    "<self>": 20155,
+    "<unmapped>": 170464,
+    "copy": 287364,
+    "library": 8294464
+   },
+   "wrongFamilyBytes": 103147,
+   "wrongFamilyBytesShipperOnly": 146680
+  }
+ },
+ "set": "pop-bun",
+ "statementBytes": {
+  "<self>": 20155,
+  "<unmapped>": 1168840,
+  "copy": 323303,
+  "library": 17702376
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 323303,
+  "f05": 0.897745,
+  "f05ShipperOnly": 0.894289,
+  "f1": 0.786724,
+  "f1ShipperOnly": 0.783696,
+  "libraryBytes": 17702376,
+  "namedAsOriginBytes": 44454,
+  "namedAsShipperBytes": 11502490,
+  "namedBytes": 11546944,
+  "namedBytesShipperOnly": 11502490,
+  "precision": 0.990975,
+  "precisionShipperOnly": 0.98716,
+  "recall": 0.652282,
+  "recallShipperOnly": 0.649771,
+  "wrongFamilyBytes": 105157,
+  "wrongFamilyBytesShipperOnly": 149611
+ },
+ "truthMethod": "sourcemap"
+}

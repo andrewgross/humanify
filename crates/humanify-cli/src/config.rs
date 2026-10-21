@@ -342,6 +342,9 @@ impl Library {
             copy_presence_origin: d.copy_presence_origin,
             copy_presence_own: d.copy_presence_own,
             factory_bodies: d.factory_bodies,
+            factory_tie_fence: d.factory_tie_fence,
+            factory_whole_seed: d.factory_whole_seed,
+            factory_banner_index: d.factory_banner_index,
         }
     }
 
@@ -445,6 +448,9 @@ pub struct LibraryDiscovery {
     pub copy_presence_origin: bool,
     pub copy_presence_own: f64,
     pub factory_bodies: bool,
+    pub factory_tie_fence: bool,
+    pub factory_whole_seed: bool,
+    pub factory_banner_index: bool,
 }
 
 fn serialize_banner_names<S: serde::Serializer>(
@@ -660,6 +666,9 @@ fn library_of(r: &Resolved) -> Library {
             copy_presence_origin: r.flag_on("library.discovery.copy_presence_origin"),
             copy_presence_own: r.float("library.discovery.copy_presence_own"),
             factory_bodies: r.flag_on("library.discovery.factory_bodies"),
+            factory_tie_fence: r.flag_on("library.discovery.factory_tie_fence"),
+            factory_whole_seed: r.flag_on("library.discovery.factory_whole_seed"),
+            factory_banner_index: r.flag_on("library.discovery.factory_banner_index"),
         },
     }
 }

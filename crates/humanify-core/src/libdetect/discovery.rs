@@ -301,6 +301,34 @@ pub struct DiscoveryOptions {
     /// hold factory bodies). Off, a factory is one external unit the index
     /// cannot speak for.
     pub factory_bodies: bool,
+    /// The factory tie fence (exp132; default off; reads cut factories,
+    /// [`Self::factory_bodies`]): a bundled CommonJS module is ONE file of
+    /// one package. When every index seed on its body statements is a TIE
+    /// (the structural rule accepts another family for it too: a fork, a
+    /// sponge carrying the module verbatim, generated code many packages
+    /// ship) and none of them is evidence only one family gives, the
+    /// module's package is unknowable from its code: its seeds are dropped
+    /// and its body statements are claimed by no one ([`factory_ties`]).
+    /// One untied seed, or a declared or banner seed, keeps the module as it
+    /// is.
+    pub factory_tie_fence: bool,
+    /// The factory whole-print floor (exp132; default off; reads cut
+    /// factories): a package names a bundled CommonJS module's statements
+    /// only when at least one of its index seeds in that module is a WHOLE
+    /// statement its family's index holds (or it has a declared or banner
+    /// seed there). Seeds from function prints alone (a shared helper, an
+    /// inlined copy's inner functions, version drift) are no evidence of the
+    /// module's file: they are dropped, and a module left with no seed is
+    /// claimed by no one ([`factory_whole`]).
+    pub factory_whole_seed: bool,
+    /// The factory banner check (exp132; default off; reads cut factories):
+    /// a `/*!` banner seed on a body statement of a bundled CommonJS module
+    /// is refused when another family's index prints cover more of that
+    /// statement than the banner family's ([`Containment::outweighed`]: a
+    /// banner kept from another file, or one ahead of the next module's
+    /// wrapper): the statement's own code outweighs a comment next to it
+    /// ([`factory_banners`]).
+    pub factory_banner_index: bool,
 }
 
 impl Default for DiscoveryOptions {
@@ -329,6 +357,9 @@ impl Default for DiscoveryOptions {
             copy_presence_origin: false,
             copy_presence_own: 0.0,
             factory_bodies: false,
+            factory_tie_fence: false,
+            factory_whole_seed: false,
+            factory_banner_index: false,
         }
     }
 }
@@ -1175,6 +1206,26 @@ impl<'c> Containment<'c> {
         })
     }
 
+    /// Does `package`'s family hold unit `u`'s WHOLE print (at or over the
+    /// row floor, in a module the lookup's specificity rule reads; however
+    /// many other packages hold it too)?
+    fn whole_held(&self, u: u32, package: &str) -> bool {
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return false;
+        };
+        use crate::matching::store::ReferenceStore;
+        let query = self.module_bytes[u as usize];
+        prints.whole.nodes >= UNIT_ROW_MIN_NODES
+            && self.index.candidates(&prints.whole.hash).iter().any(|h| {
+                self.owner_is(h.owner, package)
+                    && self
+                        .rules
+                        .specificity
+                        .is_none_or(|(f, slack)| h.module_bytes <= f * query + slack)
+            })
+    }
+
     /// Does the index contradict unit `u` being `package`'s? (type doc)
     fn contradicts(&self, u: u32, package: &str) -> bool {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
@@ -1685,7 +1736,13 @@ fn presence(
     families: &PackageFamilies,
     options: DiscoveryOptions,
 ) -> Vec<Seed> {
-    if options.context_presence <= 0.0 && !options.shadow_ties && options.copy_presence <= 0.0 {
+    if options.context_presence <= 0.0
+        && !options.shadow_ties
+        && options.copy_presence <= 0.0
+        && !options.factory_tie_fence
+        && !options.factory_whole_seed
+        && !options.factory_banner_index
+    {
         return seeds;
     }
     // A family key per package: one family judgement joins packages.
@@ -1698,6 +1755,11 @@ fn presence(
                 reps.len() - 1
             }
         }
+    };
+    let seeds = if options.factory_banner_index {
+        factory_banners(seeds, graph, containment)
+    } else {
+        seeds
     };
     let mut keys: Vec<usize> = seeds.iter().map(|s| key_of(&s.package)).collect();
     let declared: BTreeSet<usize> = seeds
@@ -1750,7 +1812,21 @@ fn presence(
     if options.shadow_ties {
         shadow_ties(&mut keep, &keys, &declared, graph, containment, &mut key_of);
     }
+    let mut fenced: Vec<u32> = Vec::new();
+    if options.factory_tie_fence {
+        factory_ties(&mut keep, graph, containment, &mut fenced);
+    }
+    if options.factory_whole_seed {
+        factory_whole(&mut keep, &keys, graph, containment, &mut fenced);
+    }
     let mut out: Vec<Seed> = keep.into_iter().flatten().collect();
+    out.extend(fenced.into_iter().map(|unit| Seed {
+        unit,
+        package: FENCE.to_string(),
+        evidence: Evidence::Declared {
+            reader: FENCE.to_string(),
+        },
+    }));
     if options.presence_fence {
         let kept: BTreeSet<u32> = out.iter().map(|s| s.unit).collect();
         let all: BTreeSet<u32> = before.into_iter().chain(dropped_units).collect();
@@ -1908,6 +1984,132 @@ fn shadow_ties(
             }
         }
     }
+}
+
+/// [`DiscoveryOptions::factory_tie_fence`] over the kept seeds (see
+/// [`presence`]): per cut factory, its seeds when every one is an index seed
+/// the structural rule accepts for two or more families are dropped, and
+/// every body statement of the factory goes to `fenced` (claimed by no one).
+fn factory_ties(
+    keep: &mut [Option<Seed>],
+    graph: &ReferenceGraph,
+    containment: &Containment<'_>,
+    fenced: &mut Vec<u32>,
+) {
+    let module_of = |u: u32| match graph.units[u as usize].kind {
+        UnitKind::FactoryBody { module } => Some(module),
+        _ => None,
+    };
+    // per factory: (has an untied seed, has a tied seed)
+    let mut verdict: BTreeMap<u32, (bool, bool)> = BTreeMap::new();
+    for s in keep.iter().flatten() {
+        let Some(m) = module_of(s.unit) else {
+            continue;
+        };
+        let tied = s.evidence.is_index() && containment.families_accepting(s.unit) > 1;
+        let v = verdict.entry(m).or_default();
+        if tied {
+            v.1 = true;
+        } else {
+            v.0 = true;
+        }
+    }
+    let gone: BTreeSet<u32> = verdict
+        .into_iter()
+        .filter(|(_, (untied, tied))| *tied && !*untied)
+        .map(|(m, _)| m)
+        .collect();
+    if gone.is_empty() {
+        return;
+    }
+    for slot in keep.iter_mut() {
+        if slot
+            .as_ref()
+            .is_some_and(|s| module_of(s.unit).is_some_and(|m| gone.contains(&m)))
+        {
+            *slot = None;
+        }
+    }
+    fenced.extend(
+        (0..graph.units.len() as u32).filter(|&u| module_of(u).is_some_and(|m| gone.contains(&m))),
+    );
+}
+
+/// [`DiscoveryOptions::factory_banner_index`]: `seeds` without the banner
+/// seeds on cut-factory body statements another family's prints cover more
+/// of.
+fn factory_banners(
+    seeds: Vec<Seed>,
+    graph: &ReferenceGraph,
+    containment: &Containment<'_>,
+) -> Vec<Seed> {
+    seeds
+        .into_iter()
+        .filter(|s| {
+            if s.evidence != Evidence::Banner
+                || !matches!(
+                    graph.units[s.unit as usize].kind,
+                    UnitKind::FactoryBody { .. }
+                )
+            {
+                return true;
+            }
+            !containment.outweighed(s.unit, &s.package)
+        })
+        .collect()
+}
+
+/// [`DiscoveryOptions::factory_whole_seed`] over the kept seeds (see
+/// [`presence`]): per cut factory and package family, the family's seeds
+/// there are kept only when one of them is a declared or banner seed or an
+/// index seed whose whole print the family holds; every other body statement
+/// of a factory that lost seeds goes to `fenced`.
+fn factory_whole(
+    keep: &mut [Option<Seed>],
+    keys: &[usize],
+    graph: &ReferenceGraph,
+    containment: &Containment<'_>,
+    fenced: &mut Vec<u32>,
+) {
+    let module_of = |u: u32| match graph.units[u as usize].kind {
+        UnitKind::FactoryBody { module } => Some(module),
+        _ => None,
+    };
+    let mut backed: BTreeSet<(u32, usize)> = BTreeSet::new();
+    for (s, &k) in keep.iter().zip(keys) {
+        let Some(s) = s else {
+            continue;
+        };
+        let Some(m) = module_of(s.unit) else {
+            continue;
+        };
+        if !s.evidence.is_index() || containment.whole_held(s.unit, &s.package) {
+            backed.insert((m, k));
+        }
+    }
+    let mut lost: BTreeSet<u32> = BTreeSet::new();
+    let mut kept: BTreeSet<u32> = BTreeSet::new();
+    for (slot, &k) in keep.iter_mut().zip(keys) {
+        let Some((m, u)) = slot
+            .as_ref()
+            .and_then(|s| Some((module_of(s.unit)?, s.unit)))
+        else {
+            continue;
+        };
+        if backed.contains(&(m, k)) {
+            kept.insert(u);
+        } else {
+            *slot = None;
+            lost.insert(m);
+        }
+    }
+    // the dropped package must not take the module back through propagation
+    // (a caller's `require_x()` reaches every body statement): every body
+    // statement of a module that lost seeds and kept none of its own is fenced
+    fenced.extend(
+        (0..graph.units.len() as u32)
+            .filter(|&u| module_of(u).is_some_and(|m| lost.contains(&m)) && !kept.contains(&u)),
+    );
 }
 
 /// One seed per unit: a declaration or banner beats an index claim; among
