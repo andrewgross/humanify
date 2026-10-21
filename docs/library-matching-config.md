@@ -170,6 +170,8 @@ copy_presence = 0.1            # exp121, ON since 2026-10-16 ("v2", clean on 19 
 copy_presence_factor = 4       #   smaller-context origin (share >= copy_presence, origin's module <= 1/factor)
 copy_presence_origin = true    #   is no seed; _origin gives the copy seeds to that origin; _own = share of
 copy_presence_own = 0.1        #   seed bytes non-copy seeds need to vouch (experiments/121-sponge-rule)
+copy_presence_context = 0.0    # exp134, default off: a copy share under copy_presence (down to this) still makes a copy
+                               #   seed when the package holds the code only in modules >= the bundle's (134-carrier-ownership)
 factory_bodies = true          # ON since 2026-10-21; exp128: cut each bundled CommonJS module into its body statements
                                #   (judged and propagated as lazy-module bodies; experiments/128-cjs-scope)
 factory_tie_fence = true       # ON since 2026-10-21; exp132: a cut factory whose every index seed is a cross-family

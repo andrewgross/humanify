@@ -294,6 +294,18 @@ pub struct DiscoveryOptions {
     /// (its own seeds stay). A sponge's one stray seed on its own code
     /// does not vouch for megabytes of inlined dependencies.
     pub copy_presence_own: f64,
+    /// The context copy share (exp134; 0 = off; read with
+    /// [`Self::copy_presence`]): an index seed of P whose copy share is
+    /// under `copy_presence` but at or over this one is a copy seed too when
+    /// P's index holds the unit's prints only in modules at least as big as
+    /// the bundle module the unit sits in. A carrier's dist can inline a
+    /// dependency it then extends (its rows hold functions the origin's
+    /// indexed builds lack), so the share the origin co-holds is thin; the
+    /// bundle showing the code in a module smaller than any of P's says the
+    /// bundle did not take it from P's file. A package holding the code in a
+    /// module no bigger than the bundle's (its own file, perhaps tree-shaken)
+    /// keeps a thin share as its own.
+    pub copy_presence_context: f64,
     /// Cut bundled CommonJS modules into their body statements (exp128;
     /// default off): each statement of a factory body is a unit with its
     /// own prints, judged and propagated as a lazy module's body is, the
@@ -356,6 +368,7 @@ impl Default for DiscoveryOptions {
             copy_presence_factor: 0,
             copy_presence_origin: false,
             copy_presence_own: 0.0,
+            copy_presence_context: 0.0,
             factory_bodies: false,
             factory_tie_fence: false,
             factory_whole_seed: false,
@@ -1120,9 +1133,10 @@ impl<'c> Containment<'c> {
     /// prints, at the row floor), the largest share of those nodes ONE other
     /// family holds in an index module at most 1/`factor` of the package's
     /// smallest module for the same print, with that family's owner holding
-    /// the code in the smallest module (the origin). None when the package
-    /// covers nothing.
-    fn copy_share(&self, u: u32, package: &str, factor: u64) -> Option<(f64, Option<u32>)> {
+    /// the code in the smallest module (the origin), and the package's own
+    /// smallest module over those prints. None when the package covers
+    /// nothing.
+    fn copy_share(&self, u: u32, package: &str, factor: u64) -> Option<(f64, Option<u32>, u64)> {
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         use crate::matching::store::ReferenceStore;
         let Some(Some(prints)) = self.prints.get(u as usize) else {
@@ -1207,9 +1221,10 @@ impl<'c> Containment<'c> {
             .values()
             .max_by_key(|(n, m)| (*n, std::cmp::Reverse(*m)))
             .copied();
+        let tightest = covering.iter().map(|(_, m)| *m).min().unwrap_or(u64::MAX);
         Some(match best {
-            Some((n, (_, owner))) => (n as f64 / cover as f64, Some(owner)),
-            None => (0.0, None),
+            Some((n, (_, owner))) => (n as f64 / cover as f64, Some(owner), tightest),
+            None => (0.0, None, tightest),
         })
     }
 
@@ -1902,8 +1917,17 @@ fn copy_presence(
         let bytes = u64::from(graph.units[s.unit as usize].bytes);
         *total.entry(s.package.clone()).or_default() += bytes;
         match containment.copy_share(s.unit, &s.package, options.copy_presence_factor) {
-            Some((share, owner)) if share >= options.copy_presence => {
+            Some((share, owner, _)) if share >= options.copy_presence => {
                 copies.insert(i, owner);
+            }
+            // exp134: a thin copy, when the package holds the code only in
+            // modules at least as big as the one the bundle shows it in
+            Some((share, Some(owner), tightest))
+                if options.copy_presence_context > 0.0
+                    && share >= options.copy_presence_context
+                    && tightest >= containment.module_bytes[s.unit as usize] =>
+            {
+                copies.insert(i, Some(owner));
             }
             _ => *own.entry(s.package.clone()).or_default() += bytes,
         }

@@ -1529,6 +1529,53 @@ fn copy_presence_own_needs_a_share_of_the_package_s_seed_bytes_to_vouch_for_it()
     assert_eq!(claim_of(&rows, "var lib"), None);
 }
 
+#[test]
+fn copy_presence_context_counts_a_thin_copy_the_carrier_holds_only_in_bigger_modules() {
+    // exp134: S (a carrier) holds both of lib's inner functions in a
+    // 4,000-byte module; Q holds one of them in a 500-byte module of its own.
+    // Under a high copy_presence share (0.9) that is no copy seed, and S
+    // keeps lib. With copy_presence_context = 0.1, a thinner share counts
+    // as a copy when S holds the code only in modules at least as big as the
+    // one the bundle shows it in (lib is a bare statement of a few hundred
+    // bytes): the bundle did not take it from S's file. S has no code of its
+    // own here, lib goes to Q.
+    let held = [
+        Held::inner("var lib", "function (x)", "S", 4000),
+        Held::inner("var lib", "function (y)", "S", 4000),
+        Held::inner("var lib", "function (x)", "Q", 500),
+    ];
+    let high = DiscoveryOptions {
+        copy_presence: 0.9,
+        copy_presence_factor: 4,
+        copy_presence_origin: true,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], high);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    let context = DiscoveryOptions {
+        copy_presence_context: 0.1,
+        ..high
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], context);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("Q".into(), Rule::Seed)));
+    // S holds the code in a module smaller than the bundle's (its own file,
+    // tree-shaken or not): a thin share says nothing, S keeps lib.
+    let own_file = [
+        Held::inner("var lib", "function (x)", "S", 200),
+        Held::inner("var lib", "function (y)", "S", 200),
+        Held::inner("var lib", "function (x)", "Q", 40),
+    ];
+    let (_, _, rows) = run_indexed_with(COPIED, &own_file, vec![], context);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+    // Under the thin floor too: nothing changes.
+    let thinner = DiscoveryOptions {
+        copy_presence_context: 0.9,
+        ..context
+    };
+    let (_, _, rows) = run_indexed_with(COPIED, &held, vec![], thinner);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("S".into(), Rule::Seed)));
+}
+
 /// lib with three inner functions, a, b and c, of about a third each.
 const COPIED3: &str = "var lib = function (t) { var a = function (x) { return x.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, x.length); }; var b = function (y) { return [y, y + 1, y * 2, y % 7, String(y), y.toFixed(2), y.toString(16)].join(\",\"); }; var c = function (z) { return [z, z - 3, z / 2, z % 5, String(z), z.toFixed(4), z.toString(2)].join(\";\"); }; return tiny(a(t) + b(t.length) + c(1)); };\nvar tiny = (x) => x + 1;\nvar app = () => lib(\"a\");\n";
 

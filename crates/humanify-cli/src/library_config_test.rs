@@ -366,6 +366,19 @@ fn the_exp121_copy_presence_keys_default_to_v2_and_set_from_the_file() {
     assert_eq!(o.copy_presence_own, 0.0);
 }
 
+/// exp134's present-origin copy share: off by default, set from the file.
+#[test]
+fn the_exp134_copy_presence_context_key_defaults_off_and_sets_from_the_file() {
+    let d = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(d.copy_presence_context, 0.0);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\ncopy_presence_context = 0.02\n",
+    )
+    .unwrap();
+    assert_eq!(on.library.discovery_options().copy_presence_context, 0.02);
+}
+
 /// exp112's declared cap: 65536 by default since exp117, 0 turns it off.
 #[test]
 fn the_exp112_declared_cap_turns_off() {

@@ -835,6 +835,18 @@ pub static KEYS: &[Key] = &[
     },
     Key {
         section: "library.discovery",
+        name: "copy_presence_context",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().copy_presence_context),
+        unset: "",
+        doc: "For copy_presence, a lower copy share at which an index seed is a copy seed too when \
+              its package holds the unit's prints only in index modules at least as big as the \
+              bundle module the unit sits in: a carrier that extends the dependency it inlines \
+              shares little with the origin's builds (exp134; 0 = off).",
+    },
+    Key {
+        section: "library.discovery",
         name: "factory_bodies",
         kind: Kind::Bool,
         flag: None,
