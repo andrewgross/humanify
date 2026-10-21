@@ -1,0 +1,195 @@
+diff --git a/crates/humanify-cli/src/config.rs b/crates/humanify-cli/src/config.rs
+index 3f1f1c412..508c0a786 100644
+--- a/crates/humanify-cli/src/config.rs
++++ b/crates/humanify-cli/src/config.rs
+@@ -312,6 +312,7 @@ impl Library {
+             literal_margin: l.literal_margin,
+             literal_margin_by_family: l.literal_margin_by_family,
+             max_packages_by_family: l.max_packages_by_family,
++            tie_by_context: l.tie_by_context,
+         }
+     }
+ 
+@@ -412,6 +413,7 @@ pub struct LibraryLookup {
+     pub literal_margin: f64,
+     pub literal_margin_by_family: bool,
+     pub max_packages_by_family: bool,
++    pub tie_by_context: bool,
+     #[serde(serialize_with = "serialize_terser_slices")]
+     pub terser_slices: humanify_core::libindex::recipe::TerserSlices,
+     pub targeted_min_nodes: u32,
+@@ -622,6 +624,7 @@ fn library_of(r: &Resolved) -> Library {
+             literal_margin: r.float("library.lookup.literal_margin"),
+             literal_margin_by_family: r.flag_on("library.lookup.literal_margin_by_family"),
+             max_packages_by_family: r.flag_on("library.lookup.max_packages_by_family"),
++            tie_by_context: r.flag_on("library.lookup.tie_by_context"),
+             terser_slices: r
+                 .text("library.lookup.terser_slices")
+                 .as_deref()
+diff --git a/crates/humanify-cli/src/config/keys.rs b/crates/humanify-cli/src/config/keys.rs
+index 81684cd40..cc08a52e6 100644
+--- a/crates/humanify-cli/src/config/keys.rs
++++ b/crates/humanify-cli/src/config/keys.rs
+@@ -573,6 +573,18 @@ pub static KEYS: &[Key] = &[
+               a scope's members or a fork and its origin are one identity, and a bigger \
+               index's carriers of the same code no longer make it too common (exp125).",
+     },
++    Key {
++        section: "library.lookup",
++        name: "tie_by_context",
++        kind: Kind::Bool,
++        flag: None,
++        default: || Some(Val::Bool(rules().tie_by_context)),
++        unset: "",
++        doc: "Break a structural tie no previous claim settles by the smallest index module \
++              each tied package holds the unit's prints in, then by name: the origin of \
++              inlined code is the smaller context, not the scoped carrier that sorts first \
++              (exp133).",
++    },
+     Key {
+         section: "library.lookup",
+         name: "terser_slices",
+diff --git a/crates/humanify-core/src/libindex/lookup.rs b/crates/humanify-core/src/libindex/lookup.rs
+index 90e7f0a8f..07a0bd789 100644
+--- a/crates/humanify-core/src/libindex/lookup.rs
++++ b/crates/humanify-core/src/libindex/lookup.rs
+@@ -496,10 +496,50 @@ impl LibraryIndex {
+             .map(|(k, _)| *k)
+             .collect();
+         tied.sort_by(|a, b| self.packages[*a as usize].cmp(&self.packages[*b as usize]));
++        if rules.tie_by_context && tied.len() > 1 && !previous.is_some_and(|p| tied.contains(&p)) {
++            // the name-order pick yields only to an owner holding the prints
++            // in a DECISIVELY smaller module (the specificity bound: the
++            // name-order pick's module is over 4x + 4096 bytes of it)
++            let first = self.tie_context(q, rules, tied[0]);
++            let (c, at) = tied
++                .iter()
++                .map(|&o| (o, self.tie_context(q, rules, o)))
++                .min_by_key(|&(_, at)| at)
++                .expect("tied is non-empty");
++            if at.saturating_mul(4).saturating_add(4096) < first {
++                tied.retain(|&o| o != c);
++                tied.insert(0, c);
++            }
++        }
+         let p = previous.filter(|p| tied.contains(p)).unwrap_or(tied[0]);
+         (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1))).then_some((p, best))
+     }
+ 
++    /// [`LookupRules::tie_by_context`]: the smallest index module in which
++    /// `owner` holds one of the unit's usable prints (the whole print when
++    /// it holds that, else any function print), within specificity. The
++    /// origin of shared code is the smaller context: a package whose dist
++    /// inlines a dependency holds the dependency's code inside its own,
++    /// bigger module.
++    fn tie_context(&self, q: &UnitQuery<'_>, rules: &LookupRules, owner: u32) -> u64 {
++        let within = |h: &UnitHit| {
++            h.owner == owner
++                && rules
++                    .specificity
++                    .is_none_or(|(factor, slack)| h.module_bytes <= factor * q.module_bytes + slack)
++        };
++        let smallest = |hash: &str| {
++            ReferenceStore::candidates(self, hash)
++                .iter()
++                .filter(|h| within(h))
++                .map(|h| h.module_bytes)
++                .min()
++        };
++        smallest(&q.prints.whole.hash)
++            .or_else(|| q.prints.functions.iter().filter_map(|f| smallest(&f.hash)).min())
++            .unwrap_or(u64::MAX)
++    }
++
+     /// Every package the structural rule would accept for `q` on its own
+     /// (its covered nodes reach the cover), tie or not: the index's
+     /// ambiguity about the unit.
+@@ -646,6 +686,14 @@ pub struct LookupRules {
+     /// its origin are one identity, and a bigger index adds carriers of the
+     /// same code until a print every one of them holds says nothing.
+     pub max_packages_by_family: bool,
++    /// Break a structural tie with no previous claim among the tied by
++    /// context (exp133; default off): the name-order pick yields to the
++    /// tied package holding the unit's prints in the smallest index module
++    /// when that module is decisively smaller (the pick's is over 4x +
++    /// 4096 bytes of it, the specificity bound). The origin of inlined
++    /// code is the smaller context, and by name alone a scoped carrier
++    /// (`@x/y`) sorts before every unscoped origin.
++    pub tie_by_context: bool,
+ }
+ 
+ impl Default for LookupRules {
+@@ -666,6 +714,7 @@ impl Default for LookupRules {
+             literal_margin: 10.0,
+             literal_margin_by_family: false,
+             max_packages_by_family: false,
++            tie_by_context: false,
+         }
+     }
+ }
+diff --git a/crates/humanify-core/src/libindex/lookup_test.rs b/crates/humanify-core/src/libindex/lookup_test.rs
+index 6bec259b1..e276206f7 100644
+--- a/crates/humanify-core/src/libindex/lookup_test.rs
++++ b/crates/humanify-core/src/libindex/lookup_test.rs
+@@ -629,3 +629,36 @@ fn the_loader_reads_the_helper_table_when_the_index_has_one() {
+     assert_eq!(rows.helper_owners(&hx("h")), ["@babel/runtime".to_string()]);
+     std::fs::remove_dir_all(&dir).ok();
+ }
++
++#[test]
++fn a_tie_goes_to_the_owner_holding_the_code_in_the_smallest_module_with_tie_by_context() {
++    // exp133: a bigger index adds sponges (a package whose dist inlines a
++    // dependency). A whole print both hold is a tie; by name the scoped
++    // sponge sorts first and wins. The origin holds the code in its OWN,
++    // smaller module; the sponge only inside its bigger dist.
++    let index = LibraryIndex::from_rows(
++        vec![
++            row("ajv", "@sponge/mcp", 150, 8000),
++            row("ajv", "ajv", 150, 900),
++        ],
++        vec![],
++    );
++    let q = [whole("ajv", 150)];
++    assert_eq!(
++        claims(&index, &q, structural()),
++        vec![(0, "@sponge/mcp".into())]
++    );
++    let by_context = LookupRules {
++        tie_by_context: true,
++        ..structural()
++    };
++    assert_eq!(claims(&index, &q, by_context), vec![(0, "ajv".into())]);
++    let close = LibraryIndex::from_rows(
++        vec![
++            row("ajv", "@sponge/mcp", 150, 6000),
++            row("ajv", "ajv", 150, 900),
++        ],
++        vec![],
++    );
++    assert_eq!(claims(&close, &q, by_context), vec![(0, "@sponge/mcp".into())]);
++}
+diff --git a/docs/library-matching-config.md b/docs/library-matching-config.md
+index fce6e3bcc..225560eac 100644
+--- a/docs/library-matching-config.md
++++ b/docs/library-matching-config.md
+@@ -138,6 +138,7 @@ literal_cover = 0.9
+ literal_margin = 10.0
+ literal_margin_by_family = true    # exp106 (agreement rule only)
+ max_packages_by_family = false     # exp125: count a print's owners by FAMILY against max_packages
++tie_by_context = false             # exp133: a structural tie no previous claim settles goes to the smallest module, then name
+ terser_slices = "off"          # exp127: also read the terser-built slices (webpack, rollup): "union", "fallback",
+ terser_share = 0.2             #   or "auto" (union for a bundle the terser slices alone hold >= terser_share of)
+ 
+diff --git a/humanify.example.toml b/humanify.example.toml
+index 3aa142d7e..193a09373 100644
+--- a/humanify.example.toml
++++ b/humanify.example.toml
+@@ -112,6 +112,8 @@ literal_margin = 10.0
+ literal_margin_by_family = true
+ # Count a print's owners by package family, not package, against max_packages: a scope's members or a fork and its origin are one identity, and a bigger index's carriers of the same code no longer make it too common (exp125).
+ max_packages_by_family = false
++# Break a structural tie no previous claim settles by the smallest index module each tied package holds the unit's prints in, then by name: the origin of inlined code is the smaller context, not the scoped carrier that sorts first (exp133).
++tie_by_context = false
+ # Also read the index's terser-built slices (webpack, rollup) beside the bundle's own: "off", "union" (every print) or "fallback" (a print the bundle's slice does not hold) or "auto" (union for a bundle the terser slices alone hold `terser_share` of) — terser-minified code matches terser rows (exp127).
+ terser_slices = "off"
+ # terser_slices = "auto": the share of the bundle's looked-up whole-unit nodes the terser-built slices alone must hold for the bundle to read them (exp127).
