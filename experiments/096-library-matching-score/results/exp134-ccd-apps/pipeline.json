@@ -1,0 +1,13 @@
+{
+ "binarySha256": "c59f974b664f8254b8c73bbb95e4f37230b106d2871b2613a207ab57a4bb150e",
+ "buildCommit": "66f13e1432c0f9f073c3738eec651834502aa0fe",
+ "corpus": "apps",
+ "corpusSha256": "98b06b6770a0a73eb0fea4afd294511d4d4fa5e60cfaafe0a55b35ff3ef23e6f",
+ "indexBytes": 13009752113,
+ "indexId": "267ee4a55f74f19d44d4472ecd82dd15975091b7ffb09d317e77fb6f38e7366a",
+ "instrument": "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml",
+ "rule": "structural",
+ "settings": [
+  "library.discovery.copy_presence_context=0.02"
+ ]
+}
