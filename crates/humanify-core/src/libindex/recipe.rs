@@ -117,6 +117,11 @@ pub struct Recipe {
     pub target: Target,
     pub format: Format,
     pub minify: bool,
+    /// `process.env.NODE_ENV` defined as "production" at build time, as app
+    /// bundles are built (exp135: Bun inlines it as "development" when it is
+    /// left undefined, so react's index.js bundles react.development.js).
+    /// Bun and esbuild only (their command line); the same slice as without.
+    pub production: bool,
 }
 
 impl Recipe {
@@ -125,12 +130,12 @@ impl Recipe {
     pub fn parse(text: &str) -> Result<Recipe, String> {
         let bad = |why: &str| {
             format!(
-                "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify])"
+                "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])"
             )
         };
         let (bundler, rest) = text.split_once(':').ok_or_else(|| bad("no `:`"))?;
         let bundler = RecipeBundler::from_name(bundler).ok_or_else(|| bad("unknown bundler"))?;
-        let (mut target, mut format, mut minify) = (None, None, false);
+        let (mut target, mut format, mut minify, mut production) = (None, None, false, false);
         for part in rest.split(',').map(str::trim) {
             match part.split_once('=') {
                 Some(("target", "bun")) => target = Some(Target::Bun),
@@ -138,6 +143,7 @@ impl Recipe {
                 Some(("format", "cjs")) => format = Some(Format::Cjs),
                 Some(("format", "esm")) => format = Some(Format::Esm),
                 None if part == "minify" => minify = true,
+                None if part == "production" => production = true,
                 _ => return Err(bad(&format!("unknown setting {part:?}"))),
             }
         }
@@ -146,7 +152,14 @@ impl Recipe {
             target: target.ok_or_else(|| bad("no target"))?,
             format: format.ok_or_else(|| bad("no format"))?,
             minify,
+            production,
         };
+        if production && !matches!(recipe.bundler, RecipeBundler::Bun | RecipeBundler::Esbuild) {
+            return Err(bad(&format!(
+                "{}'s recipe script decides NODE_ENV (production is a Bun / esbuild setting)",
+                recipe.bundler.name()
+            )));
+        }
         if recipe.bundler != RecipeBundler::Bun && recipe.target == Target::Bun {
             return Err(bad(&format!(
                 "{} has no bun platform",
@@ -159,11 +172,12 @@ impl Recipe {
     /// The spelling [`Recipe::parse`] reads back.
     pub fn spelling(&self) -> String {
         format!(
-            "{}:target={},format={}{}",
+            "{}:target={},format={}{}{}",
             self.bundler.name(),
             self.target.name(),
             self.format.name(),
-            if self.minify { ",minify" } else { "" }
+            if self.minify { ",minify" } else { "" },
+            if self.production { ",production" } else { "" }
         )
     }
 

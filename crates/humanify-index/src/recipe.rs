@@ -63,6 +63,10 @@ pub fn is_sponge_file(path: &str) -> bool {
         .any(|t| name.contains(t))
 }
 
+/// What a `production` recipe defines (as app bundles do; webpack's recipe
+/// script always does).
+const NODE_ENV_PRODUCTION: &str = "process.env.NODE_ENV=\"production\"";
+
 /// `<bundler> --version` answers in milliseconds.
 const VERSION_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
 /// One minified build of one package entry (seconds; generous for the
@@ -137,6 +141,9 @@ impl RecipeBuild {
                     // straight into out_dir: the map's source paths are
                     // relative to the directory Bun wrote it in
                     .arg(out_dir);
+                if self.recipe.production {
+                    cmd.args(["--define", NODE_ENV_PRODUCTION]);
+                }
                 for x in externals {
                     cmd.args(["--external", x]);
                 }
@@ -154,6 +161,9 @@ impl RecipeBuild {
                 }
                 cmd.args(["--sourcemap=external", "--sources-content=false"])
                     .arg(format!("--outfile={}", out_dir.join("out.js").display()));
+                if self.recipe.production {
+                    cmd.arg(format!("--define:{NODE_ENV_PRODUCTION}"));
+                }
                 for x in externals {
                     cmd.arg(format!("--external:{x}"));
                 }

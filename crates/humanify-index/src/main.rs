@@ -60,8 +60,11 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
         /// A build recipe = one index slice (repeatable, at least one; no
-        /// default): `<bun|esbuild>:target=<bun|node>,format=<cjs|esm>[,minify]`,
-        /// e.g. `bun:target=bun,format=cjs,minify`. The first recipe of a
+        /// default):
+        /// `<bun|esbuild>:target=<bun|node>,format=<cjs|esm>[,minify][,production]`
+        /// (`production`: process.env.NODE_ENV defined as "production", as
+        /// app bundles are built; Bun and esbuild only), e.g.
+        /// `bun:target=bun,format=cjs,minify`. The first recipe of a
         /// bundler is its default slice (for bundles that do not record
         /// their target).
         #[arg(long = "recipe", required = true)]
