@@ -34,7 +34,7 @@
  "noDiscovery": "the esbuild adapter unpacked no bundled module (the one-file floor): no discovery ran",
  "reportSha256": "a30d33f8e81c05001df130239236ee0af3d0aa19407688d42118a5c17b1c6a0b",
  "rule": "agreement",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,

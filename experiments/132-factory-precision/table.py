@@ -16,7 +16,26 @@ def t(r):
     return f"{100 * r['precision']:.2f} / {100 * r['recall']:.2f} / {100 * r['f05']:.2f}"
 
 
+def tradeoff(quads):
+    """base:fb:cand:variant -> P / F0.5 of each, the variant's bar verdict."""
+    print("| set | base P / F0.5 | factory_bodies | candidate | + factory_whole_seed | bar (cand / +whole) |")
+    print("|---|--:|--:|--:|--:|---|")
+    for quad in quads:
+        sets = [json.load(open(os.path.join(RESULTS, x, "summary.json")))["sets"] for x in quad.split(":")]
+        for name, ra in sets[0].items():
+            rows = [s[name] for s in sets]
+            if all(r["precision"] == ra["precision"] and r["f05"] == ra["f05"] for r in rows):
+                continue
+
+            def bar(r):
+                return "PASS" if r["precision"] >= ra["precision"] and r["f05"] >= ra["f05"] else "FAIL"
+            print(f"| {name} | " + " | ".join(f"{100 * r['precision']:.3f} / {100 * r['f05']:.2f}" for r in rows)
+                  + f" | {bar(rows[2])} / {bar(rows[3])} |")
+
+
 def main():
+    if sys.argv[1:2] == ["--tradeoff"]:
+        return tradeoff(sys.argv[2:])
     print("| set | base P / R / F0.5 | factory_bodies P / R / F0.5 | candidate P / R / F0.5 | factory-scope P "
           "(fb -> cand) | bar |")
     print("|---|--:|--:|--:|--:|---|")

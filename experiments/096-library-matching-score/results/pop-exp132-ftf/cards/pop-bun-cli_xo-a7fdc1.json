@@ -1,0 +1,174 @@
+{
+ "bundleSha256": "2e3ef95adbaaa2e192f045ef232196921d886ba18e4e50375896a39287074f56",
+ "claimedBytes": {
+  "family": 36580,
+  "origin": 44454,
+  "right": 11671901,
+  "unmapped": 50117,
+  "wrongFamily": 105176
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-cli_xo-a7fdc1",
+ "exploratory": {
+  "names": {
+   "bindings": 133948,
+   "bindingsSameVersion": 119272,
+   "bindingsVersionKnown": 133948,
+   "exactBytes": 10422444,
+   "exactUnits": 14228,
+   "sameVersionShare": 0.890435
+  }
+ },
+ "indexId": "c5fe9a7403c05c4c7ed2ca0fce09a1d7802089c80a769eb61e37b54fd8d73fa3",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.872055,
+  "f1": 0.738726,
+  "namedBytes": 10421593,
+  "precision": 0.991336,
+  "recall": 0.588712
+ },
+ "label": "pop-exp132-ftf",
+ "missBytes": {
+  "a": 4800,
+  "b": 162925,
+  "c": 270458,
+  "d-absent": 172700,
+  "d-file": 770756,
+  "d-variant": 23237,
+  "e-ambig": 153645,
+  "e-other": 3728498,
+  "e-spec": 382436,
+  "e-support": 7506,
+  "e-veto": 171196,
+  "f": 101284
+ },
+ "noDiscovery": null,
+ "reportSha256": "31d6e8baf941e9ed8b7cb63cdc770b1ec58afce7a97e0f80145c2122269d75cb",
+ "rule": "structural",
+ "schema": "exp096-score/13",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 34444,
+    "origin": 921,
+    "right": 4997014,
+    "unmapped": 35358,
+    "wrongFamily": 2010
+   },
+   "copyBytes": 35939,
+   "f05": 0.851633,
+   "f05ShipperOnly": 0.851477,
+   "f1": 0.696894,
+   "f1ShipperOnly": 0.696767,
+   "libraryBytes": 9407912,
+   "missBytes": {
+    "b": 104315,
+    "c": 31095,
+    "d-absent": 172700,
+    "d-file": 179167,
+    "e-ambig": 45100,
+    "e-other": 3710488,
+    "e-support": 3824,
+    "e-veto": 125503,
+    "f": 3341
+   },
+   "namedAsOriginBytes": 921,
+   "namedBytes": 5032379,
+   "namedBytesShipperOnly": 5031458,
+   "precision": 0.999601,
+   "precisionShipperOnly": 0.999418,
+   "recall": 0.534909,
+   "recallShipperOnly": 0.534811,
+   "statementBytes": {
+    "<unmapped>": 998376,
+    "copy": 35939,
+    "library": 9407912
+   },
+   "wrongFamilyBytes": 2010,
+   "wrongFamilyBytesShipperOnly": 2931
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 2136,
+    "origin": 43533,
+    "right": 6674887,
+    "unmapped": 14759,
+    "wrongFamily": 103166
+   },
+   "copyBytes": 287364,
+   "f05": 0.944181,
+   "f05ShipperOnly": 0.938065,
+   "f1": 0.889069,
+   "f1ShipperOnly": 0.883311,
+   "libraryBytes": 8294464,
+   "missBytes": {
+    "a": 4800,
+    "b": 58610,
+    "c": 239363,
+    "d-file": 591589,
+    "d-variant": 23237,
+    "e-ambig": 108545,
+    "e-other": 18010,
+    "e-spec": 382436,
+    "e-support": 3682,
+    "e-veto": 45693,
+    "f": 97943
+   },
+   "namedAsOriginBytes": 43533,
+   "namedBytes": 6720556,
+   "namedBytesShipperOnly": 6677023,
+   "precision": 0.984881,
+   "precisionShipperOnly": 0.978502,
+   "recall": 0.810246,
+   "recallShipperOnly": 0.804998,
+   "statementBytes": {
+    "<self>": 20155,
+    "<unmapped>": 170464,
+    "copy": 287364,
+    "library": 8294464
+   },
+   "wrongFamilyBytes": 103166,
+   "wrongFamilyBytesShipperOnly": 146699
+  }
+ },
+ "set": "pop-bun",
+ "statementBytes": {
+  "<self>": 20155,
+  "<unmapped>": 1168840,
+  "copy": 323303,
+  "library": 17702376
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 323303,
+  "f05": 0.9022,
+  "f05ShipperOnly": 0.898788,
+  "f1": 0.795179,
+  "f1ShipperOnly": 0.792171,
+  "libraryBytes": 17702376,
+  "namedAsOriginBytes": 44454,
+  "namedAsShipperBytes": 11708481,
+  "namedBytes": 11752935,
+  "namedBytesShipperOnly": 11708481,
+  "precision": 0.99113,
+  "precisionShipperOnly": 0.987382,
+  "recall": 0.663919,
+  "recallShipperOnly": 0.661407,
+  "wrongFamilyBytes": 105176,
+  "wrongFamilyBytesShipperOnly": 149630
+ },
+ "truthMethod": "sourcemap"
+}

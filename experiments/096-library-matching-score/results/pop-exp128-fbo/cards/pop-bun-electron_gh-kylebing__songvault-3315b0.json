@@ -35,7 +35,7 @@
  "label": "pop-exp128-fbo",
  "missBytes": {
   "a": 86829,
-  "b": 73947,
+  "b": 56340,
   "c": 170856,
   "d-absent": 553,
   "d-file": 1077141,
@@ -43,12 +43,12 @@
   "e-other": 64917,
   "e-support": 2723,
   "e-veto": 1443928,
-  "f": 63425
+  "f": 81032
  },
  "noDiscovery": null,
  "reportSha256": "f890d83cb4c2131f3c0bb26db3708dea655efe1134ec97d1d88d66cd248f85f9",
  "rule": "structural",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -67,7 +67,7 @@
    "libraryBytes": 6991914,
    "missBytes": {
     "a": 86829,
-    "b": 73947,
+    "b": 56340,
     "c": 170842,
     "d-absent": 553,
     "d-file": 1076606,
@@ -75,7 +75,7 @@
     "e-other": 64917,
     "e-support": 2534,
     "e-veto": 1443928,
-    "f": 63425
+    "f": 81032
    },
    "namedAsOriginBytes": 10382,
    "namedBytes": 4007730,

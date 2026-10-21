@@ -40,16 +40,16 @@
   "c": 444090,
   "d-absent": 19164,
   "d-file": 314407,
-  "e-ambig": 12084,
+  "e-ambig": 11810,
   "e-other": 19798,
-  "e-support": 8369,
+  "e-support": 8643,
   "e-veto": 767403,
   "f": 36244
  },
  "noDiscovery": null,
  "reportSha256": "1f393f4b0d47a82ba7d8d09d280684566c456c0ac937052f270374bc066f3242",
  "rule": "structural",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -69,9 +69,9 @@
     "a": 24858,
     "c": 417287,
     "d-file": 248837,
-    "e-ambig": 9763,
+    "e-ambig": 9489,
     "e-other": 19488,
-    "e-support": 6655,
+    "e-support": 6929,
     "e-veto": 743026,
     "f": 21711
    },

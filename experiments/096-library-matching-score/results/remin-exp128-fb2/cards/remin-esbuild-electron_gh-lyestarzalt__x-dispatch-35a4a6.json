@@ -34,8 +34,8 @@
  "label": "remin-exp128-fb2",
  "missBytes": {
   "a": 179191,
-  "b": 1626870,
-  "c": 197595,
+  "b": 1626931,
+  "c": 197534,
   "d-absent": 1751554,
   "d-file": 464288,
   "d-variant": 14420,
@@ -48,7 +48,7 @@
  "noDiscovery": null,
  "reportSha256": "7d83a951da03fbd8faba9f9e76ba0af95aa4afb7afc8a6f93da6cf24c999c918",
  "rule": "structural",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -66,8 +66,8 @@
    "libraryBytes": 9074798,
    "missBytes": {
     "a": 114551,
-    "b": 1573323,
-    "c": 187675,
+    "b": 1573384,
+    "c": 187614,
     "d-absent": 1718754,
     "d-file": 346127,
     "d-variant": 14420,

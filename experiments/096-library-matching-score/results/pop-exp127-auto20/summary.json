@@ -20,6 +20,7 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 6936646078,
   "indexId": "5867457cef748680fb94a4a51aa8919af766b954b0b8aa48bfaf75d3a46b68a0",
+  "misattr13Sha256": "75c4c81fc9764b3624ded7d77a3cfb2e5e082118732681419bb21ec2357ad969",
   "origins10Sha256": "3577aec2e78d81dd11cd4ca22e8c3a399283c393ac0b897eee21c8d7d4c4e406",
   "origins12Sha256": "90952649d6724f7d890cab3f2c2f1082e3d966e824ec8f7255373f7f4cbff960",
   "origins7Sha256": "e1ef4764b0ad31ba9abb13160fe4d6ca4d86295d9e4ca6ff4106ff150c48db30",
@@ -31,12 +32,12 @@
   ]
  },
  "label": "pop-exp127-auto20",
- "schema": "exp096-score/12",
+ "schema": "exp096-score/13",
  "sets": {
   "pop-bun": {
    "appClaimedBytes": 0,
    "bundlerDetected": 45,
-   "copyBytes": 36153242,
+   "copyBytes": 36113333,
    "discoveryRan": 45,
    "entries": 45,
    "exploratoryNames": {
@@ -77,7 +78,7 @@
    "scopes": {
     "factory": {
      "appClaimedBytes": 0,
-     "copyBytes": 10166340,
+     "copyBytes": 10126431,
      "f05": 0.0,
      "f05ShipperOnly": 0.0,
      "f1": 0.0,
