@@ -13,7 +13,11 @@ DONE on branch `default-helpers-terser` (off main `869931920`).
     `the_exp138_helper_seed_defaults_on_and_turns_off` asserts that seed is the default, that it turns off from
     the file, and that `terser_slices` stays off.
   - `humanify.example.toml` was regenerated and `docs/library-matching-config.md` updated.
-  - Gate and warm neutrality results are in the commit message of the flip.
+  - Gate: all 13 stages passed, run bare at `1bedcd494`.
+  - Warm neutrality of `1bedcd494` against main `869931920` (pair 2.1.215 → 2.1.216, `--priors /work/exp050-cold
+--cache /work/neutrality-cache`, under `flock /work/neutrality.lock`, from a clean detached worktree): - default mode: **NEUTRAL, 0 files / 0 lines, cache +0 / +0, exit 0 / 0**; - report mode (`library.matching=report`, `library.index=k2-all-r5-origin-prod`): **NEUTRAL, 0 / 0, +0 / +0,
+    exit 0 / 0**. The only differing file is `.humanify/library-report.json`: 3 fewer index seeds, and 927 B
+    move from seed bytes to grown bytes.
 
 - **What was re-measured.** exp129 recommended flipping both keys together. It measured them under scorer 12 on
   k2-all-r5-origin-h, before `factory_bodies` (with its tie fence, banner index and whole seed) became the default
