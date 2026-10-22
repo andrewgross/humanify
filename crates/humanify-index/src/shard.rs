@@ -168,6 +168,10 @@ pub struct ShardNotes {
     /// Unit rows dropped for [`ShardNotes::sponge_unit_files`].
     #[serde(default)]
     pub sponge_unit_rows: usize,
+    /// Statement units whose rows were dropped because their file's text
+    /// does not hold their names (exp136, `--unit-evidence`); absent when 0.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub evidence_units_dropped: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -245,4 +249,10 @@ pub fn read_current(store: &Path, inputs: &ShardInputs) -> Option<Shard> {
     let text = std::fs::read_to_string(path).ok()?;
     let shard: Shard = serde_json::from_str(&text).ok()?;
     (shard.key == inputs.key()).then_some(shard)
+}
+
+/// serde: leave a zero counter out (a shard built without the check is
+/// byte-identical to one from before it existed).
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }

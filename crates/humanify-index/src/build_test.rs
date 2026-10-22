@@ -35,6 +35,7 @@ fn config(tag: &str, as_of: &str) -> BuildConfig {
         pinned: Vec::new(),
         merge_only: false,
         sponge_regions: SpongeRegions::Drop,
+        unit_evidence: Default::default(),
     }
 }
 
@@ -734,4 +735,245 @@ fn a_foreign_region_can_be_credited_to_the_package_its_marker_names() {
         notes.sponge_unit_rows, 2,
         "lazy-pkg's two units: no version"
     );
+}
+
+#[test]
+fn a_static_entry_recipe_builds_a_third_entry_importing_every_subpath_statically() {
+    // exp136: an app's own ESM source imports a package STATICALLY, and its
+    // bundler scope-hoists the package's ESM modules eagerly: a form neither
+    // the `require()` entry (a CJS factory) nor the `import()` entry (a lazy
+    // module body) produces, so the bundle's whole statement print was in
+    // no row of the truth package. `static` adds `sta`: `import * as mN`.
+    use crate::build::{entries, write_entries};
+    use humanify_core::libindex::recipe::Recipe;
+    let plain = Recipe::parse("bun:target=node,format=cjs,minify,production").expect("recipe");
+    let stat =
+        Recipe::parse("bun:target=node,format=cjs,minify,production,static").expect("recipe");
+    let tags = |r: &Recipe| entries(r).iter().map(|(t, _)| *t).collect::<Vec<_>>();
+    assert_eq!(
+        tags(&plain),
+        ["req", "dyn"],
+        "the default recipes are unchanged"
+    );
+    assert_eq!(tags(&stat), ["req", "dyn", "sta"]);
+    let root = fake_install("static-entry");
+    write_entries(&root, "dep").expect("entries");
+    let sta = std::fs::read_to_string(root.join("entries/sta.mjs")).expect("sta.mjs");
+    assert!(sta.contains("import * as m0 from \"dep\";\n"), "{sta}");
+    assert!(sta.contains("export { labAppMain_sta, m0 };\n"), "{sta}");
+    let req = std::fs::read_to_string(root.join("entries/req.cjs")).expect("req.cjs");
+    assert!(req.contains("const m0 = require(\"dep\");\n"), "{req}");
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn the_literal_shard_reads_the_static_entrys_build_only_for_a_static_recipe() {
+    use crate::build::literal_shard;
+    use crate::shard::{ShardInputs, ShardKind};
+    use humanify_core::libindex::recipe::Recipe;
+    let root = fake_install("lits-static");
+    // listed.js is mapped by the static entry's build alone
+    let sta = root.join("build/bun-node-cjs-min/sta");
+    std::fs::create_dir_all(&sta).expect("mkdir");
+    std::fs::write(
+        sta.join("out.js.map"),
+        r#"{"version":3,"sources":["../../../node_modules/dep/listed.js"],"mappings":"AAAA"}"#,
+    )
+    .expect("map");
+    std::fs::write(sta.join("out.js"), "x\n").expect("out");
+    let inputs = ShardInputs {
+        kind: ShardKind::Literals,
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: None,
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    };
+    let files = |r: &str| {
+        let shard = literal_shard(&root, &inputs, &[Recipe::parse(r).expect("recipe")]);
+        let mut f: Vec<String> = shard.literals.iter().map(|l| l.file.clone()).collect();
+        f.dedup();
+        f
+    };
+    assert_eq!(files("bun:target=node,format=cjs,minify"), ["used.js"]);
+    assert_eq!(
+        files("bun:target=node,format=cjs,minify,static"),
+        ["listed.js", "used.js"]
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// A bundle of three CommonJS modules: A and B credited by the map to a.js
+/// (B wrongly: a.js holds only A's code), C to b.js; b.js holds C's code
+/// unless `b_holds_c` is false (the map credits b.js with code it lacks).
+fn evidence_bundle(tag: &str, b_holds_c: bool) -> std::path::PathBuf {
+    evidence_bundle_mapped(tag, b_holds_c, [0, 0, 1], false)
+}
+
+/// [`evidence_bundle`] with each module's source chosen (0 a.js, 1 b.js,
+/// 2 c.js) and c.js (a source no module maps to) holding C's code or
+/// nothing.
+fn evidence_bundle_mapped(
+    tag: &str,
+    b_holds_c: bool,
+    srcs: [u32; 3],
+    c_holds_c: bool,
+) -> std::path::PathBuf {
+    let root = std::env::temp_dir().join(format!("humanify-index-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let write = |rel: &str, text: &str| {
+        let p = root.join(rel);
+        std::fs::create_dir_all(p.parent().expect("dir")).expect("mkdir");
+        std::fs::write(p, text).expect("write");
+    };
+    write(
+        "node_modules/dep/package.json",
+        r#"{"name":"dep","version":"1.2.3"}"#,
+    );
+    let bodies = [
+        r#"(ge,q)=>{q.exports=function(e,t){var n=e.alphaWidget("first alpha token");for(var r=0;r<n.length;r++){t.alphaGadget(n[r].alphaGizmo+"abc")}return t}}"#,
+        r#"(x,y)=>{y.exports=function(e,t){var n=e.betaWidget("second beta token");for(var r=0;r<n.length;r++){t.betaGadget(n[r].betaGizmo*1024)}return t}}"#,
+        r#"(u,w)=>{w.exports=function(e,t){var n=e.gammaWidget("third gamma token");for(var r=0;r<n.length;r++){t.gammaGadget(n[r].gammaGizmo+"parts")}return t}}"#,
+    ];
+    write(
+        "node_modules/dep/a.js",
+        "module.exports = function (e, t) { const n = e.alphaWidget('first alpha token'); for (const x of n) t.alphaGadget(x.alphaGizmo + 'abc'); return t; };\n",
+    );
+    write(
+        "node_modules/dep/b.js",
+        if b_holds_c {
+            "module.exports = function (e, t) { const n = e.gammaWidget('third gamma token'); for (const x of n) t.gammaGadget(x.gammaGizmo + 'parts'); return t; };\n"
+        } else {
+            "module.exports = require('./a.js');\n"
+        },
+    );
+    let code = format!(
+        "var m=(e,r)=>()=>(r||e((r={{exports:{{}}}}).exports,r),r.exports);var A=m({});var B=m({});var C=m({});module.exports=[A(),B(),C()];\n",
+        bodies[0], bodies[1], bodies[2]
+    );
+    let mut segments = Vec::new();
+    write(
+        "node_modules/dep/c.js",
+        if c_holds_c {
+            "exports.g = function (e, t) { const n = e.gammaWidget('third gamma token'); for (const x of n) t.gammaGadget(x.gammaGizmo + 'parts'); return t; };\n"
+        } else {
+            "module.exports = 1;\n"
+        },
+    );
+    for (body, src) in bodies.iter().zip(srcs) {
+        let start = code.find(body).expect("body") as u32;
+        segments.extend(
+            (start..start + body.len() as u32)
+                .step_by(2)
+                .map(|c| (0, c, src, 0)),
+        );
+    }
+    let map = serde_json::json!({
+        "version": 3,
+        "sources": ["../node_modules/dep/a.js", "../node_modules/dep/b.js", "../node_modules/dep/c.js"],
+        "mappings": crate::sourcemap::encode_mappings(&segments),
+    });
+    write("out/out.js", &code);
+    write("out/out.js.map", &map.to_string());
+    root
+}
+
+fn evidence_shard(root: &std::path::Path, rules: crate::build::UnitRules) -> crate::shard::Shard {
+    use crate::build::fingerprint_bundle;
+    use crate::shard::{Shard, ShardInputs, ShardKind};
+    let inputs = ShardInputs {
+        kind: ShardKind::Modules(bun_node()),
+        package: "dep".into(),
+        version: "1.2.3".into(),
+        bundler: Some("bun@test".into()),
+        recipe: "test".into(),
+        fingerprint: "test".into(),
+    };
+    let mut shard = Shard::new(&inputs);
+    fingerprint_bundle(bun_node(), &root.join("out"), &mut shard, rules).expect("fingerprint");
+    shard
+}
+
+/// The distinct evidence words of a shard's unit rows' files: which
+/// module's code each file kept (A = alpha, C = gamma).
+fn kept_files(shard: &crate::shard::Shard) -> Vec<&str> {
+    let mut f: Vec<&str> = shard.units.iter().map(|u| u.file.as_str()).collect();
+    f.sort_unstable();
+    f.dedup();
+    f
+}
+
+#[test]
+fn name_evidence_keeps_the_module_a_multi_module_file_really_holds() {
+    // exp136: the multi-module rule drops EVERY row of a file the map
+    // credits to two modules (held-out 42 KB of the truth's own code went
+    // to carriers). The file's text says which module is its own: with
+    // `unit_evidence = multi-module`, a.js keeps A's rows (its text holds
+    // A's names) and drops B's (it holds none of them).
+    use crate::build::{UnitEvidence, UnitRules};
+    let root = evidence_bundle("evidence-multi", true);
+    let off = evidence_shard(&root, SpongeRegions::Drop.into());
+    assert_eq!(kept_files(&off), ["b.js"], "today: a.js labels neither");
+    let rules = UnitRules {
+        regions: SpongeRegions::Drop,
+        evidence: UnitEvidence::MultiModule,
+    };
+    let on = evidence_shard(&root, rules);
+    assert_eq!(kept_files(&on), ["a.js", "b.js"], "{:?}", on.notes);
+    let a_rows = on.units.iter().filter(|u| u.file == "a.js").count();
+    let b_rows = on.units.iter().filter(|u| u.file == "b.js").count();
+    assert_eq!(
+        a_rows, b_rows,
+        "a.js keeps ONE module's rows (A's), as b.js has C's"
+    );
+    assert!(
+        on.notes.evidence_units_dropped > 0,
+        "B's rows: {:?}",
+        on.notes
+    );
+    let key = |s: &crate::shard::Shard| {
+        s.modules
+            .iter()
+            .find(|m| m.file == "a.js")
+            .map(|m| m.key.clone())
+    };
+    // A's module row as a map crediting B elsewhere labels it
+    let alone = evidence_bundle_mapped("evidence-alone", true, [0, 2, 1], false);
+    let want = key(&evidence_shard(&alone, SpongeRegions::Drop.into()));
+    assert!(want.is_some());
+    assert_eq!(key(&on), want, "a.js's module row is A's, not B's");
+    assert_eq!(on.notes.multi_module_dropped, 1, "B's module row");
+    std::fs::remove_dir_all(&root).ok();
+    std::fs::remove_dir_all(&alone).ok();
+}
+
+#[test]
+fn name_evidence_on_every_unit_drops_rows_whose_file_lacks_their_code() {
+    // `unit_evidence = all`: a row the map credits to a file that holds
+    // none of its names is dropped wherever it is (Bun's map files one
+    // package's code under another's file); `multi-module` leaves it.
+    use crate::build::{UnitEvidence, UnitRules};
+    let root = evidence_bundle("evidence-all", false);
+    let rules = |evidence| UnitRules {
+        regions: SpongeRegions::Drop,
+        evidence,
+    };
+    assert_eq!(
+        kept_files(&evidence_shard(&root, rules(UnitEvidence::MultiModule))),
+        ["a.js", "b.js"]
+    );
+    assert_eq!(
+        kept_files(&evidence_shard(&root, rules(UnitEvidence::All))),
+        ["a.js"],
+        "neither b.js nor any other file of the package holds C's code"
+    );
+    // the PACKAGE is what a claim names: a row whose package holds its code
+    // in another bundled file stays (the map is wrong only about the file)
+    let elsewhere = evidence_bundle_mapped("evidence-elsewhere", false, [0, 0, 1], true);
+    assert_eq!(
+        kept_files(&evidence_shard(&elsewhere, rules(UnitEvidence::All))),
+        ["a.js", "b.js"]
+    );
+    std::fs::remove_dir_all(&root).ok();
+    std::fs::remove_dir_all(&elsewhere).ok();
 }

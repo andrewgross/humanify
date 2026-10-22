@@ -18,7 +18,8 @@ fn a_recipe_is_spelled_with_every_setting_and_reads_back() {
             target: Target::Bun,
             format: Format::Cjs,
             minify: true,
-            production: false
+            production: false,
+            static_entry: false
         }
     );
     assert_eq!(r.spelling(), "bun:target=bun,format=cjs,minify");
@@ -45,6 +46,41 @@ fn a_production_recipe_reads_back_and_keeps_its_slice() {
             .unwrap()
             .production
     );
+}
+
+#[test]
+fn a_static_entry_recipe_reads_back_and_keeps_its_slice() {
+    // exp136: `static` = a third app entry, a static `import * as` of every
+    // subpath, as an app's own ESM source imports a package (the eager,
+    // scope-hoisted form neither `require()` nor `import()` produces); the
+    // SAME slice, a different recipe (its shards are new); every bundler
+    let r = Recipe::parse("bun:target=node,format=cjs,minify,production,static").expect("parses");
+    assert!(r.static_entry && r.production);
+    assert_eq!(
+        r.spelling(),
+        "bun:target=node,format=cjs,minify,production,static"
+    );
+    assert_eq!(r.slice_name(), "bun-node-cjs-min");
+    assert_eq!(Recipe::parse(&r.spelling()), Ok(r));
+    for b in ["esbuild", "webpack", "rollup"] {
+        let e =
+            Recipe::parse(&format!("{b}:target=node,format=cjs,minify,static")).expect("parses");
+        assert!(e.static_entry, "{b}");
+        assert_eq!(Recipe::parse(&e.spelling()), Ok(e));
+    }
+    assert!(
+        !Recipe::parse("bun:target=node,format=cjs,minify,production")
+            .unwrap()
+            .static_entry
+    );
+    // it adds an entry, it does not change how one is built: the build
+    // stamp's spelling is the recipe's without it (req/dyn builds reused)
+    assert_eq!(
+        r.build_spelling(),
+        "bun:target=node,format=cjs,minify,production"
+    );
+    let plain = Recipe::parse("esbuild:target=node,format=cjs,minify").unwrap();
+    assert_eq!(plain.build_spelling(), plain.spelling());
 }
 
 #[test]

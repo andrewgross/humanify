@@ -122,6 +122,12 @@ pub struct Recipe {
     /// left undefined, so react's index.js bundles react.development.js).
     /// Bun and esbuild only (their command line); the same slice as without.
     pub production: bool,
+    /// A third app entry beside `require()` and `import()`: a static
+    /// `import * as` of every subpath, as an app's own ESM source imports a
+    /// package (exp136: its bundler scope-hoists the package's ESM modules
+    /// eagerly, a statement form neither other entry produces). Every
+    /// bundler; the same slice as without.
+    pub static_entry: bool,
 }
 
 impl Recipe {
@@ -130,12 +136,13 @@ impl Recipe {
     pub fn parse(text: &str) -> Result<Recipe, String> {
         let bad = |why: &str| {
             format!(
-                "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production])"
+                "--recipe {text:?}: {why} (form: <bun|esbuild|webpack|rollup>:target=<bun|node>,format=<cjs|esm>[,minify][,production][,static])"
             )
         };
         let (bundler, rest) = text.split_once(':').ok_or_else(|| bad("no `:`"))?;
         let bundler = RecipeBundler::from_name(bundler).ok_or_else(|| bad("unknown bundler"))?;
-        let (mut target, mut format, mut minify, mut production) = (None, None, false, false);
+        let (mut target, mut format, mut minify, mut production, mut static_entry) =
+            (None, None, false, false, false);
         for part in rest.split(',').map(str::trim) {
             match part.split_once('=') {
                 Some(("target", "bun")) => target = Some(Target::Bun),
@@ -144,6 +151,7 @@ impl Recipe {
                 Some(("format", "esm")) => format = Some(Format::Esm),
                 None if part == "minify" => minify = true,
                 None if part == "production" => production = true,
+                None if part == "static" => static_entry = true,
                 _ => return Err(bad(&format!("unknown setting {part:?}"))),
             }
         }
@@ -153,6 +161,7 @@ impl Recipe {
             format: format.ok_or_else(|| bad("no format"))?,
             minify,
             production,
+            static_entry,
         };
         if production && !matches!(recipe.bundler, RecipeBundler::Bun | RecipeBundler::Esbuild) {
             return Err(bad(&format!(
@@ -172,13 +181,24 @@ impl Recipe {
     /// The spelling [`Recipe::parse`] reads back.
     pub fn spelling(&self) -> String {
         format!(
-            "{}:target={},format={}{}{}",
+            "{}:target={},format={}{}{}{}",
             self.bundler.name(),
             self.target.name(),
             self.format.name(),
             if self.minify { ",minify" } else { "" },
-            if self.production { ",production" } else { "" }
+            if self.production { ",production" } else { "" },
+            if self.static_entry { ",static" } else { "" }
         )
+    }
+
+    /// The spelling a BUILD of one entry is stamped with: the recipe's,
+    /// less `static` (it adds an entry; it changes no entry's build).
+    pub fn build_spelling(&self) -> String {
+        Recipe {
+            static_entry: false,
+            ..*self
+        }
+        .spelling()
     }
 
     /// The slice name: tables, shard and build directories.

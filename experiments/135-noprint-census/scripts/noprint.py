@@ -310,9 +310,50 @@ def inline_rows(rep, units, lab, key, entry, truth, score, slot):
     return out
 
 
+_ESM = {}
+
+
+def esm_output(eid):
+    """exp136: is the bundle an ESM-format output (top-level import/export before any other statement)?"""
+    if eid not in _ESM:
+        d = os.path.join(lib096.DATA, "corpus", eid)
+        js = sorted(x for x in os.listdir(d) if x.endswith((".js", ".mjs", ".cjs"))) if os.path.isdir(d) else []
+        head = open(os.path.join(d, js[0]), "rb").read(4000).decode("utf8", "replace") if js else ""
+        _ESM[eid] = bool(re.match(r"\s*(#![^\n]*\n)?\s*(//[^\n]*\n\s*)*(import[\s{*]|export[\s{])", head))
+    return _ESM[eid]
+
+
+def detail_fields(ix, u, hs, fam, win, T, V, eid):
+    """exp136: the bundle's output format, whether the truth's version is indexed, and the winner's / the truth
+    family's smallest index module over the unit's prints (who is the carrier)."""
+    wmod = min((r[3] for h in hs for r in ix.units.get(h, ()) if r[0] == win), default=None)
+    tmod = min((r[3] for h in hs for r in ix.units.get(h, ()) if fam(r[0])), default=None) if fam else None
+    return {"esmOut": esm_output(eid), "truthVersionIndexed": bool(T and V and ix.has_version(T, V)),
+            "truthHasVersion": bool(V),
+            "winnerModule": wmod, "truthModule": tmod}
+
+
+def detail_sub(cls, sub, x):
+    """exp136's sub-cause of an f / d row (other classes keep noprint's)."""
+    fmt = "esm-out" if x["esmOut"] else "cjs-out"
+    if cls == "f-filtered":
+        if not x["truthVersionIndexed"]:
+            return sub + ("/version-not-indexed" if x["truthHasVersion"] else "/no-version-in-map")
+        rel = ("winner-smaller" if x["truthModule"] and x["winnerModule"] and 4 * x["winnerModule"] <= x["truthModule"]
+               else "truth-smaller" if x["truthModule"] and x["winnerModule"] and 4 * x["truthModule"] <= x["winnerModule"]
+               else "comparable")
+        return f"{sub}/{fmt}/{rel}"
+    if cls == "d-print-differs":
+        return f"{sub.split('-same-size')[0]}/{fmt}"
+    return sub
+
+
 def main():
     corpus, path, slot, label, prefix = sys.argv[1:6]
     private = "--private" in sys.argv
+    detail = "--detail" in sys.argv  # exp136: finer f / d sub-causes (bundle output format, version, carrier)
+    dump_all = open(prefix + ".all.jsonl", "w") if "--dump-all" in sys.argv and not private else None
+    side_out = open(prefix + ".side.jsonl", "w") if "--side" in sys.argv and not private else None
     global STORE, WORK
     if "--store" in sys.argv:  # the shard store / work dir the label's index was built from
         STORE = sys.argv[sys.argv.index("--store") + 1]
@@ -375,6 +416,11 @@ def main():
             right = [x for x in (r["truth"], r.get("origin")) if x and not x.startswith("<")]
             sc = census.scores(ix, u, mmlib)
             win = r[slot]["package"]
+            if dump_all:  # exp136: EVERY wrong index seed (scratch, never committed: names)
+                dump_all.write(json.dumps({"entry": eid, "set": r["set"], "bytes": r["bytes"], "slice": sl,
+                                           "whole": u["w"][0], "claimer": win, "truth": row.get("pkg"),
+                                           "version": row.get("version"), "file": row.get("file"),
+                                           "origin": row.get("origin"), "kind": u["k"]}) + "\n")
             if win not in sc or any(same(p, t) for p in sc for t in right):
                 continue  # reassigned / tie / outscored: not this class
             fam = lambda p: any(same(p, t) for t in right)  # noqa: E731
@@ -413,7 +459,15 @@ def main():
             if O and O != T:
                 extra["originIndexed"] = ix.has_package(O)
                 extra["originEvidence"] = row.get("originEvidence")
-            agg[(r["set"], cls, sub)] += r["bytes"]
+            agg_key = (r["set"], cls, sub)
+            if detail:
+                extra.update(detail_fields(ix, u, hs, fam if held else None, win, T, V, eid))
+                agg_key = (r["set"], cls, detail_sub(cls, sub, extra))
+            agg[agg_key] += r["bytes"]
+            if side_out:  # exp136: held-out's rows WITH names and hashes, for scratch mini builds (never committed)
+                side_out.write(json.dumps({"entry": eid, "set": r["set"], "bytes": r["bytes"], "cls": cls, "sub": sub,
+                                       "slice": sl, "truth": T, "version": V, "file": F, "claimer": win,
+                                       "hashes": sorted(hs), "whole": u["w"][0], **extra}) + "\n")
             if out:
                 hide = r["set"] in HIDDEN
                 rec = {"entry": None if hide else eid, "set": r["set"], "scope": r["scope"], "bytes": r["bytes"],
@@ -421,6 +475,8 @@ def main():
                 if not hide:
                     rec.update(truth=T, version=V, file=F, origin=O, claimer=win, hashes=sorted(hs),
                                indexedVersions=len(ix.versions.get(T, ())))
+                    if detail:
+                        rec.update(whole=u["w"][0], start=u["s"], end=u["e"])
                 out.write(json.dumps(rec) + "\n")
     print(f"# {label} ({slot}) {corpus}: wrong index-seed KB per set: "
           + ", ".join(f"{k} {v / 1e3:.1f}" for k, v in sorted(seen_total.items())))
