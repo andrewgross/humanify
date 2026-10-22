@@ -3,8 +3,7 @@
 # entry, a static `import * as` of every subpath), everything else exactly as exp135's build. Seeded from exp135: the
 # store and work dir are hard-link copies; the req/dyn builds are reused (a build's stamp is the recipe without
 # `static`), each static slice builds its `sta` entry and re-fingerprints all three; rollup/webpack shards are reused;
-# the literal shards' key names every recipe, so they rebuild. Extra builder flags after the 3rd arg (e.g.
-# --unit-evidence all).
+# the literal shards' key names every recipe, so they rebuild. Extra builder flags after the 3rd arg.
 # usage: build-static.sh <data-dir> <humanify-index> [name [extra builder flags...]]
 set -euo pipefail
 [ $# -ge 2 ] || { sed -n 2,8p "$0"; exit 2; }

@@ -1,4 +1,4 @@
-"""exp136: every wrong index seed, read against the INSTALLED CODE (name evidence, dcheck.evidence): does the truth's
+"""exp136: every wrong index seed, read against the INSTALLED CODE (name evidence, dcheck.unit_evidence): does the truth's
 file hold the unit, does the claimer's indexed file (the row the lookup read) hold it, and does the claimer's
 package hold it anywhere? From noprint.py --dump-all rows (scratch; names never printed).
 
@@ -72,7 +72,7 @@ def main():
         sp = dcheck.span(label, r["entry"], r["whole"], r["bytes"])
         if sp is None:
             continue
-        toks = dcheck.evidence(dcheck.bundle(r["entry"])[sp[0]:sp[1]].decode("utf8", "replace"))
+        toks = dcheck.unit_evidence(r["entry"], sp)
         if len(toks) < 3:
             agg[(r["set"], "no-evidence", "-", "-")] += r["bytes"]
             continue

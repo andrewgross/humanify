@@ -1,7 +1,6 @@
 //! The offline library index builder (docs/design/library-index.md).
 pub mod asof;
 pub mod build;
-pub mod evidence;
 pub mod merge;
 pub mod recipe;
 pub mod registry;
@@ -13,8 +12,6 @@ pub mod sourcemap;
 mod asof_test;
 #[cfg(test)]
 mod build_test;
-#[cfg(test)]
-mod evidence_test;
 #[cfg(test)]
 mod merge_test;
 #[cfg(test)]

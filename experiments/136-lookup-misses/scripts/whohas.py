@@ -1,7 +1,7 @@
 """exp136: for census rows whose truth file lacks the unit's code (dcheck.py's file-lacks-unit), WHO holds it? Search
 every source file installed in the truth version's work dir (the package and its dependencies) and in the
 claimer's newest installed version holding the whole print, for the file holding the most of the unit's name
-evidence (dcheck.evidence), and class the best file's package against the truth T and the claimer W:
+evidence (dcheck.unit_evidence), and class the best file's package against the truth T and the claimer W:
   truth-other-file     T, another file (scored right anyway: the scorer judges the package)
   claimer              W's package (the claim is right; the truth label is the map's defect)
   third-package        another package (both the truth label and the claim are wrong)
@@ -77,7 +77,7 @@ def main():
             sp = dcheck.span(label, r["entry"], r["whole"], r["bytes"])
             if not os.path.isfile(path) or sp is None:
                 continue
-            toks = dcheck.evidence(dcheck.bundle(r["entry"])[sp[0]:sp[1]].decode("utf8", "replace"))
+            toks = dcheck.unit_evidence(r["entry"], sp)
             if len(toks) < 3:
                 continue
             src = open(path, encoding="utf8", errors="replace").read()

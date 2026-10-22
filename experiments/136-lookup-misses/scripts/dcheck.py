@@ -1,7 +1,8 @@
 """exp136: is a census row's TRUTH file really where the unit's code comes from? For every row of a class (default
 d-print-differs and f-filtered), read the unit's text from the bundle and the truth version's installed file
-(node_modules/<T>/<F> in the index's work dir), and compare the unit's NAME EVIDENCE — its string literal contents
-and `.property` names of 4+ characters, which no minifier renames — against the file's text:
+(node_modules/<T>/<F> in the index's work dir), and compare the unit's NAME EVIDENCE — its string and template
+values and `.property` names of 4+ characters, which no minifier renames, read by acorn's tokenizer
+(evtokens.mjs) and cleaned (`clean`) — against the file's text:
   file-lacks-unit     under half of the unit's evidence tokens occur in F: the source map credits F with code F
                       does not hold (a map defect: the truth label is wrong, the claimer may be right)
   file-holds-unit     at least half occur: the truth's file does hold this code, the index print differs
@@ -25,36 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "../../096-library-matching-score"))
 import lib096  # noqa: E402
 
 WORK = "/work/exp135-data/full/work"
-PROP = re.compile(r"\.([A-Za-z_$][A-Za-z0-9_$]{3,})")
-
-
-def strings(text):
-    """String literal contents of `text` (a JS span), read with a small lexer: quotes paired, escapes skipped,
-    comments skipped (a regex literal can still fool it; rare in minified code and only adds noise tokens)."""
-    out, i, n = [], 0, len(text)
-    while i < n:
-        c = text[i]
-        if c in "\"'`":
-            j = i + 1
-            while j < n and text[j] != c:
-                if text[j] == "\\":
-                    j += 1
-                elif c == "`" and text.startswith("${", j):
-                    break
-                j += 1
-            out.append(text[i + 1:j])
-            i = j + 1
-        elif text.startswith("//", i):
-            j = text.find("\n", i)
-            i = n if j < 0 else j
-        elif text.startswith("/*", i):
-            j = text.find("*/", i + 2)
-            i = n if j < 0 else j + 2
-        else:
-            i += 1
-    return out
-
-
+ACORN = "/work/exp105-data/tools/node_modules"
 # property / string names nearly every file holds: no evidence of WHICH file a unit came from
 COMMON = set("""length prototype call apply bind push pop shift unshift slice splice concat join split indexOf
 includes forEach map filter reduce some every keys values entries assign create freeze defineProperty
@@ -65,12 +37,30 @@ string number object function boolean undefined symbol bigint message stack erro
 start end size from emit listeners parent node props state self window document process env""".split())
 
 
-def evidence(text):
-    """The unit's name evidence: string contents of 4..200 chars with 3+ letters, and `.property` names of 4+,
-    except names nearly every file holds."""
-    toks = {s for s in strings(text) if 4 <= len(s) <= 200 and "\\" not in s and re.search(r"[A-Za-z]{3}", s)}
-    toks.update(PROP.findall(text))
-    return toks - COMMON
+def clean(toks):
+    """The tokens that can be looked up verbatim in a source file: 4..200 characters with three letters in a row,
+    no character a source would have to escape (quote, backslash, newline, tab), less COMMON."""
+    return {t for t in toks if 4 <= len(t) <= 200 and re.search(r"[A-Za-z]{3}", t)
+            and not any(c in t or c < " " for c in "\"'`\\") and all(" " <= c for c in t)} - COMMON
+
+
+def acorn_evidence(bundle_path, spans):
+    """Per span, the unit's evidence read by acorn's tokenizer (evtokens.mjs): string / template values and
+    `.property` names, cleaned (`clean`)."""
+    import subprocess
+    r = subprocess.run(["node", os.path.join(HERE, "evtokens.mjs")], input=json.dumps({"bundle": bundle_path,
+                       "spans": spans}), capture_output=True, text=True, env={**os.environ, "NODE_PATH": ACORN})
+    return [clean(t) for t in json.loads(r.stdout)]
+
+
+def unit_evidence(eid, sp):
+    """One bundle unit's evidence (acorn_evidence of its span)."""
+    return acorn_evidence(bundle_path(eid), [list(sp)])[0]
+
+
+def bundle_path(eid):
+    d = os.path.join(lib096.DATA, "corpus", eid)
+    return os.path.join(d, sorted(x for x in os.listdir(d) if x.endswith((".js", ".mjs", ".cjs")))[0])
 
 
 _BUNDLE = {}
@@ -153,7 +143,7 @@ def main():
             if sp is None:
                 agg[key + ("no-span",)] += r["bytes"]
                 continue
-            toks = evidence(bundle(r["entry"])[sp[0]:sp[1]].decode("utf8", "replace"))
+            toks = unit_evidence(r["entry"], sp)
             if len(toks) < 3:
                 agg[key + ("no-evidence",)] += r["bytes"]
                 continue

@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use humanify_core::libindex::recipe::{Recipe, RecipeBundler};
 use humanify_index::asof::{VersionPolicy, parse_as_of};
-use humanify_index::build::{BuildConfig, SpongeRegions, UnitEvidence, run};
+use humanify_index::build::{BuildConfig, SpongeRegions, run};
 use humanify_index::recipe::RecipeBuild;
 
 #[derive(Parser)]
@@ -108,14 +108,6 @@ enum Command {
         /// path's version).
         #[arg(long, default_value = "drop")]
         sponge_regions: String,
-        /// Whether a unit row's file must hold the unit's names (string
-        /// contents, property names; exp136): `off`, `multi-module` (a file
-        /// the map credits to two or more modules keeps the modules and
-        /// rows its text holds, instead of none) or `all` (also drops any
-        /// other row neither its file nor another bundled file of its
-        /// package holds half the names of).
-        #[arg(long, default_value = "off")]
-        unit_evidence: String,
         /// Print the plan (versions, refusals, shards to build or reuse)
         /// and stop.
         #[arg(long)]
@@ -192,7 +184,6 @@ fn main() {
         offline,
         merge_only,
         sponge_regions,
-        unit_evidence,
         dry_run,
     } = command
     else {
@@ -243,16 +234,6 @@ fn main() {
                 "drop" => SpongeRegions::Drop,
                 "origin" => SpongeRegions::Origin,
                 other => return Err(format!("unknown --sponge-regions {other} (drop, origin)")),
-            },
-            unit_evidence: match unit_evidence.as_str() {
-                "off" => UnitEvidence::Off,
-                "multi-module" => UnitEvidence::MultiModule,
-                "all" => UnitEvidence::All,
-                other => {
-                    return Err(format!(
-                        "unknown --unit-evidence {other} (off, multi-module, all)"
-                    ));
-                }
             },
             pinned: match &pinned {
                 Some(p) => std::fs::read_to_string(p)

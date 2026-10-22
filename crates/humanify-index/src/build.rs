@@ -90,62 +90,6 @@ impl SpongeRegions {
     }
 }
 
-/// Whether a unit row's attributed file must hold the unit's NAME
-/// EVIDENCE ([`crate::evidence`], exp136): a source map can credit a unit
-/// to a file that does not hold it (Bun 1.4).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum UnitEvidence {
-    /// No check (the multi-module rule drops every row of a file credited
-    /// to two or more modules).
-    #[default]
-    Off,
-    /// A file credited to two or more modules keeps the modules and unit
-    /// rows whose names its text holds, instead of none.
-    MultiModule,
-    /// `MultiModule`, and every other unit row whose file holds under half
-    /// of its names is dropped unless another bundled file of its package
-    /// holds them (a unit with under three names is kept).
-    All,
-}
-
-impl UnitEvidence {
-    /// The suffix this mode adds to the unit-rows version.
-    fn suffix(self) -> &'static str {
-        match self {
-            UnitEvidence::Off => "",
-            UnitEvidence::MultiModule => "+evidence-multi",
-            UnitEvidence::All => "+evidence-all",
-        }
-    }
-}
-
-/// How a module shard's unit rows are made beyond the fingerprint (both in
-/// the shard key).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct UnitRules {
-    pub regions: SpongeRegions,
-    pub evidence: UnitEvidence,
-}
-
-impl From<SpongeRegions> for UnitRules {
-    fn from(regions: SpongeRegions) -> Self {
-        UnitRules {
-            regions,
-            evidence: UnitEvidence::Off,
-        }
-    }
-}
-
-impl UnitRules {
-    fn unit_rows_version(self) -> String {
-        format!(
-            "{}{}",
-            self.regions.unit_rows_version(),
-            self.evidence.suffix()
-        )
-    }
-}
-
 use humanify_core::libindex::units::UNIT_ROW_MIN_NODES;
 
 pub struct BuildConfig {
@@ -172,17 +116,6 @@ pub struct BuildConfig {
     pub merge_only: bool,
     /// What a pre-bundled file's foreign regions become.
     pub sponge_regions: SpongeRegions,
-    /// Whether unit rows must be held by their file's text (exp136).
-    pub unit_evidence: UnitEvidence,
-}
-
-impl BuildConfig {
-    fn unit_rules(&self) -> UnitRules {
-        UnitRules {
-            regions: self.sponge_regions,
-            evidence: self.unit_evidence,
-        }
-    }
 }
 
 /// One `package@version` to index.
@@ -288,7 +221,7 @@ fn shard_inputs(
     name: &str,
     version: &str,
     slices: &[SliceRecord],
-    rules: UnitRules,
+    regions: SpongeRegions,
 ) -> Vec<ShardInputs> {
     let f = fingerprint_versions();
     // The literal rows are the files these builds contain, so the
@@ -315,7 +248,7 @@ fn shard_inputs(
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
             recipe: format!("{RECIPE_VERSION} {}", s.recipe),
-            fingerprint: format!("{}+{}+{}", f.module, f.units, rules.unit_rows_version()),
+            fingerprint: format!("{}+{}+{}", f.module, f.units, regions.unit_rows_version()),
         });
     }
     out
@@ -351,7 +284,7 @@ pub fn plan(cfg: &BuildConfig) -> Result<Plan, String> {
         }));
         for s in chosen.selected {
             let (mut missing, mut reused) = (Vec::new(), Vec::new());
-            for inputs in shard_inputs(&name, &s.version, &slices, cfg.unit_rules()) {
+            for inputs in shard_inputs(&name, &s.version, &slices, cfg.sponge_regions) {
                 match read_current(&cfg.store, &inputs) {
                     Some(_) => reused.push(inputs),
                     None => missing.push(inputs),
@@ -720,9 +653,8 @@ pub(crate) fn fingerprint_bundle(
     recipe: Recipe,
     out: &Path,
     shard: &mut Shard,
-    rules: impl Into<UnitRules>,
+    regions: SpongeRegions,
 ) -> Result<(), String> {
-    let rules: UnitRules = rules.into();
     let code = std::fs::read_to_string(out.join("out.js")).map_err(|e| e.to_string())?;
     let map_text = std::fs::read_to_string(out.join("out.js.map")).map_err(|e| e.to_string())?;
     let mut map = SourceMap::parse(&map_text)?;
@@ -748,15 +680,14 @@ pub(crate) fn fingerprint_bundle(
     }
     let mut owners = HashMap::new();
     // A source file maps to ONE module of a bundle: a file credited to two
-    // or more is wrong for at least one of them, so none is labelled —
-    // unless the file's text says which (name evidence, exp136).
+    // or more is wrong for at least one of them, so none is labelled.
     let mut misattributed: BTreeSet<(String, String)> = BTreeSet::new();
-    let mut texts = SourceTexts::default();
     for (&src, &n) in &credited {
         if n < 2 {
             continue;
         }
         shard.notes.multi_module_files += 1;
+        shard.notes.multi_module_dropped += n;
         if let Some(o) = owner_cached(out, &map.sources[src as usize], &mut owners) {
             misattributed.insert((o.package, o.file));
         }
@@ -767,13 +698,7 @@ pub(crate) fn fingerprint_bundle(
             continue;
         };
         if credited[&src] >= 2 {
-            let body = &code[m.body_span.start as usize..m.body_span.end as usize];
-            let held = rules.evidence != UnitEvidence::Off
-                && texts.holds(out, &map, src, body) == Some(true);
-            if !held {
-                shard.notes.multi_module_dropped += 1;
-                continue;
-            }
+            continue;
         }
         let Some(owner) = owner_cached(out, &map.sources[src as usize], &mut owners) else {
             shard.notes.unowned += 1;
@@ -790,14 +715,14 @@ pub(crate) fn fingerprint_bundle(
             key: key.clone(),
         });
     }
-    let (units, notes) = unit_rows_checked(recipe, &code, &map, out, rules, &misattributed);
+    let (units, notes) = unit_rows(recipe, &code, &map, out, regions);
     let (made, kept_before) = (units.len(), shard.units.len());
-    shard.units.extend(units.into_iter().filter(|u| {
-        rules.evidence != UnitEvidence::Off
-            || !misattributed.contains(&(u.owner.clone(), u.file.clone()))
-    }));
+    shard.units.extend(
+        units
+            .into_iter()
+            .filter(|u| !misattributed.contains(&(u.owner.clone(), u.file.clone()))),
+    );
     shard.notes.multi_module_units_dropped += made - (shard.units.len() - kept_before);
-    shard.notes.evidence_units_dropped += notes.evidence_units_dropped;
     shard.notes.unit_mixed_spans += notes.mixed_spans;
     for (kind, n) in notes.sponge_unit_files {
         *shard.notes.sponge_unit_files.entry(kind).or_default() += n;
@@ -816,58 +741,8 @@ pub fn unit_rows(
     code: &str,
     map: &SourceMap,
     out: &Path,
-    rules: impl Into<UnitRules>,
+    regions: SpongeRegions,
 ) -> (Vec<ShardUnit>, ShardNotes) {
-    unit_rows_checked(recipe, code, map, out, rules.into(), &BTreeSet::new())
-}
-
-/// The source files' texts a bundle's units are checked against (read
-/// once each; a file that cannot be read holds nothing).
-#[derive(Default)]
-struct SourceTexts(HashMap<u32, String>);
-
-impl SourceTexts {
-    /// Does source `src` hold `text`'s name evidence ([`crate::evidence`])?
-    fn holds(&mut self, out: &Path, map: &SourceMap, src: u32, text: &str) -> Option<bool> {
-        let file = self.0.entry(src).or_insert_with(|| {
-            std::fs::read_to_string(lexical(&out.join(&map.sources[src as usize])))
-                .unwrap_or_default()
-        });
-        crate::evidence::file_holds(file, &crate::evidence::name_evidence(text))
-    }
-}
-
-/// The map's sources owned by `package` (the files of it this build
-/// bundles).
-fn package_sources(
-    map: &SourceMap,
-    out: &Path,
-    package: &str,
-    cache: &mut HashMap<PathBuf, Option<(String, String)>>,
-) -> Vec<u32> {
-    (0..map.sources.len() as u32)
-        .filter(|&i| {
-            owner_cached(out, &map.sources[i as usize], cache).is_some_and(|o| o.package == package)
-        })
-        .collect()
-}
-
-/// [`unit_rows`], with the name-evidence check of `rules`: a unit of a file
-/// in `multi` (credited to two or more modules) is kept only when the
-/// file's text holds its names; under [`UnitEvidence::All`] any other unit
-/// whose file holds under half of them is dropped, unless another bundled
-/// file of its package holds them (a claim names the package; the map is
-/// then wrong only about the file).
-fn unit_rows_checked(
-    recipe: Recipe,
-    code: &str,
-    map: &SourceMap,
-    out: &Path,
-    rules: UnitRules,
-    multi: &BTreeSet<(String, String)>,
-) -> (Vec<ShardUnit>, ShardNotes) {
-    let regions = rules.regions;
-    let mut texts = SourceTexts::default();
     let mut notes = ShardNotes::default();
     let toolchain = humanify_core::toolchain::resolve_toolchain(
         &humanify_core::detect::detect_bundle(code),
@@ -910,27 +785,6 @@ fn unit_rows_checked(
                     notes.sponge_unit_rows += 1;
                     continue;
                 };
-                let keep = match rules.evidence {
-                    UnitEvidence::Off => true,
-                    e => {
-                        let span = &code[unit.span.start as usize..unit.span.end as usize];
-                        if multi.contains(&(owner.package.clone(), owner.file.clone())) {
-                            texts.holds(out, map, src, span) == Some(true)
-                        } else {
-                            e != UnitEvidence::All
-                                || texts.holds(out, map, src, span) != Some(false)
-                                || package_sources(map, out, &owner.package, &mut cache)
-                                    .iter()
-                                    .any(|&s| {
-                                        s != src && texts.holds(out, map, s, span) == Some(true)
-                                    })
-                        }
-                    }
-                };
-                if !keep {
-                    notes.evidence_units_dropped += 1;
-                    continue;
-                }
                 owned.push((owner, u64::from(unit.bytes), prints));
             }
             UnitOwner::Mixed => notes.mixed_spans += 1,
@@ -1273,12 +1127,17 @@ fn ensure_build(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Re
 }
 
 /// The module shard of one slice: its entries built and fingerprinted.
-fn module_shard(dir: &Path, recipe: &RecipeBuild, inputs: &ShardInputs, rules: UnitRules) -> Shard {
+fn module_shard(
+    dir: &Path,
+    recipe: &RecipeBuild,
+    inputs: &ShardInputs,
+    regions: SpongeRegions,
+) -> Shard {
     let mut shard = Shard::new(inputs);
     for (tag, entry) in entries(&recipe.recipe) {
         let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
         let result = ensure_build(recipe, dir, entry, &out)
-            .and_then(|()| fingerprint_bundle(recipe.recipe, &out, &mut shard, rules));
+            .and_then(|()| fingerprint_bundle(recipe.recipe, &out, &mut shard, regions));
         let status = match result {
             Ok(()) => "ok".to_string(),
             Err(e) => e,
@@ -1318,7 +1177,7 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
                     .iter()
                     .find(|r| r.recipe == want)
                     .ok_or("no recipe for slice")?;
-                module_shard(&dir, recipe, inputs, cfg.unit_rules())
+                module_shard(&dir, recipe, inputs, cfg.sponge_regions)
             }
         };
         write_shard(&cfg.store, &shard)?;
@@ -1379,7 +1238,7 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
         .iter()
         .enumerate()
         .flat_map(|(i, t)| {
-            shard_inputs(&t.name, &t.version, &plan.slices, cfg.unit_rules())
+            shard_inputs(&t.name, &t.version, &plan.slices, cfg.sponge_regions)
                 .into_iter()
                 .map(move |s| (s.label(), i, s))
         })
