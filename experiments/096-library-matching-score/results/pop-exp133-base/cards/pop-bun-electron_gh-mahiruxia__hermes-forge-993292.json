@@ -39,15 +39,15 @@
   "d-file": 155,
   "d-variant": 9517,
   "e-ambig": 20782,
-  "e-other": 157206,
+  "e-other": 155445,
   "e-support": 9346,
   "e-veto": 22674,
-  "f": 26674
+  "f": 28435
  },
  "noDiscovery": null,
  "reportSha256": "bd441dd29a5d173395f59fcf4a4bbd1c25d382b29796023302c324e5ab364660",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -68,10 +68,10 @@
     "c": 79023,
     "d-absent": 22491,
     "e-ambig": 20660,
-    "e-other": 156993,
+    "e-other": 155232,
     "e-support": 6677,
     "e-veto": 13887,
-    "f": 26367
+    "f": 28128
    },
    "namedAsOriginBytes": 0,
    "namedBytes": 3838983,

@@ -1,0 +1,380 @@
+[
+ {
+  "label": "exp135-prod",
+  "named13": 1819438,
+  "named14": 1819438,
+  "s13": {
+   "f05": 0.957678,
+   "precision": 1.0,
+   "recall": 0.819027
+  },
+  "s14": {
+   "f05": 0.957678,
+   "precision": 1.0,
+   "recall": 0.819027
+  },
+  "set": "cc",
+  "wrong13": 0,
+  "wrong14": 0
+ },
+ {
+  "label": "exp135-prod",
+  "named13": 13899654,
+  "named14": 13899654,
+  "s13": {
+   "f05": 0.930118,
+   "precision": 0.990658,
+   "recall": 0.747418
+  },
+  "s14": {
+   "f05": 0.930118,
+   "precision": 0.990658,
+   "recall": 0.747418
+  },
+  "set": "esbuild-app",
+  "wrong13": 131074,
+  "wrong14": 131074
+ },
+ {
+  "label": "exp135-prod",
+  "named13": 161078593,
+  "named14": 161193324,
+  "s13": {
+   "f05": 0.912887,
+   "precision": 0.995647,
+   "recall": 0.6851
+  },
+  "s14": {
+   "f05": 0.913537,
+   "precision": 0.996356,
+   "recall": 0.685588
+  },
+  "set": "heldout",
+  "wrong13": 704245,
+  "wrong14": 589514
+ },
+ {
+  "label": "exp135-prod",
+  "named13": 614396,
+  "named14": 614396,
+  "s13": {
+   "f05": 0.708697,
+   "precision": 0.99069,
+   "recall": 0.331388
+  },
+  "s14": {
+   "f05": 0.708697,
+   "precision": 0.99069,
+   "recall": 0.331388
+  },
+  "set": "wrangler",
+  "wrong13": 5774,
+  "wrong14": 5774
+ },
+ {
+  "label": "exp135-prod-apps",
+  "named13": 118820571,
+  "named14": 118823770,
+  "s13": {
+   "f05": 0.944761,
+   "precision": 0.998865,
+   "recall": 0.776519
+  },
+  "s14": {
+   "f05": 0.944787,
+   "precision": 0.998892,
+   "recall": 0.77654
+  },
+  "set": "apps-esbuild",
+  "wrong13": 135038,
+  "wrong14": 131839
+ },
+ {
+  "label": "exp135-prod-apps",
+  "named13": 77594704,
+  "named14": 77594704,
+  "s13": {
+   "f05": 0.943838,
+   "precision": 0.990926,
+   "recall": 0.793091
+  },
+  "s14": {
+   "f05": 0.943838,
+   "precision": 0.990926,
+   "recall": 0.793091
+  },
+  "set": "apps-rollup",
+  "wrong13": 710567,
+  "wrong14": 710567
+ },
+ {
+  "label": "exp135-prod-apps",
+  "named13": 54744340,
+  "named14": 54744340,
+  "s13": {
+   "f05": 0.929814,
+   "precision": 0.995801,
+   "recall": 0.734995
+  },
+  "s14": {
+   "f05": 0.929814,
+   "precision": 0.995801,
+   "recall": 0.734995
+  },
+  "set": "apps-webpack",
+  "wrong13": 230841,
+  "wrong14": 230841
+ },
+ {
+  "label": "exp135-prod-bundlers",
+  "named13": 1661294,
+  "named14": 1661294,
+  "s13": {
+   "f05": 0.944302,
+   "precision": 0.998729,
+   "recall": 0.775298
+  },
+  "s14": {
+   "f05": 0.944302,
+   "precision": 0.998729,
+   "recall": 0.775298
+  },
+  "set": "dev-rollup",
+  "wrong13": 2114,
+  "wrong14": 2114
+ },
+ {
+  "label": "exp135-prod-bundlers",
+  "named13": 1150569,
+  "named14": 1150569,
+  "s13": {
+   "f05": 0.892159,
+   "precision": 0.996416,
+   "recall": 0.628932
+  },
+  "s14": {
+   "f05": 0.892159,
+   "precision": 0.996416,
+   "recall": 0.628932
+  },
+  "set": "dev-webpack",
+  "wrong13": 4139,
+  "wrong14": 4139
+ },
+ {
+  "label": "pop-exp135-prod",
+  "named13": 251564840,
+  "named14": 251623483,
+  "s13": {
+   "f05": 0.940598,
+   "precision": 0.994949,
+   "recall": 0.771926
+  },
+  "s14": {
+   "f05": 0.940817,
+   "precision": 0.995181,
+   "recall": 0.772105
+  },
+  "set": "pop-bun",
+  "wrong13": 1277116,
+  "wrong14": 1218473
+ },
+ {
+  "label": "pop-exp135-prod",
+  "named13": 256780282,
+  "named14": 256784513,
+  "s13": {
+   "f05": 0.943652,
+   "precision": 0.993041,
+   "recall": 0.787071
+  },
+  "s14": {
+   "f05": 0.943668,
+   "precision": 0.993058,
+   "recall": 0.787084
+  },
+  "set": "pop-esbuild",
+  "wrong13": 1799412,
+  "wrong14": 1795181
+ },
+ {
+  "label": "remin-exp135-prod",
+  "named13": 51546807,
+  "named14": 51546807,
+  "s13": {
+   "f05": 0.841126,
+   "precision": 0.996906,
+   "recall": 0.517598
+  },
+  "s14": {
+   "f05": 0.841126,
+   "precision": 0.996906,
+   "recall": 0.517598
+  },
+  "set": "remin-esbuild",
+  "wrong13": 159995,
+  "wrong14": 159995
+ },
+ {
+  "label": "remin-exp135-prod",
+  "named13": 18983240,
+  "named14": 18983240,
+  "s13": {
+   "f05": 0.560434,
+   "precision": 0.999019,
+   "recall": 0.203346
+  },
+  "s14": {
+   "f05": 0.560434,
+   "precision": 0.999019,
+   "recall": 0.203346
+  },
+  "set": "remin-terser",
+  "wrong13": 18646,
+  "wrong14": 18646
+ },
+ {
+  "label": "test-exp135-prod",
+  "named13": 211492415,
+  "named14": 211505594,
+  "s13": {
+   "f05": 0.918539,
+   "precision": 0.99551,
+   "recall": 0.701563
+  },
+  "s14": {
+   "f05": 0.918596,
+   "precision": 0.995572,
+   "recall": 0.701607
+  },
+  "set": "test-bun",
+  "wrong13": 953849,
+  "wrong14": 940670
+ },
+ {
+  "label": "test-exp135-prod",
+  "named13": 233451979,
+  "named14": 233457357,
+  "s13": {
+   "f05": 0.927167,
+   "precision": 0.992602,
+   "recall": 0.733699
+  },
+  "s14": {
+   "f05": 0.927189,
+   "precision": 0.992625,
+   "recall": 0.733716
+  },
+  "set": "test-esbuild",
+  "wrong13": 1740006,
+  "wrong14": 1734628
+ },
+ {
+  "label": "test-exp135-prod",
+  "named13": 79020231,
+  "named14": 79020231,
+  "s13": {
+   "f05": 0.922064,
+   "precision": 0.989608,
+   "recall": 0.724315
+  },
+  "s14": {
+   "f05": 0.922064,
+   "precision": 0.989608,
+   "recall": 0.724315
+  },
+  "set": "test-rollup",
+  "wrong13": 829784,
+  "wrong14": 829784
+ },
+ {
+  "label": "test-exp135-prod",
+  "named13": 107958046,
+  "named14": 107958046,
+  "s13": {
+   "f05": 0.924856,
+   "precision": 0.994763,
+   "recall": 0.721924
+  },
+  "s14": {
+   "f05": 0.924856,
+   "precision": 0.994763,
+   "recall": 0.721924
+  },
+  "set": "test-webpack",
+  "wrong13": 568384,
+  "wrong14": 568384
+ },
+ {
+  "label": "test2-exp135-prod",
+  "named13": 170752597,
+  "named14": 170921942,
+  "s13": {
+   "f05": 0.913846,
+   "precision": 0.99262,
+   "recall": 0.693653
+  },
+  "s14": {
+   "f05": 0.914753,
+   "precision": 0.993605,
+   "recall": 0.694341
+  },
+  "set": "test2-bun",
+  "wrong13": 1269452,
+  "wrong14": 1100107
+ },
+ {
+  "label": "test2-exp135-prod",
+  "named13": 192574129,
+  "named14": 192578344,
+  "s13": {
+   "f05": 0.92206,
+   "precision": 0.996259,
+   "recall": 0.710418
+  },
+  "s14": {
+   "f05": 0.92208,
+   "precision": 0.996281,
+   "recall": 0.710434
+  },
+  "set": "test2-esbuild",
+  "wrong13": 723110,
+  "wrong14": 718895
+ },
+ {
+  "label": "test2-exp135-prod",
+  "named13": 44735512,
+  "named14": 44778041,
+  "s13": {
+   "f05": 0.913533,
+   "precision": 0.963521,
+   "recall": 0.756536
+  },
+  "s14": {
+   "f05": 0.914402,
+   "precision": 0.964437,
+   "recall": 0.757255
+  },
+  "set": "test2-rollup",
+  "wrong13": 1693692,
+  "wrong14": 1651163
+ },
+ {
+  "label": "test2-exp135-prod",
+  "named13": 119544112,
+  "named14": 119553746,
+  "s13": {
+   "f05": 0.916411,
+   "precision": 0.992742,
+   "recall": 0.700857
+  },
+  "s14": {
+   "f05": 0.916484,
+   "precision": 0.992822,
+   "recall": 0.700913
+  },
+  "set": "test2-webpack",
+  "wrong13": 874055,
+  "wrong14": 864421
+ }
+]

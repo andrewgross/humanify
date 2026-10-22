@@ -38,8 +38,8 @@
  "label": "exp125-dlf-apps",
  "missBytes": {
   "c": 736478,
-  "d-absent": 478253,
-  "d-file": 28859,
+  "d-absent": 478585,
+  "d-file": 28527,
   "e-ambig": 21505,
   "e-other": 64187,
   "e-support": 1671,
@@ -50,7 +50,7 @@
  "noDiscovery": null,
  "reportSha256": "1e3d449af130f93e07abcb2050b463ff79f224f9c5c9ae219cc6cd67a79fc024",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -93,8 +93,8 @@
    "libraryBytes": 13361001,
    "missBytes": {
     "c": 736478,
-    "d-absent": 478253,
-    "d-file": 28859,
+    "d-absent": 478585,
+    "d-file": 28527,
     "e-ambig": 21505,
     "e-other": 64187,
     "e-support": 1671,

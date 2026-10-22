@@ -133,7 +133,13 @@ NOT_LIBRARY = ("<app>", "<self>", "<unmapped>", "<foreign>")
 #    of large bundles) and that holds none of the module's rare tokens / long strings takes the smallest
 #    module-sized file of another package that does (a map source, else an installed file). Factory scope only.
 #    Same reports, re-scored; the rule off reproduces scorer 12's cards.
-SCORER_VERSION = "exp096-score/13"
+# 14: exp137, rule `mapdefect` (truth_audit.Audit.mapdefect, frozen layer mapdefect14 built by
+#    experiments/137-scorer-mapdefect/scorer14/mapdefect14.py): a unit whose labelled package's INSTALLED closure
+#    (the package at the map's path and every dependency resolved from it) holds under 20% of its distinctive name
+#    evidence, while one installed file of exactly one other family holds at least 80%, takes that package (Bun
+#    1.4's maps credit code to a file that does not hold it). Every scope; claim-blind (it moves claims both ways
+#    and relabels unclaimed units alike). Same reports, re-scored; the rule off reproduces scorer 13's cards.
+SCORER_VERSION = "exp096-score/14"
 
 
 def r6(x):
@@ -199,7 +205,9 @@ def label_units(truth, units, origins=None, audit=None):
     the MAJORITY of the label's own bytes by origin (no origin counts as a candidate too), when it is not the
     label itself. Also for <self> units (a copy inside the app's own package). With the scorer-4 `audit`
     (truth_audit.Audit): a carried unit is <unmapped> (`carriedFrom` keeps the old label), and a library unit with
-    no origin takes a frozen copy range's origin (`originEvidence` "copy")."""
+    no origin takes a frozen copy range's origin (`originEvidence` "copy"). Scorer 13: a misattributed module's
+    units take the layer's file (`misattributedFrom`); scorer 14: a unit the map-defect layer relabels takes its
+    package (`mapDefectFrom` keeps the old label), its copy origin then read for the new shipper."""
     segs = truth["segments"]
     srcs = truth["sources"]
     offs = [s[0] for s in segs]
@@ -246,6 +254,10 @@ def label_units(truth, units, origins=None, audit=None):
                 if kind.startswith(VIA):
                     row.update(originEvidence="chunk", via=kind[len(VIA):])
         if audit is not None and lab not in NOT_LIBRARY and "origin" not in row:
+            md = audit.mapdefect(s, e, lab)
+            if md is not None:
+                row = {"label": md[3], "pkg": md[3], "version": md[4], "file": md[5], "mapDefectFrom": lab}
+                lab = md[3]
             co = audit.copy_origin(s, e, lab)
             if co is not None:
                 row.update(origin=co[0], originEvidence="copy")
@@ -656,6 +668,9 @@ def main():
     o12m = truth_audit.load_origins12_manifest() if o7m is not None else None
     if o12m is not None and o12m["corpusSha256"] != pipeline["corpusSha256"]:
         raise SystemExit("REFUSED: the scorer 12 origin layer was frozen for another corpus manifest")
+    if truth_audit.RULES14["mapdefect"] and \
+            truth_audit.load_mapdefect14_manifest()["corpusSha256"] != pipeline["corpusSha256"]:
+        raise SystemExit("REFUSED: the scorer 14 map-defect layer was frozen for another corpus manifest")
     out_dir = os.path.join(HERE, "results", label)
     # a test label's per-bundle cards are NOT committed (tuning lanes must not read per-app test misses)
     cards_dir = os.path.join(run_dir if test else out_dir, "cards")
@@ -714,6 +729,7 @@ def main():
                    **({"chained9Sha256": truth_audit.chained9_sha()} if c9m else {}),
                    **({"chained11Sha256": truth_audit.chained11_sha()} if c11m else {}),
                    **({"misattr13Sha256": truth_audit.misattr13_sha()} if truth_audit.RULES13["misattributed"] else {}),
+                   **({"mapdefect14Sha256": truth_audit.mapdefect14_sha()} if truth_audit.RULES14["mapdefect"] else {}),
                    **({"settings": pipeline["settings"]} if pipeline.get("settings") else {}),
                    **({"corpus": lib096.CORPUS} if lib096.CORPUS != "dev" else {}),
                    **({"sets": pipeline["sets"]} if pipeline.get("sets") else {})},

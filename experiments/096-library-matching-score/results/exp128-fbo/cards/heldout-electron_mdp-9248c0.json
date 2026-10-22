@@ -35,7 +35,8 @@
  "label": "exp128-fbo",
  "missBytes": {
   "c": 60012,
-  "d-file": 184309,
+  "d-absent": 182347,
+  "d-file": 1962,
   "e-ambig": 4330,
   "e-other": 1327,
   "e-support": 1211,
@@ -45,7 +46,7 @@
  "noDiscovery": null,
  "reportSha256": "8235a50e3ba339bb54238153ffe74de5fde921868bef93ddeec9865cc324413a",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -61,7 +62,7 @@
    "libraryBytes": 1503107,
    "missBytes": {
     "c": 11152,
-    "d-file": 182347,
+    "d-absent": 182347,
     "e-support": 186,
     "e-veto": 719960,
     "f": 556

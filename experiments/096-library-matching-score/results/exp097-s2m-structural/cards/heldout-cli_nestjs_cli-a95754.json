@@ -36,7 +36,7 @@
  "missBytes": {
   "b": 3518,
   "c": 2658,
-  "d-file": 20478,
+  "d-absent": 20478,
   "e-support": 570,
   "e-veto": 167,
   "f": 3343,
@@ -45,7 +45,7 @@
  "noDiscovery": null,
  "reportSha256": "71564366bb5e88a7ebf55cec1b624290409faf170d5d1bee9514025682ff3fb4",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -92,7 +92,7 @@
    "missBytes": {
     "b": 3518,
     "c": 2658,
-    "d-file": 20478,
+    "d-absent": 20478,
     "e-support": 570,
     "e-veto": 167,
     "f": 3343

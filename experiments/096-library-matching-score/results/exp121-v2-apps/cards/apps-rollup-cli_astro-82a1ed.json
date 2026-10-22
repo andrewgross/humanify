@@ -38,8 +38,8 @@
  "label": "exp121-v2-apps",
  "missBytes": {
   "c": 736596,
-  "d-absent": 478253,
-  "d-file": 28859,
+  "d-absent": 478585,
+  "d-file": 28527,
   "e-ambig": 23358,
   "e-other": 66059,
   "e-support": 1671,
@@ -50,7 +50,7 @@
  "noDiscovery": null,
  "reportSha256": "c4eb5777c45f6db00c7e9ae2dde93f7bdf35809d09eb75d60308387679576e07",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -93,8 +93,8 @@
    "libraryBytes": 13361001,
    "missBytes": {
     "c": 736596,
-    "d-absent": 478253,
-    "d-file": 28859,
+    "d-absent": 478585,
+    "d-file": 28527,
     "e-ambig": 23358,
     "e-other": 66059,
     "e-support": 1671,

@@ -37,7 +37,8 @@
  "missBytes": {
   "a": 63793,
   "c": 49852,
-  "d-file": 20719,
+  "d-absent": 20478,
+  "d-file": 241,
   "e-ambig": 7540,
   "e-other": 412,
   "e-support": 772,
@@ -47,7 +48,7 @@
  "noDiscovery": null,
  "reportSha256": "c59660aa13cf5598f2044b024a9c9465b7baefb27c15f2d8a17fff327ffdeada",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -105,7 +106,7 @@
    "libraryBytes": 193262,
    "missBytes": {
     "c": 1550,
-    "d-file": 20478,
+    "d-absent": 20478,
     "e-support": 209,
     "e-veto": 167,
     "f": 2063

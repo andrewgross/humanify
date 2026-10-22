@@ -33,8 +33,8 @@
  "label": "bundlers-exp129o-auto",
  "missBytes": {
   "c": 5057,
+  "d-absent": 4626,
   "d-file": 13492,
-  "d-variant": 4626,
   "e-ambig": 216,
   "e-spec": 1147,
   "e-support": 6877,
@@ -44,7 +44,7 @@
  "noDiscovery": null,
  "reportSha256": "7b9e1524cd89ae17de68a17401434fefa32d255604d5bd4dd524defa0c2802e4",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -82,8 +82,8 @@
    "libraryBytes": 166945,
    "missBytes": {
     "c": 5057,
+    "d-absent": 4626,
     "d-file": 13492,
-    "d-variant": 4626,
     "e-ambig": 216,
     "e-spec": 1147,
     "e-support": 6877,

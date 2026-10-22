@@ -22,6 +22,7 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 3037153259,
   "indexId": "6edf4f3d7860d03cc2ed419318780d3844a929ed89d4e428b7055aa2d6203435",
+  "mapdefect14Sha256": "79eee3bfd208a21bcc48ce210ac87587dab995b8ceede6818c8daea8e4505b60",
   "misattr13Sha256": "66db1e7bce52b2ca7d92710c95caa7b0aea229cc1f3063007723068495e4c777",
   "origins10Sha256": "8275017bee83fa2d6284f7ef224cf04277b7fd1f24a7d28f941948adb11c9fa8",
   "origins12Sha256": "bacacab152693bdd229ce2c126ba0247dc27951ff61593a04b942454572db604",
@@ -30,7 +31,7 @@
   "rule": "structural"
  },
  "label": "test-exp101-call2k-structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "sets": {
   "test-bun": {
    "appClaimedBytes": 0,
@@ -55,8 +56,8 @@
     "a": 0.021373,
     "b": 0.008129,
     "c": 0.00154,
-    "d-absent": 0.006088,
-    "d-file": 0.000498,
+    "d-absent": 0.006341,
+    "d-file": 0.000246,
     "d-variant": 0.000381,
     "e-ambig": 0.000184,
     "e-other": 6.7e-05,
@@ -108,8 +109,8 @@
       "a": 0.099791,
       "b": 0.037955,
       "c": 0.007189,
-      "d-absent": 0.028426,
-      "d-file": 0.002324,
+      "d-absent": 0.029604,
+      "d-file": 0.001147,
       "d-variant": 0.001778,
       "e-ambig": 0.000861,
       "e-other": 0.000314,

@@ -3,9 +3,9 @@
  "claimedBytes": {
   "family": 8753886,
   "origin": 518648,
-  "right": 9068702,
+  "right": 9068325,
   "unmapped": 80016,
-  "wrongFamily": 180559
+  "wrongFamily": 180936
  },
  "detected": {
   "bundler": "bun",
@@ -15,81 +15,81 @@
  "entry": "pop-bun-electron_gh-eastsun5566__hackdesk-bca960",
  "exploratory": {
   "names": {
-   "bindings": 120297,
+   "bindings": 120279,
    "bindingsSameVersion": 92124,
-   "bindingsVersionKnown": 120297,
-   "exactBytes": 10602175,
-   "exactUnits": 12385,
-   "sameVersionShare": 0.765805
+   "bindingsVersionKnown": 120279,
+   "exactBytes": 10601798,
+   "exactUnits": 12384,
+   "sameVersionShare": 0.765919
   }
  },
  "indexId": "c5fe9a7403c05c4c7ed2ca0fce09a1d7802089c80a769eb61e37b54fd8d73fa3",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.756342,
-  "f1": 0.558251,
-  "namedBytes": 8670229,
-  "precision": 0.990704,
-  "recall": 0.388616
+  "f05": 0.756309,
+  "f1": 0.558227,
+  "namedBytes": 8669852,
+  "precision": 0.990661,
+  "recall": 0.388599
  },
  "label": "pop-exp132-ftfw",
  "missBytes": {
   "a": 1107074,
   "b": 617226,
   "c": 1178564,
-  "d-absent": 388242,
-  "d-file": 71001,
-  "e-ambig": 74084,
+  "d-absent": 390234,
+  "d-file": 69009,
+  "e-ambig": 74819,
   "e-other": 128033,
   "e-spec": 1116,
-  "e-support": 12358,
-  "e-veto": 33430,
-  "f": 358168
+  "e-support": 11623,
+  "e-veto": 32840,
+  "f": 359135
  },
  "noDiscovery": null,
  "reportSha256": "09dd5c8f064741e68050abcef2d809ddefceefc29512f4366c1086d97402de24",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
    "claimedBytes": {
     "family": 17600,
-    "right": 6792017,
+    "right": 6791640,
     "unmapped": 55530,
-    "wrongFamily": 13712
+    "wrongFamily": 14089
    },
    "copyBytes": 0,
-   "f05": 0.957043,
-   "f05ShipperOnly": 0.957043,
-   "f1": 0.901557,
-   "f1ShipperOnly": 0.901557,
+   "f05": 0.95699,
+   "f05ShipperOnly": 0.95699,
+   "f1": 0.901507,
+   "f1ShipperOnly": 0.901507,
    "libraryBytes": 8283015,
    "missBytes": {
     "a": 22261,
     "b": 204310,
     "c": 481703,
-    "d-absent": 387808,
-    "d-file": 43926,
-    "e-ambig": 50674,
+    "d-absent": 389800,
+    "d-file": 41934,
+    "e-ambig": 51409,
     "e-other": 71135,
-    "e-support": 10025,
-    "e-veto": 33340,
-    "f": 168216
+    "e-support": 9290,
+    "e-veto": 32750,
+    "f": 169183
    },
    "namedAsOriginBytes": 0,
-   "namedBytes": 6809617,
-   "namedBytesShipperOnly": 6809617,
-   "precision": 0.99799,
-   "precisionShipperOnly": 0.99799,
-   "recall": 0.822118,
-   "recallShipperOnly": 0.822118,
+   "namedBytes": 6809240,
+   "namedBytesShipperOnly": 6809240,
+   "precision": 0.997935,
+   "precisionShipperOnly": 0.997935,
+   "recall": 0.822073,
+   "recallShipperOnly": 0.822073,
    "statementBytes": {
     "<unmapped>": 350735,
     "library": 8283015
    },
-   "wrongFamilyBytes": 13712,
-   "wrongFamilyBytesShipperOnly": 13712
+   "wrongFamilyBytes": 14089,
+   "wrongFamilyBytesShipperOnly": 14089
   },
   "statement": {
    "appClaimedBytes": 0,
@@ -152,21 +152,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 942113,
-  "f05": 0.951332,
-  "f05ShipperOnly": 0.92443,
-  "f1": 0.898369,
-  "f1ShipperOnly": 0.872965,
+  "f05": 0.951312,
+  "f05ShipperOnly": 0.92441,
+  "f1": 0.89835,
+  "f1ShipperOnly": 0.872946,
   "libraryBytes": 22310532,
   "namedAsOriginBytes": 518648,
-  "namedAsShipperBytes": 17822588,
-  "namedBytes": 18341236,
-  "namedBytesShipperOnly": 17822588,
-  "precision": 0.990252,
-  "precisionShipperOnly": 0.96225,
-  "recall": 0.822089,
-  "recallShipperOnly": 0.798842,
-  "wrongFamilyBytes": 180559,
-  "wrongFamilyBytesShipperOnly": 699207
+  "namedAsShipperBytes": 17822211,
+  "namedBytes": 18340859,
+  "namedBytesShipperOnly": 17822211,
+  "precision": 0.990231,
+  "precisionShipperOnly": 0.962229,
+  "recall": 0.822072,
+  "recallShipperOnly": 0.798825,
+  "wrongFamilyBytes": 180936,
+  "wrongFamilyBytesShipperOnly": 699584
  },
  "truthMethod": "sourcemap"
 }
