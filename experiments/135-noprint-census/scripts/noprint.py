@@ -22,7 +22,9 @@ take the truth row scorer 13 gives the unit (label package T, version V, file F,
 Classes are judged on the label package T; an origin O (when the truth has one) is recorded as `origin-indexed`
 yes/no beside it (the claim would be right for either).
 
-usage: <venv python> -I noprint.py <corpus> <judge.jsonl> <slot c0|c1> <label> <out-prefix> [--private]
+usage: <venv python> -I noprint.py <corpus> <judge.jsonl|-> <slot c0|c1> <label> <out-prefix> [--private]
+                                   [--store <store/shards> --work <work dir>]   (default: exp130's, k2-all-r5-origin)
+  `-` judges the label inline (judge13's verdicts); the only way it reads a frozen test split.
   writes <out-prefix>.rows.jsonl (per unit; package names withheld for the held-out set and for --private
   corpora) and prints per-set aggregates (KB per class/subclass). --private (test only): aggregates only."""
 import collections
@@ -311,6 +313,10 @@ def inline_rows(rep, units, lab, key, entry, truth, score, slot):
 def main():
     corpus, path, slot, label, prefix = sys.argv[1:6]
     private = "--private" in sys.argv
+    global STORE, WORK
+    if "--store" in sys.argv:  # the shard store / work dir the label's index was built from
+        STORE = sys.argv[sys.argv.index("--store") + 1]
+        WORK = sys.argv[sys.argv.index("--work") + 1]
     if corpus == "test2":
         raise SystemExit("REFUSED: test2 is a frozen judge, never diagnosed")
     if corpus in lib096.PRIVATE and not private:
@@ -333,8 +339,8 @@ def main():
             wrong[r["entry"]].append(r)
     entries = {e["id"]: e for e in lib096.load_manifest()["entries"]}
     if path == "-":  # inline judge (judge13's verdicts, one label): the frozen test split, never written out
-        wrong = {eid: None for eid in entries
-                 if os.path.exists(os.path.join(lib096.DATA, "results", label, "reports", eid + ".json"))}
+        wrong = {eid: None for eid, e in entries.items() if (e.get("truth") or {}).get("method") == "sourcemap"
+                 and os.path.exists(os.path.join(lib096.DATA, "results", label, "reports", eid + ".json"))}
     pipe = json.load(open(os.path.join(lib096.DATA, "results", label, "pipeline.json")))
     ixs = {}
     agg = collections.Counter()
@@ -385,14 +391,18 @@ def main():
             elif not V:
                 cls, sub = "e-truth-questionable", "no-version-in-map"
             elif not ix.has_package(T):
-                cls, sub = "a-not-indexed", "-"
                 dl = dl25k()
                 extra = {"inDl25k": T in dl, "inDl25kVersion": V in dl.get(T, ())}
+                cls = "a-not-indexed"
+                sub = ("in-dl25k-at-version" if extra["inDl25kVersion"] else "in-dl25k-other-version"
+                       if extra["inDl25k"] else "not-in-dl25k")
             elif not ix.has_version(T, V):
                 step, gap, side = nearest(T, V, ix.versions[T])
                 built = bool(ix.file_versions(T, F))
-                cls, sub = "b-other-version", step
                 extra = {"gapDays": gap, "side": side, "fileBuiltElsewhere": built, **policies(T, V)}
+                cls = "b-other-version"
+                sub = ("after-as-of" if not extra["policyKnown"] else "last-year" if extra["lastYear"]
+                       else "latest-patch-of-minor" if extra["latestPatchOfMinor"] else "older") + "/" + step
             else:
                 UNIT_NODES[0] = u["w"][1]
                 cls, sub = classify_dropped(sl, T, V, F, hs)

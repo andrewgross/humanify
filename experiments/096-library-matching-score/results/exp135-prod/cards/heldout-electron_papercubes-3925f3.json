@@ -1,0 +1,136 @@
+{
+ "bundleSha256": "ff270e0fdf6788e9c02028fb3c6efd56fe17f43149bfa3a1330f5ddebdcd79d8",
+ "claimedBytes": {
+  "right": 244725,
+  "unmapped": 15
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-electron_papercubes-3925f3",
+ "exploratory": {
+  "names": {
+   "bindings": 4487,
+   "bindingsSameVersion": 4487,
+   "bindingsVersionKnown": 4487,
+   "exactBytes": 231071,
+   "exactUnits": 700,
+   "sameVersionShare": 1.0
+  }
+ },
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.913004,
+  "f1": 0.807615,
+  "namedBytes": 213888,
+  "precision": 1.0,
+  "recall": 0.677311
+ },
+ "label": "exp135-prod",
+ "missBytes": {
+  "a": 7295,
+  "c": 14142,
+  "e-ambig": 4719,
+  "e-other": 6964,
+  "e-support": 8514,
+  "e-veto": 29431
+ },
+ "noDiscovery": null,
+ "reportSha256": "fc51dfe845ba04022988d9ca7d69d3b8d02dd263c849edcb04a21ab46d35c2cd",
+ "rule": "structural",
+ "schema": "exp096-score/13",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "right": 244725,
+    "unmapped": 15
+   },
+   "copyBytes": 0,
+   "f05": 0.94511,
+   "f05ShipperOnly": 0.94511,
+   "f1": 0.873215,
+   "f1ShipperOnly": 0.873215,
+   "libraryBytes": 315790,
+   "missBytes": {
+    "a": 7295,
+    "c": 14142,
+    "e-ambig": 4719,
+    "e-other": 6964,
+    "e-support": 8514,
+    "e-veto": 29431
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 244725,
+   "namedBytesShipperOnly": 244725,
+   "precision": 1.0,
+   "precisionShipperOnly": 1.0,
+   "recall": 0.774961,
+   "recallShipperOnly": 0.774961,
+   "statementBytes": {
+    "<unmapped>": 15,
+    "library": 315790
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<app>": 233
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  }
+ },
+ "set": "heldout",
+ "statementBytes": {
+  "<app>": 233,
+  "<unmapped>": 15,
+  "library": 315790
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.94511,
+  "f05ShipperOnly": 0.94511,
+  "f1": 0.873215,
+  "f1ShipperOnly": 0.873215,
+  "libraryBytes": 315790,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 244725,
+  "namedBytes": 244725,
+  "namedBytesShipperOnly": 244725,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.774961,
+  "recallShipperOnly": 0.774961,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}
