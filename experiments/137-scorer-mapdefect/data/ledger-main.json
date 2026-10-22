@@ -1,312 +1,312 @@
 {
- "exp135-prod": {
-  "esbuild-app": {
-   "counts": {
-    "library bytes": 18596890,
-    "library bytes the layer read": 18280047,
-    "wrong-family bytes left, by layer verdict: few-evidence": 18993,
-    "wrong-family bytes left, by layer verdict: label-holds": 78035,
-    "wrong-family bytes left, by layer verdict: label-not-installed": 32114,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 1932
-   },
-   "moves": {}
+  "exp135-prod": {
+    "esbuild-app": {
+      "counts": {
+        "library bytes": 18596890,
+        "library bytes the layer read": 18280047,
+        "wrong-family bytes left, by layer verdict: few-evidence": 18993,
+        "wrong-family bytes left, by layer verdict: label-holds": 78035,
+        "wrong-family bytes left, by layer verdict: label-not-installed": 32114,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 1932
+      },
+      "moves": {}
+    },
+    "heldout": {
+      "counts": {
+        "library bytes": 235116943,
+        "library bytes the layer read": 227552292,
+        "relabelled bytes": 863305,
+        "relabelled bytes, claimed": 118466,
+        "relabelled bytes, unclaimed (recall truth)": 744839,
+        "relabelled units": 48,
+        "wrong-family bytes left, by layer verdict: ambiguous": 12851,
+        "wrong-family bytes left, by layer verdict: few-evidence": 293216,
+        "wrong-family bytes left, by layer verdict: label-holds": 252328,
+        "wrong-family bytes left, by layer verdict: relabel": 3453,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 27666
+      },
+      "moves": {
+        "right -> wrongFamily": 282,
+        "wrongFamily -> family": 1148,
+        "wrongFamily -> right": 113865,
+        "wrongFamily -> wrongFamily": 3171
+      }
+    },
+    "wrangler": {
+      "counts": {
+        "library bytes": 1854010,
+        "library bytes the layer read": 1813952,
+        "wrong-family bytes left, by layer verdict: no-install-tree": 5774
+      },
+      "moves": {}
+    }
   },
-  "heldout": {
-   "counts": {
-    "library bytes": 235116943,
-    "library bytes the layer read": 227552292,
-    "relabelled bytes": 863305,
-    "relabelled bytes, claimed": 118466,
-    "relabelled bytes, unclaimed (recall truth)": 744839,
-    "relabelled units": 48,
-    "wrong-family bytes left, by layer verdict: ambiguous": 12851,
-    "wrong-family bytes left, by layer verdict: few-evidence": 293216,
-    "wrong-family bytes left, by layer verdict: label-holds": 252328,
-    "wrong-family bytes left, by layer verdict: relabel": 3453,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 27666
-   },
-   "moves": {
-    "right -> wrongFamily": 282,
-    "wrongFamily -> family": 1148,
-    "wrongFamily -> right": 113865,
-    "wrongFamily -> wrongFamily": 3171
-   }
+  "exp135-prod-apps": {
+    "apps-esbuild": {
+      "counts": {
+        "library bytes": 153016872,
+        "library bytes the layer read": 146882381,
+        "relabelled bytes": 3199,
+        "relabelled bytes, claimed": 3199,
+        "relabelled units": 6,
+        "wrong-family bytes left, by layer verdict: few-evidence": 107623,
+        "wrong-family bytes left, by layer verdict: label-holds": 19530,
+        "wrong-family bytes left, by layer verdict: label-not-installed": 466,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 4220
+      },
+      "moves": {
+        "wrongFamily -> right": 3199
+      }
+    },
+    "apps-rollup": {
+      "counts": {
+        "library bytes": 94774012,
+        "library bytes the layer read": 92653312,
+        "relabelled bytes": 36236,
+        "relabelled bytes, unclaimed (recall truth)": 36236,
+        "relabelled units": 4,
+        "wrong-family bytes left, by layer verdict: few-evidence": 364021,
+        "wrong-family bytes left, by layer verdict: label-holds": 313981,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 32565
+      },
+      "moves": {}
+    },
+    "apps-webpack": {
+      "counts": {
+        "library bytes": 74482644,
+        "library bytes the layer read": 73682227,
+        "wrong-family bytes left, by layer verdict: few-evidence": 81996,
+        "wrong-family bytes left, by layer verdict: label-holds": 105682,
+        "wrong-family bytes left, by layer verdict: no-install-tree": 41431,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 1732
+      },
+      "moves": {}
+    }
   },
-  "wrangler": {
-   "counts": {
-    "library bytes": 1854010,
-    "library bytes the layer read": 1813952,
-    "wrong-family bytes left, by layer verdict: no-install-tree": 5774
-   },
-   "moves": {}
+  "exp135-prod-bundlers": {
+    "dev-rollup": {
+      "counts": {
+        "library bytes": 2142780,
+        "library bytes the layer read": 2135152,
+        "wrong-family bytes left, by layer verdict: few-evidence": 2100,
+        "wrong-family bytes left, by layer verdict: label-holds": 9,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 5
+      },
+      "moves": {}
+    },
+    "dev-webpack": {
+      "counts": {
+        "library bytes": 1829402,
+        "library bytes the layer read": 1828325,
+        "wrong-family bytes left, by layer verdict: few-evidence": 1285,
+        "wrong-family bytes left, by layer verdict: label-holds": 2854
+      },
+      "moves": {}
+    }
+  },
+  "pop-exp135-prod": {
+    "pop-bun": {
+      "counts": {
+        "library bytes": 325892619,
+        "library bytes the layer read": 288005443,
+        "relabelled bytes": 636371,
+        "relabelled bytes, claimed": 59397,
+        "relabelled bytes, unclaimed (recall truth)": 576974,
+        "relabelled units": 41,
+        "wrong-family bytes left, by layer verdict: ambiguous": 2192,
+        "wrong-family bytes left, by layer verdict: app-holds": 840,
+        "wrong-family bytes left, by layer verdict: few-evidence": 469497,
+        "wrong-family bytes left, by layer verdict: label-holds": 287405,
+        "wrong-family bytes left, by layer verdict: relabel": 377,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 458162
+      },
+      "moves": {
+        "right -> wrongFamily": 377,
+        "wrongFamily -> right": 59020
+      }
+    },
+    "pop-esbuild": {
+      "counts": {
+        "library bytes": 326248014,
+        "library bytes the layer read": 291188153,
+        "relabelled bytes": 4231,
+        "relabelled bytes, claimed": 4231,
+        "relabelled units": 4,
+        "wrong-family bytes left, by layer verdict: few-evidence": 475850,
+        "wrong-family bytes left, by layer verdict: label-holds": 413171,
+        "wrong-family bytes left, by layer verdict: label-not-installed": 572667,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 333493
+      },
+      "moves": {
+        "wrongFamily -> right": 4231
+      }
+    }
+  },
+  "remin-exp135-prod": {
+    "remin-esbuild": {
+      "counts": {
+        "library bytes": 99588574,
+        "library bytes the layer read": 98846872,
+        "relabelled bytes": 291,
+        "relabelled bytes, unclaimed (recall truth)": 291,
+        "relabelled units": 1,
+        "wrong-family bytes left, by layer verdict: few-evidence": 83347,
+        "wrong-family bytes left, by layer verdict: label-holds": 40433,
+        "wrong-family bytes left, by layer verdict: label-not-installed": 34322,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 1893
+      },
+      "moves": {}
+    },
+    "remin-terser": {
+      "counts": {
+        "library bytes": 93354555,
+        "library bytes the layer read": 92355495,
+        "wrong-family bytes left, by layer verdict: few-evidence": 10195,
+        "wrong-family bytes left, by layer verdict: label-holds": 8451
+      },
+      "moves": {}
+    }
+  },
+  "test-exp135-prod": {
+    "test-bun": {
+      "counts": {
+        "library bytes": 290064491,
+        "library bytes the layer read": 255906933,
+        "relabelled bytes": 465140,
+        "relabelled bytes, claimed": 14209,
+        "relabelled bytes, unclaimed (recall truth)": 450931,
+        "relabelled units": 38,
+        "wrong-family bytes left, by layer verdict: ambiguous": 1989,
+        "wrong-family bytes left, by layer verdict: few-evidence": 541077,
+        "wrong-family bytes left, by layer verdict: label-holds": 318669,
+        "wrong-family bytes left, by layer verdict: relabel": 746,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 78189
+      },
+      "moves": {
+        "right -> wrongFamily": 284,
+        "wrongFamily -> right": 13463,
+        "wrongFamily -> wrongFamily": 462
+      }
+    },
+    "test-esbuild": {
+      "counts": {
+        "library bytes": 318184757,
+        "library bytes the layer read": 285752163,
+        "relabelled bytes": 5378,
+        "relabelled bytes, claimed": 5378,
+        "relabelled units": 8,
+        "wrong-family bytes left, by layer verdict: ambiguous": 254,
+        "wrong-family bytes left, by layer verdict: few-evidence": 371612,
+        "wrong-family bytes left, by layer verdict: label-holds": 203180,
+        "wrong-family bytes left, by layer verdict: label-not-installed": 1084811,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 74771
+      },
+      "moves": {
+        "wrongFamily -> right": 5378
+      }
+    },
+    "test-rollup": {
+      "counts": {
+        "library bytes": 109096570,
+        "library bytes the layer read": 85040839,
+        "relabelled bytes": 33448,
+        "relabelled bytes, unclaimed (recall truth)": 33448,
+        "relabelled units": 1,
+        "wrong-family bytes left, by layer verdict: few-evidence": 280159,
+        "wrong-family bytes left, by layer verdict: label-holds": 116852,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 432773
+      },
+      "moves": {}
+    },
+    "test-webpack": {
+      "counts": {
+        "library bytes": 149542217,
+        "library bytes the layer read": 133837060,
+        "relabelled bytes": 4561,
+        "relabelled bytes, unclaimed (recall truth)": 4561,
+        "relabelled units": 1,
+        "wrong-family bytes left, by layer verdict: few-evidence": 169725,
+        "wrong-family bytes left, by layer verdict: label-holds": 385727,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 12932
+      },
+      "moves": {}
+    }
+  },
+  "test2-exp135-prod": {
+    "test2-bun": {
+      "counts": {
+        "library bytes": 246164296,
+        "library bytes the layer read": 233315329,
+        "relabelled bytes": 932336,
+        "relabelled bytes, claimed": 176358,
+        "relabelled bytes, unclaimed (recall truth)": 755978,
+        "relabelled units": 97,
+        "wrong-family bytes left, by layer verdict: ambiguous": 1736,
+        "wrong-family bytes left, by layer verdict: few-evidence": 565864,
+        "wrong-family bytes left, by layer verdict: label-family-elsewhere": 23140,
+        "wrong-family bytes left, by layer verdict: label-holds": 380341,
+        "wrong-family bytes left, by layer verdict: relabel": 6257,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 122769
+      },
+      "moves": {
+        "right -> wrongFamily": 756,
+        "wrongFamily -> right": 170101,
+        "wrongFamily -> wrongFamily": 5501
+      }
+    },
+    "test2-esbuild": {
+      "counts": {
+        "library bytes": 271071562,
+        "library bytes the layer read": 263822386,
+        "relabelled bytes": 4215,
+        "relabelled bytes, claimed": 4215,
+        "relabelled units": 4,
+        "wrong-family bytes left, by layer verdict: few-evidence": 317480,
+        "wrong-family bytes left, by layer verdict: label-holds": 109669,
+        "wrong-family bytes left, by layer verdict: label-not-installed": 142280,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 149466
+      },
+      "moves": {
+        "wrongFamily -> right": 4215
+      }
+    },
+    "test2-rollup": {
+      "counts": {
+        "library bytes": 59132042,
+        "library bytes the layer read": 54381771,
+        "relabelled bytes": 67480,
+        "relabelled bytes, claimed": 42529,
+        "relabelled bytes, unclaimed (recall truth)": 24951,
+        "relabelled units": 40,
+        "wrong-family bytes left, by layer verdict: ambiguous": 7320,
+        "wrong-family bytes left, by layer verdict: app-holds": 2757,
+        "wrong-family bytes left, by layer verdict: few-evidence": 588018,
+        "wrong-family bytes left, by layer verdict: label-family-elsewhere": 1605,
+        "wrong-family bytes left, by layer verdict: label-holds": 1018182,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 33281
+      },
+      "moves": {
+        "wrongFamily -> family": 4067,
+        "wrongFamily -> right": 38462
+      }
+    },
+    "test2-webpack": {
+      "counts": {
+        "library bytes": 170568478,
+        "library bytes the layer read": 164433565,
+        "relabelled bytes": 33098,
+        "relabelled bytes, claimed": 9634,
+        "relabelled bytes, unclaimed (recall truth)": 23464,
+        "relabelled units": 17,
+        "wrong-family bytes left, by layer verdict: ambiguous": 1578,
+        "wrong-family bytes left, by layer verdict: few-evidence": 178882,
+        "wrong-family bytes left, by layer verdict: label-holds": 623430,
+        "wrong-family bytes left, by layer verdict: nobody-holds": 13817,
+        "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 46714
+      },
+      "moves": {
+        "wrongFamily -> right": 9634
+      }
+    }
   }
- },
- "exp135-prod-apps": {
-  "apps-esbuild": {
-   "counts": {
-    "library bytes": 153016872,
-    "library bytes the layer read": 146882381,
-    "relabelled bytes": 3199,
-    "relabelled bytes, claimed": 3199,
-    "relabelled units": 6,
-    "wrong-family bytes left, by layer verdict: few-evidence": 107623,
-    "wrong-family bytes left, by layer verdict: label-holds": 19530,
-    "wrong-family bytes left, by layer verdict: label-not-installed": 466,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 4220
-   },
-   "moves": {
-    "wrongFamily -> right": 3199
-   }
-  },
-  "apps-rollup": {
-   "counts": {
-    "library bytes": 94774012,
-    "library bytes the layer read": 92653312,
-    "relabelled bytes": 36236,
-    "relabelled bytes, unclaimed (recall truth)": 36236,
-    "relabelled units": 4,
-    "wrong-family bytes left, by layer verdict: few-evidence": 364021,
-    "wrong-family bytes left, by layer verdict: label-holds": 313981,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 32565
-   },
-   "moves": {}
-  },
-  "apps-webpack": {
-   "counts": {
-    "library bytes": 74482644,
-    "library bytes the layer read": 73682227,
-    "wrong-family bytes left, by layer verdict: few-evidence": 81996,
-    "wrong-family bytes left, by layer verdict: label-holds": 105682,
-    "wrong-family bytes left, by layer verdict: no-install-tree": 41431,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 1732
-   },
-   "moves": {}
-  }
- },
- "exp135-prod-bundlers": {
-  "dev-rollup": {
-   "counts": {
-    "library bytes": 2142780,
-    "library bytes the layer read": 2135152,
-    "wrong-family bytes left, by layer verdict: few-evidence": 2100,
-    "wrong-family bytes left, by layer verdict: label-holds": 9,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 5
-   },
-   "moves": {}
-  },
-  "dev-webpack": {
-   "counts": {
-    "library bytes": 1829402,
-    "library bytes the layer read": 1828325,
-    "wrong-family bytes left, by layer verdict: few-evidence": 1285,
-    "wrong-family bytes left, by layer verdict: label-holds": 2854
-   },
-   "moves": {}
-  }
- },
- "pop-exp135-prod": {
-  "pop-bun": {
-   "counts": {
-    "library bytes": 325892619,
-    "library bytes the layer read": 288005443,
-    "relabelled bytes": 636371,
-    "relabelled bytes, claimed": 59397,
-    "relabelled bytes, unclaimed (recall truth)": 576974,
-    "relabelled units": 41,
-    "wrong-family bytes left, by layer verdict: ambiguous": 2192,
-    "wrong-family bytes left, by layer verdict: app-holds": 840,
-    "wrong-family bytes left, by layer verdict: few-evidence": 469497,
-    "wrong-family bytes left, by layer verdict: label-holds": 287405,
-    "wrong-family bytes left, by layer verdict: relabel": 377,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 458162
-   },
-   "moves": {
-    "right -> wrongFamily": 377,
-    "wrongFamily -> right": 59020
-   }
-  },
-  "pop-esbuild": {
-   "counts": {
-    "library bytes": 326248014,
-    "library bytes the layer read": 291188153,
-    "relabelled bytes": 4231,
-    "relabelled bytes, claimed": 4231,
-    "relabelled units": 4,
-    "wrong-family bytes left, by layer verdict: few-evidence": 475850,
-    "wrong-family bytes left, by layer verdict: label-holds": 413171,
-    "wrong-family bytes left, by layer verdict: label-not-installed": 572667,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 333493
-   },
-   "moves": {
-    "wrongFamily -> right": 4231
-   }
-  }
- },
- "remin-exp135-prod": {
-  "remin-esbuild": {
-   "counts": {
-    "library bytes": 99588574,
-    "library bytes the layer read": 98846872,
-    "relabelled bytes": 291,
-    "relabelled bytes, unclaimed (recall truth)": 291,
-    "relabelled units": 1,
-    "wrong-family bytes left, by layer verdict: few-evidence": 83347,
-    "wrong-family bytes left, by layer verdict: label-holds": 40433,
-    "wrong-family bytes left, by layer verdict: label-not-installed": 34322,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 1893
-   },
-   "moves": {}
-  },
-  "remin-terser": {
-   "counts": {
-    "library bytes": 93354555,
-    "library bytes the layer read": 92355495,
-    "wrong-family bytes left, by layer verdict: few-evidence": 10195,
-    "wrong-family bytes left, by layer verdict: label-holds": 8451
-   },
-   "moves": {}
-  }
- },
- "test-exp135-prod": {
-  "test-bun": {
-   "counts": {
-    "library bytes": 290064491,
-    "library bytes the layer read": 255906933,
-    "relabelled bytes": 465140,
-    "relabelled bytes, claimed": 14209,
-    "relabelled bytes, unclaimed (recall truth)": 450931,
-    "relabelled units": 38,
-    "wrong-family bytes left, by layer verdict: ambiguous": 1989,
-    "wrong-family bytes left, by layer verdict: few-evidence": 541077,
-    "wrong-family bytes left, by layer verdict: label-holds": 318669,
-    "wrong-family bytes left, by layer verdict: relabel": 746,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 78189
-   },
-   "moves": {
-    "right -> wrongFamily": 284,
-    "wrongFamily -> right": 13463,
-    "wrongFamily -> wrongFamily": 462
-   }
-  },
-  "test-esbuild": {
-   "counts": {
-    "library bytes": 318184757,
-    "library bytes the layer read": 285752163,
-    "relabelled bytes": 5378,
-    "relabelled bytes, claimed": 5378,
-    "relabelled units": 8,
-    "wrong-family bytes left, by layer verdict: ambiguous": 254,
-    "wrong-family bytes left, by layer verdict: few-evidence": 371612,
-    "wrong-family bytes left, by layer verdict: label-holds": 203180,
-    "wrong-family bytes left, by layer verdict: label-not-installed": 1084811,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 74771
-   },
-   "moves": {
-    "wrongFamily -> right": 5378
-   }
-  },
-  "test-rollup": {
-   "counts": {
-    "library bytes": 109096570,
-    "library bytes the layer read": 85040839,
-    "relabelled bytes": 33448,
-    "relabelled bytes, unclaimed (recall truth)": 33448,
-    "relabelled units": 1,
-    "wrong-family bytes left, by layer verdict: few-evidence": 280159,
-    "wrong-family bytes left, by layer verdict: label-holds": 116852,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 432773
-   },
-   "moves": {}
-  },
-  "test-webpack": {
-   "counts": {
-    "library bytes": 149542217,
-    "library bytes the layer read": 133837060,
-    "relabelled bytes": 4561,
-    "relabelled bytes, unclaimed (recall truth)": 4561,
-    "relabelled units": 1,
-    "wrong-family bytes left, by layer verdict: few-evidence": 169725,
-    "wrong-family bytes left, by layer verdict: label-holds": 385727,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 12932
-   },
-   "moves": {}
-  }
- },
- "test2-exp135-prod": {
-  "test2-bun": {
-   "counts": {
-    "library bytes": 246164296,
-    "library bytes the layer read": 233315329,
-    "relabelled bytes": 932336,
-    "relabelled bytes, claimed": 176358,
-    "relabelled bytes, unclaimed (recall truth)": 755978,
-    "relabelled units": 97,
-    "wrong-family bytes left, by layer verdict: ambiguous": 1736,
-    "wrong-family bytes left, by layer verdict: few-evidence": 565864,
-    "wrong-family bytes left, by layer verdict: label-family-elsewhere": 23140,
-    "wrong-family bytes left, by layer verdict: label-holds": 380341,
-    "wrong-family bytes left, by layer verdict: relabel": 6257,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 122769
-   },
-   "moves": {
-    "right -> wrongFamily": 756,
-    "wrongFamily -> right": 170101,
-    "wrongFamily -> wrongFamily": 5501
-   }
-  },
-  "test2-esbuild": {
-   "counts": {
-    "library bytes": 271071562,
-    "library bytes the layer read": 263822386,
-    "relabelled bytes": 4215,
-    "relabelled bytes, claimed": 4215,
-    "relabelled units": 4,
-    "wrong-family bytes left, by layer verdict: few-evidence": 317480,
-    "wrong-family bytes left, by layer verdict: label-holds": 109669,
-    "wrong-family bytes left, by layer verdict: label-not-installed": 142280,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 149466
-   },
-   "moves": {
-    "wrongFamily -> right": 4215
-   }
-  },
-  "test2-rollup": {
-   "counts": {
-    "library bytes": 59132042,
-    "library bytes the layer read": 54381771,
-    "relabelled bytes": 67480,
-    "relabelled bytes, claimed": 42529,
-    "relabelled bytes, unclaimed (recall truth)": 24951,
-    "relabelled units": 40,
-    "wrong-family bytes left, by layer verdict: ambiguous": 7320,
-    "wrong-family bytes left, by layer verdict: app-holds": 2757,
-    "wrong-family bytes left, by layer verdict: few-evidence": 588018,
-    "wrong-family bytes left, by layer verdict: label-family-elsewhere": 1605,
-    "wrong-family bytes left, by layer verdict: label-holds": 1018182,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 33281
-   },
-   "moves": {
-    "wrongFamily -> family": 4067,
-    "wrongFamily -> right": 38462
-   }
-  },
-  "test2-webpack": {
-   "counts": {
-    "library bytes": 170568478,
-    "library bytes the layer read": 164433565,
-    "relabelled bytes": 33098,
-    "relabelled bytes, claimed": 9634,
-    "relabelled bytes, unclaimed (recall truth)": 23464,
-    "relabelled units": 17,
-    "wrong-family bytes left, by layer verdict: ambiguous": 1578,
-    "wrong-family bytes left, by layer verdict: few-evidence": 178882,
-    "wrong-family bytes left, by layer verdict: label-holds": 623430,
-    "wrong-family bytes left, by layer verdict: nobody-holds": 13817,
-    "wrong-family bytes left, by layer verdict: skipped: copy origin / scorer 13": 46714
-   },
-   "moves": {
-    "wrongFamily -> right": 9634
-   }
-  }
- }
 }
