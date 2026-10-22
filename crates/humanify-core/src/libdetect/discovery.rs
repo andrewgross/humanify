@@ -226,12 +226,15 @@ pub struct DiscoveryOptions {
     /// says nothing about whose payload it is
     /// ([`Containment::unbacked_payload`]).
     pub payload_min_bytes: u32,
-    /// Read the payload guard's long-literal backing as identity only when
-    /// no other family's files hold the literal too (exp139; default off):
-    /// a dist that inlines a dependency's data table (a UMD bundle) holds
-    /// the dependency's literal, and backed by it, propagation hands the
-    /// dependency's payload to the carrier.
-    pub payload_unique_literal: bool,
+    /// In a bundle that reads the terser-built slices, read the payload
+    /// guard's long-literal backing as identity only when no other family's
+    /// files hold the literal too (exp139; default off): a dist that inlines
+    /// a dependency's data table (a UMD bundle) holds the dependency's
+    /// literal, and backed by it, propagation hands the dependency's payload
+    /// to the carrier. Read in every bundle it costs right payloads (the
+    /// apps and pop sets lose 0.4-0.7 points of recall), so it is scoped to
+    /// the terser slices' extra claims.
+    pub terser_payload_literal: bool,
     /// Read another family's evidence in the conflict guards
     /// (`evidence_conflict`, `contested_cover`) under the lookup's
     /// specificity rule (exp106; default off): a print another family holds
@@ -384,7 +387,7 @@ impl Default for DiscoveryOptions {
             helper_families: 0,
             helper_prints: HelperPrints::Off,
             payload_min_bytes: 0,
-            payload_unique_literal: false,
+            terser_payload_literal: false,
             specific_rivals: false,
             derived_families: false,
             context_presence: 0.0,
@@ -1034,8 +1037,9 @@ pub struct Containment<'c> {
     /// Rivals' prints count only under the specificity rule
     /// ([`DiscoveryOptions::specific_rivals`]).
     specific_rivals: bool,
-    /// A long literal backs a payload only when one family holds it
-    /// ([`DiscoveryOptions::payload_unique_literal`]).
+    /// A long literal backs a payload only when one family holds it, in a
+    /// bundle reading the terser slices
+    /// ([`DiscoveryOptions::terser_payload_literal`]).
     unique_literals: bool,
 }
 
@@ -1394,6 +1398,7 @@ impl<'c> Containment<'c> {
             }),
             _ => false,
         };
+        let unique = self.unique_literals && self.index.reads_terser();
         let literal = self
             .index
             .long_literal_owners(text)
@@ -1401,7 +1406,7 @@ impl<'c> Containment<'c> {
             .iter()
             .any(|owners| {
                 owners.iter().any(|&o| self.owner_is(o, package))
-                    && (!self.unique_literals || owners.iter().all(|&o| self.owner_is(o, package)))
+                    && (!unique || owners.iter().all(|&o| self.owner_is(o, package)))
             });
         !printed && !literal
     }
@@ -3099,7 +3104,7 @@ fn discover_unscoped(
         &families,
     )
     .with_specific_rivals(options.specific_rivals)
-    .with_unique_literals(options.payload_unique_literal);
+    .with_unique_literals(options.terser_payload_literal);
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
     // The evidence-conflict guard reads index seeds too: the lookup picks
     // the best package under its specificity and package-count filters; a

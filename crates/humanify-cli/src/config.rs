@@ -330,7 +330,7 @@ impl Library {
             helper_families: d.helper_families,
             helper_prints: d.helper_prints,
             payload_min_bytes: d.payload_min_bytes,
-            payload_unique_literal: d.payload_unique_literal,
+            terser_payload_literal: d.terser_payload_literal,
             specific_rivals: d.specific_rivals,
             derived_families: d.derived_families,
             context_presence: d.context_presence,
@@ -441,7 +441,7 @@ pub struct LibraryDiscovery {
     #[serde(serialize_with = "serialize_helper_prints")]
     pub helper_prints: humanify_core::libdetect::discovery::HelperPrints,
     pub payload_min_bytes: u32,
-    pub payload_unique_literal: bool,
+    pub terser_payload_literal: bool,
     pub specific_rivals: bool,
     pub derived_families: bool,
     pub context_presence: f64,
@@ -664,7 +664,7 @@ fn library_of(r: &Resolved) -> Library {
                 .and_then(humanify_core::libdetect::discovery::HelperPrints::parse)
                 .unwrap_or(humanify_core::libdetect::discovery::HelperPrints::Off),
             payload_min_bytes: n("library.discovery.payload_min_bytes") as u32,
-            payload_unique_literal: r.flag_on("library.discovery.payload_unique_literal"),
+            terser_payload_literal: r.flag_on("library.discovery.terser_payload_literal"),
             specific_rivals: r.flag_on("library.discovery.specific_rivals"),
             derived_families: r.flag_on("library.discovery.derived_families"),
             context_presence: r.float("library.discovery.context_presence"),

@@ -718,14 +718,15 @@ pub static KEYS: &[Key] = &[
     ),
     Key {
         section: "library.discovery",
-        name: "payload_unique_literal",
+        name: "terser_payload_literal",
         kind: Kind::Bool,
         flag: None,
-        default: || Some(Val::Bool(discovery().payload_unique_literal)),
+        default: || Some(Val::Bool(discovery().terser_payload_literal)),
         unset: "",
-        doc: "For payload_min_bytes, a long literal in the claimed family's files backs the payload \
-              only when no other family's files hold it too: a dist that inlines a dependency's \
-              data table is no evidence the table is its own (exp139).",
+        doc: "When the bundle reads the terser-built slices: for payload_min_bytes, a long literal \
+              in the claimed family's files backs the payload only when no other family's files \
+              hold it too: a dist that inlines a dependency's data table is no evidence the table \
+              is its own (exp139).",
     },
     Key {
         section: "library.discovery",

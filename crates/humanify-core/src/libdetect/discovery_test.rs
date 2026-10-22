@@ -1883,17 +1883,21 @@ fn terser_thin_drops_a_family_shown_only_by_a_sliver_of_a_far_bigger_index_modul
 }
 
 #[test]
-fn payload_unique_literal_takes_no_backing_from_a_long_string_another_family_also_holds() {
+fn terser_payload_literal_takes_no_backing_from_a_long_string_another_family_also_holds() {
     // P's files hold blob's long string — and so do E's (P's dist carries
     // E's data table, as a UMD bundle inlines its dependency). Read as P's
-    // own evidence, DOWN hands E's payload to P; with the literal held by
-    // two families it backs neither.
+    // own evidence, DOWN hands E's payload to P; in a bundle reading the
+    // terser slices, a literal two families hold backs neither.
     let blob: String = "QUJD".repeat(400);
     let code: &'static str = Box::leak(
         format!("var lib = function (t) {{ return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length, blob.length, more(t)); }};\nvar more = function (m) {{ return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); }};\nvar blob = \"{blob}\";\nvar app = () => lib(\"a\");\n")
             .into_boxed_str(),
     );
-    let held = [Held::whole("var lib", "P"), Held::whole("var more", "P")];
+    // more is held in the terser slice: the bundle reads it
+    let held = [
+        Held::whole("var lib", "P"),
+        Held::whole("var more", "P").terser(),
+    ];
     let line = code.lines().find(|l| l.starts_with("var blob")).unwrap();
     let both = vec![literal_row("P", line), literal_row("E", line)];
     let guard = DiscoveryOptions {
@@ -1903,12 +1907,16 @@ fn payload_unique_literal_takes_no_backing_from_a_long_string_another_family_als
     let (_, _, rows) = run_indexed_with(code, &held, both.clone(), guard);
     assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
     let unique = DiscoveryOptions {
-        payload_unique_literal: true,
+        terser_payload_literal: true,
         ..guard
     };
-    let (_, _, rows) = run_indexed_with(code, &held, both, unique);
+    let (_, _, rows) = run_indexed_with(code, &held, both.clone(), unique);
     assert_eq!(claim_of(&rows, "var blob"), None);
     // P's alone: still P's own evidence.
     let (_, _, rows) = run_indexed_with(code, &held, vec![literal_row("P", line)], unique);
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+    // No terser slice read: the key does not apply.
+    let chosen = [Held::whole("var lib", "P"), Held::whole("var more", "P")];
+    let (_, _, rows) = run_indexed_with(code, &chosen, both, unique);
     assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
 }
