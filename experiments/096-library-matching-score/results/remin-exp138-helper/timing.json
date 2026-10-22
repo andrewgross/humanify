@@ -1,0 +1,295 @@
+{
+ "maxPeakRssMb": 1216,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "remin-esbuild-cli_auto-changelog-32e6a3": {
+   "peakRssMb": 188,
+   "wallSeconds": 0.34
+  },
+  "remin-esbuild-cli_bili-a07712": {
+   "peakRssMb": 421,
+   "wallSeconds": 1.82
+  },
+  "remin-esbuild-cli_detox-4e42a4": {
+   "peakRssMb": 271,
+   "wallSeconds": 1.3
+  },
+  "remin-esbuild-cli_electron-installer-debian-45b707": {
+   "peakRssMb": 204,
+   "wallSeconds": 0.79
+  },
+  "remin-esbuild-cli_napi-rs_cli-b32af3": {
+   "peakRssMb": 234,
+   "wallSeconds": 0.62
+  },
+  "remin-esbuild-cli_quicktype-f64c8a": {
+   "peakRssMb": 1216,
+   "wallSeconds": 9.9
+  },
+  "remin-esbuild-cli_rxjs-report-usage-596baa": {
+   "peakRssMb": 227,
+   "wallSeconds": 0.78
+  },
+  "remin-esbuild-cli_s3rver-842d10": {
+   "peakRssMb": 328,
+   "wallSeconds": 0.96
+  },
+  "remin-esbuild-cli_sequelize-cli-5d25cd": {
+   "peakRssMb": 224,
+   "wallSeconds": 0.53
+  },
+  "remin-esbuild-cli_wd-a9139b": {
+   "peakRssMb": 294,
+   "wallSeconds": 1.15
+  },
+  "remin-esbuild-cli_web_dev-server-e87ff2": {
+   "peakRssMb": 295,
+   "wallSeconds": 1.21
+  },
+  "remin-esbuild-cli_webpack-dashboard-20162c": {
+   "peakRssMb": 224,
+   "wallSeconds": 1.1
+  },
+  "remin-esbuild-electron_gh-almenon__arepl-electron-3cf3af": {
+   "peakRssMb": 243,
+   "wallSeconds": 0.71
+  },
+  "remin-esbuild-electron_gh-c-jsn__d3-id3-6f34a2": {
+   "peakRssMb": 244,
+   "wallSeconds": 1.42
+  },
+  "remin-esbuild-electron_gh-dax89__electron-sveltekit-39904f": {
+   "peakRssMb": 196,
+   "wallSeconds": 0.25
+  },
+  "remin-esbuild-electron_gh-flaviodelgrosso__reactronite-436d09": {
+   "peakRssMb": 548,
+   "wallSeconds": 6.74
+  },
+  "remin-esbuild-electron_gh-jctaoo__vite-electron-esbuild-starter-47b8ad": {
+   "peakRssMb": 337,
+   "wallSeconds": 1.9
+  },
+  "remin-esbuild-electron_gh-leota__electron-angular4-sqlite3-c3d7f4": {
+   "peakRssMb": 478,
+   "wallSeconds": 2.3
+  },
+  "remin-esbuild-electron_gh-lyestarzalt__x-dispatch-35a4a6": {
+   "peakRssMb": 1112,
+   "wallSeconds": 16.72
+  },
+  "remin-esbuild-electron_gh-meetfranz__franz-32608d": {
+   "peakRssMb": 772,
+   "wallSeconds": 5.0
+  },
+  "remin-esbuild-electron_gh-microsoft__skill-recorder-d05998": {
+   "peakRssMb": 494,
+   "wallSeconds": 3.82
+  },
+  "remin-esbuild-electron_gh-postcatlab__postcat-bfd6fe": {
+   "peakRssMb": 851,
+   "wallSeconds": 7.28
+  },
+  "remin-esbuild-electron_gh-robinfr__electron-react-typescript-9af828": {
+   "peakRssMb": 199,
+   "wallSeconds": 0.47
+  },
+  "remin-esbuild-electron_gh-vadko__lbk-launcher-e2f7ce": {
+   "peakRssMb": 748,
+   "wallSeconds": 7.57
+  },
+  "remin-esbuild-vscode_gh-1password__op-vscode-d2eb31": {
+   "peakRssMb": 195,
+   "wallSeconds": 0.46
+  },
+  "remin-esbuild-vscode_gh-bartmanabyss__vscode-amiga-debug-95a42f": {
+   "peakRssMb": 224,
+   "wallSeconds": 0.94
+  },
+  "remin-esbuild-vscode_gh-firsttris__vscode-jest-runner-2d19ff": {
+   "peakRssMb": 532,
+   "wallSeconds": 7.15
+  },
+  "remin-esbuild-vscode_gh-hangxingliu__vscode-coding-tracker-1cccb8": {
+   "peakRssMb": 198,
+   "wallSeconds": 0.57
+  },
+  "remin-esbuild-vscode_gh-illixion__vscode-vibrancy-continued-fec3e6": {
+   "peakRssMb": 194,
+   "wallSeconds": 0.25
+  },
+  "remin-esbuild-vscode_gh-kanahiro__maplibre-vscode-extension-088874": {
+   "peakRssMb": 196,
+   "wallSeconds": 0.79
+  },
+  "remin-esbuild-vscode_gh-lee88688__aider-composer-26dede": {
+   "peakRssMb": 498,
+   "wallSeconds": 6.8
+  },
+  "remin-esbuild-vscode_gh-molstar__vscoding-sequence-56b7f7": {
+   "peakRssMb": 201,
+   "wallSeconds": 0.41
+  },
+  "remin-esbuild-vscode_gh-onecentlin__laravel-blade-snippets-vscode-4595d7": {
+   "peakRssMb": 198,
+   "wallSeconds": 0.42
+  },
+  "remin-esbuild-vscode_gh-shardulm94__vscode-trailingspaces-239d22": {
+   "peakRssMb": 283,
+   "wallSeconds": 4.83
+  },
+  "remin-esbuild-vscode_gh-skymecode__deepseek-harness-for-vscode-a1364d": {
+   "peakRssMb": 608,
+   "wallSeconds": 10.88
+  },
+  "remin-esbuild-vscode_gh-svsool__memo-22eb02": {
+   "peakRssMb": 614,
+   "wallSeconds": 7.8
+  },
+  "remin-terser-cli_auto-changelog-32e6a3": {
+   "peakRssMb": 190,
+   "wallSeconds": 0.33
+  },
+  "remin-terser-cli_bili-a07712": {
+   "peakRssMb": 430,
+   "wallSeconds": 1.62
+  },
+  "remin-terser-cli_detox-4e42a4": {
+   "peakRssMb": 312,
+   "wallSeconds": 0.98
+  },
+  "remin-terser-cli_electron-installer-debian-45b707": {
+   "peakRssMb": 204,
+   "wallSeconds": 0.51
+  },
+  "remin-terser-cli_napi-rs_cli-b32af3": {
+   "peakRssMb": 248,
+   "wallSeconds": 0.6
+  },
+  "remin-terser-cli_quicktype-f64c8a": {
+   "peakRssMb": 1198,
+   "wallSeconds": 9.17
+  },
+  "remin-terser-cli_rxjs-report-usage-596baa": {
+   "peakRssMb": 279,
+   "wallSeconds": 0.78
+  },
+  "remin-terser-cli_s3rver-842d10": {
+   "peakRssMb": 320,
+   "wallSeconds": 0.8
+  },
+  "remin-terser-cli_sequelize-cli-5d25cd": {
+   "peakRssMb": 196,
+   "wallSeconds": 0.5
+  },
+  "remin-terser-cli_wd-a9139b": {
+   "peakRssMb": 328,
+   "wallSeconds": 0.86
+  },
+  "remin-terser-cli_web_dev-server-e87ff2": {
+   "peakRssMb": 314,
+   "wallSeconds": 1.06
+  },
+  "remin-terser-cli_webpack-dashboard-20162c": {
+   "peakRssMb": 242,
+   "wallSeconds": 0.69
+  },
+  "remin-terser-electron_gh-almenon__arepl-electron-3cf3af": {
+   "peakRssMb": 258,
+   "wallSeconds": 0.64
+  },
+  "remin-terser-electron_gh-c-jsn__d3-id3-6f34a2": {
+   "peakRssMb": 265,
+   "wallSeconds": 0.97
+  },
+  "remin-terser-electron_gh-dax89__electron-sveltekit-39904f": {
+   "peakRssMb": 194,
+   "wallSeconds": 0.27
+  },
+  "remin-terser-electron_gh-flaviodelgrosso__reactronite-436d09": {
+   "peakRssMb": 506,
+   "wallSeconds": 2.9
+  },
+  "remin-terser-electron_gh-jctaoo__vite-electron-esbuild-starter-47b8ad": {
+   "peakRssMb": 325,
+   "wallSeconds": 1.57
+  },
+  "remin-terser-electron_gh-leota__electron-angular4-sqlite3-c3d7f4": {
+   "peakRssMb": 413,
+   "wallSeconds": 2.09
+  },
+  "remin-terser-electron_gh-lyestarzalt__x-dispatch-35a4a6": {
+   "peakRssMb": 1140,
+   "wallSeconds": 7.75
+  },
+  "remin-terser-electron_gh-meetfranz__franz-32608d": {
+   "peakRssMb": 675,
+   "wallSeconds": 3.52
+  },
+  "remin-terser-electron_gh-microsoft__skill-recorder-d05998": {
+   "peakRssMb": 563,
+   "wallSeconds": 2.49
+  },
+  "remin-terser-electron_gh-postcatlab__postcat-bfd6fe": {
+   "peakRssMb": 772,
+   "wallSeconds": 5.27
+  },
+  "remin-terser-electron_gh-robinfr__electron-react-typescript-9af828": {
+   "peakRssMb": 198,
+   "wallSeconds": 0.41
+  },
+  "remin-terser-electron_gh-vadko__lbk-launcher-e2f7ce": {
+   "peakRssMb": 694,
+   "wallSeconds": 3.83
+  },
+  "remin-terser-vscode_gh-1password__op-vscode-d2eb31": {
+   "peakRssMb": 196,
+   "wallSeconds": 0.4
+  },
+  "remin-terser-vscode_gh-bartmanabyss__vscode-amiga-debug-95a42f": {
+   "peakRssMb": 232,
+   "wallSeconds": 0.84
+  },
+  "remin-terser-vscode_gh-firsttris__vscode-jest-runner-2d19ff": {
+   "peakRssMb": 510,
+   "wallSeconds": 2.69
+  },
+  "remin-terser-vscode_gh-hangxingliu__vscode-coding-tracker-1cccb8": {
+   "peakRssMb": 222,
+   "wallSeconds": 0.48
+  },
+  "remin-terser-vscode_gh-illixion__vscode-vibrancy-continued-fec3e6": {
+   "peakRssMb": 194,
+   "wallSeconds": 0.24
+  },
+  "remin-terser-vscode_gh-kanahiro__maplibre-vscode-extension-088874": {
+   "peakRssMb": 202,
+   "wallSeconds": 0.6
+  },
+  "remin-terser-vscode_gh-lee88688__aider-composer-26dede": {
+   "peakRssMb": 504,
+   "wallSeconds": 2.18
+  },
+  "remin-terser-vscode_gh-molstar__vscoding-sequence-56b7f7": {
+   "peakRssMb": 202,
+   "wallSeconds": 0.39
+  },
+  "remin-terser-vscode_gh-onecentlin__laravel-blade-snippets-vscode-4595d7": {
+   "peakRssMb": 192,
+   "wallSeconds": 0.34
+  },
+  "remin-terser-vscode_gh-shardulm94__vscode-trailingspaces-239d22": {
+   "peakRssMb": 265,
+   "wallSeconds": 1.48
+  },
+  "remin-terser-vscode_gh-skymecode__deepseek-harness-for-vscode-a1364d": {
+   "peakRssMb": 575,
+   "wallSeconds": 3.38
+  },
+  "remin-terser-vscode_gh-svsool__memo-22eb02": {
+   "peakRssMb": 563,
+   "wallSeconds": 2.77
+  }
+ },
+ "totalWallSeconds": 181.4
+}

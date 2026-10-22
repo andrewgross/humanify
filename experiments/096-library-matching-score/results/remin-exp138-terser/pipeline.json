@@ -1,0 +1,14 @@
+{
+ "binarySha256": "d3296a2b66a74cf5763437c7d100cacff06586c56e584721e820c5bfe9ab6445",
+ "buildCommit": "869931920303e730e4fb7545cbe8c86f6dec6e6b",
+ "corpus": "remin",
+ "corpusSha256": "2140b7be1c132d909d6e4bd1d3d6baa7b5cbd23f012a439f755e3bae68861f45",
+ "indexBytes": 6977535769,
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "instrument": "humanify discover --unit-prints --bundler <builtWith, else the corpus bundler> --config discover.toml",
+ "rule": "structural",
+ "settings": [
+  "library.lookup.terser_slices=auto",
+  "library.lookup.terser_share=0.2"
+ ]
+}
