@@ -2,9 +2,18 @@
 
 ## STATUS (2026-10-22)
 
-DONE on branch `default-helpers-terser` (off main `869931920`). Measurement only: **NOT flipped.** The pair fails
-the flip bar on one set, remin-terser (precision 99.90 → 99.32). `helper_prints = "seed"` ALONE meets the bar on
-every set. Flipping it alone is Andrew's call: it was approved only as half of the pair.
+DONE on branch `default-helpers-terser` (off main `869931920`).
+
+- **The pair is NOT flipped.** It fails the flip bar on one set, remin-terser (precision 99.90 → 99.32).
+  `terser_slices` stays `off`.
+- **`helper_prints = "seed"` is FLIPPED ALONE** (Andrew, 2026-10-22). It meets the bar on every set: precision is
+  never lower, and F0.5 is at worst -0.000006.
+
+  - The change is in `DiscoveryOptions::recommended()`. The pin test
+    `the_exp138_helper_seed_defaults_on_and_turns_off` asserts that seed is the default, that it turns off from
+    the file, and that `terser_slices` stays off.
+  - `humanify.example.toml` was regenerated and `docs/library-matching-config.md` updated.
+  - Gate and warm neutrality results are in the commit message of the flip.
 
 - **What was re-measured.** exp129 recommended flipping both keys together. It measured them under scorer 12 on
   k2-all-r5-origin-h, before `factory_bodies` (with its tie fence, banner index and whole seed) became the default
