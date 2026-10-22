@@ -60,6 +60,46 @@ fn args_of(cmd: &std::process::Command) -> Vec<String> {
 }
 
 #[test]
+fn a_production_recipe_defines_node_env_as_production_and_the_default_does_not() {
+    // exp135: Bun inlines an undefined process.env.NODE_ENV as "development"
+    // (react's index.js then bundles react.development.js); app bundles
+    // define it as "production"
+    let cmd = |recipe: &str, bin: &str| {
+        let build = RecipeBuild {
+            recipe: Recipe::parse(recipe).unwrap(),
+            bin: PathBuf::from(bin),
+        };
+        args_of(&build.command(
+            Path::new("/w"),
+            "entries/req.cjs",
+            Path::new("/o"),
+            &[],
+            false,
+        ))
+    };
+    let bun = cmd("bun:target=node,format=cjs,minify,production", "/t/bun");
+    let at = bun
+        .iter()
+        .position(|a| a == "--define")
+        .expect("bun --define");
+    assert_eq!(bun[at + 1], "process.env.NODE_ENV=\"production\"");
+    let esb = cmd(
+        "esbuild:target=node,format=cjs,minify,production",
+        "/t/esbuild",
+    );
+    assert!(
+        esb.contains(&"--define:process.env.NODE_ENV=\"production\"".to_string()),
+        "{esb:?}"
+    );
+    for (r, b) in [
+        ("bun:target=node,format=cjs,minify", "/t/bun"),
+        ("esbuild:target=node,format=cjs,minify", "/t/esbuild"),
+    ] {
+        assert!(!cmd(r, b).iter().any(|a| a.contains("NODE_ENV")), "{r}");
+    }
+}
+
+#[test]
 fn webpack_and_rollup_run_as_node_scripts_writing_out_js() {
     for (recipe, script) in [
         (

@@ -1,0 +1,13 @@
+{
+  "slice": "bun-bun-cjs-min",
+  "versions": 62739,
+  "changed": 13550,
+  "rowsOld": 75323675,
+  "rowsNew": 74923605,
+  "rowsOnlyNew": 1670164,
+  "rowsOnlyOld": 2070234,
+  "prodFilesNew": 21373,
+  "devFilesGone": 28912,
+  "filesOnlyNew": 36278,
+  "filesOnlyOld": 51465
+}

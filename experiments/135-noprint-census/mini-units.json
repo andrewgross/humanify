@@ -1,0 +1,4472 @@
+{
+  "@netlify/edge-bundler@16.1.3": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 5921,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "1651b3cb71bff8f0",
+        "1f59a1f0780140c5",
+        "2eeeda853f769b0b",
+        "3288d1da9d781189",
+        "4bd0b361f7fdc2c4",
+        "51bade9f472ccd46",
+        "86f9f8b057ceefe9",
+        "897fe7415475b9a5",
+        "ab6ad7113595ecab",
+        "af554101f0bbfa83",
+        "ca0a379ea50a4562",
+        "e21c46733b139a80",
+        "f1f8f5f4d7099539",
+        "f23c4e19c41d2be5",
+        "f45e79df2cf60817"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 87178,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "00342655e16f7666",
+        "01d2ecd485a58777",
+        "01ec2d0c2969c8a5",
+        "0246fc75f07009db",
+        "02c4ff4dc6df295f",
+        "0359e15f805f30e1",
+        "052ef860191d93be",
+        "0a0ccd448461e7d2",
+        "0c95bfedfb3ff358",
+        "0e7e877ddb03e80b",
+        "154b7f2fe76c7182",
+        "16347c5d4beac9b6",
+        "19ec88dd3717a50b",
+        "1a86e74fb552d9e2",
+        "1bd4405cb87cd5aa",
+        "1ced3df575ee3e54",
+        "1d194ec11eb7fa4f",
+        "1d89a03ac1c4969c",
+        "23a1e5dcb7b8be69",
+        "25a32d8e3c7e39cc",
+        "26b72e1339766baa",
+        "26f074e5f90a4243",
+        "277186cc9128a6e9",
+        "280ba4a7fa073bd3",
+        "29f5df1f96adeee1",
+        "2c2eb2ba884dab52",
+        "2ca5e13a4a05e8ae",
+        "2d2a53f09909b7da",
+        "2e2e90d7960b6487",
+        "300ff9436d35f22d",
+        "30861894ed36ec14",
+        "30e36fc0c41b641f",
+        "3408a1fb604517df",
+        "36fe56aa40103d11",
+        "390fb485204709ba",
+        "394d9ba90835dad4",
+        "39caa337d648410f",
+        "3a53287803880dd2",
+        "3ae11505ed38b7a5",
+        "3f04220fc69770bb",
+        "41cac563e154bc62",
+        "4778127d085758d8",
+        "47f91e37f0cbc619",
+        "4a711c16fa8771bf",
+        "4c467b8141b8bbe9",
+        "4c9a81ecadc8e0b6",
+        "4fbed2a463ed7998",
+        "4fd67cdbac25984d",
+        "5321eb56538f940e",
+        "53fe92b3709351e0",
+        "54c12d07d75e30fa",
+        "557b3da0be7590cd",
+        "5596d9567fcd9c6a",
+        "5785d1a78eeb0ea7",
+        "58cbd08403f6d29c",
+        "59a9075687c16b4c",
+        "5b8b3f67a5a65c18",
+        "5c450d0a193de508",
+        "5c6fee3e27274583",
+        "5c93733bce631ddf",
+        "5cec4fd729d85a43",
+        "5ded8bb3b057c38e",
+        "5ecc5cddd0e21dd4",
+        "5f2a59e020e5fe50",
+        "62002f4dfb20bd1d",
+        "620a615ecb77884c",
+        "647a02d07541cfc8",
+        "64c4f02b1369ad74",
+        "654b6072879b5d7d",
+        "65b4f9284935acab",
+        "660dc2224c65292f",
+        "66e3151f02aba282",
+        "6906be7561bb49af",
+        "698c966327ae0bdf",
+        "69db8ad66f522549",
+        "6e175b1d0e967c6c",
+        "6e3e78fb7955f312",
+        "71101437504eed50",
+        "71b123e0a2d30a76",
+        "727b816c16cf15f0",
+        "75185b2b620fbcf4",
+        "77f3d8a4f3bc4fc8",
+        "7a5e4a775b4fb411",
+        "7ac8e60713e562e8",
+        "7ae9474aa33c319f",
+        "7c89b356d4b47b20",
+        "7cf3395f71a6efcd",
+        "7f12680025ffd125",
+        "81e67ddf8c54ff73",
+        "828a37f1a64a8935",
+        "82f7de1b271baa48",
+        "83309274dd22107f",
+        "8745c90445effc16",
+        "87c1df08580146fc",
+        "88037a9f3bb9e85e",
+        "8895b4e4f0002ff7",
+        "88982a5eaf4147e3",
+        "889ad55fc760eb47",
+        "88cbf8e7aef21134",
+        "891fc3b6d17e1135",
+        "8989f10c312c75e5",
+        "8a4bae2058ebbc9c",
+        "8e6e82e0959c2264",
+        "8ef483095dd14c09",
+        "910984ae969c315f",
+        "9440a30db366bea6",
+        "946097ea1c510336",
+        "961b5fb6560c96d0",
+        "9674afbf13d94a27",
+        "968a83253996cafe",
+        "a85f05c9005553d8",
+        "a9a882f3fb946786",
+        "aab12a2237bbc20d",
+        "acf972afbef34282",
+        "add0f575f54343a6",
+        "afd949d250bdbfe5",
+        "b077bd3ccebaf724",
+        "b27553ee2598b7e0",
+        "b2f5175583e67494",
+        "b398724c0862f28a",
+        "b4bb82721309a04f",
+        "b57dbb06550e7c18",
+        "b836d4d98403f8c3",
+        "bc70f7c70b3c6db5",
+        "be06d30817488042",
+        "bea479bcab76f22b",
+        "bf44133a31788e5f",
+        "bf98afe073898982",
+        "bfb7ccf7d079cb11",
+        "c0c293800b71a154",
+        "c1d579540afe0a20",
+        "c1f347f97917d2d5",
+        "c2a16419d5a1dd69",
+        "c4d1944fbb1db615",
+        "c51972ab9381674f",
+        "c5dc2aba69a88cf4",
+        "c66a02180a8779ab",
+        "c96d71344a694ad0",
+        "c9cba1f644893977",
+        "ca6d98bc22459306",
+        "cbc376456f44028d",
+        "cbfe606d195b2a47",
+        "ccf160071d00dc58",
+        "cdb57ca6946d13f5",
+        "cedc147c64838a19",
+        "cfdad94c1309276d",
+        "cff2178adce99e27",
+        "d0492000bebfe183",
+        "d0ef86471afcf4fe",
+        "d1f6be8b7350e716",
+        "d29f344f862c672d",
+        "d4abfbd21466bf99",
+        "d51f6208a0892008",
+        "d5791e16011cc453",
+        "d5ffaac10f3ec0b5",
+        "d90ea22917892ed3",
+        "dfc8ec8673283dfb",
+        "dfd3ee7ac08a25ab",
+        "e19eac0c3dc6a153",
+        "e2a5e058aa996e22",
+        "e51f5fba3f454d12",
+        "e663b5fa9627055d",
+        "e6f7e85944261acc",
+        "e7dc7a5aeb5d211b",
+        "e891c33c4f119045",
+        "e8a238058d231853",
+        "e9b324ebc1a7ac32",
+        "ea3fffcc5eb562d4",
+        "eb36ceec5e4e7eec",
+        "ed0dbb144d25ac3a",
+        "ee2e29fdeb218dcd",
+        "eed5f2af35032ad2",
+        "f0ded0e5a93a3a68",
+        "f0ed447edd082886",
+        "f2c2074c4b7a03f7",
+        "f2dd4979a4236f3f",
+        "f310d64238863e9b",
+        "f3723397adf98708",
+        "f57246b9d7003a6e",
+        "f5e479fd5034bb1c",
+        "f61e62883b417adb",
+        "f725b24c4bcc83a0",
+        "f7bc1a2adb3e50b9",
+        "f93cd72dcaf77b6e",
+        "fc6f0d0054c0ddbd",
+        "feac12389f6b3ef6",
+        "ff57cbbb9a866883",
+        "ffccc3cf24ccd7c8"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 2114,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "3ee82efe6a769ddc",
+        "4cbae75aa4240f38",
+        "63cde3e2b3e99a22",
+        "731b22d6a7be411a",
+        "b9d07731aab8346f",
+        "e992b0b083b139de",
+        "eb83d2827c0d135d"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["e5fb01f13ed8961d"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 121,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["16a50d83fbc63c4d"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 5825,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "041a5dd897c0bf3c",
+        "1a0cf89173e7a42e",
+        "22fabbc88bfb751f",
+        "2eeeda853f769b0b",
+        "47cb29fe9967b925",
+        "4bd0b361f7fdc2c4",
+        "60c606a5e0801c4e",
+        "73995c996326b31d",
+        "a40ca5d403c4ae60",
+        "a89e5224e645abde",
+        "c4eaf925d48ee165",
+        "ca48a833344987c0",
+        "cd6485f3d5f3eff1",
+        "de115a6927a96efc",
+        "fdc19d1581108064"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 153,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["314e0e23ce3f45e6"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 1061,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d1b5170521886109"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 1144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1de086031317deae"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 3155,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "4ec75544cf302442",
+        "5685bd19c89bb048",
+        "6b1c70928f798711",
+        "6c3633e3eadbc69c",
+        "6e47641875f02674",
+        "6fc206c0916a6363",
+        "e4d24ced58858492",
+        "eb7307351ba663aa",
+        "ef5eda4a4af04c8f"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 189,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["be0fbc04b447fafc"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 414,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1fb235dda4a200e7"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 85699,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "00cba6be76d90360",
+        "017158abbf650fc8",
+        "0224596dfa08894a",
+        "04b1991a730f12b0",
+        "06588e8d77314842",
+        "07fa7d54aafa5e63",
+        "083775294a09c7d7",
+        "0950c8768f3509dd",
+        "0e5c33403eae7890",
+        "0e7e877ddb03e80b",
+        "0f634b1800a59915",
+        "10cd92e50c22722d",
+        "112acfc5ee683cf1",
+        "1a86e74fb552d9e2",
+        "1a87a629e32e175a",
+        "1bd4405cb87cd5aa",
+        "1d194ec11eb7fa4f",
+        "1fdafdd3bb17efe6",
+        "201c66c363798761",
+        "2090e6a1be272894",
+        "2169de3e7d1a12bf",
+        "220e7b6c3edadf9b",
+        "238c3bdc52214b74",
+        "2494aaa943ce8052",
+        "258720726ddf2b56",
+        "258ef176cc89c632",
+        "263006b0463fc3dc",
+        "263ac6466921f1ab",
+        "2688f81dc2148a2d",
+        "272072198f107545",
+        "289a6071cc6ece0c",
+        "29f5df1f96adeee1",
+        "2b80eff55e2c4453",
+        "2dac3da0620d00be",
+        "2dc02d0f4b7de1c1",
+        "2f73d16542bc134d",
+        "301953492e1e77ef",
+        "334a1f4910ee2036",
+        "345ce169fca44938",
+        "3624423057341a21",
+        "367c12ae5c7d95d6",
+        "394d9ba90835dad4",
+        "3a41f1ab16a8844e",
+        "3a53287803880dd2",
+        "3b67ef9331947e6a",
+        "3c3841ce0000be35",
+        "3c868e1490fc0b9b",
+        "404eda817dc43cec",
+        "4050a0e0650a4261",
+        "413e94cdc84bec23",
+        "4231c2030733e72e",
+        "424fd0c680db38dd",
+        "45b5f18fdfe70bff",
+        "4619211e9ebeeb13",
+        "46d95e222ce04941",
+        "4778127d085758d8",
+        "48644990f85d25f7",
+        "4ac9e5e29c264c1f",
+        "4b0a88f508dbf720",
+        "4c9a81ecadc8e0b6",
+        "4d20c2dc3a726541",
+        "4f154e5719718036",
+        "4fbed2a463ed7998",
+        "4fd67cdbac25984d",
+        "506901669faa6c07",
+        "5321eb56538f940e",
+        "54c12d07d75e30fa",
+        "5601a60f918bfdfa",
+        "57d9f10d73997deb",
+        "58f1e46b0a737613",
+        "59a9075687c16b4c",
+        "5a6d3e2da69f5f41",
+        "5cf2327a3f361865",
+        "5f21658076dd353c",
+        "60a1cea3d5b5ab0b",
+        "647a02d07541cfc8",
+        "6906be7561bb49af",
+        "698c966327ae0bdf",
+        "6b53ce1d2e602097",
+        "749652b2d2925a3a",
+        "75185b2b620fbcf4",
+        "77f3d8a4f3bc4fc8",
+        "77f98181ca1b3d17",
+        "78d3e28513395817",
+        "7ae9474aa33c319f",
+        "7b05ddcd089be51a",
+        "7b4df5faeeefee5c",
+        "7eb2978bbb48bab2",
+        "7f8209a418cb09f0",
+        "7fb58700a6181783",
+        "8057b194f5941b1a",
+        "820996996f6d750c",
+        "8340708c24dfd078",
+        "83d77fe7d12406be",
+        "851857d495cf6057",
+        "86383bc803a2bee2",
+        "8895b4e4f0002ff7",
+        "88982a5eaf4147e3",
+        "889ad55fc760eb47",
+        "89fda8144ea4e848",
+        "8a4bae2058ebbc9c",
+        "8b63e32a2e016727",
+        "91886b708da70af2",
+        "927ac911b889298f",
+        "931ec382efc3aeee",
+        "93c78dccb2136742",
+        "9580a00ba211c422",
+        "968a83253996cafe",
+        "9860fbb0ec05e54c",
+        "99056b3c54ecf039",
+        "9b284dc7d34c1176",
+        "9d3f2a600f67662a",
+        "9d44db1b54151ac4",
+        "9d54a26138e2a269",
+        "a84da5a2586724c2",
+        "a92ee6de52fcdba7",
+        "a9368475cd9c78c5",
+        "ab0ed13ce1d56d0a",
+        "ac018e3b3e03b3b4",
+        "ad44c77262277ff8",
+        "adcedc8970ee62b1",
+        "ae82440fe8a24cc9",
+        "af3c333958698088",
+        "af774a51713e08fe",
+        "b1a3729d52c1b73a",
+        "b790d1558d9fa1a3",
+        "b7f1ae26093842c8",
+        "b953b9b61deec503",
+        "ba7a986b52f806d8",
+        "bbb2bee77641a8bc",
+        "bf44133a31788e5f",
+        "bfc6fdc8cfeee5f1",
+        "c01cc3b72784b3c1",
+        "c0c293800b71a154",
+        "c41cdcf46dc69465",
+        "c4d1944fbb1db615",
+        "c567aedd9c64fcc8",
+        "c8e50e337f28b489",
+        "c96d71344a694ad0",
+        "c9cba1f644893977",
+        "cb29a8a4d53d8de6",
+        "cd1213169c877ca7",
+        "cd2d8ee5ad63633b",
+        "cec457deb63aca5d",
+        "cf6d41db18548627",
+        "cfc062ff7594cb4b",
+        "d0492000bebfe183",
+        "d1f6be8b7350e716",
+        "d35ad5f878ee2dad",
+        "d4abfbd21466bf99",
+        "d52f5a262caae62d",
+        "d7a08a6a08d80195",
+        "d8054b4b609b7603",
+        "d90ea22917892ed3",
+        "d9482c5696ab5e27",
+        "dbb033553e15699c",
+        "dd867cea964bbef7",
+        "dfbaca60c378ccc4",
+        "dfbdb8d802339c56",
+        "dfd3ee7ac08a25ab",
+        "e03712aedf73ec7c",
+        "e19eac0c3dc6a153",
+        "e26ddb2446fe309e",
+        "e4a9802f25c3a987",
+        "e51f5fba3f454d12",
+        "e663b5fa9627055d",
+        "e983e531ebc47254",
+        "eaaa63d8ec5fa732",
+        "eabd9bae49905b9d",
+        "eb36ceec5e4e7eec",
+        "f0ded0e5a93a3a68",
+        "f2dd4979a4236f3f",
+        "f31f06435fbad5d8",
+        "f3723397adf98708",
+        "f3df96ff5b5d398b",
+        "f54e1889441ce2ef",
+        "f57246b9d7003a6e",
+        "f725b24c4bcc83a0",
+        "f7e2477f066295fc",
+        "f851fb1418613607",
+        "f9a1ce90edf42585",
+        "fac36fbdee7b0c7c",
+        "fac5ad153726dfa0",
+        "fc6f0d0054c0ddbd",
+        "fc85dd1d7405c938",
+        "feac12389f6b3ef6",
+        "ff57cbbb9a866883"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 604,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9009f191c5b5a683"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 6493,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["a4609276cfc98eef"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 3519,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["b0cd94bcc3312665"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 3213,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "1d7b08a53a8200f0",
+        "2b4ad8132b574486",
+        "43766f03dd42510f",
+        "465bbb3179f626f0",
+        "55c92c9a2b6074b4",
+        "68bd999151c75ec9",
+        "72a23aa4a47c37bc",
+        "760c920f4c5cd469",
+        "774a8c659e82f4c9",
+        "adc9c7edea2e6e02",
+        "cff531f068df110d",
+        "ef14df68bf2f87c2",
+        "f901a68b3e4f4e38"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 518,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["efd7b932cec242f8"]
+    }
+  ],
+  "file-type@10.11.0": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 42189,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["f56c3bb224435ca7"]
+    }
+  ],
+  "prettier@1.19.1": [
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 117,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["5bdeb576a9863975", "90039667071374a2", "a1fdaa2e6d71cc04"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 100,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["01f46f125182cf6e", "3bf50287f7ba8666"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 278,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9ded9422e5b8b80d"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["514b2343504ebe9a", "75ed476a8f9bbde8"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 92,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["da1d9ac6df7d47d9"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 507,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["4766cb145b925ed7", "dc0a1799785a7cf4"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 190,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["06e174681dc1f97d", "be5b02b6d3efe14f"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 236,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1618770e0198b328", "46022a3ea2c10f95"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 192,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9d17081b31a51ff1"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 464,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["ea1f0546b3e86bd3"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 593,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1dce793a2aa7661b", "faa60b92018f14ec"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 389,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7908ef928200213b"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 836,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["10dc7fb0a087db4e", "de9b438d67ddc2ef", "feae9ceb1786316a"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 628,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1ac0af4dc7350504"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 213,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["24dee4198cb00d71"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 412,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8d216d8a603713c3"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 980,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["e1f358889263d06d"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 574,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["0196ff52e4470cdf"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1395,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["a980129c6439c753"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1090,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["5baadaa3a8c3d040"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 413,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1f68d29af3a6baee"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1503,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["ed387702ff16580c"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1409,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d6c05f0ebde4230b"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 323,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["6447983f9029a1b0"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 582,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1b6cb69ad788f5a0"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 167,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["41ce5177f7d5f5f0"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 206,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["b5fadd68ca099d14"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 319,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c9107fdfff4fd353"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 575,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["4a62101fbc01b2ae"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 525,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["205f91b5fd6761d0"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 944,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["09ec24a552e15670"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 100,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["13c8ced566d99fc9"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 277,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["508ed342dc1539e5", "c6fdaf30f01aa91c"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 200,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["3c3a837ac80457ba", "8f40693b16eb74c7"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 381,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["8ad32568fbed88cc", "a8e6d153308a20d9"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 276,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["58008650646b7cf5"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 213,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["75ed476a8f9bbde8", "c14d63b4aa9406b9"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 90,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["da1d9ac6df7d47d9"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 689,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["082eaca911b673ff", "af8ac0b3a0e11b2f", "cbd8808da0d1077e"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 231,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["46022a3ea2c10f95", "6bb5ef6151cd9374"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 642,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["2af8f51b583f658e", "c5b8ac15b0cebc78"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 594,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["1dce793a2aa7661b", "4176e958c776156a"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1410,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["b82e0b44896890aa", "c4e8ac19db79a90c", "d2a199900fc6938a"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 387,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["7908ef928200213b"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 100,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["6025c42629096710"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 831,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["6aa0b05c58d07bb3", "7a0d7dae25339109", "bd5d1f62ab9a2ae1"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 621,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["49143c2ac4904e7f"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 212,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["f40b355c3fecb2f5"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 404,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["70824c0b80dc4366"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 551,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["6d17b775d8c92fc1"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1085,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["96d9ab14c0dfa2f1"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 7655,
+      "slice": "webpack-node-cjs-min",
+      "hashes": [
+        "221a7e60e185d64d",
+        "3722c6934ed4ae78",
+        "376f211667c4054a",
+        "3a28ed5abb39b89c",
+        "759909852a2c9f25",
+        "77a20bc82c077d46",
+        "7d3e321d0048a380",
+        "b6d2b16955ecfdd3"
+      ]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1371,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["4e9cea51aa764ea9"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 321,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["0bb6278b29392683"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 858,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["37409be78750d79c", "9ff88e72aa69b363"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1684,
+      "slice": "webpack-node-cjs-min",
+      "hashes": [
+        "0b80d3fb67dceb8c",
+        "18f486f76de8d098",
+        "24d6f03da13b0372",
+        "29948cc2a2041f4b",
+        "7c59cf061f6abbd0",
+        "ac2fe4d2912eb1f0",
+        "fe6ca30e110f007d"
+      ]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 517,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["69107c3e8d1550de"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 2146,
+      "slice": "webpack-node-cjs-min",
+      "hashes": [
+        "1f8f6563c3a8a562",
+        "2d1a36638bfc926b",
+        "ac28cadc77b58f25",
+        "e1037f2fe3f4363c",
+        "e5049648e84945bc"
+      ]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 95,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["20cea0b574d24b71"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 261,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["0fd51fdf6caea65e", "8e5711b1c51f20eb"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 182,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["9d3abc5042001781", "fbb980c8f3d25d64"]
+    }
+  ],
+  "@tanstack/query-devtools@5.104.2": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 244,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1798440ca1b5acde", "93da6e04dec8de20"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 126,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["5bab9593c92ff15d"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 122,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["abeac31e33c70497"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 520,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b3ff8837040aea8f", "f9a6fd58fd1cc038"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 234,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4efe4270ebb59661", "9fb461467f2c78f9", "d7ff4efd18cba203"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 445,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["628858651072b965"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 343,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3e73bd2c08ce6def"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 541,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c313b140bb03283c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 600,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["53abfb07a6e28237", "da340effffc6f578"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 295,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["65863b62eb7c3951"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 224,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1d811f39adae83ad"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 196,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["54b04e617a9cd89b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 541,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["6454b6588dc12d38"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 113,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["41d3027f01dd137e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 511,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "0799d3314e1bad57",
+        "0e6fb297a83aef64",
+        "6a80bd3224244eb9",
+        "b92262c017beef7f"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 287,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b077516135b648fa", "c966a81fd484fe51"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 496,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1caaf5417a33b0f6", "862f00a45fd0d193", "b3d26a3feab53766"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 154,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["7e9df30336b6698f"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 283,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["67434d97b306329c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 167,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["12ba44d655630f47"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 775,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["30ab44e7cf1d9272", "ecba091fcf59cd7e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 1307,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1910a1c6354151b9"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 302,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a5051906b848532b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 128,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["64d0cad8383d23cc"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 127,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c99275bc13bea595"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 571,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["e244fce13cbb0667"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 1034,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "09d8edd6ad451fc3",
+        "2dc45bbc4044db9d",
+        "8c7a3d5f8ce21c68",
+        "b62568ad6954e53f",
+        "b73a5b73582031a5"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 479,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["48781a5bb789f09a", "942ca288914b49fa", "c998005bed7867c6"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 231,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1e61cb36aa290dd0", "28b90b0685b24fa8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 1679,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "29d4b93b223c59a2",
+        "4abcd745d60779cc",
+        "61c3b35cfdb74a06",
+        "6c0ec4183a80ffc0",
+        "73765078177d661b",
+        "8419a5af65b87b64",
+        "8d866cdc71ca1790",
+        "91917c86bbd65b0f",
+        "b8446dc12e914b11",
+        "cd6c6e64f626c8cb"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 198,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["cca1f1910c6062f8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 109,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["d9c2d418c4ff576a"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 344,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["91a754624a474727"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 129,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a9654b2c4a78a0cb"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 221,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["71a7f06759c9e870"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 137,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["dcee59aff5363cbf"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 121,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["cc5301fe4aae96ae"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 235,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["64db01b922a5564b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 140,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2f560ca00a6469c4"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 124,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2195a62b5c9ae127"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 1082,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["28e5e2454e8c5fbf"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 2958,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "09849beb6eca6eaa",
+        "2d58ac2a5f99786b",
+        "3a78a5634621cf2a",
+        "c3ab620c691ca9bb",
+        "e2779d3aacf2d89d",
+        "f209778f2921be3a"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 112,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8e94784dfc4f3812"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 511,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["0a182115b3582a3e", "3a5ca06bd3b6f76b", "c6f80fff9bde23a3"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 450,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2b64f05813226c21"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 252,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4111d6324451ae7b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 124,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["7ea9d7a16c48f13c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 549,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["cc7eaf175036b8a1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 455,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a1fbecabaabe00c0"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 181,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a14d560b543b326d"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 387,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["e39293578fb60a39"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 341,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["84e3cfaea82ffa7b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 396,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b64333e5b4afab34"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 217,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["346e5c1471cb4cdf", "447919772b64fbad"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 222,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["586dcc7e13aa85ab"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 711,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["704c8ae8816c9861", "975250aded4e6224", "a668c91d5fe0ecf7"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 891,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["26ac4eea6ead07a5", "6c6786db207d1857", "d701486c9f6c75bd"]
+    }
+  ],
+  "word-extractor@1.0.4": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 965,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["fdd4de2625333b04"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 523,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2f175c6b282935e2"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 22098,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "036378e1552f789e",
+        "0a0128a0479e1767",
+        "10c736721005f166",
+        "1611c6038cbf695f",
+        "1c47ccf8e34ce13f",
+        "278a8f7f2ff62376",
+        "28c378fcd93a8dba",
+        "2e07c39a7994f6d5",
+        "3222c456a8935785",
+        "3483d2765f33c54e",
+        "39f91f0dc0f88e5b",
+        "3a1b134ca0d99edc",
+        "44fd8ea7d94f4d07",
+        "47a7470484beda22",
+        "4d2afd51ce9ae971",
+        "4e701ca2248dd043",
+        "4fccab964f13d913",
+        "559e809839483c6d",
+        "56318d2a71280163",
+        "57401ce9db35bdd9",
+        "5c36e7c2f022ce08",
+        "6a4b59acc04cca5e",
+        "6c0c2def66e825db",
+        "7141299691ccc2d5",
+        "75257b026d588831",
+        "75bfec117b1c4cfc",
+        "7749397dfc66dd72",
+        "7ee06f26d5a425f1",
+        "802bfcc5dc837c14",
+        "8336cb1258dd9c56",
+        "8895bd75526eaf12",
+        "8b2c217bf417bcad",
+        "8c7f332fe2a76a4d",
+        "91740beef07c1fb9",
+        "9a7a0ceea4cc6cc1",
+        "9fe730500a75facc",
+        "a1abbadfb0596393",
+        "a2a08c87685ff4b6",
+        "a304ef68197ae808",
+        "aeed20ba24f17d91",
+        "b0d046a55f0b84c8",
+        "b3dc9dca0d1c46a5",
+        "b94d966db4bba12c",
+        "bae5516352453068",
+        "c258d05f92dc95da",
+        "c2cae4dc8ee68d94",
+        "c9972cd0d9fc8010",
+        "cb5752fbc850ced1",
+        "cc7a658eb832aa67",
+        "d051fd246948b41f",
+        "d5efbd438643a154",
+        "e61b379c65ac55d5",
+        "e6e10756321f3106",
+        "eaff71664ce4d2ba",
+        "ec1aef9f2440aa0d",
+        "f6bb5570731bee13",
+        "f9d4b01eaa984947",
+        "fa346516a31a9225",
+        "fbc538530fe1cccd",
+        "fc8c5a62d8682196",
+        "fd027de2f692559c"
+      ]
+    }
+  ],
+  "jsdom@30.1.2": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 947,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["fdd4de2625333b04"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 519,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2f175c6b282935e2"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 22059,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "036378e1552f789e",
+        "0a0128a0479e1767",
+        "10c736721005f166",
+        "1611c6038cbf695f",
+        "1c47ccf8e34ce13f",
+        "278a8f7f2ff62376",
+        "28c378fcd93a8dba",
+        "2e07c39a7994f6d5",
+        "3222c456a8935785",
+        "3483d2765f33c54e",
+        "39f91f0dc0f88e5b",
+        "3a1b134ca0d99edc",
+        "44fd8ea7d94f4d07",
+        "47a7470484beda22",
+        "4d2afd51ce9ae971",
+        "4e701ca2248dd043",
+        "4fccab964f13d913",
+        "559e809839483c6d",
+        "56318d2a71280163",
+        "57401ce9db35bdd9",
+        "5c36e7c2f022ce08",
+        "6a4b59acc04cca5e",
+        "6c0c2def66e825db",
+        "7141299691ccc2d5",
+        "75257b026d588831",
+        "75bfec117b1c4cfc",
+        "7749397dfc66dd72",
+        "7ee06f26d5a425f1",
+        "802bfcc5dc837c14",
+        "8336cb1258dd9c56",
+        "8895bd75526eaf12",
+        "8b2c217bf417bcad",
+        "8c7f332fe2a76a4d",
+        "91740beef07c1fb9",
+        "9a7a0ceea4cc6cc1",
+        "9fe730500a75facc",
+        "a1abbadfb0596393",
+        "a2a08c87685ff4b6",
+        "a304ef68197ae808",
+        "aeed20ba24f17d91",
+        "b0d046a55f0b84c8",
+        "b3dc9dca0d1c46a5",
+        "b94d966db4bba12c",
+        "bae5516352453068",
+        "c258d05f92dc95da",
+        "c2cae4dc8ee68d94",
+        "c9972cd0d9fc8010",
+        "cb5752fbc850ced1",
+        "cc7a658eb832aa67",
+        "d051fd246948b41f",
+        "d5efbd438643a154",
+        "e61b379c65ac55d5",
+        "e6e10756321f3106",
+        "eaff71664ce4d2ba",
+        "ec1aef9f2440aa0d",
+        "f6bb5570731bee13",
+        "f9d4b01eaa984947",
+        "fa346516a31a9225",
+        "fbc538530fe1cccd",
+        "fc8c5a62d8682196",
+        "fd027de2f692559c"
+      ]
+    }
+  ],
+  "@babel/core@7.29.7": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 183,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b9c14ea42f119347", "f002c5764f5d0291"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 146,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 144,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 774,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 159,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8c17131f4dc50d1c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 135,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["29aa04d076229da1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 182,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b9c14ea42f119347", "f002c5764f5d0291"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 146,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 144,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 769,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 159,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8c17131f4dc50d1c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 135,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["29aa04d076229da1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 183,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b9c14ea42f119347", "f002c5764f5d0291"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 146,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 144,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 774,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 159,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8c17131f4dc50d1c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 135,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["29aa04d076229da1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 183,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b9c14ea42f119347", "f002c5764f5d0291"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 146,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 144,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 774,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 159,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8c17131f4dc50d1c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 135,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["29aa04d076229da1"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 182,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 769,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 183,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 774,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 183,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 774,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 183,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 774,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 183,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 774,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 183,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 774,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 183,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7f3ea59496fdf0d4", "886fd1c5b8b46d1a"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 146,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["60d44e3d3d3f4b74"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 774,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["858ded06b9f0b361"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 313,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["405c18d4af878cd4"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 880,
+      "slice": "webpack-node-cjs-min",
+      "hashes": [
+        "3356c638c6d57e36",
+        "a320340a75b0ab39",
+        "c890f531be4a3a79",
+        "fb4e4bf5051c06b1"
+      ]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1086,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["1d1438467a93a923", "22d79d81d1a5284c"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 313,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["405c18d4af878cd4"]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 880,
+      "slice": "webpack-node-cjs-min",
+      "hashes": [
+        "3356c638c6d57e36",
+        "a320340a75b0ab39",
+        "c890f531be4a3a79",
+        "fb4e4bf5051c06b1"
+      ]
+    },
+    {
+      "set": "apps-webpack",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 1086,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["1d1438467a93a923", "22d79d81d1a5284c"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 145,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["daaa387d582e079c"]
+    }
+  ],
+  "jsdom@29.1.1": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 18752,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "0a0f13c179ca525b",
+        "15a4d25c78773e01",
+        "24d178298b9c521a",
+        "2586741c0d0b3368",
+        "2a395733fa4cea98",
+        "2cb987b6cfc533a7",
+        "33bc797d6ed72c83",
+        "43c12d915a7d1653",
+        "48fbc1dbf64fdf32",
+        "510dda8fb3187dda",
+        "535d737a5dfd2b36",
+        "571d7b8b0b81f40b",
+        "57f6e8f5e8da4693",
+        "58601e2d31543817",
+        "597d77b257ee8022",
+        "624aef5c100608c3",
+        "678164f47538b1bf",
+        "6bab9543bd0664f2",
+        "7292c0a7ef1107a2",
+        "78d65dd4b57e0904",
+        "795b6f1f89fddb60",
+        "7cb304e05d4aa5c2",
+        "7d47d3b276df1739",
+        "8b4460efb58bc689",
+        "8c2e756cffed4d28",
+        "8e5c2f02ecf81923",
+        "946baabff97347ea",
+        "989e066bef1a2ca8",
+        "9f0b9859959cfef0",
+        "a60d1366d965be8b",
+        "a7cdd26019b89529",
+        "a8dd632c167e22fa",
+        "ab62394f2c77f6fa",
+        "ab9040f44135d83d",
+        "ac2b180ad5051aa7",
+        "afa74c207d0413f6",
+        "b2a9f0892498369b",
+        "bbc58912d8ecf43a",
+        "c60cd7a28a29e3f2",
+        "c9c13554c9eacc5f",
+        "ce617e2bc2716d13",
+        "d30f2eb8a94d24c5",
+        "d88a290b982bab3a",
+        "d91a7d1ad8bc73d2",
+        "db83b5c36bc48985",
+        "dc4a3cc8f17aac4e",
+        "e741a06fcb29973d",
+        "f21b6c0c9ac95f0e",
+        "f232aa235d911c20",
+        "f2489c09c1d7af25",
+        "fbd4617d963072d9"
+      ]
+    }
+  ],
+  "bunyan@1.8.15": [
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 145,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["6dc2baea4b53b8b6", "d2355468a4ccc8dd"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 166,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["becc6584748c46b8"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 173,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2d83ae8d251a4135"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 489,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["5532aa419d05541f", "7d108be958e1ccac", "963ab2e42b5c7bb1"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 392,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9e067f8294a98de8", "f01acab084334b9f"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 77,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2159369847f6a7b2"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 81,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2945c421e330f0bf"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 125,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["0d4124f9c27c6e44", "e42efe37d1d17915"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 91,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2c912710d400fc5b"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 319,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["49baa9cf00992cb2"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 2355,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["f8ad13af71724d49"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 3378,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "2c9218804646867c",
+        "49835f8f19cb73da",
+        "530e2008072d87fb",
+        "641ae55d719265f6",
+        "7d6fa023d5641e08",
+        "84ebb12b4a297ece",
+        "acf285ffeebf68ef",
+        "bd34f5e999703915",
+        "f37309c036c4f784",
+        "fe989477b9eca4d8"
+      ]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 680,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["5dc62aa8919b4884"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 454,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["30c37e56ff8d324d", "37315f7a4668fbfd"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 137,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2f96a9bb570788c0"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 153,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["a0e42effdca967a7", "f2e9be43103ad2f0"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 115,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["57f99e85b8b0486a"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 120,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["95a3cf227023a653", "f829af38a20510a8"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import",
+      "bytes": 441,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9fadb6fae07d56bc"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 3852,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "090ec1063e2fc846",
+        "2e73b7f0c773b0fc",
+        "345482623cb4e16a",
+        "4c9298ba7bc9a361",
+        "609328bc1cbbf6eb",
+        "6a314cc06fb72cec",
+        "c1a9836b14d4f276",
+        "c8fe67b5a502be60",
+        "e84d0185b3785cbf"
+      ]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 95,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d1d7055080768402"]
+    },
+    {
+      "set": "remin-terser",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 380,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9e067f8294a98de8", "d4821fe370edfa87"]
+    },
+    {
+      "set": "remin-terser",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 125,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["0d4124f9c27c6e44", "e42efe37d1d17915"]
+    },
+    {
+      "set": "remin-terser",
+      "cls": "c-dropped",
+      "sub": "build-failed-unresolved-import-other-slice-holds",
+      "bytes": 94,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d1d7055080768402"]
+    }
+  ],
+  "emoji-regex@8.0.0": [
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "no-rows-other",
+      "bytes": 10607,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["8346a65bc24bcf06", "fd339cd078f18c91"]
+    }
+  ],
+  "lru-cache@11.5.3": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 921,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ca87fe43993c630b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 121,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["6c008691995d7bbd"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 127,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4110cc516571f1aa", "9e9e430646f6ab6e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 350,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ed0f6bc934e6d5a8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 310,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2b0b2cb7282aa226"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 326,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["dfb402b93922446f"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 921,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ca87fe43993c630b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 121,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["6c008691995d7bbd"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 127,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4110cc516571f1aa", "9e9e430646f6ab6e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 350,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ed0f6bc934e6d5a8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 310,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2b0b2cb7282aa226"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 326,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["dfb402b93922446f"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 921,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ca87fe43993c630b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 121,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["6c008691995d7bbd"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 127,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4110cc516571f1aa", "9e9e430646f6ab6e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 350,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ed0f6bc934e6d5a8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 310,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2b0b2cb7282aa226"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 326,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["dfb402b93922446f"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 921,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ca87fe43993c630b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 121,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["6c008691995d7bbd"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 127,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4110cc516571f1aa", "9e9e430646f6ab6e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 350,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ed0f6bc934e6d5a8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 310,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2b0b2cb7282aa226"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 326,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["dfb402b93922446f"]
+    }
+  ],
+  "react-dom@18.3.1": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 214,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["56f9aeb7856cd514"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 123,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["18211397644f4e93"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 90,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["aab1fca32f784938"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 97,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["612461f02037839b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 107,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3e9f31c964860ab8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 716,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b3d19cde783ecdf1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 338,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c267fff668328506"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 157,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a27d40347c2911ef"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 214,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["56f9aeb7856cd514"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 123,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["18211397644f4e93"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 90,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["aab1fca32f784938"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 97,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["612461f02037839b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 107,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3e9f31c964860ab8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 716,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b3d19cde783ecdf1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 339,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c267fff668328506"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 158,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a27d40347c2911ef"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 214,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["56f9aeb7856cd514"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 123,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["18211397644f4e93"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 90,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["aab1fca32f784938"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 97,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["612461f02037839b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 107,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3e9f31c964860ab8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 717,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b3d19cde783ecdf1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 339,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c267fff668328506"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 158,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a27d40347c2911ef"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 214,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["56f9aeb7856cd514"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 123,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["18211397644f4e93"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 90,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["aab1fca32f784938"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 97,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["612461f02037839b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 107,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3e9f31c964860ab8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 716,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b3d19cde783ecdf1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 338,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c267fff668328506"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 158,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a27d40347c2911ef"]
+    }
+  ],
+  "liquid-json@0.3.1": [
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 82,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["cdc269847013b66c"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 289,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["4284a08bffaefe86"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 5024,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "049c5479523a0f04",
+        "31810f066e0132bf",
+        "44c087f0e7e235f6",
+        "46479b72936c51f2",
+        "4c0daa99ede7b93b",
+        "5c7b5f9705e9b618",
+        "82533bab72b2d828",
+        "87387477df53b844",
+        "96ec399115ba280a",
+        "999095fa04f016a1",
+        "aa77d6865d40b56a",
+        "b52425f4aedd424e",
+        "df46cc1997edf08e",
+        "e4aa1647ed829577",
+        "e6b75b61df55935d"
+      ]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-vendored-path",
+      "bytes": 631,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["16bdadd675de050e", "ec30fb33cffbc6ca", "f02cb58bfd444804"]
+    }
+  ],
+  "@headlessui/react@2.2.10": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 208,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["919b90ba1a84e4a6"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 125,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["2195a62b5c9ae127"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 1062,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a1d7fc016a0fd32e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 435,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3fafbe24a885ae4e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 1651,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "1b9dd05123ad3cf5",
+        "416274d463b9687b",
+        "68553da9257d359e",
+        "693bea16e4b27250",
+        "7e1bf093d961c7af",
+        "7fc56dcfd4f6ebcd",
+        "ab3edcd3364210e9"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 255,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4111d6324451ae7b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 125,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["7ea9d7a16c48f13c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 223,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1054fba6b7fd1ad8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 197,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8a9ca9bc5e36eac3"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 177,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8af9e2482e71b0b7"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 385,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["845f959098eb45ef"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 370,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3197a480cfe564f8", "afcf4a35a840837f"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 188,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["35e8fca6dc5f9510", "853e76a58efc0385"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 222,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["586dcc7e13aa85ab"]
+    }
+  ],
+  "chalk@5.6.2": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 98,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["0898ec1835947dac"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 175,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8e3054823afb595d"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 1170,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["98163453b6a92d58"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 176,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8e3054823afb595d"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 1173,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["98163453b6a92d58"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 176,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8e3054823afb595d"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 1173,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["98163453b6a92d58"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 174,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8e3054823afb595d"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 1144,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["98163453b6a92d58"]
+    }
+  ],
+  "@sidvind/better-ajv-errors@7.0.0": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 166,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d4f14c903c7308b1"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 940,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2da94d1900f31fe6"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 312,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c65b60e4cc9ea1ed"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 2979,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "18247c031883c33d",
+        "191c9828c169b3de",
+        "3ca4a1482f2dea88",
+        "679946fa7040a94a",
+        "8410eb5742c95c9a",
+        "867be83f87715e17",
+        "b37dd5e7bc864342",
+        "b8dc7821c3da22d7",
+        "f87f04ae5b209bf8"
+      ]
+    }
+  ],
+  "@workflow/serde@4.1.0": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 3469,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d11c7a86080a29c7"]
+    }
+  ],
+  "prettier@3.9.10": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 151,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["5ca59e81e6db5d35"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 968,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ab50683c9ea0ea70", "f5f362a82ab3e192"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 557,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["44c8c14a7fc8b680", "6d39206ea4a9935c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 145,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3b05e3d03b64f7e4"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 770,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["15c65656a1d8d7ff"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 149,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["5ca59e81e6db5d35"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 368,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["9c4490c29863996f"]
+    }
+  ],
+  "cloudflare@4.5.0": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 2224,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ff0f0f84f9fc3f64"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 354,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["089c4dc368e4fc3b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 322,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["21c7907d328c011c"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod0-oth1-mm0",
+      "bytes": 84,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["9ddf424fd99ae3d9"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built",
+      "bytes": 93,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["fa7bd603193625b3"]
+    }
+  ],
+  "puppeteer-core@25.13.0": [
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 155,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["5a720ed4b54ef888"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 99,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["e83adf2fc9057393"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 125,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["2e67aa27c12b7499", "824c95de3a796564"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 793,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["4ac4a1bb86b5c5e0", "79c6801abb460b50", "fbb158d35503d60b"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 222,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["45cef1b9165feba6", "fd0e99bb33b3151a"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 126,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["f31e5be574040f8a", "f953ee92c2729369"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 170,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["6a65d93098bba149"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 260,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["b695b7bcd4f2b728", "fdc8cdf80f035d99"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 116,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["8ebe40ca9281679c"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 235,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["25222db09d8ccbf8", "c4e829d46a91031e", "d544de897fdb18f6"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 107,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["070d302de83a83fa", "3dfb32d3c56f4882"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 117,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["1ae3cf15e4564fd2", "880cc8a825c07d2d"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 294,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["297d7873c9cd595a", "967173d7f4e43d26", "98327b20a04414b2"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "entry-not-built-vendored",
+      "bytes": 125,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["86b4a8a446573726", "ad9901f4b7d2021c"]
+    }
+  ],
+  "smart-buffer@4.2.0": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 254,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["31585ee10b28a857"]
+    }
+  ],
+  "cssstyle@5.3.7": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 921,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ca87fe43993c630b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 121,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["6c008691995d7bbd"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 127,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4110cc516571f1aa", "9e9e430646f6ab6e"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 350,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ed0f6bc934e6d5a8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 211,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1bbecf52d0e0050a", "d05fbf5155e71671"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 213,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c2d9b0f0ba6df8a0", "d1d4de6f9088dd76"]
+    }
+  ],
+  "@exodus/bytes@1.16.0": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 229,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c62695011e93f9aa"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 91,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["0a920aff7887b9a7"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 266,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["d2289d410fa257e2"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 110,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b52ec41d2b49922d"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 94,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["bb13f52219d61fa2"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 97,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["d397677ed2c129d1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 323,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["bead9ea7d8c868a5"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 206,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["28b42f9b153bcc18"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 176,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["8be8fb5f12fd2441"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 114,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["84852f829bf50b66"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 138,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["33d11c00532b804b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 89,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["0f7adeb108a1ddd3"]
+    }
+  ],
+  "d3-scale@4.0.2": [
+    {
+      "set": "apps-rollup",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 1241,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["6d425bb366b36156", "73940d060854b36d", "7b5a7dfd4935a8b5"]
+    },
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "no-rows-other",
+      "bytes": 658,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["860f17b7e722aee3", "9f57af35ead05f7b", "ceca5ab02c99d593"]
+    }
+  ],
+  "react-dom@18.2.0": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 214,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["56f9aeb7856cd514"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 123,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["18211397644f4e93"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 90,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["aab1fca32f784938"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 97,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["612461f02037839b"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 107,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["3e9f31c964860ab8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 716,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b3d19cde783ecdf1"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 338,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["c267fff668328506"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 157,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["a27d40347c2911ef"]
+    }
+  ],
+  "fast-equals@5.4.4": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 689,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["2104d9ace52c8cf7", "30f2dc19f17c3692"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 114,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7ea621dfd07400dc"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 104,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["ae3cec3fb405d2c0", "ffe3df8e31bfe041"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 395,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "b9e3feaa6e64fbf8",
+        "c493ba710b5ad91a",
+        "da564c033607b456",
+        "fe98c4126bd17685"
+      ]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 396,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["4f28411f3323e96a", "9ff3fe974ee06208"]
+    }
+  ],
+  "rollup@2.80.0": [
+    {
+      "set": "remin-terser",
+      "cls": "d-print-differs",
+      "sub": "other-slice",
+      "bytes": 1652,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9488ea7996b829d2"]
+    }
+  ],
+  "sqlite3@4.2.0": [
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-no-loader.html",
+      "bytes": 208,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["7e23d806f2221baf", "9959abf85bed8171"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-no-loader.html",
+      "bytes": 335,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["9a4dd4afbc5e222b", "bf100e69b3caf9ac"]
+    },
+    {
+      "set": "remin-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-no-loader.html-other-slice-holds",
+      "bytes": 1029,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "59c87b4075917b9a",
+        "a10907ecc6475cac",
+        "ac489aae1cf8b624",
+        "ebb6192161c01ede"
+      ]
+    }
+  ],
+  "find-up-simple@1.0.1": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 346,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["59139e6fa4ec3b25"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 360,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4eb77f755c4f9335"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 346,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d57488e13f50a82a"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 360,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["0d692ba12538f57b"]
+    }
+  ],
+  "supports-color@10.2.2": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 176,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8e3054823afb595d"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 1173,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["98163453b6a92d58"]
+    }
+  ],
+  "@modelcontextprotocol/client@2.3.1": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 1280,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "099492cd7b6e278b",
+        "7968c1af59e46d90",
+        "8b73a4ec009601df",
+        "a44a7410a43e7414"
+      ]
+    }
+  ],
+  "history@4.10.1": [
+    {
+      "set": "apps-webpack",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 1119,
+      "slice": "webpack-node-cjs-min",
+      "hashes": ["982ab0b33731a18f", "f25c29fcf642a66a"]
+    }
+  ],
+  "vite@8.3.4": [
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "sponge-region-dropped",
+      "bytes": 787,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["92c06ff4946f0ed9", "eaa73234f446fbde", "f24249af0aeb10fe"]
+    }
+  ],
+  "meow@14.1.0": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 360,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4eb77f755c4f9335"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 354,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["0d692ba12538f57b"]
+    }
+  ],
+  "@modelcontextprotocol/sdk@1.32.1": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 178,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c15dadfb39c8e32f"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 178,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c15dadfb39c8e32f"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 178,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c15dadfb39c8e32f"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "file-absent",
+      "bytes": 178,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c15dadfb39c8e32f"]
+    }
+  ],
+  "oxc-resolver@11.24.2": [
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-no-loader.node",
+      "bytes": 673,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["17cb73b575ca2915", "c78e283b60c0ea2f", "d52137e3c9f91d4c"]
+    }
+  ],
+  "gifwrap@0.9.4": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 665,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "08515f6b120c35dc",
+        "2391d739515aee7f",
+        "58ba045cfad0aa23",
+        "6d244358772b7a59",
+        "6fedb52766cd0095"
+      ]
+    }
+  ],
+  "gifwrap@0.10.1": [
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 665,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": [
+        "08515f6b120c35dc",
+        "2391d739515aee7f",
+        "58ba045cfad0aa23",
+        "6d244358772b7a59",
+        "6fedb52766cd0095"
+      ]
+    }
+  ],
+  "highlight.js@11.12.0": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 581,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["05c99baf5f96e49c", "78e4072eed7b4251", "9541a2f87206411c"]
+    }
+  ],
+  "@cfworker/json-schema@4.1.1": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 194,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["73601ee78894983e"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 193,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["73601ee78894983e"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 193,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["73601ee78894983e"]
+    }
+  ],
+  "graceful-fs@4.2.11": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 306,
+      "slice": "bun-node-cjs-min",
+      "hashes": [
+        "558c1f63bf0b0254",
+        "78f837818e22fa47",
+        "7ea53a156f918860",
+        "b7775fca9c5eba21"
+      ]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 235,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["365777cf097b9218", "9209f167564cd4f2", "955cb0adae39ebdf"]
+    }
+  ],
+  "ora@8.2.0": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 521,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ba4b1c7251718bc7", "c5c75cd2bc308a7b", "fbfdf37c35b221ef"]
+    }
+  ],
+  "confusing-browser-globals@1.0.11": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 513,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["237ac05610cad3c3", "7a8f5f59343e2f63"]
+    }
+  ],
+  "react-lazy-load-image-component@1.6.3": [
+    {
+      "set": "remin-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 507,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["3f1fdacc061498e4", "9541a2f87206411c", "9d5cfe7147d4239e"]
+    }
+  ],
+  "encoding-sniffer@0.2.1": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "multi-module-dropped",
+      "bytes": 462,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["4bcabd77a9f93a5d"]
+    }
+  ],
+  "execa@8.0.1": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 143,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["0118272edb6fdf9c", "ee78f828a1e20a06"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 301,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["1f4b21bddeeda138"]
+    }
+  ],
+  "js-tiktoken@1.0.21": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 136,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["a3bf0e812d4ed601"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 136,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["a3bf0e812d4ed601"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 135,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["a3bf0e812d4ed601"]
+    }
+  ],
+  "langsmith@0.7.17": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod1-oth0-mm0",
+      "bytes": 179,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["48982bd5d178a084"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "no-rows-other-mod1-oth0-mm0",
+      "bytes": 215,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["4bd1b5ea281a294c"]
+    }
+  ],
+  "debug@2.6.9": [
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 178,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["43d7fed34fabeaa8"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 102,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["445451250609f937"]
+    },
+    {
+      "set": "pop-bun",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 105,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["74d5c70b695d80fd"]
+    }
+  ],
+  "execa@9.6.1": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 377,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["b51d4b593fa15c91"]
+    }
+  ],
+  "source-map@0.5.7": [
+    {
+      "set": "apps-esbuild",
+      "cls": "c-dropped",
+      "sub": "no-rows-other",
+      "bytes": 297,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["1c682d9dc50f61f4"]
+    }
+  ],
+  "bootstrap@5.3.8": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "entry-not-built",
+      "bytes": 280,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["95170a11e426becc", "e8ccc37d5a884f48", "ebc1852584cf55f6"]
+    }
+  ],
+  "upath@1.2.0": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 278,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["c1818303cfd23a9c", "d94b8973000ded10", "f91451d91af75066"]
+    }
+  ],
+  "path-to-regexp@1.9.0": [
+    {
+      "set": "apps-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 136,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["689d23afe59566f6"]
+    },
+    {
+      "set": "apps-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 136,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["689d23afe59566f6"]
+    }
+  ],
+  "dagre-d3-es@7.0.14": [
+    {
+      "set": "apps-rollup",
+      "cls": "d-print-differs",
+      "sub": "other-slice",
+      "bytes": 266,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["35fc044b2302d435", "36f9ff237ffa0976", "d1a7786542e27fca"]
+    }
+  ],
+  "@eslint/config-helpers@0.7.0": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 255,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["0b6f10791be0d4a0", "8ca69c22fbbf787b"]
+    }
+  ],
+  "pm2@5.4.3": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 224,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["31bfb21986975b32"]
+    }
+  ],
+  "@shadcn/registry@0.1.3": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 113,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["825efd02988d05cc"]
+    },
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 108,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["492b478d1fce75bf"]
+    }
+  ],
+  "iferr@0.1.5": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 217,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["b142d80e05c98dd8"]
+    }
+  ],
+  "d@1.0.2": [
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "no-rows-other",
+      "bytes": 211,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["f9acc13c2616fd1d"]
+    }
+  ],
+  "eslint-plugin-import-x@4.17.1": [
+    {
+      "set": "pop-esbuild",
+      "cls": "c-dropped",
+      "sub": "build-failed-no-loader.node-other-slice-holds",
+      "bytes": 208,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["6503c0e8d92e1525"]
+    }
+  ],
+  "follow-redirects@1.16.1": [
+    {
+      "set": "pop-esbuild",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 207,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["d15e19207acf6667"]
+    }
+  ],
+  "node-fetch@3.3.2": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 204,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["edcdc82ef7803214"]
+    }
+  ],
+  "property-information@7.2.0": [
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "no-rows-other",
+      "bytes": 156,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["de782142cd875d0f"]
+    }
+  ],
+  "browserslist@4.29.3": [
+    {
+      "set": "apps-rollup",
+      "cls": "c-dropped",
+      "sub": "sponge-region-reowned",
+      "bytes": 154,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["2fb605029cb90c0a"]
+    }
+  ],
+  "@sec-ant/readable-stream@0.4.1": [
+    {
+      "set": "pop-bun",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows-same-size",
+      "bytes": 149,
+      "slice": "bun-node-cjs-min",
+      "hashes": ["ae27d7d99000b388"]
+    }
+  ],
+  "react-dom@16.8.6": [
+    {
+      "set": "remin-terser",
+      "cls": "c-dropped",
+      "sub": "slice-missing",
+      "bytes": 137,
+      "slice": "esbuild-node-cjs-min",
+      "hashes": ["8973be5b9a69ceda"]
+    }
+  ],
+  "colorette@2.0.20": [
+    {
+      "set": "apps-rollup",
+      "cls": "d-print-differs",
+      "sub": "same-file-rows",
+      "bytes": 103,
+      "slice": "rollup-node-cjs-min",
+      "hashes": ["1a3fe43c0c74293c", "da13a989c84aee66"]
+    }
+  ]
+}

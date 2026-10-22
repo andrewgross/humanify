@@ -17,7 +17,8 @@ fn a_recipe_is_spelled_with_every_setting_and_reads_back() {
             bundler: RecipeBundler::Bun,
             target: Target::Bun,
             format: Format::Cjs,
-            minify: true
+            minify: true,
+            production: false
         }
     );
     assert_eq!(r.spelling(), "bun:target=bun,format=cjs,minify");
@@ -25,6 +26,37 @@ fn a_recipe_is_spelled_with_every_setting_and_reads_back() {
     let e = Recipe::parse("esbuild:target=node,format=esm").expect("parses");
     assert_eq!(e.slice_name(), "esbuild-node-esm");
     assert_eq!(Recipe::parse(&e.spelling()), Ok(e));
+}
+
+#[test]
+fn a_production_recipe_reads_back_and_keeps_its_slice() {
+    // exp135: `production` = process.env.NODE_ENV defined as "production",
+    // as app bundles are built; the SAME slice (a bundle reads it the same
+    // way), a different recipe (its shards are new)
+    let r = Recipe::parse("bun:target=node,format=cjs,minify,production").expect("parses");
+    assert!(r.production && r.minify);
+    assert_eq!(r.spelling(), "bun:target=node,format=cjs,minify,production");
+    assert_eq!(r.slice_name(), "bun-node-cjs-min");
+    assert_eq!(Recipe::parse(&r.spelling()), Ok(r));
+    let e = Recipe::parse("esbuild:target=node,format=cjs,minify,production").expect("parses");
+    assert_eq!(e.slice_name(), "esbuild-node-cjs-min");
+    assert!(
+        !Recipe::parse("bun:target=node,format=cjs,minify")
+            .unwrap()
+            .production
+    );
+}
+
+#[test]
+fn production_is_refused_where_the_recipe_script_decides_it() {
+    // webpack's script always defines it (production mode), rollup's never:
+    // a flag the command line cannot honour is refused, not ignored
+    for r in [
+        "webpack:target=node,format=cjs,minify,production",
+        "rollup:target=node,format=cjs,minify,production",
+    ] {
+        assert!(Recipe::parse(r).is_err(), "{r}");
+    }
 }
 
 #[test]
