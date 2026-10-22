@@ -1,187 +1,187 @@
 {
- "a  package not indexed (in dl25k at that version)": {
-  "esbuild-app": 1.9,
-  "heldout": 25.0,
-  "apps-esbuild": 8.1,
-  "apps-rollup": 34.6,
-  "pop-bun": 10.4,
-  "pop-esbuild": 14.6,
-  "test-bun": 6.5,
-  "test-esbuild": 7.7,
-  "test-rollup": 3.2,
-  "test-webpack": 2.9
- },
- "a  package not indexed (in dl25k, other version)": {
-  "heldout": 7.8,
-  "pop-bun": 28.2,
-  "pop-esbuild": 25.6,
-  "test-bun": 33.2,
-  "test-esbuild": 105.5,
-  "test-rollup": 52.2,
-  "test-webpack": 43.0
- },
- "a  package not indexed (not in dl25k either)": {
-  "esbuild-app": 1.7,
-  "heldout": 9.8,
-  "apps-esbuild": 16.7,
-  "apps-rollup": 12.8,
-  "apps-webpack": 19.9,
-  "pop-bun": 106.6,
-  "pop-esbuild": 144.0,
-  "remin-esbuild": 14.2,
-  "test-bun": 126.3,
-  "test-esbuild": 77.3,
-  "test-rollup": 41.6,
-  "test-webpack": 68.0
- },
- "b  version not indexed: published after the index's as-of": {
-  "pop-bun": 0.4,
-  "pop-esbuild": 269.8,
-  "test-bun": 13.5,
-  "test-esbuild": 41.4,
-  "test-rollup": 0.7
- },
- "b  version not indexed: released in the last 12 months": {
-  "esbuild-app": 2.7,
-  "heldout": 4.3,
-  "pop-bun": 90.5,
-  "pop-esbuild": 89.6,
-  "test-bun": 5.4,
-  "test-esbuild": 12.6,
-  "test-rollup": 11.9,
-  "test-webpack": 3.3
- },
- "b  version not indexed: latest patch of its minor": {
-  "heldout": 2.1,
-  "apps-rollup": 29.8,
-  "apps-webpack": 0.8,
-  "pop-bun": 10.7,
-  "pop-esbuild": 10.1,
-  "remin-terser": 2.0,
-  "test-esbuild": 105.2,
-  "test-webpack": 36.2
- },
- "b  version not indexed: older": {
-  "heldout": 11.9,
-  "pop-bun": 6.4,
-  "remin-esbuild": 2.8,
-  "test-bun": 3.0,
-  "test-esbuild": 1.7,
-  "test-webpack": 0.1
- },
- "c  dropped: Bun built the development file (NODE_ENV)": {
-  "heldout": 207.1,
-  "apps-rollup": 1.0,
-  "pop-bun": 25.9,
-  "test-bun": 86.2,
-  "test-rollup": 0.2,
-  "test-webpack": 0.6
- },
- "c  dropped: multi-module rule (file credited to 2+ modules)": {
-  "heldout": 42.2,
-  "pop-bun": 21.2,
-  "test-bun": 1.4
- },
- "c  dropped: sponge rule (vendored path / foreign region)": {
-  "esbuild-app": 1.3,
-  "heldout": 27.1,
-  "apps-esbuild": 19.1,
-  "apps-rollup": 4.3,
-  "apps-webpack": 28.4,
-  "pop-bun": 109.6,
-  "pop-esbuild": 119.2,
-  "remin-esbuild": 6.0,
-  "test-bun": 17.8,
-  "test-esbuild": 8.3,
-  "test-rollup": 0.5,
-  "test-webpack": 22.8
- },
- "c  dropped: the slice build failed": {
-  "esbuild-app": 6.6,
-  "heldout": 1.3,
-  "apps-esbuild": 0.7,
-  "pop-esbuild": 0.2,
-  "remin-esbuild": 15.3,
-  "remin-terser": 0.6,
-  "test-bun": 0.4,
-  "test-esbuild": 0.7,
-  "test-rollup": 0.4
- },
- "c  dropped: no shard of that version in the slice": {
-  "heldout": 52.4,
-  "wrangler": 1.4,
-  "pop-bun": 51.4,
-  "pop-esbuild": 1.3,
-  "remin-terser": 0.1,
-  "test-bun": 8.3
- },
- "c  dropped: other (entry not built, no rows)": {
-  "heldout": 0.6,
-  "apps-esbuild": 0.3,
-  "apps-rollup": 10.6,
-  "pop-esbuild": 0.8,
-  "test-esbuild": 0.2,
-  "test-rollup": 0.2
- },
- "d  print differs (same file has rows, not this unit's)": {
-  "esbuild-app": 1.9,
-  "heldout": 164.4,
-  "apps-esbuild": 0.3,
-  "apps-rollup": 1.6,
-  "apps-webpack": 1.1,
-  "pop-bun": 14.8,
-  "pop-esbuild": 5.1,
-  "remin-esbuild": 0.5,
-  "remin-terser": 1.7,
-  "test-bun": 59.5,
-  "test-esbuild": 3.8,
-  "test-rollup": 11.5,
-  "test-webpack": 0.5
- },
- "e  truth: file not in the package (pre-build source path)": {
-  "apps-esbuild": 6.4,
-  "pop-esbuild": 61.7,
-  "remin-esbuild": 0.1,
-  "test-esbuild": 10.7
- },
- "e  truth: no version in the map / misattributed": {
-  "esbuild-app": 3.3,
-  "heldout": 9.2,
-  "apps-webpack": 34.0,
-  "pop-bun": 6.5,
-  "pop-esbuild": 11.9,
-  "remin-esbuild": 0.5,
-  "test-bun": 11.1,
-  "test-esbuild": 158.0
- },
- "f  family holds the print, lookup does not read it: spec bound": {
-  "wrangler": 4.1,
-  "apps-rollup": 2.8,
-  "pop-bun": 69.4,
-  "test-bun": 1.3,
-  "test-esbuild": 1.0,
-  "test-rollup": 410.5
- },
- "f  family holds the print, lookup does not read it: whole print read first": {
-  "esbuild-app": 11.7,
-  "heldout": 6.4,
-  "apps-esbuild": 2.1,
-  "apps-rollup": 17.4,
-  "apps-webpack": 3.2,
-  "pop-bun": 56.0,
-  "pop-esbuild": 188.2,
-  "remin-esbuild": 30.7,
-  "test-bun": 45.7,
-  "test-esbuild": 757.3,
-  "test-rollup": 18.5,
-  "test-webpack": 18.0
- },
- "f  family holds the print, lookup does not read it: other": {
-  "apps-rollup": 8.0,
-  "apps-webpack": 1.8,
-  "pop-bun": 2.0,
-  "pop-esbuild": 4.3,
-  "test-esbuild": 3.0,
-  "test-webpack": 4.2
- }
+  "a  package not indexed (in dl25k at that version)": {
+    "esbuild-app": 1.9,
+    "heldout": 25.0,
+    "apps-esbuild": 8.1,
+    "apps-rollup": 34.6,
+    "pop-bun": 10.4,
+    "pop-esbuild": 14.6,
+    "test-bun": 6.5,
+    "test-esbuild": 7.7,
+    "test-rollup": 3.2,
+    "test-webpack": 2.9
+  },
+  "a  package not indexed (in dl25k, other version)": {
+    "heldout": 7.8,
+    "pop-bun": 28.2,
+    "pop-esbuild": 25.6,
+    "test-bun": 33.2,
+    "test-esbuild": 105.5,
+    "test-rollup": 52.2,
+    "test-webpack": 43.0
+  },
+  "a  package not indexed (not in dl25k either)": {
+    "esbuild-app": 1.7,
+    "heldout": 9.8,
+    "apps-esbuild": 16.7,
+    "apps-rollup": 12.8,
+    "apps-webpack": 19.9,
+    "pop-bun": 106.6,
+    "pop-esbuild": 144.0,
+    "remin-esbuild": 14.2,
+    "test-bun": 126.3,
+    "test-esbuild": 77.3,
+    "test-rollup": 41.6,
+    "test-webpack": 68.0
+  },
+  "b  version not indexed: published after the index's as-of": {
+    "pop-bun": 0.4,
+    "pop-esbuild": 269.8,
+    "test-bun": 13.5,
+    "test-esbuild": 41.4,
+    "test-rollup": 0.7
+  },
+  "b  version not indexed: released in the last 12 months": {
+    "esbuild-app": 2.7,
+    "heldout": 4.3,
+    "pop-bun": 90.5,
+    "pop-esbuild": 89.6,
+    "test-bun": 5.4,
+    "test-esbuild": 12.6,
+    "test-rollup": 11.9,
+    "test-webpack": 3.3
+  },
+  "b  version not indexed: latest patch of its minor": {
+    "heldout": 2.1,
+    "apps-rollup": 29.8,
+    "apps-webpack": 0.8,
+    "pop-bun": 10.7,
+    "pop-esbuild": 10.1,
+    "remin-terser": 2.0,
+    "test-esbuild": 105.2,
+    "test-webpack": 36.2
+  },
+  "b  version not indexed: older": {
+    "heldout": 11.9,
+    "pop-bun": 6.4,
+    "remin-esbuild": 2.8,
+    "test-bun": 3.0,
+    "test-esbuild": 1.7,
+    "test-webpack": 0.1
+  },
+  "c  dropped: Bun built the development file (NODE_ENV)": {
+    "heldout": 207.1,
+    "apps-rollup": 1.0,
+    "pop-bun": 25.9,
+    "test-bun": 86.2,
+    "test-rollup": 0.2,
+    "test-webpack": 0.6
+  },
+  "c  dropped: multi-module rule (file credited to 2+ modules)": {
+    "heldout": 42.2,
+    "pop-bun": 21.2,
+    "test-bun": 1.4
+  },
+  "c  dropped: sponge rule (vendored path / foreign region)": {
+    "esbuild-app": 1.3,
+    "heldout": 27.1,
+    "apps-esbuild": 19.1,
+    "apps-rollup": 4.3,
+    "apps-webpack": 28.4,
+    "pop-bun": 109.6,
+    "pop-esbuild": 119.2,
+    "remin-esbuild": 6.0,
+    "test-bun": 17.8,
+    "test-esbuild": 8.3,
+    "test-rollup": 0.5,
+    "test-webpack": 22.8
+  },
+  "c  dropped: the slice build failed": {
+    "esbuild-app": 6.6,
+    "heldout": 1.3,
+    "apps-esbuild": 0.7,
+    "pop-esbuild": 0.2,
+    "remin-esbuild": 15.3,
+    "remin-terser": 0.6,
+    "test-bun": 0.4,
+    "test-esbuild": 0.7,
+    "test-rollup": 0.4
+  },
+  "c  dropped: no shard of that version in the slice": {
+    "heldout": 52.4,
+    "wrangler": 1.4,
+    "pop-bun": 51.4,
+    "pop-esbuild": 1.3,
+    "remin-terser": 0.1,
+    "test-bun": 8.3
+  },
+  "c  dropped: other (entry not built, no rows)": {
+    "heldout": 0.6,
+    "apps-esbuild": 0.3,
+    "apps-rollup": 10.6,
+    "pop-esbuild": 0.8,
+    "test-esbuild": 0.2,
+    "test-rollup": 0.2
+  },
+  "d  print differs (same file has rows, not this unit's)": {
+    "esbuild-app": 1.9,
+    "heldout": 164.4,
+    "apps-esbuild": 0.3,
+    "apps-rollup": 1.6,
+    "apps-webpack": 1.1,
+    "pop-bun": 14.8,
+    "pop-esbuild": 5.1,
+    "remin-esbuild": 0.5,
+    "remin-terser": 1.7,
+    "test-bun": 59.5,
+    "test-esbuild": 3.8,
+    "test-rollup": 11.5,
+    "test-webpack": 0.5
+  },
+  "e  truth: file not in the package (pre-build source path)": {
+    "apps-esbuild": 6.4,
+    "pop-esbuild": 61.7,
+    "remin-esbuild": 0.1,
+    "test-esbuild": 10.7
+  },
+  "e  truth: no version in the map / misattributed": {
+    "esbuild-app": 3.3,
+    "heldout": 9.2,
+    "apps-webpack": 34.0,
+    "pop-bun": 6.5,
+    "pop-esbuild": 11.9,
+    "remin-esbuild": 0.5,
+    "test-bun": 11.1,
+    "test-esbuild": 158.0
+  },
+  "f  family holds the print, lookup does not read it: spec bound": {
+    "wrangler": 4.1,
+    "apps-rollup": 2.8,
+    "pop-bun": 69.4,
+    "test-bun": 1.3,
+    "test-esbuild": 1.0,
+    "test-rollup": 410.5
+  },
+  "f  family holds the print, lookup does not read it: whole print read first": {
+    "esbuild-app": 11.7,
+    "heldout": 6.4,
+    "apps-esbuild": 2.1,
+    "apps-rollup": 17.4,
+    "apps-webpack": 3.2,
+    "pop-bun": 56.0,
+    "pop-esbuild": 188.2,
+    "remin-esbuild": 30.7,
+    "test-bun": 45.7,
+    "test-esbuild": 757.3,
+    "test-rollup": 18.5,
+    "test-webpack": 18.0
+  },
+  "f  family holds the print, lookup does not read it: other": {
+    "apps-rollup": 8.0,
+    "apps-webpack": 1.8,
+    "pop-bun": 2.0,
+    "pop-esbuild": 4.3,
+    "test-esbuild": 3.0,
+    "test-webpack": 4.2
+  }
 }

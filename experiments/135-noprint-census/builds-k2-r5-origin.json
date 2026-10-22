@@ -1,85 +1,85 @@
 {
- "slices": {
-  "bun-bun-cjs-min": {
-   "versions": 62739,
-   "bothFailed": 1180,
-   "oneFailed": 122,
-   "unread": 0,
-   "kinds": {
-    "other": 1174,
-    "timeout": 5,
-    "unresolved-import": 1
-   }
-  },
-  "bun-node-cjs-min": {
-   "versions": 62739,
-   "bothFailed": 1188,
-   "oneFailed": 91,
-   "unread": 0,
-   "kinds": {
-    "other": 1182,
-    "timeout": 5,
-    "unresolved-import": 1
-   }
-  },
-  "esbuild-node-cjs-min": {
-   "versions": 62739,
-   "bothFailed": 1607,
-   "oneFailed": 208,
-   "unread": 0,
-   "kinds": {
-    "other": 482,
-    "no-loader.node": 459,
-    "unresolved-import": 193,
-    "no-loader.wasm": 86,
-    "no-loader.html": 76,
-    "no-loader.woff2": 52,
-    "no-loader.scss": 41,
-    "no-loader.svelte": 27,
-    "no-loader.png": 25,
-    "no-loader.astro": 21,
-    "no-loader.svg": 17,
-    "no-loader.map": 15,
-    "no-loader.zip": 14,
-    "no-loader.woff": 14,
-    "no-loader.md": 13,
-    "no-loader.sass": 12,
-    "no-loader.so": 12,
-    "no-loader.msg": 12,
-    "no-loader.ttf": 10,
-    "no-loader.gz": 6,
-    "no-loader.vue": 5,
-    "no-loader.applescript": 3,
-    "no-loader.eslintrc": 2,
-    "no-loader.yml": 2,
-    "no-loader.pjs": 2,
-    "no-loader.gitattributes": 1,
-    "no-loader.coffee": 1,
-    "no-loader.eot": 1,
-    "no-loader.trie": 1,
-    "no-loader.hbs": 1,
-    "no-loader.marko": 1
-   }
-  },
-  "rollup-node-cjs-min": {
-   "versions": 62739,
-   "bothFailed": 2447,
-   "oneFailed": 173,
-   "unread": 0,
-   "kinds": {
-    "other": 2441,
-    "unresolved-import": 6
-   }
-  },
-  "webpack-node-cjs-min": {
-   "versions": 62739,
-   "bothFailed": 2009,
-   "oneFailed": 1146,
-   "unread": 0,
-   "kinds": {
-    "other": 1960,
-    "unresolved-import": 49
-   }
+  "slices": {
+    "bun-bun-cjs-min": {
+      "versions": 62739,
+      "bothFailed": 1180,
+      "oneFailed": 122,
+      "unread": 0,
+      "kinds": {
+        "other": 1174,
+        "timeout": 5,
+        "unresolved-import": 1
+      }
+    },
+    "bun-node-cjs-min": {
+      "versions": 62739,
+      "bothFailed": 1188,
+      "oneFailed": 91,
+      "unread": 0,
+      "kinds": {
+        "other": 1182,
+        "timeout": 5,
+        "unresolved-import": 1
+      }
+    },
+    "esbuild-node-cjs-min": {
+      "versions": 62739,
+      "bothFailed": 1607,
+      "oneFailed": 208,
+      "unread": 0,
+      "kinds": {
+        "other": 482,
+        "no-loader.node": 459,
+        "unresolved-import": 193,
+        "no-loader.wasm": 86,
+        "no-loader.html": 76,
+        "no-loader.woff2": 52,
+        "no-loader.scss": 41,
+        "no-loader.svelte": 27,
+        "no-loader.png": 25,
+        "no-loader.astro": 21,
+        "no-loader.svg": 17,
+        "no-loader.map": 15,
+        "no-loader.zip": 14,
+        "no-loader.woff": 14,
+        "no-loader.md": 13,
+        "no-loader.sass": 12,
+        "no-loader.so": 12,
+        "no-loader.msg": 12,
+        "no-loader.ttf": 10,
+        "no-loader.gz": 6,
+        "no-loader.vue": 5,
+        "no-loader.applescript": 3,
+        "no-loader.eslintrc": 2,
+        "no-loader.yml": 2,
+        "no-loader.pjs": 2,
+        "no-loader.gitattributes": 1,
+        "no-loader.coffee": 1,
+        "no-loader.eot": 1,
+        "no-loader.trie": 1,
+        "no-loader.hbs": 1,
+        "no-loader.marko": 1
+      }
+    },
+    "rollup-node-cjs-min": {
+      "versions": 62739,
+      "bothFailed": 2447,
+      "oneFailed": 173,
+      "unread": 0,
+      "kinds": {
+        "other": 2441,
+        "unresolved-import": 6
+      }
+    },
+    "webpack-node-cjs-min": {
+      "versions": 62739,
+      "bothFailed": 2009,
+      "oneFailed": 1146,
+      "unread": 0,
+      "kinds": {
+        "other": 1960,
+        "unresolved-import": 49
+      }
+    }
   }
- }
 }
