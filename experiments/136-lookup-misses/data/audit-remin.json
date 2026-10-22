@@ -1,0 +1,50 @@
+[
+  {
+    "set": "remin-esbuild",
+    "label": "remin-exp135-prod",
+    "wrongKB": 160.0,
+    "mapDefectKB": 3.2,
+    "no-evidence": 60.3,
+    "claimer-lacks": 4.0,
+    "both-hold": 84.7,
+    "unknown": 7.8,
+    "map-defect": 3.2,
+    "precision": 99.691,
+    "auditedPrecision": 99.697
+  },
+  {
+    "set": "remin-terser",
+    "label": "remin-exp135-prod",
+    "wrongKB": 18.6,
+    "mapDefectKB": 0.0,
+    "no-evidence": 7.2,
+    "both-hold": 11.3,
+    "unknown": 0.1,
+    "precision": 99.902,
+    "auditedPrecision": 99.902
+  },
+  {
+    "set": "remin-esbuild",
+    "label": "remin-exp136-static",
+    "wrongKB": 181.8,
+    "mapDefectKB": 3.9,
+    "no-evidence": 62.0,
+    "claimer-lacks": 5.5,
+    "both-hold": 102.6,
+    "map-defect": 3.9,
+    "unknown": 7.8,
+    "precision": 99.647,
+    "auditedPrecision": 99.655
+  },
+  {
+    "set": "remin-terser",
+    "label": "remin-exp136-static",
+    "wrongKB": 18.6,
+    "mapDefectKB": 0.0,
+    "no-evidence": 7.2,
+    "both-hold": 11.3,
+    "unknown": 0.1,
+    "precision": 99.901,
+    "auditedPrecision": 99.901
+  }
+]

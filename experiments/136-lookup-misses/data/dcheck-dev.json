@@ -1,0 +1,233 @@
+[
+  {
+    "set": "esbuild-app",
+    "cls": "c-dropped",
+    "sub": "build-failed-no-loader.wasm",
+    "cause": "file-holds-unit",
+    "kb": 1.3
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "c-dropped",
+    "sub": "build-failed-no-loader.wasm",
+    "cause": "no-evidence",
+    "kb": 0.5
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "c-dropped",
+    "sub": "build-failed-no-loader.wasm-other-slice-holds",
+    "cause": "file-holds-unit",
+    "kb": 4.5
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "c-dropped",
+    "sub": "build-failed-no-loader.wasm-other-slice-holds",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "file-holds-unit",
+    "kb": 1.2
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-holds-unit",
+    "kb": 1.7
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 1.3
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-missing",
+    "kb": 10.4
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "build-failed-other",
+    "cause": "file-holds-unit",
+    "kb": 0.3
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "build-failed-other",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "build-failed-other-other-slice-holds",
+    "cause": "file-holds-unit",
+    "kb": 0.2
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "build-failed-other-other-slice-holds",
+    "cause": "no-evidence",
+    "kb": 0.6
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "multi-module-dropped",
+    "cause": "file-lacks-unit/claimer-lacks",
+    "kb": 42.2
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod0-oth1-mm0",
+    "cause": "file-lacks-unit/claimer-lacks",
+    "kb": 84.4
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "slice-missing",
+    "cause": "file-missing",
+    "kb": 3.6
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "sponge-region-dropped",
+    "cause": "file-holds-unit",
+    "kb": 1.0
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "sponge-region-dropped",
+    "cause": "no-evidence",
+    "kb": 0.1
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "sponge-region-reowned",
+    "cause": "no-evidence",
+    "kb": 0.6
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "file-holds-unit",
+    "kb": 22.6
+  },
+  {
+    "set": "heldout",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "no-evidence",
+    "kb": 2.8
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "other-slice",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-holds-unit",
+    "kb": 0.9
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 17.3
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-lacks-unit/claimer-lacks",
+    "kb": 137.7
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-lacks-unit/claimer-not-installed",
+    "kb": 4.3
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "no-evidence",
+    "kb": 4.0
+  },
+  {
+    "set": "heldout",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 0.4
+  },
+  {
+    "set": "heldout",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-missing",
+    "kb": 4.0
+  },
+  {
+    "set": "heldout",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "wrangler",
+    "cls": "c-dropped",
+    "sub": "slice-missing",
+    "cause": "file-missing",
+    "kb": 1.4
+  },
+  {
+    "set": "wrangler",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "cause": "file-missing",
+    "kb": 4.1
+  }
+]

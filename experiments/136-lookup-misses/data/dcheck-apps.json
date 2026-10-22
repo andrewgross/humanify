@@ -1,0 +1,254 @@
+[
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "build-failed-no-loader.node",
+    "cause": "file-holds-unit",
+    "kb": 0.7
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "file-holds-unit",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "file-absent",
+    "cause": "file-missing",
+    "kb": 6.4
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod1-oth1-mm0",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "sponge-region-dropped",
+    "cause": "no-evidence",
+    "kb": 0.1
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "sponge-region-reowned",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 0.7
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "file-holds-unit",
+    "kb": 15.7
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "no-evidence",
+    "kb": 1.2
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 2.1
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "file-holds-unit",
+    "kb": 1.5
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "no-evidence",
+    "kb": 1.4
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod0-oth0-mm0",
+    "cause": "no-evidence",
+    "kb": 10.6
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod0-oth1-mm0",
+    "cause": "file-holds-unit",
+    "kb": 0.2
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod0-oth1-mm0",
+    "cause": "no-evidence",
+    "kb": 0.9
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "sponge-region-dropped",
+    "cause": "file-holds-unit",
+    "kb": 1.2
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "c-dropped",
+    "sub": "sponge-region-reowned",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "d-print-differs",
+    "sub": "other-slice",
+    "cause": "file-holds-unit",
+    "kb": 0.3
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-holds-unit",
+    "kb": 1.2
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "no-evidence",
+    "kb": 0.1
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "other",
+    "cause": "file-holds-unit",
+    "kb": 0.9
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "cause": "file-holds-unit",
+    "kb": 1.7
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "cause": "no-evidence",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "too-many-owners",
+    "cause": "file-holds-unit",
+    "kb": 6.8
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "too-many-owners",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 11.8
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 3.5
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-missing",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "no-evidence",
+    "kb": 0.9
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "file-holds-unit",
+    "kb": 25.9
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "no-evidence",
+    "kb": 2.5
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-holds-unit",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "f-filtered",
+    "sub": "too-many-owners",
+    "cause": "file-missing",
+    "kb": 1.8
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 1.4
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-missing",
+    "kb": 1.7
+  }
+]

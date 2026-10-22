@@ -1,0 +1,1022 @@
+[
+  {
+    "set": "apps-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 0.3,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.3
+    }
+  },
+  {
+    "set": "apps-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 2.1,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 2.1,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 2.1,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 2.1,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 2.1,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 2.1
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "d-print-differs",
+    "sub": "other-slice",
+    "format": "cjs-out",
+    "kb": 0.3,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.3,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.3,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.3,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.3,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.3
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 1.2,
+    "req": {
+      "whole": 1.2,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 1.2,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 1.2,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 1.2,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 1.2,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "esm-out",
+    "kb": 0.1,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.1
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "other",
+    "format": "esm-out",
+    "kb": 0.9,
+    "req": {
+      "whole": 0.9,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.9,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.9
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.9
+    },
+    "firstWhole": {
+      "req": 0.9,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "format": "cjs-out",
+    "kb": 2.8,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 2.8
+    },
+    "dyn": {
+      "whole": 2.8,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 2.8,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 2.8,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 2.8,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "too-many-owners",
+    "format": "esm-out",
+    "kb": 5.7,
+    "req": {
+      "whole": 5.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 5.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 5.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 5.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 5.7,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 6.9,
+    "req": {
+      "whole": 2.1,
+      "anyprint": 4.6,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 2.1,
+      "anyprint": 4.6,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 2.1,
+      "anyprint": 4.6,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 2.1,
+      "anyprint": 4.6,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 2.1,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 4.8
+    }
+  },
+  {
+    "set": "apps-rollup",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "esm-out",
+    "kb": 9.4,
+    "req": {
+      "whole": 7.8,
+      "anyprint": 1.6,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 7.8,
+      "anyprint": 1.6,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 1.6,
+      "failed": 7.8
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 1.6,
+      "failed": 7.8
+    },
+    "firstWhole": {
+      "req": 7.8,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 1.6
+    }
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 1.1,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 1.1,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 1.1,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 1.1,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 1.1,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 1.1
+    }
+  },
+  {
+    "set": "apps-webpack",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 1.4,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 1.4,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 1.4,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 1.4,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 1.4,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 1.4
+    }
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 1.9,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 1.3,
+      "anyprint": 0.5,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 1.3,
+      "none": 0.5
+    }
+  },
+  {
+    "set": "esbuild-app",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 1.3,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 1.3
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 1.3
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 1.3
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 1.3
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 1.3
+    }
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "other-slice",
+    "format": "esm-out",
+    "kb": 0.2,
+    "req": {
+      "whole": 0.2,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.2,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 163.1,
+    "req": {
+      "whole": 1.6,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 1.6,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 1.6,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.3,
+      "anyprint": 1.3,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 1.6,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 161.5
+    }
+  },
+  {
+    "set": "heldout",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "esm-out",
+    "kb": 1.1,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.1,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.1,
+      "anyprint": 0.7,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.1,
+      "sta-esm": 0.0,
+      "none": 1.0
+    }
+  },
+  {
+    "set": "heldout",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 0.3,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.3,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.3,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.3,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.3,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "heldout",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "esm-out",
+    "kb": 0.4,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.4,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.4,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.4,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.4,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.4,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "pop-bun",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 11.8,
+    "req": {
+      "whole": 0.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.7,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.7,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 11.1
+    }
+  },
+  {
+    "set": "pop-bun",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "esm-out",
+    "kb": 2.7,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.5,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 2.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.5,
+      "sta-esm": 1.5,
+      "none": 0.8
+    }
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "format": "esm-out",
+    "kb": 69.4,
+    "req": {
+      "whole": 50.2,
+      "anyprint": 19.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 51.5,
+      "anyprint": 17.9,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 53.4,
+      "anyprint": 16.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 69.4,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 50.2,
+      "dyn": 1.3,
+      "sta-cjs": 1.9,
+      "sta-esm": 16.0,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "esm-out",
+    "kb": 34.9,
+    "req": {
+      "whole": 21.7,
+      "anyprint": 13.1,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 21.7,
+      "anyprint": 13.3,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 34.2,
+      "anyprint": 0.7,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 34.9,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 21.7,
+      "dyn": 0.0,
+      "sta-cjs": 12.5,
+      "sta-esm": 0.7,
+      "none": 0.0
+    }
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 5.1,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 2.6,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 2.6,
+      "none": 2.4
+    }
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "other",
+    "format": "cjs-out",
+    "kb": 0.8,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.8
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.8
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.8
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.8
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.8
+    }
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 3.5,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 2.2,
+      "failed": 1.3
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 2.2,
+      "failed": 1.3
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.3,
+      "failed": 3.2
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.3,
+      "failed": 3.2
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 3.5
+    }
+  },
+  {
+    "set": "remin-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "format": "cjs-out",
+    "kb": 0.5,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 0.5
+    }
+  },
+  {
+    "set": "remin-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "format": "cjs-out",
+    "kb": 2.0,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 2.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 2.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 2.0,
+      "failed": 0.0
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 2.0,
+      "failed": 0.0
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 2.0
+    }
+  },
+  {
+    "set": "remin-terser",
+    "cls": "d-print-differs",
+    "sub": "other-slice",
+    "format": "cjs-out",
+    "kb": 1.7,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 0.0
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 1.7
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 1.7
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 1.7
+    }
+  },
+  {
+    "set": "wrangler",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "format": "cjs-out",
+    "kb": 4.1,
+    "req": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 4.1
+    },
+    "dyn": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 4.1
+    },
+    "sta-cjs": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 4.1
+    },
+    "sta-esm": {
+      "whole": 0.0,
+      "anyprint": 0.0,
+      "failed": 4.1
+    },
+    "firstWhole": {
+      "req": 0.0,
+      "dyn": 0.0,
+      "sta-cjs": 0.0,
+      "sta-esm": 0.0,
+      "none": 4.1
+    }
+  }
+]

@@ -1,0 +1,282 @@
+[
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "file-holds-unit",
+    "kb": 93.1
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "multi-module-dropped",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 18.8
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "multi-module-dropped",
+    "cause": "file-lacks-unit/claimer-lacks",
+    "kb": 1.9
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "multi-module-dropped",
+    "cause": "no-evidence",
+    "kb": 0.5
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod0-oth1-mm0",
+    "cause": "file-holds-unit",
+    "kb": 2.9
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod0-oth1-mm0",
+    "cause": "no-evidence",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "slice-missing",
+    "cause": "file-lacks-unit/claimer-lacks",
+    "kb": 42.2
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "sponge-region-dropped",
+    "cause": "file-holds-unit",
+    "kb": 2.4
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "sponge-region-dropped",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "sponge-region-reowned",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "sponge-region-reowned",
+    "cause": "no-evidence",
+    "kb": 0.3
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "file-holds-unit",
+    "kb": 4.4
+  },
+  {
+    "set": "pop-bun",
+    "cls": "c-dropped",
+    "sub": "sponge-vendored-path",
+    "cause": "no-evidence",
+    "kb": 1.8
+  },
+  {
+    "set": "pop-bun",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-holds-unit",
+    "kb": 1.7
+  },
+  {
+    "set": "pop-bun",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 1.3
+  },
+  {
+    "set": "pop-bun",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-lacks-unit/claimer-lacks",
+    "kb": 7.1
+  },
+  {
+    "set": "pop-bun",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "no-evidence",
+    "kb": 4.6
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "cause": "file-holds-unit",
+    "kb": 66.0
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "spec-bound",
+    "cause": "no-evidence",
+    "kb": 3.3
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "too-many-owners",
+    "cause": "file-missing",
+    "kb": 2.0
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 34.8
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-missing",
+    "kb": 19.1
+  },
+  {
+    "set": "pop-bun",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "no-evidence",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "build-failed-no-loader.node-other-slice-holds",
+    "cause": "file-missing",
+    "kb": 0.2
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "entry-not-built",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 0.3
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "entry-not-built",
+    "cause": "no-evidence",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "file-holds-unit",
+    "kb": 117.8
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "entry-not-built-vendored",
+    "cause": "no-evidence",
+    "kb": 0.7
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "file-absent",
+    "cause": "file-missing",
+    "kb": 61.7
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "no-rows-other-mod1-oth0-mm0",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 0.4
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "slice-missing",
+    "cause": "file-missing",
+    "kb": 1.3
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "c-dropped",
+    "sub": "sponge-region-reowned",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 0.7
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-holds-unit",
+    "kb": 2.7
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "file-lacks-unit/claimer-holds",
+    "kb": 2.2
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "d-print-differs",
+    "sub": "same-file-rows",
+    "cause": "no-evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "other",
+    "cause": "file-missing",
+    "kb": 0.8
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "too-many-owners",
+    "cause": "file-missing",
+    "kb": 3.5
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-holds-unit",
+    "kb": 1.9
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "file-missing",
+    "kb": 185.3
+  },
+  {
+    "set": "pop-esbuild",
+    "cls": "f-filtered",
+    "sub": "whole-read-first",
+    "cause": "no-evidence",
+    "kb": 1.0
+  }
+]

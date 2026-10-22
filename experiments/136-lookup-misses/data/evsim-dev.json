@@ -1,0 +1,386 @@
+[
+  {
+    "set": "esbuild-app",
+    "verdict": "other/foreign",
+    "fate": "kept: no evidence",
+    "kb": 48.3
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "other/foreign",
+    "fate": "kept: row holds",
+    "kb": 171.7
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 22.0
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 423.3
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 335.6
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 11646.7
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 282.6
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 8.5
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 159.1
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 0.7
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 3.1
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 60.3
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 11.4
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 4.4
+  },
+  {
+    "set": "esbuild-app",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 40.1
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/self",
+    "fate": "kept: no evidence",
+    "kb": 62.5
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/self",
+    "fate": "kept: row holds",
+    "kb": 612.9
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/self",
+    "fate": "kept: row not-installed",
+    "kb": 7.8
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOrigin",
+    "fate": "DROPPED",
+    "kb": 31.5
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: no evidence",
+    "kb": 23.6
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: package holds",
+    "kb": 48.0
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row holds",
+    "kb": 394.2
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row not-installed",
+    "kb": 30.0
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOther",
+    "fate": "kept: no evidence",
+    "kb": 2.3
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOther",
+    "fate": "kept: row holds",
+    "kb": 66.2
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/selfOther",
+    "fate": "kept: row not-installed",
+    "kb": 5.4
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/unmapped",
+    "fate": "DROPPED",
+    "kb": 29.1
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/unmapped",
+    "fate": "kept: no evidence",
+    "kb": 31.7
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/unmapped",
+    "fate": "kept: package holds",
+    "kb": 56.4
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 193.5
+  },
+  {
+    "set": "heldout",
+    "verdict": "other/unmapped",
+    "fate": "kept: row not-installed",
+    "kb": 36.7
+  },
+  {
+    "set": "heldout",
+    "verdict": "right",
+    "fate": "DROPPED",
+    "kb": 169.8
+  },
+  {
+    "set": "heldout",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 10667.2
+  },
+  {
+    "set": "heldout",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 833.9
+  },
+  {
+    "set": "heldout",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 122664.2
+  },
+  {
+    "set": "heldout",
+    "verdict": "right",
+    "fate": "kept: row no-row",
+    "kb": 3.4
+  },
+  {
+    "set": "heldout",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 8178.1
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 94.7
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/family",
+    "fate": "kept: package holds",
+    "kb": 170.3
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 600.7
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/family",
+    "fate": "kept: row no-row",
+    "kb": 4.7
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 129.3
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/origin",
+    "fate": "DROPPED",
+    "kb": 0.5
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 74.8
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/origin",
+    "fate": "kept: package holds",
+    "kb": 335.4
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 670.3
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/origin",
+    "fate": "kept: row no-row",
+    "kb": 0.2
+  },
+  {
+    "set": "heldout",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 103.1
+  },
+  {
+    "set": "heldout",
+    "verdict": "wrong",
+    "fate": "DROPPED",
+    "kb": 68.0
+  },
+  {
+    "set": "heldout",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 38.8
+  },
+  {
+    "set": "heldout",
+    "verdict": "wrong",
+    "fate": "kept: package holds",
+    "kb": 276.5
+  },
+  {
+    "set": "heldout",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 107.4
+  },
+  {
+    "set": "heldout",
+    "verdict": "wrong",
+    "fate": "kept: row not-installed",
+    "kb": 23.5
+  },
+  {
+    "set": "wrangler",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 0.9
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 25.9
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 302.6
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right",
+    "fate": "kept: row no-row",
+    "kb": 0.8
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 14.9
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 3.4
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 7.2
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right/family",
+    "fate": "kept: row no-row",
+    "kb": 1.0
+  },
+  {
+    "set": "wrangler",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 1.0
+  },
+  {
+    "set": "wrangler",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 4.1
+  },
+  {
+    "set": "wrangler",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 1.4
+  }
+]

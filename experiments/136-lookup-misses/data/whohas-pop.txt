@@ -1,0 +1,4 @@
+pop-bun        d-print-differs  claimer                         6.7 KB
+pop-bun        d-print-differs  nobody-in-truth-install         1.4 KB
+pop-bun        d-print-differs  third-package                   0.2 KB
+pop-esbuild    d-print-differs  claimer                         2.2 KB

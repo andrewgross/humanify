@@ -1,0 +1,380 @@
+[
+  {
+    "set": "pop-bun",
+    "verdict": "other/self",
+    "fate": "kept: row not-installed",
+    "kb": 2.2
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: no evidence",
+    "kb": 13.9
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row holds",
+    "kb": 57.2
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/selfOther",
+    "fate": "kept: no evidence",
+    "kb": 1.8
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/selfOther",
+    "fate": "kept: row holds",
+    "kb": 0.4
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/selfOther",
+    "fate": "kept: row no-row",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/unmapped",
+    "fate": "DROPPED",
+    "kb": 50.1
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/unmapped",
+    "fate": "kept: no evidence",
+    "kb": 22.3
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/unmapped",
+    "fate": "kept: package holds",
+    "kb": 37.6
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 212.8
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "other/unmapped",
+    "fate": "kept: row not-installed",
+    "kb": 0.6
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right",
+    "fate": "DROPPED",
+    "kb": 405.5
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 8702.2
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 817.0
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 166396.4
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right",
+    "fate": "kept: row no-row",
+    "kb": 5.0
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 6033.9
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 105.3
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/family",
+    "fate": "kept: package holds",
+    "kb": 1.7
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 700.7
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 142.3
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/origin",
+    "fate": "DROPPED",
+    "kb": 9.4
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 477.4
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/origin",
+    "fate": "kept: package holds",
+    "kb": 435.1
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 10950.3
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/origin",
+    "fate": "kept: row no-row",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 7470.4
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "wrong",
+    "fate": "DROPPED",
+    "kb": 38.2
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 69.3
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "wrong",
+    "fate": "kept: package holds",
+    "kb": 60.2
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 430.0
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "wrong",
+    "fate": "kept: row no-row",
+    "kb": 0.2
+  },
+  {
+    "set": "pop-bun",
+    "verdict": "wrong",
+    "fate": "kept: row not-installed",
+    "kb": 290.5
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: no evidence",
+    "kb": 103.9
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: package holds",
+    "kb": 0.8
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: row holds",
+    "kb": 7784.7
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: row not-installed",
+    "kb": 68.8
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/self",
+    "fate": "kept: row not-installed",
+    "kb": 2.2
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: no evidence",
+    "kb": 10.9
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row holds",
+    "kb": 45.5
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/selfOther",
+    "fate": "kept: no evidence",
+    "kb": 1.9
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/selfOther",
+    "fate": "kept: row holds",
+    "kb": 25.5
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "DROPPED",
+    "kb": 0.7
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "kept: no evidence",
+    "kb": 30.2
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 137.3
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right",
+    "fate": "DROPPED",
+    "kb": 8.8
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 10091.6
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 111.7
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 177367.7
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 2558.3
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 1385.5
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 1281.8
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 128.5
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/origin",
+    "fate": "DROPPED",
+    "kb": 34.9
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 402.0
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: package holds",
+    "kb": 431.1
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 10102.7
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 7445.8
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "wrong",
+    "fate": "DROPPED",
+    "kb": 4.5
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 107.6
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 940.6
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: row no-row",
+    "kb": 0.1
+  },
+  {
+    "set": "pop-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: row not-installed",
+    "kb": 61.0
+  }
+]

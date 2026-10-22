@@ -1,0 +1,72 @@
+[
+  {
+    "set": "esbuild-app",
+    "label": "exp135-prod",
+    "wrongKB": 131.1,
+    "mapDefectKB": 0.0,
+    "no-evidence": 12.8,
+    "both-hold": 88.8,
+    "unknown": 10.6,
+    "claimer-lacks": 19.0,
+    "precision": 99.066,
+    "auditedPrecision": 99.066
+  },
+  {
+    "set": "heldout",
+    "label": "exp135-prod",
+    "wrongKB": 704.2,
+    "mapDefectKB": 314.1,
+    "no-evidence": 135.0,
+    "claimer-lacks": 93.6,
+    "map-defect": 314.1,
+    "both-hold": 90.0,
+    "unknown": 71.5,
+    "precision": 99.565,
+    "auditedPrecision": 99.759
+  },
+  {
+    "set": "wrangler",
+    "label": "exp135-prod",
+    "wrongKB": 5.8,
+    "mapDefectKB": 0.0,
+    "both-hold": 1.5,
+    "no-evidence": 4.3,
+    "precision": 99.069,
+    "auditedPrecision": 99.069
+  },
+  {
+    "set": "esbuild-app",
+    "label": "exp136-static",
+    "wrongKB": 131.1,
+    "mapDefectKB": 0.0,
+    "no-evidence": 12.8,
+    "both-hold": 88.8,
+    "unknown": 10.6,
+    "claimer-lacks": 19.0,
+    "precision": 99.066,
+    "auditedPrecision": 99.066
+  },
+  {
+    "set": "heldout",
+    "label": "exp136-static",
+    "wrongKB": 758.2,
+    "mapDefectKB": 372.6,
+    "no-evidence": 133.8,
+    "claimer-lacks": 92.5,
+    "map-defect": 372.6,
+    "both-hold": 87.9,
+    "unknown": 71.5,
+    "precision": 99.532,
+    "auditedPrecision": 99.762
+  },
+  {
+    "set": "wrangler",
+    "label": "exp136-static",
+    "wrongKB": 5.8,
+    "mapDefectKB": 0.0,
+    "no-evidence": 4.3,
+    "both-hold": 1.4,
+    "precision": 99.094,
+    "auditedPrecision": 99.094
+  }
+]

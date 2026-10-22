@@ -1,0 +1,19 @@
+# remin-exp135-prod (c0) remin: wrong index-seed KB per set: remin-esbuild 78.6, remin-terser 7.1
+      14.2 KB  remin-esbuild  a-not-indexed  not-in-dl25k
+       2.8 KB  remin-esbuild  b-other-version  older/major
+       8.4 KB  remin-esbuild  c-dropped  build-failed-unresolved-import
+       6.0 KB  remin-esbuild  c-dropped  sponge-vendored-path
+       5.4 KB  remin-esbuild  c-dropped  build-failed-unresolved-import-other-slice-holds
+       1.0 KB  remin-esbuild  c-dropped  build-failed-no-loader.html-other-slice-holds
+       0.5 KB  remin-esbuild  c-dropped  build-failed-no-loader.html
+       0.1 KB  remin-esbuild  c-dropped  file-absent
+       0.5 KB  remin-esbuild  d-print-differs  same-file-rows/cjs-out
+       0.5 KB  remin-esbuild  e-truth-questionable  no-version-in-map
+      28.3 KB  remin-esbuild  f-filtered  whole-read-first/no-version-in-map
+       2.0 KB  remin-esbuild  f-filtered  whole-read-first/cjs-out/comparable
+       0.4 KB  remin-esbuild  f-filtered  whole-read-first/version-not-indexed
+       1.7 KB  remin-terser  b-other-version  latest-patch-of-minor/minor
+       0.3 KB  remin-terser  b-other-version  latest-patch-of-minor/patch
+       0.6 KB  remin-terser  c-dropped  build-failed-unresolved-import-other-slice-holds
+       0.1 KB  remin-terser  c-dropped  slice-missing
+       1.7 KB  remin-terser  d-print-differs  other-slice/cjs-out

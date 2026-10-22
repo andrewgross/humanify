@@ -1,0 +1,488 @@
+[
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: no evidence",
+    "kb": 37.1
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: row holds",
+    "kb": 1693.5
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/foreign",
+    "fate": "kept: row not-installed",
+    "kb": 17.6
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/self",
+    "fate": "kept: no evidence",
+    "kb": 12.5
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/self",
+    "fate": "kept: row holds",
+    "kb": 271.2
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: no evidence",
+    "kb": 0.6
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row holds",
+    "kb": 6.1
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/selfOther",
+    "fate": "kept: no evidence",
+    "kb": 0.4
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/selfOther",
+    "fate": "kept: row holds",
+    "kb": 3.1
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/selfOther",
+    "fate": "kept: row not-installed",
+    "kb": 2.4
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "kept: no evidence",
+    "kb": 10.3
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "kept: package holds",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 70.1
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "other/unmapped",
+    "fate": "kept: row not-installed",
+    "kb": 1.7
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right",
+    "fate": "DROPPED",
+    "kb": 29.9
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 7957.0
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 18.7
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 86657.2
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right",
+    "fate": "kept: row no-row",
+    "kb": 0.3
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 4239.3
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 685.7
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 750.2
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 104.5
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/origin",
+    "fate": "DROPPED",
+    "kb": 26.3
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 20.8
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: package holds",
+    "kb": 47.4
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 239.0
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 49.1
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 21.7
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 40.4
+  },
+  {
+    "set": "apps-esbuild",
+    "verdict": "wrong",
+    "fate": "kept: row not-installed",
+    "kb": 0.7
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/self",
+    "fate": "kept: no evidence",
+    "kb": 1.8
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/self",
+    "fate": "kept: row holds",
+    "kb": 57.6
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: no evidence",
+    "kb": 0.2
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row holds",
+    "kb": 1.2
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/selfOrigin",
+    "fate": "kept: row not-installed",
+    "kb": 0.2
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/selfOther",
+    "fate": "DROPPED",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/selfOther",
+    "fate": "kept: no evidence",
+    "kb": 1.0
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "other/selfOther",
+    "fate": "kept: row holds",
+    "kb": 4.7
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right",
+    "fate": "DROPPED",
+    "kb": 182.8
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 2482.2
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 1310.5
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 54759.6
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right",
+    "fate": "kept: row no-row",
+    "kb": 2.3
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 2663.2
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 33.6
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 458.5
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/family",
+    "fate": "kept: row no-row",
+    "kb": 0.9
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 52.4
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/origin",
+    "fate": "DROPPED",
+    "kb": 3.4
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 72.1
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 557.4
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 320.9
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "wrong",
+    "fate": "DROPPED",
+    "kb": 8.8
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 34.3
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 213.3
+  },
+  {
+    "set": "apps-rollup",
+    "verdict": "wrong",
+    "fate": "kept: row not-installed",
+    "kb": 80.8
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "other/self",
+    "fate": "kept: no evidence",
+    "kb": 2.0
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "other/self",
+    "fate": "kept: row holds",
+    "kb": 79.5
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "other/unmapped",
+    "fate": "kept: no evidence",
+    "kb": 141.3
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "other/unmapped",
+    "fate": "kept: package holds",
+    "kb": 2.9
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "other/unmapped",
+    "fate": "kept: row holds",
+    "kb": 3682.0
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "other/unmapped",
+    "fate": "kept: row not-installed",
+    "kb": 10.7
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right",
+    "fate": "DROPPED",
+    "kb": 9.3
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right",
+    "fate": "kept: no evidence",
+    "kb": 7208.5
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right",
+    "fate": "kept: package holds",
+    "kb": 81.6
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right",
+    "fate": "kept: row holds",
+    "kb": 42268.9
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right",
+    "fate": "kept: row no-row",
+    "kb": 1.7
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right",
+    "fate": "kept: row not-installed",
+    "kb": 1400.7
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/family",
+    "fate": "DROPPED",
+    "kb": 8.3
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/family",
+    "fate": "kept: no evidence",
+    "kb": 27.8
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/family",
+    "fate": "kept: row holds",
+    "kb": 574.1
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/family",
+    "fate": "kept: row not-installed",
+    "kb": 56.4
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/origin",
+    "fate": "kept: no evidence",
+    "kb": 26.7
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/origin",
+    "fate": "kept: package holds",
+    "kb": 8.1
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/origin",
+    "fate": "kept: row holds",
+    "kb": 218.2
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "right/origin",
+    "fate": "kept: row not-installed",
+    "kb": 262.5
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "wrong",
+    "fate": "DROPPED",
+    "kb": 1.1
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "wrong",
+    "fate": "kept: no evidence",
+    "kb": 13.5
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "wrong",
+    "fate": "kept: row holds",
+    "kb": 135.4
+  },
+  {
+    "set": "apps-webpack",
+    "verdict": "wrong",
+    "fate": "kept: row not-installed",
+    "kb": 8.9
+  }
+]
