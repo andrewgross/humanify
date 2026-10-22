@@ -157,6 +157,7 @@ specific_rivals = true         # exp106: the two conflict guards read rivals und
 banner_names = "known"         # exp106 matcher hygiene (experiments/106-matcher-hygiene)
 derived_families = true        # exp106: one family = npm-metadata links (families-derived.json)
 payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence (exp113: own bytes; a base64 payload naming the package is its own)
+payload_unique_literal = false # exp139, off: the payload's long literal backs the claimed family only when no other family's files hold it
 helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
 helper_prints = "seed"         # ON since 2026-10-22 (exp138: P >= the previous default on all 21 sets); exp129: a unit whose whole print the
                                #   index's helper table (tslib, @babel/runtime ... own code) holds is no other package's seed: "seed" (dropped),
@@ -179,6 +180,12 @@ factory_whole_seed = true      # ON since 2026-10-21; exp132: a package names a 
                                #   index seed (or a declared/banner seed) there; function-print seeds alone are dropped
 factory_banner_index = true    # ON since 2026-10-21; exp132: a banner seed on a cut factory's statement another family's
                                #   index prints cover more of is refused
+terser_carriers = 0.0          # exp139, off: with the terser slices read, a package the bundle does not show (exclusive seeds
+terser_carriers_own = 0.1      #   < _own of its seed bytes) whose seeds >= this share tie a family the bundle shows gives its
+                               #   terser-made seeds to that family, else to no one (experiments/139-carriers)
+terser_factory_majority = 0.0  # exp139, off: a terser-made seed in a cut factory another family holds N x more of is dropped
+terser_thin = 0.0              # exp139, off: a family shown only by terser-made seeds holding < this share of its smallest
+                               #   index module is dropped
 ```
 
 Since exp117 (2026-10-15) `context_presence = 1.5`, `context_presence_slack = 16384`,

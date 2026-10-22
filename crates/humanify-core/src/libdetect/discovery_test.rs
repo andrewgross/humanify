@@ -514,6 +514,8 @@ struct Held<'h> {
     /// A row of the index's HELPER table (exp129: a helper source's own
     /// print), not of its unit table.
     helper: bool,
+    /// A row of the index's terser-built slice (exp139), read as `union`.
+    terser: bool,
 }
 
 impl<'h> Held<'h> {
@@ -525,6 +527,7 @@ impl<'h> Held<'h> {
             module_bytes: 500,
             inner: None,
             helper: false,
+            terser: false,
         }
     }
 
@@ -549,6 +552,22 @@ impl<'h> Held<'h> {
     fn helper(self) -> Held<'h> {
         Held {
             helper: true,
+            ..self
+        }
+    }
+
+    /// Held in the index's terser-built slice, not its chosen one (exp139).
+    fn terser(self) -> Held<'h> {
+        Held {
+            terser: true,
+            ..self
+        }
+    }
+
+    /// In an index module of `module_bytes`.
+    fn in_module(self, module_bytes: u64) -> Held<'h> {
+        Held {
+            module_bytes,
             ..self
         }
     }
@@ -601,6 +620,7 @@ fn run_indexed_factories(
         pieces.interop,
     );
     let mut rows = Vec::new();
+    let mut terser_rows = Vec::new();
     let mut helpers = Vec::new();
     for h in held {
         let (_, p) = prints
@@ -635,7 +655,7 @@ fn run_indexed_factories(
             });
             continue;
         }
-        rows.push(UnitRow {
+        let row = UnitRow {
             hash: print.hash.clone(),
             owner: h.owner.into(),
             file: "index.js".into(),
@@ -643,9 +663,20 @@ fn run_indexed_factories(
             content: print.content,
             module_bytes: h.module_bytes,
             versions: vec![("1.0.0".into(), "1.0.0".into())],
-        });
+        };
+        if h.terser {
+            terser_rows.push(row);
+        } else {
+            rows.push(row);
+        }
     }
-    let index = LibraryIndex::from_rows(rows, literals).with_helpers(helpers);
+    let index = LibraryIndex::from_slices(
+        rows,
+        terser_rows,
+        literals,
+        crate::libindex::recipe::TerserSlices::Union,
+    )
+    .with_helpers(helpers);
     let rules = LookupRules {
         agreement: false,
         support: 0,
@@ -1682,4 +1713,202 @@ fn factory_banner_index_refuses_a_banner_the_module_s_own_code_contradicts() {
     // The index silent (or agreeing) on the statement: the banner stands.
     let rows = run(&held[1..], check);
     assert_eq!(claim_of(&rows, "var lib"), Some(("R".into(), Rule::Seed)));
+}
+
+// ---- exp139 terser carriers -------------------------------------------------
+
+/// lib and dep: two statements a host H and a plugin P (whose dist copied
+/// H's chunk) both hold; own: H's own statement.
+const CARRIED: &str = "var lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).map(function (s) { return s + s.length + t.indexOf(s); }).join(\"|\").concat(t.length, t.trim(), t.toUpperCase()); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar own = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16), lib(String(k))].join(\",\"); };\nvar mine = function (z) { return [z, z - 3, z / 2, z % 5, String(z), z.toFixed(4), z.toString(2), dep(String(z))].join(\";\"); };\nvar app = () => own(1) + dep(\"a\") + mine(2);\n";
+
+#[test]
+fn terser_carriers_give_a_plugin_s_terser_made_ties_to_the_host_the_bundle_shows() {
+    // The terser slice holds lib and dep for both H and P ("@p/plugin" sorts
+    // first: name order hands it every tie); H's own statement is in the
+    // chosen slice, H's alone.
+    let held = [
+        Held::whole("var lib", "@p/plugin").terser(),
+        Held::whole("var lib", "host").terser(),
+        Held::whole("var dep", "@p/plugin").terser(),
+        Held::whole("var dep", "host").terser(),
+        Held::whole("var own", "host"),
+    ];
+    let off = DiscoveryOptions::default();
+    let rows = run_indexed_with(CARRIED, &held, vec![], off).2;
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("@p/plugin".into(), Rule::Seed))
+    );
+    assert_eq!(
+        claim_of(&rows, "var dep"),
+        Some(("@p/plugin".into(), Rule::Seed))
+    );
+    let on = DiscoveryOptions {
+        terser_carriers: 0.5,
+        terser_carriers_own: 0.1,
+        ..off
+    };
+    let rows = run_indexed_with(CARRIED, &held, vec![], on);
+    let rows = rows.2;
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("host".into(), Rule::Seed))
+    );
+    assert_eq!(
+        claim_of(&rows, "var dep"),
+        Some(("host".into(), Rule::Seed))
+    );
+    // The plugin's seeds from the CHOSEN slice are not the terser slices'
+    // doing: left alone.
+    let chosen = [
+        Held::whole("var lib", "@p/plugin"),
+        Held::whole("var lib", "host"),
+        Held::whole("var dep", "@p/plugin"),
+        Held::whole("var dep", "host"),
+        Held::whole("var own", "host"),
+    ];
+    let rows = run_indexed_with(CARRIED, &chosen, vec![], on).2;
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("@p/plugin".into(), Rule::Seed))
+    );
+    // The host not shown in the bundle (no statement of its own): no rival
+    // to give the ties to, and the plugin is no carrier of anyone here.
+    let rows = run_indexed_with(CARRIED, &held[..4], vec![], on).2;
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("@p/plugin".into(), Rule::Seed))
+    );
+    // The plugin shown by a statement of its own: it keeps its seeds.
+    let shown = [
+        Held::whole("var lib", "@p/plugin").terser(),
+        Held::whole("var lib", "host").terser(),
+        Held::whole("var dep", "@p/plugin").terser(),
+        Held::whole("var dep", "host").terser(),
+        Held::whole("var own", "host"),
+        Held::whole("var mine", "@p/plugin").terser(),
+    ];
+    let rows = run_indexed_with(CARRIED, &shown, vec![], on).2;
+    assert_eq!(
+        claim_of(&rows, "var lib"),
+        Some(("@p/plugin".into(), Rule::Seed))
+    );
+}
+
+/// One bundled CommonJS module F: big (long), then b calling c.
+const MAJORITY: &str = "var Q = (n, e) => () => (e || n((e = { exports: {} }).exports, e), e.exports);\nvar F = Q((x, m) => { var main = function (t) { var a = t.split(\",\").map(function (s) { return s + s.length + t.indexOf(s); }).filter(Boolean).join(\"|\").concat(t.length, t.trim(), t.toUpperCase()); var z = [t, t + 1, t + 2, String(t), t.length, t.toLowerCase(), t.slice(1), t.slice(2), t.charAt(0)].join(\";\"); var y = t.replace(/a/g, \"b\").replace(/c/g, \"d\").split(\"\").reverse().map(function (q) { return q + q; }).join(\"\"); return a + z + y; }; var fmt = function (u) { return cut(u) + [u, u + 1, u * 2, u % 7, String(u), u.toFixed(2), u.toString(16)].join(\",\"); }; var cut = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); }; m.exports = function (v) { return main(fmt(v)); }; });\nvar G = Q((x, m) => { var other = function (k) { return [k, k + 1, k * 2, String(k), k.toFixed(2), k.toString(16)].join(\",\"); }; m.exports = other; });\nvar app = () => F()(\"a\") + G()(1);\n";
+
+#[test]
+fn terser_factory_majority_drops_a_terser_made_minority_seed_inside_another_package_s_file() {
+    // F's main statement is P's (chosen slice); fmt and cut only R's terser rows
+    // hold: a minority family inside P's file, under half of P's bytes.
+    let held = [
+        Held::whole("var main", "P"),
+        Held::whole("var fmt", "R").terser(),
+        Held::whole("var cut", "R").terser(),
+    ];
+    let cut = DiscoveryOptions {
+        factory_bodies: true,
+        ..DiscoveryOptions::default()
+    };
+    let run = |held: &[Held<'_>], o| run_indexed_factories(MAJORITY, true, held, vec![], o).2;
+    let rows = run(&held, cut);
+    assert_eq!(claim_of(&rows, "var fmt"), Some(("R".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var cut"), Some(("R".into(), Rule::Seed)));
+    let majority = DiscoveryOptions {
+        terser_factory_majority: 1.0,
+        presence_fence: true,
+        ..cut
+    };
+    let rows = run(&held, majority);
+    assert_eq!(claim_of(&rows, "var fmt"), None);
+    assert_eq!(claim_of(&rows, "var cut"), None);
+    // Not outweighed enough at 10x: R keeps them.
+    let rows = run(
+        &held,
+        DiscoveryOptions {
+            terser_factory_majority: 10.0,
+            ..majority
+        },
+    );
+    assert_eq!(claim_of(&rows, "var fmt"), Some(("R".into(), Rule::Seed)));
+    // R's rows in the chosen slice: not the terser slices' doing.
+    let chosen = [
+        Held::whole("var main", "P"),
+        Held::whole("var fmt", "R"),
+        Held::whole("var cut", "R"),
+    ];
+    let rows = run(&chosen, majority);
+    assert_eq!(claim_of(&rows, "var fmt"), Some(("R".into(), Rule::Seed)));
+}
+
+#[test]
+fn terser_thin_drops_a_family_shown_only_by_a_sliver_of_a_far_bigger_index_module() {
+    // C's only seeds, lib and dep (terser-made, about 300 bytes together),
+    // sit in a 4,000-byte module of C's: under a tenth of it is in the
+    // bundle.
+    let held = [
+        Held::whole("var lib", "C").terser().in_module(4000),
+        Held::whole("var dep", "C").terser().in_module(4000),
+    ];
+    let off = DiscoveryOptions::default();
+    let rows = run_indexed_with(CARRIED, &held, vec![], off).2;
+    assert_eq!(claim_of(&rows, "var dep"), Some(("C".into(), Rule::Seed)));
+    let thin = DiscoveryOptions {
+        terser_thin: 0.1,
+        ..off
+    };
+    let rows = run_indexed_with(CARRIED, &held, vec![], thin).2;
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    // At 5% the sliver is enough.
+    let rows = run_indexed_with(
+        CARRIED,
+        &held,
+        vec![],
+        DiscoveryOptions {
+            terser_thin: 0.05,
+            ..off
+        },
+    )
+    .2;
+    assert_eq!(claim_of(&rows, "var dep"), Some(("C".into(), Rule::Seed)));
+    // Seeds from the chosen slice: the family is not terser-made, kept.
+    let chosen = [
+        Held::whole("var lib", "C").in_module(4000),
+        Held::whole("var dep", "C").in_module(4000),
+    ];
+    let rows = run_indexed_with(CARRIED, &chosen, vec![], thin).2;
+    assert_eq!(claim_of(&rows, "var dep"), Some(("C".into(), Rule::Seed)));
+}
+
+#[test]
+fn payload_unique_literal_takes_no_backing_from_a_long_string_another_family_also_holds() {
+    // P's files hold blob's long string — and so do E's (P's dist carries
+    // E's data table, as a UMD bundle inlines its dependency). Read as P's
+    // own evidence, DOWN hands E's payload to P; with the literal held by
+    // two families it backs neither.
+    let blob: String = "QUJD".repeat(400);
+    let code: &'static str = Box::leak(
+        format!("var lib = function (t) {{ return t.split(\",\").map(Number).filter(Boolean).join(\"|\").concat(t.length, blob.length, more(t)); }};\nvar more = function (m) {{ return [m, m * 3, m - 7, Math.max(m, 9), Math.min(m, 2), m % 5].reduce((x, y) => x + y, 0); }};\nvar blob = \"{blob}\";\nvar app = () => lib(\"a\");\n")
+            .into_boxed_str(),
+    );
+    let held = [Held::whole("var lib", "P"), Held::whole("var more", "P")];
+    let line = code.lines().find(|l| l.starts_with("var blob")).unwrap();
+    let both = vec![literal_row("P", line), literal_row("E", line)];
+    let guard = DiscoveryOptions {
+        payload_min_bytes: 1024,
+        ..DiscoveryOptions::default()
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, both.clone(), guard);
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
+    let unique = DiscoveryOptions {
+        payload_unique_literal: true,
+        ..guard
+    };
+    let (_, _, rows) = run_indexed_with(code, &held, both, unique);
+    assert_eq!(claim_of(&rows, "var blob"), None);
+    // P's alone: still P's own evidence.
+    let (_, _, rows) = run_indexed_with(code, &held, vec![literal_row("P", line)], unique);
+    assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
 }
