@@ -1,0 +1,64 @@
+{
+  "about": "scorer 14 rule `mapdefect` (experiments/137-scorer-mapdefect/scorer14/mapdefect14.py): per entry, the sha256 of <DATA>/truth/<id>.mapdefect14.json.gz (rows: unit start, end, old package, new package, version, file, evidence tokens, closure share x1000, holder share x1000, old file; evaluated: every span the rule read, with its verdict)",
+  "bytes": {
+    "dev-rollup": {
+      "few-evidence (bytes)": 492554,
+      "label-holds (bytes)": 1642598,
+      "library bytes": 2142780,
+      "library units": 3285,
+      "skipped: copy origin or scorer 13 relabel (bytes)": 7628,
+      "units judged": 5637
+    },
+    "dev-webpack": {
+      "few-evidence (bytes)": 563084,
+      "label-holds (bytes)": 1265161,
+      "library bytes": 1829402,
+      "library units": 3978,
+      "nobody-holds (bytes)": 80,
+      "skipped: copy origin or scorer 13 relabel (bytes)": 1077,
+      "units judged": 4500
+    }
+  },
+  "corpusSha256": "93a335a04b194076036454b80a01225261653397b251ecc8a4d8f70597377dde",
+  "entries": {
+    "rollup-dev105-app00": "4a8510513741fe9c162d7476c9f7ab0bb66c93100b19a92a003712f5227df00e",
+    "rollup-dev105-app01": "a55c388f9a58f7add6f873055a205639044dc832836f0fcc6a8a16b5768e4280",
+    "rollup-dev105-app02": "d5d5f0ec932aa4001d9f6c157cf87a2b758cf9e0f012b4d0d0ac248f2ec105fa",
+    "rollup-dev105-app03": "ac48c427eb46f98cd7b991e1743f88de9d6fdd3b81ec563713a5a74781083101",
+    "rollup-dev105-app04": "7d8fcf64a899d0fcb62161276114d035253fc62c87775f1fec31e19b45670a17",
+    "rollup-dev105-app05": "6ef886c39da1e3eeef760ba10fe206cb57cbb93600e8a7a9598d9186f83ce62b",
+    "rollup-dev105-app06": "418b0d6d76a929d24e4fe02f54f7168dea038f034bccbb1817ac2fa692a753bd",
+    "rollup-dev105-app07": "b269737290b8efbf209397e22cfed0b40900c51618b8394026ad4a4a54f7263d",
+    "rollup-dev105-app08": "64cd8e124f7b3a6dc69745f80c256f28f7019cddd785eb0b8b1152ebe73d60cc",
+    "rollup-dev105-app09": "99d1b1bf2bbb1ed88d7ca0faa700e429f4128bf181bccc26c8aed822a7d35f05",
+    "rollup-dev105-app10": "8ed16e1059d1394116b1bc3e148b7c42a0ad8bc48285d6aa128ed9972f653979",
+    "rollup-dev105-app11": "4b8c0b3e58989ebae7be046893254dada0ad59fa207b503df26d75a0f8ab30a9",
+    "rollup-dev105-app12": "b2e702dbfabc494e8505f4f07654a473eef606df0edef8b2c57b7135f664b19c",
+    "rollup-dev105-app13": "ad05e752156be37216699debc7b773f3f4d473877fc44875c789dd4c004dae0e",
+    "webpack-dev105-app00": "1c3309fe7225a28058ce9f789d091641fede88732aeb1e1f7132fb73cd9b76cd",
+    "webpack-dev105-app01": "be509db6e3753eac6505e21a86932fab18082d027c18b394963e3ff8ece52e1a",
+    "webpack-dev105-app02": "a4e5bf414627ef39a090dc22c59671fbe21fa8e2a85673e8fa333948917774f3",
+    "webpack-dev105-app03": "184de86adc43cb97000f30af5aadae8761f1288f0183ab8eeecdef9acdb8577c",
+    "webpack-dev105-app04": "d80c8a8e936dbd57569570b175a6ddb31416f19d83d0c35a6374d99f15b6c706",
+    "webpack-dev105-app05": "0a4ee661e2d2fa3ded17db45d56e093b8055640124f3ee070d7bbae1e1744066",
+    "webpack-dev105-app06": "0890da2228230235303ceb45d2859b55dcffbf70db828f937f319f62f925dae9",
+    "webpack-dev105-app08": "3c36ec923d23cdcc14fe7876f6bc93bb2f3f7daf3e1e2c05a5c3c332b92146a2",
+    "webpack-dev105-app09": "4cc3455c22a1e344f86285f713468d0cb3753a3f7bb5dd30f670c4dcad3e9b88",
+    "webpack-dev105-app10": "c3136f996ca6943ef11f343681aae7bbf5783941533943883e909fbc2cb65f15",
+    "webpack-dev105-app11": "f1bcc3cd6ad7482d66ab5b3ffd1d929bc199f62709a94d639469ca658f969253",
+    "webpack-dev105-app12": "9348d3381970594d23d1d59f0ae5ece326badb97960eda13ce8cf99680546350",
+    "webpack-dev105-app13": "3a78d12856ba970e01939a49e5d8839de22840a60b2b513f918551a25c0a1a76"
+  },
+  "rules": {
+    "candidate": 0.3,
+    "depKeys": ["dependencies", "optionalDependencies", "peerDependencies"],
+    "dfMax": 5,
+    "fileCap": 1000,
+    "hold": 0.8,
+    "lack": 0.2,
+    "minEvidence": 8,
+    "sample": 64
+  },
+  "schema": "exp137-mapdefect14/1",
+  "unitsLabels": ["exp135-prod-bundlers", "exp130-origin-bundlers"]
+}

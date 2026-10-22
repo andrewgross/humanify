@@ -60,6 +60,42 @@ def misattr13_sha():
         return lib096.sha256_bytes(lib096.dump(json.load(fh)).encode())
 
 
+# scorer 14 (exp137): Audit.mapdefect over the frozen layer mapdefect14 (experiments/137-scorer-mapdefect/scorer14/
+# mapdefect14.py): a unit whose labelled package's installed closure lacks its name evidence while exactly one other
+# installed package's file holds it takes that package. Off: scorer 13's cards exactly.
+RULES14 = {"mapdefect": True}
+_MD14 = {}
+
+
+def mapdefect14_manifest_path():
+    c = lib096.CORPUS
+    return os.path.join(lib096.HERE, "mapdefect14.json" if c == "dev" else f"mapdefect14-{c}.json")
+
+
+def load_mapdefect14_manifest():
+    p = mapdefect14_manifest_path()
+    if p not in _MD14:
+        with open(p) as fh:
+            _MD14[p] = json.load(fh)
+    return _MD14[p]
+
+
+def load_mapdefect14(entry):
+    m = load_mapdefect14_manifest()
+    f = os.path.join(lib096.DATA, "truth", entry["id"] + ".mapdefect14.json.gz")
+    got = sha256_file(f)
+    if got != m["entries"].get(entry["id"]):
+        raise SystemExit(f"REFUSED: mapdefect14 {f} sha256 {got[:12]} != {os.path.basename(mapdefect14_manifest_path())}")
+    with gzip.open(f, "rt") as fh:
+        return json.load(fh)["rows"]
+
+
+def mapdefect14_sha():
+    if not RULES14["mapdefect"]:
+        return None
+    return lib096.sha256_bytes(lib096.dump(load_mapdefect14_manifest()).encode())
+
+
 # scorer 12 (exp129): the copies layer v2 (experiments/129-helpers-copies/copies2.py) replaces exp104's: the same
 # rule, its evidence read from the INSTALLED packages (the shipper's own package.json, the shipped file) and the
 # default index's rows over EVERY slice plus its helper table, over every judged unit of the corpus — not from one
@@ -124,6 +160,7 @@ class Audit:
         self.copy_at = [r[0] for r in ranges]
         self.copies = ranges
         self.mis13 = {(r[0], r[1]): r for r in load_misattr13(entry)} if RULES13["misattributed"] else {}
+        self.md14 = {(r[0], r[1]): r for r in load_mapdefect14(entry)} if RULES14["mapdefect"] else {}
 
     def carried(self, s, e):
         """True when the unit [s, e) has no mapping of its own and its tokens are mostly absent from the source
@@ -146,6 +183,14 @@ class Audit:
             return {}
         return {u["i"]: self.mis13[(u["s"], u["e"])] for u in units
                 if u["k"] == "Factory" and (u["s"], u["e"]) in self.mis13}
+
+    def mapdefect(self, s, e, label):
+        """Scorer 14 (exp137, rule `mapdefect`): the layer row [start, end, old package, package, version, file,
+        evidence, closure share, holder share, old file] for the unit [s, e) when the frozen mapdefect14 layer
+        relabels it and its label is still the row's old package, else None. Matched by span: a unit the reference
+        runs did not hold is left alone."""
+        r = self.md14.get((s, e))
+        return r if r is not None and r[2] == label else None
 
     def copy_origin(self, s, e, shipper):
         """(origin, declaring dependency) when most of [s, e) lies in one origin's copy ranges of this shipper."""

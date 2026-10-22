@@ -20,6 +20,7 @@
   "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
   "indexBytes": 6961790155,
   "indexId": "d43c3db7309c69766934b6a31e1fddba0bc86012f8e0d1ea0601121343a360e1",
+  "mapdefect14Sha256": "ccddd37edef619afe9731710e36fc88fb07d6daacaf689f00e9c605aabc79b55",
   "misattr13Sha256": "76156880e6f8e7001cf9cc88f23274a31328b103dff9eaa59b0173f1e2f1d4dc",
   "origins10Sha256": "ca36abae7b9829cd97c217a698f712e80fbf18e40f7dc6e487f4058963297f73",
   "origins12Sha256": "46e6ee87925a623377ee5b3a5c00ef5052033fa939ee00c085c3a4655eefdabe",
@@ -33,7 +34,7 @@
   ]
  },
  "label": "remin-exp129o-auto-seed",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "sets": {
   "remin-esbuild": {
    "appClaimedBytes": 0,

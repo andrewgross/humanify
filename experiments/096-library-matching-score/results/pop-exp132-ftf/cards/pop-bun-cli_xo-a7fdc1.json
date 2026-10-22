@@ -35,10 +35,10 @@
  "label": "pop-exp132-ftf",
  "missBytes": {
   "a": 4800,
-  "b": 162925,
+  "b": 271416,
   "c": 270458,
-  "d-absent": 172700,
-  "d-file": 770756,
+  "d-absent": 209125,
+  "d-file": 625840,
   "d-variant": 23237,
   "e-ambig": 153645,
   "e-other": 3728498,
@@ -50,7 +50,7 @@
  "noDiscovery": null,
  "reportSha256": "31d6e8baf941e9ed8b7cb63cdc770b1ec58afce7a97e0f80145c2122269d75cb",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -68,10 +68,10 @@
    "f1ShipperOnly": 0.696767,
    "libraryBytes": 9407912,
    "missBytes": {
-    "b": 104315,
+    "b": 212806,
     "c": 31095,
-    "d-absent": 172700,
-    "d-file": 179167,
+    "d-absent": 209125,
+    "d-file": 34251,
     "e-ambig": 45100,
     "e-other": 3710488,
     "e-support": 3824,

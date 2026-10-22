@@ -34,11 +34,11 @@
  },
  "label": "exp135-prod",
  "missBytes": {
-  "a": 372091,
+  "a": 633884,
   "b": 100337,
   "c": 55203,
   "d-absent": 205086,
-  "d-file": 291997,
+  "d-file": 30204,
   "e-ambig": 1141,
   "e-other": 7205,
   "e-spec": 606,
@@ -49,7 +49,7 @@
  "noDiscovery": null,
  "reportSha256": "e8ac4c5a48897f2ad81ad6a7266def7c76ab1726c51c2057b198ad68c06d9303",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -63,10 +63,10 @@
    "f1ShipperOnly": 0.544932,
    "libraryBytes": 942426,
    "missBytes": {
-    "a": 71211,
+    "a": 333004,
     "c": 34447,
     "d-absent": 190562,
-    "d-file": 266507,
+    "d-file": 4714,
     "e-ambig": 965,
     "e-other": 6969,
     "e-support": 3940,

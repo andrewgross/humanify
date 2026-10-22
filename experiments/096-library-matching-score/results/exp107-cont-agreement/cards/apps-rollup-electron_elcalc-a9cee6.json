@@ -33,12 +33,12 @@
  },
  "label": "exp107-cont-agreement",
  "missBytes": {
-  "a": 4520197,
+  "a": 4521424,
   "b": 6190888,
   "c": 35385,
   "d-absent": 124545,
   "d-file": 250099,
-  "e-agree": 718920,
+  "e-agree": 717693,
   "e-ambig": 26345,
   "e-other": 647,
   "e-support": 14635,
@@ -48,7 +48,7 @@
  "noDiscovery": null,
  "reportSha256": "f67193e6dfd6fa020d44dfc2b1a3d97bba53a0ca52629d3e816562b415eb0490",
  "rule": "agreement",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -86,12 +86,12 @@
    "f1ShipperOnly": 0.101292,
    "libraryBytes": 12554914,
    "missBytes": {
-    "a": 4520197,
+    "a": 4521424,
     "b": 6190888,
     "c": 35385,
     "d-absent": 124545,
     "d-file": 250099,
-    "e-agree": 718920,
+    "e-agree": 717693,
     "e-ambig": 26345,
     "e-other": 647,
     "e-support": 14635,

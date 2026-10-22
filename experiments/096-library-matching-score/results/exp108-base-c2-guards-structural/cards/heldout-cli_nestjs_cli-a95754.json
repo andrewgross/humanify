@@ -36,8 +36,7 @@
  "label": "exp108-base-c2-guards-structural",
  "missBytes": {
   "c": 1430,
-  "d-absent": 1308,
-  "d-file": 20478,
+  "d-absent": 21786,
   "e-support": 462,
   "e-veto": 167,
   "f": 3019,
@@ -46,7 +45,7 @@
  "noDiscovery": null,
  "reportSha256": "e0d182b10bdea08033699cc341f7b15cb657659cf255932a2f568aa5664484e4",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -93,8 +92,7 @@
    "libraryBytes": 193262,
    "missBytes": {
     "c": 1430,
-    "d-absent": 1308,
-    "d-file": 20478,
+    "d-absent": 21786,
     "e-support": 462,
     "e-veto": 167,
     "f": 3019

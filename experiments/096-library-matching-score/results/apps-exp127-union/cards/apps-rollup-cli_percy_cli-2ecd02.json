@@ -34,7 +34,7 @@
  "noDiscovery": "the passthrough adapter ran no library discovery (the input does not parse)",
  "reportSha256": "8731d120217b3ce500e2d76531ac71b1088b67cbd70b0544c498d3e5b7ca2a7e",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,

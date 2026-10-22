@@ -33,7 +33,8 @@
  "label": "exp135-ctl",
  "missBytes": {
   "c": 39085,
-  "d-file": 36843,
+  "d-absent": 33447,
+  "d-file": 3396,
   "e-ambig": 5507,
   "e-other": 18340,
   "e-support": 12990,
@@ -43,7 +44,7 @@
  "noDiscovery": null,
  "reportSha256": "2584726f8b408be5483e84d40a947744c3aec631880c29cd68514bf6462ff7d8",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -60,7 +61,8 @@
    "libraryBytes": 2300958,
    "missBytes": {
     "c": 39085,
-    "d-file": 36843,
+    "d-absent": 33447,
+    "d-file": 3396,
     "e-ambig": 5507,
     "e-other": 18340,
     "e-support": 12990,

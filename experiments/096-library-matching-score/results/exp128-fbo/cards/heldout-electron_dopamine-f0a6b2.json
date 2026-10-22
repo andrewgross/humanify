@@ -34,10 +34,10 @@
  },
  "label": "exp128-fbo",
  "missBytes": {
-  "a": 231313,
+  "a": 240633,
   "b": 23973,
   "c": 76604,
-  "d-file": 9801,
+  "d-file": 481,
   "e-ambig": 887,
   "e-other": 4362,
   "e-support": 776,
@@ -47,7 +47,7 @@
  "noDiscovery": null,
  "reportSha256": "f6ba1fc3e6a7613e1ca1c0e959cf20acd5d0f7ce1f94c1086200463e692d5fb5",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -65,10 +65,10 @@
    "f1ShipperOnly": 0.878374,
    "libraryBytes": 2099629,
    "missBytes": {
-    "a": 231313,
+    "a": 240633,
     "b": 21824,
     "c": 76361,
-    "d-file": 9557,
+    "d-file": 237,
     "e-ambig": 887,
     "e-other": 4362,
     "e-support": 494,

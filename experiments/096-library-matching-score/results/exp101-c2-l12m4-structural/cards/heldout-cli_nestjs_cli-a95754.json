@@ -36,8 +36,7 @@
  "label": "exp101-c2-l12m4-structural",
  "missBytes": {
   "c": 1430,
-  "d-absent": 1308,
-  "d-file": 20478,
+  "d-absent": 21786,
   "e-support": 462,
   "e-veto": 167,
   "f": 3019,
@@ -46,7 +45,7 @@
  "noDiscovery": null,
  "reportSha256": "78957da0aff178f48db35d5740c3f7f526b9b0f093ed6958ed45b309a98e442e",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -93,8 +92,7 @@
    "libraryBytes": 193262,
    "missBytes": {
     "c": 1430,
-    "d-absent": 1308,
-    "d-file": 20478,
+    "d-absent": 21786,
     "e-support": 462,
     "e-veto": 167,
     "f": 3019

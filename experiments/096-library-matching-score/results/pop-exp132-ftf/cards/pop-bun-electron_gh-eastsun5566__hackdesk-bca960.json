@@ -3,9 +3,9 @@
  "claimedBytes": {
   "family": 8753886,
   "origin": 518648,
-  "right": 9118268,
+  "right": 9117891,
   "unmapped": 82922,
-  "wrongFamily": 180559
+  "wrongFamily": 180936
  },
  "detected": {
   "bundler": "bun",
@@ -15,81 +15,81 @@
  "entry": "pop-bun-electron_gh-eastsun5566__hackdesk-bca960",
  "exploratory": {
   "names": {
-   "bindings": 120382,
+   "bindings": 120364,
    "bindingsSameVersion": 92204,
-   "bindingsVersionKnown": 120382,
-   "exactBytes": 10603087,
-   "exactUnits": 12393,
-   "sameVersionShare": 0.765928
+   "bindingsVersionKnown": 120364,
+   "exactBytes": 10602710,
+   "exactUnits": 12392,
+   "sameVersionShare": 0.766043
   }
  },
  "indexId": "c5fe9a7403c05c4c7ed2ca0fce09a1d7802089c80a769eb61e37b54fd8d73fa3",
  "indexSeeds": {
   "appClaimedBytes": 0,
-  "f05": 0.757941,
-  "f1": 0.56041,
-  "namedBytes": 8716812,
-  "precision": 0.990753,
-  "recall": 0.390704
+  "f05": 0.757909,
+  "f1": 0.560386,
+  "namedBytes": 8716435,
+  "precision": 0.99071,
+  "recall": 0.390687
  },
  "label": "pop-exp132-ftf",
  "missBytes": {
   "a": 1107074,
   "b": 617141,
   "c": 1175666,
-  "d-absent": 388242,
-  "d-file": 71001,
-  "e-ambig": 74084,
+  "d-absent": 390234,
+  "d-file": 69009,
+  "e-ambig": 74819,
   "e-other": 80878,
   "e-spec": 1116,
-  "e-support": 12358,
-  "e-veto": 34002,
-  "f": 358168
+  "e-support": 11623,
+  "e-veto": 33412,
+  "f": 359135
  },
  "noDiscovery": null,
  "reportSha256": "67f17a4a3536427c2aae62bee87906895bf7fd34e79a6ef766e8b363fce9fa02",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
    "claimedBytes": {
     "family": 17600,
-    "right": 6841583,
+    "right": 6841206,
     "unmapped": 58436,
-    "wrongFamily": 13712
+    "wrongFamily": 14089
    },
    "copyBytes": 0,
-   "f05": 0.958667,
-   "f05ShipperOnly": 0.958667,
-   "f1": 0.90515,
-   "f1ShipperOnly": 0.90515,
+   "f05": 0.958614,
+   "f05ShipperOnly": 0.958614,
+   "f1": 0.9051,
+   "f1ShipperOnly": 0.9051,
    "libraryBytes": 8283015,
    "missBytes": {
     "a": 22261,
     "b": 204225,
     "c": 478805,
-    "d-absent": 387808,
-    "d-file": 43926,
-    "e-ambig": 50674,
+    "d-absent": 389800,
+    "d-file": 41934,
+    "e-ambig": 51409,
     "e-other": 23980,
-    "e-support": 10025,
-    "e-veto": 33912,
-    "f": 168216
+    "e-support": 9290,
+    "e-veto": 33322,
+    "f": 169183
    },
    "namedAsOriginBytes": 0,
-   "namedBytes": 6859183,
-   "namedBytesShipperOnly": 6859183,
-   "precision": 0.998005,
-   "precisionShipperOnly": 0.998005,
-   "recall": 0.828102,
-   "recallShipperOnly": 0.828102,
+   "namedBytes": 6858806,
+   "namedBytesShipperOnly": 6858806,
+   "precision": 0.99795,
+   "precisionShipperOnly": 0.99795,
+   "recall": 0.828057,
+   "recallShipperOnly": 0.828057,
    "statementBytes": {
     "<unmapped>": 350735,
     "library": 8283015
    },
-   "wrongFamilyBytes": 13712,
-   "wrongFamilyBytesShipperOnly": 13712
+   "wrongFamilyBytes": 14089,
+   "wrongFamilyBytesShipperOnly": 14089
   },
   "statement": {
    "appClaimedBytes": 0,
@@ -152,21 +152,21 @@
  "totals": {
   "appClaimedBytes": 0,
   "copyBytes": 942113,
-  "f05": 0.951945,
-  "f05ShipperOnly": 0.925098,
-  "f1": 0.899704,
-  "f1ShipperOnly": 0.874331,
+  "f05": 0.951925,
+  "f05ShipperOnly": 0.925079,
+  "f1": 0.899685,
+  "f1ShipperOnly": 0.874313,
   "libraryBytes": 22310532,
   "namedAsOriginBytes": 518648,
-  "namedAsShipperBytes": 17872154,
-  "namedBytes": 18390802,
-  "namedBytesShipperOnly": 17872154,
-  "precision": 0.990278,
-  "precisionShipperOnly": 0.96235,
-  "recall": 0.82431,
-  "recallShipperOnly": 0.801064,
-  "wrongFamilyBytes": 180559,
-  "wrongFamilyBytesShipperOnly": 699207
+  "namedAsShipperBytes": 17871777,
+  "namedBytes": 18390425,
+  "namedBytesShipperOnly": 17871777,
+  "precision": 0.990257,
+  "precisionShipperOnly": 0.96233,
+  "recall": 0.824293,
+  "recallShipperOnly": 0.801047,
+  "wrongFamilyBytes": 180936,
+  "wrongFamilyBytesShipperOnly": 699584
  },
  "truthMethod": "sourcemap"
 }

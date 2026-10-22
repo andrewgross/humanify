@@ -38,8 +38,8 @@
  "label": "exp118-dl25k-apps",
  "missBytes": {
   "c": 736630,
-  "d-absent": 478253,
-  "d-file": 28859,
+  "d-absent": 478585,
+  "d-file": 28527,
   "e-ambig": 27658,
   "e-other": 66059,
   "e-support": 1671,
@@ -50,7 +50,7 @@
  "noDiscovery": null,
  "reportSha256": "dc3adafa70348228789af123bef13c852832aba15a7dc6b19916d7e75ca8ef19",
  "rule": "structural",
- "schema": "exp096-score/13",
+ "schema": "exp096-score/14",
  "scopes": {
   "factory": {
    "appClaimedBytes": 0,
@@ -93,8 +93,8 @@
    "libraryBytes": 13361001,
    "missBytes": {
     "c": 736630,
-    "d-absent": 478253,
-    "d-file": 28859,
+    "d-absent": 478585,
+    "d-file": 28527,
     "e-ambig": 27658,
     "e-other": 66059,
     "e-support": 1671,
