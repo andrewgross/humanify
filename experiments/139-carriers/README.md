@@ -15,7 +15,12 @@ simulation scripts, labels. **Not merged. No default flipped** (Andrew decides).
   - The keys: `terser_carriers = 0.5` (+ `terser_carriers_own = 0.1`), `terser_factory_majority = 1`,
     `terser_payload_literal = true`, all `[library.discovery]`, all default off.
 - **Recommendation (Andrew decides): flip `terser_slices = "auto"` (terser_share 0.2) together with these three
-  keys.** Not flipped here.
+  keys.** Not flipped here. `terser_thin` stays off (inert at 0.05, recall cost at 0.2).
+- **Caveat: the keys were tuned on the only corpus they act on.** remin is the only corpus whose bundles get a
+  terser `union` verdict (test and test2 have none, so they cannot judge the keys), and the ladder's last two
+  steps (factory majority 1, the payload literal) were chosen after reading remin-terser's residue. The margin
+  over the bar is 0.015 points (about 7 KB of wrong bytes). Each key is principled and gated, but there is no
+  held-out terser corpus behind the number.
 - **Census** (section 1): with terser auto, 258 of remin-terser's 340 KB wrong is the carrier class (76%), 199 KB
   of it one plugin (`@vitejs/plugin-basic-ssl`) winning name-order ties for its host's (vite's) copied chunk. On
   dl25k the carrier class is most of the NEW wrong bytes on every dev set but held-out (held-out 409 of 913 KB;
@@ -32,8 +37,8 @@ simulation scripts, labels. **Not merged. No default flipped** (Andrew decides).
   `*exp139-key*`) cost apps/pop recall 0.44-0.69 points (F0.5 -0.13..-0.20); it is now `terser_payload_literal`,
   read only in bundles that read the terser slices.
 - Gate: 13/13 bare at `28c1de28` and at `b7333e9a` (`npm run check`).
-- **Warm neutrality** of `b7333e9a` against main `6f604195c` (pair 2.1.215 -> 2.1.216, `--priors
-  /work/exp050-cold --cache /work/neutrality-cache`, under `flock /work/neutrality.lock`, from a clean detached
+- **Warm neutrality** of `b7333e9a` against main `6f604195c` (pair 2.1.215 -> 2.1.216,
+  `--priors /work/exp050-cold --cache /work/neutrality-cache`, under `flock /work/neutrality.lock`, from a clean detached
   worktree): default mode **NEUTRAL, 0 files / 0 lines, cache +0 / +0, exit 0 / 0**; report mode
   (`library.matching=report`, `library.index=k2-all-r5-origin-prod`) **NEUTRAL, 0 / 0, +0 / +0, exit 0 / 0**, and
   `library-report.json` identical too. This proves the keys-off code path; a flip lane would re-run it with the
@@ -79,17 +84,17 @@ bytes. "terser-made": the claimer scores more over the slices read than over the
 
 ### 1a. `terser_slices = auto` (remin-terser; base `*exp138-helper*`, variant `*exp138-both*`)
 
-| class (KB wrong in the variant)              | remin-terser |
-| -------------------------------------------- | -----------: |
-| seed/carrier-tie, claimer not shown, terser-made |     63.8 |
-| seed/carrier-tie, claimer shown, terser-made |         34.7 |
-| seed/carrier-tie, other                      |          4.3 |
-| prop/off-carrier                             |        155.4 |
-| **carrier class**                            |    **258.2** |
-| seed/truth-not-scoring, terser-made          |         59.6 |
-| seed/truth-not-scoring, other / seed/other   |          1.1 |
-| prop/other                                   |         21.0 |
-| **total**                                    |    **339.8** |
+| class (KB wrong in the variant)                  | remin-terser |
+| ------------------------------------------------ | -----------: |
+| seed/carrier-tie, claimer not shown, terser-made |         63.8 |
+| seed/carrier-tie, claimer shown, terser-made     |         34.7 |
+| seed/carrier-tie, other                          |          4.3 |
+| prop/off-carrier                                 |        155.4 |
+| **carrier class**                                |    **258.2** |
+| seed/truth-not-scoring, terser-made              |         59.6 |
+| seed/truth-not-scoring, other / seed/other       |          1.1 |
+| prop/other                                       |         21.0 |
+| **total**                                        |    **339.8** |
 
 The carrier class is 76% of the wrong bytes. Most of it is one bundle (an electron starter that ships vite):
 
@@ -108,17 +113,17 @@ for `@babel/core`. No ownership rule reaches it.
 
 NEW wrong bytes (wrong in dl25k, not in the base), KB:
 
-| class                                  | held-out | esbuild-app | apps-esbuild | apps-rollup | apps-webpack | pop-bun | pop-esbuild |
-| -------------------------------------- | -------: | ----------: | -----------: | ----------: | -----------: | ------: | ----------: |
-| seed/carrier-outscored, not shown      |    320.2 |       292.8 |            0 |           0 |            0 |   292.5 |       291.5 |
-| seed/carrier-outscored, shown          |        0 |           0 |            0 |           0 |            0 |     5.8 |        79.8 |
-| seed/carrier-tie, not shown            |     51.6 |         3.4 |          2.3 |        58.1 |         54.8 |    32.6 |         4.5 |
-| seed/carrier-tie, shown                |     10.9 |           0 |        167.3 |         4.3 |          0.1 |     8.3 |       169.4 |
-| prop/off-carrier                       |     26.7 |        23.8 |         17.7 |       316.3 |          2.0 |    57.4 |       323.1 |
-| **carrier class**                      |  **409.4** |   **320.0** |    **187.3** |   **378.7** |     **56.9** | **396.6** |   **868.3** |
-| seed/truth-not-scoring                 |    492.3 |         1.6 |          4.1 |         7.0 |          0.8 |   178.5 |       190.1 |
-| prop/other                             |     11.2 |         2.2 |          3.1 |         7.1 |          0.2 |    48.8 |        68.8 |
-| **total new wrong**                    |  **912.8** |   **323.9** |    **194.5** |   **392.7** |     **57.9** | **623.8** |  **1127.2** |
+| class                             |  held-out | esbuild-app | apps-esbuild | apps-rollup | apps-webpack |   pop-bun | pop-esbuild |
+| --------------------------------- | --------: | ----------: | -----------: | ----------: | -----------: | --------: | ----------: |
+| seed/carrier-outscored, not shown |     320.2 |       292.8 |            0 |           0 |            0 |     292.5 |       291.5 |
+| seed/carrier-outscored, shown     |         0 |           0 |            0 |           0 |            0 |       5.8 |        79.8 |
+| seed/carrier-tie, not shown       |      51.6 |         3.4 |          2.3 |        58.1 |         54.8 |      32.6 |         4.5 |
+| seed/carrier-tie, shown           |      10.9 |           0 |        167.3 |         4.3 |          0.1 |       8.3 |       169.4 |
+| prop/off-carrier                  |      26.7 |        23.8 |         17.7 |       316.3 |          2.0 |      57.4 |       323.1 |
+| **carrier class**                 | **409.4** |   **320.0** |    **187.3** |   **378.7** |     **56.9** | **396.6** |   **868.3** |
+| seed/truth-not-scoring            |     492.3 |         1.6 |          4.1 |         7.0 |          0.8 |     178.5 |       190.1 |
+| prop/other                        |      11.2 |         2.2 |          3.1 |         7.1 |          0.2 |      48.8 |        68.8 |
+| **total new wrong**               | **912.8** |   **323.9** |    **194.5** |   **392.7** |     **57.9** | **623.8** |  **1127.2** |
 
 The carrier class is most of dl25k's new wrong bytes on every dev set but held-out, where the coverage class
 (truth not scoring, 492 KB) is as large. The "outscored, not shown" rows are exp134's two 146 KB lazy bodies
@@ -143,12 +148,12 @@ Rules, W = the claimer, "contested" = another family scores the unit at least as
 
 KB moved, right→wrong / wrong→right (direct seed bytes):
 
-| rule                     | remin-terser (terser-made only) | held-out (k2) | apps-esbuild (k2) | apps-webpack (k2) | pop-bun (k2) | pop-esbuild (k2) | held-out (dl25k) | pop-esbuild (dl25k) |
-| ------------------------ | ------------------------------: | ------------: | ----------------: | ----------------: | -----------: | ---------------: | ---------------: | ------------------: |
-| (a) pubtime              |                   145.2 / 55.7 |  912.0 / 97.9 |      710.4 / 6.6 |      254.1 / 55.2 | 1710.6 / 89.0 |   2006.1 / 120.1 |    912.6 / 143.9 |      1672.0 / 275.5 |
-| (a+b) pub+abs            |                     0.2 / 55.2 |    0.3 / 12.1 |        0.2 / 3.7 |          0 / 0 |   0.1 / 6.4 |        0.1 / 4.0 |       0.3 / 28.6 |           0.1 / 0.6 |
-| (b) presence             |                     0.3 / 63.8 |   24.0 / 14.1 |       35.9 / 3.7 |       36.3 / 1.9 |  53.3 / 6.4 |      49.5 / 12.4 |       0.3 / 31.1 |          46.7 / 8.5 |
-| (b') carrier-pkg         |                   **0 / 63.8** |   23.8 / 14.1 |       34.9 / 3.7 |       36.3 / 1.9 |  52.1 / 6.4 |      46.7 / 12.4 | 0 (+15.5 right→other) / 17.7 |          45.7 / 8.5 |
+| rule             | remin-terser (terser-made only) | held-out (k2) | apps-esbuild (k2) | apps-webpack (k2) |  pop-bun (k2) | pop-esbuild (k2) |             held-out (dl25k) | pop-esbuild (dl25k) |
+| ---------------- | ------------------------------: | ------------: | ----------------: | ----------------: | ------------: | ---------------: | ---------------------------: | ------------------: |
+| (a) pubtime      |                    145.2 / 55.7 |  912.0 / 97.9 |       710.4 / 6.6 |      254.1 / 55.2 | 1710.6 / 89.0 |   2006.1 / 120.1 |                912.6 / 143.9 |      1672.0 / 275.5 |
+| (a+b) pub+abs    |                      0.2 / 55.2 |    0.3 / 12.1 |         0.2 / 3.7 |             0 / 0 |     0.1 / 6.4 |        0.1 / 4.0 |                   0.3 / 28.6 |           0.1 / 0.6 |
+| (b) presence     |                      0.3 / 63.8 |   24.0 / 14.1 |        35.9 / 3.7 |        36.3 / 1.9 |    53.3 / 6.4 |      49.5 / 12.4 |                   0.3 / 31.1 |          46.7 / 8.5 |
+| (b') carrier-pkg |                    **0 / 63.8** |   23.8 / 14.1 |        34.9 / 3.7 |        36.3 / 1.9 |    52.1 / 6.4 |      46.7 / 12.4 | 0 (+15.5 right→other) / 17.7 |          45.7 / 8.5 |
 
 Plus refusals (right→refused): pub+abs refuses 303 KB right on held-out (k2), 3.5 MB on apps-esbuild and 2.6 MB on pop-esbuild (dl25k); presence on dl25k refuses 113 KB (held-out) and 2.5 MB (pop-esbuild) of right seeds;
 presence refuses 279 / 175 / 430 / 385 KB right on held-out / apps-esbuild / pop-bun / pop-esbuild (k2);
@@ -180,12 +185,12 @@ remains its carrier fix.
 All in `[library.discovery]`; the three terser keys run only in a bundle that reads the terser-built slices
 (`library.lookup.terser_slices` union, or auto with a union verdict), so they cannot change any other bundle.
 
-| key                       | default | what it does                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `terser_carriers`         |     0.0 | (b') A package the bundle does not show (no declared/banner seed in its family; its family's exclusive seeds under `terser_carriers_own` of its seed bytes), at least this share of whose seed bytes a shown family scores as well, is a carrier: its terser-made seeds go to such a rival when the rival scores the unit (the one with the most exclusive bytes), else to no one. |
-| `terser_carriers_own`     |     0.1 | The exclusive share that shows a family, for `terser_carriers`.                                                                                                                                                                                                                                                                                                         |
-| `terser_factory_majority` |     0.0 | A terser-made seed on a cut CommonJS factory's statement is dropped (fenced) when another family's index seeds in that factory hold at least this many times its family's there.                                                                                                                                                                                      |
-| `terser_thin`             |     0.0 | A family every seed of which is terser-made, holding under this share of its smallest index module, is dropped. Inert in the lab at 0.05 and 0.2 (cost recall at 0.2); not recommended.                                                                                                                                                                                |
+| key                       | default | what it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `terser_carriers`         |     0.0 | (b') A package the bundle does not show (no declared/banner seed in its family; its family's exclusive seeds under `terser_carriers_own` of its seed bytes), at least this share of whose seed bytes a shown family scores as well, is a carrier: its terser-made seeds go to such a rival when the rival scores the unit (the one with the most exclusive bytes), else to no one.                                                                                                                                           |
+| `terser_carriers_own`     |     0.1 | The exclusive share that shows a family, for `terser_carriers`.                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `terser_factory_majority` |     0.0 | A terser-made seed on a cut CommonJS factory's statement is dropped (fenced) when another family's index seeds in that factory hold at least this many times its family's there.                                                                                                                                                                                                                                                                                                                                             |
+| `terser_thin`             |     0.0 | A family every seed of which is terser-made, holding under this share of its smallest index module, is dropped. Inert in the lab at 0.05 and 0.2 (cost recall at 0.2); not recommended.                                                                                                                                                                                                                                                                                                                                      |
 | `terser_payload_literal`  |   false | When the bundle reads the terser slices: the payload guard (`payload_min_bytes`) takes a long literal in the claimed family's files as its own evidence only when no other family's files hold it too. Found in the lab's residue: 32 KB of `entities`' decode table propagated to `markdown-it` (whose UMD dist carries it) on remin-terser, 36 KB on remin-esbuild even without terser. First built global (`payload_unique_literal`, `28c1de28`); global it costs apps/pop recall (section 4), so it is terser-gated now. |
 
 Lookup support: `LibraryIndex::reads_terser`, `structural_scores_chosen` (the chosen slice alone), and a test
@@ -198,16 +203,16 @@ constructor `from_slices` with a terser slice. Tests (watched red by disabling e
 
 Lab ladder on remin (prebuilt binary, lab labels not committed), terser auto + :
 
-| keys                                                 | remin-terser P / R / F0.5 | wrong KB | remin-esbuild P / F0.5 |
-| ---------------------------------------------------- | ------------------------: | -------: | ---------------------: |
-| none (`*exp138-both*`)                               |    99.322 / 53.31 / 84.700 |    339.8 |        99.720 / 84.173 |
-| carriers 0.5                                         |    99.718 / 53.31 / 84.933 |    140.9 |        99.720 / 84.173 |
-| + factory majority 4                                 |    99.807 / 53.21 / 84.932 |     96.0 |        99.720 / 84.173 |
-| + factory majority 2                                 |    99.845 / 53.19 / 84.945 |     76.9 |        99.720 / 84.173 |
-| + factory majority 1                                 |    99.852 / 53.19 / 84.948 |     73.5 |        99.720 / 84.173 |
-| + factory majority 4 + thin 0.05 / 0.2               | 99.807 / 53.21 / 84.932 (0.05); 99.814 / 53.15 / 84.904 (0.2) | 96.0 / 92.6 | 99.720 / 84.173 |
-| carriers 0.5 + factory majority 1 + payload_unique_literal (then global) | 99.917 / 53.16 / 84.968 | 41.3 | 99.781 / 84.191 |
-| base (`*exp138-helper*`, terser off)                 |    99.902 / 20.33 / 56.043 |     18.6 |        99.719 / 84.129 |
+| keys                                                                     |                                     remin-terser P / R / F0.5 |    wrong KB | remin-esbuild P / F0.5 |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------: | ----------: | ---------------------: |
+| none (`*exp138-both*`)                                                   |                                       99.322 / 53.31 / 84.700 |       339.8 |        99.720 / 84.173 |
+| carriers 0.5                                                             |                                       99.718 / 53.31 / 84.933 |       140.9 |        99.720 / 84.173 |
+| + factory majority 4                                                     |                                       99.807 / 53.21 / 84.932 |        96.0 |        99.720 / 84.173 |
+| + factory majority 2                                                     |                                       99.845 / 53.19 / 84.945 |        76.9 |        99.720 / 84.173 |
+| + factory majority 1                                                     |                                       99.852 / 53.19 / 84.948 |        73.5 |        99.720 / 84.173 |
+| + factory majority 4 + thin 0.05 / 0.2                                   | 99.807 / 53.21 / 84.932 (0.05); 99.814 / 53.15 / 84.904 (0.2) | 96.0 / 92.6 |        99.720 / 84.173 |
+| carriers 0.5 + factory majority 1 + payload_unique_literal (then global) |                                       99.917 / 53.16 / 84.968 |        41.3 |        99.781 / 84.191 |
+| base (`*exp138-helper*`, terser off)                                     |                                       99.902 / 20.33 / 56.043 |        18.6 |        99.719 / 84.129 |
 
 ## 4. Results (scorer 14, structural rule, both scopes, k2-all-r5-origin-prod, every corpus)
 
@@ -280,4 +285,3 @@ experiments/135-noprint-census/scripts/score-all.sh exp139-both /work/exp135-dat
 experiments/135-noprint-census/scripts/score-all.sh exp139-keys /work/exp135-data/full/ix/k2-all-r5-origin-prod <log dir> $K
 python3 -I $S/table139.py exp138-helper exp139-keys exp138-both exp139-both
 ```
-
