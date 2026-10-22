@@ -1,0 +1,13 @@
+# alpha 1.0 own 0.1; KB
+remin-esbuild: base seeds right 38406.1 wrong 65.5
+  presence  direct:right->refused 47.7  direct:right->wrong 2.2
+  refuse    direct:right->refused 49.9
+  pubtime   direct:other->other 1.4  direct:right->right 23.0  direct:right->wrong 215.2  direct:wrong->right 1.1  direct:wrong->wrong 0.1
+  pub+abs   direct:right->refused 49.7  direct:right->wrong 0.2
+  carrier-pkg 
+remin-terser: base seeds right 44145.5 wrong 163.3
+  presence  direct:right->refused 8.4  direct:right->wrong 1.1  direct:wrong->right 66.4
+  refuse    direct:right->refused 9.5  direct:wrong->refused 66.4
+  pubtime   direct:other->other 1.4  direct:right->right 156.6  direct:right->wrong 175.6  direct:wrong->right 59.1  direct:wrong->wrong 34.9
+  pub+abs   direct:right->refused 8.5  direct:right->wrong 1.0  direct:wrong->refused 8.6  direct:wrong->right 57.8
+  carrier-pkg direct:wrong->refused 7.1  direct:wrong->right 66.4  prop-gone:wrong 125.9

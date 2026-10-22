@@ -1,0 +1,271 @@
+{
+ "dl25k": {
+  "base": "*exp133-base* (k2-all-r5-origin, main 4b1d1a49 defaults, judged under scorer 14)",
+  "sets": {
+   "apps-esbuild": {
+    "all": {
+     "TOTAL": 282738,
+     "prop/off-carrier": 22514,
+     "prop/other": 52388,
+     "seed/carrier-tie not-shown": 2301,
+     "seed/carrier-tie shown": 169779,
+     "seed/other": 139,
+     "seed/truth-not-scoring not-shown": 90,
+     "seed/truth-not-scoring shown": 35527
+    },
+    "new": {
+     "TOTAL": 194504,
+     "prop/off-carrier": 17700,
+     "prop/other": 3106,
+     "seed/carrier-tie not-shown": 2301,
+     "seed/carrier-tie shown": 167264,
+     "seed/truth-not-scoring not-shown": 90,
+     "seed/truth-not-scoring shown": 4043
+    }
+   },
+   "apps-rollup": {
+    "all": {
+     "TOTAL": 838186,
+     "prop/off-carrier": 359914,
+     "prop/other": 208347,
+     "seed/carrier-outscored shown": 7970,
+     "seed/carrier-tie not-shown": 153133,
+     "seed/carrier-tie shown": 21117,
+     "seed/other": 11461,
+     "seed/truth-not-scoring not-shown": 1988,
+     "seed/truth-not-scoring shown": 74256
+    },
+    "new": {
+     "TOTAL": 392746,
+     "prop/off-carrier": 316263,
+     "prop/other": 7131,
+     "seed/carrier-tie not-shown": 58058,
+     "seed/carrier-tie shown": 4284,
+     "seed/truth-not-scoring not-shown": 765,
+     "seed/truth-not-scoring shown": 6245
+    }
+   },
+   "apps-webpack": {
+    "all": {
+     "TOTAL": 222528,
+     "prop/off-carrier": 18257,
+     "prop/other": 45002,
+     "seed/carrier-tie not-shown": 96667,
+     "seed/carrier-tie shown": 25452,
+     "seed/truth-not-scoring shown": 37150
+    },
+    "new": {
+     "TOTAL": 57880,
+     "prop/off-carrier": 2033,
+     "prop/other": 197,
+     "seed/carrier-tie not-shown": 54772,
+     "seed/carrier-tie shown": 97,
+     "seed/truth-not-scoring shown": 781
+    }
+   },
+   "dev-rollup": {
+    "all": {
+     "TOTAL": 2130,
+     "prop/other": 2130
+    },
+    "new": {
+     "TOTAL": 16,
+     "prop/other": 16
+    }
+   },
+   "dev-webpack": {
+    "all": {
+     "TOTAL": 4139,
+     "prop/other": 4139
+    }
+   },
+   "esbuild-app": {
+    "all": {
+     "TOTAL": 354740,
+     "prop/off-carrier": 31104,
+     "prop/other": 5216,
+     "seed/carrier-outscored not-shown": 292837,
+     "seed/carrier-tie not-shown": 3361,
+     "seed/carrier-tie shown": 5242,
+     "seed/truth-not-scoring shown": 16980
+    },
+    "new": {
+     "TOTAL": 323905,
+     "prop/off-carrier": 23838,
+     "prop/other": 2238,
+     "seed/carrier-outscored not-shown": 292837,
+     "seed/carrier-tie not-shown": 3361,
+     "seed/truth-not-scoring shown": 1631
+    }
+   },
+   "heldout": {
+    "all": {
+     "TOTAL": 1555237,
+     "prop/off-carrier": 65876,
+     "prop/other": 120022,
+     "seed/carrier-outscored not-shown": 320206,
+     "seed/carrier-tie not-shown": 59014,
+     "seed/carrier-tie shown": 89612,
+     "seed/other": 11275,
+     "seed/truth-not-scoring not-shown": 6569,
+     "seed/truth-not-scoring shown": 882663
+    },
+    "new": {
+     "TOTAL": 912846,
+     "prop/off-carrier": 26695,
+     "prop/other": 11153,
+     "seed/carrier-outscored not-shown": 320206,
+     "seed/carrier-tie not-shown": 51579,
+     "seed/carrier-tie shown": 10858,
+     "seed/truth-not-scoring not-shown": 6248,
+     "seed/truth-not-scoring shown": 486107
+    }
+   },
+   "pop-bun": {
+    "all": {
+     "TOTAL": 1693240,
+     "prop/off-carrier": 124411,
+     "prop/other": 303161,
+     "seed/carrier-outscored not-shown": 586101,
+     "seed/carrier-outscored shown": 5786,
+     "seed/carrier-tie not-shown": 91490,
+     "seed/carrier-tie shown": 78812,
+     "seed/other": 10009,
+     "seed/truth-not-scoring not-shown": 83629,
+     "seed/truth-not-scoring shown": 409841
+    },
+    "new": {
+     "TOTAL": 623812,
+     "prop/off-carrier": 57364,
+     "prop/other": 48771,
+     "seed/carrier-outscored not-shown": 292457,
+     "seed/carrier-outscored shown": 5786,
+     "seed/carrier-tie not-shown": 32568,
+     "seed/carrier-tie shown": 8324,
+     "seed/truth-not-scoring not-shown": 52812,
+     "seed/truth-not-scoring shown": 125730
+    }
+   },
+   "pop-esbuild": {
+    "all": {
+     "TOTAL": 2657986,
+     "prop/off-carrier": 488378,
+     "prop/other": 485169,
+     "seed/carrier-outscored not-shown": 291498,
+     "seed/carrier-outscored shown": 168628,
+     "seed/carrier-tie not-shown": 48465,
+     "seed/carrier-tie shown": 246407,
+     "seed/other": 2213,
+     "seed/truth-not-scoring not-shown": 55541,
+     "seed/truth-not-scoring shown": 871687
+    },
+    "new": {
+     "TOTAL": 1127220,
+     "prop/off-carrier": 323128,
+     "prop/other": 68847,
+     "seed/carrier-outscored not-shown": 291498,
+     "seed/carrier-outscored shown": 79821,
+     "seed/carrier-tie not-shown": 4454,
+     "seed/carrier-tie shown": 169401,
+     "seed/truth-not-scoring not-shown": 9604,
+     "seed/truth-not-scoring shown": 180467
+    }
+   },
+   "remin-esbuild": {
+    "all": {
+     "TOTAL": 148516,
+     "prop/off-carrier": 712,
+     "prop/other": 76607,
+     "seed/carrier-outscored shown": 747,
+     "seed/carrier-tie shown": 6565,
+     "seed/other": 137,
+     "seed/truth-not-scoring not-shown": 13693,
+     "seed/truth-not-scoring shown": 50055
+    },
+    "new": {
+     "TOTAL": 3871,
+     "prop/other": 827,
+     "seed/carrier-tie shown": 231,
+     "seed/truth-not-scoring shown": 2813
+    }
+   },
+   "remin-terser": {
+    "all": {
+     "TOTAL": 59038,
+     "prop/off-carrier": 18517,
+     "prop/other": 32213,
+     "seed/carrier-tie not-shown": 1551,
+     "seed/carrier-tie shown": 1049,
+     "seed/other": 137,
+     "seed/truth-not-scoring not-shown": 317,
+     "seed/truth-not-scoring shown": 5254
+    },
+    "new": {
+     "TOTAL": 46496,
+     "prop/off-carrier": 17021,
+     "prop/other": 27692,
+     "seed/carrier-tie not-shown": 596,
+     "seed/truth-not-scoring shown": 1187
+    }
+   },
+   "wrangler": {
+    "all": {
+     "TOTAL": 730,
+     "prop/other": 249,
+     "seed/truth-not-scoring shown": 481
+    },
+    "new": {
+     "TOTAL": 561,
+     "prop/other": 80,
+     "seed/truth-not-scoring shown": 481
+    }
+   }
+  },
+  "variant": "*exp133-dl* (k2-all-r5-origin-dl25k)"
+ },
+ "note": "Bytes of wrong-family claims by mechanism (census139.py); 'all' = every wrong byte of the variant, 'new' = wrong in the variant and not in the base. Classes only, no package names. heldout is an aggregate.",
+ "terser": {
+  "base": "*exp138-helper* (main defaults, scorer 14)",
+  "sets": {
+   "remin-esbuild": {
+    "all": {
+     "TOTAL": 145219,
+     "prop/off-carrier": 557,
+     "prop/other": 79005,
+     "seed/carrier-outscored shown": 747,
+     "seed/carrier-tie shown": 7346,
+     "seed/other": 137,
+     "seed/truth-not-scoring shown": 57427
+    }
+   },
+   "remin-terser": {
+    "all": {
+     "TOTAL": 339842,
+     "prop/off-carrier": 155353,
+     "prop/other": 21040,
+     "seed/carrier-tie not-shown": 2632,
+     "seed/carrier-tie not-shown/terser-made": 63769,
+     "seed/carrier-tie shown": 1655,
+     "seed/carrier-tie shown/terser-made": 34679,
+     "seed/other": 137,
+     "seed/truth-not-scoring not-shown/terser-made": 11821,
+     "seed/truth-not-scoring shown": 995,
+     "seed/truth-not-scoring shown/terser-made": 47761
+    },
+    "new": {
+     "TOTAL": 339028,
+     "prop/off-carrier": 155353,
+     "prop/other": 20363,
+     "seed/carrier-tie not-shown": 2632,
+     "seed/carrier-tie not-shown/terser-made": 63769,
+     "seed/carrier-tie shown": 1655,
+     "seed/carrier-tie shown/terser-made": 34679,
+     "seed/truth-not-scoring not-shown/terser-made": 11821,
+     "seed/truth-not-scoring shown": 995,
+     "seed/truth-not-scoring shown/terser-made": 47761
+    }
+   }
+  },
+  "variant": "*exp138-both* (+terser_slices=auto, share 0.2)"
+ }
+}

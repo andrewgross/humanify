@@ -1,0 +1,73 @@
+# alpha 1.0 own 0.1; KB
+apps-esbuild: base seeds right 100825.9 wrong 46.5
+  presence  direct:right->refused 174.8  direct:right->right 28.3  direct:right->wrong 35.9  direct:wrong->right 3.7  prop-gone:right 3.1  prop-gone:wrong 0.6
+  refuse    direct:right->refused 238.9  direct:wrong->refused 3.7  prop-gone:right 3.1  prop-gone:wrong 0.6
+  pubtime   direct:other->other 3.9  direct:right->right 195.0  direct:right->wrong 710.4  direct:wrong->right 6.6  direct:wrong->wrong 1.5  prop-gone:right 2.1  prop-gone:wrong 0.3
+  pub+abs   direct:right->refused 232.2  direct:right->right 6.5  direct:right->wrong 0.2  direct:wrong->right 3.7  prop-gone:right 3.1  prop-gone:wrong 0.6
+  carrier-pkg direct:right->refused 4.9  direct:right->right 28.3  direct:right->wrong 34.9  direct:wrong->right 3.7  prop-gone:right 12.7  prop-gone:wrong 0.7
+apps-rollup: base seeds right 62901.4 wrong 327.3
+  presence  direct:right->refused 185.2  direct:right->right 90.1  direct:right->wrong 8.3  direct:wrong->refused 15.0  direct:wrong->right 92.0  prop-gone:right 4.8  prop-gone:unmapped 0.3  prop-gone:wrong 0.5
+  refuse    direct:right->refused 283.7  direct:wrong->refused 107.1  prop-gone:right 4.8  prop-gone:unmapped 0.3  prop-gone:wrong 0.5
+  pubtime   direct:other->other 0.8  direct:other->right 2.7  direct:right->other 0.1  direct:right->right 140.8  direct:right->wrong 235.0  direct:wrong->right 199.9  direct:wrong->wrong 0.2  prop-gone:unmapped 0.1  prop-gone:wrong 0.5
+  pub+abs   direct:right->refused 193.5  direct:right->right 90.1  direct:wrong->refused 15.8  direct:wrong->right 91.3  prop-gone:right 4.8  prop-gone:unmapped 0.3  prop-gone:wrong 0.5
+  carrier-pkg direct:right->refused 0.2  direct:right->wrong 8.1  direct:wrong->refused 0.2  direct:wrong->right 2.5  prop-gone:right 2.6  prop-gone:wrong 0.1
+apps-webpack: base seeds right 52152.1 wrong 153.2
+  presence  direct:other->other 34.1  direct:other->refused 42.3  direct:right->refused 60.6  direct:right->right 127.7  direct:right->wrong 36.3  direct:wrong->refused 40.0  direct:wrong->right 1.9  prop-gone:right 2.1  prop-gone:unmapped 6.0  prop-gone:wrong 0.8
+  refuse    direct:other->refused 76.4  direct:right->refused 224.6  direct:wrong->refused 41.9  prop-gone:right 2.1  prop-gone:unmapped 6.0  prop-gone:wrong 0.8
+  pubtime   direct:other->other 40.1  direct:right->right 84.1  direct:right->wrong 254.1  direct:wrong->right 55.2  direct:wrong->wrong 1.3  prop-gone:unmapped 0.7  prop-gone:wrong 0.6
+  pub+abs   direct:other->other 20.1  direct:other->refused 56.3  direct:right->refused 224.6  direct:wrong->refused 41.9  prop-gone:right 2.1  prop-gone:unmapped 6.0  prop-gone:wrong 0.8
+  carrier-pkg direct:other->other 34.1  direct:other->refused 0.2  direct:right->refused 2.8  direct:right->right 127.4  direct:right->wrong 36.3  direct:wrong->right 1.9  prop-gone:right 5.5  prop-gone:unmapped 1.4
+dev-rollup: base seeds right 1502.1 wrong 0.0
+  presence  
+  refuse    
+  pubtime   direct:right->right 6.3  direct:right->wrong 16.8
+  pub+abs   
+  carrier-pkg 
+dev-webpack: base seeds right 991.3 wrong 0.0
+  presence  direct:right->refused 9.0  prop-gone:right 0.2
+  refuse    direct:right->refused 9.0  prop-gone:right 0.2
+  pubtime   direct:right->right 0.7  direct:right->wrong 11.0
+  pub+abs   direct:right->refused 9.0  prop-gone:right 0.2
+  carrier-pkg 
+esbuild-app: base seeds right 12930.9 wrong 43.0
+  presence  direct:right->refused 5.2
+  refuse    direct:right->refused 5.2
+  pubtime   direct:other->other 2.2  direct:right->right 3.6  direct:right->wrong 91.9  direct:wrong->right 12.3
+  pub+abs   direct:right->refused 5.2
+  carrier-pkg 
+heldout: base seeds right 145315.4 wrong 421.0
+  presence  direct:other->refused 13.8  direct:right->refused 278.8  direct:right->wrong 24.0  direct:wrong->refused 2.8  direct:wrong->right 14.1  prop-gone:right 6.0  prop-gone:wrong 3.4
+  refuse    direct:other->refused 13.8  direct:right->refused 302.9  direct:wrong->refused 17.0  prop-gone:right 6.0  prop-gone:wrong 3.4
+  pubtime   direct:other->other 35.7  direct:other->right 4.8  direct:right->other 25.4  direct:right->right 202.9  direct:right->wrong 912.0  direct:wrong->right 97.9  direct:wrong->wrong 9.1  prop-gone:wrong 3.4
+  pub+abs   direct:other->refused 13.8  direct:right->refused 302.6  direct:right->wrong 0.3  direct:wrong->refused 4.8  direct:wrong->right 12.1  prop-gone:right 6.0  prop-gone:wrong 3.4
+  carrier-pkg direct:right->refused 2.6  direct:right->wrong 23.8  direct:wrong->refused 0.3  direct:wrong->right 14.1  prop-gone:right 4.7  prop-gone:wrong 4.5
+pop-bun: base seeds right 202764.2 wrong 844.2
+  presence  direct:other->refused 1.5  direct:right->refused 429.8  direct:right->right 15.3  direct:right->wrong 53.3  direct:wrong->refused 11.6  direct:wrong->right 6.4  direct:wrong->wrong 0.5  prop-gone:right 8.2  prop-gone:unmapped 0.0  prop-gone:wrong 2.5
+  refuse    direct:other->refused 1.5  direct:right->refused 498.4  direct:wrong->refused 18.5  prop-gone:right 8.2  prop-gone:unmapped 0.0  prop-gone:wrong 2.5
+  pubtime   direct:other->other 41.6  direct:other->right 1.5  direct:right->other 1.3  direct:right->right 238.3  direct:right->wrong 1710.6  direct:wrong->right 89.0  direct:wrong->wrong 18.7  prop-gone:wrong 1.6
+  pub+abs   direct:other->refused 1.5  direct:right->refused 498.3  direct:right->wrong 0.1  direct:wrong->refused 12.1  direct:wrong->right 6.4  prop-gone:right 8.2  prop-gone:unmapped 0.0  prop-gone:wrong 2.5
+  carrier-pkg direct:right->refused 7.6  direct:right->right 15.3  direct:right->wrong 52.1  direct:wrong->right 6.4  direct:wrong->wrong 0.3  prop-gone:right 11.0  prop-gone:unmapped 0.0  prop-gone:wrong 1.9
+pop-esbuild: base seeds right 211407.7 wrong 1088.8
+  presence  direct:right->refused 385.2  direct:right->right 41.5  direct:right->wrong 49.5  direct:wrong->refused 55.7  direct:wrong->right 12.4  direct:wrong->wrong 1.3  prop-gone:right 3.6  prop-gone:wrong 18.5
+  refuse    direct:right->refused 476.2  direct:wrong->refused 69.4  prop-gone:right 3.6  prop-gone:wrong 18.5
+  pubtime   direct:other->other 118.7  direct:other->right 16.4  direct:right->other 1.1  direct:right->right 416.1  direct:right->wrong 2006.1  direct:wrong->right 120.1  direct:wrong->wrong 16.0  prop-gone:right 2.1  prop-gone:wrong 0.6
+  pub+abs   direct:right->refused 469.8  direct:right->right 6.3  direct:right->wrong 0.1  direct:wrong->refused 64.7  direct:wrong->right 4.0  direct:wrong->wrong 0.6  prop-gone:right 3.6  prop-gone:wrong 18.5
+  carrier-pkg direct:right->refused 6.9  direct:right->right 41.5  direct:right->wrong 46.7  direct:wrong->right 12.4  prop-gone:right 15.9  prop-gone:wrong 10.1
+remin-esbuild: base seeds right 38336.8 wrong 65.5
+  presence  direct:right->refused 47.7  direct:right->wrong 2.2
+  refuse    direct:right->refused 49.9
+  pubtime   direct:other->other 1.4  direct:right->right 23.0  direct:right->wrong 215.2  direct:wrong->right 1.1  direct:wrong->wrong 0.1
+  pub+abs   direct:right->refused 49.7  direct:right->wrong 0.2
+  carrier-pkg 
+remin-terser: base seeds right 9682.5 wrong 7.1
+  presence  direct:wrong->refused 1.0
+  refuse    direct:wrong->refused 1.0
+  pubtime   direct:right->wrong 14.8  direct:wrong->right 1.0
+  pub+abs   direct:wrong->refused 1.0
+  carrier-pkg 
+wrangler: base seeds right 356.7 wrong 5.5
+  presence  
+  refuse    
+  pubtime   direct:right->wrong 1.0
+  pub+abs   
+  carrier-pkg 
