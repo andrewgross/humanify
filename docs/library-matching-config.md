@@ -158,8 +158,9 @@ banner_names = "known"         # exp106 matcher hygiene (experiments/106-matcher
 derived_families = true        # exp106: one family = npm-metadata links (families-derived.json)
 payload_min_bytes = 4096       # exp106: a propagated string payload needs its own evidence (exp113: own bytes; a base64 payload naming the package is its own)
 helper_families = 0            # exp106: off (N=4 costs right claims, N=12 ~neutral)
-helper_prints = "off"          # exp129: a unit whose whole print the index's helper table (tslib, @babel/runtime ... own code) holds is no
-                               #   other package's seed: "seed" (dropped) or "credit" (the helper package's); needs an index with helpers.jsonl
+helper_prints = "seed"         # ON since 2026-10-22 (exp138: P >= the previous default on all 21 sets); exp129: a unit whose whole print the
+                               #   index's helper table (tslib, @babel/runtime ... own code) holds is no other package's seed: "seed" (dropped),
+                               #   "credit" (the helper package's) or "off"; needs an index with helpers.jsonl
 context_presence = 1.5         # exp114, ON since exp117: a package seen only in index modules
 context_presence_slack = 16384 #   bigger than the bundle's groups is no seed (experiments/114-dev-precision)
 shadow_ties = true             # exp114, ON since 2026-10-15 (Andrew): fork claims gone on webpack/rollup; costs 1,035 B on test2-esbuild

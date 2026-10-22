@@ -406,15 +406,14 @@ fn the_terser_slices_key_is_off_by_default_and_takes_union_or_fallback() {
     assert!(err.iter().any(|e| e.contains("terser_slices")), "{err:?}");
 }
 
-/// exp129: `helper_prints` (off | seed | credit), default off: a unit whose
-/// whole print a helper source's own build holds is no other package's
-/// index seed (seed), or the helper package's (credit).
+/// exp129: `helper_prints` (off | seed | credit): a unit whose whole print
+/// a helper source's own build holds is no other package's index seed
+/// (seed), or the helper package's (credit).
 #[test]
-fn the_helper_prints_key_defaults_off_and_sets_from_the_file() {
+fn the_helper_prints_key_sets_from_the_file() {
     use humanify_core::libdetect::discovery::HelperPrints;
-    let o = build(&["in.js"], "").unwrap().library.discovery_options();
-    assert_eq!(o.helper_prints, HelperPrints::Off);
     for (text, want) in [
+        ("off", HelperPrints::Off),
         ("seed", HelperPrints::Seed),
         ("credit", HelperPrints::Credit),
     ] {
@@ -433,6 +432,27 @@ fn the_helper_prints_key_defaults_off_and_sets_from_the_file() {
     )
     .expect_err("an unknown choice is refused");
     assert!(err.iter().any(|e| e.contains("helper_prints")), "{err:?}");
+}
+
+/// exp138: `helper_prints = "seed"` is on by default since 2026-10-22
+/// (precision at or above the previous default on all 21 sets, F0.5 at worst
+/// -0.000006); it turns off from the file. `terser_slices` stays off: with
+/// factory bodies it costs remin-terser 0.6 points of precision.
+#[test]
+fn the_exp138_helper_seed_defaults_on_and_turns_off() {
+    use humanify_core::libdetect::discovery::HelperPrints;
+    use humanify_core::libindex::recipe::TerserSlices;
+    let d = build(&["in.js"], "").unwrap();
+    assert_eq!(
+        d.library.discovery_options().helper_prints,
+        HelperPrints::Seed
+    );
+    assert_eq!(d.library.lookup.terser_slices, TerserSlices::Off);
+    let off = build(&["in.js"], "[library.discovery]\nhelper_prints = \"off\"\n").unwrap();
+    assert_eq!(
+        off.library.discovery_options().helper_prints,
+        HelperPrints::Off
+    );
 }
 
 /// exp132: cutting bundled CommonJS modules into body statements, with its

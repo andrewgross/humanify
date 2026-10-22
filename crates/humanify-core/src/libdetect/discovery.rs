@@ -378,7 +378,10 @@ impl DiscoveryOptions {
     /// on all 19 sets on k2-all; and since 2026-10-21 exp128/exp132's
     /// factory_bodies with its tie fence, banner-index and whole-seed keys
     /// (precision at or above the previous default on every set, F0.5
-    /// +29..62 over both scopes). `helper_families` stays off.
+    /// +29..62 over both scopes); and since 2026-10-22 exp129's
+    /// `helper_prints = seed` (experiments/138-helpers-terser-flip:
+    /// precision at or above the previous default on all 21 sets).
+    /// `helper_families` stays off.
     /// `Default` stays the engine's baseline (every guard off), which the
     /// unit tests compare each guard against.
     pub fn recommended() -> Self {
@@ -403,6 +406,7 @@ impl DiscoveryOptions {
             factory_tie_fence: true,
             factory_banner_index: true,
             factory_whole_seed: true,
+            helper_prints: HelperPrints::Seed,
             ..DiscoveryOptions::default()
         }
     }

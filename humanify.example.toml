@@ -143,7 +143,7 @@ banner_names = "known"
 # An index print at least this many package families hold is emitted helper code: a unit such prints cover half of is no seed and no propagated claim (exp106; 0 = off).
 helper_families = 0
 # A unit whose whole print the index's helper table holds (a helper source's own code: tslib, @babel/runtime, @swc/helpers) is no other package's index seed: "off", "seed" (dropped; propagation may still reach it) or "credit" (the helper package's seed when one helper family holds it; exp129).
-helper_prints = "off"
+helper_prints = "seed"
 # A propagated unit of at least this many bytes of its own (a module wrapper is not its body), nine tenths string literal (a wasm blob, a data table), needs the claimed family's own index evidence or a base64 payload naming it (exp106, exp113; 0 = off).
 payload_min_bytes = 4096
 # Read another family's prints in evidence_conflict / contested_cover under the lookup's specificity rule: a sponge's unspecific print is no rival (exp106).
