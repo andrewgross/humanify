@@ -1,0 +1,7 @@
+heldout         R 68.56 missedAfter 13KB upperR +0.01 upperF +0.00 | expected 0KB R +0.00 F +0.00
+pop-bun         R 77.21 missedAfter 4690KB upperR +1.47 upperF +0.43 | expected 1247KB R +0.39 F +0.12
+pop-esbuild     R 78.71 missedAfter 5173KB upperR +1.62 upperF +0.46 | expected 1516KB R +0.48 F +0.14
+remin-esbuild   R 51.76 missedAfter 5504KB upperR +5.66 upperF +2.78 | expected 694KB R +0.71 F +0.37
+remin-terser    R 20.33 missedAfter 7020KB upperR +7.70 upperF +9.96 | expected 416KB R +0.46 F +0.68
+remin3-esbuild  R 49.48 missedAfter 8856KB upperR +4.38 upperF +2.32 | expected 1414KB R +0.70 F +0.39
+remin3-terser   R 17.38 missedAfter 11214KB upperR +5.85 upperF +8.91 | expected 533KB R +0.28 F +0.48

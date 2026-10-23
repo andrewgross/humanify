@@ -1,0 +1,12 @@
+esbuild-app held=16111KB/0.79 after-asof=0KB/0.00 not-chosen=813KB/0.67 not-indexed=341KB/0.03
+heldout held=188567KB/0.81 after-asof=30KB/0.57 not-chosen=10777KB/0.43 not-indexed=30232KB/0.02
+wrangler held=1420KB/0.36 after-asof=0KB/0.00 not-chosen=222KB/0.36 not-indexed=169KB/0.06
+apps-esbuild held=134357KB/0.85 after-asof=0KB/0.00 not-chosen=8531KB/0.17 not-indexed=6335KB/0.02
+apps-rollup held=83113KB/0.90 after-asof=0KB/0.00 not-chosen=6330KB/0.17 not-indexed=3110KB/0.09
+apps-webpack held=55738KB/0.82 after-asof=0KB/0.00 not-chosen=5744KB/0.22 not-indexed=1869KB/0.19
+pop-bun held=245731KB/0.82 after-asof=26950KB/0.83 not-chosen=36236KB/0.62 not-indexed=9323KB/0.00
+pop-esbuild held=247333KB/0.83 after-asof=26809KB/0.81 not-chosen=34410KB/0.65 not-indexed=8759KB/0.01
+remin-esbuild held=78135KB/0.58 after-asof=8448KB/0.35 not-chosen=8986KB/0.21 not-indexed=1284KB/0.00
+remin-terser held=72706KB/0.23 after-asof=8152KB/0.14 not-chosen=8674KB/0.06 not-indexed=1261KB/0.00
+remin3-esbuild held=161954KB/0.56 after-asof=14201KB/0.38 not-chosen=11451KB/0.27 not-indexed=13406KB/0.00
+remin3-terser held=151842KB/0.19 after-asof=13559KB/0.17 not-chosen=12056KB/0.12 not-indexed=13111KB/0.00
