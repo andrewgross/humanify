@@ -718,6 +718,18 @@ pub static KEYS: &[Key] = &[
     ),
     Key {
         section: "library.discovery",
+        name: "terser_payload_literal",
+        kind: Kind::Bool,
+        flag: None,
+        default: || Some(Val::Bool(discovery().terser_payload_literal)),
+        unset: "",
+        doc: "When the bundle reads the terser-built slices: for payload_min_bytes, a long literal \
+              in the claimed family's files backs the payload only when no other family's files \
+              hold it too: a dist that inlines a dependency's data table is no evidence the table \
+              is its own (exp139).",
+    },
+    Key {
+        section: "library.discovery",
         name: "specific_rivals",
         kind: Kind::Bool,
         flag: None,
@@ -878,6 +890,54 @@ pub static KEYS: &[Key] = &[
         doc: "With factory_bodies: a /*! banner seed on a bundled CommonJS module's statement is \
               refused when another family's index prints cover more of that statement than \
               the banner family's (exp132).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "terser_carriers",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().terser_carriers),
+        unset: "",
+        doc: "When the bundle reads the terser-built slices: a package the bundle does not show \
+              (no declared or banner seed, exclusive index seeds under terser_carriers_own of its \
+              seed bytes), at least this share of whose seed bytes a family the bundle shows \
+              scores as well, is that family's carrier: its terser-made seeds go to the rival \
+              that scores them, else to no one (exp139; 0 = off).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "terser_carriers_own",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().terser_carriers_own),
+        unset: "",
+        doc: "For terser_carriers, the share of a family's index seed bytes its exclusive seeds \
+              (units no other family scores) need to show it in the bundle (exp139; 0 = any).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "terser_factory_majority",
+        kind: Kind::Float {
+            min: 0.0,
+            max: 1000.0,
+        },
+        flag: None,
+        default: || float(discovery().terser_factory_majority),
+        unset: "",
+        doc: "When the bundle reads the terser-built slices: a terser-made seed on a cut CommonJS \
+              module's statement is claimed by no one when another family's index seeds in that \
+              module hold at least this many times its family's there (exp139; 0 = off).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "terser_thin",
+        kind: Kind::Float { min: 0.0, max: 1.0 },
+        flag: None,
+        default: || float(discovery().terser_thin),
+        unset: "",
+        doc: "When the bundle reads the terser-built slices: a family every index seed of which is \
+              terser-made, holding under this share of the smallest index module any of them sits \
+              in, is no seed (exp139; 0 = off).",
     },
     // [unpack]
     Key {

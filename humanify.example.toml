@@ -146,6 +146,8 @@ helper_families = 0
 helper_prints = "seed"
 # A propagated unit of at least this many bytes of its own (a module wrapper is not its body), nine tenths string literal (a wasm blob, a data table), needs the claimed family's own index evidence or a base64 payload naming it (exp106, exp113; 0 = off).
 payload_min_bytes = 4096
+# When the bundle reads the terser-built slices: for payload_min_bytes, a long literal in the claimed family's files backs the payload only when no other family's files hold it too: a dist that inlines a dependency's data table is no evidence the table is its own (exp139).
+terser_payload_literal = false
 # Read another family's prints in evidence_conflict / contested_cover under the lookup's specificity rule: a sponge's unspecific print is no rival (exp106).
 specific_rivals = true
 # Join package families by the npm-metadata links (libindex/families-derived.json, among the index's packages) wherever discovery asks "one family?" (exp106).
@@ -176,6 +178,14 @@ factory_tie_fence = true
 factory_whole_seed = true
 # With factory_bodies: a /*! banner seed on a bundled CommonJS module's statement is refused when another family's index prints cover more of that statement than the banner family's (exp132).
 factory_banner_index = true
+# When the bundle reads the terser-built slices: a package the bundle does not show (no declared or banner seed, exclusive index seeds under terser_carriers_own of its seed bytes), at least this share of whose seed bytes a family the bundle shows scores as well, is that family's carrier: its terser-made seeds go to the rival that scores them, else to no one (exp139; 0 = off).
+terser_carriers = 0.0
+# For terser_carriers, the share of a family's index seed bytes its exclusive seeds (units no other family scores) need to show it in the bundle (exp139; 0 = any).
+terser_carriers_own = 0.1
+# When the bundle reads the terser-built slices: a terser-made seed on a cut CommonJS module's statement is claimed by no one when another family's index seeds in that module hold at least this many times its family's there (exp139; 0 = off).
+terser_factory_majority = 0.0
+# When the bundle reads the terser-built slices: a family every index seed of which is terser-made, holding under this share of the smallest index module any of them sits in, is no seed (exp139; 0 = off).
+terser_thin = 0.0
 
 [unpack]
 # Force the bundler verdict.

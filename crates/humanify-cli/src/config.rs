@@ -330,6 +330,7 @@ impl Library {
             helper_families: d.helper_families,
             helper_prints: d.helper_prints,
             payload_min_bytes: d.payload_min_bytes,
+            terser_payload_literal: d.terser_payload_literal,
             specific_rivals: d.specific_rivals,
             derived_families: d.derived_families,
             context_presence: d.context_presence,
@@ -345,6 +346,10 @@ impl Library {
             factory_tie_fence: d.factory_tie_fence,
             factory_whole_seed: d.factory_whole_seed,
             factory_banner_index: d.factory_banner_index,
+            terser_carriers: d.terser_carriers,
+            terser_carriers_own: d.terser_carriers_own,
+            terser_factory_majority: d.terser_factory_majority,
+            terser_thin: d.terser_thin,
         }
     }
 
@@ -436,6 +441,7 @@ pub struct LibraryDiscovery {
     #[serde(serialize_with = "serialize_helper_prints")]
     pub helper_prints: humanify_core::libdetect::discovery::HelperPrints,
     pub payload_min_bytes: u32,
+    pub terser_payload_literal: bool,
     pub specific_rivals: bool,
     pub derived_families: bool,
     pub context_presence: f64,
@@ -450,6 +456,10 @@ pub struct LibraryDiscovery {
     pub factory_bodies: bool,
     pub factory_tie_fence: bool,
     pub factory_whole_seed: bool,
+    pub terser_carriers: f64,
+    pub terser_carriers_own: f64,
+    pub terser_factory_majority: f64,
+    pub terser_thin: f64,
     pub factory_banner_index: bool,
 }
 
@@ -654,6 +664,7 @@ fn library_of(r: &Resolved) -> Library {
                 .and_then(humanify_core::libdetect::discovery::HelperPrints::parse)
                 .unwrap_or(humanify_core::libdetect::discovery::HelperPrints::Off),
             payload_min_bytes: n("library.discovery.payload_min_bytes") as u32,
+            terser_payload_literal: r.flag_on("library.discovery.terser_payload_literal"),
             specific_rivals: r.flag_on("library.discovery.specific_rivals"),
             derived_families: r.flag_on("library.discovery.derived_families"),
             context_presence: r.float("library.discovery.context_presence"),
@@ -669,6 +680,10 @@ fn library_of(r: &Resolved) -> Library {
             factory_tie_fence: r.flag_on("library.discovery.factory_tie_fence"),
             factory_whole_seed: r.flag_on("library.discovery.factory_whole_seed"),
             factory_banner_index: r.flag_on("library.discovery.factory_banner_index"),
+            terser_carriers: r.float("library.discovery.terser_carriers"),
+            terser_carriers_own: r.float("library.discovery.terser_carriers_own"),
+            terser_factory_majority: r.float("library.discovery.terser_factory_majority"),
+            terser_thin: r.float("library.discovery.terser_thin"),
         },
     }
 }

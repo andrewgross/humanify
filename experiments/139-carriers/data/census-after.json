@@ -1,0 +1,36 @@
+{
+  "remin-esbuild": {
+    "all": {
+      "TOTAL": 145219,
+      "prop/off-carrier": 557,
+      "prop/other": 79005,
+      "seed/carrier-outscored shown": 747,
+      "seed/carrier-tie shown": 7346,
+      "seed/other": 137,
+      "seed/truth-not-scoring shown": 57427
+    }
+  },
+  "remin-terser": {
+    "all": {
+      "TOTAL": 41294,
+      "prop/off-carrier": 336,
+      "prop/other": 15067,
+      "seed/carrier-tie not-shown": 669,
+      "seed/carrier-tie shown": 747,
+      "seed/carrier-tie shown/terser-made": 555,
+      "seed/other": 137,
+      "seed/truth-not-scoring shown": 995,
+      "seed/truth-not-scoring shown/terser-made": 22788
+    },
+    "new": {
+      "TOTAL": 40480,
+      "prop/off-carrier": 336,
+      "prop/other": 14390,
+      "seed/carrier-tie not-shown": 669,
+      "seed/carrier-tie shown": 747,
+      "seed/carrier-tie shown/terser-made": 555,
+      "seed/truth-not-scoring shown": 995,
+      "seed/truth-not-scoring shown/terser-made": 22788
+    }
+  }
+}

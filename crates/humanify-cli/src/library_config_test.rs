@@ -479,3 +479,27 @@ fn the_exp132_factory_keys_default_on_and_turn_off() {
             && !o.factory_whole_seed
     );
 }
+
+/// exp139's terser presence keys and terser_payload_literal: off by default
+/// (terser_carriers_own 0.1, read only with terser_carriers), each set from
+/// the file.
+#[test]
+fn the_exp139_terser_presence_keys_default_off_and_set_from_the_file() {
+    let d = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(d.terser_carriers, 0.0);
+    assert_eq!(d.terser_carriers_own, 0.1);
+    assert_eq!(d.terser_factory_majority, 0.0);
+    assert_eq!(d.terser_thin, 0.0);
+    assert!(!d.terser_payload_literal);
+    let on = build(
+        &["in.js"],
+        "[library.discovery]\nterser_carriers = 0.5\nterser_carriers_own = 0.2\nterser_factory_majority = 4.0\nterser_thin = 0.05\nterser_payload_literal = true\n",
+    )
+    .unwrap();
+    let o = on.library.discovery_options();
+    assert_eq!(o.terser_carriers, 0.5);
+    assert_eq!(o.terser_carriers_own, 0.2);
+    assert_eq!(o.terser_factory_majority, 4.0);
+    assert_eq!(o.terser_thin, 0.05);
+    assert!(o.terser_payload_literal);
+}

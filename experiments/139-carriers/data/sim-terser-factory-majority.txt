@@ -1,0 +1,14 @@
+# K 1
+      2.3 KB  remin-terser  other->refused
+     44.9 KB  remin-terser  right->refused
+     63.4 KB  remin-terser  wrong->refused
+# K 2
+      1.2 KB  remin-terser  other->refused
+     44.9 KB  remin-terser  right->refused
+     63.4 KB  remin-terser  wrong->refused
+# K 4
+     40.7 KB  remin-terser  right->refused
+     51.9 KB  remin-terser  wrong->refused
+# K 10
+      0.8 KB  remin-terser  right->refused
+     23.3 KB  remin-terser  wrong->refused

@@ -56,15 +56,38 @@ impl LibraryIndex {
     /// An index from its rows, through the same tables a run reads (the
     /// tests' constructor).
     pub fn from_rows(units: Vec<UnitRow>, literals: Vec<LiteralRow>) -> LibraryIndex {
-        let packages = table::package_table(&[&units], &literals);
-        let units = UnitTable::encode(&units, &packages).expect("unit hashes are unit keys");
+        LibraryIndex::from_slices(
+            units,
+            Vec::new(),
+            literals,
+            super::recipe::TerserSlices::Off,
+        )
+    }
+
+    /// An index from its rows with `terser` as its one terser-built slice
+    /// (none when empty), read as `mode` (the tests' constructor).
+    pub fn from_slices(
+        units: Vec<UnitRow>,
+        terser: Vec<UnitRow>,
+        literals: Vec<LiteralRow>,
+        mode: super::recipe::TerserSlices,
+    ) -> LibraryIndex {
+        let packages = table::package_table(&[&units, &terser], &literals);
+        let open = |rows: &[UnitRow]| {
+            let bytes = UnitTable::encode(rows, &packages).expect("unit hashes are unit keys");
+            UnitTable::open(Source::Memory(bytes)).expect("an encoded unit table opens")
+        };
         LibraryIndex {
             id: String::new(),
             slice: String::new(),
             slice_reason: String::new(),
-            units: UnitTable::open(Source::Memory(units)).expect("an encoded unit table opens"),
-            terser_units: Vec::new(),
-            terser_reading: super::recipe::TerserSlices::Off,
+            units: open(&units),
+            terser_units: if terser.is_empty() {
+                Vec::new()
+            } else {
+                vec![open(&terser)]
+            },
+            terser_reading: mode,
             terser_verdict: std::sync::OnceLock::new(),
             literals: LiteralTable::open(Source::Memory(LiteralTable::encode(
                 &literals, &packages,
@@ -270,6 +293,19 @@ impl LibraryIndex {
         })
     }
 
+    /// Does this bundle read the terser-built slices beside the chosen one
+    /// (`union`, `fallback`, or `auto` once its verdict is union)? False
+    /// for an index that holds none.
+    pub fn reads_terser(&self) -> bool {
+        use super::recipe::TerserSlices;
+        !self.terser_units.is_empty()
+            && match self.terser_reading {
+                TerserSlices::Off => false,
+                TerserSlices::Union | TerserSlices::Fallback => true,
+                TerserSlices::Auto { .. } => self.terser_verdict.get().is_some_and(|v| v.0),
+            }
+    }
+
     /// Every indexed occurrence of `hash`, in row order (the store's
     /// `candidates`).
     pub fn unit_hits(&self, hash: &str) -> Vec<UnitHit> {
@@ -328,7 +364,23 @@ impl LibraryIndex {
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
     ) -> Option<BTreeSet<u32>> {
-        let owners: BTreeSet<u32> = ReferenceStore::candidates(self, hash)
+        self.look_in(
+            &ReferenceStore::candidates(self, hash),
+            module_bytes,
+            rules,
+            same,
+        )
+    }
+
+    /// [`Self::look`] over the given occurrences of a print.
+    fn look_in(
+        &self,
+        hits: &[UnitHit],
+        module_bytes: u64,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Option<BTreeSet<u32>> {
+        let owners: BTreeSet<u32> = hits
             .iter()
             .filter(|h| {
                 rules
@@ -522,18 +574,40 @@ impl LibraryIndex {
 
     /// The structural rule's scores: per package, the nodes its hits cover
     /// (the whole print, else the largest non-overlapping functions).
-    fn structural_scores(
+    pub(crate) fn structural_scores(
         &self,
         q: &UnitQuery<'_>,
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
     ) -> HashMap<u32, u32> {
+        self.structural_scores_from(q, rules, same, &|h| self.unit_hits(h))
+    }
+
+    /// [`Self::structural_scores`] over the CHOSEN slice alone, the
+    /// terser-built slices unread (exp139: what a seed owes to them).
+    pub(crate) fn structural_scores_chosen(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> HashMap<u32, u32> {
+        self.structural_scores_from(q, rules, same, &|h| self.units.hits(h))
+    }
+
+    fn structural_scores_from(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+        hits: &dyn Fn(&str) -> Vec<UnitHit>,
+    ) -> HashMap<u32, u32> {
         let usable =
             |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
+        let look = |hash: &str| self.look_in(&hits(hash), q.module_bytes, rules, same);
         let whole = &q.prints.whole;
         let mut score: HashMap<u32, u32> = HashMap::new();
         if usable(whole, rules.min_content)
-            && let Some(owners) = self.look(&whole.hash, q.module_bytes, rules, same)
+            && let Some(owners) = look(&whole.hash)
         {
             for p in owners {
                 score.insert(p, whole.nodes);
@@ -545,7 +619,7 @@ impl LibraryIndex {
                 .functions
                 .iter()
                 .filter(|f| usable(f, rules.min_function_content))
-                .filter_map(|f| Some((f, self.look(&f.hash, q.module_bytes, rules, same)?)))
+                .filter_map(|f| Some((f, look(&f.hash)?)))
                 .collect();
             hits.sort_by_key(|(f, _)| std::cmp::Reverse(f.nodes));
             let mut taken: Vec<(u32, u32)> = Vec::new();

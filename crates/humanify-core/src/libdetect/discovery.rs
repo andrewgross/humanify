@@ -226,6 +226,15 @@ pub struct DiscoveryOptions {
     /// says nothing about whose payload it is
     /// ([`Containment::unbacked_payload`]).
     pub payload_min_bytes: u32,
+    /// In a bundle that reads the terser-built slices, read the payload
+    /// guard's long-literal backing as identity only when no other family's
+    /// files hold the literal too (exp139; default off): a dist that inlines
+    /// a dependency's data table (a UMD bundle) holds the dependency's
+    /// literal, and backed by it, propagation hands the dependency's payload
+    /// to the carrier. Read in every bundle it costs right payloads (the
+    /// apps and pop sets lose 0.4-0.7 points of recall), so it is scoped to
+    /// the terser slices' extra claims.
+    pub terser_payload_literal: bool,
     /// Read another family's evidence in the conflict guards
     /// (`evidence_conflict`, `contested_cover`) under the lookup's
     /// specificity rule (exp106; default off): a print another family holds
@@ -294,6 +303,39 @@ pub struct DiscoveryOptions {
     /// (its own seeds stay). A sponge's one stray seed on its own code
     /// does not vouch for megabytes of inlined dependencies.
     pub copy_presence_own: f64,
+    /// Terser carriers (exp139; 0 = off; read only when the bundle reads the
+    /// index's terser-built slices, `library.lookup.terser_slices`): a
+    /// package the bundle does not show (no declared or banner seed in its
+    /// family, and its family's EXCLUSIVE index seeds — units no other
+    /// family scores — under [`Self::terser_carriers_own`] of its index
+    /// seed bytes), at least this share of whose index seed bytes another
+    /// family the bundle DOES show scores as well (a tie or better), is a
+    /// carrier of that family's code here: each of its seeds the terser
+    /// slices made (its family scores more over the slices read than over
+    /// the chosen slice alone) goes to such a rival (the one with the most
+    /// exclusive bytes) when the rival scores that unit, else to no one. A
+    /// plugin whose dist copied its host's chunk ties with the host on
+    /// every unit, and name order hands it the host's code.
+    pub terser_carriers: f64,
+    /// The exclusive share a family's index seeds need for
+    /// [`Self::terser_carriers`] to count it as shown in the bundle (exp139;
+    /// 0 = any exclusive byte).
+    pub terser_carriers_own: f64,
+    /// The terser factory majority (exp139; 0 = off; read only when the
+    /// bundle reads the terser-built slices): a cut CommonJS factory is ONE
+    /// file of one package. A seed the terser slices made on a body
+    /// statement of factory F is dropped (claimed by no one) when another
+    /// family's index seeds in F hold at least this many times the seed's
+    /// family's index seed bytes there: a minority family inside another
+    /// package's file is a copy that file inlined.
+    pub terser_factory_majority: f64,
+    /// The terser thin floor (exp139; 0 = off; read only when the bundle
+    /// reads the terser-built slices): a family every index seed of which
+    /// the terser slices made, and whose index seed bytes are under this
+    /// share of the smallest index module holding any of them, is dropped:
+    /// a few statements of a much bigger file the bundle does not otherwise
+    /// show (a carrier's copy of another package's parser).
+    pub terser_thin: f64,
     /// Cut bundled CommonJS modules into their body statements (exp128;
     /// default off): each statement of a factory body is a unit with its
     /// own prints, judged and propagated as a lazy module's body is, the
@@ -345,6 +387,7 @@ impl Default for DiscoveryOptions {
             helper_families: 0,
             helper_prints: HelperPrints::Off,
             payload_min_bytes: 0,
+            terser_payload_literal: false,
             specific_rivals: false,
             derived_families: false,
             context_presence: 0.0,
@@ -360,6 +403,10 @@ impl Default for DiscoveryOptions {
             factory_tie_fence: false,
             factory_whole_seed: false,
             factory_banner_index: false,
+            terser_carriers: 0.0,
+            terser_carriers_own: 0.0,
+            terser_factory_majority: 0.0,
+            terser_thin: 0.0,
         }
     }
 }
@@ -407,6 +454,7 @@ impl DiscoveryOptions {
             factory_banner_index: true,
             factory_whole_seed: true,
             helper_prints: HelperPrints::Seed,
+            terser_carriers_own: 0.1,
             ..DiscoveryOptions::default()
         }
     }
@@ -989,6 +1037,10 @@ pub struct Containment<'c> {
     /// Rivals' prints count only under the specificity rule
     /// ([`DiscoveryOptions::specific_rivals`]).
     specific_rivals: bool,
+    /// A long literal backs a payload only when one family holds it, in a
+    /// bundle reading the terser slices
+    /// ([`DiscoveryOptions::terser_payload_literal`]).
+    unique_literals: bool,
 }
 
 /// The cover key of the claimed package's own family (see
@@ -1022,10 +1074,16 @@ impl<'c> Containment<'c> {
                 .map(|p| families.family(p))
                 .collect(),
             specific_rivals: false,
+            unique_literals: false,
         }
     }
 
     /// Read rivals under the specificity rule ([`DiscoveryOptions::specific_rivals`]).
+    pub fn with_unique_literals(mut self, on: bool) -> Self {
+        self.unique_literals = on;
+        self
+    }
+
     pub fn with_specific_rivals(mut self, on: bool) -> Self {
         self.specific_rivals = on;
         self
@@ -1092,6 +1150,35 @@ impl<'c> Containment<'c> {
         };
         self.index
             .structural_owners(&q, &self.rules, &|a, b| self.families.same(a, b))
+    }
+
+    /// Does the bundle read the index's terser-built slices (exp139)?
+    fn reads_terser(&self) -> bool {
+        self.index.reads_terser()
+    }
+
+    /// The structural rule's scores of unit `u` per owner: (owner, nodes
+    /// over every slice read, nodes over the chosen slice alone), by owner
+    /// id (exp139). Empty for a unit with no prints.
+    fn slice_scores(&self, u: u32) -> Vec<(u32, u32, u32)> {
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return Vec::new();
+        };
+        let q = crate::libindex::lookup::UnitQuery {
+            unit: u,
+            prints,
+            module_bytes: self.module_bytes[u as usize],
+            text: "",
+        };
+        let same = |a: &str, b: &str| self.families.same(a, b);
+        let all = self.index.structural_scores(&q, &self.rules, &same);
+        let chosen = self.index.structural_scores_chosen(&q, &self.rules, &same);
+        let mut out: Vec<(u32, u32, u32)> = all
+            .iter()
+            .map(|(&o, &n)| (o, n, chosen.get(&o).copied().unwrap_or(0)))
+            .collect();
+        out.sort_unstable();
+        out
     }
 
     /// The smallest index module in which `package`'s family holds any of
@@ -1311,12 +1398,16 @@ impl<'c> Containment<'c> {
             }),
             _ => false,
         };
+        let unique = self.unique_literals && self.index.reads_terser();
         let literal = self
             .index
             .long_literal_owners(text)
             .unwrap_or_default()
             .iter()
-            .any(|owners| owners.iter().any(|&o| self.owner_is(o, package)));
+            .any(|owners| {
+                owners.iter().any(|&o| self.owner_is(o, package))
+                    && (!unique || owners.iter().all(|&o| self.owner_is(o, package)))
+            });
         !printed && !literal
     }
 
@@ -1753,6 +1844,9 @@ fn presence(
         && !options.factory_tie_fence
         && !options.factory_whole_seed
         && !options.factory_banner_index
+        && options.terser_carriers <= 0.0
+        && options.terser_factory_majority <= 0.0
+        && options.terser_thin <= 0.0
     {
         return seeds;
     }
@@ -1809,6 +1903,22 @@ fn presence(
     }
     if options.copy_presence > 0.0 {
         copy_presence(
+            graph,
+            &mut keep,
+            &mut keys,
+            &declared,
+            containment,
+            options,
+            &mut key_of,
+            &mut dropped_units,
+        );
+    }
+    if containment.reads_terser()
+        && (options.terser_carriers > 0.0
+            || options.terser_factory_majority > 0.0
+            || options.terser_thin > 0.0)
+    {
+        terser_presence(
             graph,
             &mut keep,
             &mut keys,
@@ -1930,6 +2040,277 @@ fn copy_presence(
             }
             _ => dropped_units.extend(slot.take().map(|s| s.unit)),
         }
+    }
+}
+
+/// One kept index seed as the terser presence rules read it (exp139).
+struct TerserSeed {
+    slot: usize,
+    bytes: u64,
+    /// Per family key: (best nodes over every slice read, an owner of the
+    /// family scoring them).
+    scores: BTreeMap<usize, (u32, u32)>,
+    /// The seed's family scores more over the slices read than over the
+    /// chosen slice alone: the terser-built slices made this seed.
+    gained: bool,
+}
+
+/// The terser presence rules over the kept seeds of a bundle that reads the
+/// terser-built slices (see [`presence`]; exp139):
+/// [`DiscoveryOptions::terser_carriers`],
+/// [`DiscoveryOptions::terser_factory_majority`] and
+/// [`DiscoveryOptions::terser_thin`]. Every verdict reads the seeds as they
+/// stand on entry; a dropped seed's unit goes to `dropped` (the fence).
+#[allow(clippy::too_many_arguments)]
+fn terser_presence(
+    graph: &ReferenceGraph,
+    keep: &mut [Option<Seed>],
+    keys: &mut [usize],
+    declared: &BTreeSet<usize>,
+    containment: &Containment<'_>,
+    options: DiscoveryOptions,
+    key_of: &mut dyn FnMut(&str) -> usize,
+    dropped_units: &mut Vec<u32>,
+) {
+    let seeds = terser_seeds(keep, keys, containment, key_of);
+    // Per family: index seed bytes, exclusive bytes, and whether every
+    // seed of it is terser-made.
+    let mut total: BTreeMap<usize, u64> = BTreeMap::new();
+    let mut exclusive: BTreeMap<usize, u64> = BTreeMap::new();
+    let mut all_gained: BTreeMap<usize, bool> = BTreeMap::new();
+    for t in &seeds {
+        let k = keys[t.slot];
+        *total.entry(k).or_default() += t.bytes;
+        if t.scores.keys().all(|&f| f == k) {
+            *exclusive.entry(k).or_default() += t.bytes;
+        }
+        let g = all_gained.entry(k).or_insert(true);
+        *g = *g && t.gained;
+    }
+    let present = |k: usize| {
+        declared.contains(&k) || {
+            let e = exclusive.get(&k).copied().unwrap_or(0);
+            e > 0
+                && e as f64
+                    >= options.terser_carriers_own * total.get(&k).copied().unwrap_or(0) as f64
+        }
+    };
+    let mut verdicts: Vec<(usize, Option<u32>)> = Vec::new(); // (slot, new owner or none)
+    if options.terser_carriers > 0.0 {
+        terser_carrier_verdicts(
+            &seeds,
+            keys,
+            &total,
+            &exclusive,
+            &present,
+            options,
+            &mut verdicts,
+        );
+    }
+    let moved: BTreeSet<usize> = verdicts.iter().map(|v| v.0).collect();
+    if options.terser_factory_majority > 0.0 {
+        terser_majority_verdicts(graph, keep, keys, &seeds, &moved, options, &mut verdicts);
+    }
+    if options.terser_thin > 0.0 {
+        let thin = TerserFamilies {
+            total: &total,
+            all_gained: &all_gained,
+            declared,
+        };
+        terser_thin_verdicts(
+            keep,
+            keys,
+            &seeds,
+            &moved,
+            &thin,
+            containment,
+            options,
+            &mut verdicts,
+        );
+    }
+    let mut done: BTreeSet<usize> = BTreeSet::new();
+    for (slot, owner) in verdicts {
+        if !done.insert(slot) {
+            continue;
+        }
+        match (owner, keep[slot].as_mut()) {
+            (Some(o), Some(s)) => {
+                s.package = containment.name(o).to_string();
+                keys[slot] = key_of(&s.package);
+            }
+            _ => dropped_units.extend(keep[slot].take().map(|s| s.unit)),
+        }
+    }
+}
+
+/// [`DiscoveryOptions::terser_factory_majority`]'s verdicts (see
+/// [`terser_presence`]): per cut factory, each family's index seed bytes;
+/// a terser-made seed another family outweighs there is dropped.
+fn terser_majority_verdicts(
+    graph: &ReferenceGraph,
+    keep: &[Option<Seed>],
+    keys: &[usize],
+    seeds: &[TerserSeed],
+    moved: &BTreeSet<usize>,
+    options: DiscoveryOptions,
+    verdicts: &mut Vec<(usize, Option<u32>)>,
+) {
+    let module_of = |u: u32| match graph.units[u as usize].kind {
+        UnitKind::FactoryBody { module } => Some(module),
+        _ => None,
+    };
+    let mut in_module: BTreeMap<(u32, usize), u64> = BTreeMap::new();
+    for (s, &k) in keep.iter().zip(keys.iter()) {
+        if let Some(s) = s.as_ref().filter(|s| s.evidence.is_index())
+            && let Some(m) = module_of(s.unit)
+        {
+            *in_module.entry((m, k)).or_default() += u64::from(graph.units[s.unit as usize].bytes);
+        }
+    }
+    for t in seeds
+        .iter()
+        .filter(|t| t.gained && !moved.contains(&t.slot))
+    {
+        let Some(m) = keep[t.slot].as_ref().and_then(|s| module_of(s.unit)) else {
+            continue;
+        };
+        let k = keys[t.slot];
+        let mine = in_module.get(&(m, k)).copied().unwrap_or(0) as f64;
+        let outweighed = in_module
+            .range((m, 0)..=(m, usize::MAX))
+            .any(|(&(_, j), &b)| j != k && b as f64 >= options.terser_factory_majority * mine);
+        if outweighed {
+            verdicts.push((t.slot, None));
+        }
+    }
+}
+
+/// Per family, what [`terser_thin_verdicts`] reads.
+struct TerserFamilies<'f> {
+    total: &'f BTreeMap<usize, u64>,
+    all_gained: &'f BTreeMap<usize, bool>,
+    declared: &'f BTreeSet<usize>,
+}
+
+/// [`DiscoveryOptions::terser_thin`]'s verdicts (see [`terser_presence`]).
+#[allow(clippy::too_many_arguments)]
+fn terser_thin_verdicts(
+    keep: &[Option<Seed>],
+    keys: &[usize],
+    seeds: &[TerserSeed],
+    moved: &BTreeSet<usize>,
+    fams: &TerserFamilies<'_>,
+    containment: &Containment<'_>,
+    options: DiscoveryOptions,
+    verdicts: &mut Vec<(usize, Option<u32>)>,
+) {
+    let mut context: BTreeMap<usize, u64> = BTreeMap::new();
+    for t in seeds {
+        if let Some(s) = keep[t.slot].as_ref()
+            && let Some(c) = containment.tightest_context(s.unit, &s.package)
+        {
+            let e = context.entry(keys[t.slot]).or_insert(u64::MAX);
+            *e = (*e).min(c);
+        }
+    }
+    for t in seeds.iter().filter(|t| !moved.contains(&t.slot)) {
+        let k = keys[t.slot];
+        let thin = !fams.declared.contains(&k)
+            && fams.all_gained.get(&k).copied().unwrap_or(false)
+            && context.get(&k).is_some_and(|&c| {
+                (fams.total.get(&k).copied().unwrap_or(0) as f64) < options.terser_thin * c as f64
+            });
+        if thin {
+            verdicts.push((t.slot, None));
+        }
+    }
+}
+
+/// The kept index seeds with their per-family scores (see [`TerserSeed`]).
+fn terser_seeds(
+    keep: &[Option<Seed>],
+    keys: &[usize],
+    containment: &Containment<'_>,
+    key_of: &mut dyn FnMut(&str) -> usize,
+) -> Vec<TerserSeed> {
+    let mut out = Vec::new();
+    for (slot, s) in keep.iter().enumerate() {
+        let Some(s) = s.as_ref().filter(|s| s.evidence.is_index()) else {
+            continue;
+        };
+        let k = keys[slot];
+        let mut scores: BTreeMap<usize, (u32, u32)> = BTreeMap::new();
+        let (mut all, mut chosen) = (0u32, 0u32);
+        for (o, n, n0) in containment.slice_scores(s.unit) {
+            if n == 0 {
+                continue;
+            }
+            let f = key_of(containment.name(o));
+            let e = scores.entry(f).or_insert((0, o));
+            if n > e.0 {
+                *e = (n, o);
+            }
+            if f == k {
+                all = all.max(n);
+                chosen = chosen.max(n0);
+            }
+        }
+        out.push(TerserSeed {
+            slot,
+            bytes: u64::from(containment.own_bytes[s.unit as usize]),
+            scores,
+            gained: all > chosen,
+        });
+    }
+    out
+}
+
+/// [`DiscoveryOptions::terser_carriers`]' verdicts (see [`terser_presence`]).
+fn terser_carrier_verdicts(
+    seeds: &[TerserSeed],
+    keys: &[usize],
+    total: &BTreeMap<usize, u64>,
+    exclusive: &BTreeMap<usize, u64>,
+    present: &dyn Fn(usize) -> bool,
+    options: DiscoveryOptions,
+    verdicts: &mut Vec<(usize, Option<u32>)>,
+) {
+    // The present rivals scoring a seed at least as well as its own family.
+    let rivals = |t: &TerserSeed| -> Vec<(usize, u32)> {
+        let k = keys[t.slot];
+        let mine = t.scores.get(&k).map_or(0, |v| v.0);
+        if mine == 0 {
+            return Vec::new();
+        }
+        t.scores
+            .iter()
+            .filter(|&(&f, &(n, _))| f != k && n >= mine && present(f))
+            .map(|(&f, &(_, o))| (f, o))
+            .collect()
+    };
+    let mut contested: BTreeMap<usize, u64> = BTreeMap::new();
+    for t in seeds {
+        if !rivals(t).is_empty() {
+            *contested.entry(keys[t.slot]).or_default() += t.bytes;
+        }
+    }
+    let carrier = |k: usize| {
+        !present(k)
+            && contested.get(&k).copied().unwrap_or(0) as f64
+                >= options.terser_carriers * total.get(&k).copied().unwrap_or(0) as f64
+            && contested.contains_key(&k)
+    };
+    for t in seeds.iter().filter(|t| t.gained && carrier(keys[t.slot])) {
+        let to = rivals(t)
+            .into_iter()
+            .max_by_key(|&(f, _)| {
+                (
+                    exclusive.get(&f).copied().unwrap_or(0),
+                    std::cmp::Reverse(f),
+                )
+            })
+            .map(|(_, o)| o);
+        verdicts.push((t.slot, to));
     }
 }
 
@@ -2722,7 +3103,8 @@ fn discover_unscoped(
         lookup.rules,
         &families,
     )
-    .with_specific_rivals(options.specific_rivals);
+    .with_specific_rivals(options.specific_rivals)
+    .with_unique_literals(options.terser_payload_literal);
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
     // The evidence-conflict guard reads index seeds too: the lookup picks
     // the best package under its specificity and package-count filters; a

@@ -1,0 +1,174 @@
+{
+ "bundleSha256": "7a31efe70444589b94c4abf7ece3dc62451cfc8bf9983dc673a8aaa332867812",
+ "claimedBytes": {
+  "family": 28757,
+  "origin": 11787,
+  "right": 7829737,
+  "unmapped": 85876,
+  "wrongFamily": 93047
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-orgoai__bops-1153c4",
+ "exploratory": {
+  "names": {
+   "bindings": 75614,
+   "bindingsSameVersion": 57085,
+   "bindingsVersionKnown": 75614,
+   "exactBytes": 7253423,
+   "exactUnits": 9807,
+   "sameVersionShare": 0.754953
+  }
+ },
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.813527,
+  "f1": 0.639779,
+  "namedBytes": 7202243,
+  "precision": 0.993377,
+  "recall": 0.471829
+ },
+ "label": "pop-exp139-both",
+ "missBytes": {
+  "a": 1869438,
+  "b": 438469,
+  "c": 395611,
+  "d-absent": 542207,
+  "d-file": 137873,
+  "e-ambig": 14967,
+  "e-other": 3751285,
+  "e-spec": 507,
+  "e-support": 23651,
+  "e-veto": 181871,
+  "f": 38372
+ },
+ "noDiscovery": null,
+ "reportSha256": "67d99180e71a0810a1dfc93e365fc3dac8c44e4ad983eb507ce86da8b18c0767",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 26798,
+    "right": 6832683,
+    "unmapped": 85876,
+    "wrongFamily": 73590
+   },
+   "copyBytes": 3722326,
+   "f05": 0.827793,
+   "f05ShipperOnly": 0.827793,
+   "f1": 0.6649,
+   "f1ShipperOnly": 0.6649,
+   "libraryBytes": 13700047,
+   "missBytes": {
+    "a": 1509155,
+    "b": 437115,
+    "c": 375161,
+    "d-absent": 519166,
+    "d-file": 52327,
+    "e-ambig": 4652,
+    "e-other": 3720396,
+    "e-spec": 507,
+    "e-support": 20499,
+    "e-veto": 180861,
+    "f": 20727
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 6859481,
+   "namedBytesShipperOnly": 6859481,
+   "precision": 0.989386,
+   "precisionShipperOnly": 0.989386,
+   "recall": 0.50069,
+   "recallShipperOnly": 0.50069,
+   "statementBytes": {
+    "<app>": 938,
+    "<foreign>": 156300,
+    "<unmapped>": 231260,
+    "copy": 3722326,
+    "library": 13700047
+   },
+   "wrongFamilyBytes": 73590,
+   "wrongFamilyBytesShipperOnly": 73590
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 1959,
+    "origin": 11787,
+    "right": 997054,
+    "wrongFamily": 19457
+   },
+   "copyBytes": 73089,
+   "f05": 0.888926,
+   "f05ShipperOnly": 0.87856,
+   "f1": 0.779114,
+   "f1ShipperOnly": 0.770029,
+   "libraryBytes": 1564485,
+   "missBytes": {
+    "a": 360283,
+    "b": 1354,
+    "c": 20450,
+    "d-absent": 23041,
+    "d-file": 85546,
+    "e-ambig": 10315,
+    "e-other": 30889,
+    "e-support": 3152,
+    "e-veto": 1010,
+    "f": 17645
+   },
+   "namedAsOriginBytes": 11787,
+   "namedBytes": 1010800,
+   "namedBytesShipperOnly": 999013,
+   "precision": 0.981114,
+   "precisionShipperOnly": 0.969674,
+   "recall": 0.646091,
+   "recallShipperOnly": 0.638557,
+   "statementBytes": {
+    "<unmapped>": 65,
+    "copy": 73089,
+    "library": 1564485
+   },
+   "wrongFamilyBytes": 19457,
+   "wrongFamilyBytesShipperOnly": 31244
+  }
+ },
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 938,
+  "<foreign>": 156300,
+  "<unmapped>": 231325,
+  "copy": 3795415,
+  "library": 15264532
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "bun",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 3795415,
+  "f05": 0.83517,
+  "f05ShipperOnly": 0.833919,
+  "f1": 0.677659,
+  "f1ShipperOnly": 0.676644,
+  "libraryBytes": 15264532,
+  "namedAsOriginBytes": 11787,
+  "namedAsShipperBytes": 7858494,
+  "namedBytes": 7870281,
+  "namedBytesShipperOnly": 7858494,
+  "precision": 0.988316,
+  "precisionShipperOnly": 0.986835,
+  "recall": 0.515593,
+  "recallShipperOnly": 0.514821,
+  "wrongFamilyBytes": 93047,
+  "wrongFamilyBytesShipperOnly": 104834
+ },
+ "truthMethod": "sourcemap"
+}
