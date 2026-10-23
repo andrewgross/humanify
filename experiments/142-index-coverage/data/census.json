@@ -1,0 +1,884 @@
+{
+  "asOf": "2026-10-11T23:59:59.999000+00:00",
+  "kb": {
+    "apps-esbuild": {
+      "corpus": "apps",
+      "held": {
+        "-": 20043.0
+      },
+      "held:originIndexed": {
+        "-": 4116.0
+      },
+      "held:unclaimed": {
+        "-": 19957.9
+      },
+      "held:wrongClaimed": {
+        "-": 85.1
+      },
+      "library": {
+        "total": 149430.5
+      },
+      "named": {
+        "total": 116032.0
+      },
+      "no-version": {
+        "-": 19.6
+      },
+      "no-version:unclaimed": {
+        "-": 19.2
+      },
+      "no-version:wrongClaimed": {
+        "-": 0.4
+      },
+      "not-chosen": {
+        "last-12-months": 576.4,
+        "latest-patch-of-minor": 6316.2,
+        "older": 223.9
+      },
+      "not-chosen:originIndexed": {
+        "-": 3.2
+      },
+      "not-chosen:unclaimed": {
+        "-": 7116.5
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 0.1
+      },
+      "not-indexed": {
+        "before-asof": 6219.4
+      },
+      "not-indexed:originIndexed": {
+        "-": 0.5
+      },
+      "not-indexed:unclaimed": {
+        "-": 6197.6
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 21.8
+      }
+    },
+    "apps-rollup": {
+      "corpus": "apps",
+      "held": {
+        "-": 8692.1
+      },
+      "held:originIndexed": {
+        "-": 306.6
+      },
+      "held:unclaimed": {
+        "-": 8110.0
+      },
+      "held:wrongClaimed": {
+        "-": 582.2
+      },
+      "library": {
+        "total": 92552.7
+      },
+      "named": {
+        "total": 75776.1
+      },
+      "not-chosen": {
+        "last-12-months": 762.9,
+        "latest-patch-of-minor": 4385.7,
+        "older": 94.4
+      },
+      "not-chosen:originIndexed": {
+        "-": 0.8
+      },
+      "not-chosen:unclaimed": {
+        "-": 5207.7
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 35.3
+      },
+      "not-indexed": {
+        "before-asof": 2841.5
+      },
+      "not-indexed:originIndexed": {
+        "-": 0.5
+      },
+      "not-indexed:unclaimed": {
+        "-": 2780.2
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 61.3
+      }
+    },
+    "apps-webpack": {
+      "corpus": "apps",
+      "held": {
+        "-": 9936.1
+      },
+      "held:originIndexed": {
+        "-": 47.6
+      },
+      "held:unclaimed": {
+        "-": 9781.1
+      },
+      "held:wrongClaimed": {
+        "-": 155.0
+      },
+      "library": {
+        "total": 72737.0
+      },
+      "named": {
+        "total": 53461.3
+      },
+      "no-version": {
+        "-": 3354.2
+      },
+      "no-version:originIndexed": {
+        "-": 0.3
+      },
+      "no-version:unclaimed": {
+        "-": 3313.7
+      },
+      "no-version:wrongClaimed": {
+        "-": 40.5
+      },
+      "not-chosen": {
+        "last-12-months": 18.3,
+        "latest-patch-of-minor": 4355.8,
+        "older": 105.7
+      },
+      "not-chosen:originIndexed": {
+        "-": 2.9
+      },
+      "not-chosen:unclaimed": {
+        "-": 4475.5
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 4.3
+      },
+      "not-indexed": {
+        "before-asof": 1505.6
+      },
+      "not-indexed:unclaimed": {
+        "-": 1489.8
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 15.8
+      }
+    },
+    "dev-rollup": {
+      "corpus": "bundlers",
+      "held": {
+        "-": 469.9
+      },
+      "held:originIndexed": {
+        "-": 0.1
+      },
+      "held:unclaimed": {
+        "-": 467.9
+      },
+      "held:wrongClaimed": {
+        "-": 2.1
+      },
+      "library": {
+        "total": 2092.6
+      },
+      "named": {
+        "total": 1622.4
+      },
+      "not-indexed": {
+        "before-asof": 0.3
+      },
+      "not-indexed:unclaimed": {
+        "-": 0.3
+      }
+    },
+    "dev-webpack": {
+      "corpus": "bundlers",
+      "held": {
+        "-": 662.7
+      },
+      "held:unclaimed": {
+        "-": 658.7
+      },
+      "held:wrongClaimed": {
+        "-": 4.0
+      },
+      "library": {
+        "total": 1786.5
+      },
+      "named": {
+        "total": 1123.6
+      },
+      "not-indexed": {
+        "before-asof": 0.2
+      },
+      "not-indexed:unclaimed": {
+        "-": 0.2
+      }
+    },
+    "esbuild-app": {
+      "corpus": "dev",
+      "held": {
+        "-": 3422.7
+      },
+      "held:originIndexed": {
+        "-": 167.7
+      },
+      "held:unclaimed": {
+        "-": 3345.6
+      },
+      "held:wrongClaimed": {
+        "-": 77.1
+      },
+      "library": {
+        "total": 18161.0
+      },
+      "named": {
+        "total": 13573.9
+      },
+      "no-version": {
+        "-": 568.9
+      },
+      "no-version:unclaimed": {
+        "-": 537.6
+      },
+      "no-version:wrongClaimed": {
+        "-": 31.3
+      },
+      "not-chosen": {
+        "last-12-months": 264.5,
+        "older": 0.0
+      },
+      "not-chosen:unclaimed": {
+        "-": 257.7
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 6.9
+      },
+      "not-indexed": {
+        "before-asof": 330.9
+      },
+      "not-indexed:originIndexed": {
+        "-": 0.4
+      },
+      "not-indexed:unclaimed": {
+        "-": 319.9
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 11.0
+      }
+    },
+    "heldout": {
+      "after-asof": {
+        "2026-10-12": 13.1
+      },
+      "after-asof:unclaimed": {
+        "-": 13.1
+      },
+      "corpus": "dev",
+      "held": {
+        "-": 36365.6
+      },
+      "held:originIndexed": {
+        "-": 938.0
+      },
+      "held:unclaimed": {
+        "-": 35939.3
+      },
+      "held:wrongClaimed": {
+        "-": 426.3
+      },
+      "library": {
+        "total": 229606.4
+      },
+      "named": {
+        "total": 157414.5
+      },
+      "not-chosen": {
+        "last-12-months": 881.6,
+        "latest-patch-of-minor": 2778.2,
+        "older": 2513.0
+      },
+      "not-chosen:originIndexed": {
+        "-": 41.7
+      },
+      "not-chosen:unclaimed": {
+        "-": 6137.9
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 34.9
+      },
+      "not-indexed": {
+        "before-asof": 29636.7,
+        "unknown-time": 3.7
+      },
+      "not-indexed:originIndexed": {
+        "-": 2753.4
+      },
+      "not-indexed:unclaimed": {
+        "-": 29526.0
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 114.5
+      }
+    },
+    "pop-bun": {
+      "after-asof": {
+        "2026-10-12": 2205.9,
+        "2026-10-13": 566.4,
+        "2026-10-14": 1917.6
+      },
+      "after-asof:originIndexed": {
+        "-": 74.8
+      },
+      "after-asof:unclaimed": {
+        "-": 4676.2
+      },
+      "after-asof:wrongClaimed": {
+        "-": 13.6
+      },
+      "corpus": "pop",
+      "held": {
+        "-": 44744.9
+      },
+      "held:originIndexed": {
+        "-": 9204.8
+      },
+      "held:unclaimed": {
+        "-": 44295.0
+      },
+      "held:wrongClaimed": {
+        "-": 449.9
+      },
+      "library": {
+        "total": 318254.5
+      },
+      "named": {
+        "total": 245726.1
+      },
+      "no-version": {
+        "-": 14.7
+      },
+      "no-version:unclaimed": {
+        "-": 14.7
+      },
+      "not-chosen": {
+        "last-12-months": 10062.4,
+        "latest-patch-of-minor": 2716.7,
+        "older": 1023.0
+      },
+      "not-chosen:originIndexed": {
+        "-": 3011.8
+      },
+      "not-chosen:unclaimed": {
+        "-": 13328.0
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 474.2
+      },
+      "not-indexed": {
+        "after-asof": 1340.6,
+        "before-asof": 7936.3
+      },
+      "not-indexed:unclaimed": {
+        "-": 9024.7
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 252.2
+      }
+    },
+    "pop-esbuild": {
+      "after-asof": {
+        "2026-10-12": 2387.3,
+        "2026-10-13": 1368.6,
+        "2026-10-14": 1416.8
+      },
+      "after-asof:originIndexed": {
+        "-": 52.3
+      },
+      "after-asof:unclaimed": {
+        "-": 4881.5
+      },
+      "after-asof:wrongClaimed": {
+        "-": 291.3
+      },
+      "corpus": "pop",
+      "held": {
+        "-": 40916.8
+      },
+      "held:originIndexed": {
+        "-": 7984.8
+      },
+      "held:unclaimed": {
+        "-": 40496.2
+      },
+      "held:wrongClaimed": {
+        "-": 420.6
+      },
+      "library": {
+        "total": 318601.6
+      },
+      "named": {
+        "total": 250766.1
+      },
+      "no-version": {
+        "-": 1078.5
+      },
+      "no-version:unclaimed": {
+        "-": 771.0
+      },
+      "no-version:wrongClaimed": {
+        "-": 307.5
+      },
+      "not-chosen": {
+        "last-12-months": 9660.7,
+        "latest-patch-of-minor": 2007.2,
+        "older": 289.7
+      },
+      "not-chosen:originIndexed": {
+        "-": 2924.8
+      },
+      "not-chosen:unclaimed": {
+        "-": 11606.5
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 351.0
+      },
+      "not-indexed": {
+        "after-asof": 1306.2,
+        "before-asof": 7403.7
+      },
+      "not-indexed:unclaimed": {
+        "-": 8349.6
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 360.3
+      }
+    },
+    "remin-esbuild": {
+      "after-asof": {
+        "2026-10-12": 4056.4,
+        "2026-10-13": 970.0,
+        "2026-10-14": 478.0
+      },
+      "after-asof:originIndexed": {
+        "-": 0.6
+      },
+      "after-asof:unclaimed": {
+        "-": 5504.3
+      },
+      "after-asof:wrongClaimed": {
+        "-": 0.1
+      },
+      "corpus": "remin",
+      "held": {
+        "-": 32635.9
+      },
+      "held:originIndexed": {
+        "-": 214.8
+      },
+      "held:unclaimed": {
+        "-": 32547.3
+      },
+      "held:wrongClaimed": {
+        "-": 88.6
+      },
+      "library": {
+        "total": 97254.5
+      },
+      "named": {
+        "total": 50338.7
+      },
+      "no-version": {
+        "-": 401.6
+      },
+      "no-version:unclaimed": {
+        "-": 368.1
+      },
+      "no-version:wrongClaimed": {
+        "-": 33.5
+      },
+      "not-chosen": {
+        "last-12-months": 366.8,
+        "latest-patch-of-minor": 4964.9,
+        "older": 1762.4
+      },
+      "not-chosen:originIndexed": {
+        "-": 97.4
+      },
+      "not-chosen:unclaimed": {
+        "-": 7079.1
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 15.1
+      },
+      "not-indexed": {
+        "after-asof": 11.6,
+        "before-asof": 1268.1
+      },
+      "not-indexed:originIndexed": {
+        "-": 3.6
+      },
+      "not-indexed:unclaimed": {
+        "-": 1275.2
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 4.5
+      }
+    },
+    "remin-terser": {
+      "after-asof": {
+        "2026-10-12": 4658.1,
+        "2026-10-13": 1324.6,
+        "2026-10-14": 1037.1
+      },
+      "after-asof:originIndexed": {
+        "-": 84.2
+      },
+      "after-asof:unclaimed": {
+        "-": 7019.8
+      },
+      "corpus": "remin",
+      "held": {
+        "-": 55790.4
+      },
+      "held:originIndexed": {
+        "-": 314.7
+      },
+      "held:unclaimed": {
+        "-": 55774.5
+      },
+      "held:wrongClaimed": {
+        "-": 15.9
+      },
+      "library": {
+        "total": 91166.6
+      },
+      "named": {
+        "total": 18538.3
+      },
+      "no-version": {
+        "-": 373.2
+      },
+      "no-version:unclaimed": {
+        "-": 373.2
+      },
+      "not-chosen": {
+        "last-12-months": 375.6,
+        "latest-patch-of-minor": 5755.7,
+        "older": 2056.7
+      },
+      "not-chosen:originIndexed": {
+        "-": 285.8
+      },
+      "not-chosen:unclaimed": {
+        "-": 8185.8
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 2.1
+      },
+      "not-indexed": {
+        "after-asof": 4.7,
+        "before-asof": 1252.3
+      },
+      "not-indexed:originIndexed": {
+        "-": 3.6
+      },
+      "not-indexed:unclaimed": {
+        "-": 1256.8
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 0.2
+      }
+    },
+    "remin3-esbuild": {
+      "after-asof": {
+        "2026-10-12": 6077.9,
+        "2026-10-13": 2709.2,
+        "2026-10-14": 69.0
+      },
+      "after-asof:originIndexed": {
+        "-": 91.4
+      },
+      "after-asof:unclaimed": {
+        "-": 8786.1
+      },
+      "after-asof:wrongClaimed": {
+        "-": 70.0
+      },
+      "corpus": "remin3",
+      "held": {
+        "-": 70467.7
+      },
+      "held:originIndexed": {
+        "-": 1696.5
+      },
+      "held:unclaimed": {
+        "-": 70390.5
+      },
+      "held:wrongClaimed": {
+        "-": 77.2
+      },
+      "library": {
+        "total": 202078.4
+      },
+      "named": {
+        "total": 99982.1
+      },
+      "no-version": {
+        "-": 1049.4
+      },
+      "no-version:unclaimed": {
+        "-": 996.8
+      },
+      "no-version:wrongClaimed": {
+        "-": 52.7
+      },
+      "not-chosen": {
+        "last-12-months": 883.8,
+        "latest-patch-of-minor": 5639.6,
+        "older": 1798.0
+      },
+      "not-chosen:originIndexed": {
+        "-": 21.9
+      },
+      "not-chosen:unclaimed": {
+        "-": 8247.5
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 74.0
+      },
+      "not-indexed": {
+        "after-asof": 69.2,
+        "before-asof": 13302.7,
+        "unknown-time": 13.4
+      },
+      "not-indexed:originIndexed": {
+        "-": 31.4
+      },
+      "not-indexed:unclaimed": {
+        "-": 13363.5
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 21.8
+      },
+      "unknown-time": {
+        "-": 16.4
+      },
+      "unknown-time:unclaimed": {
+        "-": 16.4
+      }
+    },
+    "remin3-terser": {
+      "after-asof": {
+        "2026-10-12": 7186.7,
+        "2026-10-13": 2831.4,
+        "2026-10-14": 1196.1
+      },
+      "after-asof:originIndexed": {
+        "-": 128.9
+      },
+      "after-asof:unclaimed": {
+        "-": 11214.2
+      },
+      "after-asof:wrongClaimed": {
+        "-": 0.1
+      },
+      "corpus": "remin3",
+      "held": {
+        "-": 122321.0
+      },
+      "held:originIndexed": {
+        "-": 1701.1
+      },
+      "held:unclaimed": {
+        "-": 122287.3
+      },
+      "held:wrongClaimed": {
+        "-": 33.7
+      },
+      "library": {
+        "total": 191574.0
+      },
+      "named": {
+        "total": 33300.0
+      },
+      "no-version": {
+        "-": 974.1
+      },
+      "no-version:unclaimed": {
+        "-": 973.5
+      },
+      "no-version:wrongClaimed": {
+        "-": 0.6
+      },
+      "not-chosen": {
+        "last-12-months": 971.5,
+        "latest-patch-of-minor": 7223.8,
+        "older": 2451.3
+      },
+      "not-chosen:originIndexed": {
+        "-": 117.6
+      },
+      "not-chosen:unclaimed": {
+        "-": 10633.3
+      },
+      "not-chosen:wrongClaimed": {
+        "-": 13.4
+      },
+      "not-indexed": {
+        "after-asof": 50.0,
+        "before-asof": 13035.3,
+        "unknown-time": 16.1
+      },
+      "not-indexed:originIndexed": {
+        "-": 133.5
+      },
+      "not-indexed:unclaimed": {
+        "-": 13100.9
+      },
+      "not-indexed:wrongClaimed": {
+        "-": 0.6
+      },
+      "unknown-time": {
+        "-": 16.3
+      },
+      "unknown-time:unclaimed": {
+        "-": 16.3
+      }
+    },
+    "wrangler": {
+      "corpus": "dev",
+      "held": {
+        "-": 908.9
+      },
+      "held:originIndexed": {
+        "-": 5.3
+      },
+      "held:unclaimed": {
+        "-": 903.3
+      },
+      "held:wrongClaimed": {
+        "-": 5.6
+      },
+      "library": {
+        "total": 1810.6
+      },
+      "named": {
+        "total": 600.0
+      },
+      "not-chosen": {
+        "latest-patch-of-minor": 101.9,
+        "older": 40.8
+      },
+      "not-chosen:unclaimed": {
+        "-": 142.7
+      },
+      "not-indexed": {
+        "before-asof": 41.8,
+        "unknown-time": 117.1
+      },
+      "not-indexed:originIndexed": {
+        "-": 4.8
+      },
+      "not-indexed:unclaimed": {
+        "-": 158.9
+      }
+    }
+  },
+  "resolutionFloors": {
+    "apps-esbuild": {
+      "afterAsOf": 0,
+      "bundles": 39,
+      "max": "2026-10-11T19:34",
+      "median": "2026-10-08T03:13",
+      "min": "2025-06-16T13:29"
+    },
+    "apps-rollup": {
+      "afterAsOf": 0,
+      "bundles": 23,
+      "max": "2026-10-11T19:34",
+      "median": "2026-10-08T13:07",
+      "min": "2025-06-16T13:29"
+    },
+    "apps-webpack": {
+      "afterAsOf": 0,
+      "bundles": 15,
+      "max": "2026-10-11T19:34",
+      "median": "2026-10-08T15:31",
+      "min": "2026-08-26T20:53"
+    },
+    "dev-rollup": {
+      "afterAsOf": 0,
+      "bundles": 14,
+      "max": "2026-10-10T21:12",
+      "median": "2026-09-24T02:56",
+      "min": "2026-04-07T09:28"
+    },
+    "dev-webpack": {
+      "afterAsOf": 0,
+      "bundles": 13,
+      "max": "2026-10-10T21:12",
+      "median": "2026-09-18T23:46",
+      "min": "2025-09-11T12:27"
+    },
+    "esbuild-app": {
+      "afterAsOf": 0,
+      "bundles": 1,
+      "max": "2026-10-11T16:18",
+      "median": "2026-10-11T16:18",
+      "min": "2026-10-11T16:18"
+    },
+    "heldout": {
+      "afterAsOf": 1,
+      "bundles": 59,
+      "max": "2026-10-12T00:50",
+      "median": "2026-10-07T09:50",
+      "min": "2023-06-10T13:11"
+    },
+    "pop-bun": {
+      "afterAsOf": 31,
+      "bundles": 45,
+      "max": "2026-10-14T09:33",
+      "median": "2026-10-13T07:44",
+      "min": "2023-03-16T19:30"
+    },
+    "pop-esbuild": {
+      "afterAsOf": 32,
+      "bundles": 46,
+      "max": "2026-10-14T09:33",
+      "median": "2026-10-13T07:47",
+      "min": "2023-03-16T19:30"
+    },
+    "remin-esbuild": {
+      "afterAsOf": 12,
+      "bundles": 36,
+      "max": "2026-10-14T06:12",
+      "median": "2026-10-07T09:50",
+      "min": "2023-08-23T17:18"
+    },
+    "remin-terser": {
+      "afterAsOf": 12,
+      "bundles": 36,
+      "max": "2026-10-14T06:12",
+      "median": "2026-10-07T09:50",
+      "min": "2023-08-23T17:18"
+    },
+    "remin3-esbuild": {
+      "afterAsOf": 30,
+      "bundles": 72,
+      "max": "2026-10-14T09:29",
+      "median": "2026-10-09T09:19",
+      "min": "2024-06-17T12:23"
+    },
+    "remin3-terser": {
+      "afterAsOf": 30,
+      "bundles": 72,
+      "max": "2026-10-14T09:29",
+      "median": "2026-10-09T09:19",
+      "min": "2024-06-17T12:23"
+    },
+    "wrangler": {
+      "afterAsOf": 0,
+      "bundles": 1,
+      "max": "2025-01-16T09:24",
+      "median": "2025-01-16T09:24",
+      "min": "2025-01-16T09:24"
+    }
+  }
+}

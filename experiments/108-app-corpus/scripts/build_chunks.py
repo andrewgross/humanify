@@ -5,7 +5,10 @@ Why: a `humanify-index build` process's RSS grows ~40 MB per package version it 
 Run under the campaign lock:  flock /work/index-build.lock python3 -I build_chunks.py <args>
 
 usage: build_chunks.py <data-dir> <name> <cpus> <procs> <humanify-index> <packages.txt> <pins.txt> <chunk-versions>
-                       -- <recipe flags>
+                       [--as-of YYYY-MM-DD] [--build-pins <pins.txt>] -- <recipe flags>
+  --as-of       the index date (default 2026-10-11, every index before exp142)
+  --build-pins  build shards only for these pins (a DELTA on a store that holds the rest: exp142); the merge still
+                reads <packages.txt> + <pins.txt>
 Writes <data-dir>/ix/<name> (refuses an existing one); logs in <data-dir>/logs/chunks-<name>/, a per-chunk
 peak-RSS table in <data-dir>/logs/chunks-<name>.tsv, timings appended to <data-dir>/logs/merge-<name>.log.
 """
@@ -20,19 +23,23 @@ ASOF = "2026-10-11"
 def main():
     a = sys.argv[1:]
     sep = a.index("--")
-    data, name, cpus, procs, ix, pkgs, pins, chunk = a[:sep]
+    data, name, cpus, procs, ix, pkgs, pins, chunk = a[:8]
+    opts = dict(zip(a[8:sep:2], a[9:sep:2]))
+    if sep < 8 or set(opts) - {"--as-of", "--build-pins"} or len(a[8:sep]) % 2:
+        raise SystemExit(__doc__)
+    as_of = opts.get("--as-of", ASOF)
     recipe = a[sep + 1:]
     procs, chunk = int(procs), int(chunk)
     out = f"{data}/ix/{name}"
     if os.path.exists(out):
         raise SystemExit(f"REFUSED: {out} exists (never overwrite an index)")
-    common = ["--as-of", ASOF, "--registry", f"{data}/registry", "--store", f"{data}/store", "--work", f"{data}/work",
+    common = ["--as-of", as_of, "--registry", f"{data}/registry", "--store", f"{data}/store", "--work", f"{data}/work",
               "--policy", "year-all+minor", *recipe]
     ld = f"{data}/logs/chunks-{name}"
     os.makedirs(ld, exist_ok=True)
     os.makedirs(f"{data}/ix", exist_ok=True)
     roots = [l.strip() for l in open(pkgs) if l.strip()]
-    pinned = [l.strip() for l in open(pins) if l.strip()]
+    pinned = [l.strip() for l in open(opts.get("--build-pins", pins)) if l.strip()]
     n = max(1, (len(pinned) + chunk - 1) // chunk)
     chunks = []
     for i in range(n):  # round-robin: one package's versions spread over chunks, so no chunk is all one big family
