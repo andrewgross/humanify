@@ -186,6 +186,8 @@ terser_carriers_own = 0.1
 terser_factory_majority = 0.0
 # When the bundle reads the terser-built slices: a family every index seed of which is terser-made, holding under this share of the smallest index module any of them sits in, is no seed (exp139; 0 = off).
 terser_thin = 0.0
+# When the bundle reads the terser-built slices: a terser-made index seed stands only when the bundle anchors its family (a declared or banner seed, or an index seed the chosen slice makes on its own on a unit no other family scores); `statements` applies it to top-level and lazy-module statements, `all` to cut factory bodies too (exp141; off = never).
+terser_anchor = "off"
 
 [unpack]
 # Force the bundler verdict.

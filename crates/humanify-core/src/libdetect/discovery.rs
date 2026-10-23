@@ -180,6 +180,42 @@ impl HelperPrints {
     }
 }
 
+/// Which terser-made index seeds need an anchor (exp141,
+/// [`DiscoveryOptions::terser_anchor`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerserAnchor {
+    /// No anchor needed (the default).
+    Off,
+    /// A terser-made seed on a statement-scope unit (a top-level statement
+    /// or a lazy module's body statement) needs its family anchored.
+    Statements,
+    /// Every terser-made seed needs its family anchored, cut CommonJS
+    /// factory bodies included.
+    All,
+}
+
+impl TerserAnchor {
+    /// The config spellings, in this order.
+    pub const NAMES: [&'static str; 3] = ["off", "statements", "all"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            TerserAnchor::Off => "off",
+            TerserAnchor::Statements => "statements",
+            TerserAnchor::All => "all",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<TerserAnchor> {
+        match text {
+            "off" => Some(TerserAnchor::Off),
+            "statements" => Some(TerserAnchor::Statements),
+            "all" => Some(TerserAnchor::All),
+            _ => None,
+        }
+    }
+}
+
 /// The tunables (design §5): the content floor a DOWN-CLASS start needs,
 /// the largest region queued for an index lookup, and what may support a
 /// seed against the isolation veto.
@@ -336,6 +372,21 @@ pub struct DiscoveryOptions {
     /// a few statements of a much bigger file the bundle does not otherwise
     /// show (a carrier's copy of another package's parser).
     pub terser_thin: f64,
+    /// The terser anchor (exp141; off by default; read only when the bundle
+    /// reads the terser-built slices): a seed the terser slices made (its
+    /// family scores the unit higher over every slice read than over the
+    /// chosen slice alone) stands only when the bundle ANCHORS its family —
+    /// a declared or banner seed, or an index seed the chosen slice makes
+    /// on its own on a unit no other family scores (code of the family's
+    /// own; a unit another family also holds is the copied code itself).
+    /// The terser slices are a second reading of code the
+    /// bundle's own slice already places; a family only they see is most
+    /// often the carrier or the origin of a copy another package ships
+    /// (a vendored file, a fork, a pre-bundled dist). `Statements` applies
+    /// it where no module frame bounds a copy (top-level and lazy-module
+    /// statements); `All` to cut factory bodies too. Dropped seeds are
+    /// claimed by no one (the presence fence holds them).
+    pub terser_anchor: TerserAnchor,
     /// Cut bundled CommonJS modules into their body statements (exp128;
     /// default off): each statement of a factory body is a unit with its
     /// own prints, judged and propagated as a lazy module's body is, the
@@ -407,6 +458,7 @@ impl Default for DiscoveryOptions {
             terser_carriers_own: 0.0,
             terser_factory_majority: 0.0,
             terser_thin: 0.0,
+            terser_anchor: TerserAnchor::Off,
         }
     }
 }
@@ -1847,6 +1899,7 @@ fn presence(
         && options.terser_carriers <= 0.0
         && options.terser_factory_majority <= 0.0
         && options.terser_thin <= 0.0
+        && options.terser_anchor == TerserAnchor::Off
     {
         return seeds;
     }
@@ -1916,7 +1969,8 @@ fn presence(
     if containment.reads_terser()
         && (options.terser_carriers > 0.0
             || options.terser_factory_majority > 0.0
-            || options.terser_thin > 0.0)
+            || options.terser_thin > 0.0
+            || options.terser_anchor != TerserAnchor::Off)
     {
         terser_presence(
             graph,
@@ -2128,6 +2182,9 @@ fn terser_presence(
             &mut verdicts,
         );
     }
+    if options.terser_anchor != TerserAnchor::Off {
+        terser_anchor_verdicts(graph, keep, keys, &seeds, declared, options, &mut verdicts);
+    }
     let mut done: BTreeSet<usize> = BTreeSet::new();
     for (slot, owner) in verdicts {
         if !done.insert(slot) {
@@ -2180,6 +2237,44 @@ fn terser_majority_verdicts(
             .range((m, 0)..=(m, usize::MAX))
             .any(|(&(_, j), &b)| j != k && b as f64 >= options.terser_factory_majority * mine);
         if outweighed {
+            verdicts.push((t.slot, None));
+        }
+    }
+}
+
+/// [`DiscoveryOptions::terser_anchor`]'s verdicts (see [`terser_presence`]):
+/// a terser-made seed in the anchor's scope whose family the bundle does
+/// not anchor (no declared or banner seed, no index seed the chosen slice
+/// makes on its own that no other family scores) is dropped.
+fn terser_anchor_verdicts(
+    graph: &ReferenceGraph,
+    keep: &[Option<Seed>],
+    keys: &[usize],
+    seeds: &[TerserSeed],
+    declared: &BTreeSet<usize>,
+    options: DiscoveryOptions,
+    verdicts: &mut Vec<(usize, Option<u32>)>,
+) {
+    // An anchor is code of the family's OWN: a chosen-slice seed no other
+    // family scores (a statement another family also holds is the copied
+    // code itself).
+    let anchored: BTreeSet<usize> = seeds
+        .iter()
+        .filter(|t| !t.gained && t.scores.keys().all(|&f| f == keys[t.slot]))
+        .map(|t| keys[t.slot])
+        .chain(declared.iter().copied())
+        .collect();
+    let in_scope = |u: u32| match graph.units[u as usize].kind {
+        UnitKind::FactoryBody { .. } | UnitKind::Factory => {
+            options.terser_anchor == TerserAnchor::All
+        }
+        _ => true,
+    };
+    for t in seeds.iter().filter(|t| t.gained) {
+        let Some(s) = keep[t.slot].as_ref() else {
+            continue;
+        };
+        if in_scope(s.unit) && !anchored.contains(&keys[t.slot]) {
             verdicts.push((t.slot, None));
         }
     }

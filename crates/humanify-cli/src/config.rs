@@ -350,6 +350,7 @@ impl Library {
             terser_carriers_own: d.terser_carriers_own,
             terser_factory_majority: d.terser_factory_majority,
             terser_thin: d.terser_thin,
+            terser_anchor: d.terser_anchor,
         }
     }
 
@@ -460,6 +461,8 @@ pub struct LibraryDiscovery {
     pub terser_carriers_own: f64,
     pub terser_factory_majority: f64,
     pub terser_thin: f64,
+    #[serde(serialize_with = "serialize_terser_anchor")]
+    pub terser_anchor: humanify_core::libdetect::discovery::TerserAnchor,
     pub factory_banner_index: bool,
 }
 
@@ -472,6 +475,13 @@ fn serialize_banner_names<S: serde::Serializer>(
 
 fn serialize_helper_prints<S: serde::Serializer>(
     v: &humanify_core::libdetect::discovery::HelperPrints,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    s.serialize_str(v.name())
+}
+
+fn serialize_terser_anchor<S: serde::Serializer>(
+    v: &humanify_core::libdetect::discovery::TerserAnchor,
     s: S,
 ) -> Result<S::Ok, S::Error> {
     s.serialize_str(v.name())
@@ -684,6 +694,11 @@ fn library_of(r: &Resolved) -> Library {
             terser_carriers_own: r.float("library.discovery.terser_carriers_own"),
             terser_factory_majority: r.float("library.discovery.terser_factory_majority"),
             terser_thin: r.float("library.discovery.terser_thin"),
+            terser_anchor: r
+                .text("library.discovery.terser_anchor")
+                .as_deref()
+                .and_then(humanify_core::libdetect::discovery::TerserAnchor::parse)
+                .unwrap_or(humanify_core::libdetect::discovery::TerserAnchor::Off),
         },
     }
 }

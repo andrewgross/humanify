@@ -86,6 +86,11 @@ fn helper_prints_choices() -> Vec<String> {
         .map(String::from)
         .to_vec()
 }
+fn terser_anchor_choices() -> Vec<String> {
+    humanify_core::libdetect::discovery::TerserAnchor::NAMES
+        .map(String::from)
+        .to_vec()
+}
 fn banner_names() -> Vec<String> {
     ["any", "known"].map(String::from).to_vec()
 }
@@ -938,6 +943,19 @@ pub static KEYS: &[Key] = &[
         doc: "When the bundle reads the terser-built slices: a family every index seed of which is \
               terser-made, holding under this share of the smallest index module any of them sits \
               in, is no seed (exp139; 0 = off).",
+    },
+    Key {
+        section: "library.discovery",
+        name: "terser_anchor",
+        kind: Kind::Choice(terser_anchor_choices),
+        flag: None,
+        default: || text(discovery().terser_anchor.name()),
+        unset: "",
+        doc: "When the bundle reads the terser-built slices: a terser-made index seed stands only \
+              when the bundle anchors its family (a declared or banner seed, or an index seed the \
+              chosen slice makes on its own on a unit no other family scores); `statements` applies \
+              it to top-level and lazy-module statements, `all` to cut factory bodies too (exp141; \
+              off = never).",
     },
     // [unpack]
     Key {

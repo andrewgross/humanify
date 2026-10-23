@@ -1920,3 +1920,82 @@ fn terser_payload_literal_takes_no_backing_from_a_long_string_another_family_als
     let (_, _, rows) = run_indexed_with(code, &chosen, both, unique);
     assert_eq!(claim_of(&rows, "var blob"), Some(("P".into(), Rule::Down)));
 }
+
+// ---- exp141 terser anchor ---------------------------------------------------
+
+use crate::libdetect::discovery::TerserAnchor;
+
+#[test]
+fn terser_anchor_drops_terser_made_statement_seeds_of_a_family_the_chosen_slice_never_sees() {
+    // C's only seeds, lib and dep, are the terser slices' doing: the bundle's
+    // own slice sees nothing of C (a copy another package's dist carries).
+    let held = [
+        Held::whole("var lib", "C").terser(),
+        Held::whole("var dep", "C").terser(),
+    ];
+    let off = DiscoveryOptions::default();
+    let rows = run_indexed_with(CARRIED, &held, vec![], off).2;
+    assert_eq!(claim_of(&rows, "var lib"), Some(("C".into(), Rule::Seed)));
+    let stmts = DiscoveryOptions {
+        terser_anchor: TerserAnchor::Statements,
+        ..off
+    };
+    let rows = run_indexed_with(CARRIED, &held, vec![], stmts).2;
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+    // C anchored by a statement the chosen slice holds: its terser-made
+    // seeds stand.
+    let anchored = [
+        Held::whole("var lib", "C").terser(),
+        Held::whole("var dep", "C").terser(),
+        Held::whole("var own", "C"),
+    ];
+    let rows = run_indexed_with(CARRIED, &anchored, vec![], stmts).2;
+    assert_eq!(claim_of(&rows, "var lib"), Some(("C".into(), Rule::Seed)));
+    assert_eq!(claim_of(&rows, "var dep"), Some(("C".into(), Rule::Seed)));
+    // Seeds from the chosen slice are not the terser slices' doing.
+    let chosen = [Held::whole("var lib", "C"), Held::whole("var dep", "C")];
+    let rows = run_indexed_with(CARRIED, &chosen, vec![], stmts).2;
+    assert_eq!(claim_of(&rows, "var lib"), Some(("C".into(), Rule::Seed)));
+    // A chosen-slice statement another family holds too is no anchor: it is
+    // the copied code itself, not code of C's own.
+    let shared = [
+        Held::whole("var lib", "C").terser(),
+        Held::whole("var dep", "C").terser(),
+        Held::whole("var own", "C"),
+        Held::whole("var own", "H"),
+    ];
+    let rows = run_indexed_with(CARRIED, &shared, vec![], stmts).2;
+    assert_eq!(claim_of(&rows, "var lib"), None);
+    assert_eq!(claim_of(&rows, "var dep"), None);
+}
+
+#[test]
+fn terser_anchor_statements_leaves_factory_seeds_and_all_reaches_them() {
+    // Inside bundled module F, fmt and cut only R's terser rows hold; R has
+    // no chosen-slice seed anywhere.
+    let held = [
+        Held::whole("var main", "P"),
+        Held::whole("var fmt", "R").terser(),
+        Held::whole("var cut", "R").terser(),
+    ];
+    let cut = DiscoveryOptions {
+        factory_bodies: true,
+        presence_fence: true,
+        ..DiscoveryOptions::default()
+    };
+    let run = |o| run_indexed_factories(MAJORITY, true, &held, vec![], o).2;
+    let stmts = run(DiscoveryOptions {
+        terser_anchor: TerserAnchor::Statements,
+        ..cut
+    });
+    assert_eq!(claim_of(&stmts, "var fmt"), Some(("R".into(), Rule::Seed)));
+    let all = run(DiscoveryOptions {
+        terser_anchor: TerserAnchor::All,
+        ..cut
+    });
+    assert_eq!(claim_of(&all, "var fmt"), None);
+    assert_eq!(claim_of(&all, "var cut"), None);
+    // P's chosen-slice seed is no terser seed: untouched.
+    assert_eq!(claim_of(&all, "var main"), claim_of(&run(cut), "var main"));
+}

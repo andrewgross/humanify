@@ -503,3 +503,32 @@ fn the_exp139_terser_presence_keys_default_off_and_set_from_the_file() {
     assert_eq!(o.terser_thin, 0.05);
     assert!(o.terser_payload_literal);
 }
+
+/// exp141: `terser_anchor` (off | statements | all): off by default, set
+/// from the file, an unknown choice refused.
+#[test]
+fn the_exp141_terser_anchor_key_defaults_off_and_sets_from_the_file() {
+    use humanify_core::libdetect::discovery::TerserAnchor;
+    let d = build(&["in.js"], "").unwrap().library.discovery_options();
+    assert_eq!(d.terser_anchor, TerserAnchor::Off);
+    for (text, want) in [
+        ("off", TerserAnchor::Off),
+        ("statements", TerserAnchor::Statements),
+        ("all", TerserAnchor::All),
+    ] {
+        let o = build(
+            &["in.js"],
+            &format!("[library.discovery]\nterser_anchor = \"{text}\"\n"),
+        )
+        .unwrap()
+        .library
+        .discovery_options();
+        assert_eq!(o.terser_anchor, want);
+    }
+    let err = ConfigFile::check(
+        "cfg.toml",
+        "[library.discovery]\nterser_anchor = \"some\"\n",
+    )
+    .expect_err("an unknown choice is refused");
+    assert!(err.iter().any(|e| e.contains("terser_anchor")), "{err:?}");
+}
