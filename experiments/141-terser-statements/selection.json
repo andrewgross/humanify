@@ -1,0 +1,511 @@
+{
+  "seed": 141,
+  "pool": 1304,
+  "perKind": 24,
+  "apps": [
+    {
+      "id": "cli:ultracite",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:@electron/rebuild",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:svgicons2svgfont",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 20200
+    },
+    {
+      "id": "cli:cmake-js",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:sonarqube-scanner",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 68211
+    },
+    {
+      "id": "cli:@alcalzone/release-script",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:grunt-cli",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:@astrojs/language-server",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:metalsmith",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 42502
+    },
+    {
+      "id": "cli:prettier-eslint-cli",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 109871
+    },
+    {
+      "id": "cli:f2elint",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 2,
+      "swapBytes": 106814
+    },
+    {
+      "id": "cli:typescript-json-schema",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:microbundle-crl",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 245088
+    },
+    {
+      "id": "cli:tap-min",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:yosay",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:conventional-github-releaser",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 73234
+    },
+    {
+      "id": "cli:babel-watch",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:metro-inspector-proxy",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:n8n-core",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:electron-vite",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "cli:yeoman-environment",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 27968
+    },
+    {
+      "id": "cli:gatsby",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 446267
+    },
+    {
+      "id": "cli:svg2ttf",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 73234
+    },
+    {
+      "id": "cli:yeoman-doctor",
+      "kind": "cli",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "electron:gh-pedr0fontoura__gtav-audio-occlusion",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 101489
+    },
+    {
+      "id": "electron:gh-iimeta__iim-web",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 4,
+      "swapBytes": 512838
+    },
+    {
+      "id": "electron:gh-ploxc__modbux",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 6,
+      "swapBytes": 196696
+    },
+    {
+      "id": "electron:gh-inulute__simplexity-ai-app",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 17200
+    },
+    {
+      "id": "electron:gh-nathanlesage__local-chat",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 308901
+    },
+    {
+      "id": "electron:gh-dznass-cmd__radarrss",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 613271
+    },
+    {
+      "id": "electron:gh-rn0x__altaqwaa-desktop",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "electron:gh-guasam__electron-react-app",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 4,
+      "swapBytes": 27754
+    },
+    {
+      "id": "electron:gh-loranallensmith__brightwheel",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 83273
+    },
+    {
+      "id": "electron:gh-antropos17__aegis",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 276116
+    },
+    {
+      "id": "electron:gh-wangrongding__wallpaper-box",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 10,
+      "swapBytes": 810638
+    },
+    {
+      "id": "electron:gh-tahnik__electron-react",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 77168
+    },
+    {
+      "id": "electron:gh-sindresorhus__electron-reloader",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "electron:gh-qufei1993__dsh-desktop",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 43644
+    },
+    {
+      "id": "electron:gh-sanjevirau__gsubs",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 4,
+      "swapBytes": 180687
+    },
+    {
+      "id": "electron:gh-tomkp__card-spy",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 605104
+    },
+    {
+      "id": "electron:gh-soulehshaikh99__create-svelte-electron-app",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 2,
+      "swapBytes": 1124
+    },
+    {
+      "id": "electron:gh-onmyway133__pushnotifications",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 1894
+    },
+    {
+      "id": "electron:gh-aivis-project__aivisspeech",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 9,
+      "swapBytes": 178417
+    },
+    {
+      "id": "electron:gh-cerzi__videoswarm",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 17085
+    },
+    {
+      "id": "electron:gh-alexkim205__g-desktop-suite",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 62738
+    },
+    {
+      "id": "electron:gh-japdl__japdl",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 19157
+    },
+    {
+      "id": "electron:gh-alexishida__moji",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 8,
+      "swapBytes": 1079739
+    },
+    {
+      "id": "electron:gh-klotzbrocken__reframe",
+      "kind": "electron",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 43644
+    },
+    {
+      "id": "vscode:gh-yukaii__vscode-ptt",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 17085
+    },
+    {
+      "id": "vscode:gh-wx-minapp__minapp-vscode",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 32013
+    },
+    {
+      "id": "vscode:gh-sthamann__nyx-local-ai",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 2,
+      "swapBytes": 334103
+    },
+    {
+      "id": "vscode:gh-qcz__vscode-text-power-tools",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 32013
+    },
+    {
+      "id": "vscode:gh-raathigesh__waypoint",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 18,
+      "swapBytes": 833981
+    },
+    {
+      "id": "vscode:gh-n2ns__antigravity-panel",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-geriyoco__vscode-image-gallery",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 98544
+    },
+    {
+      "id": "vscode:gh-zokugun__vscode-explicit-folding",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-stylelint__vscode-stylelint",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 2,
+      "swapBytes": 246180
+    },
+    {
+      "id": "vscode:gh-pajoma__vscode-journal",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 1783
+    },
+    {
+      "id": "vscode:gh-vadimcn__codelldb",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 199369
+    },
+    {
+      "id": "vscode:gh-harrydowning__vscode-yaml-embedded-languages",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-kenhowardpdx__vscode-gist",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-bourhaouta__vscode-tailwindshades",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 64322
+    },
+    {
+      "id": "vscode:gh-supabase-community__supabase-vscode-extension",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 173458
+    },
+    {
+      "id": "vscode:gh-arrterian__nix-env-selector",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-microsoft__vscode-js-debug",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 18221
+    },
+    {
+      "id": "vscode:gh-mattbierner__vscode-docs-view",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 4,
+      "swapBytes": 317413
+    },
+    {
+      "id": "vscode:gh-bmewburn__vscode-intelephense",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-alefragnani__vscode-project-manager",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 1,
+      "swapBytes": 17085
+    },
+    {
+      "id": "vscode:gh-kokororin__vscode-phpfmt",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-andreafrederica__andrea-novel-helper",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 3,
+      "swapBytes": 253275
+    },
+    {
+      "id": "vscode:gh-mblode__vscode-zotero",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 0,
+      "swapBytes": 0
+    },
+    {
+      "id": "vscode:gh-kejunmao__vscode-devtoys",
+      "kind": "vscode",
+      "stratum": "random",
+      "swaps": 5,
+      "swapBytes": 399338
+    }
+  ]
+}
