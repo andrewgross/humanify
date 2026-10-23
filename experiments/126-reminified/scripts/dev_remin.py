@@ -8,8 +8,12 @@ population, drawn from exp108's TRAINING apps (never held-out, never test or tes
 usage: python3 -I dev_remin.py plan               -> $DATA/plan.json
        python3 -I dev_remin.py build [--jobs N]   -> $DATA/apps/<slug>/ (exp108's lock, `npm ci`),
                                                     $DATA/build/{stage1,terser,esbuild}/<slug>/ (remin-build.mjs)
+       python3 -I dev_remin.py replace            a failed app's replacement (same kind, the seed's generator
+                                                continued), appended to plan.json; then `build` again
        <exp095 venv python> -I dev_remin.py freeze [--jobs N]
                                                 -> $DATA/frozen/, corpus-remin.json, origins-remin.json
+       ... --corpus remin2                      exp140's JUDGE corpus `remin2` (seed 140, DATA /work/exp140-data/remin2,
+                                                no app of any other corpus); every verb takes it
 
 Selection: RANDOM_PER_KIND apps of each kind (cli, electron, vscode) at random (SEED) from the training apps
 whose closure is OK and whose library closure is at most MAX_LIB bytes. Two sets, one per second minifier:
@@ -23,11 +27,19 @@ wrangler-min). Truth: the final source map (maps composed), exactly as exp096's 
 import json
 import os
 import random
+import re
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-DATA = "/work/exp126-data/remin"
+# one builder, two corpora: exp126's dev corpus `remin` and exp140's JUDGE `remin2` (`--corpus remin2`: another
+# seed, and none of remin's apps nor any app of another corpus; private exactly as test2)
+CORPORA = {
+    "remin": {"data": "/work/exp126-data/remin", "seed": 126},
+    "remin2": {"data": "/work/exp140-data/remin2", "seed": 140},
+}
+CORPUS = "remin2" if "--corpus" in sys.argv and sys.argv[sys.argv.index("--corpus") + 1] == "remin2" else "remin"
+DATA = CORPORA[CORPUS]["data"]
 os.environ["SEL"] = DATA
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "../../.."))
@@ -42,8 +54,12 @@ TEST_SELECTION = os.path.join(REPO, "experiments/100-test-split/selection.json")
 HELDOUT = "/work/exp095-library-fingerprints/selection/selection.json"
 OTHER_DEV = [os.path.join(REPO, "experiments/096-library-matching-score", f) for f in
              ("corpus-apps.json", "corpus-pop.json")]
+# remin2 also excludes every app of every other corpus manifest (remin's 36 among them), by slug
+OTHER_ALL = [os.path.join(REPO, "experiments/096-library-matching-score", f) for f in
+             ("corpus.json", "corpus-test.json", "corpus-test2.json", "corpus-apps.json", "corpus-pop.json",
+              "corpus-remin.json", "corpus-bundlers.json")]
 BUILD = os.path.join(HERE, "remin-build.mjs")
-SEED = 126
+SEED = CORPORA[CORPUS]["seed"]
 MAX_LIB = 15_000_000
 RANDOM_PER_KIND = 12
 KINDS = ("cli", "electron", "vscode")
@@ -55,6 +71,12 @@ DESC = {
 }
 
 
+NOTE2 = ("exp140 JUDGE corpus of RE-MINIFIED bundles (exp126's recipe, seed 140): exp108 TRAINING apps in none of "
+         "remin, held-out, test, test2, apps, pop or dev, bundled against the packages' published minified entries and "
+         "minified again by terser and by esbuild (experiments/126-reminified/scripts/dev_remin.py --corpus remin2); "
+         "private: never tuned on, never diagnosed")
+
+
 def pool():
     apps = json.load(open(CORPUS108))["apps"]
     test = {c["id"] for c in json.load(open(TEST_SELECTION))["candidates"]}
@@ -63,6 +85,12 @@ def pool():
     for p in OTHER_DEV:
         for e in json.load(open(p))["entries"]:
             other.add(e["id"].split("-", 2)[2])  # <corpus>-<bundler>-<slug>
+    if CORPUS == "remin2":
+        for p in OTHER_ALL:
+            for e in json.load(open(p))["entries"]:
+                m = re.search(r"(cli|electron|vscode)_.*$", e["id"])
+                if m:
+                    other.add(m.group(0))
     out = []
     for a in apps:
         if a["kind"] not in KINDS or a["id"] in test or a["id"] in held:
@@ -91,6 +119,29 @@ def plan():
     os.makedirs(DATA, exist_ok=True)
     json.dump(out, open(DATA + "/plan.json", "w"), indent=1)
     print(f"pool {len(pl)}: {len(chosen)} apps -> {DATA}/plan.json")
+
+
+def replace():
+    """A failed build moves the cut (exp116's rule), never the draw: for each app whose stage 1 failed, one more app
+    of its kind from the rest of the pool, drawn by the SAME seeded generator continued past plan()'s draws (so the
+    original draw and every replacement are fixed by the seed). Appended to plan.json as stratum `replacement`."""
+    p = json.load(open(DATA + "/plan.json"))
+    built = {r["id"]: r for r in json.load(open(DATA + "/built.json"))}
+    pl = pool()
+    rng = random.Random(SEED)
+    for kind in KINDS:
+        rng.sample([a for a in pl if a["kind"] == kind], RANDOM_PER_KIND)  # replay plan()'s draws
+    taken = {a["id"] for a in p["apps"]}
+    for a in list(p["apps"]):
+        r = built.get(a["id"])
+        if r is None or any(r[b] for b in SETS) or any(x.get("replaces") == a["id"] for x in p["apps"]):
+            continue
+        rest = [x for x in pl if x["kind"] == a["kind"] and x["id"] not in taken]
+        new = dict(rng.sample(rest, 1)[0], stratum="replacement", replaces=a["id"])
+        taken.add(new["id"])
+        p["apps"].append(new)
+        print(f"{a['id']} failed -> replacement {new['id']}")
+    json.dump(p, open(DATA + "/plan.json", "w"), indent=1)
 
 
 def install(a):
@@ -149,15 +200,15 @@ def do_build(jobs):
 def do_freeze(jobs):
     import importlib.util
     import multiprocessing
-    lib096.use("remin")
+    lib096.use(CORPUS)
     spec = importlib.util.spec_from_file_location("corpus096", os.path.join(lib096.HERE, "corpus.py"))
     corpus = importlib.util.module_from_spec(spec)
     sys.modules["corpus096"] = corpus
     spec.loader.exec_module(corpus)
     p = json.load(open(DATA + "/plan.json"))
     built = {r["id"]: r for r in json.load(open(DATA + "/built.json"))}
-    manifest = {"schema": "exp096-corpus/1", "corpus": "remin", "frozen": True,
-                "note": "exp126 DEV corpus of RE-MINIFIED bundles: exp108 TRAINING apps (never held-out, test, "
+    manifest = {"schema": "exp096-corpus/1", "corpus": CORPUS, "frozen": True,
+                "note": NOTE2 if CORPUS == "remin2" else "exp126 DEV corpus of RE-MINIFIED bundles: exp108 TRAINING apps (never held-out, test, "
                         "test2, apps or pop), bundled against the packages' published minified entries and "
                         "minified again by terser and by esbuild (experiments/126-reminified/scripts/dev_remin.py)",
                 "entries": []}
@@ -168,9 +219,9 @@ def do_freeze(jobs):
                 continue
             js = f"{DATA}/build/{b}/{a['slug']}/entry.js"
             app = a["name"] if a["kind"] == "cli" else "-"
-            entry = {"id": f"remin-{b}-{a['slug']}", "set": f"remin-{b}", "bundler": "esbuild", "builtWith": "esbuild", "minifier": b,
+            entry = {"id": f"{CORPUS}-{b}-{a['slug']}", "set": f"{CORPUS}-{b}", "bundler": "esbuild", "builtWith": "esbuild", "minifier": b,
                      "appPackage": app, "kind": a["kind"], "stratum": a["stratum"],
-                     "description": f"exp126 dev app {a['id']}: {DESC[b]}"}
+                     "description": f"{'exp140 judge' if CORPUS == 'remin2' else 'exp126 dev'} app {a['id']}: {DESC[b]}"}
             d = os.path.join(lib096.DATA, "corpus", entry["id"])
             os.makedirs(d, exist_ok=True)
             entry["files"] = {}
@@ -194,7 +245,8 @@ def do_freeze(jobs):
 def main():
     a = sys.argv[1:]
     jobs = int(a[a.index("--jobs") + 1]) if "--jobs" in a else 6
-    {"plan": lambda: plan(), "build": lambda: do_build(jobs), "freeze": lambda: do_freeze(jobs)}[a[0]]()
+    {"plan": lambda: plan(), "build": lambda: do_build(jobs), "freeze": lambda: do_freeze(jobs),
+     "replace": lambda: replace()}[a[0]]()
 
 
 if __name__ == "__main__":
