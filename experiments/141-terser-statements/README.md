@@ -2,6 +2,12 @@
 
 ## STATUS (2026-10-23)
 
+**JUDGED ON remin2 (once, summaries only, label `remin2-exp141-x`, commit `b3c9e0876`): FAILS.** remin2-terser P
+main 99.712 -> candidate 99.562 (exp139 combo 99.518), F0.5 50.18 -> 78.28; statement scope P 98.148 -> 97.110
+(40.5 -> 156.0 KB wrong), factory scope 99.937 -> 99.908; app claimed 0; remin2-esbuild byte-identical (P 99.499).
+The anchor rule fixed remin3's statement-scope copies but not remin2's: two dev corpora did not predict the judge.
+Do not flip; do not re-judge a variant of this rule on remin2.
+
 DONE on branch `exp141-terser-statements` (off main `673c72cc0`, exp139's branch merged in). One new default-off key,
 `[library.discovery] terser_anchor = off | statements | all`, and one new DEV corpus, `remin3`. **Not merged. No
 default flipped. remin2 / test / test2 were not scored** (the coordinator decides on spending one remin2 look).
