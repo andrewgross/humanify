@@ -1,0 +1,208 @@
+{
+  "apps-esbuild": {
+    "held": {
+      "fn-held": 4367.3,
+      "no-prints": 0.1,
+      "unheld": 2932.5,
+      "whole-held": 12743.1
+    },
+    "not-chosen": {
+      "fn-held": 5047.3,
+      "unheld": 1950.5,
+      "whole-held": 118.8
+    }
+  },
+  "apps-rollup": {
+    "held": {
+      "fn-held": 2132.7,
+      "no-prints": 0.2,
+      "unheld": 5141.5,
+      "whole-held": 1417.8
+    },
+    "not-chosen": {
+      "fn-held": 3891.1,
+      "unheld": 1275.3,
+      "whole-held": 76.6
+    }
+  },
+  "apps-webpack": {
+    "held": {
+      "fn-held": 3973.8,
+      "no-prints": 10.4,
+      "unheld": 1719.5,
+      "whole-held": 4232.4
+    },
+    "not-chosen": {
+      "fn-held": 3805.5,
+      "no-prints": 0.1,
+      "unheld": 607.4,
+      "whole-held": 66.8
+    }
+  },
+  "dev-rollup": {
+    "held": {
+      "fn-held": 48.8,
+      "no-prints": 0.1,
+      "unheld": 95.7,
+      "whole-held": 325.4
+    }
+  },
+  "dev-webpack": {
+    "held": {
+      "fn-held": 51.4,
+      "no-prints": 6.8,
+      "unheld": 328.7,
+      "whole-held": 275.8
+    }
+  },
+  "esbuild-app": {
+    "held": {
+      "fn-held": 1982.6,
+      "unheld": 364.2,
+      "whole-held": 1075.9
+    },
+    "not-chosen": {
+      "fn-held": 95.0,
+      "unheld": 159.7,
+      "whole-held": 9.8
+    }
+  },
+  "heldout": {
+    "after-asof": {
+      "fn-held": 10.5,
+      "unheld": 1.6,
+      "whole-held": 1.0
+    },
+    "held": {
+      "fn-held": 3283.9,
+      "unheld": 17233.7,
+      "whole-held": 15848.0
+    },
+    "not-chosen": {
+      "fn-held": 2558.8,
+      "unheld": 3451.7,
+      "whole-held": 162.3
+    }
+  },
+  "pop-bun": {
+    "after-asof": {
+      "fn-held": 1101.5,
+      "unheld": 2723.9,
+      "whole-held": 864.5
+    },
+    "held": {
+      "fn-held": 13155.8,
+      "unheld": 11628.4,
+      "whole-held": 19960.8
+    },
+    "not-chosen": {
+      "fn-held": 11077.4,
+      "unheld": 2445.5,
+      "whole-held": 279.3
+    }
+  },
+  "pop-esbuild": {
+    "after-asof": {
+      "fn-held": 1603.1,
+      "unheld": 2891.1,
+      "whole-held": 678.5
+    },
+    "held": {
+      "fn-held": 13797.6,
+      "no-prints": 0.1,
+      "unheld": 10538.7,
+      "whole-held": 16580.4
+    },
+    "not-chosen": {
+      "fn-held": 9811.0,
+      "unheld": 1851.5,
+      "whole-held": 295.1
+    }
+  },
+  "remin-esbuild": {
+    "after-asof": {
+      "fn-held": 2403.4,
+      "unheld": 2438.0,
+      "whole-held": 663.0
+    },
+    "held": {
+      "fn-held": 13844.8,
+      "no-prints": 0.3,
+      "unheld": 13374.6,
+      "whole-held": 5416.2
+    },
+    "not-chosen": {
+      "fn-held": 3456.8,
+      "unheld": 3434.9,
+      "whole-held": 202.6
+    }
+  },
+  "remin-terser": {
+    "after-asof": {
+      "fn-held": 2569.8,
+      "unheld": 4309.4,
+      "whole-held": 140.6
+    },
+    "held": {
+      "fn-held": 24749.7,
+      "no-prints": 0.2,
+      "unheld": 28674.3,
+      "whole-held": 2366.2
+    },
+    "not-chosen": {
+      "fn-held": 3701.7,
+      "unheld": 4314.1,
+      "whole-held": 172.2
+    }
+  },
+  "remin3-esbuild": {
+    "after-asof": {
+      "fn-held": 3038.6,
+      "unheld": 4792.6,
+      "whole-held": 1024.9
+    },
+    "held": {
+      "fn-held": 27224.8,
+      "no-prints": 0.4,
+      "unheld": 31448.5,
+      "whole-held": 11793.9
+    },
+    "not-chosen": {
+      "fn-held": 3770.0,
+      "no-prints": 1.0,
+      "unheld": 4238.4,
+      "whole-held": 312.0
+    }
+  },
+  "remin3-terser": {
+    "after-asof": {
+      "fn-held": 3645.9,
+      "unheld": 7340.1,
+      "whole-held": 228.3
+    },
+    "held": {
+      "fn-held": 54023.5,
+      "no-prints": 0.6,
+      "unheld": 64041.2,
+      "whole-held": 4255.6
+    },
+    "not-chosen": {
+      "fn-held": 4160.6,
+      "no-prints": 1.2,
+      "unheld": 6314.6,
+      "whole-held": 170.2
+    }
+  },
+  "wrangler": {
+    "held": {
+      "fn-held": 306.1,
+      "unheld": 538.5,
+      "whole-held": 64.3
+    },
+    "not-chosen": {
+      "fn-held": 35.3,
+      "unheld": 106.1,
+      "whole-held": 1.3
+    }
+  }
+}
