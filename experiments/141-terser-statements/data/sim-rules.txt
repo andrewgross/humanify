@@ -1,0 +1,22 @@
+# remin3 remin3-exp141-both remin3-terser: P 99.670 R 50.30 F0.5 83.317 wrong 293.5 KB app 25.5 KB  params {'nodes': 0, 'share': 0.5, 'own': 0.1, 'units': 16.0}
+anchor              half0: -R  3706.9 -W  115.1 P 99.738 F0.5 85.14  half1: -R  3497.7 -W   23.1 P 99.869 F0.5 77.03  all: -R  7204.6 -W  138.2 P 99.798 F0.5 81.21
+anchor_stmt         half0: -R   584.4 -W   57.4 P 99.642 F0.5 86.76  half1: -R   597.7 -W   21.9 P 99.875 F0.5 79.03  all: -R  1182.1 -W   79.3 P 99.749 F0.5 83.02
+anchor_excl         half0: -R  3905.9 -W  181.1 P 99.873 F0.5 85.11  half1: -R  4457.5 -W   23.5 P 99.866 F0.5 76.33  all: -R  8363.3 -W  204.6 P 99.870 F0.5 80.88
+anchor_excl_stmt    half0: -R   584.4 -W   57.4 P 99.642 F0.5 86.76  half1: -R   867.7 -W   22.3 P 99.875 F0.5 78.85  all: -R  1452.1 -W   79.7 P 99.749 F0.5 82.94
+anchor_contested    half0: -R  1485.0 -W  103.5 P 99.726 F0.5 86.34  half1: -R  1552.0 -W   17.6 P 99.862 F0.5 78.39  all: -R  3037.0 -W  121.1 P 99.788 F0.5 82.49
+hidden_host         half0: -R   281.3 -W   52.3 P 99.634 F0.5 86.91  half1: -R   263.5 -W   14.3 P 99.858 F0.5 79.25  all: -R   544.8 -W   66.6 P 99.737 F0.5 83.20
+stmt_off            half0: -R  5499.7 -W   70.3 P 99.632 F0.5 84.05  half1: -R  5331.3 -W   34.7 P 99.892 F0.5 75.68  all: -R 10831.0 -W  105.0 P 99.750 F0.5 80.00
+fn_only             half0: -R 17333.3 -W  137.7 P 99.699 F0.5 75.67  half1: -R 16804.5 -W   22.2 P 99.802 F0.5 65.01  all: -R 34137.9 -W  159.9 P 99.745 F0.5 70.54
+gained_share        half0: -R 31563.1 -W  209.2 P 99.839 F0.5 59.41  half1: -R 31247.3 -W   43.8 P 99.749 F0.5 42.65  all: -R 62810.4 -W  253.0 P 99.804 F0.5 51.46
+few_units           half0: -R  6817.2 -W  168.5 P 99.837 F0.5 83.37  half1: -R  6495.8 -W   32.6 P 99.883 F0.5 74.77  all: -R 13313.0 -W  201.1 P 99.858 F0.5 79.21
+# remin remin-exp139-both remin-terser: P 99.917 R 53.16 F0.5 84.968 wrong 40.3 KB app 0.0 KB  params {'nodes': 0, 'share': 0.5, 'own': 0.1, 'units': 16.0}
+anchor              half0: -R  1482.8 -W   17.7 P 99.980 F0.5 87.10  half1: -R  1333.2 -W    0.8 P 99.921 F0.5 79.44  all: -R  2816.1 -W   18.5 P 99.952 F0.5 83.34
+anchor_stmt         half0: -R   129.8 -W    0.0 P 99.912 F0.5 88.48  half1: -R    86.2 -W    0.8 P 99.925 F0.5 81.07  all: -R   216.0 -W    0.8 P 99.918 F0.5 84.85
+anchor_excl         half0: -R  1612.6 -W   17.7 P 99.980 F0.5 86.96  half1: -R  1424.7 -W    2.5 P 99.928 F0.5 79.31  all: -R  3037.2 -W   20.2 P 99.956 F0.5 83.21
+anchor_excl_stmt    half0: -R   189.8 -W    0.0 P 99.912 F0.5 88.42  half1: -R    86.2 -W    0.8 P 99.925 F0.5 81.07  all: -R   276.0 -W    0.8 P 99.918 F0.5 84.81
+anchor_contested    half0: -R   532.2 -W    1.9 P 99.918 F0.5 88.07  half1: -R   596.7 -W    0.5 P 99.922 F0.5 80.41  all: -R  1128.9 -W    2.4 P 99.920 F0.5 84.33
+hidden_host         half0: -R    98.8 -W    0.0 P 99.912 F0.5 88.51  half1: -R   159.4 -W    0.0 P 99.921 F0.5 80.97  all: -R   258.2 -W    0.0 P 99.916 F0.5 84.82
+stmt_off            half0: -R  3731.3 -W    1.0 P 99.902 F0.5 84.45  half1: -R  1524.3 -W    2.8 P 99.929 F0.5 79.18  all: -R  5255.6 -W    3.8 P 99.916 F0.5 81.79
+fn_only             half0: -R  9329.9 -W    1.3 P 99.871 F0.5 76.06  half1: -R  7729.7 -W    6.9 P 99.928 F0.5 68.72  all: -R 17059.6 -W    8.3 P 99.898 F0.5 72.39
+gained_share        half0: -R 16971.8 -W   20.5 P 99.976 F0.5 56.87  half1: -R 13279.4 -W   13.0 P 99.950 F0.5 54.29  all: -R 30251.1 -W   33.5 P 99.963 F0.5 55.51
+few_units           half0: -R  3269.9 -W   20.1 P 99.989 F0.5 85.06  half1: -R  2976.8 -W   11.0 P 99.966 F0.5 77.11  all: -R  6246.7 -W   31.0 P 99.978 F0.5 81.16

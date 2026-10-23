@@ -1,0 +1,28 @@
+{
+  "app-copy": {
+    "factory/prop": 75,
+    "factory/seed": 25892
+  },
+  "carrier-claims-origin": {
+    "factory/prop": 12900,
+    "factory/seed": 40100,
+    "statement/prop": 3810,
+    "statement/seed": 4445
+  },
+  "fork": {
+    "factory/prop": 2995,
+    "factory/seed": 64293
+  },
+  "other": {
+    "factory/prop": 384,
+    "factory/seed": 82,
+    "statement/prop": 24548,
+    "statement/seed": 370
+  },
+  "vendored-in-truth": {
+    "factory/prop": 16077,
+    "factory/seed": 13804,
+    "statement/prop": 18958,
+    "statement/seed": 62379
+  }
+}

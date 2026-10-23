@@ -1,0 +1,18 @@
+{
+  "factory/excl-anchor/A": 25589,
+  "factory/excl-anchor/O": 1446633,
+  "factory/excl-anchor/R": 52137589,
+  "factory/excl-anchor/W": 17321,
+  "factory/no-anchor/O": 26886,
+  "factory/no-anchor/R": 5340627,
+  "factory/no-anchor/W": 57307,
+  "factory/shared-anchor-only/R": 800592,
+  "factory/shared-anchor-only/W": 55381,
+  "statement/excl-anchor/O": 5244,
+  "statement/excl-anchor/R": 6750494,
+  "statement/excl-anchor/W": 259,
+  "statement/no-anchor/O": 21689,
+  "statement/no-anchor/R": 913693,
+  "statement/no-anchor/W": 66842,
+  "statement/shared-anchor-only/R": 30414
+}

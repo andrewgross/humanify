@@ -1,0 +1,12 @@
+# remin3 remin3-exp141-both remin3-terser: P 99.670 R 50.30 F0.5 83.317 wrong 293.5 KB app 25.5 KB  params {'nodes': 0, 'share': 0.5, 'own': 0.1, 'units': 16.0}
+anchor              half0: -R   642.9 -W   57.5 P 99.508 F0.5 86.08  half1: -R   613.2 -W   22.2 P 99.635 F0.5 85.07  all: -R  1256.1 -W   79.7 P 99.571 F0.5 85.58
+anchor_excl         half0: -R   642.9 -W   57.5 P 99.508 F0.5 86.08  half1: -R   871.5 -W   22.6 P 99.625 F0.5 83.80  all: -R  1514.3 -W   80.1 P 99.565 F0.5 84.96
+anchor_contested    half0: -R   426.6 -W   54.7 P 99.480 F0.5 87.03  half1: -R   335.6 -W   16.7 P 99.560 F0.5 86.30  all: -R   762.2 -W   71.4 P 99.520 F0.5 86.67
+hidden_host         half0: -R    69.5 -W   52.3 P 99.472 F0.5 88.53  half1: -R    63.3 -W   14.3 P 99.540 F0.5 87.47  all: -R   132.7 -W   66.6 P 99.506 F0.5 88.00
+few_units           half0: -R  1047.6 -W   69.7 P 99.697 F0.5 84.23  half1: -R  1227.9 -W   24.3 P 99.632 F0.5 81.92  all: -R  2275.5 -W   94.0 P 99.665 F0.5 83.09
+# remin remin-exp139-both remin-terser: P 99.917 R 53.16 F0.5 84.968 wrong 40.3 KB app 0.0 KB  params {'nodes': 0, 'share': 0.5, 'own': 0.1, 'units': 16.0}
+anchor              half0: -R   126.7 -W    0.0 P 99.931 F0.5 95.93  half1: -R    88.4 -W    0.8 P 99.800 F0.5 93.72  all: -R   215.1 -W    0.8 P 99.891 F0.5 95.24
+anchor_excl         half0: -R   186.6 -W    0.0 P 99.930 F0.5 95.60  half1: -R    88.4 -W    0.8 P 99.800 F0.5 93.72  all: -R   275.0 -W    0.8 P 99.890 F0.5 95.01
+anchor_contested    half0: -R    62.7 -W    0.0 P 99.932 F0.5 96.28  half1: -R    65.2 -W    0.5 P 99.786 F0.5 94.01  all: -R   127.9 -W    0.5 P 99.887 F0.5 95.58
+hidden_host         half0: -R     0.0 -W    0.0 P 99.932 F0.5 96.62  half1: -R     0.0 -W    0.0 P 99.768 F0.5 94.82  all: -R     0.0 -W    0.0 P 99.881 F0.5 96.05
+few_units           half0: -R   349.4 -W    0.8 P 99.948 F0.5 94.65  half1: -R   202.9 -W    1.9 P 99.853 F0.5 92.17  all: -R   552.3 -W    2.7 P 99.919 F0.5 93.88

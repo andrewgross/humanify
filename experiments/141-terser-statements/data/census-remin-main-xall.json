@@ -1,0 +1,11 @@
+{
+  "carrier-claims-origin": {
+    "factory/prop": 82,
+    "factory/seed": 669
+  },
+  "other": {
+    "factory/prop": 2052,
+    "factory/seed": 705,
+    "statement/prop": 5704
+  }
+}

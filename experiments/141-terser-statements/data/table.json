@@ -1,0 +1,422 @@
+[
+  {
+    "set": "cc",
+    "main": {
+      "precision": 1.0,
+      "recall": 0.819027,
+      "f05": 0.957678,
+      "wrongFamilyBytes": 0,
+      "namedBytes": 1819438,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 1.0,
+      "recall": 0.819027,
+      "f05": 0.957678,
+      "wrongFamilyBytes": 0,
+      "namedBytes": 1819438,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 1.0,
+      "recall": 0.819027,
+      "f05": 0.957678,
+      "wrongFamilyBytes": 0,
+      "namedBytes": 1819438,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "esbuild-app",
+    "main": {
+      "precision": 0.990779,
+      "recall": 0.747418,
+      "f05": 0.930204,
+      "wrongFamilyBytes": 129367,
+      "namedBytes": 13899654,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.990779,
+      "recall": 0.747418,
+      "f05": 0.930204,
+      "wrongFamilyBytes": 129367,
+      "namedBytes": 13899654,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.990779,
+      "recall": 0.747418,
+      "f05": 0.930204,
+      "wrongFamilyBytes": 129367,
+      "namedBytes": 13899654,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "heldout",
+    "main": {
+      "precision": 0.996356,
+      "recall": 0.685584,
+      "f05": 0.913536,
+      "wrongFamilyBytes": 589514,
+      "namedBytes": 161192397,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.996356,
+      "recall": 0.685584,
+      "f05": 0.913536,
+      "wrongFamilyBytes": 589514,
+      "namedBytes": 161192397,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.996356,
+      "recall": 0.685584,
+      "f05": 0.913536,
+      "wrongFamilyBytes": 589514,
+      "namedBytes": 161192397,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "wrangler",
+    "main": {
+      "precision": 0.99069,
+      "recall": 0.331388,
+      "f05": 0.708697,
+      "wrongFamilyBytes": 5774,
+      "namedBytes": 614396,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.99069,
+      "recall": 0.331388,
+      "f05": 0.708697,
+      "wrongFamilyBytes": 5774,
+      "namedBytes": 614396,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.99069,
+      "recall": 0.331388,
+      "f05": 0.708697,
+      "wrongFamilyBytes": 5774,
+      "namedBytes": 614396,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "apps-esbuild",
+    "main": {
+      "precision": 0.999076,
+      "recall": 0.776495,
+      "f05": 0.944905,
+      "wrongFamilyBytes": 109898,
+      "namedBytes": 118816788,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.999076,
+      "recall": 0.776495,
+      "f05": 0.944905,
+      "wrongFamilyBytes": 109898,
+      "namedBytes": 118816788,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.999076,
+      "recall": 0.776495,
+      "f05": 0.944905,
+      "wrongFamilyBytes": 109898,
+      "namedBytes": 118816788,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "apps-rollup",
+    "main": {
+      "precision": 0.991122,
+      "recall": 0.793091,
+      "f05": 0.943981,
+      "wrongFamilyBytes": 695074,
+      "namedBytes": 77594704,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.991122,
+      "recall": 0.793091,
+      "f05": 0.943981,
+      "wrongFamilyBytes": 695074,
+      "namedBytes": 77594704,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.991122,
+      "recall": 0.793091,
+      "f05": 0.943981,
+      "wrongFamilyBytes": 695074,
+      "namedBytes": 77594704,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "apps-webpack",
+    "main": {
+      "precision": 0.995985,
+      "recall": 0.734995,
+      "f05": 0.929942,
+      "wrongFamilyBytes": 220678,
+      "namedBytes": 54744340,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.995985,
+      "recall": 0.734995,
+      "f05": 0.929942,
+      "wrongFamilyBytes": 220678,
+      "namedBytes": 54744340,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.995985,
+      "recall": 0.734995,
+      "f05": 0.929942,
+      "wrongFamilyBytes": 220678,
+      "namedBytes": 54744340,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "dev-rollup",
+    "main": {
+      "precision": 0.998729,
+      "recall": 0.775298,
+      "f05": 0.944302,
+      "wrongFamilyBytes": 2114,
+      "namedBytes": 1661294,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.998729,
+      "recall": 0.775298,
+      "f05": 0.944302,
+      "wrongFamilyBytes": 2114,
+      "namedBytes": 1661294,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.998729,
+      "recall": 0.775298,
+      "f05": 0.944302,
+      "wrongFamilyBytes": 2114,
+      "namedBytes": 1661294,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "dev-webpack",
+    "main": {
+      "precision": 0.996416,
+      "recall": 0.628932,
+      "f05": 0.892159,
+      "wrongFamilyBytes": 4139,
+      "namedBytes": 1150569,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.996416,
+      "recall": 0.628932,
+      "f05": 0.892159,
+      "wrongFamilyBytes": 4139,
+      "namedBytes": 1150569,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.996416,
+      "recall": 0.628932,
+      "f05": 0.892159,
+      "wrongFamilyBytes": 4139,
+      "namedBytes": 1150569,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "pop-bun",
+    "main": {
+      "precision": 0.995181,
+      "recall": 0.772105,
+      "f05": 0.940817,
+      "wrongFamilyBytes": 1218473,
+      "namedBytes": 251623483,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.995181,
+      "recall": 0.772105,
+      "f05": 0.940817,
+      "wrongFamilyBytes": 1218473,
+      "namedBytes": 251623483,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.995181,
+      "recall": 0.772105,
+      "f05": 0.940817,
+      "wrongFamilyBytes": 1218473,
+      "namedBytes": 251623483,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "pop-esbuild",
+    "main": {
+      "precision": 0.993146,
+      "recall": 0.787084,
+      "f05": 0.943731,
+      "wrongFamilyBytes": 1772179,
+      "namedBytes": 256784513,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.993146,
+      "recall": 0.787084,
+      "f05": 0.943731,
+      "wrongFamilyBytes": 1772179,
+      "namedBytes": 256784513,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.993146,
+      "recall": 0.787084,
+      "f05": 0.943731,
+      "wrongFamilyBytes": 1772179,
+      "namedBytes": 256784513,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "remin-esbuild",
+    "main": {
+      "precision": 0.997191,
+      "recall": 0.517598,
+      "f05": 0.841288,
+      "wrongFamilyBytes": 145219,
+      "namedBytes": 51546807,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.997195,
+      "recall": 0.518433,
+      "f05": 0.841731,
+      "wrongFamilyBytes": 145219,
+      "namedBytes": 51630032,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.997195,
+      "recall": 0.518433,
+      "f05": 0.841731,
+      "wrongFamilyBytes": 145219,
+      "namedBytes": 51630032,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "remin-terser",
+    "main": {
+      "precision": 0.999019,
+      "recall": 0.203346,
+      "f05": 0.560434,
+      "wrongFamilyBytes": 18646,
+      "namedBytes": 18983240,
+      "appClaimedBytes": 0
+    },
+    "terserKeys": {
+      "precision": 0.999169,
+      "recall": 0.531565,
+      "f05": 0.849681,
+      "wrongFamilyBytes": 41294,
+      "namedBytes": 49624029,
+      "appClaimedBytes": 0
+    },
+    "candidate": {
+      "precision": 0.999784,
+      "recall": 0.497624,
+      "f05": 0.83189,
+      "wrongFamilyBytes": 10026,
+      "namedBytes": 46455497,
+      "appClaimedBytes": 0
+    },
+    "bar": true
+  },
+  {
+    "set": "remin3-esbuild",
+    "main": {
+      "precision": 0.996789,
+      "recall": 0.494769,
+      "f05": 0.828634,
+      "wrongFamilyBytes": 302794,
+      "namedBytes": 102381644,
+      "appClaimedBytes": 26998
+    },
+    "terserKeys": {
+      "precision": 0.996797,
+      "recall": 0.497818,
+      "f05": 0.830341,
+      "wrongFamilyBytes": 303970,
+      "namedBytes": 103012611,
+      "appClaimedBytes": 26998
+    },
+    "candidate": {
+      "precision": 0.996797,
+      "recall": 0.497704,
+      "f05": 0.830278,
+      "wrongFamilyBytes": 303970,
+      "namedBytes": 102989147,
+      "appClaimedBytes": 26998
+    },
+    "bar": true
+  },
+  {
+    "set": "remin3-terser",
+    "main": {
+      "precision": 0.998549,
+      "recall": 0.173823,
+      "f05": 0.512359,
+      "wrongFamilyBytes": 49425,
+      "namedBytes": 34099233,
+      "appClaimedBytes": 116
+    },
+    "terserKeys": {
+      "precision": 0.996701,
+      "recall": 0.503037,
+      "f05": 0.833172,
+      "wrongFamilyBytes": 300557,
+      "namedBytes": 98681658,
+      "appClaimedBytes": 26083
+    },
+    "candidate": {
+      "precision": 0.999045,
+      "recall": 0.457896,
+      "f05": 0.808051,
+      "wrongFamilyBytes": 59802,
+      "namedBytes": 89826341,
+      "appClaimedBytes": 26083
+    },
+    "bar": false
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "about": "exp141: hand classes of the (claimed package, truth package) pairs behind every new wrong claim of 1 KB or more that terser_slices=auto adds on the dev corpora remin and remin3 (read from the claims, the truth and the index rows; scripts/census141.py). A pair not listed is `other` (propagation inside a shown family, sub-KB residue).",
+  "fork": [
+    ["yargs", "@curlconverter/yargs"],
+    ["@apollographql/graphql-upload-8-fork", "graphql-upload"],
+    ["react-is", "@jest/react-is-18"],
+    ["react-is", "@jest/react-is-19"],
+    ["jju", "liquid-json"]
+  ],
+  "vendored-in-truth": [
+    ["marked", "monaco-editor"],
+    ["dompurify", "monaco-editor"],
+    ["vscode-uri", "monaco-editor"],
+    ["vscode-languageserver-types", "monaco-editor"],
+    ["import-meta-resolve", "@babel/core"],
+    ["@dual-bundle/import-meta-resolve", "@babel/core"],
+    ["i18next-fs-backend", "mermaid"],
+    ["ms", "mocha"],
+    ["d3-path", "victory-vendor"],
+    ["@vscode/sqlite3", "sqlite3"]
+  ],
+  "carrier-claims-origin": [
+    ["@bramus/specificity", "css-tree"],
+    ["@bramus/specificity", "source-map-js"],
+    ["prettier", "graphql"],
+    ["chalk", "ansi-styles"],
+    ["glob", "brace-expansion"],
+    ["execa", "get-stream"],
+    ["execa", "onetime"],
+    ["ora", "string-width"],
+    ["@vitejs/plugin-basic-ssl", "vite"],
+    ["rollup", "vite"],
+    ["@vue/compiler-core", "vite"],
+    ["prettier", "vite"]
+  ]
+}

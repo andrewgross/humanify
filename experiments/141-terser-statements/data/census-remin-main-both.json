@@ -1,0 +1,19 @@
+{
+  "carrier-claims-origin": {
+    "factory/prop": 82,
+    "factory/seed": 669
+  },
+  "fork": {
+    "factory/prop": 181,
+    "factory/seed": 16010
+  },
+  "other": {
+    "factory/prop": 2052,
+    "factory/seed": 705,
+    "statement/prop": 6615
+  },
+  "vendored-in-truth": {
+    "factory/prop": 5799,
+    "factory/seed": 8370
+  }
+}

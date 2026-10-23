@@ -1,0 +1,14 @@
+{
+  "factory/excl-anchor/O": 553538,
+  "factory/excl-anchor/R": 26916021,
+  "factory/excl-anchor/W": 3804,
+  "factory/no-anchor/O": 7629,
+  "factory/no-anchor/R": 2407948,
+  "factory/no-anchor/W": 17723,
+  "factory/shared-anchor-only/R": 142366,
+  "factory/shared-anchor-only/W": 1581,
+  "statement/excl-anchor/R": 3879501,
+  "statement/no-anchor/O": 602,
+  "statement/no-anchor/R": 179814,
+  "statement/shared-anchor-only/R": 51524
+}
