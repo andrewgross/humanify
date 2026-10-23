@@ -1,0 +1,4184 @@
+{
+  "corpus": "remin3",
+  "entries": [
+    {
+      "appPackage": "ultracite",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:ultracite: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1554006,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_ultracite-91ac1d/entry.js",
+          "sha256": "a240415c6556ebd39782ccd0e134a8f90291a75bab0c478e34d858f3b62ccd9c"
+        },
+        "map": {
+          "bytes": 5613707,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_ultracite-91ac1d/entry.js.map",
+          "sha256": "c7d93989b8e2c0f5490490cc9846c162e872c2811abafeac6f523f5e68662d64"
+        }
+      },
+      "id": "remin3-terser-cli_ultracite-91ac1d",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2fc9b23739fe9107021eedf96dd4e170c9b15e4983d304ed549152804d54095f"
+      }
+    },
+    {
+      "appPackage": "@electron/rebuild",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:@electron/rebuild: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 84035,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_electron_rebuild-2c1efe/entry.js",
+          "sha256": "3939d2991e0657db6f1836a22bdbe5b9e3274a7885e0be1d040a9e31dbc0b504"
+        },
+        "map": {
+          "bytes": 235873,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_electron_rebuild-2c1efe/entry.js.map",
+          "sha256": "43d57e77870459de8c6b3a13559acfc4aac3c085ca0a49e579e2f456888085d5"
+        }
+      },
+      "id": "remin3-terser-cli_electron_rebuild-2c1efe",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3111457e34f77cce82757851114b32a3da93218ea43942078bc9c14e3aef39dc"
+      }
+    },
+    {
+      "appPackage": "svgicons2svgfont",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:svgicons2svgfont: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 210290,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_svgicons2svgfont-ea30f9/entry.js",
+          "sha256": "fd11730485529f81681a29c9b5db8dd32d290655d8bda3efec95cb3f25599928"
+        },
+        "map": {
+          "bytes": 1043762,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_svgicons2svgfont-ea30f9/entry.js.map",
+          "sha256": "d2427bedaf188a955763df98341617cca242bf575db687d60df458e420b56122"
+        }
+      },
+      "id": "remin3-terser-cli_svgicons2svgfont-ea30f9",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f40d11af5ce7c6f503327cc007edc00fb9d77b3b1e5a15c45b9b98ee84b4bed9"
+      }
+    },
+    {
+      "appPackage": "cmake-js",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:cmake-js: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 354584,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_cmake-js-e29090/entry.js",
+          "sha256": "021442fcbcff095072f7b711a3f33b3d029c131f8d214351e4a1311adf4fb656"
+        },
+        "map": {
+          "bytes": 1221535,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_cmake-js-e29090/entry.js.map",
+          "sha256": "e747eb59f8dc0c098d2ed94b5e80f5a3da6c612658942257bbef9b23f148a586"
+        }
+      },
+      "id": "remin3-terser-cli_cmake-js-e29090",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c83f949c891e0b135e80c599b6e8295cbe852b9eda0b2ef77b4de996df8da39f"
+      }
+    },
+    {
+      "appPackage": "sonarqube-scanner",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:sonarqube-scanner: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 536927,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_sonarqube-scanner-f71925/entry.js",
+          "sha256": "b238ffd3fbe3d20d92b3924185d836235b92a7d909e5c1e370ab340f10c6f63e"
+        },
+        "map": {
+          "bytes": 2322340,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_sonarqube-scanner-f71925/entry.js.map",
+          "sha256": "52be5dc9cae2963c4050325c1b69cfbed9ab3af569bd0d19fdcd7001f2682c3b"
+        }
+      },
+      "id": "remin3-terser-cli_sonarqube-scanner-f71925",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8903e60ffb490e9e825aa320c9b9c00c879b9232bbb8057a0a8be66b69c3f960"
+      }
+    },
+    {
+      "appPackage": "@alcalzone/release-script",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:@alcalzone/release-script: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 237828,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_alcalzone_release-script-9e09f0/entry.js",
+          "sha256": "1a59d1625a16b4a632ce8d8eb3c03b77ff08b82da4f7053017996d878bc946e1"
+        },
+        "map": {
+          "bytes": 749534,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_alcalzone_release-script-9e09f0/entry.js.map",
+          "sha256": "ff519d61f303fa37093ec04c6276eb5042497749ef3a27d946e7c49e8351487a"
+        }
+      },
+      "id": "remin3-terser-cli_alcalzone_release-script-9e09f0",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cb49fd398131394c219182b420fa53aa8685a2d2ccae39afa25b795df7f2c0a7"
+      }
+    },
+    {
+      "appPackage": "grunt-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:grunt-cli: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 115831,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_grunt-cli-00d477/entry.js",
+          "sha256": "51778cb5db43361521cc078e487398db5976a00ae55431560b27fff7ee4851ca"
+        },
+        "map": {
+          "bytes": 417183,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_grunt-cli-00d477/entry.js.map",
+          "sha256": "10ec3c1b17af376a49b63a0ebb07d67e79e136a05e9883032312fe731179d3dc"
+        }
+      },
+      "id": "remin3-terser-cli_grunt-cli-00d477",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5128e9448013dd0d50d34559d08e6914242d7debe4fb740337af80538033bce0"
+      }
+    },
+    {
+      "appPackage": "@astrojs/language-server",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:@astrojs/language-server: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 2186422,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_astrojs_language-server-0926c5/entry.js",
+          "sha256": "ded649bed3f01540c2af42e674b738d2e0fc39be5068373a2683229bd395e853"
+        },
+        "map": {
+          "bytes": 7235309,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_astrojs_language-server-0926c5/entry.js.map",
+          "sha256": "2454b145c1848963f7b9fd36b52670a5a8fa0cc8be922af799922d95b342b563"
+        }
+      },
+      "id": "remin3-terser-cli_astrojs_language-server-0926c5",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fbb8c0d0b08c7511b46d85ac7e3bc63f062a8f65273bcb359ebfc5032433db73"
+      }
+    },
+    {
+      "appPackage": "metalsmith",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:metalsmith: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 195074,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_metalsmith-285bc4/entry.js",
+          "sha256": "cbf01fabc779dd39b036b50470b764959325890c4f1df719d38ff1d8ded7b803"
+        },
+        "map": {
+          "bytes": 766870,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_metalsmith-285bc4/entry.js.map",
+          "sha256": "16fa847b7488c964398f85436f414ea25f6124fe65751a0aff8b9b9dbd5ee793"
+        }
+      },
+      "id": "remin3-terser-cli_metalsmith-285bc4",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "74cc36b709066ae25d0e5115ffcc1eed6a9cfd1c38b87c8ab1d477acbd029810"
+      }
+    },
+    {
+      "appPackage": "prettier-eslint-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:prettier-eslint-cli: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1845991,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_prettier-eslint-cli-c39716/entry.js",
+          "sha256": "e14fb6a5a56800707162e639fb0cb599ebe703d8be83e5679148e73f48728114"
+        },
+        "map": {
+          "bytes": 7727052,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_prettier-eslint-cli-c39716/entry.js.map",
+          "sha256": "87fc7a0a658877ed316b8f8467db47d8b53dda1393f28cd19356ca638a97ddb7"
+        }
+      },
+      "id": "remin3-terser-cli_prettier-eslint-cli-c39716",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "be0bfab8b4e04cc4dd5f3000c6441f66f6597340cb4b11a389ac8d74b37cf2cb"
+      }
+    },
+    {
+      "appPackage": "f2elint",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:f2elint: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 510505,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_f2elint-8791d9/entry.js",
+          "sha256": "b4f18da775ebdab12fdd1dfee36a97733355480eb44454f4520bfbc82ebe2db1"
+        },
+        "map": {
+          "bytes": 1781169,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_f2elint-8791d9/entry.js.map",
+          "sha256": "7d1e06ff1dcdcfc1ad3d88e6da299897001d49209217879e868cfc587316e36f"
+        }
+      },
+      "id": "remin3-terser-cli_f2elint-8791d9",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "85ddb648defccd50cbb4cb173baa0efb263a599e8316d2103628c7b34d60b4f3"
+      }
+    },
+    {
+      "appPackage": "typescript-json-schema",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:typescript-json-schema: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 4050725,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_typescript-json-schema-e8c37b/entry.js",
+          "sha256": "1463cd2056317974ff64fc5c4857d4a05c8385e392e6e127222c05c233256b42"
+        },
+        "map": {
+          "bytes": 16326630,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_typescript-json-schema-e8c37b/entry.js.map",
+          "sha256": "fdc0fde649fcb12be16778ffa55e38d950bdd18e7ba4e92d8a558055dc1892fc"
+        }
+      },
+      "id": "remin3-terser-cli_typescript-json-schema-e8c37b",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9bc45933f2fd04a10b1e096efd5ab9f39f9bc14fcc19d7f66d006819c991c06d"
+      }
+    },
+    {
+      "appPackage": "microbundle-crl",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:microbundle-crl: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 8467233,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_microbundle-crl-7c5731/entry.js",
+          "sha256": "113d60e81481975e4844ea2d188a9788aec64bb94ed047f5872125f46a8eb0b3"
+        },
+        "map": {
+          "bytes": 31815786,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_microbundle-crl-7c5731/entry.js.map",
+          "sha256": "55743e2827422f14a8e606da0e1425301e9e99ff78b3b78f7a2a3f957c5ff463"
+        }
+      },
+      "id": "remin3-terser-cli_microbundle-crl-7c5731",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8d5ac0fb4735e2ed481e641ffb4f6d6ad7fadeba8d85a234727b2c9ca8c9a7e9"
+      }
+    },
+    {
+      "appPackage": "tap-min",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:tap-min: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 162864,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_tap-min-cdf3e3/entry.js",
+          "sha256": "3a08ca6391eee874edac0782b0c026285b78f2055629dd74e957107ae755a5b9"
+        },
+        "map": {
+          "bytes": 596246,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_tap-min-cdf3e3/entry.js.map",
+          "sha256": "3122285bbe30765ebc870ff2ba6731cd654ddc4442fbb194e0c81522080a3192"
+        }
+      },
+      "id": "remin3-terser-cli_tap-min-cdf3e3",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5f152572fe45b4519fada73c358170eb5444391545a90bd2552b37ed11c30590"
+      }
+    },
+    {
+      "appPackage": "yosay",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:yosay: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 266352,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_yosay-a6f972/entry.js",
+          "sha256": "6cf867ed6ed23a0769ddf1fc73c36ad04bcb0935eaf8da705d5ffbaa3834fc1d"
+        },
+        "map": {
+          "bytes": 755701,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_yosay-a6f972/entry.js.map",
+          "sha256": "26903e41578071b317c0f21624d4421f97c5cc4cbf5b82309b60d4fa5d272267"
+        }
+      },
+      "id": "remin3-terser-cli_yosay-a6f972",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f56d98f044d75fb91f55c08a0763a7c1b4f57a60897ccec82212e57ef78a42b8"
+      }
+    },
+    {
+      "appPackage": "conventional-github-releaser",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:conventional-github-releaser: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 627843,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_conventional-github-releaser-6ca6de/entry.js",
+          "sha256": "8da963d9c1cd000e53ee96d9c6a55b64eb213bec01b2de662b48cf6ca44c1695"
+        },
+        "map": {
+          "bytes": 2386779,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_conventional-github-releaser-6ca6de/entry.js.map",
+          "sha256": "bcaa4adad586e30d4fb43f28d4d005121ac2a292928ffabcf675d317fa4b1cf8"
+        }
+      },
+      "id": "remin3-terser-cli_conventional-github-releaser-6ca6de",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1d1f503e890f5af50cc3d7f9fd444bb1a332d52d44df30db42c804f711a873df"
+      }
+    },
+    {
+      "appPackage": "babel-watch",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:babel-watch: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 141259,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_babel-watch-9ea2b9/entry.js",
+          "sha256": "1461ff05cea4ff6fe761d5aa39bae0f20954b4e76fb04e4716e3dee1859a2477"
+        },
+        "map": {
+          "bytes": 572428,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_babel-watch-9ea2b9/entry.js.map",
+          "sha256": "4b0ff4bd585abfb15600ed5418424cd63875805f2d3bf7bdebd0650f67b00268"
+        }
+      },
+      "id": "remin3-terser-cli_babel-watch-9ea2b9",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "371de118f60f92fdcc72795232eec15d65b05b71d542d4976a6aedee1e214320"
+      }
+    },
+    {
+      "appPackage": "metro-inspector-proxy",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:metro-inspector-proxy: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 495633,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_metro-inspector-proxy-f48511/entry.js",
+          "sha256": "67c483993e07832e376ada688d3d2a31d5ab5532aeae9946a6be14bcaa13fb1b"
+        },
+        "map": {
+          "bytes": 1351511,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_metro-inspector-proxy-f48511/entry.js.map",
+          "sha256": "051209572ef2bb741b01e7d27f68b4213a0b9ae15171e52e26bee9499737a730"
+        }
+      },
+      "id": "remin3-terser-cli_metro-inspector-proxy-f48511",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f93e4f603dc59413c5089449b6bdf69ce266f79c79e1dbeafc5bc2a0db37f235"
+      }
+    },
+    {
+      "appPackage": "n8n-core",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:n8n-core: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 653547,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_n8n-core-1c36ca/entry.js",
+          "sha256": "17188dc6630df5f0b7b464c25689abe619bb89ea3d7814e82a3bfffee9b71336"
+        },
+        "map": {
+          "bytes": 1856910,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_n8n-core-1c36ca/entry.js.map",
+          "sha256": "c4232795cd46c8f98744df7eefc3b5b07de5f9809c9cd5d8cf6fd76f43a63802"
+        }
+      },
+      "id": "remin3-terser-cli_n8n-core-1c36ca",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ff88631f21395bf98db065c34478bc42d82dd764256d2908f7fbbb44b5086aa9"
+      }
+    },
+    {
+      "appPackage": "electron-vite",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:electron-vite: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1434734,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_electron-vite-23b4a5/entry.js",
+          "sha256": "56dc5184dd84e71d50000edb3621afd244046226391df4da828c39dee144f793"
+        },
+        "map": {
+          "bytes": 4807230,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_electron-vite-23b4a5/entry.js.map",
+          "sha256": "f55f2b64e9de2458738b41f3496994bb19d2d0e7a53d4292b3e28490c33c317f"
+        }
+      },
+      "id": "remin3-terser-cli_electron-vite-23b4a5",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0b6ed417d244efe5d29cd4ac0e685fed2bde7018aa4023eb7dea2b67e72838ee"
+      }
+    },
+    {
+      "appPackage": "yeoman-environment",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:yeoman-environment: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 2216548,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_yeoman-environment-ce36cc/entry.js",
+          "sha256": "bdddf5a20df452ce495302e80ab19782e5c4e430a8a78d8165b28f277568ea04"
+        },
+        "map": {
+          "bytes": 8217745,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_yeoman-environment-ce36cc/entry.js.map",
+          "sha256": "82594dda102a651aaf5c77225067537f658d8dbce7e0a47360834a2e242e78ef"
+        }
+      },
+      "id": "remin3-terser-cli_yeoman-environment-ce36cc",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b241aeb1626a4cde975ad8f4989a676fe255b4f28e1a3960ccaaa745abdf3ca9"
+      }
+    },
+    {
+      "appPackage": "gatsby",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:gatsby: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 3355365,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_gatsby-5e5162/entry.js",
+          "sha256": "92fe4597e0ac9c880fdd04466d84ca93761f1095515b00c653bd9508d7aa90e5"
+        },
+        "map": {
+          "bytes": 10171472,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_gatsby-5e5162/entry.js.map",
+          "sha256": "7c0199919035c7fad0255ac290112fc9cf874809a092b19741e207d2ca59d4e2"
+        }
+      },
+      "id": "remin3-terser-cli_gatsby-5e5162",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "65ef631efadfebcc6c11724adbb5e4e014dd8fca757c2f1cf26cf037624b2d23"
+      }
+    },
+    {
+      "appPackage": "svg2ttf",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:svg2ttf: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 254494,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_svg2ttf-cfc940/entry.js",
+          "sha256": "13888448cf94adf6ea248db09a36501900bbcf518f4b10a828d2b2c8b40b0d7b"
+        },
+        "map": {
+          "bytes": 1059499,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_svg2ttf-cfc940/entry.js.map",
+          "sha256": "b48fd0dc67e11cd3fa7ab485566615da94a03e4c672b5b5b9904e8e159b9f0b5"
+        }
+      },
+      "id": "remin3-terser-cli_svg2ttf-cfc940",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ac6c02e5d42d0bb14e2b965024aef4a86828a2552c89856a90b50f88d0cfd1c0"
+      }
+    },
+    {
+      "appPackage": "yeoman-doctor",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:yeoman-doctor: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 311540,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_yeoman-doctor-f29137/entry.js",
+          "sha256": "f615bef89c763ab6486da113973c89c28b9e70d951a8b5fdd6c9c0a0f6df0c7c"
+        },
+        "map": {
+          "bytes": 1161912,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/cli_yeoman-doctor-f29137/entry.js.map",
+          "sha256": "a7d421e58787af4d6107110c07e019ca4204cf6d31581bedeefd042ec20d5c37"
+        }
+      },
+      "id": "remin3-terser-cli_yeoman-doctor-f29137",
+      "kind": "cli",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "56ad62ac690f74622b1e41f4bccd46f068baa0c794ef6bb3b805114f9903525e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-pedr0fontoura__gtav-audio-occlusion: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 520753,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955/entry.js",
+          "sha256": "92e5b1af19d5126b5fa0e7a7ecb2dc3ad4e091974807f64146420a392d68be2e"
+        },
+        "map": {
+          "bytes": 1959860,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955/entry.js.map",
+          "sha256": "7fd7de0ec9698220a8183b6f7bab7a40a03bbda1f1777cf7c11da6c6a19d2a7d"
+        }
+      },
+      "id": "remin3-terser-electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5168262f871dcb71d02fbd2dce2d439cbe367dcfcb37feee9c436adf198b6f9e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-iimeta__iim-web: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 9488092,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-iimeta__iim-web-8609e9/entry.js",
+          "sha256": "e1403ce34715f318ac20d82ddebc518563b93a40d4c42dc466b9bbbfdc53d58e"
+        },
+        "map": {
+          "bytes": 25889695,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-iimeta__iim-web-8609e9/entry.js.map",
+          "sha256": "6ebbb0f2ce8fd495c869cb933acad49ea2a57bb42b9019b00c776bc412170ad9"
+        }
+      },
+      "id": "remin3-terser-electron_gh-iimeta__iim-web-8609e9",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6718cff5b6fe7c321561f17c03cb83538c05ee30023482d1163d6e7c850bace8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-ploxc__modbux: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 13939528,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-ploxc__modbux-9f89a7/entry.js",
+          "sha256": "455eac7ee57a8a26a0a1dc81a7c2f3ba0738be0eafc3dddc90713322e2e5b010"
+        },
+        "map": {
+          "bytes": 36639437,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-ploxc__modbux-9f89a7/entry.js.map",
+          "sha256": "0e54319ab72c91f4ac829e442a55fbdd6b640c9864ac226648c5529e8622005a"
+        }
+      },
+      "id": "remin3-terser-electron_gh-ploxc__modbux-9f89a7",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ccc0b31ba3d63ddc2707189a290f41e5e4bfce17570ca6e452d4daba18c7aeb7"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-inulute__simplexity-ai-app: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 294061,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-inulute__simplexity-ai-app-4a3432/entry.js",
+          "sha256": "2b366508068c8ca239003f30fc0b44324aa94379cd8d89f01605265760662b9d"
+        },
+        "map": {
+          "bytes": 1140400,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-inulute__simplexity-ai-app-4a3432/entry.js.map",
+          "sha256": "d2caf4f670db10e0bd6af992866821e540784215e8decc4f94d44eeaa950d604"
+        }
+      },
+      "id": "remin3-terser-electron_gh-inulute__simplexity-ai-app-4a3432",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9875a79a06e3bd4afb0c4515ff3a7c2ba14eca1c85e5c7fa3bbcc9d0cd35cab1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-nathanlesage__local-chat: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 3171255,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-nathanlesage__local-chat-85d7b3/entry.js",
+          "sha256": "bf2cdde22fb593781fd6417966f37c307a82fe56725ff7c51012b8fe27ae79bd"
+        },
+        "map": {
+          "bytes": 9756471,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-nathanlesage__local-chat-85d7b3/entry.js.map",
+          "sha256": "08190deb46d1e4d9df2f1977af7cc43d71f5af54a2a9787e760b2e86fb4b6aa0"
+        }
+      },
+      "id": "remin3-terser-electron_gh-nathanlesage__local-chat-85d7b3",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "87e3cc3eb0a1383821cfc08e10b27ee7275fd7408b657ddb8fd95513859624f0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-dznass-cmd__radarrss: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 3498154,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-dznass-cmd__radarrss-6546f8/entry.js",
+          "sha256": "63ea8bbc8031891518a53ec5186c70425a1ec896e839b542c656243494bd4590"
+        },
+        "map": {
+          "bytes": 14117304,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-dznass-cmd__radarrss-6546f8/entry.js.map",
+          "sha256": "aaf51039351b030388b6fbf5c291e1bfc6067f849897e2301f9f423cb7de4c3a"
+        }
+      },
+      "id": "remin3-terser-electron_gh-dznass-cmd__radarrss-6546f8",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e55c413caa7a7ddf764f288fd27dac45ec854088c3f7c3675092d7d29730e9cc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-rn0x__altaqwaa-desktop: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1663948,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-rn0x__altaqwaa-desktop-69b6f0/entry.js",
+          "sha256": "2d72f0980ac6c497b09b93148bf426b837b452e0e52c90fd6dff0e0ea834321e"
+        },
+        "map": {
+          "bytes": 5650926,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-rn0x__altaqwaa-desktop-69b6f0/entry.js.map",
+          "sha256": "230964bc4371a51f795343aca862d6244a29e705a06a883a6d6248e89cce218a"
+        }
+      },
+      "id": "remin3-terser-electron_gh-rn0x__altaqwaa-desktop-69b6f0",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "30230841e69c90776f0b9222fd8fe376b178a30b4cd27af22002fcc4068971b9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-guasam__electron-react-app: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 4769013,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-guasam__electron-react-app-7d7e21/entry.js",
+          "sha256": "f5ad66a5faeba37ccfbd2139d728faf42dcd24e409ec64861b8507a0f1c63e52"
+        },
+        "map": {
+          "bytes": 16528143,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-guasam__electron-react-app-7d7e21/entry.js.map",
+          "sha256": "812f3cd69fcdf8eaec778c2ecf705274458b4208c34fd9668d8e64333c281552"
+        }
+      },
+      "id": "remin3-terser-electron_gh-guasam__electron-react-app-7d7e21",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b1d48c1cd1e2636b50ca978df3b1dbe849e9514a4cc70f5f4adae102c1b99b5d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-loranallensmith__brightwheel: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 854109,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-loranallensmith__brightwheel-8201a2/entry.js",
+          "sha256": "772ce7cc2d9b5d522bd2dd997d5fad8526f673b7ed44d90b4c7262ff3c899daa"
+        },
+        "map": {
+          "bytes": 3234351,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-loranallensmith__brightwheel-8201a2/entry.js.map",
+          "sha256": "7c69eedd42c7f894ea84942947a91e4e9b16faf482ab4bbd4930d8841fcf1141"
+        }
+      },
+      "id": "remin3-terser-electron_gh-loranallensmith__brightwheel-8201a2",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "61dcb7ac5fa37114ae401ef11fd5001b4da8426fe18520dfaf698f499432303d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-antropos17__aegis: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5286323,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-antropos17__aegis-b57998/entry.js",
+          "sha256": "1418b3f99a1d4a98f4b1f6dc7bfc4dbc8b24537f5bb6f4912287ad134a3c1f16"
+        },
+        "map": {
+          "bytes": 16780282,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-antropos17__aegis-b57998/entry.js.map",
+          "sha256": "ccb4941e880cfa81eeaebf8ec82f92638b3c83407806eabdab1885f90c84b960"
+        }
+      },
+      "id": "remin3-terser-electron_gh-antropos17__aegis-b57998",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d07e7d19cdec5bc95079876698161665d4cc41862f3a8aadeb9649119775f664"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-wangrongding__wallpaper-box: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5213358,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-wangrongding__wallpaper-box-262dc5/entry.js",
+          "sha256": "074c882295bf01ef29f8eb59e3e8d7f8d8cc54917620338984684d5fa186bc49"
+        },
+        "map": {
+          "bytes": 18534492,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-wangrongding__wallpaper-box-262dc5/entry.js.map",
+          "sha256": "d165120f7c80ec2047c18c123e61186a99efd60ae091a854cac4975f217c075d"
+        }
+      },
+      "id": "remin3-terser-electron_gh-wangrongding__wallpaper-box-262dc5",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6ae5fc7f5cff3ec681f0e3dab53f43e21db88411f620ba7f2068dca64c3034be"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-tahnik__electron-react: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 797522,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-tahnik__electron-react-8bef0d/entry.js",
+          "sha256": "776131f8ca817f47dd7f5fd8354c5152a8e3bb65d006239170d65e3494a45829"
+        },
+        "map": {
+          "bytes": 2626987,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-tahnik__electron-react-8bef0d/entry.js.map",
+          "sha256": "1f3ba5f7e3423bca514d4c2bc6dc5cfac3cf07649d1ea8d7dce8e9962974e447"
+        }
+      },
+      "id": "remin3-terser-electron_gh-tahnik__electron-react-8bef0d",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "19df8a4954f1ca6ad810901bbe1e6b9b7f6655a71a2152923095d5c6b0f2a681"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-sindresorhus__electron-reloader: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 49155,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-sindresorhus__electron-reloader-b02378/entry.js",
+          "sha256": "b73308961d8110c389251c7399d9e5c54ee835e0d60f9e670462e406a8d94cd3"
+        },
+        "map": {
+          "bytes": 171890,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-sindresorhus__electron-reloader-b02378/entry.js.map",
+          "sha256": "5fecd3fb6a06cb4b2739f5701436e96d9e93956680ddd9dbf0821cc10b644668"
+        }
+      },
+      "id": "remin3-terser-electron_gh-sindresorhus__electron-reloader-b02378",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "196f52eba3777734b7eae2cb357260d5dbae263a0759e3f17dec82b791eafe75"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-qufei1993__dsh-desktop: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 670600,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-qufei1993__dsh-desktop-f5483b/entry.js",
+          "sha256": "fc0977feb960784c8ed7bb007dbf9b55e502eafb958849b9f9b19c104049f8de"
+        },
+        "map": {
+          "bytes": 2300087,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-qufei1993__dsh-desktop-f5483b/entry.js.map",
+          "sha256": "bf8cb7711b684fb2fcf914a829e0c1b701a581d17d7e04b2458647cbfd6d8f3a"
+        }
+      },
+      "id": "remin3-terser-electron_gh-qufei1993__dsh-desktop-f5483b",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3001c0e2c5b5c83cf9bdc3ac926df2efa0ada466d4718a5accb99287a9a74592"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-sanjevirau__gsubs: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 548026,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-sanjevirau__gsubs-2bfa7a/entry.js",
+          "sha256": "cda0052d03ed6bb0d0adc8fbe14cdc1c977f9238ebac9ad229a62d56fbc402bb"
+        },
+        "map": {
+          "bytes": 1875511,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-sanjevirau__gsubs-2bfa7a/entry.js.map",
+          "sha256": "80d685ae6b8b2c99f20499dc28b7046d683976fadef0447b7372861a69ea4318"
+        }
+      },
+      "id": "remin3-terser-electron_gh-sanjevirau__gsubs-2bfa7a",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b938114092bf2401e0f0580876c1eee537c87a0d780f870c31f199259ab07f19"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-tomkp__card-spy: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 2358676,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-tomkp__card-spy-4c2a3e/entry.js",
+          "sha256": "4bbbba67978efd6b63f21c00cfd85b406f2d45260336222cb4c44124ac86e425"
+        },
+        "map": {
+          "bytes": 9498281,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-tomkp__card-spy-4c2a3e/entry.js.map",
+          "sha256": "c221616227674e66f25583bca8c8a69c44a1ab34d86ef86ebfc497230e5226ab"
+        }
+      },
+      "id": "remin3-terser-electron_gh-tomkp__card-spy-4c2a3e",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f3ecde90da674704718aef682365bbcc65305a2ec2ab7bc0b7a313f4533726b1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-soulehshaikh99__create-svelte-electron-app: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 54696,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b/entry.js",
+          "sha256": "cbbf447f30dcaf7a0a76983980e3330f420c40e35faf83e0232ac6fe2227c705"
+        },
+        "map": {
+          "bytes": 210629,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b/entry.js.map",
+          "sha256": "454d9f2a6e3214801f15bb68fc89d74d72c7956fd187bc0173cbb3dadcd6c6e1"
+        }
+      },
+      "id": "remin3-terser-electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4b646e321878a8499a8f325c66ba9e75f0f6860a416369f2253775d2a8015ade"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-onmyway133__pushnotifications: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 937403,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-onmyway133__pushnotifications-17a4eb/entry.js",
+          "sha256": "26d18d6ab2f4805279d01e6116451fde89809c798554831876c88855e0ed3cca"
+        },
+        "map": {
+          "bytes": 2879673,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-onmyway133__pushnotifications-17a4eb/entry.js.map",
+          "sha256": "519401afc74e2e25efa0a8f2801ba44e629bf592b1899c8ca9878445424addb7"
+        }
+      },
+      "id": "remin3-terser-electron_gh-onmyway133__pushnotifications-17a4eb",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "344e6a95248db9ba7e1c9e7693bd006f6090e2909f7131d56113cb7888f9c893"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-aivis-project__aivisspeech: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 11527549,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-aivis-project__aivisspeech-12f4f8/entry.js",
+          "sha256": "6aac0b17ea61bcd8c78df515f5aa214f3a60b4ed2d9f569736bac9cf7460bc92"
+        },
+        "map": {
+          "bytes": 35631642,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-aivis-project__aivisspeech-12f4f8/entry.js.map",
+          "sha256": "f780cdebe8c76193760807401cba6a7d4dc6223e841b4b8fe3d365fca5368f81"
+        }
+      },
+      "id": "remin3-terser-electron_gh-aivis-project__aivisspeech-12f4f8",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8d0035a8e18dd2693d6c074da042d128684279b2c2f460339dc18c15a17b9422"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-cerzi__videoswarm: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 3510464,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-cerzi__videoswarm-3d12b2/entry.js",
+          "sha256": "4a278dcb0a20cd86f8df37a8fc3d916167d13af7248c995d5cae2195cabefa39"
+        },
+        "map": {
+          "bytes": 10798260,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-cerzi__videoswarm-3d12b2/entry.js.map",
+          "sha256": "00f6b27a2f5b459e94dd219484c96e2d22885515db7fc030914ca87d113c2244"
+        }
+      },
+      "id": "remin3-terser-electron_gh-cerzi__videoswarm-3d12b2",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3e40d2015243020432822d8c2e024429768dcca844f522cb3810f4bc036c74cf"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-alexkim205__g-desktop-suite: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 534350,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-alexkim205__g-desktop-suite-5c7dc8/entry.js",
+          "sha256": "ba3a413f5de73a17251bae810827e1b67c585bff40fe82e926e918d1ec1b8d80"
+        },
+        "map": {
+          "bytes": 2122666,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-alexkim205__g-desktop-suite-5c7dc8/entry.js.map",
+          "sha256": "835d5a1283072d6ba9da4c14879b7e415d7f4473f9ad838697b5a7c66f92ae35"
+        }
+      },
+      "id": "remin3-terser-electron_gh-alexkim205__g-desktop-suite-5c7dc8",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "074bffd63f52b3f5a5e80e171f758e2392ec777e89df5e20a3cadc9392d6604f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-japdl__japdl: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1540058,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-japdl__japdl-50b326/entry.js",
+          "sha256": "8994800c933a5214d34adb1208c19eecb5cdc76761c02a0fbb9ac86a08fdc9b3"
+        },
+        "map": {
+          "bytes": 4702747,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-japdl__japdl-50b326/entry.js.map",
+          "sha256": "9e84e7b5b51e542fb0671bac69169ce24d112ce38a599a910617528c4889afb1"
+        }
+      },
+      "id": "remin3-terser-electron_gh-japdl__japdl-50b326",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b403ed21bcce8dc8edfc3d19a1c0952a009e07bc1c5fc6e7502a407f0d57144a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-alexishida__moji: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 6460065,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-alexishida__moji-c470a5/entry.js",
+          "sha256": "1ab56a1a7f708acce59bbafaf2ba5154be71354f6a1d79031d3617abe86fd84a"
+        },
+        "map": {
+          "bytes": 19054858,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-alexishida__moji-c470a5/entry.js.map",
+          "sha256": "b12d19c3f8cf42de701d0e85612df00336db081f77f332b5cf734404c63af59b"
+        }
+      },
+      "id": "remin3-terser-electron_gh-alexishida__moji-c470a5",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7dddf6fe3f1593deca55759ba9124669e1c2155f2ee49961033fb5feaeb5ac7f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-klotzbrocken__reframe: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 738812,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-klotzbrocken__reframe-088b8c/entry.js",
+          "sha256": "da531aa13ee5bcd81b6ce80ee8bc6d33256fe3ba26cb1a29b60f3200ee0883d5"
+        },
+        "map": {
+          "bytes": 1851747,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/electron_gh-klotzbrocken__reframe-088b8c/entry.js.map",
+          "sha256": "5d3ef9ffc1e9f64b192bc00203d18b6a730df58a18b01a7a05af76d15cf401f5"
+        }
+      },
+      "id": "remin3-terser-electron_gh-klotzbrocken__reframe-088b8c",
+      "kind": "electron",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fff3f15ec784ae741bcee788a861c99cc6552dca902d0c2a653b499d1ee09beb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-yukaii__vscode-ptt: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 6024179,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-yukaii__vscode-ptt-b9168a/entry.js",
+          "sha256": "5a25dc8b2ff62050242d2d659f762f0f9af5f144b49fa003f478b9c4e3b2231a"
+        },
+        "map": {
+          "bytes": 20314332,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-yukaii__vscode-ptt-b9168a/entry.js.map",
+          "sha256": "ee2cee75a6bc7012c3acbd932f7114ae22e68912de12286a3edcc2b91dc7e7aa"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-yukaii__vscode-ptt-b9168a",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "19d44d835b0f34dafa9eb67f5ad7721c274ed27a8c6afc5fe6fc0c496290fef9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-wx-minapp__minapp-vscode: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 4114627,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-wx-minapp__minapp-vscode-2cd7f4/entry.js",
+          "sha256": "d329df7ca8322ca31e896da4faf47734dbbc9ef67e71541c9d7a09ed15ecfcf3"
+        },
+        "map": {
+          "bytes": 13874262,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-wx-minapp__minapp-vscode-2cd7f4/entry.js.map",
+          "sha256": "9d83ace49b667210d73abc4faa0ecbfd2ad23c3d7aa6d0924578cd8f96aeb7d3"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-wx-minapp__minapp-vscode-2cd7f4",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "455a0b8144df5884537e62372733594141f150edabb46ad74b9155e27cadc1f3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-sthamann__nyx-local-ai: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 6662792,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-sthamann__nyx-local-ai-e50dee/entry.js",
+          "sha256": "e0e283b300afd73ec74237d8f2797a1de23dad8f94e669e690cac4a183f44f09"
+        },
+        "map": {
+          "bytes": 19374257,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-sthamann__nyx-local-ai-e50dee/entry.js.map",
+          "sha256": "e32430999cc8e0fc95a05becea9a30f70c07db4a642c02f1f45c2d83b0f0ab78"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-sthamann__nyx-local-ai-e50dee",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6723c09af03294b8a08e81a2110cf6569885e95f7744caf998721ebd798fcbb6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-qcz__vscode-text-power-tools: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1224198,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-qcz__vscode-text-power-tools-502c9a/entry.js",
+          "sha256": "f02963bce213101d9d3b296b8af53f2db0ffb1ce81b9219e01fd0394b1a91193"
+        },
+        "map": {
+          "bytes": 4010961,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-qcz__vscode-text-power-tools-502c9a/entry.js.map",
+          "sha256": "8d0e7d5b838bfe0efadc013154690759986c74e3a53eddff3e181346a1d440b5"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-qcz__vscode-text-power-tools-502c9a",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "71d3948e09149ec0a0d96843e35dfefb62ce265bc4e15e88ceecc6454d41ed9d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-raathigesh__waypoint: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5458844,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-raathigesh__waypoint-e1437b/entry.js",
+          "sha256": "a8bd9aff582b85f6bed48d536ea2d6b84476c29aae79fa1e33f36b1c5a974a66"
+        },
+        "map": {
+          "bytes": 15476882,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-raathigesh__waypoint-e1437b/entry.js.map",
+          "sha256": "b6f3c5796b8c17af1d13ce3bdc11219614fef466551674954bfa477e769cb987"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-raathigesh__waypoint-e1437b",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "611b91b1361a3c227924b185bcd158458f95d014a7014eefcb3a6a9f03566df7"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-n2ns__antigravity-panel: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 6654231,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-n2ns__antigravity-panel-423973/entry.js",
+          "sha256": "d4d2c116936d022021e1e92b528445cc22b54eb4e0e890ab1b9e15579141de0a"
+        },
+        "map": {
+          "bytes": 21510941,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-n2ns__antigravity-panel-423973/entry.js.map",
+          "sha256": "605665076dd292d9c41ba151e5dc0212392764fa238d53bf78aac29bffe46dd7"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-n2ns__antigravity-panel-423973",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "825cfa3f2ac8e6d99d9be2e4cc1ed7e5ee48d39ebf13122277dfd1c95757fe4d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-geriyoco__vscode-image-gallery: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 7557014,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-geriyoco__vscode-image-gallery-f6399e/entry.js",
+          "sha256": "b69577b14ba00bcd16415ab92fed3984dcfbc4b3d709a1acac3671a4efb506dd"
+        },
+        "map": {
+          "bytes": 23732161,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-geriyoco__vscode-image-gallery-f6399e/entry.js.map",
+          "sha256": "7f6cccbeb3c0ac47c32f8c5692d0221438f5490eadfa2f0fdb69050e7bafa82d"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-geriyoco__vscode-image-gallery-f6399e",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "043f727dca5534fd0cfeb664536ab15e6eb4746063ff14deaf2e42e25a249bd6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-zokugun__vscode-explicit-folding: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 78037,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-zokugun__vscode-explicit-folding-ef71ec/entry.js",
+          "sha256": "fab7fb98c9cba97685cd4f50f6090c80ea3d712efeb27d7fe50c010b54f92bdb"
+        },
+        "map": {
+          "bytes": 333913,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-zokugun__vscode-explicit-folding-ef71ec/entry.js.map",
+          "sha256": "ae401910ea0126aabc547d808e4f7ffb97060d9836aafec8cb3c80232576af80"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-zokugun__vscode-explicit-folding-ef71ec",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f25450df38bece2b2bbaeebdcc1d8c4b981425ef0eb9b9ff9fe1ec7d9c43cdc3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-stylelint__vscode-stylelint: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 6221827,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-stylelint__vscode-stylelint-33eb20/entry.js",
+          "sha256": "837425801e17451a231f34b9e8d8a0f65eba744e1bf137277c5a7a60c0904ec9"
+        },
+        "map": {
+          "bytes": 23419531,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-stylelint__vscode-stylelint-33eb20/entry.js.map",
+          "sha256": "97b2f722057f073f4fd6e26ab9a494dbae426d129cdab80341d329f19a5b8d04"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-stylelint__vscode-stylelint-33eb20",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "54b7d5e550998fe583c3704eaadeb0dfb0a01f6d8190b6914cd3533fcb8f8ce3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-pajoma__vscode-journal: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 1098841,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-pajoma__vscode-journal-e5402e/entry.js",
+          "sha256": "ba102cf12e3357282d409954c3a7f8bda2e1a5e3de46e3542f21f17173b947c0"
+        },
+        "map": {
+          "bytes": 3493372,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-pajoma__vscode-journal-e5402e/entry.js.map",
+          "sha256": "0cc6051586847155ef956c5762c01bb898ec9d8d75f09bbe5b17f722a1263e73"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-pajoma__vscode-journal-e5402e",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "308130db60443a111900979c7b4c7c850d27ff194ff12262b4265fce0b78e148"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-vadimcn__codelldb: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 4380957,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-vadimcn__codelldb-f46207/entry.js",
+          "sha256": "f0b3a9a0e064d8d036c517982172e7022c633bfa59d67143cc2cc364f7bd70f9"
+        },
+        "map": {
+          "bytes": 15326015,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-vadimcn__codelldb-f46207/entry.js.map",
+          "sha256": "6848f899d97127460d36241abf76a578e8128fcabe8f7722b2c0349985a9fc73"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-vadimcn__codelldb-f46207",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d1624d4413f5ea71f04ea0822cfb5dce504f49ff0f46088b80f8b6279a20c102"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-harrydowning__vscode-yaml-embedded-languages: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5009362,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f/entry.js",
+          "sha256": "4c39efe876ebe559e5f472aade6f18301f1f99a3b1c2c69510b0e37f6ed07ad4"
+        },
+        "map": {
+          "bytes": 17062618,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f/entry.js.map",
+          "sha256": "00c7f208a8c85d8c365348df4d3e2dbe80ece1cee327d311e769cb785b54c929"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bd7c31bba3c6a7b685e54a5878082b2cf1b365a903f260ee855729dbbc26afb0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-kenhowardpdx__vscode-gist: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 590158,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-kenhowardpdx__vscode-gist-7a8987/entry.js",
+          "sha256": "678170e22d7c6b5d045c69088268e3b3c1092b92bfd6705c57e11e1d625e77dd"
+        },
+        "map": {
+          "bytes": 1696046,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-kenhowardpdx__vscode-gist-7a8987/entry.js.map",
+          "sha256": "703f61df831d15c98ff98c6ad03f606057de45b5b60f5e92efd67531826cd5e5"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-kenhowardpdx__vscode-gist-7a8987",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6fbd10c81890af0822505269209ecf0591ce57c350a2a27aa5dfc1bddf24dd07"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-bourhaouta__vscode-tailwindshades: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5358314,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-bourhaouta__vscode-tailwindshades-28c415/entry.js",
+          "sha256": "43dc8765ceb42b060c7a82801d24948186240cd03a4a6c97c14f39b9f9f4815d"
+        },
+        "map": {
+          "bytes": 16797484,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-bourhaouta__vscode-tailwindshades-28c415/entry.js.map",
+          "sha256": "b89e256e55919d7ffd9751b43a66d160a101cea0bb7d4bfec3382dad53ca415c"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-bourhaouta__vscode-tailwindshades-28c415",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "929d39a112c421f8b33fcc0836c7edde25a24539c837c1a3211dd3e11215a171"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-supabase-community__supabase-vscode-extension: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 526411,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-supabase-community__supabase-vscode-extension-a5f28f/entry.js",
+          "sha256": "bccd57c1e01914a8bc4d628605d23aae5a2d35b4959ab2192c420c37ffd0f4f9"
+        },
+        "map": {
+          "bytes": 1870238,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-supabase-community__supabase-vscode-extension-a5f28f/entry.js.map",
+          "sha256": "dee82f029593cd937a885c79050e0707a85b7a35bff9a315f3c574db535b7802"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-supabase-community__supabase-vscode-extension-a5f28f",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "dc2e0d3debc95361a7832a4b89fb8f222989254bb92587c62998fdad8280b7de"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-arrterian__nix-env-selector: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 3871077,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-arrterian__nix-env-selector-7ecd90/entry.js",
+          "sha256": "715b0ae60cd9bd9c319085388bea4f00e306ab0124098a5f96a7735a9a518624"
+        },
+        "map": {
+          "bytes": 13418773,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-arrterian__nix-env-selector-7ecd90/entry.js.map",
+          "sha256": "76793ece53118c3409278736bf620a37b39bcf7868d3504145e582adda296b44"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-arrterian__nix-env-selector-7ecd90",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5e13806297fb271de523b678b2a899154fd35e378d608d6f4a77dc40bd964bd4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-microsoft__vscode-js-debug: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5656552,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-microsoft__vscode-js-debug-9920bd/entry.js",
+          "sha256": "5270ca2eee73c1583154298b044fe4b232619cbf0732a86d8f4367a2b5ead0c2"
+        },
+        "map": {
+          "bytes": 18947109,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-microsoft__vscode-js-debug-9920bd/entry.js.map",
+          "sha256": "de8c460f0493161ad0e49be572ded125f279ff92735a74416293d29d1a68088c"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-microsoft__vscode-js-debug-9920bd",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a0eb9b438d4c0be493f01e8651d18f3a3502db762b9e4d63ba30dc6c8c184d4b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-mattbierner__vscode-docs-view: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 3551655,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-mattbierner__vscode-docs-view-11a464/entry.js",
+          "sha256": "3c01db7663c113bf586f5b06b8d7c92b1a5b688e1c47f89dbbeccdc3b6f2bf97"
+        },
+        "map": {
+          "bytes": 10189746,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-mattbierner__vscode-docs-view-11a464/entry.js.map",
+          "sha256": "adee0a59b0cf79c2732cb6bbddd39266d0e2c0f80adcb05b74be3a947f39aabf"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-mattbierner__vscode-docs-view-11a464",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "31b28c902eda6a8ccbc6df57a359027839219fa06c9d31f7ec485a63d3d772ac"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-bmewburn__vscode-intelephense: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 9394239,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-bmewburn__vscode-intelephense-9c105c/entry.js",
+          "sha256": "a6dd2af62f4ed38a885d8e383df4a0f51c0bea181449cae3fb43f09313fec845"
+        },
+        "map": {
+          "bytes": 20756836,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-bmewburn__vscode-intelephense-9c105c/entry.js.map",
+          "sha256": "caff1bd4ce25e19f8893d2d03645ff0a8c9103125226a36797f15f64be13cbef"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-bmewburn__vscode-intelephense-9c105c",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b0cdb087749257c286ae374ac5212ce727b8e234883d5282e1916112dbcd3aa0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-alefragnani__vscode-project-manager: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 443022,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-alefragnani__vscode-project-manager-2f5fdb/entry.js",
+          "sha256": "e6bc8ee60c905e63b3579b953ff1a5f17962ace4fc004aca49b2e745e2bdfeae"
+        },
+        "map": {
+          "bytes": 1795112,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-alefragnani__vscode-project-manager-2f5fdb/entry.js.map",
+          "sha256": "636163f785504c6435e6d62a15038efbedc626f11157d681357c630766367804"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-alefragnani__vscode-project-manager-2f5fdb",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "127ffb54e18bb109329ae2c16cc51601f67a64c1f53c8b11c1306ff299380631"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-kokororin__vscode-phpfmt: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 12211,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-kokororin__vscode-phpfmt-6129f4/entry.js",
+          "sha256": "1f9073241b9764f00c78aa626d84a6bf75ae2e709d13b8ff3c9406d20334f04d"
+        },
+        "map": {
+          "bytes": 52501,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-kokororin__vscode-phpfmt-6129f4/entry.js.map",
+          "sha256": "43f671f9e7a7e0ee4fc4e5550140920cd0c1786a8c6e54504f6f9d2956e82764"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-kokororin__vscode-phpfmt-6129f4",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ef7f0d14a2cf64053c55e7aed5b8650bdc63ab78d8eb0356b5532b5f595ee01c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-andreafrederica__andrea-novel-helper: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 5439134,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-andreafrederica__andrea-novel-helper-01158a/entry.js",
+          "sha256": "e435587bb65e1eb4759f45c3f610913dad9b80fc889282862e7a86f2ce789db8"
+        },
+        "map": {
+          "bytes": 12556871,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-andreafrederica__andrea-novel-helper-01158a/entry.js.map",
+          "sha256": "7cfa8b40f53dddceaef2eb51dacec4caeec18510fe91521508a9667c65ee971e"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-andreafrederica__andrea-novel-helper-01158a",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3840a4e332fdf02b0f091c41637c8c982f966e68087be4ca3514115e45e4fb1f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-mblode__vscode-zotero: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 2565599,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-mblode__vscode-zotero-63d7c9/entry.js",
+          "sha256": "b20d106c4261648e55083844796290a47b048b68d2c4c2d5115d1022ff76166f"
+        },
+        "map": {
+          "bytes": 9645523,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-mblode__vscode-zotero-63d7c9/entry.js.map",
+          "sha256": "2de8a5df3dc526364436c54a10120a1ca9b2d42a6113d7a4aac533fa51579de4"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-mblode__vscode-zotero-63d7c9",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d8e1f5685055d858d531e452156d872204eb667c6aa478507e3a5f7199eb6edc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-kejunmao__vscode-devtoys: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by terser 5",
+      "files": {
+        "bundle": {
+          "bytes": 7740643,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-kejunmao__vscode-devtoys-a1140c/entry.js",
+          "sha256": "a018197704d7494ae662280efc5eee31cad0d4bca8f24f9665cd47fdc85d71a5"
+        },
+        "map": {
+          "bytes": 25974772,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/terser/vscode_gh-kejunmao__vscode-devtoys-a1140c/entry.js.map",
+          "sha256": "f1e651bd6c4b53538ee99fb4a0217a886c3d44d7536dbb88808c8fc22d28a91d"
+        }
+      },
+      "id": "remin3-terser-vscode_gh-kejunmao__vscode-devtoys-a1140c",
+      "kind": "vscode",
+      "minifier": "terser",
+      "set": "remin3-terser",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f1d9a3dd6a65b5d15c17547b10623d1fb969c1337860ae7ba03011f638f3ead9"
+      }
+    },
+    {
+      "appPackage": "ultracite",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:ultracite: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1641105,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_ultracite-91ac1d/entry.js",
+          "sha256": "b6ebe2ca1e047a0ab425c5a0ae098dfe2e600019d062f11288a1aa9b9e85f350"
+        },
+        "map": {
+          "bytes": 5836705,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_ultracite-91ac1d/entry.js.map",
+          "sha256": "4338fdcc452bcd0632d8ae8400417d6bc10ec70988ee75f1d2d8ea933f1490e7"
+        }
+      },
+      "id": "remin3-esbuild-cli_ultracite-91ac1d",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3f5384c7856c262ef4c3842044c1a70fd023743c5b4738eec02bbf9afa08e22a"
+      }
+    },
+    {
+      "appPackage": "@electron/rebuild",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:@electron/rebuild: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 85085,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_electron_rebuild-2c1efe/entry.js",
+          "sha256": "b32e885d725dbeee9f0d54c14c27a0bfb9612890445b9f93584a876427feee88"
+        },
+        "map": {
+          "bytes": 243537,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_electron_rebuild-2c1efe/entry.js.map",
+          "sha256": "04ebf9aafc280f86b7f28c151c9114d1ec6217e48afdac67d4cd7e83a47d6db6"
+        }
+      },
+      "id": "remin3-esbuild-cli_electron_rebuild-2c1efe",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "53bd5b1ae311925b6f092f22fc169ca8e20c08e041614b554d05dbe430d04a56"
+      }
+    },
+    {
+      "appPackage": "svgicons2svgfont",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:svgicons2svgfont: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 212135,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_svgicons2svgfont-ea30f9/entry.js",
+          "sha256": "f71add70449c7511444216b4fa94aeb8a76d9e9e2f2e7ac50736a0209b5365b3"
+        },
+        "map": {
+          "bytes": 1047263,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_svgicons2svgfont-ea30f9/entry.js.map",
+          "sha256": "6037217ab877ee82a94bb104a37e794e7d8bbc77b9d1f8fc1398b6a87a92a584"
+        }
+      },
+      "id": "remin3-esbuild-cli_svgicons2svgfont-ea30f9",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "20d4ca087b28f7516cc753559b2966fd2b02df6be1038c0248534b49fb98aa4e"
+      }
+    },
+    {
+      "appPackage": "cmake-js",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:cmake-js: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 357382,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_cmake-js-e29090/entry.js",
+          "sha256": "f59261800958eec31a9b0656a3520f94ed9b70f2b14cd49b010d54287e5e4ecd"
+        },
+        "map": {
+          "bytes": 1252835,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_cmake-js-e29090/entry.js.map",
+          "sha256": "066ff43e35b26f9181cac9abda419652268769b8934b343c57e13b6a821d2314"
+        }
+      },
+      "id": "remin3-esbuild-cli_cmake-js-e29090",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0c73f3b6c7273b06627da55b37e76b76bab6f4060b090bb250308c70105392ec"
+      }
+    },
+    {
+      "appPackage": "sonarqube-scanner",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:sonarqube-scanner: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 549765,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_sonarqube-scanner-f71925/entry.js",
+          "sha256": "63b48c839e732d6eb5e2846a666b4429829ce5bcb680b610017e70439f110a20"
+        },
+        "map": {
+          "bytes": 2349569,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_sonarqube-scanner-f71925/entry.js.map",
+          "sha256": "2381b57917bd619a8f926ab75e2d40714c9863cf0f34fb4eac0aa0a28d27d5ba"
+        }
+      },
+      "id": "remin3-esbuild-cli_sonarqube-scanner-f71925",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "99c947b30502749adc373c0ba02f28103332e74b7d44daf57203cf8226f9f5b7"
+      }
+    },
+    {
+      "appPackage": "@alcalzone/release-script",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:@alcalzone/release-script: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 206659,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_alcalzone_release-script-9e09f0/entry.js",
+          "sha256": "428ef3873b49c7baeda65b07645be01fde76318942bbd2bc1e659341c49a6d37"
+        },
+        "map": {
+          "bytes": 758971,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_alcalzone_release-script-9e09f0/entry.js.map",
+          "sha256": "551663fc9ffca8da95fc3fbb632c7b00bcb5244f18e57f337cdffe164b0068be"
+        }
+      },
+      "id": "remin3-esbuild-cli_alcalzone_release-script-9e09f0",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "981395c412b9f22962564527efc7e2491e542965fb4c7a1c7903f42048413e3a"
+      }
+    },
+    {
+      "appPackage": "grunt-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:grunt-cli: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 112646,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_grunt-cli-00d477/entry.js",
+          "sha256": "e2c609b22ff308882e9ebd92a9dfcaa4e22095952337745af1f99b9460536823"
+        },
+        "map": {
+          "bytes": 428653,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_grunt-cli-00d477/entry.js.map",
+          "sha256": "a4378ea6e4096c8910dbe9744651ba26a546940086280d9747c2b8df41b27a34"
+        }
+      },
+      "id": "remin3-esbuild-cli_grunt-cli-00d477",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ca66978c0ed9ba3caa28881c7490c5f56659c3edafff4ecd7af3ad992ce4a872"
+      }
+    },
+    {
+      "appPackage": "@astrojs/language-server",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:@astrojs/language-server: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 2269912,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_astrojs_language-server-0926c5/entry.js",
+          "sha256": "1310e2f1db3ecc1d35d14cf4493b43eee9d52a2397f1b736d1e25dee0f2756b3"
+        },
+        "map": {
+          "bytes": 7333111,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_astrojs_language-server-0926c5/entry.js.map",
+          "sha256": "da408a18570c302e967cb6bea66fd4ffb37318f2e89570aba8e99d2f2584812f"
+        }
+      },
+      "id": "remin3-esbuild-cli_astrojs_language-server-0926c5",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5d7fb24c20b984d73757d6f440efae36dd82887ec1b9e1c5540774628f3870c8"
+      }
+    },
+    {
+      "appPackage": "metalsmith",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:metalsmith: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 198279,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_metalsmith-285bc4/entry.js",
+          "sha256": "081dc961fbe5bc6c2219998faa39cd7039cbe21304a4726d8be2e97a7bab3636"
+        },
+        "map": {
+          "bytes": 772078,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_metalsmith-285bc4/entry.js.map",
+          "sha256": "dd0c12f3a6afc132eeca9791dfec726f70d8a4f6f0fbf827ba8e5b5269fc692f"
+        }
+      },
+      "id": "remin3-esbuild-cli_metalsmith-285bc4",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4660bef76b97774d424732d0d7583c2f5e67814367be29c6687feeef4502f94d"
+      }
+    },
+    {
+      "appPackage": "prettier-eslint-cli",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:prettier-eslint-cli: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1795844,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_prettier-eslint-cli-c39716/entry.js",
+          "sha256": "428e7cd8da68a43a0d7d99d20240c6bbd672dcbcb2668b4f3bb2bc78aacc18c4"
+        },
+        "map": {
+          "bytes": 7894903,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_prettier-eslint-cli-c39716/entry.js.map",
+          "sha256": "9141d2e5f1535b3020db48c1c190dad8c59aa608bd05160644e67df006821f8b"
+        }
+      },
+      "id": "remin3-esbuild-cli_prettier-eslint-cli-c39716",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c917eeacbbdb428a4fb31972c31c56c599107cb5abfe7dbaace1e29ce649eb97"
+      }
+    },
+    {
+      "appPackage": "f2elint",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:f2elint: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 499844,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_f2elint-8791d9/entry.js",
+          "sha256": "5291b7e3c958e8e1b4df10d4689f6f9f480f0a9ab5456622dcf5cd51942bc95d"
+        },
+        "map": {
+          "bytes": 1819150,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_f2elint-8791d9/entry.js.map",
+          "sha256": "70d188c25de91d525d3b3b3641e5ec549c1a93ab9701c08b4bcae9afe7bf148a"
+        }
+      },
+      "id": "remin3-esbuild-cli_f2elint-8791d9",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "760167f2d46636585c8490656587d8311b88ef14563faa5b0ab5ee78fcf4befe"
+      }
+    },
+    {
+      "appPackage": "typescript-json-schema",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:typescript-json-schema: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 4132987,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_typescript-json-schema-e8c37b/entry.js",
+          "sha256": "5f0d32eccbc1232f1bc5537658459172475e7fbea99d33c4b4135ca9517d2ed2"
+        },
+        "map": {
+          "bytes": 16487784,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_typescript-json-schema-e8c37b/entry.js.map",
+          "sha256": "61e7dce9d933a1460b156989b7f80cc780ec34489745e348f32229433a4550fb"
+        }
+      },
+      "id": "remin3-esbuild-cli_typescript-json-schema-e8c37b",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "93839549100538dea358d3dfb7b6c5c6247f71eb39313b2cb0ce3236a24818c8"
+      }
+    },
+    {
+      "appPackage": "microbundle-crl",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:microbundle-crl: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 8660362,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_microbundle-crl-7c5731/entry.js",
+          "sha256": "4c5bcd0a170323b09ba086ff59fc46cc228958d8a10e9255cfb21be52a80c1ee"
+        },
+        "map": {
+          "bytes": 32390852,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_microbundle-crl-7c5731/entry.js.map",
+          "sha256": "8ab814bcf0a12a3b2269a02fa871284d7d2fc3203be3411a7c6f583b9d31e220"
+        }
+      },
+      "id": "remin3-esbuild-cli_microbundle-crl-7c5731",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "63069e1d34c1383cb6ed17cc86db0926698227a412c644ffc7c7df24325f01d2"
+      }
+    },
+    {
+      "appPackage": "tap-min",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:tap-min: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 152795,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_tap-min-cdf3e3/entry.js",
+          "sha256": "9730dcd3f6059a326c8f3cb2bcb7dac8c67eca1b73e5740fef8612acf9133a4b"
+        },
+        "map": {
+          "bytes": 602115,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_tap-min-cdf3e3/entry.js.map",
+          "sha256": "194e1150e198b15ceec1012c1d4ed5bb2416fad1bf4941f0493c58fb8abedaeb"
+        }
+      },
+      "id": "remin3-esbuild-cli_tap-min-cdf3e3",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "663dab5bc1d178fe698f642656877f695e63c5d18cb46a31ae8af807d0fada3a"
+      }
+    },
+    {
+      "appPackage": "yosay",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:yosay: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 244331,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_yosay-a6f972/entry.js",
+          "sha256": "96b5f99c7a75830ecda594be52d3b3e2f9d3ab977e767358e19736542a196984"
+        },
+        "map": {
+          "bytes": 775865,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_yosay-a6f972/entry.js.map",
+          "sha256": "9515e924d46289b76b56b62398c965d31d0fb07b409eb82ee210822a2232babc"
+        }
+      },
+      "id": "remin3-esbuild-cli_yosay-a6f972",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "187153cce7112168f71a7e7c4bde267a95395455293a4db54f4b38c1d72e29e7"
+      }
+    },
+    {
+      "appPackage": "conventional-github-releaser",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:conventional-github-releaser: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 635929,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_conventional-github-releaser-6ca6de/entry.js",
+          "sha256": "04257d2e1a326f3ead8eb6bdf1c0c75269203e54c0871fb3b13b5acab5c82795"
+        },
+        "map": {
+          "bytes": 2446475,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_conventional-github-releaser-6ca6de/entry.js.map",
+          "sha256": "18a9f3d70f3d0a0e3b4a1eb758116ef10a3e01afc1ea519546e5f7dce5c01fe2"
+        }
+      },
+      "id": "remin3-esbuild-cli_conventional-github-releaser-6ca6de",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "fbb38c7ac1ee152830514e2c90db3ee1dcc85955673f3eb6bc79a13ca105d03f"
+      }
+    },
+    {
+      "appPackage": "babel-watch",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:babel-watch: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 140498,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_babel-watch-9ea2b9/entry.js",
+          "sha256": "527335e542cbd8c0155a0d2685350862ea38d4288abedd571429d3103b076ee0"
+        },
+        "map": {
+          "bytes": 577201,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_babel-watch-9ea2b9/entry.js.map",
+          "sha256": "ba611a5f5fdcf24f06da3d53e295948547af75f35ab33c37380fdf179072b531"
+        }
+      },
+      "id": "remin3-esbuild-cli_babel-watch-9ea2b9",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "51076df94852235869a6036cecab350cab8df87193dd3c89c09e708f2f02ebe1"
+      }
+    },
+    {
+      "appPackage": "metro-inspector-proxy",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:metro-inspector-proxy: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 496356,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_metro-inspector-proxy-f48511/entry.js",
+          "sha256": "4734ed4991be9eaf5aebccdc8781cde07b9f237821461ab203dfc35a05a4f7fb"
+        },
+        "map": {
+          "bytes": 1473708,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_metro-inspector-proxy-f48511/entry.js.map",
+          "sha256": "8f0474726a059ade0f029b18ef346cc8c7b4fd88a54ca9cdc5dc2a3f0d0253d6"
+        }
+      },
+      "id": "remin3-esbuild-cli_metro-inspector-proxy-f48511",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9c2d72ebba40b9c074516b387ff34cb6488aed6189cd726e8c81881a583e7827"
+      }
+    },
+    {
+      "appPackage": "n8n-core",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:n8n-core: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 639672,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_n8n-core-1c36ca/entry.js",
+          "sha256": "1ad554a95697cb935d4ba8a84c6625d79c1f65c6c160dc308f84ffbec37a477c"
+        },
+        "map": {
+          "bytes": 1883693,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_n8n-core-1c36ca/entry.js.map",
+          "sha256": "bd500755a740a80a64d8e879471adc5dc8e92cadb80d6878351165e85fcda1d2"
+        }
+      },
+      "id": "remin3-esbuild-cli_n8n-core-1c36ca",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a85b6db6edbb676e72cf27dd40d55775dbad11e183b9f2723d9d2aab2235590a"
+      }
+    },
+    {
+      "appPackage": "electron-vite",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:electron-vite: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1440317,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_electron-vite-23b4a5/entry.js",
+          "sha256": "40268ba63da55611dffa700f0ac8635450bd2e1471a4c8b51b5f8b7ff2a85992"
+        },
+        "map": {
+          "bytes": 5022524,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_electron-vite-23b4a5/entry.js.map",
+          "sha256": "22f82487da508add3d426a013a972174eedd0aa0b1c58116b1533ad79e58a445"
+        }
+      },
+      "id": "remin3-esbuild-cli_electron-vite-23b4a5",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8cd6c91a1cea84f67d51530794b2ea489029fb987ab2382fbf4f469db2a1f159"
+      }
+    },
+    {
+      "appPackage": "yeoman-environment",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:yeoman-environment: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 2484268,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_yeoman-environment-ce36cc/entry.js",
+          "sha256": "05e8534e4392bd1f6f1ffe97e33f7bf0fce29bfd063926b219cd0c4c4bc791ee"
+        },
+        "map": {
+          "bytes": 8738267,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_yeoman-environment-ce36cc/entry.js.map",
+          "sha256": "119eeddda72fc6bea9204517e6f4d2f3143ff74f84700902744c412df161f2b2"
+        }
+      },
+      "id": "remin3-esbuild-cli_yeoman-environment-ce36cc",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8c231c0e854dd02f31128672541641a3c5b1c15e4efcbeebcf4901e0bd283189"
+      }
+    },
+    {
+      "appPackage": "gatsby",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:gatsby: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 3682312,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_gatsby-5e5162/entry.js",
+          "sha256": "3e4809b62c5c0c6edfce549476d6965bc16f5d0be6dda14c1c5b11c777a1b195"
+        },
+        "map": {
+          "bytes": 10679781,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_gatsby-5e5162/entry.js.map",
+          "sha256": "a7e9c0347cc05300d3a6204abc043dda43f6c3a1b86f9fd352f7c94970f5987d"
+        }
+      },
+      "id": "remin3-esbuild-cli_gatsby-5e5162",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9cb486a7bf3fe26ded09d2a45905a17b0da593e8d57fdde78ff11f2a26e20bf1"
+      }
+    },
+    {
+      "appPackage": "svg2ttf",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:svg2ttf: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 266702,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_svg2ttf-cfc940/entry.js",
+          "sha256": "f6b1b1958923ba961156f8d7c68823c8059552edde522bee64724709984727c5"
+        },
+        "map": {
+          "bytes": 1056169,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_svg2ttf-cfc940/entry.js.map",
+          "sha256": "5a006f1c3194e14e67a906be89909dfd4f27082a95450607247ad2df62eeee8a"
+        }
+      },
+      "id": "remin3-esbuild-cli_svg2ttf-cfc940",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e4c9ef79608d7527c55f6dcf93e310a3b96c92dd66c0be2fc162bba850bf0e2c"
+      }
+    },
+    {
+      "appPackage": "yeoman-doctor",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app cli:yeoman-doctor: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 286076,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_yeoman-doctor-f29137/entry.js",
+          "sha256": "a9fec1138762df90c795aecf2193c88542c7170243a30ab852cb1b694ad828cf"
+        },
+        "map": {
+          "bytes": 1178749,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/cli_yeoman-doctor-f29137/entry.js.map",
+          "sha256": "bd16cd45bad45e6cf758eab42d4499740126e0010f0aaea9e7a365df2731c10b"
+        }
+      },
+      "id": "remin3-esbuild-cli_yeoman-doctor-f29137",
+      "kind": "cli",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "27ade24bff000ed13bb9978da23e75f15c6d46c726d03be909293ab4cea0d8d2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-pedr0fontoura__gtav-audio-occlusion: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 526722,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955/entry.js",
+          "sha256": "b2c04cd1cc539c448a58c58608c2916361aaffce57d09fb27807730397d96e7e"
+        },
+        "map": {
+          "bytes": 2003987,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955/entry.js.map",
+          "sha256": "f5edae930448d5eed060e335de5d4a0e6a5c2a7d0b3bfc9c4580241ea87ce988"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cdaa5e702bfe835ba59ae562c71deae234f468f35435eaadd1f7b64f6dee9f2e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-iimeta__iim-web: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 9653431,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-iimeta__iim-web-8609e9/entry.js",
+          "sha256": "b4540e92a70b0c82ccdb4fa84141e087d2ec7991f7494c587d64a76f70bad846"
+        },
+        "map": {
+          "bytes": 26754172,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-iimeta__iim-web-8609e9/entry.js.map",
+          "sha256": "bde24124afad1b3d24fab22f18c1c663b2c992f7aea21e93119b517ce4632e25"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-iimeta__iim-web-8609e9",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2e8b498e6d1082d797e51437bfd907014d4f4c8fdf64076564111eed4f584b10"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-ploxc__modbux: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 12266861,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-ploxc__modbux-9f89a7/entry.js",
+          "sha256": "e7b8397b128396267c9b8d726435601258c2b2694fafbdd937d8b7767004c123"
+        },
+        "map": {
+          "bytes": 37695142,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-ploxc__modbux-9f89a7/entry.js.map",
+          "sha256": "64dead3bde24319baf8c9771901bc44cfc9ed93f4b0551d56c26ff56a417e102"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-ploxc__modbux-9f89a7",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "78c4e404ec0bfa9235cf2f7818db2f34469f51de1e13ba0e4c2f413b2a99f7c9"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-inulute__simplexity-ai-app: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 291066,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-inulute__simplexity-ai-app-4a3432/entry.js",
+          "sha256": "4fd332add87b5ac9adc2b5b565533d06a1e65dddfc7509ef1f5c0827e10f2885"
+        },
+        "map": {
+          "bytes": 1167864,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-inulute__simplexity-ai-app-4a3432/entry.js.map",
+          "sha256": "c9cef0442c690ad055af381bebed20cb6b9e5eaa269a09ea66649d3effc44fec"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-inulute__simplexity-ai-app-4a3432",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "34eb57af3d657c3ab3f696e8dd5689109e5c8db582f9b1ca351364dab009196a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-nathanlesage__local-chat: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 3368428,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-nathanlesage__local-chat-85d7b3/entry.js",
+          "sha256": "d78c82ac9b836c5501267ed1a3a92f986b6a1d37092dae65decfb078fd504242"
+        },
+        "map": {
+          "bytes": 10066511,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-nathanlesage__local-chat-85d7b3/entry.js.map",
+          "sha256": "92d5dfdc246d3446c8d05fe911cc395a2bd4954b8569417a517384b6d513d7ad"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-nathanlesage__local-chat-85d7b3",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ccdbb8d0b51c580f0d2ea2ce08a19a999c2187b36c821a59b1a64db06378be64"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-dznass-cmd__radarrss: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 3724813,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-dznass-cmd__radarrss-6546f8/entry.js",
+          "sha256": "be79ff9770fc0686d2facc07882e68fff0260f5c5c5da0d0bd9880481cd02f8f"
+        },
+        "map": {
+          "bytes": 14421668,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-dznass-cmd__radarrss-6546f8/entry.js.map",
+          "sha256": "817493a68b437f55a8983367a1bcb44cd171e1177cf19f0ffda0a3d72cce4161"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-dznass-cmd__radarrss-6546f8",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "acfabe642a850c6f57f2ade5c34c9ae6f782b629a5f18914a079f996261bfa86"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-rn0x__altaqwaa-desktop: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1688945,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-rn0x__altaqwaa-desktop-69b6f0/entry.js",
+          "sha256": "977df226bc9a4ed75812a664291440e4c2049d8b6e453338231a6733149939f2"
+        },
+        "map": {
+          "bytes": 5765347,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-rn0x__altaqwaa-desktop-69b6f0/entry.js.map",
+          "sha256": "d57c0531d49918219b30c76a7f814c53444df32849d78feda079ad9eb8f024ab"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-rn0x__altaqwaa-desktop-69b6f0",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "722fb9179dc533f23ece87f1a5184974e04cd493d9bf53383ba2713f1741b510"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-guasam__electron-react-app: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 4882813,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-guasam__electron-react-app-7d7e21/entry.js",
+          "sha256": "113d899cb72f0fa3e185b679d06b44fe140fbae356aeb65f2301f4467035865d"
+        },
+        "map": {
+          "bytes": 16654981,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-guasam__electron-react-app-7d7e21/entry.js.map",
+          "sha256": "4740608d674a404f44aecda0432e860f2da7f709456bca19041f75590b7f5e44"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-guasam__electron-react-app-7d7e21",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7d5feb812632920be6471a4970d35db680046e62cf8b4cf1e910c0bec4335afa"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-loranallensmith__brightwheel: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 856008,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-loranallensmith__brightwheel-8201a2/entry.js",
+          "sha256": "ceba22d08ba6ff6e04979c6f0303d4331296129f26953e2cd1b5d26edccba911"
+        },
+        "map": {
+          "bytes": 3273779,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-loranallensmith__brightwheel-8201a2/entry.js.map",
+          "sha256": "9e39a69edc2746372ad1966af42182dd51fb2bf14975255535e9f77aa25db4ee"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-loranallensmith__brightwheel-8201a2",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "63ad609009e215536b1310834d1e05663cdb62e0caa005b42ae228c412277043"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-antropos17__aegis: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 5570515,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-antropos17__aegis-b57998/entry.js",
+          "sha256": "72414b795809696352d2cf56a89599fea323f58492b76a4475c7ec8f7abbb3e6"
+        },
+        "map": {
+          "bytes": 16949733,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-antropos17__aegis-b57998/entry.js.map",
+          "sha256": "e7297952de51b429c79cad487f3d97db41f1d226c9f28fef8b821dcc9bcba394"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-antropos17__aegis-b57998",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "764ed66eb7a22358d721a60666e5cef8b644d3c61519de7ed3abb38f71cd68bc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-wangrongding__wallpaper-box: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 5322370,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-wangrongding__wallpaper-box-262dc5/entry.js",
+          "sha256": "2e09da6b928106cbdbba8018a63a765d1f06b421debda669e5b789013dda07b3"
+        },
+        "map": {
+          "bytes": 18848614,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-wangrongding__wallpaper-box-262dc5/entry.js.map",
+          "sha256": "745a925809fb27029f8b27a02cd1d1e6c3dba6c864d8eb4aeae8d17dfb3a35e1"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-wangrongding__wallpaper-box-262dc5",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3332ba9652ecf2f7ba7a49a053d18b9a990ba02af5cee58b36c510916ec80541"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-tahnik__electron-react: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 848177,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-tahnik__electron-react-8bef0d/entry.js",
+          "sha256": "c2a394701a9fc358af2131ac51dd377f132f3a41ac60bae66b9c8d82bd74dfc4"
+        },
+        "map": {
+          "bytes": 2714358,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-tahnik__electron-react-8bef0d/entry.js.map",
+          "sha256": "768426fed84f6cd3bd031bd05bca9396c5a4adbf522a60616427717d1e356ed2"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-tahnik__electron-react-8bef0d",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "877a8d7139a6772c255912a3b9806b29887479b6e8178a00ad2018e93bbcd1a0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-sindresorhus__electron-reloader: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 40119,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-sindresorhus__electron-reloader-b02378/entry.js",
+          "sha256": "44c66052fe9facd23a23540b01ee2585d8505766457b3ef9eb75cc295f612813"
+        },
+        "map": {
+          "bytes": 171790,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-sindresorhus__electron-reloader-b02378/entry.js.map",
+          "sha256": "c272034c6ddf21463a17976ba9ec0226d5dd8fe218c9d6d3d2733554de02e93e"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-sindresorhus__electron-reloader-b02378",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b508b1a52d2416bef941a3c8af443dbbe8fe5257f540557bfcbafa2bb0efebc4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-qufei1993__dsh-desktop: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 718386,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-qufei1993__dsh-desktop-f5483b/entry.js",
+          "sha256": "389b097b924179fd34e441a493e71744129eb74a9aa847740b4f5dfdc38c7b03"
+        },
+        "map": {
+          "bytes": 2389718,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-qufei1993__dsh-desktop-f5483b/entry.js.map",
+          "sha256": "73eacf83346e73421878eca758df3479fd56b3d9084cbeb491c154e7d6f9f2b3"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-qufei1993__dsh-desktop-f5483b",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "19fe39c0714d54a1ca11c72abab5c270ddba8d5e81b8940e833324d238ffa22f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-sanjevirau__gsubs: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 547464,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-sanjevirau__gsubs-2bfa7a/entry.js",
+          "sha256": "00417435e8a0d527c6cf4ac5ab5d480b4b2ca9c288b857ca4e948124098eb152"
+        },
+        "map": {
+          "bytes": 1895343,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-sanjevirau__gsubs-2bfa7a/entry.js.map",
+          "sha256": "392368b6a88d4093e723fd40c1e45b24a4a522376ce6fcb392e5e4312d6c179e"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-sanjevirau__gsubs-2bfa7a",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "daabc3495dcbc14c7cd55cbed865cf05b3eb44e8c63cf17d5b9618fe692f838e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-tomkp__card-spy: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 2331972,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-tomkp__card-spy-4c2a3e/entry.js",
+          "sha256": "f0b72bf756c07f60d0d9b38fd5b9d8c1300702f7b406ebf51126764529c33f5e"
+        },
+        "map": {
+          "bytes": 9467170,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-tomkp__card-spy-4c2a3e/entry.js.map",
+          "sha256": "7c572af5fc21512b869a5afbab20eb0db18b08c762d592a10dc104972d8386e3"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-tomkp__card-spy-4c2a3e",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9e32dfec0a7fe4f0acef10f313dbe33d2b839bda5a1a89b47acdb37d1ac718e3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-soulehshaikh99__create-svelte-electron-app: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 55117,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b/entry.js",
+          "sha256": "bb95b4d8d5a08ed29d9f0a657e8d8621acff7a3b28fa9ba9448b892b79a161f9"
+        },
+        "map": {
+          "bytes": 211451,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b/entry.js.map",
+          "sha256": "82f3c93026e327d94466e8310b6ed9f61102af101a53e1af1e5eecf737c028d4"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "041edc687c7f9c978e005d0a6b7d93ce57336beb08a332321e85c18bca5960fc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-onmyway133__pushnotifications: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1133286,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-onmyway133__pushnotifications-17a4eb/entry.js",
+          "sha256": "9a41d54b156a08412f3703b024e3a47c61b531db44b2e08d5aa07eb4d9828b2c"
+        },
+        "map": {
+          "bytes": 3153790,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-onmyway133__pushnotifications-17a4eb/entry.js.map",
+          "sha256": "b79054a0916a11a542cec0e77395bf462e3fe9ba980992e338539f53d0f16e93"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-onmyway133__pushnotifications-17a4eb",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "184e122a1d64e891849e26a5b9b2964f8e92dc09a1ae16eafb56d53f3462df1f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-aivis-project__aivisspeech: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 11132587,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-aivis-project__aivisspeech-12f4f8/entry.js",
+          "sha256": "fc4aaad8de0e12a19ed36799572666944b0f3fbc4af0d4de063778aed4f26e3a"
+        },
+        "map": {
+          "bytes": 37584065,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-aivis-project__aivisspeech-12f4f8/entry.js.map",
+          "sha256": "e839c2a9de7c81e46827a5b635a48311640e37268384ee23a6183672da6f4aa0"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-aivis-project__aivisspeech-12f4f8",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7e1dbc8012e362676d2ddcab480d88da2e0e04321b4d241413637da63fce0203"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-cerzi__videoswarm: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 3770371,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-cerzi__videoswarm-3d12b2/entry.js",
+          "sha256": "5aeb19357bdaefb8eca3fb515f3806d02125a867ff47d1870106ce523eed2462"
+        },
+        "map": {
+          "bytes": 11177734,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-cerzi__videoswarm-3d12b2/entry.js.map",
+          "sha256": "9f008d1e36c43b953b61f98d3e0ff8aaf2a09c83c771dc7a234eca225aa10154"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-cerzi__videoswarm-3d12b2",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f8e648511b9549c01d03a4983df1a95ef985c60607c03af89a0f3117e879e139"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-alexkim205__g-desktop-suite: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 539483,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-alexkim205__g-desktop-suite-5c7dc8/entry.js",
+          "sha256": "021ac484ca1302099b18eda7cf881b3523d8c97fa0d096b4f2a9ccb75028bd8c"
+        },
+        "map": {
+          "bytes": 2169693,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-alexkim205__g-desktop-suite-5c7dc8/entry.js.map",
+          "sha256": "aec5486b9a3d383d05d1e92ea41bfba566f5c4407eb5f7fe938958f27caf4668"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-alexkim205__g-desktop-suite-5c7dc8",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "49619f0bcb4c1a87364bb116d34727af05a3e66fb3891e11d93726dc3f9fc564"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-japdl__japdl: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1773394,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-japdl__japdl-50b326/entry.js",
+          "sha256": "b7c36c32fd5a836c7d384c2f47c3757d705f3c8f59dc9b090a5dec9f3e18e308"
+        },
+        "map": {
+          "bytes": 5038914,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-japdl__japdl-50b326/entry.js.map",
+          "sha256": "7403c78ff25c9fa07b4a11c011f5dd3808d1d8cdd35209da90d6fe0e5722578c"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-japdl__japdl-50b326",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "84621a7dbcc651b6e90162a29d038e309248290b74258c5a6ab36b4a5edaf22c"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-alexishida__moji: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 6601092,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-alexishida__moji-c470a5/entry.js",
+          "sha256": "fce97a38494ea40bf686bef39caef1c7f4da3d0273c75edeec3df691eeb82221"
+        },
+        "map": {
+          "bytes": 19693292,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-alexishida__moji-c470a5/entry.js.map",
+          "sha256": "436eabd832b0cab34071f354871f0ff5323c289b32bcbfdf6d6d9ee322d99816"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-alexishida__moji-c470a5",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cdd28a571d0b8556e18fbe48ef1b4d8f07ce238a800161b422a6e35d4445cd29"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app electron:gh-klotzbrocken__reframe: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 736599,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-klotzbrocken__reframe-088b8c/entry.js",
+          "sha256": "c9c53fa70c9d7a0e3efc96a96ee874197511788066b5cfa3778ac13eed1f7c64"
+        },
+        "map": {
+          "bytes": 1873199,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/electron_gh-klotzbrocken__reframe-088b8c/entry.js.map",
+          "sha256": "56e20531d6ca149e509c34feec6594abf4f3d78f86300ac3487c4a2fb8371b4e"
+        }
+      },
+      "id": "remin3-esbuild-electron_gh-klotzbrocken__reframe-088b8c",
+      "kind": "electron",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3ef666ee6f72d172914c2b00fa9fcd84148920f31a2f88676aec00e15abb5ab4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-yukaii__vscode-ptt: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 6606059,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-yukaii__vscode-ptt-b9168a/entry.js",
+          "sha256": "f2f7412821f9ad6d3699eca03ada8e946713bfb1dd149d30333d54e462cb0dd9"
+        },
+        "map": {
+          "bytes": 20760265,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-yukaii__vscode-ptt-b9168a/entry.js.map",
+          "sha256": "c9605808cf02d36ea93ba83a360855db20b58b6df9394a7938201b92fcb098f4"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-yukaii__vscode-ptt-b9168a",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d044806dcd667968d28cc92a1f0808bd1b673391a9d94e2bb48d039fddfba6a1"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-wx-minapp__minapp-vscode: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 4440495,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-wx-minapp__minapp-vscode-2cd7f4/entry.js",
+          "sha256": "580a31186424c997355e3d4da27f5e7c5739eebccccf255672e50b188037f9fe"
+        },
+        "map": {
+          "bytes": 14122162,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-wx-minapp__minapp-vscode-2cd7f4/entry.js.map",
+          "sha256": "56bf758656ae327cf3eb265675f3b89cafc64e124b41b68f905a8c3075776601"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-wx-minapp__minapp-vscode-2cd7f4",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "b2f6b11e45e5e86f2dfc30e0aef332d12311488a43530492bdfe0d2aecaa4c30"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-sthamann__nyx-local-ai: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 7380881,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-sthamann__nyx-local-ai-e50dee/entry.js",
+          "sha256": "6dbb6a20a11eb6438fbf4cb87c35a939148ba3b06398c84a356ce86745820b25"
+        },
+        "map": {
+          "bytes": 19539934,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-sthamann__nyx-local-ai-e50dee/entry.js.map",
+          "sha256": "b0a8a331265ce9d6bb5dcb29505776c273ed760d4784990ab2e0b3050ba66d32"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-sthamann__nyx-local-ai-e50dee",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1e20c9a8fdb5a60c37e82f7311e2ece8cf293eaa85e2e72a9d36021670a79fe2"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-qcz__vscode-text-power-tools: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1275796,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-qcz__vscode-text-power-tools-502c9a/entry.js",
+          "sha256": "0b25db81eca14f298c0218d05ac93e94debccbbc3386976791b3a75301ad8c79"
+        },
+        "map": {
+          "bytes": 4144989,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-qcz__vscode-text-power-tools-502c9a/entry.js.map",
+          "sha256": "d99a92356824d2f70d0d4eb386aedc7d328ccd4db265c804581b8fdee170adf8"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-qcz__vscode-text-power-tools-502c9a",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ddc89999f6aeb81e39d6f7063618a15514cc86843a307dfc273778b663572a33"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-raathigesh__waypoint: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 5842342,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-raathigesh__waypoint-e1437b/entry.js",
+          "sha256": "5b650ec1d20e700ce456175c5be185525c6f6eb92b2fc76b1f91f7b33ce01a6a"
+        },
+        "map": {
+          "bytes": 16151472,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-raathigesh__waypoint-e1437b/entry.js.map",
+          "sha256": "5ada7f383ac4da6b63ca6509657a0d34ec56bd4c66e7990800e9d79b4cb53702"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-raathigesh__waypoint-e1437b",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "148e03c86ba61b2f167f1280d26e9abe2118a736d32ac229230a26d05ccd97e4"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-n2ns__antigravity-panel: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 7737343,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-n2ns__antigravity-panel-423973/entry.js",
+          "sha256": "d322ff4a463b7047f9e9f165d1584e62e2e4592344e0ff8e8e53ec9723f4e465"
+        },
+        "map": {
+          "bytes": 22185007,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-n2ns__antigravity-panel-423973/entry.js.map",
+          "sha256": "c70c90b06c0126197c3dccbcc8fd90cf456da0f377e1806c3ee5036ccb1f6b30"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-n2ns__antigravity-panel-423973",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "eae5d4d11d5f0bbed8208da0890416f9d8720a41ae30b7292238613d1d37f199"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-geriyoco__vscode-image-gallery: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 8011640,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-geriyoco__vscode-image-gallery-f6399e/entry.js",
+          "sha256": "8733909d93ec4a088798f060b97e76411291ce1e411dca78e79726f27e63ae0b"
+        },
+        "map": {
+          "bytes": 23863946,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-geriyoco__vscode-image-gallery-f6399e/entry.js.map",
+          "sha256": "ed4b22e96776b8ee373e8caa0cb3b0aa59f12832794ebe6fd482b7a8bcb014da"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-geriyoco__vscode-image-gallery-f6399e",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cd3acf197c0c7e3fd9e3ff9ddaae40bf6c6b07d9280e473ef294f5862457885f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-zokugun__vscode-explicit-folding: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 73477,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-zokugun__vscode-explicit-folding-ef71ec/entry.js",
+          "sha256": "02c716d55bbd9470112068c3b040534d22c3d088407a5e9b43bffe25cf69d259"
+        },
+        "map": {
+          "bytes": 347722,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-zokugun__vscode-explicit-folding-ef71ec/entry.js.map",
+          "sha256": "6045742e83b67bf02c0e98ef4c79a4ce15f63a3eb737ffd34d56a77ca6865844"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-zokugun__vscode-explicit-folding-ef71ec",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6a399a25f323f5eb6ff6e456e6916fe11484b71b23c31be9b5a55b952fdf6df8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-stylelint__vscode-stylelint: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 6331893,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-stylelint__vscode-stylelint-33eb20/entry.js",
+          "sha256": "9ebd4ee60bb70d2825818c7c5de8f0f093c8ec6efe2c32308466b6e0476af3e1"
+        },
+        "map": {
+          "bytes": 23593222,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-stylelint__vscode-stylelint-33eb20/entry.js.map",
+          "sha256": "c7174e85584fc4b952cf3ad7cf999eb90fe50f4bebf3d075758240f1424c878b"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-stylelint__vscode-stylelint-33eb20",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f2b73f5c5f327608319d1a371460a1ddabd634b81e8516c3da3062e8a24c450e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-pajoma__vscode-journal: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 1158828,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-pajoma__vscode-journal-e5402e/entry.js",
+          "sha256": "0a09259804497d05de9c2a4a068d70e5b367150d0c97cb022f2edb1ce3a9e49d"
+        },
+        "map": {
+          "bytes": 3471412,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-pajoma__vscode-journal-e5402e/entry.js.map",
+          "sha256": "cd5a9e6fb4b1f4006562048e2d2a0e7adaac46a1cc2a6a0dfe5fea81b717f708"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-pajoma__vscode-journal-e5402e",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "9377070ab8b279c9a0d403dd84b7bef178099620047dd5fcbf1835f2110057da"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-vadimcn__codelldb: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 4736688,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-vadimcn__codelldb-f46207/entry.js",
+          "sha256": "2f974df4f9f3abc864416e713eb9e587a1be7363b1119365e2988123bd32e838"
+        },
+        "map": {
+          "bytes": 15638275,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-vadimcn__codelldb-f46207/entry.js.map",
+          "sha256": "463e2d0b4f554a9830ea5525525416bd8be2be93681ab8df05d99b9fb7a33bd8"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-vadimcn__codelldb-f46207",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "bdd64628accbf716894bc55f0d147655591d1e8eb86d79d69073e5281e2ba616"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-harrydowning__vscode-yaml-embedded-languages: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 5216533,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f/entry.js",
+          "sha256": "017603697b36118b309a6c73de3ae60b847854e97ef87e95dcb2df4ccc38d51f"
+        },
+        "map": {
+          "bytes": 17276006,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f/entry.js.map",
+          "sha256": "7163244328655e5f885611b697302aaef16f05373f4a88b04d3062a3d3295837"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1226df9482ce4f2c96beb10249fd565a49bc7642fefeb57a46a237e44c6f10b3"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-kenhowardpdx__vscode-gist: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 586331,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-kenhowardpdx__vscode-gist-7a8987/entry.js",
+          "sha256": "9753f1918d1c55059679f58c46556643f902247a71bc6d79bc936f971f31797b"
+        },
+        "map": {
+          "bytes": 1820311,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-kenhowardpdx__vscode-gist-7a8987/entry.js.map",
+          "sha256": "0e3d2b553403bda7e429d7d5ee335ac4716b84cbac3a51659d77e90c4a90a9e4"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-kenhowardpdx__vscode-gist-7a8987",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5f07027992fbdc4fa1fa666cc6504e4d88230e270bbd020d05b7cc156bd0e392"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-bourhaouta__vscode-tailwindshades: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 6247616,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-bourhaouta__vscode-tailwindshades-28c415/entry.js",
+          "sha256": "c0e9f00a9180141ba0bfc809d098ea5271dcc4e6e3625c1023b917330817df02"
+        },
+        "map": {
+          "bytes": 17535547,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-bourhaouta__vscode-tailwindshades-28c415/entry.js.map",
+          "sha256": "4aa1d5e286e47a2e4e1c22c767bae2073de7e83e19f48283ac439295cdea7c65"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-bourhaouta__vscode-tailwindshades-28c415",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "7b16675068762471fe7495b5761c7b00e3bf906a9b06d33dd4fe6c9840040dde"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-supabase-community__supabase-vscode-extension: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 541562,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-supabase-community__supabase-vscode-extension-a5f28f/entry.js",
+          "sha256": "8b5aba1f0583c3d172b958ecbbbf8458e2c8d1d0b6e22cbc23973f228a5bd41a"
+        },
+        "map": {
+          "bytes": 1921940,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-supabase-community__supabase-vscode-extension-a5f28f/entry.js.map",
+          "sha256": "4552f70b7e5c8f69fa93ed6106d9d330f220bda516a70ce773e9b89d5b7a4116"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-supabase-community__supabase-vscode-extension-a5f28f",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "aa6df33dd42e461576a00d2a291fc29b4ed95ade894d206bf6227dc18c2d0a58"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-arrterian__nix-env-selector: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 4201628,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-arrterian__nix-env-selector-7ecd90/entry.js",
+          "sha256": "b41edad7e43d1c1bb75f3c53578ae64dda6431b024f9ea245d721b091da78303"
+        },
+        "map": {
+          "bytes": 13691912,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-arrterian__nix-env-selector-7ecd90/entry.js.map",
+          "sha256": "59deffac12a4a889e4b9670892594d8b89582221894e7d2181d5b2f1aaa3a9a6"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-arrterian__nix-env-selector-7ecd90",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cbd7c8588431631f5953308461f6583f754f1f6e8ab1f7f6ef2c189dea2f3bdc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-microsoft__vscode-js-debug: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 6465520,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-microsoft__vscode-js-debug-9920bd/entry.js",
+          "sha256": "083520646ef733d3b052bb9a448e163758e84a9a563574e323a751ab4bcda190"
+        },
+        "map": {
+          "bytes": 19674652,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-microsoft__vscode-js-debug-9920bd/entry.js.map",
+          "sha256": "410f3bb9a7e2f72abf00f9f03e3956a0f523ac004b95ba4e4316c9a04e6dd446"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-microsoft__vscode-js-debug-9920bd",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "0f98b1ce41d96a91bc78808798c64826abf90a90f1e037237e4bdf5d5e40175d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-mattbierner__vscode-docs-view: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 3830236,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-mattbierner__vscode-docs-view-11a464/entry.js",
+          "sha256": "830e5011326a10222f3c4440649e6cb8e4f08c1820e24a436f70e9e61c656802"
+        },
+        "map": {
+          "bytes": 10674390,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-mattbierner__vscode-docs-view-11a464/entry.js.map",
+          "sha256": "96f955975a6cfb46ee94b0c2a3c349dccd83e81c7b0433ad39f8536589d1ed0c"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-mattbierner__vscode-docs-view-11a464",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c83653d99c731e6a8698196f32e3f2334bd8775430cb646003e91120fa6334cb"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-bmewburn__vscode-intelephense: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 9639302,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-bmewburn__vscode-intelephense-9c105c/entry.js",
+          "sha256": "5cd9c15c8f9a20d62409e7092d7c288f0e7963e33f6731dd0483a9c3f178f93a"
+        },
+        "map": {
+          "bytes": 20377357,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-bmewburn__vscode-intelephense-9c105c/entry.js.map",
+          "sha256": "828627732d60a1f0cac653cd747beaed0de256c54d4a5a8acbd6003af871d020"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-bmewburn__vscode-intelephense-9c105c",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "15f24d3312b8de2a16587ebd3e4fd59d8325b0a69d8f4c25cdedc3022461974b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-alefragnani__vscode-project-manager: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 443846,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-alefragnani__vscode-project-manager-2f5fdb/entry.js",
+          "sha256": "ee98358c41c73b5505e1d0dfe7b826baca359eb9cc3da0ac71c3d06e1983e47b"
+        },
+        "map": {
+          "bytes": 1811641,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-alefragnani__vscode-project-manager-2f5fdb/entry.js.map",
+          "sha256": "e47ec9a522fff9d94410b45b2718005f79a0e3f82c5de475f95bd73bc692f1dc"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-alefragnani__vscode-project-manager-2f5fdb",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "76b7a330c59d4848d0cb0967096cc47065eb045ab48039d6aa01eff5e6babef6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-kokororin__vscode-phpfmt: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 11655,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-kokororin__vscode-phpfmt-6129f4/entry.js",
+          "sha256": "5099b896121163db53d6dcca8a67cb360d419ab110b4b9653fecd296d6ad47c4"
+        },
+        "map": {
+          "bytes": 54303,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-kokororin__vscode-phpfmt-6129f4/entry.js.map",
+          "sha256": "4976823ceca9c474c7e0f4f67cdd6f19db5d388c262879cc206d119de77ab641"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-kokororin__vscode-phpfmt-6129f4",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "11ce27ec17276be2e7178921cefed665eea8a4e6ad36a3d056854a8c8a8cf6b7"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-andreafrederica__andrea-novel-helper: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 6889508,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-andreafrederica__andrea-novel-helper-01158a/entry.js",
+          "sha256": "f0113ea547bfee4247e9ba81ed0e65c3d865473ab0233ef831a31cb77c67a6c0"
+        },
+        "map": {
+          "bytes": 14346433,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-andreafrederica__andrea-novel-helper-01158a/entry.js.map",
+          "sha256": "17d502e6f775f973a30ec0cf04e2da523edd4f536722b2289404a99a167ed513"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-andreafrederica__andrea-novel-helper-01158a",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "62e4410514d8c5db6ceb0ef88bfea336c557e832600bcb0fdfcd63ad19d2b2f8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-mblode__vscode-zotero: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 2519182,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-mblode__vscode-zotero-63d7c9/entry.js",
+          "sha256": "5f33886a14834fcc7fd0f58b67a995e4ccc5205b24df1ee16d2aad2c2f9f7771"
+        },
+        "map": {
+          "bytes": 9683961,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-mblode__vscode-zotero-63d7c9/entry.js.map",
+          "sha256": "25a960a8467fb4cfe57cbc72800d81a9fb019a47d5b2435c83261e728441bf54"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-mblode__vscode-zotero-63d7c9",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ec485249c4318ad0e1b5410a0e31aeefd815e92b6c149ebceb35ae14aaca28d5"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "esbuild",
+      "bundler": "esbuild",
+      "description": "exp141 dev app vscode:gh-kejunmao__vscode-devtoys: esbuild 0.28.2 bundle (unminified, published minified entries preferred) re-minified by esbuild 0.28.2 --minify",
+      "files": {
+        "bundle": {
+          "bytes": 7514911,
+          "name": "entry.js",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-kejunmao__vscode-devtoys-a1140c/entry.js",
+          "sha256": "ef82aa73f1c7f3348f51dcdc39716afdb4e45807ad0c819b9405ec5fcabd5db1"
+        },
+        "map": {
+          "bytes": 26148169,
+          "name": "entry.js.map",
+          "origin": "/work/exp141-data/remin3/build/esbuild/vscode_gh-kejunmao__vscode-devtoys-a1140c/entry.js.map",
+          "sha256": "1c40141feb1790733dad300717ab199258cd78a65f88e2a1b5d048c48670e40b"
+        }
+      },
+      "id": "remin3-esbuild-vscode_gh-kejunmao__vscode-devtoys-a1140c",
+      "kind": "vscode",
+      "minifier": "esbuild",
+      "set": "remin3-esbuild",
+      "stratum": "random",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "cd1095242aefe971c20e1121530afe0ec9d8d154a583beb0da4f7554967b2f22"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp141 DEV corpus of RE-MINIFIED bundles (exp126's recipe, seed 141, 24 apps per kind): exp108 TRAINING apps in none of remin, remin2, held-out, test, test2, apps, pop or dev, bundled against the packages' published minified entries and minified again by terser and by esbuild (experiments/126-reminified/scripts/dev_remin.py --corpus remin3)",
+  "schema": "exp096-corpus/1"
+}

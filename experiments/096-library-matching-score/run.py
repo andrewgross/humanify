@@ -2,7 +2,7 @@
 one claim rule, score it.
 
 usage: run.sh <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST]
-                      [--corpus dev|test|test2|bundlers|apps|pop|remin|remin2] [--sets A,B] [--force-mixed] [--pipeline-set library.<key>=value]...
+                      [--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3] [--sets A,B] [--force-mixed] [--pipeline-set library.<key>=value]...
 
   --commit   build the binary from this commit in a detached worktree (default: this checkout's HEAD, which must
              be clean under crates/ and Cargo.*; a dirty tree would make the label describe code that did not run)
