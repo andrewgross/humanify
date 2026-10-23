@@ -395,7 +395,21 @@ picks one unless `--library-index` names it. The recommendation below is
 what `library.matching = "report"` should be pointed at today, and what the
 eval's library score (`npm run eval -- library`) is judged on.
 
-**Recommended now: `k2-all-r5-origin-prod`** (exp135; `/work/exp135-data/full/ix/k2-all-r5-origin-prod`, 6.5 GB,
+**Recommended now: `k2-all-r5-origin-prod-asof20261015`** (exp142;
+`/work/exp142-data/full/ix/k2-all-r5-origin-prod-asof20261015`, 7.1 GB, index id `c4d2bd6c...`). It is
+k2-all-r5-origin-prod with its as-of moved from 2026-10-11 to 2026-10-15 by a DELTA build: the 1,633 versions (937
+packages, all already indexed) that the index's own version rules pick at the new as-of and that were published
+after the old one, built with the same recipes (`production`, `--sponge-regions origin`) into a hard-link copy of
+exp135's store and merged with every old version (~1.5 h on 30 cores; 388 versions failed to install under
+`npm install --before`, a known as-of limit). With main's defaults (scorer 14, both scopes), F0.5 is up on every
+judge set with precision up or equal (test +0.07 to +0.23, test2 +0.07 to +0.24, remin2 +0.05 / +0.11), held-out
+F0.5 +0.03, esbuild-app +0.29, pop +0.17; precision dips on pop-bun -0.006, pop-esbuild -0.004 and remin3-terser
+-0.006, all new releases that inline another package's code (the carrier problem). App claimed 0. Adopted by
+Andrew 2026-10-23 over the strict every-set precision bar. **Policy:** an index's as-of is the newest dependency-
+resolution date among the corpora it is judged on; never older than them. Details:
+experiments/142-index-coverage/README.md.
+
+**Previously: `k2-all-r5-origin-prod`** (exp135; `/work/exp135-data/full/ix/k2-all-r5-origin-prod`, 6.5 GB,
 index id `9d40265a...`). It is k2-all-r5-origin with both Bun recipes built `production` (the recipe flag that
 defines `process.env.NODE_ENV="production"` for Bun and esbuild; refused for webpack and rollup). Bun treats an
 unset NODE_ENV as development, so packages that pick a file by NODE_ENV (react, react-dom, scheduler, ...) had
@@ -405,7 +419,7 @@ byte-identical: held-out P 99.41 -> 99.56, F0.5 90.90 -> 91.29; pop-bun +0.21; t
 App claimed 0. Build every future index's Bun recipes with `production`. Details:
 experiments/135-noprint-census/README.md.
 
-**Previously: `k2-all-r5-origin`** (exp130; `/work/exp130-data/full/ix/k2-all-r5-origin`, 6.5 GB, index id
+**Before that: `k2-all-r5-origin`** (exp130; `/work/exp130-data/full/ix/k2-all-r5-origin`, 6.5 GB, index id
 `c5fe9a74...`). It is k2-all-r5 re-fingerprinted with `build --sponge-regions origin` (`unit-rows/5+origin`): a
 foreign region of a pre-bundled file is credited to the package its marker names, at its pnpm path's version,
 instead of dropped. With main's defaults (scorer 10), F0.5 is up on 16 of 22 sets, equal on 5, and down on one
@@ -413,7 +427,7 @@ instead of dropped. With main's defaults (scorer 10), F0.5 is up on 16 of 22 set
 +4.11 / +4.26, test-bun / test-esbuild +3.09 / +3.10, wrangler +3.84, test-rollup +1.65, apps-esbuild +0.44,
 held-out +0.08. Precision is up or equal on the other 21. App claimed 0.
 
-**Before that: `k2-all-r5`** (exp124; `/work/exp124-data/full/ix/k2-all-r5`, 6.5 GB, index id
+**Earlier: `k2-all-r5`** (exp124; `/work/exp124-data/full/ix/k2-all-r5`, 6.5 GB, index id
 `5867457c...`). It is k2-all re-fingerprinted with `unit-rows/5`: a package's own pre-bundled chunk keeps its rows
 outside the regions its module markers give to other packages. With main's defaults, precision is up or equal on
 all 19 scored sets and F0.5 is up on 15 (held-out +0.37, task-master +1.60, apps-esbuild +0.58, pop +0.5 to +0.64,
@@ -421,7 +435,7 @@ test2-bun +0.56; apps-webpack -0.003). It was re-fingerprinted from k2-all's cac
 (`experiments/124-region-sponge/scripts/seed-work.sh`, `lab-build.sh`). The k2-all description below still holds
 for it.
 
-**Earlier: `k2-all`** (exp113; `/work/exp113-data/ix/k2-all`, /3,
+**Earliest: `k2-all`** (exp113; `/work/exp113-data/ix/k2-all`, /3,
 6.4 GB, index id `6d503431...`) — exp108's `k2-l12m4` package set (step 4's
 roots and pins plus every package bundled by at least two of 2,155
 independent training apps, at the `year-last12+major4` density) in ALL FIVE
