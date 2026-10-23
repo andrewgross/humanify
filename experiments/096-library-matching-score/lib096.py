@@ -51,9 +51,14 @@ CORPORA = {
     "remin": {"manifest": os.path.join(HERE, "corpus-remin.json"), "origins": os.path.join(HERE, "origins-remin.json"),
               "copies": os.path.join(HERE, "copies-remin.json"), "chained": os.path.join(HERE, "chained-remin.json"),
               "data": "/work/exp126-data/remin/frozen"},
+    # exp140's JUDGE corpus of RE-MINIFIED bundles: exp126's recipe at another seed over exp108 TRAINING apps in no
+    # other corpus (remin's 36 included); private exactly as test2 (summaries only, never tuned on, never diagnosed)
+    "remin2": {"manifest": os.path.join(HERE, "corpus-remin2.json"), "origins": os.path.join(HERE, "origins-remin2.json"),
+               "copies": os.path.join(HERE, "copies-remin2.json"), "chained": os.path.join(HERE, "chained-remin2.json"),
+               "data": "/work/exp140-data/remin2/frozen"},
 }
 # frozen judges: a label on one commits per-set aggregates only (no per-bundle cards, no bundle names in its log)
-PRIVATE = ("test", "test2")
+PRIVATE = ("test", "test2", "remin2")
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"
 DATA = CORPORA[CORPUS]["data"]  # the frozen corpus, truth and raw reports (not committed)
@@ -72,12 +77,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|test2|bundlers|apps|pop|remin` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|test2|bundlers|apps|pop|remin|remin2` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin")
+        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin|remin2")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

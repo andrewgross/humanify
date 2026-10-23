@@ -494,11 +494,18 @@ export function libraryArgs(args: string[]): string[] | string {
   if (
     corpus !== undefined &&
     (typeof corpus !== "string" ||
-      !["dev", "test", "test2", "bundlers", "apps", "pop", "remin"].includes(
-        corpus
-      ))
+      ![
+        "dev",
+        "test",
+        "test2",
+        "bundlers",
+        "apps",
+        "pop",
+        "remin",
+        "remin2"
+      ].includes(corpus))
   ) {
-    return "--corpus dev|test|test2|bundlers|apps|pop|remin (dev = corpus.json; test = exp100's frozen test split; test2 = exp116's frozen test split v2, the untouched final judge; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population; remin = exp126's dev-side RE-MINIFIED builds of training apps: bundled against the packages' published minified entries, then minified again by terser and by esbuild)";
+    return "--corpus dev|test|test2|bundlers|apps|pop|remin|remin2 (dev = corpus.json; test = exp100's frozen test split; test2 = exp116's frozen test split v2, the untouched final judge; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population; remin = exp126's dev-side RE-MINIFIED builds of training apps: bundled against the packages' published minified entries, then minified again by terser and by esbuild; remin2 = exp140's FROZEN judge of the same recipe on 36 other training apps, private exactly as test2)";
   }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
@@ -755,7 +762,7 @@ const VERBS: Verb[] = [
   {
     name: "library",
     usage:
-      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|test2|bundlers|apps|pop|remin] [--force-mixed] [--pipeline-set library.<key>=value]...",
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|test2|bundlers|apps|pop|remin|remin2] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
       "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
@@ -768,7 +775,8 @@ const VERBS: Verb[] = [
       "esbuild, webpack and rollup builds of 32 real exp095 TRAINING apps (corpus-apps.json); `--corpus pop` scores exp112's " +
       "dev-side Bun and esbuild builds of 46 exp108 TRAINING apps from the test split's population (corpus-pop.json); `--corpus remin` scores exp126's " +
       "RE-MINIFIED builds of 36 exp108 TRAINING apps: bundled against the packages' published minified entries, then " +
-      "minified again by terser and by esbuild (corpus-remin.json). " +
+      "minified again by terser and by esbuild (corpus-remin.json); `--corpus remin2` scores exp140's FROZEN judge of " +
+      "the same recipe on 36 other training apps (corpus-remin2.json; private as test2: summaries only). " +
       "Each bundle runs with `--bundler` = the " +
       "bundler that built it. Compare labels with `library-leaderboard`.",
     proves:
