@@ -1,75 +1,75 @@
 {
- "lines8": {
-  "versions": 9768,
-  "packages": 3255,
-  "classBCoveredKB": {
-   "apps-rollup": 29.5,
-   "apps-webpack": 4.3,
-   "heldout": 1.4,
-   "pop-bun": 1.4,
-   "pop-esbuild": 0.2,
-   "remin-esbuild": 7.3,
-   "remin-terser": 0.3,
-   "remin4-esbuild": 0.7
+  "lines8": {
+    "versions": 9768,
+    "packages": 3255,
+    "classBCoveredKB": {
+      "apps-rollup": 29.5,
+      "apps-webpack": 4.3,
+      "heldout": 1.4,
+      "pop-bun": 1.4,
+      "pop-esbuild": 0.2,
+      "remin-esbuild": 7.3,
+      "remin-terser": 0.3,
+      "remin4-esbuild": 0.7
+    },
+    "classBCoveredTotalKB": 45.2
   },
-  "classBCoveredTotalKB": 45.2
- },
- "lines-y3": {
-  "versions": 8515,
-  "packages": 775,
-  "classBCoveredKB": {
-   "heldout": 0.7,
-   "pop-bun": 44.6,
-   "pop-esbuild": 24.9,
-   "remin-esbuild": 7.3,
-   "remin-terser": 0.3,
-   "remin4-esbuild": 0.1,
-   "remin4-terser": 8.5
+  "lines-y3": {
+    "versions": 8515,
+    "packages": 775,
+    "classBCoveredKB": {
+      "heldout": 0.7,
+      "pop-bun": 44.6,
+      "pop-esbuild": 24.9,
+      "remin-esbuild": 7.3,
+      "remin-terser": 0.3,
+      "remin4-esbuild": 0.1,
+      "remin4-terser": 8.5
+    },
+    "classBCoveredTotalKB": 86.5
   },
-  "classBCoveredTotalKB": 86.5
- },
- "lines-y5": {
-  "versions": 14336,
-  "packages": 1319,
-  "classBCoveredKB": {
-   "apps-rollup": 0.0,
-   "heldout": 0.7,
-   "pop-bun": 44.6,
-   "pop-esbuild": 24.9,
-   "remin-esbuild": 7.3,
-   "remin-terser": 0.3,
-   "remin3-esbuild": 72.5,
-   "remin3-terser": 13.4,
-   "remin4-esbuild": 127.1,
-   "remin4-terser": 27.0
+  "lines-y5": {
+    "versions": 14336,
+    "packages": 1319,
+    "classBCoveredKB": {
+      "apps-rollup": 0.0,
+      "heldout": 0.7,
+      "pop-bun": 44.6,
+      "pop-esbuild": 24.9,
+      "remin-esbuild": 7.3,
+      "remin-terser": 0.3,
+      "remin3-esbuild": 72.5,
+      "remin3-terser": 13.4,
+      "remin4-esbuild": 127.1,
+      "remin4-terser": 27.0
+    },
+    "classBCoveredTotalKB": 317.8
   },
-  "classBCoveredTotalKB": 317.8
- },
- "pre": {
-  "versions": 635,
-  "packages": 600,
-  "classBCoveredKB": {
-   "heldout": 0.0,
-   "pop-bun": 265.2,
-   "pop-esbuild": 110.0
+  "pre": {
+    "versions": 635,
+    "packages": 600,
+    "classBCoveredKB": {
+      "heldout": 0.0,
+      "pop-bun": 265.2,
+      "pop-esbuild": 110.0
+    },
+    "classBCoveredTotalKB": 375.2
   },
-  "classBCoveredTotalKB": 375.2
- },
- "lines-y5+pre": {
-  "versions": 14971,
-  "packages": 1762,
-  "classBCoveredKB": {
-   "apps-rollup": 0.0,
-   "heldout": 0.8,
-   "pop-bun": 309.8,
-   "pop-esbuild": 134.8,
-   "remin-esbuild": 7.3,
-   "remin-terser": 0.3,
-   "remin3-esbuild": 72.5,
-   "remin3-terser": 13.4,
-   "remin4-esbuild": 127.1,
-   "remin4-terser": 27.0
-  },
-  "classBCoveredTotalKB": 693.0
- }
+  "lines-y5+pre": {
+    "versions": 14971,
+    "packages": 1762,
+    "classBCoveredKB": {
+      "apps-rollup": 0.0,
+      "heldout": 0.8,
+      "pop-bun": 309.8,
+      "pop-esbuild": 134.8,
+      "remin-esbuild": 7.3,
+      "remin-terser": 0.3,
+      "remin3-esbuild": 72.5,
+      "remin3-terser": 13.4,
+      "remin4-esbuild": 127.1,
+      "remin4-terser": 27.0
+    },
+    "classBCoveredTotalKB": 693.0
+  }
 }
