@@ -1,0 +1,2349 @@
+{
+  "corpus": "remin4",
+  "seed": 146,
+  "maxLibBytes": 15000000,
+  "pool": 1232,
+  "drawn": 145,
+  "built": 144,
+  "failedStage1": ["electron:gh-xianyunleo__eserver"],
+  "perKind": {
+    "cli": 48,
+    "electron": 48,
+    "vscode": 48
+  },
+  "bundles": {
+    "remin4-terser": {
+      "count": 144,
+      "bytes": 536543857
+    },
+    "remin4-esbuild": {
+      "count": 144,
+      "bytes": 559770336
+    }
+  },
+  "overlapWithOtherManifests": {
+    "corpus-apps.json": 0,
+    "corpus-bundlers.json": 0,
+    "corpus-pop.json": 0,
+    "corpus-remin.json": 0,
+    "corpus-remin2.json": 0,
+    "corpus-remin3.json": 0,
+    "corpus-test.json": 0,
+    "corpus-test2.json": 0,
+    "corpus.json": 0
+  },
+  "apps": [
+    {
+      "id": "cli:audit-ci",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "cb402882d19ccc064a075a773021bca3e6bf435be7f59ffeaf58a556061b350a",
+          "bytes": 269497
+        },
+        "remin4-esbuild": {
+          "sha256": "4a24e8a4ae8593f50d34146d7d24f8306710c0d5b7ad7649965df80fc303b875",
+          "bytes": 235200
+        }
+      }
+    },
+    {
+      "id": "cli:@react-grab/cli",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "f4dfeec5a116f8f3c6270b2acb207844e36591415f74fedfd063b077ffe75a82",
+          "bytes": 392987
+        },
+        "remin4-esbuild": {
+          "sha256": "6b02242d30f091dc7091a2fa0bd0dd84ef5435c42f9117abd5111f2b95d59ad7",
+          "bytes": 407994
+        }
+      }
+    },
+    {
+      "id": "cli:license-checker",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b1ef9a095351df98b9a7f9834edf1db83a643156ab7d0c12d670128e4551d9d8",
+          "bytes": 204690
+        },
+        "remin4-esbuild": {
+          "sha256": "40e657b92be8a4ae15223771f0d12b2bfc7a1ab6fb868a085eaa06d4dde1e491",
+          "bytes": 202908
+        }
+      }
+    },
+    {
+      "id": "cli:bundle-collapser",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b1436c79a342740681d93b9933b24ea427429907398940de5d29e05b2cf14703",
+          "bytes": 219117
+        },
+        "remin4-esbuild": {
+          "sha256": "84265411bba31f5977c7133f0c591351888ac2a83fae7cf9eead00f96f20098b",
+          "bytes": 221092
+        }
+      }
+    },
+    {
+      "id": "cli:prettier-standard",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c51cd93370f9246f60a5bdad02f95dc89b9c986c624edbbbdd919b4cf0f5febe",
+          "bytes": 1909939
+        },
+        "remin4-esbuild": {
+          "sha256": "1e150416d6dc4e90731f0d376ef1363904dfc0fbd68845eba6bb30acc49de545",
+          "bytes": 1933084
+        }
+      }
+    },
+    {
+      "id": "cli:react-styleguidist",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "129701a22c52174cf907cb5b98e6a2a1e3d39f7d6a5ddd4282f3fe7daffbb3d6",
+          "bytes": 5112436
+        },
+        "remin4-esbuild": {
+          "sha256": "761a703b4f64e154bca9fd58f89aa9fe184a3bf5c93edd60b246fb07da309ca6",
+          "bytes": 5452650
+        }
+      }
+    },
+    {
+      "id": "cli:@ice/screenshot",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "d738bee5bf82ac4ef73a10feb2cd83f04e15791b75b011d8afc8cf50ce2e7ede",
+          "bytes": 449605
+        },
+        "remin4-esbuild": {
+          "sha256": "0009021155a0b060a586fb5a7b42af027825da8da277581caaa4f353bf950552",
+          "bytes": 465213
+        }
+      }
+    },
+    {
+      "id": "cli:@rushstack/heft",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "07246ecd51b65cfb87662542c277db493a4e3475abaae41572a4d89b0255a9de",
+          "bytes": 748282
+        },
+        "remin4-esbuild": {
+          "sha256": "b9369b68d05d6843aebe8bdf66d94a4fe64f2e3d3bd1bea55915e544b3827e2d",
+          "bytes": 728525
+        }
+      }
+    },
+    {
+      "id": "cli:jscoverage",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "200f6e98f66f14707467ba236ca0c41ba995bd7ef16c1b9359a4ca26b1158cd1",
+          "bytes": 257165
+        },
+        "remin4-esbuild": {
+          "sha256": "b7b0f00c0e25cb0df75cf8ac0c6bd1c8c12dce5adcfbde4f747dd158ac44885c",
+          "bytes": 262711
+        }
+      }
+    },
+    {
+      "id": "cli:ava",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "63c84abda7fdc8485032a1c12b2b9363f63762c7b0fd7e8bd67069785233c90a",
+          "bytes": 1571211
+        },
+        "remin4-esbuild": {
+          "sha256": "5a339b913386a1887b8c395e0f4a659b67bd2c3170a7a066a68505619115b11f",
+          "bytes": 1603682
+        }
+      }
+    },
+    {
+      "id": "cli:tap-mocha-reporter",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "5123ae188d440c9eaf2547edf036abd266a65e88a180083afc2fdc06f294886b",
+          "bytes": 218383
+        },
+        "remin4-esbuild": {
+          "sha256": "a6c460e845fc66b3108ac6b0c279bda1120c32fa9b863ffa1e4f8953061ea727",
+          "bytes": 216481
+        }
+      }
+    },
+    {
+      "id": "cli:@metamask/auto-changelog",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "d6b29ca6bab35ecd1cf52feac7511492eccb4c33308e1a9a25df36ec9184d3a1",
+          "bytes": 374778
+        },
+        "remin4-esbuild": {
+          "sha256": "b4833fea2f835b39f092ff6ba1e2ee3d95b8bc10a955a3f4e70d35d594b687bd",
+          "bytes": 360309
+        }
+      }
+    },
+    {
+      "id": "cli:commoner",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "3a362f07332b61f68e790d45854e46d81bd5ceb67655952f6f179727eada3b5c",
+          "bytes": 739539
+        },
+        "remin4-esbuild": {
+          "sha256": "e312a1fce15f1d7e4a46a10bea71916c5e2a566967890515c662f76675ea760a",
+          "bytes": 964599
+        }
+      }
+    },
+    {
+      "id": "cli:remap-istanbul",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7d1565367c4258357be4e35caba693237c199c4d4e1e90fe4334fc44ff625c9e",
+          "bytes": 323186
+        },
+        "remin4-esbuild": {
+          "sha256": "9a0d008c249292844c46221477e2709857bc3edf0a8110a2fc888c19af652712",
+          "bytes": 325481
+        }
+      }
+    },
+    {
+      "id": "cli:@custom-elements-manifest/analyzer",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "97173636ad148d470bab30cd28f98e63c02365e2275640e2a00292954e819e0b",
+          "bytes": 3622350
+        },
+        "remin4-esbuild": {
+          "sha256": "d24bf04cb06a9e02c0dc1ffdddb15a06e743e661b8bebc997ab06d346b89d705",
+          "bytes": 3697067
+        }
+      }
+    },
+    {
+      "id": "cli:@unocss/cli",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "d4f410510067ab2bfd2585a7494469ddec5f642746b3839971bfb06e870e98ec",
+          "bytes": 984019
+        },
+        "remin4-esbuild": {
+          "sha256": "d43f28f66b8c4e713592a72c80817a0fdc0d246f6dd8c7a52887f93201279939",
+          "bytes": 926955
+        }
+      }
+    },
+    {
+      "id": "cli:monocart-coverage-reports",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "14894282391a5a67e6dbdd599be1fbd8c28f958e74339bb9ee6f92c4165e6d84",
+          "bytes": 977735
+        },
+        "remin4-esbuild": {
+          "sha256": "768523325b41e8499bd3d01c1ba387b9e31faa03d9fc0d75261f413357f30732",
+          "bytes": 989577
+        }
+      }
+    },
+    {
+      "id": "cli:dumi",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a213addb9ceebab7ba998c108994d81128a89f1161da1bbf71372248d61a71e3",
+          "bytes": 2128861
+        },
+        "remin4-esbuild": {
+          "sha256": "9838dcd57422050f440afb5e2d8228bb9c244f098e3b60242e71c1310d5f79e3",
+          "bytes": 2388546
+        }
+      }
+    },
+    {
+      "id": "cli:braintrust",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a51ee2f3bf2794e6ba5777fed5a5977db1f6fd4dd57846f0057ddb90a92e827c",
+          "bytes": 2202328
+        },
+        "remin4-esbuild": {
+          "sha256": "9bcbd8896ff58ca2789d3762a31af7d22d4c7804c4157c60a6f543b74910e52d",
+          "bytes": 2455537
+        }
+      }
+    },
+    {
+      "id": "cli:react-native-builder-bob",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "4da1098aff9efc011a04d1ffe19a2a3da3d1f0927cd787fccba69d3b5de94cf0",
+          "bytes": 5697326
+        },
+        "remin4-esbuild": {
+          "sha256": "3d62644d9b3ea942d82d6d750ae437eb43eb054d61be3f1b8cad49975ba21648",
+          "bytes": 5749902
+        }
+      }
+    },
+    {
+      "id": "cli:https-localhost",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "0573d822b0de117f2faaaecffda4190e6a1199c5f8e261859926ec9ef8fc2c05",
+          "bytes": 1153590
+        },
+        "remin4-esbuild": {
+          "sha256": "0e6b5d90cb68f432bed875400c2980c648a8bc7d089189ea69dc6004a7ff9b05",
+          "bytes": 1364308
+        }
+      }
+    },
+    {
+      "id": "cli:oclif",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7a5bde59a1ff2f5420e5ac16d30c62e4423714f54f5428e2e3cb16faa5857484",
+          "bytes": 368411
+        },
+        "remin4-esbuild": {
+          "sha256": "101e7c1504f3a0d0d5dbdd55da214794a13c4f7f1368e9ebaac64bb95ccd85ee",
+          "bytes": 372368
+        }
+      }
+    },
+    {
+      "id": "cli:solidity-coverage",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "24ec4a5b1263b91b2603c6b60280a86638be9a99b20bc9d2e5c325d5149b732a",
+          "bytes": 77973
+        },
+        "remin4-esbuild": {
+          "sha256": "517c0158e6972d7dc19535b60c3352efbdfab4697ece58387998ef613e841d90",
+          "bytes": 89409
+        }
+      }
+    },
+    {
+      "id": "cli:es-dev-server",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a478123b225377b0b121cfb237470aabbb057b91b035313ef671f29ab6fcbcc9",
+          "bytes": 3826292
+        },
+        "remin4-esbuild": {
+          "sha256": "a646b041b3bf7f7d5083ad4c4c60a698b103c9b65c5ff3deadba7c449873abb1",
+          "bytes": 3937224
+        }
+      }
+    },
+    {
+      "id": "cli:@remotion/cli",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "077b7c73d08dad07c7384f654ee7bd3f4c22a89353ca53281f3f63d9931d44b1",
+          "bytes": 12953942
+        },
+        "remin4-esbuild": {
+          "sha256": "64ba33a5e135050931682ff1916691a2199431a264c12c01021967e2e8e4847f",
+          "bytes": 13426940
+        }
+      }
+    },
+    {
+      "id": "cli:azurite",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "36db96ba5ee9c8afe85c979e0b7a9f427ee5cf1d41798f36d168d2d19d4a0b31",
+          "bytes": 7613553
+        },
+        "remin4-esbuild": {
+          "sha256": "507d7412d9f7f7378a6d02766582e7f3583e0d54bd9f25ff3987fc1c450f1e02",
+          "bytes": 7628701
+        }
+      }
+    },
+    {
+      "id": "cli:bundlesize",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "fbed40f400615d76732cb6e149c00dd1d1925c6b694575cfffe3c368310d1c2f",
+          "bytes": 242896
+        },
+        "remin4-esbuild": {
+          "sha256": "645509e4eca18553aefeba1f6fe938cac501b420cfe17bf1e8ad9cf838d82ab0",
+          "bytes": 245573
+        }
+      }
+    },
+    {
+      "id": "cli:@kadira/storybook",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "09a603e060f29ad9e111b4d6d7c46ad054ef23d86519e7810c055e63867d6331",
+          "bytes": 2473202
+        },
+        "remin4-esbuild": {
+          "sha256": "6f3261a1f675f647ae007c079914d654d577340fd5883c73509ec988eaada5a2",
+          "bytes": 2633948
+        }
+      }
+    },
+    {
+      "id": "cli:@craco/craco",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c05a3be0cd164bcd99e431e2178f09be7f33497d969b034f323877c9b48d4f27",
+          "bytes": 8677
+        },
+        "remin4-esbuild": {
+          "sha256": "24739bc68365dc98f242063713eb326f3f91993e70652b54ab73ee2a1798c144",
+          "bytes": 8143
+        }
+      }
+    },
+    {
+      "id": "cli:@apphosting/build",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "91fd08ae389aea0df4893a0a53a4939b654e26e8c218b9a6a88f0046c4a19ba8",
+          "bytes": 43012
+        },
+        "remin4-esbuild": {
+          "sha256": "0eb970ab2912d1334af345d8cf8576987f78cb027f1e92aada6417da0b104f75",
+          "bytes": 42682
+        }
+      }
+    },
+    {
+      "id": "cli:ethereum-waffle",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "edd5a076a182b7f67badb1a368fccdc3b32ecf72158f3b8759077d5b9241160b",
+          "bytes": 10217081
+        },
+        "remin4-esbuild": {
+          "sha256": "3211c3941a1157a57b60bd90dbc5c2a89af1ecb5854bd7473b88243af29f2f5c",
+          "bytes": 10269183
+        }
+      }
+    },
+    {
+      "id": "cli:@compodoc/live-server",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "74413c5c6efb4161e26612c99fae9912cf6af9bfbe9c795ef2449038217540c5",
+          "bytes": 729440
+        },
+        "remin4-esbuild": {
+          "sha256": "9cfddbea9d646bf6b9dcf76d6ab6895c132385b5cf02ba082e5f2946a499c443",
+          "bytes": 733186
+        }
+      }
+    },
+    {
+      "id": "cli:derequire",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "0009541e7e7197f31d861a56cc6d7b7d55eec2777ba3435cccd137978e3c1bf0",
+          "bytes": 336014
+        },
+        "remin4-esbuild": {
+          "sha256": "3903e20848621a80d4afcb9a17117942e660c21ee3a338a0480d95bded7dd10e",
+          "bytes": 335092
+        }
+      }
+    },
+    {
+      "id": "cli:@pika/pack",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "63d590e43348bb400a62539e09d333cc7df7c1662bca6cab6fe191a901fbfdf0",
+          "bytes": 199418
+        },
+        "remin4-esbuild": {
+          "sha256": "af272a34a91ebaa2dd95624ca57c1e37ae20e359bee5e2dd3c0cad47b1652727",
+          "bytes": 201369
+        }
+      }
+    },
+    {
+      "id": "cli:orval",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "0264b852d6cf1ba450c6a50695e0aff0dc11af2b2c735ca47e70117d804c1f6c",
+          "bytes": 2242324
+        },
+        "remin4-esbuild": {
+          "sha256": "13b274ef72d4f6bd267a04bec51e633aef0fdee7354d494cb0013bad603e37e8",
+          "bytes": 2280609
+        }
+      }
+    },
+    {
+      "id": "cli:eslint-find-rules",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "85afa8301ff353e3c4d89670c27d66cf9d94f774b199e9d630bc4938370c610a",
+          "bytes": 143773
+        },
+        "remin4-esbuild": {
+          "sha256": "078b1870dbcaa9f862fcbce79c1c6c8da1eb8b8022d40267e0f40ca6bc86ad75",
+          "bytes": 145209
+        }
+      }
+    },
+    {
+      "id": "cli:prettier-stylelint",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "051a9e0473730ccb6ebfbf6e3c28103cfbc88000aba3982d9695be5af0294122",
+          "bytes": 194469
+        },
+        "remin4-esbuild": {
+          "sha256": "7474922cdf1a6928b92943c73b975c175cd427eac94731724731804ed1f11c86",
+          "bytes": 191314
+        }
+      }
+    },
+    {
+      "id": "cli:jsii-rosetta",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "4e1d7b00c226b9718a05bc32a9355151f2e45e121897c9f8e945b9663c78084f",
+          "bytes": 4637871
+        },
+        "remin4-esbuild": {
+          "sha256": "db030c4dd725ca367fab42ef1e82d3d09b8eb9e02532dea7492f51fec198c067",
+          "bytes": 4791820
+        }
+      }
+    },
+    {
+      "id": "cli:@tensorflow/tfjs",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7a2e125068952ffac4d605ab42c8a8331f2026c7835fc7da8414d8fe3f6c8ab9",
+          "bytes": 716230
+        },
+        "remin4-esbuild": {
+          "sha256": "0397e7023990983dafee61f126739bd564e8be20c4027ee9bd0891f47e1b93fe",
+          "bytes": 723613
+        }
+      }
+    },
+    {
+      "id": "cli:find-test-names",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "0278c71a0d351b74f62c389910e1f134ae1f441e5d426a3bfe5c48574ffbd800",
+          "bytes": 687004
+        },
+        "remin4-esbuild": {
+          "sha256": "9895763f19902e4ad671dfaf2f47e760abb336c2ae27884ef50e6e5cc082ef61",
+          "bytes": 700696
+        }
+      }
+    },
+    {
+      "id": "cli:jsii",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7cb8e9565e8c7d0708f39ff8e8ec23a980f48d3554eab7e895d5810070e7d964",
+          "bytes": 4153336
+        },
+        "remin4-esbuild": {
+          "sha256": "f01fe828e13601a93144e292be477225a42181ff77e382ea5ec4daf5634cf8b1",
+          "bytes": 4257557
+        }
+      }
+    },
+    {
+      "id": "cli:@vue/cli-service",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "416ce5ff37d49c4a6884f2bde41f740a21d10e7a7caa84e3973427923aa47066",
+          "bytes": 891440
+        },
+        "remin4-esbuild": {
+          "sha256": "281a83dea5f45d1c7f9dce20511c33cf70570c77f3a913af7d291a154cf85920",
+          "bytes": 899152
+        }
+      }
+    },
+    {
+      "id": "cli:datafire",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "985895df0d8a6830aaa82cbbf3dcee39d6f14c6176399f53ee605ad90f6f59dd",
+          "bytes": 4016128
+        },
+        "remin4-esbuild": {
+          "sha256": "71706c13ab32b9a4a7346c0b5b9320328e7016e8899d75ab9479a847a2c27dfb",
+          "bytes": 4308370
+        }
+      }
+    },
+    {
+      "id": "cli:selenium-standalone",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "e48c47738f73d93cc8acc4481b738252c90a249d2d16a3376e7fa9d9478f0c72",
+          "bytes": 330105
+        },
+        "remin4-esbuild": {
+          "sha256": "55999a5aab0cb69d9511c1b8332c44c8c2ff98a3595cfaa4d4604e2b2ca55609",
+          "bytes": 326922
+        }
+      }
+    },
+    {
+      "id": "cli:mocha-webpack",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "9c08a5716ee5d232a57852ae401ecda48109ad3a1ce18afbb843ae08ecda59ee",
+          "bytes": 774810
+        },
+        "remin4-esbuild": {
+          "sha256": "54d618d9c41667c9ef83052796f190aabbacb170d2d12cfabf003328987eff18",
+          "bytes": 777410
+        }
+      }
+    },
+    {
+      "id": "cli:codeceptjs",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "f3b88d94b468539ae0cb0f12f98c55764142b6fa955440f3e549c562856ae1f5",
+          "bytes": 7117321
+        },
+        "remin4-esbuild": {
+          "sha256": "d6622e5b16cd31d8363f89a3abb3bdcb393aac5f39f80b85daff973a5ac0c25f",
+          "bytes": 7633654
+        }
+      }
+    },
+    {
+      "id": "cli:father",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "8da4000146b3c7567321683a1e258a8dad683e1594ea835e1469dbb623a75195",
+          "bytes": 1449875
+        },
+        "remin4-esbuild": {
+          "sha256": "a6fbab6769ad926f4c08d3bc2d27671d9f6cf8881517d4c11cb2297d151b35c7",
+          "bytes": 1484006
+        }
+      }
+    },
+    {
+      "id": "cli:expo-module-scripts",
+      "kind": "cli",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "36ff30ee3eac2c489fd08c5a06e707b911a0692e051c1289a41bfaa989c14b2a",
+          "bytes": 37424
+        },
+        "remin4-esbuild": {
+          "sha256": "e23515f4df5d889080529fd3dbbc0ba9190ccedc883c2758b4f5561c89bca739",
+          "bytes": 36600
+        }
+      }
+    },
+    {
+      "id": "electron:gh-qri-io__desktop",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "be087b84bb002428ccead408c7462234c92f998faa6cf782a4bce11ea9485f0b",
+          "bytes": 7551722
+        },
+        "remin4-esbuild": {
+          "sha256": "33c026619d682d06ac51d4df422d53bdecfd94fabdecf3436ff1a3a312ce0ebb",
+          "bytes": 8480309
+        }
+      }
+    },
+    {
+      "id": "electron:gh-liriliri__vivy",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "770cb28d0cc649a3f857239356beb5aec9917703869082160bfd6c517f4d8f34",
+          "bytes": 12167033
+        },
+        "remin4-esbuild": {
+          "sha256": "f355d69bcfe0cdcafe9dde23dfbe4d0c60378f886811df958015c15ee6bba372",
+          "bytes": 12665404
+        }
+      }
+    },
+    {
+      "id": "electron:gh-revoltchat__desktop",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "e3a4a5e2be6ecabf2c3d5d1d46ab16099c86cb1f8a2d3bcb0f46788874e5d3b2",
+          "bytes": 421928
+        },
+        "remin4-esbuild": {
+          "sha256": "ce2766e0fe165e79f57b0fa52670e773f680bf1b27158aa1e363540f1c0bc421",
+          "bytes": 416890
+        }
+      }
+    },
+    {
+      "id": "electron:gh-tableaunoir__tableaunoir",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "92b96946e35cde4e23530117e10382dbac2225111527629de178480f3d57c6f7",
+          "bytes": 2810377
+        },
+        "remin4-esbuild": {
+          "sha256": "00bc3b3939226e81ec96c4d37a77c75cdd6b2c86b82c673f943049733ffdec07",
+          "bytes": 2913045
+        }
+      }
+    },
+    {
+      "id": "electron:gh-dillonkearns__mobster",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "f751443596d4840551a6c1fcf52073fe1f381419445063014d7d243f06e2501c",
+          "bytes": 2089042
+        },
+        "remin4-esbuild": {
+          "sha256": "489f891d7f1ad54010515ea54431b01ba9be224aadba45647b106aa01446fa38",
+          "bytes": 2243401
+        }
+      }
+    },
+    {
+      "id": "electron:gh-liliu-z__stashbase",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "634c422b74f395e1a90e8fd5d02e7e0ff33d964ceaadcf0ec899fe002b2fd149",
+          "bytes": 3733150
+        },
+        "remin4-esbuild": {
+          "sha256": "272e421ab0b5e772b581190becb72bcfff13dafd6b66aedbe2ddd164d5ddfbe6",
+          "bytes": 3908239
+        }
+      }
+    },
+    {
+      "id": "electron:gh-xiaoshengxianjun__51mazi",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "09753d2554f8757049d5e232f7252bb9467e351252cf80a27a23e31d87291f7f",
+          "bytes": 7091258
+        },
+        "remin4-esbuild": {
+          "sha256": "033ef04142557ab39976139a2f81ca71a0094680d9a34fe8336dcfc4f84360c8",
+          "bytes": 7448950
+        }
+      }
+    },
+    {
+      "id": "electron:gh-xianyunleo__eserver",
+      "kind": "electron",
+      "stratum": "random",
+      "built": false,
+      "bundles": {}
+    },
+    {
+      "id": "electron:gh-suboptimaleng__atomic-edits",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "10d2480f1ac410a7e3d9dc4bca8e2613fc3c2c570b3e21dafd8a0b82abc43b6d",
+          "bytes": 1990513
+        },
+        "remin4-esbuild": {
+          "sha256": "551d7fd948171ada482f1085318a79b3cea93f442e4379e7079f02cf22d065fa",
+          "bytes": 1909577
+        }
+      }
+    },
+    {
+      "id": "electron:gh-claytonpetrosian__opabrow",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "9a104a9725319b65fd563497a32ec691328e8a4d0c4fda5bc281280f39158b19",
+          "bytes": 963454
+        },
+        "remin4-esbuild": {
+          "sha256": "13ae40f089f95744b0fe0d857605e1de955d74a98518644c87f7ab3743ffc889",
+          "bytes": 960857
+        }
+      }
+    },
+    {
+      "id": "electron:gh-hulxv__vnstat-client",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c5fcd22bbeda5a13b1e79d72c20722942894930899a2801bcecfb966315f992f",
+          "bytes": 1425804
+        },
+        "remin4-esbuild": {
+          "sha256": "6df3a212b2dd90c8132251286bc5419b9fa7e61dee26a03e4d6d39f1d4b57a24",
+          "bytes": 1362238
+        }
+      }
+    },
+    {
+      "id": "electron:gh-ertugrulcetin__code3dworld",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "3d3edae27bd5c5db0f4ff0bacc2ebe1e6e8edd6c40f26b4b9134a71621c0d312",
+          "bytes": 323976
+        },
+        "remin4-esbuild": {
+          "sha256": "d8edecc23c055ba6b1c55f4ddae22ed02190fed25f1c84ad6ddbe1fc9ab2f6c9",
+          "bytes": 327645
+        }
+      }
+    },
+    {
+      "id": "electron:gh-algonorhythm__flare",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "539628cf65124c0a5d48b9a9f3d2c63e13339c5bc082969b9144e999e4711dec",
+          "bytes": 5128987
+        },
+        "remin4-esbuild": {
+          "sha256": "8674ed6426ab34f316d4cf3c3ae8be1ab88b556fd9eecc1d3eb85fd8bacac2cd",
+          "bytes": 4556916
+        }
+      }
+    },
+    {
+      "id": "electron:gh-eveningkid__reacto",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c9fc483203da59cd7e30ad82e6a300a7757ba781c1882dea7d40b12f385f8553",
+          "bytes": 6938926
+        },
+        "remin4-esbuild": {
+          "sha256": "57e8b95ec39ef52f4f6a9b23f3a7e4dd712cda713d2ef52e1a1203d8b852f513",
+          "bytes": 7230183
+        }
+      }
+    },
+    {
+      "id": "electron:gh-leo__electron-next-skeleton",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "08915223ff4e8154d472bddc5cdfbb09a35951b458e57fba8e2b51dab9646e07",
+          "bytes": 133479
+        },
+        "remin4-esbuild": {
+          "sha256": "67625d7183d86884101da100bfc85f86fe68bd067b74104ee904db6da296d351",
+          "bytes": 134097
+        }
+      }
+    },
+    {
+      "id": "electron:gh-p32929__electron-shadcn-typescript",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "9695225ca138d653f3c7246105c545e41e7201df21bea34b577189b50950c554",
+          "bytes": 9487158
+        },
+        "remin4-esbuild": {
+          "sha256": "4c1a8f3839154966f1d9571c1afde16f61de6cf6ea3731c5c2bafe209820ecef",
+          "bytes": 9769310
+        }
+      }
+    },
+    {
+      "id": "electron:gh-lulumiproject__lulumi-browser",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "55e277d43adbb83c0a47d9d4e4527f643f59db55ca7a697038c985ccbc6685b6",
+          "bytes": 9573024
+        },
+        "remin4-esbuild": {
+          "sha256": "c4c7aac17e2ebdd0c739297ed4cbfcade6208f32676928581b6ac47a61ac74bb",
+          "bytes": 10337428
+        }
+      }
+    },
+    {
+      "id": "electron:gh-react-everywhere__re-start",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "db61b0572de7df100639ee4140d7dd0c9ff74baf65164ee88776d4e4fa01b5fb",
+          "bytes": 804390
+        },
+        "remin4-esbuild": {
+          "sha256": "222af6e4e2c1aefce2fe34bcc511237b0124f111e89abb534eae2128fd89bb10",
+          "bytes": 797450
+        }
+      }
+    },
+    {
+      "id": "electron:gh-davidhu2000__youtube_desktop",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "04a4308b27ad3b71c8f887da2ee9b27b24598b3ad86d71f4b938df5601ba7c0e",
+          "bytes": 596132
+        },
+        "remin4-esbuild": {
+          "sha256": "d89f8d27c662a4861415a14bd4189407e42a2bfdb6814cc57faa35182e5105d7",
+          "bytes": 594497
+        }
+      }
+    },
+    {
+      "id": "electron:gh-t8y2__unihub",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b3ba9beb6a646cc7f0b77003f08c9e3be0fa3bfca243bed56c6f3d7a00b36c70",
+          "bytes": 5524771
+        },
+        "remin4-esbuild": {
+          "sha256": "f9f1f72be656b83de5c024b15876bda1c5d2f0680c5c9c0e3103793dc198ef31",
+          "bytes": 6097570
+        }
+      }
+    },
+    {
+      "id": "electron:gh-nyakuoff__snowify",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "cc60c4398ae3b61c827b505b196f1c88bfc80f568ca56416bcd0740453ff80cd",
+          "bytes": 3546711
+        },
+        "remin4-esbuild": {
+          "sha256": "ef9778a4e9af24d135a53f675899b646ad7449c6295c48ea3b4d4bfec48f8568",
+          "bytes": 3629230
+        }
+      }
+    },
+    {
+      "id": "electron:gh-lacymorrow__cinematic",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7615289f40f51218ff9e2afaec54f20932e69d7d83c834e043708283bd4cdd02",
+          "bytes": 9033058
+        },
+        "remin4-esbuild": {
+          "sha256": "353e201cbbe46b2022da59e6cb8d4cb27df6fad592f433a950edcd13443c2caa",
+          "bytes": 9389951
+        }
+      }
+    },
+    {
+      "id": "electron:gh-alexandrosgounis__pdfx",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "eb9d906b3c4d4f2e65d679494b3a694df1ce6393975bbfbf2b6e3ba08a9b9214",
+          "bytes": 3813135
+        },
+        "remin4-esbuild": {
+          "sha256": "233064b8833603178cbb77c40d899c8d4fb7b8cdd89fcada375c512d709ec645",
+          "bytes": 3963633
+        }
+      }
+    },
+    {
+      "id": "electron:gh-dashersw__brain-bits",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "6ddb588c323e3e21be0a893bc60bee0ebe804981b4fa6f3e0c7049b4ba47af7e",
+          "bytes": 10193458
+        },
+        "remin4-esbuild": {
+          "sha256": "4a1da0c971751fa036a089c489e2880b801a3f6d92bf44e773cef55049c4cdf9",
+          "bytes": 10455999
+        }
+      }
+    },
+    {
+      "id": "electron:gh-mashaal__destroyer",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "ac64841283283f33c951c439221021bd76a06f0334911637a96b58e575596dba",
+          "bytes": 396630
+        },
+        "remin4-esbuild": {
+          "sha256": "ace612cc4fa4f3988bee803486d47f807003b2ec700ac92150109c9595c1e8fd",
+          "bytes": 366820
+        }
+      }
+    },
+    {
+      "id": "electron:gh-opencoworkai__open-cowork",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "89f807812af31598e12e089ef832a7fc37ea0c55b7cff3ce8c1ca38b123548de",
+          "bytes": 10849311
+        },
+        "remin4-esbuild": {
+          "sha256": "48680f2a411f20d1ba812f04d6d422dd7edc1284c5870564caa21be6c0acb9bf",
+          "bytes": 11055671
+        }
+      }
+    },
+    {
+      "id": "electron:gh-kilian__fromscratch",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "125f8d9bee1c1026a38793fa9b3ac0c40c27241a5eeaf4ab8b5d7e4ce699820d",
+          "bytes": 12385095
+        },
+        "remin4-esbuild": {
+          "sha256": "9ddb7f1990da050545189a70a8cf45ca07ad7ad746484c2d8aedd7a69eff8b14",
+          "bytes": 12944733
+        }
+      }
+    },
+    {
+      "id": "electron:gh-braebo__sveltekit-electron",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "536318649d544a95ccf56651feb82d8dd4788c166da91b36fd9aa5c0657d0f93",
+          "bytes": 623403
+        },
+        "remin4-esbuild": {
+          "sha256": "7e1ea16dfe77d55eec7c4b369c34cc4ba257340c1e5f30920ca66c2167ac2aff",
+          "bytes": 622937
+        }
+      }
+    },
+    {
+      "id": "electron:gh-blue-b__whispersubtranslate",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "1182807a9558d86875a89bcd5c5a9c9cbdd35efde2dd6909cf23e5d1ada88843",
+          "bytes": 1397894
+        },
+        "remin4-esbuild": {
+          "sha256": "6e3404840734127fbae59abab40ce6686aea4854281626cb845fd27b1007a002",
+          "bytes": 1432938
+        }
+      }
+    },
+    {
+      "id": "electron:gh-david1025__redis-desktop-client",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "08d0a6191024520cbc91ad6e09186732d0ea75110773441dded053b033770f47",
+          "bytes": 2664167
+        },
+        "remin4-esbuild": {
+          "sha256": "64361a7518d70cd9a0d8298dbc43865c09d5eb42f442dccc18a5abdc831383db",
+          "bytes": 2731879
+        }
+      }
+    },
+    {
+      "id": "electron:gh-oslabs-beta__fflow",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "1d2c8119f438665406c7638d29dd5152087faf8d38071a8867b78174a0e618ae",
+          "bytes": 11359068
+        },
+        "remin4-esbuild": {
+          "sha256": "372d25136b4aa493a42cdb5316d110138fcd00c8c7c7d15f2920cf3b94559763",
+          "bytes": 10469853
+        }
+      }
+    },
+    {
+      "id": "electron:gh-xuange6610__syncwatch",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "3c6c2e9cef1d2bf512d64834a0411bb3ff6637655f248e41bb5c22a0371d550b",
+          "bytes": 2206205
+        },
+        "remin4-esbuild": {
+          "sha256": "7c9c365a3752fbb9f95ceff005c02597e9574ca03b8673016f2b37396375b056",
+          "bytes": 2407700
+        }
+      }
+    },
+    {
+      "id": "electron:gh-itswendell__google-assistant-desktop-client",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "fa865fc5084c4ef35b44c60893bd5d42e866a65a124cc415142da8714dd54b1d",
+          "bytes": 8464040
+        },
+        "remin4-esbuild": {
+          "sha256": "c0a607fc3402c51e21c60b2126538a9d0b3f50ae23798e8611cd09eb254bbf79",
+          "bytes": 8959972
+        }
+      }
+    },
+    {
+      "id": "electron:gh-pixel-perfectionist__magicbox",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "563b548995cee9d061b37f69c35685e9e623320ddf067df33ad70d39dd72d0e9",
+          "bytes": 2792935
+        },
+        "remin4-esbuild": {
+          "sha256": "ff68fcd12318845c61432987f1cda7b49713269b55e87368f2d67eb0de4ecd92",
+          "bytes": 2853392
+        }
+      }
+    },
+    {
+      "id": "electron:gh-thavarshan__comet",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "85ad80891d70acd631794c7c43984eb6f39268ad35c757c0556e6b4f7342bec0",
+          "bytes": 4955889
+        },
+        "remin4-esbuild": {
+          "sha256": "122f80893555e18a781a3073368af9776b4cdd490751bf4d3c63184ff66abcb9",
+          "bytes": 5212523
+        }
+      }
+    },
+    {
+      "id": "electron:gh-wasd171__chatinder",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "cd40b60edf97ebe9579ac07ad11de5c4c1bd9fe370299361e8371a2a495f1f71",
+          "bytes": 4931546
+        },
+        "remin4-esbuild": {
+          "sha256": "ecedd04fa06d1eaa326894735014a9a470757191d60af688655aa662b03288e3",
+          "bytes": 5285420
+        }
+      }
+    },
+    {
+      "id": "electron:gh-level__electron-demo",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "ae8b4aea691ca929615415bacd69994321df229d4d0d87f431c2634cdb45b2ae",
+          "bytes": 188927
+        },
+        "remin4-esbuild": {
+          "sha256": "9fcb84b2585632bd9f111b828ef564de0482452d3988b758c5809e6722883c3d",
+          "bytes": 185844
+        }
+      }
+    },
+    {
+      "id": "electron:gh-stemrollerapp__stemroller",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a05eab04e4f3581a5f1a1c3452e86d3e0e425252105e03a0af2464f45b3973ff",
+          "bytes": 526486
+        },
+        "remin4-esbuild": {
+          "sha256": "f4541a527ab085337a563e3ee70f73c6a8fcdb412d9103f4150b3f8f019779ff",
+          "bytes": 731369
+        }
+      }
+    },
+    {
+      "id": "electron:gh-simpleapples__chatgpt-translator",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "1dbaad5f0bba0ec14d08f2d682ecda4f04a37539a772a2fabdccc5e8e66fb6a4",
+          "bytes": 6704933
+        },
+        "remin4-esbuild": {
+          "sha256": "7cbbf2cd27d9a145ad9132fac2b75ec69e446e4c98a36e34091eebc451d0b2d1",
+          "bytes": 6705148
+        }
+      }
+    },
+    {
+      "id": "electron:gh-rezach__secure-electron-template",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "3a205338cf9bc1b251e99e84c36e162ad7b5febe6bb797eca7dbecc4aa447a76",
+          "bytes": 11925981
+        },
+        "remin4-esbuild": {
+          "sha256": "9c44c6504216b441e3dff5b49ada594a20658c61361b60f6c2e4ba9e8341c9b1",
+          "bytes": 12535576
+        }
+      }
+    },
+    {
+      "id": "electron:gh-czhou578__llm-god",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "41295dc4c9cf164bc77719655ee8fb3ee67b07479ff094d539b7d57d29d22091",
+          "bytes": 219958
+        },
+        "remin4-esbuild": {
+          "sha256": "c4ce77fdc9e1533fe215f4f84ee52913165697ba1ad19977b8deff69323fe75c",
+          "bytes": 213876
+        }
+      }
+    },
+    {
+      "id": "electron:gh-cuimuxuan__moonshine-image",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "d24fcb79818d32c24f9c6deeacf34c880817b6e519e85dc42aa48fced3ae4095",
+          "bytes": 2017110
+        },
+        "remin4-esbuild": {
+          "sha256": "bc3e87da9d10b4c643b6e89d5c1168f70ec167819dcb66bb19d92df67af6abe8",
+          "bytes": 1960240
+        }
+      }
+    },
+    {
+      "id": "electron:gh-kerinlin__localmusicplayer",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "6e5ed7f11b9554d7fe2f59c665281db1ad2baab8049fe779bf6ce836c17016ce",
+          "bytes": 853449
+        },
+        "remin4-esbuild": {
+          "sha256": "782dc73d8aa5f7cf6f1fb7c33e6065012cb107d39ac068fc4503b7e2b0952cbe",
+          "bytes": 746761
+        }
+      }
+    },
+    {
+      "id": "electron:gh-catdad__raw-viewer",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a2ccaafda1d9108860364e0c93c02345bcb3622c6c2a1d0c829643ea6e9f4b32",
+          "bytes": 3951318
+        },
+        "remin4-esbuild": {
+          "sha256": "ca6a1e6e213e081937112ec4979b60d47e4da3d67fe9ae4da414cb841f30e8e8",
+          "bytes": 4106896
+        }
+      }
+    },
+    {
+      "id": "electron:gh-wangqrkkk__paperquay",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "09e366efadb701fb6fd0424d8931f4a7bf10a85e352c9bff9749d487dc7ee8e3",
+          "bytes": 5278020
+        },
+        "remin4-esbuild": {
+          "sha256": "c83f54cf2d4a375c5f9c957930266b8d6e3c05fbd30f2cccf5da74fc1586ddac",
+          "bytes": 5460635
+        }
+      }
+    },
+    {
+      "id": "electron:gh-rhysd__neovim-component",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a857f2e9826ed6aa9a0118fbf67cba91436dbd742e83df1dbe848673d780296e",
+          "bytes": 211430
+        },
+        "remin4-esbuild": {
+          "sha256": "2ee645ff2aae756bdab0adac8386d0507113a463a83ea51f53d8326e3c536387",
+          "bytes": 198405
+        }
+      }
+    },
+    {
+      "id": "electron:gh-nilbuild__pennywise",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "2c1c3b12401986085e6eeba7c300c0e38adbed3d8ee691a6c5cb26ec1210ee7b",
+          "bytes": 571000
+        },
+        "remin4-esbuild": {
+          "sha256": "bbadda76eef37a1845bbdd480a7960ee2873d4bd8cee5a706c33905a640be17f",
+          "bytes": 572896
+        }
+      }
+    },
+    {
+      "id": "electron:gh-raphamorim__retro",
+      "kind": "electron",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "094c1ffd494d91e8f017041ef83981d22053cf8c558593524bbf482a6ed5e84c",
+          "bytes": 112753
+        },
+        "remin4-esbuild": {
+          "sha256": "eae96e323f27d7d6c92f41698f973aa5701c4d80afc96591009b1e631cc1d6a5",
+          "bytes": 117539
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-formulahendry__vscode-code-runner",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "741b193f362282ecd3d439f4a24fbc90a587a673f344c7011d51d27051e1df6b",
+          "bytes": 107864
+        },
+        "remin4-esbuild": {
+          "sha256": "f910b8487adc4a3a8472ee4ac2c9718b1311b9781cefdaa3c916fe023d65c2a7",
+          "bytes": 107809
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-vmware__vrealize-developer-tools",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "1ebea2d414e94a0d3a4fd1b2365253cd0fbb3753664d89f53e2b64362bf53255",
+          "bytes": 4396376
+        },
+        "remin4-esbuild": {
+          "sha256": "10afabe71394d9e42d06e79d98445c19eccdcaf73b0c477df1d324faf5a840f2",
+          "bytes": 4746848
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-weaveworks__vscode-gitops-tools",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "851040b1a5f09ab805934d4cc2a9c330ee45624b183407e4d8e00a5ab3ac1677",
+          "bytes": 4031791
+        },
+        "remin4-esbuild": {
+          "sha256": "da52ef04eb88593a390c99cdef613a629ab6f7758fa473de443c7102c1391f1d",
+          "bytes": 3968545
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-the0807__git-graph-plus",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b166a39d66c02a2d9f89314e4294c300315c6c03696b6a0326e7e94401ae11e6",
+          "bytes": 5018758
+        },
+        "remin4-esbuild": {
+          "sha256": "5ef74567b24fa50b5404cf73581aa39c9723d070826d91f4b435da1e18980ad8",
+          "bytes": 5337471
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-aviggiano__solidity-audit-report-generator",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "0c4a800099dfbe5423a3eff22a9d74e26b3d51d195b95fa26dddfe0b59eaa041",
+          "bytes": 540647
+        },
+        "remin4-esbuild": {
+          "sha256": "37e50b6c1b8bb2f82fecc234cdc9f40fed28038a711b987994435c1a2236f84e",
+          "bytes": 537241
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-material-extensions__vscode-material-icon-theme",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7214feba957ab4d4cd47c868820e25ea422e7236095eed3bb6151cf840042d55",
+          "bytes": 3071029
+        },
+        "remin4-esbuild": {
+          "sha256": "f65b6d072f79a000f9896fb4e23614458501d7fc116c55c6a77d87a1381f6a06",
+          "bytes": 3506978
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-jsayol__vscode-firebase-explorer",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b151c32c9d9445b35f2ffc5664c27d9049dd1be5ae270bc4d528f4c92d722e3c",
+          "bytes": 2688160
+        },
+        "remin4-esbuild": {
+          "sha256": "a491dca62749a606d073cbfbaf244ddb96b242349587722e3fd200202c0e482b",
+          "bytes": 2993383
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-dsy4567__4399-on-vscode",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "acdd3d71274c0035cb9469e0cf0bf4a45879bdee08a6dec220b1910d3e1293fa",
+          "bytes": 751916
+        },
+        "remin4-esbuild": {
+          "sha256": "c3e6155ae4710d79f06bcde9c96541b107d21255f63d44c0e792f0f8dd2f01a4",
+          "bytes": 1013061
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-sumnow__markdown-formatter",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "259eda16942daabf0e0a23e03dd63524a02c44a23d6b92bf8dfe5a3264bdce0f",
+          "bytes": 485798
+        },
+        "remin4-esbuild": {
+          "sha256": "a9206e864b72b4535d776e9780b2837781cf0fd789545165acdd9068e4743771",
+          "bytes": 492664
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-codefori__vscode-ibmi",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "ac85f6ecb9e5453794c06c549abdeeca22a1872ad92603a393b7df5d9c975320",
+          "bytes": 4810486
+        },
+        "remin4-esbuild": {
+          "sha256": "5b1d430d85b209ac6956a99c8ed9f3224e3ed0156f61d3cf3cc728baa8087826",
+          "bytes": 5277671
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-oslabs-beta__svisualize",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "193ea3057b010d7dc877b8ff27c926ecb40276ea15aabef087a68a5bcf218c4e",
+          "bytes": 565608
+        },
+        "remin4-esbuild": {
+          "sha256": "65af7cfa4887d30b8ea0c5af672dba63e530393df069c377ecd5ad3692486c7f",
+          "bytes": 570219
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-leathong__openscad-support-vscode",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "4bf435c831bdf939109e08dbcea211aeefa6bc847ee213430530fb46908dad62",
+          "bytes": 5165042
+        },
+        "remin4-esbuild": {
+          "sha256": "2ce7ff490de6df3af3e23049cb039de077f5de96f7898166ccdab7f84fbf3a6d",
+          "bytes": 5416849
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-hverlin__mise-vscode",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "60cfec5cc57aee54c0b246aae81bfe85bda7d7d33339feab37ae1c98ca92392b",
+          "bytes": 2237947
+        },
+        "remin4-esbuild": {
+          "sha256": "49d749d1303cf22057df4b4ee39cb3ee9024e4a4fd3ac4e8bd7f8a54387b34fa",
+          "bytes": 2389391
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-imlinhanchao__vsc-markdown-image",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "1006773c47b532cf701f77621918e8e4526e6bc23ca86749b9b703e3a7703ba5",
+          "bytes": 4998335
+        },
+        "remin4-esbuild": {
+          "sha256": "8c53160a6b2a6cfcbcb56870825edc708f8ad2aab46259eddb57f23febfaea9a",
+          "bytes": 5021898
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-tahabasri__snippets",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b0b0b92c60c119d20ba88b299adbb9378d791ee7492ec353c22edba9230fe6fb",
+          "bytes": 694551
+        },
+        "remin4-esbuild": {
+          "sha256": "0c8099d1a1387bed1d45e7e1f936423ecc880180edac5c953d5bc82102d0a6df",
+          "bytes": 718518
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-picgo__vs-picgo",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "8d70a2fae72af4cb377243e8acc8940e4a629e04385dde874d63e654c1bfb326",
+          "bytes": 15181847
+        },
+        "remin4-esbuild": {
+          "sha256": "2a64ece073f860d48297eb9bd9543f0d17afd59bdc9e01c6cc7577ae83b87845",
+          "bytes": 16254698
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-kamasamak__vscode-cfml",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c3a6672a002df2f28ad76361e8847d8823654679b868aa00509533f2cbf9e0da",
+          "bytes": 939488
+        },
+        "remin4-esbuild": {
+          "sha256": "d6078e61b0fda301bcf4a41f75cd0d08c7ef88b64a5a588adcb304ca8c6ff1ac",
+          "bytes": 955805
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-signageos__vscode-sops",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "14b7b3d1fad9585033364ccaee0d4d329087d8c9144a18010772ed16361a98b7",
+          "bytes": 712374
+        },
+        "remin4-esbuild": {
+          "sha256": "08392753e601c00c8d538ddb3408a4cd1f417e08c72cf6bfef091a1e50ecd1f2",
+          "bytes": 707357
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-letmaik__vscode-git-tree-compare",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "3f6a238bdc0c12b278a594261841f81eade9780efd977aa6e08a15fc94ca230b",
+          "bytes": 4302599
+        },
+        "remin4-esbuild": {
+          "sha256": "b5cc5a54b350f52a7e715e80453f430f966fe93c6c363d83efe575ee79bfe05d",
+          "bytes": 4752838
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-amir9480__vscode-laravel-extra-intellisense",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b5ae92f59d8f7205e8d4911a240d18e96741e88dfe12af46a85a01c0a44744ae",
+          "bytes": 825051
+        },
+        "remin4-esbuild": {
+          "sha256": "bfd041555e39b41b210c737dbeb45606b946f3c01ee1d1878577fa0514cd66d5",
+          "bytes": 842009
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-concretios__markdown-for-humans",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "9aebd8fe378b4c7f04fd08b9a91ad728270b4d533b8a005517db4c13c94042c2",
+          "bytes": 11113725
+        },
+        "remin4-esbuild": {
+          "sha256": "5a8fa5d13ba0468d7cff5cfcd716ebe46c88a7772245cfd4797d7ed52f1dfdef",
+          "bytes": 11288723
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-katsutedev__background",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b66f94a8b464ea3298fbd0b1875c2cc50f58282b831b555a952e7668f2183872",
+          "bytes": 2678516
+        },
+        "remin4-esbuild": {
+          "sha256": "bc79d82cc90b7a02d0575806fb2685a08116674bbd503d7e97ef9b6e8796258e",
+          "bytes": 2636743
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-huachao__vscode-restclient",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "cbbf682707960d2e17b13fe1a7048de05af6538d6f568c26a5c0989bf796de6f",
+          "bytes": 6310867
+        },
+        "remin4-esbuild": {
+          "sha256": "affc7ea62cd5601969b423535b9d32f20f34ececefef868d467598e984a1748b",
+          "bytes": 6511137
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-whitphx__vscode-emacs-mcx",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "7f41ffe9ac68a1bae99b89996d7fd87099b5bd0c9a4421171f8d760526e882c8",
+          "bytes": 10450629
+        },
+        "remin4-esbuild": {
+          "sha256": "06e3851db06284601419b07739646629e9521dffc1849aa4bded0c9891500816",
+          "bytes": 10977899
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-deep-copilot__deepcopilot",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "284d601b59776dc5859d7c06b214bb09ae53701132bb2a0ace0f7d305ad529ca",
+          "bytes": 9894386
+        },
+        "remin4-esbuild": {
+          "sha256": "a2e15cf903768594fc69892ed079bc412b92c1dbe16aef5689ccc632c11e83b6",
+          "bytes": 10127820
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-bendera__vscode-commit-message-editor",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "f8a8198ae91b9b0f3337f9e35c557e5be510a48177504982929357a2382c4dde",
+          "bytes": 6081031
+        },
+        "remin4-esbuild": {
+          "sha256": "b6d1e89cae1f0b7c2a25bb99c3e0cfe42fe3860fac4dce2cb61c5b9978159b94",
+          "bytes": 6750660
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-buva7687__sql-crack",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "72b832b9c77935982942820b3c66dde427ca68e856449a1fd16cf4e18ceeaa04",
+          "bytes": 3561315
+        },
+        "remin4-esbuild": {
+          "sha256": "743461d420c2eee439e9ddc049a12e6d845cfa5845b5f3288cd315dd57021d59",
+          "bytes": 3725089
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-ryanmcalister__unotes",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "a7cf1425a631c5f3e1fc5b21afd3e5a497e39c229930227581048f13a9347cd6",
+          "bytes": 4801014
+        },
+        "remin4-esbuild": {
+          "sha256": "c68b1446edbbd04fea257b54bbe07b0c4063ea6e8bbcc38e47994777c0fcb40c",
+          "bytes": 5242578
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-bpmn-io__vs-code-bpmn-io",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "42fdd074e162b6e507dcf6cedb5df56afbb9ca16a17a097e89ba4e6e64c744e7",
+          "bytes": 4205691
+        },
+        "remin4-esbuild": {
+          "sha256": "947d2c341642c9318407d67d837ad58e00d4c8b5bcf3289d4482920aa3f0c243",
+          "bytes": 4110611
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-twinnydotdev__twinny",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "493e087a5ba3543baa523f79599fac6efcf1dafab9702cc4ef2d6960b6ff6f6a",
+          "bytes": 12952964
+        },
+        "remin4-esbuild": {
+          "sha256": "2be091bbb9cdfa9972f281798b8f630bf4876555bc51d39c68389d2f8ab3d429",
+          "bytes": 13975611
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-sleistner__vscode-fileutils",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "be5c1723c632615ceccf7a4fecededbbf3383d90a9f6b019311d18cef31b3b95",
+          "bytes": 453430
+        },
+        "remin4-esbuild": {
+          "sha256": "acf9e766fce5ebb1c0754764d6321d94be30544ed982a15f4f9260082d21348a",
+          "bytes": 472307
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-antfu__vscode-pair-diff",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b8e56bf1d904579d73653a2e528a238bf996fffffdc3f666a8558ff89fc9c71a",
+          "bytes": 11565652
+        },
+        "remin4-esbuild": {
+          "sha256": "524efb62fd4547489a6c67d8bac135f0b69707dfd5166f2a5f710e59841e4801",
+          "bytes": 11775500
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-polymeilex__vscode-wgsl",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b8116ff9d25e0da24ae5db94d6484c01e1ef6115473c53eb83cc2e56c98fe816",
+          "bytes": 395705
+        },
+        "remin4-esbuild": {
+          "sha256": "0c272a40a51eb7c2ae43d54212d60adea08815f3e97eee985be59ef407bc4c4e",
+          "bytes": 401832
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-antfu__vscode-browse-lite",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "0e3db3d9e4774991a5cc4e89bc5e55ed0780fdd6f8def124ac68a6b3e7ac2689",
+          "bytes": 12189786
+        },
+        "remin4-esbuild": {
+          "sha256": "9a87705ec45be3f49f2a622580a1034e1555b71fd0b07bdd550cf74d83bc77f0",
+          "bytes": 12416745
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-open-policy-agent__vscode-opa",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "750531fa9995472e81875fa1cc822907a6d1a714b271ca9735284216b701e6d1",
+          "bytes": 450274
+        },
+        "remin4-esbuild": {
+          "sha256": "5f592b2677a52783af1fb8c247ea806716407921b5d6232b043d4c4f60ff65f8",
+          "bytes": 443548
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-tomoyukim__vscode-mermaid-editor",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "8b4df04eea8eb85a0ad8f73fce6acb4464bc2fc0dc3fab6b1c83dd55b4d3a06a",
+          "bytes": 8185573
+        },
+        "remin4-esbuild": {
+          "sha256": "b6a5311b6564fc5206f04b44655a1b84bfbaab143bf1b7fc30df4755ea2f88f6",
+          "bytes": 8385279
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-adelphes__android-dev-ext",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "960008ea5d75b09f0ce31500b0bff2de1dd73d59257746c179cc1b586b6bf77b",
+          "bytes": 812811
+        },
+        "remin4-esbuild": {
+          "sha256": "d03e60ce8831e19dcdd0b3cf55a35723c13ad97c61338db995f41a44451c8105",
+          "bytes": 834042
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-metaseed__metago",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "37ab652147ebdb7ee11f85c43ae90f86cbe71f9f3d711d789d7a87a941740379",
+          "bytes": 9627824
+        },
+        "remin4-esbuild": {
+          "sha256": "fa7e5b3c4d514470d322a839c309f50d9c4c49f4c461a6181df527d3e9669299",
+          "bytes": 10096391
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-l13__vscode-diff",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "8312f32d40e1adbbca356318737a4a86642b39f18a9ad6585e94080643498ff4",
+          "bytes": 483661
+        },
+        "remin4-esbuild": {
+          "sha256": "2fa3ac2b778a1bb4bc85876aef8b0717f9d025ee11297f2e117588aac4eb48c5",
+          "bytes": 490519
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-vscode-icons__vscode-icons",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "6553713a316dfae8e364390d47a9652da19542a5c9a9a6a5f87bdecee2d9a100",
+          "bytes": 6342281
+        },
+        "remin4-esbuild": {
+          "sha256": "92b8b5e59247b47bb266e9d3518f45cc5cac6916e753ef1b75a3f2e2d012cbff",
+          "bytes": 6475048
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-tonybaloney__vscode-pets",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "9a7d28bbd216a82801c9026346e04c5026ffd990780760573b511e9b1f2584f6",
+          "bytes": 13254521
+        },
+        "remin4-esbuild": {
+          "sha256": "8cb1747dfd1a1e6cdbebe3f14fb807f81c0f8586d6649a5f5ae5d0252ad430c9",
+          "bytes": 13973127
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-rohinivsenthil__postcode",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "b358d70d4e08d48cb247ebf01ec25ab769b49322d3834d031f793aa4cbb857fd",
+          "bytes": 11325512
+        },
+        "remin4-esbuild": {
+          "sha256": "b7a0cf17816919a5acc9f9fab2d748bcf29808eb31764e1f8fa026cf1912090a",
+          "bytes": 11946988
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-tencent__luapanda",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "d53f15524760a29579a12fbc32c5a7460f1d78770e3fe16036475e7c4563aaea",
+          "bytes": 5227418
+        },
+        "remin4-esbuild": {
+          "sha256": "2cdce5addece9cadddf2759297798910881098704ca6262f3dff740afce00f0a",
+          "bytes": 5978800
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-jan-dolejsi__vscode-pddl",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "fa8cd00535fbde1c433159d84d17631a0ee8492111f28e952d25bae45e1e89f6",
+          "bytes": 1589128
+        },
+        "remin4-esbuild": {
+          "sha256": "5a10578d8b075bcc15b314a9597687cb7d1f312f9c9ee1be2f24b2609c4a95cc",
+          "bytes": 1839347
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-alexa__ask-toolkit-for-vscode",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "6bccad87ec3f089ce20def700f0694d7b460c9342b0bd15bce5812e10bf0c44a",
+          "bytes": 11911763
+        },
+        "remin4-esbuild": {
+          "sha256": "af22bbf7b10bd0fcd1a6655263c2fc6390ce786e98620f117f69a3e7a9b198cc",
+          "bytes": 12882624
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-serhioromano__vscode-st",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c6fc1f37ebaff3c9f1febe5fb9d0a9714cb4e9ce6722729fa13ebf2659b38c5e",
+          "bytes": 4210619
+        },
+        "remin4-esbuild": {
+          "sha256": "3432c98796864ec65e496a7e08fb8b836b494f5f7e651ffea250acd55548a55f",
+          "bytes": 4546276
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-biomejs__biome-vscode",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "156a1331259b60486227e718536b8e4bf8b022e90f8b393ec7bc6a620c78ccb7",
+          "bytes": 6258069
+        },
+        "remin4-esbuild": {
+          "sha256": "ba9100717671a4d8ccc45706bab6fbe2dec1148ebb4abc70f411d027c888af24",
+          "bytes": 7192469
+        }
+      }
+    },
+    {
+      "id": "vscode:gh-leodevbro__vscode-blockman",
+      "kind": "vscode",
+      "stratum": "random",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "8fdc3db29c4c41abce658abbc0fb697328212a66522350953b75d90e6dba1f51",
+          "bytes": 713629
+        },
+        "remin4-esbuild": {
+          "sha256": "06570f683999975cd362bef701a509ff201f8b59dbc289343407ba1545619a58",
+          "bytes": 752913
+        }
+      }
+    },
+    {
+      "id": "electron:gh-evilcult__iptv-m3u-player",
+      "kind": "electron",
+      "stratum": "replacement",
+      "replaces": "electron:gh-xianyunleo__eserver",
+      "built": true,
+      "bundles": {
+        "remin4-terser": {
+          "sha256": "c7742240cdf5248049589e2bdc803706b7cc7608c95f6dcf2c53d2cc5d644aba",
+          "bytes": 1002317
+        },
+        "remin4-esbuild": {
+          "sha256": "b194d243e06d6eebd15e1b7b26ebf9c209e1513d5d150ca7a461559ae72a4a00",
+          "bytes": 1004044
+        }
+      }
+    }
+  ]
+}

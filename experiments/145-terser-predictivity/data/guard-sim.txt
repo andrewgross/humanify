@@ -1,0 +1,42 @@
+== remin3-terser: 2521 events, new right 53821.5 KB, new wrong 67.2 KB
+base                       P   99.855  R  17.38  F0.5  51.24  dropRightKB      0.0  dropWrongKB    0.0
+candidate                  P   99.904  R  45.79  F0.5  80.81  dropRightKB      0.0  dropWrongKB    0.0
+cap 2KB ratio 0            P   99.913  R  37.38  F0.5  74.86  dropRightKB  16506.9  dropWrongKB   21.8
+cap 2KB ratio 16           P   99.933  R  29.82  F0.5  67.97  dropRightKB  31333.0  dropWrongKB   46.8
+cap 8KB ratio 0            P   99.894  R  38.46  F0.5  75.70  dropRightKB  14387.6  dropWrongKB    6.1
+cap 8KB ratio 16           P   99.910  R  30.96  F0.5  69.12  dropRightKB  29087.5  dropWrongKB   31.1
+cap 32KB ratio 0           P   99.896  R  41.08  F0.5  77.66  dropRightKB   9231.7  dropWrongKB    1.8
+cap 32KB ratio 16          P   99.875  R  34.13  F0.5  72.10  dropRightKB  22866.0  dropWrongKB    1.8
+== remin-terser: 2352 events, new right 29939.8 KB, new wrong 40.5 KB
+base                       P   99.902  R  20.33  F0.5  56.04  dropRightKB      0.0  dropWrongKB    0.0
+candidate                  P   99.917  R  53.16  F0.5  84.97  dropRightKB      0.0  dropWrongKB    0.0
+cap 2KB ratio 0            P   99.984  R  43.26  F0.5  79.21  dropRightKB   9240.7  dropWrongKB   35.0
+cap 2KB ratio 16           P   99.982  R  34.90  F0.5  72.82  dropRightKB  17045.2  dropWrongKB   35.4
+cap 8KB ratio 0            P   99.946  R  45.72  F0.5  80.78  dropRightKB   6947.0  dropWrongKB   18.1
+cap 8KB ratio 16           P   99.935  R  37.40  F0.5  74.89  dropRightKB  14707.9  dropWrongKB   18.5
+cap 32KB ratio 0           P   99.911  R  49.58  F0.5  83.05  dropRightKB   3337.6  dropWrongKB    0.0
+cap 32KB ratio 16          P   99.895  R  42.04  F0.5  78.33  dropRightKB  10377.9  dropWrongKB    0.0
+== remin-terser: 1336 events, new right 26900.9 KB, new wrong 9.2 KB
+base                       P   99.902  R  20.33  F0.5  56.04  dropRightKB      0.0  dropWrongKB    0.0
+candidate                  P   99.978  R  49.76  F0.5  83.19  dropRightKB      0.0  dropWrongKB    0.0
+cap 2KB ratio 0            P   99.989  R  42.49  F0.5  78.69  dropRightKB   6788.9  dropWrongKB    5.6
+cap 2KB ratio 16           P   99.987  R  34.13  F0.5  72.15  dropRightKB  14593.3  dropWrongKB    6.0
+cap 8KB ratio 0            P   99.979  R  43.76  F0.5  79.54  dropRightKB   5603.4  dropWrongKB    1.5
+cap 8KB ratio 16           P   99.976  R  35.45  F0.5  73.29  dropRightKB  13364.3  dropWrongKB    1.9
+cap 32KB ratio 0           P   99.977  R  46.56  F0.5  81.32  dropRightKB   2985.4  dropWrongKB    0.0
+cap 32KB ratio 16          P   99.972  R  39.02  F0.5  76.18  dropRightKB  10025.6  dropWrongKB    0.0
+== remin-terser: 147 events, new right 700.9 KB, new wrong 0.0 KB
+base                       P   99.916  R  20.43  F0.5  56.19  dropRightKB      0.0  dropWrongKB    0.0
+candidate                  P   99.919  R  21.17  F0.5  57.29  dropRightKB      0.0  dropWrongKB    0.0
+cap 2KB ratio 0            P   99.919  R  21.15  F0.5  57.26  dropRightKB     18.5  dropWrongKB    0.0
+cap 2KB ratio 16           P   99.919  R  21.14  F0.5  57.26  dropRightKB     24.4  dropWrongKB    0.0
+cap 8KB ratio 0            P   99.919  R  21.16  F0.5  57.28  dropRightKB      8.3  dropWrongKB    0.0
+cap 8KB ratio 16           P   99.919  R  21.16  F0.5  57.28  dropRightKB      8.3  dropWrongKB    0.0
+cap 32KB ratio 0           P   99.919  R  21.17  F0.5  57.29  dropRightKB      0.0  dropWrongKB    0.0
+cap 32KB ratio 16          P   99.919  R  21.17  F0.5  57.29  dropRightKB      0.0  dropWrongKB    0.0
+== remin3-terser: 4335 events, new right 62105.2 KB, new wrong 291.1 KB
+base                       P   99.855  R  17.38  F0.5  51.24  dropRightKB      0.0  dropWrongKB    0.0
+candidate                  P   99.670  R  50.30  F0.5  83.32  dropRightKB      0.0  dropWrongKB    0.0
+cap 2KB ratio 16           P   99.902  R  30.81  F0.5  68.97  dropRightKB  38246.8  dropWrongKB  267.3
+cap 8KB ratio 16           P   99.822  R  32.96  F0.5  71.01  dropRightKB  34019.9  dropWrongKB  211.1
+cap 32KB ratio 16          P   99.776  R  37.40  F0.5  74.82  dropRightKB  25319.5  dropWrongKB  161.9
