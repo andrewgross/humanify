@@ -1,0 +1,7994 @@
+{
+ "apps-esbuild": {
+  "classes": {
+   "W": 85.1,
+   "N": 0.1,
+   "R1": 672.9,
+   "R2": 2223.4,
+   "R3": 3368.7,
+   "R5": 320.6,
+   "R6": 7384.1,
+   "P1": 3.0,
+   "P2": 2761.9,
+   "P3": 369.3,
+   "P4": 45.9,
+   "T": 2407.0,
+   "U1": 65.3,
+   "U2": 86.1,
+   "U3": 13.0,
+   "U4": 129.9,
+   "U5": 106.7,
+   "total": 20043.0
+  },
+  "sub": {
+   "P2: 20-29 nodes": 1709.5,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 1052.4,
+   "R3: module of several units": 3361.3,
+   "R3: top level": 7.4,
+   "R6: ambiguous (another package reaches the cover)": 3122.9,
+   "R6: unambiguous": 4261.2,
+   "T: family-claimed module": 67.6,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 34.3,
+   "T: top level": 17.8,
+   "T: unclaimed module": 1000.2,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 1287.0,
+   "U2: held in another slice": 5.4,
+   "U2: no slice holds it": 80.7,
+   "U4: held in another slice": 5.3,
+   "U5: held in another slice": 0.5,
+   "W: family": 85.1
+  },
+  "inFamilyClaimedModule": {
+   "P2": 10.2,
+   "P3": 130.1,
+   "P4": 29.7,
+   "R1": 19.3,
+   "R2": 20.2,
+   "R3": 18.6,
+   "R6": 141.9,
+   "T": 102.0,
+   "U1": 1.4,
+   "U2": 35.0,
+   "U3": 3.3,
+   "U5": 4.3
+  },
+  "units": {
+   "R3": 3527,
+   "T": 44197,
+   "P2": 14448,
+   "R2": 3049,
+   "R5": 1785,
+   "W": 1249,
+   "R1": 1976,
+   "U2": 215,
+   "N": 7,
+   "R6": 240,
+   "U5": 120,
+   "U1": 170,
+   "P3": 80,
+   "P4": 21,
+   "U4": 104,
+   "U3": 17,
+   "P1": 15
+  },
+  "top5UnitsShare": {
+   "R3": 0.103,
+   "T": 0.229,
+   "P2": 0.364,
+   "R2": 0.292,
+   "R5": 0.017,
+   "W": 0.087,
+   "R1": 0.025,
+   "U2": 0.176,
+   "N": 0.758,
+   "R6": 0.932,
+   "U5": 0.49,
+   "U1": 0.075,
+   "P3": 0.53,
+   "P4": 0.732,
+   "U4": 0.508,
+   "U3": 0.731,
+   "P1": 0.457
+  },
+  "top": {
+   "W": [
+    [
+     "@babel/core",
+     25.0
+    ],
+    [
+     "prettier",
+     17.3
+    ],
+    [
+     "socks",
+     2.8
+    ],
+    [
+     "d3-shape",
+     2.5
+    ],
+    [
+     "colorette",
+     2.2
+    ],
+    [
+     "@popperjs/core",
+     2.2
+    ],
+    [
+     "chalk",
+     2.1
+    ],
+    [
+     "@upsetjs/venn.js",
+     2.0
+    ]
+   ],
+   "N": [
+    [
+     "dom-converter",
+     0.0
+    ],
+    [
+     "react-redux",
+     0.0
+    ],
+    [
+     "memoizee",
+     0.0
+    ],
+    [
+     "core-js",
+     0.0
+    ],
+    [
+     "client-only",
+     0.0
+    ],
+    [
+     "rxjs",
+     0.0
+    ]
+   ],
+   "R1": [
+    [
+     "@ant-design/icons",
+     363.6
+    ],
+    [
+     "react-dom",
+     134.4
+    ],
+    [
+     "renderkid",
+     20.4
+    ],
+    [
+     "@hot-loader/react-dom",
+     15.8
+    ],
+    [
+     "lodash",
+     14.9
+    ],
+    [
+     "node-fetch",
+     11.9
+    ],
+    [
+     "ssh2-streams",
+     8.5
+    ],
+    [
+     "prompts",
+     8.1
+    ]
+   ],
+   "R2": [
+    [
+     "busboy",
+     485.1
+    ],
+    [
+     "react-dom",
+     478.2
+    ],
+    [
+     "entities",
+     216.1
+    ],
+    [
+     "source-map",
+     151.5
+    ],
+    [
+     "prompts",
+     110.4
+    ],
+    [
+     "color-name",
+     103.1
+    ],
+    [
+     "debug",
+     93.6
+    ],
+    [
+     "yargs-parser",
+     85.9
+    ]
+   ],
+   "R3": [
+    [
+     "highlight.js",
+     681.6
+    ],
+    [
+     "@ant-design/icons-svg",
+     666.9
+    ],
+    [
+     "element-plus",
+     425.1
+    ],
+    [
+     "semver",
+     113.1
+    ],
+    [
+     "handlebars",
+     107.4
+    ],
+    [
+     "smart-buffer",
+     51.2
+    ],
+    [
+     "typeorm",
+     47.2
+    ],
+    [
+     "yaml",
+     47.0
+    ]
+   ],
+   "R5": [
+    [
+     "@ant-design/icons",
+     138.5
+    ],
+    [
+     "@hot-loader/react-dom",
+     20.7
+    ],
+    [
+     "define-property",
+     7.7
+    ],
+    [
+     "has-flag",
+     4.8
+    ],
+    [
+     "ansi-regex",
+     3.0
+    ],
+    [
+     "inflight",
+     2.8
+    ],
+    [
+     "get-proto",
+     2.6
+    ],
+    [
+     "path-key",
+     2.4
+    ]
+   ],
+   "R6": [
+    [
+     "@ts-morph/common",
+     3486.9
+    ],
+    [
+     "typescript",
+     2963.4
+    ],
+    [
+     "prettier",
+     246.3
+    ],
+    [
+     "jiti",
+     182.3
+    ],
+    [
+     "tar",
+     99.2
+    ],
+    [
+     "@hot-loader/react-dom",
+     64.1
+    ],
+    [
+     "utif2",
+     62.2
+    ],
+    [
+     "vite",
+     44.9
+    ]
+   ],
+   "P1": [
+    [
+     "react-dom",
+     1.4
+    ],
+    [
+     "prettier",
+     1.1
+    ],
+    [
+     "react-redux",
+     0.3
+    ],
+    [
+     "@hot-loader/react-dom",
+     0.2
+    ]
+   ],
+   "P2": [
+    [
+     "vm2",
+     790.7
+    ],
+    [
+     "@material-ui/icons",
+     587.3
+    ],
+    [
+     "@ant-design/icons",
+     240.6
+    ],
+    [
+     "entities",
+     186.6
+    ],
+    [
+     "parse5",
+     143.6
+    ],
+    [
+     "regexpu-core",
+     122.0
+    ],
+    [
+     "lodash",
+     72.4
+    ],
+    [
+     "react-dom",
+     56.2
+    ]
+   ],
+   "P3": [
+    [
+     "vite",
+     190.9
+    ],
+    [
+     "antd",
+     31.6
+    ],
+    [
+     "localforage",
+     30.8
+    ],
+    [
+     "magicast",
+     27.7
+    ],
+    [
+     "create-react-class",
+     9.7
+    ],
+    [
+     "react-redux",
+     9.4
+    ],
+    [
+     "@material-ui/core",
+     6.7
+    ],
+    [
+     "puppeteer-core",
+     6.4
+    ]
+   ],
+   "P4": [
+    [
+     "prettier",
+     22.8
+    ],
+    [
+     "antd",
+     13.0
+    ],
+    [
+     "tinyexec",
+     6.7
+    ],
+    [
+     "puppeteer-core",
+     2.0
+    ],
+    [
+     "@vercel/nft",
+     1.4
+    ]
+   ],
+   "T": [
+    [
+     "undici",
+     565.7
+    ],
+    [
+     "katex",
+     268.5
+    ],
+    [
+     "emoji-regex",
+     145.1
+    ],
+    [
+     "entities",
+     144.8
+    ],
+    [
+     "@ant-design/icons",
+     82.9
+    ],
+    [
+     "json5",
+     78.1
+    ],
+    [
+     "lodash",
+     71.5
+    ],
+    [
+     "@ant-design/icons-svg",
+     53.6
+    ]
+   ],
+   "U1": [
+    [
+     "@babel/core",
+     43.6
+    ],
+    [
+     "prettier",
+     14.7
+    ],
+    [
+     "puppeteer-core",
+     5.7
+    ],
+    [
+     "@vercel/nft",
+     0.5
+    ],
+    [
+     "oxc-resolver",
+     0.3
+    ],
+    [
+     "netmask",
+     0.3
+    ],
+    [
+     "postcss",
+     0.2
+    ]
+   ],
+   "U2": [
+    [
+     "redux",
+     19.5
+    ],
+    [
+     "prettier",
+     10.6
+    ],
+    [
+     "@material-ui/core",
+     9.4
+    ],
+    [
+     "antd",
+     6.8
+    ],
+    [
+     "react-redux",
+     6.0
+    ],
+    [
+     "@oclif/core",
+     5.2
+    ],
+    [
+     "@prisma/cli-engine",
+     2.3
+    ],
+    [
+     "execa",
+     2.2
+    ]
+   ],
+   "U3": [
+    [
+     "sharp",
+     12.5
+    ],
+    [
+     "oxc-parser",
+     0.3
+    ],
+    [
+     "type",
+     0.1
+    ]
+   ],
+   "U4": [
+    [
+     "@vercel/nft",
+     63.8
+    ],
+    [
+     "@prisma/compute-sdk",
+     28.7
+    ],
+    [
+     "oxc-resolver",
+     14.4
+    ],
+    [
+     "ajv",
+     11.7
+    ],
+    [
+     "@mapbox/node-pre-gyp",
+     11.3
+    ]
+   ],
+   "U5": [
+    [
+     "@mapbox/node-pre-gyp",
+     42.8
+    ],
+    [
+     "prettier",
+     19.2
+    ],
+    [
+     "figlet",
+     18.7
+    ],
+    [
+     "@babel/core",
+     7.1
+    ],
+    [
+     "date-fns",
+     5.7
+    ],
+    [
+     "@clack/prompts",
+     4.1
+    ],
+    [
+     "puppeteer-core",
+     3.9
+    ],
+    [
+     "postcss",
+     2.3
+    ]
+   ]
+  }
+ },
+ "apps-rollup": {
+  "classes": {
+   "W": 582.2,
+   "S": 48.6,
+   "N": 0.0,
+   "R1": 58.9,
+   "R2": 206.7,
+   "R3": 381.2,
+   "R5": 108.1,
+   "R6": 638.9,
+   "P1": 261.1,
+   "P2": 169.2,
+   "P3": 1203.2,
+   "P4": 130.7,
+   "T": 2350.5,
+   "U1": 16.8,
+   "U2": 1311.0,
+   "U3": 370.0,
+   "U4": 846.1,
+   "U5": 8.8,
+   "total": 8692.1
+  },
+  "sub": {
+   "P2: 20-29 nodes": 165.5,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 3.8,
+   "R3: module of several units": 143.2,
+   "R3: top level": 209.7,
+   "R3: top level, ambiguous": 28.3,
+   "R6: ambiguous (another package reaches the cover)": 2.6,
+   "R6: unambiguous": 636.2,
+   "T: family-claimed module": 52.9,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 1.5,
+   "T: top level": 655.9,
+   "T: top level, literal-heavy (>= 16 B/node)": 1366.1,
+   "T: unclaimed module": 145.0,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 129.1,
+   "U2: held in another slice": 26.8,
+   "U2: no slice holds it": 1284.2,
+   "U4: held in another slice": 6.4,
+   "W: family": 582.2
+  },
+  "inFamilyClaimedModule": {
+   "P1": 7.2,
+   "P2": 10.3,
+   "P3": 21.0,
+   "P4": 11.2,
+   "R1": 6.3,
+   "R2": 3.5,
+   "R3": 4.8,
+   "R6": 0.3,
+   "S": 2.4,
+   "T": 54.4,
+   "U2": 24.4,
+   "U3": 11.2,
+   "U4": 7.5
+  },
+  "units": {
+   "R3": 534,
+   "T": 13084,
+   "P2": 1547,
+   "R5": 467,
+   "R2": 370,
+   "W": 1875,
+   "U2": 2084,
+   "R6": 73,
+   "U4": 255,
+   "P4": 124,
+   "P3": 238,
+   "U3": 756,
+   "U1": 42,
+   "R1": 162,
+   "N": 7,
+   "P1": 253,
+   "S": 9,
+   "U5": 32
+  },
+  "top5UnitsShare": {
+   "R3": 0.237,
+   "T": 0.164,
+   "P2": 0.046,
+   "R5": 0.081,
+   "R2": 0.153,
+   "W": 0.118,
+   "U2": 0.202,
+   "R6": 0.971,
+   "U4": 0.923,
+   "P4": 0.497,
+   "P3": 0.292,
+   "U3": 0.041,
+   "U1": 0.496,
+   "R1": 0.184,
+   "N": 0.75,
+   "P1": 0.307,
+   "S": 0.922,
+   "U5": 0.348
+  },
+  "top": {
+   "W": [
+    [
+     "cytoscape",
+     164.0
+    ],
+    [
+     "react-dom",
+     114.0
+    ],
+    [
+     "emoji-regex",
+     84.5
+    ],
+    [
+     "color-name",
+     65.0
+    ],
+    [
+     "puppeteer-core",
+     18.1
+    ],
+    [
+     "dagre-d3-es",
+     14.8
+    ],
+    [
+     "node-ipc",
+     11.9
+    ],
+    [
+     "prettier",
+     11.9
+    ]
+   ],
+   "S": [
+    [
+     "node-releases",
+     32.7
+    ],
+    [
+     "class-utils",
+     5.3
+    ],
+    [
+     "@xmldom/xmldom",
+     2.8
+    ],
+    [
+     "eslint",
+     2.4
+    ],
+    [
+     "dmd",
+     2.3
+    ],
+    [
+     "yargs",
+     1.7
+    ],
+    [
+     "electron-is-accelerator",
+     1.1
+    ],
+    [
+     "verkit",
+     0.3
+    ]
+   ],
+   "N": [
+    [
+     "cytoscape",
+     0.0
+    ],
+    [
+     "http-cache-semantics",
+     0.0
+    ],
+    [
+     "hoist-non-react-statics",
+     0.0
+    ],
+    [
+     "rc",
+     0.0
+    ],
+    [
+     "safe-stable-stringify",
+     0.0
+    ],
+    [
+     "inflection",
+     0.0
+    ]
+   ],
+   "R1": [
+    [
+     "react-dom",
+     5.3
+    ],
+    [
+     "lodash.uniq",
+     4.9
+    ],
+    [
+     "prettier",
+     4.9
+    ],
+    [
+     "picocolors",
+     3.4
+    ],
+    [
+     "d3-color",
+     3.3
+    ],
+    [
+     "character-entities-html4",
+     2.7
+    ],
+    [
+     "antd",
+     2.7
+    ],
+    [
+     "chalk",
+     2.2
+    ]
+   ],
+   "R2": [
+    [
+     "prettier",
+     30.8
+    ],
+    [
+     "react-is",
+     18.3
+    ],
+    [
+     "source-map",
+     10.3
+    ],
+    [
+     "picocolors",
+     8.7
+    ],
+    [
+     "postcss-value-parser",
+     8.0
+    ],
+    [
+     "xml2js",
+     7.8
+    ],
+    [
+     "chalk",
+     7.0
+    ],
+    [
+     "prompts",
+     6.9
+    ]
+   ],
+   "R3": [
+    [
+     "vite",
+     70.7
+    ],
+    [
+     "puppeteer-core",
+     40.5
+    ],
+    [
+     "prettier",
+     22.4
+    ],
+    [
+     "typeorm",
+     21.5
+    ],
+    [
+     "big-integer",
+     20.8
+    ],
+    [
+     "micromark",
+     19.6
+    ],
+    [
+     "fill-range",
+     15.8
+    ],
+    [
+     "@sideway/address",
+     12.2
+    ]
+   ],
+   "R5": [
+    [
+     "has-flag",
+     5.0
+    ],
+    [
+     "uc.micro",
+     5.0
+    ],
+    [
+     "path-is-absolute",
+     2.7
+    ],
+    [
+     "ansi-regex",
+     2.6
+    ],
+    [
+     "is-buffer",
+     2.5
+    ],
+    [
+     "call-bind",
+     1.8
+    ],
+    [
+     "get-proto",
+     1.7
+    ],
+    [
+     "xml-name-validator",
+     1.7
+    ]
+   ],
+   "R6": [
+    [
+     "xterm",
+     538.8
+    ],
+    [
+     "tr46",
+     69.3
+    ],
+    [
+     "lru-cache",
+     6.3
+    ],
+    [
+     "file-entry-cache",
+     3.5
+    ],
+    [
+     "ansi-styles",
+     2.6
+    ],
+    [
+     "@clack/prompts",
+     2.6
+    ],
+    [
+     "core-js",
+     1.3
+    ],
+    [
+     "vite",
+     1.0
+    ]
+   ],
+   "P1": [
+    [
+     "cytoscape",
+     206.3
+    ],
+    [
+     "node-fetch",
+     19.8
+    ],
+    [
+     "@mermaid-js/parser",
+     19.1
+    ],
+    [
+     "mermaid",
+     12.5
+    ],
+    [
+     "whatwg-fetch",
+     2.8
+    ],
+    [
+     "quickjs-emscripten-core",
+     0.5
+    ],
+    [
+     "yargs",
+     0.2
+    ]
+   ],
+   "P2": [
+    [
+     "lodash",
+     21.9
+    ],
+    [
+     "prettier",
+     14.1
+    ],
+    [
+     "core-js",
+     8.7
+    ],
+    [
+     "typeorm",
+     7.3
+    ],
+    [
+     "rxjs",
+     6.3
+    ],
+    [
+     "es-abstract",
+     6.3
+    ],
+    [
+     "@mermaid-js/parser",
+     4.9
+    ],
+    [
+     "react-dom",
+     4.0
+    ]
+   ],
+   "P3": [
+    [
+     "lodash",
+     485.2
+    ],
+    [
+     "prettier",
+     90.5
+    ],
+    [
+     "react-test-renderer",
+     74.1
+    ],
+    [
+     "lodash.isequal",
+     38.3
+    ],
+    [
+     "localforage",
+     28.5
+    ],
+    [
+     "vscode-languageserver-protocol",
+     27.2
+    ],
+    [
+     "typeorm",
+     25.9
+    ],
+    [
+     "buffer",
+     20.5
+    ]
+   ],
+   "P4": [
+    [
+     "@babel/core",
+     38.7
+    ],
+    [
+     "prettier",
+     26.0
+    ],
+    [
+     "typeorm",
+     20.8
+    ],
+    [
+     "vscode-languageserver-protocol",
+     13.7
+    ],
+    [
+     "tinyexec",
+     6.2
+    ],
+    [
+     "typed-css-modules",
+     3.9
+    ],
+    [
+     "jsonc-parser",
+     2.7
+    ],
+    [
+     "react-jss",
+     2.5
+    ]
+   ],
+   "T": [
+    [
+     "@material-ui/icons",
+     1356.9
+    ],
+    [
+     "katex",
+     259.7
+    ],
+    [
+     "entities",
+     126.6
+    ],
+    [
+     "@ant-design/icons",
+     101.2
+    ],
+    [
+     "core-js",
+     78.8
+    ],
+    [
+     "prettier",
+     42.2
+    ],
+    [
+     "vite",
+     33.8
+    ],
+    [
+     "lodash",
+     30.2
+    ]
+   ],
+   "U1": [
+    [
+     "prettier",
+     8.3
+    ],
+    [
+     "antd",
+     2.0
+    ],
+    [
+     "connected-react-router",
+     1.5
+    ],
+    [
+     "puppeteer-core",
+     1.3
+    ],
+    [
+     "async-validator",
+     1.0
+    ],
+    [
+     "rxjs",
+     0.8
+    ],
+    [
+     "@clack/prompts",
+     0.4
+    ],
+    [
+     "react-redux",
+     0.4
+    ]
+   ],
+   "U2": [
+    [
+     "@material-ui/icons",
+     548.6
+    ],
+    [
+     "caniuse-lite",
+     222.1
+    ],
+    [
+     "prettier",
+     117.4
+    ],
+    [
+     "@prisma/cli-engine",
+     42.4
+    ],
+    [
+     "@prisma/composer-cli",
+     28.1
+    ],
+    [
+     "yurnalist",
+     22.8
+    ],
+    [
+     "typeorm",
+     19.4
+    ],
+    [
+     "@clack/prompts",
+     16.9
+    ]
+   ],
+   "U3": [
+    [
+     "caniuse-lite",
+     290.8
+    ],
+    [
+     "@ant-design/icons-svg",
+     30.4
+    ],
+    [
+     "highlight.js",
+     8.3
+    ],
+    [
+     "core-js",
+     7.9
+    ],
+    [
+     "effect",
+     3.5
+    ],
+    [
+     "electron-updater",
+     2.6
+    ],
+    [
+     "vscode-languageserver-protocol",
+     2.6
+    ],
+    [
+     "chai",
+     2.0
+    ]
+   ],
+   "U4": [
+    [
+     "zxcvbn",
+     774.4
+    ],
+    [
+     "core-js",
+     36.2
+    ],
+    [
+     "caniuse-lite",
+     10.1
+    ],
+    [
+     "airbnb-prop-types",
+     3.6
+    ],
+    [
+     "levelup",
+     2.3
+    ],
+    [
+     "@astrojs/internal-helpers",
+     2.3
+    ],
+    [
+     "rxjs",
+     2.1
+    ],
+    [
+     "yurnalist",
+     1.9
+    ]
+   ],
+   "U5": [
+    [
+     "date-fns",
+     3.3
+    ],
+    [
+     "puppeteer-core",
+     2.9
+    ],
+    [
+     "rc-tree-select",
+     0.7
+    ],
+    [
+     "lodash",
+     0.5
+    ],
+    [
+     "rc-cascader",
+     0.5
+    ],
+    [
+     "antd",
+     0.3
+    ],
+    [
+     "core-js",
+     0.3
+    ],
+    [
+     "@babel/plugin-transform-runtime",
+     0.2
+    ]
+   ]
+  }
+ },
+ "apps-webpack": {
+  "classes": {
+   "W": 155.0,
+   "S": 113.1,
+   "R1": 56.3,
+   "R2": 744.9,
+   "R3": 5121.6,
+   "R5": 99.6,
+   "R6": 9.8,
+   "P1": 1.0,
+   "P2": 1333.2,
+   "P3": 570.7,
+   "P4": 77.7,
+   "T": 775.8,
+   "U1": 14.9,
+   "U2": 446.2,
+   "U3": 52.0,
+   "U4": 321.1,
+   "U5": 43.2,
+   "total": 9936.1
+  },
+  "sub": {
+   "P2: 20-29 nodes": 741.7,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 591.5,
+   "R3: module of several units": 5121.6,
+   "R6: unambiguous": 9.8,
+   "T: family-claimed module": 64.1,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 20.0,
+   "T: unclaimed module": 256.9,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 434.9,
+   "U2: held in another slice": 9.8,
+   "U2: no slice holds it": 436.4,
+   "U4: held in another slice": 0.5,
+   "W: family": 155.0
+  },
+  "inFamilyClaimedModule": {
+   "P2": 34.0,
+   "P3": 326.7,
+   "P4": 64.6,
+   "R1": 32.3,
+   "R2": 27.5,
+   "R3": 73.6,
+   "R5": 20.5,
+   "R6": 0.7,
+   "S": 1.4,
+   "T": 84.0,
+   "U1": 1.0,
+   "U2": 393.0,
+   "U3": 46.5,
+   "U4": 295.4,
+   "U5": 1.3
+  },
+  "units": {
+   "P2": 2777,
+   "T": 8906,
+   "R3": 1063,
+   "R2": 367,
+   "R5": 431,
+   "S": 15,
+   "R1": 206,
+   "U2": 1376,
+   "U5": 32,
+   "U1": 31,
+   "W": 478,
+   "P4": 58,
+   "P1": 4,
+   "P3": 162,
+   "R6": 43,
+   "U4": 436,
+   "U3": 69
+  },
+  "top5UnitsShare": {
+   "P2": 0.492,
+   "T": 0.478,
+   "R3": 0.665,
+   "R2": 0.672,
+   "R5": 0.106,
+   "S": 0.894,
+   "R1": 0.184,
+   "U2": 0.131,
+   "U5": 0.649,
+   "U1": 0.42,
+   "W": 0.296,
+   "P4": 0.214,
+   "P1": 1.0,
+   "P3": 0.221,
+   "R6": 0.214,
+   "U4": 0.061,
+   "U3": 0.175
+  },
+  "top": {
+   "W": [
+    [
+     "prettier",
+     36.8
+    ],
+    [
+     "htmlparser2",
+     25.4
+    ],
+    [
+     "@babel/core",
+     18.9
+    ],
+    [
+     "fast-xml-builder",
+     13.4
+    ],
+    [
+     "node-ipc",
+     11.9
+    ],
+    [
+     "url-parse",
+     11.2
+    ],
+    [
+     "fast-xml-parser",
+     7.9
+    ],
+    [
+     "@hot-loader/react-dom",
+     7.0
+    ]
+   ],
+   "S": [
+    [
+     "rxjs",
+     66.2
+    ],
+    [
+     "file-type",
+     21.2
+    ],
+    [
+     "nano-css",
+     7.8
+    ],
+    [
+     "use-sync-external-store",
+     3.3
+    ],
+    [
+     "prettier",
+     2.5
+    ],
+    [
+     "typescript",
+     2.4
+    ],
+    [
+     "typeorm",
+     2.2
+    ],
+    [
+     "caniuse-lite",
+     1.7
+    ]
+   ],
+   "R1": [
+    [
+     "d3-color",
+     6.3
+    ],
+    [
+     "node-fetch",
+     5.0
+    ],
+    [
+     "react-dom",
+     4.8
+    ],
+    [
+     "@babel/types",
+     3.9
+    ],
+    [
+     "@babel/generator",
+     3.5
+    ],
+    [
+     "@mermaid-js/parser",
+     2.4
+    ],
+    [
+     "postcss-selector-parser",
+     2.2
+    ],
+    [
+     "request",
+     1.9
+    ]
+   ],
+   "R2": [
+    [
+     "busboy",
+     485.1
+    ],
+    [
+     "color-name",
+     76.5
+    ],
+    [
+     "debug",
+     54.8
+    ],
+    [
+     "source-map",
+     18.2
+    ],
+    [
+     "request",
+     18.1
+    ],
+    [
+     "source-map-js",
+     7.9
+    ],
+    [
+     "postcss-value-parser",
+     7.2
+    ],
+    [
+     "pngjs",
+     6.0
+    ]
+   ],
+   "R3": [
+    [
+     "typescript",
+     2877.4
+    ],
+    [
+     "typeorm",
+     1091.7
+    ],
+    [
+     "jpegxr",
+     219.9
+    ],
+    [
+     "ajv",
+     215.9
+    ],
+    [
+     "postcss",
+     64.5
+    ],
+    [
+     "mermaid",
+     56.2
+    ],
+    [
+     "postcss-selector-parser",
+     55.4
+    ],
+    [
+     "postcss-calc",
+     50.1
+    ]
+   ],
+   "R5": [
+    [
+     "@ant-design/icons-svg",
+     20.5
+    ],
+    [
+     "uc.micro",
+     5.0
+    ],
+    [
+     "has-flag",
+     3.6
+    ],
+    [
+     "define-property",
+     3.0
+    ],
+    [
+     "get-proto",
+     1.3
+    ],
+    [
+     "lazy-val",
+     1.3
+    ],
+    [
+     "indent-string",
+     1.2
+    ],
+    [
+     "is-buffer",
+     1.2
+    ]
+   ],
+   "R6": [
+    [
+     "@babel/plugin-transform-dynamic-import",
+     0.8
+    ],
+    [
+     "@mermaid-js/parser",
+     0.5
+    ],
+    [
+     "@babel/plugin-transform-duplicate-named-capturing-groups-regex",
+     0.4
+    ],
+    [
+     "@babel/plugin-transform-unicode-property-regex",
+     0.4
+    ],
+    [
+     "@babel/plugin-transform-numeric-separator",
+     0.3
+    ],
+    [
+     "@babel/plugin-transform-optional-catch-binding",
+     0.3
+    ],
+    [
+     "@babel/plugin-transform-arrow-functions",
+     0.3
+    ],
+    [
+     "cssnano-util-same-parent",
+     0.3
+    ]
+   ],
+   "P1": [
+    [
+     "prettier",
+     0.6
+    ],
+    [
+     "mermaid",
+     0.4
+    ]
+   ],
+   "P2": [
+    [
+     "vm2",
+     416.5
+    ],
+    [
+     "regenerate-unicode-properties",
+     336.0
+    ],
+    [
+     "undici",
+     141.3
+    ],
+    [
+     "parse5",
+     71.9
+    ],
+    [
+     "regexpu-core",
+     56.3
+    ],
+    [
+     "caniuse-lite",
+     43.7
+    ],
+    [
+     "core-js",
+     39.7
+    ],
+    [
+     "json5",
+     30.2
+    ]
+   ],
+   "P3": [
+    [
+     "antd",
+     101.5
+    ],
+    [
+     "file-type",
+     52.3
+    ],
+    [
+     "rc-picker",
+     38.3
+    ],
+    [
+     "mermaid",
+     37.1
+    ],
+    [
+     "@ant-design/react-slick",
+     32.6
+    ],
+    [
+     "localforage",
+     28.1
+    ],
+    [
+     "rc-tree",
+     27.0
+    ],
+    [
+     "rc-select",
+     22.5
+    ]
+   ],
+   "P4": [
+    [
+     "antd",
+     54.4
+    ],
+    [
+     "@react-icons/all-files",
+     4.3
+    ],
+    [
+     "typed-css-modules",
+     3.7
+    ],
+    [
+     "d3-shape",
+     3.4
+    ],
+    [
+     "prettier",
+     3.2
+    ],
+    [
+     "ansi-styles",
+     1.9
+    ],
+    [
+     "mimic-fn",
+     1.7
+    ],
+    [
+     "@mermaid-js/parser",
+     1.1
+    ]
+   ],
+   "T": [
+    [
+     "katex",
+     258.6
+    ],
+    [
+     "entities",
+     113.4
+    ],
+    [
+     "emoji-regex",
+     67.7
+    ],
+    [
+     "caniuse-lite",
+     36.9
+    ],
+    [
+     "typeorm",
+     26.1
+    ],
+    [
+     "core-js",
+     24.3
+    ],
+    [
+     "element-plus",
+     23.1
+    ],
+    [
+     "regenerate-unicode-properties",
+     19.1
+    ]
+   ],
+   "U1": [
+    [
+     "@babel/core",
+     13.1
+    ],
+    [
+     "async-validator",
+     0.5
+    ],
+    [
+     "figlet",
+     0.5
+    ],
+    [
+     "@floating-ui/dom",
+     0.3
+    ],
+    [
+     "prettier",
+     0.2
+    ],
+    [
+     "enzyme-adapter-react-16",
+     0.1
+    ],
+    [
+     "enzyme-adapter-utils",
+     0.1
+    ],
+    [
+     "d3-ease",
+     0.1
+    ]
+   ],
+   "U2": [
+    [
+     "@ant-design/icons-svg",
+     150.8
+    ],
+    [
+     "antd",
+     84.3
+    ],
+    [
+     "@ant-design/icons",
+     80.2
+    ],
+    [
+     "mermaid",
+     26.7
+    ],
+    [
+     "rc-picker",
+     8.2
+    ],
+    [
+     "autoprefixer",
+     7.8
+    ],
+    [
+     "rc-select",
+     6.5
+    ],
+    [
+     "@mermaid-js/parser",
+     5.1
+    ]
+   ],
+   "U3": [
+    [
+     "@ant-design/icons-svg",
+     45.3
+    ],
+    [
+     "antd",
+     3.9
+    ],
+    [
+     "rc-align",
+     2.2
+    ],
+    [
+     "@thoughtsunificator/route-tokenizer",
+     0.3
+    ],
+    [
+     "@domodel/router",
+     0.2
+    ],
+    [
+     "type",
+     0.1
+    ]
+   ],
+   "U4": [
+    [
+     "@ant-design/icons-svg",
+     298.5
+    ],
+    [
+     "domodel-diary",
+     16.3
+    ],
+    [
+     "@domodel/paginator",
+     4.1
+    ],
+    [
+     "@domodel/popup",
+     0.7
+    ],
+    [
+     "bundle-name",
+     0.6
+    ],
+    [
+     "image-size-next",
+     0.6
+    ],
+    [
+     "@domodel/router",
+     0.3
+    ]
+   ],
+   "U5": [
+    [
+     "figlet",
+     17.7
+    ],
+    [
+     "prettier",
+     13.7
+    ],
+    [
+     "date-fns",
+     5.1
+    ],
+    [
+     "@babel/core",
+     4.9
+    ],
+    [
+     "mermaid",
+     1.3
+    ],
+    [
+     "recast",
+     0.3
+    ],
+    [
+     "lodash",
+     0.2
+    ],
+    [
+     "babel-runtime",
+     0.1
+    ]
+   ]
+  }
+ },
+ "dev-rollup": {
+  "classes": {
+   "W": 2.1,
+   "S": 5.8,
+   "N": 0.0,
+   "R1": 0.1,
+   "R2": 28.1,
+   "R3": 16.6,
+   "R5": 8.3,
+   "R6": 1.3,
+   "P1": 289.3,
+   "P2": 5.2,
+   "P3": 18.6,
+   "P4": 1.0,
+   "T": 82.5,
+   "U1": 3.3,
+   "U2": 6.6,
+   "U3": 1.2,
+   "U5": 0.1,
+   "total": 469.9
+  },
+  "sub": {
+   "P2: 20-29 nodes": 5.2,
+   "R3: module of several units": 3.8,
+   "R3: top level": 12.9,
+   "R6: unambiguous": 1.3,
+   "T: family-claimed module": 0.6,
+   "T: top level": 9.7,
+   "T: top level, literal-heavy (>= 16 B/node)": 68.7,
+   "T: unclaimed module": 3.5,
+   "U2: no slice holds it": 6.6,
+   "W: family": 2.1
+  },
+  "inFamilyClaimedModule": {
+   "P2": 0.1,
+   "T": 0.6,
+   "U2": 0.5
+  },
+  "units": {
+   "T": 445,
+   "R5": 36,
+   "R3": 26,
+   "P2": 59,
+   "U5": 1,
+   "R6": 5,
+   "R2": 15,
+   "P1": 403,
+   "U1": 7,
+   "W": 41,
+   "N": 7,
+   "P3": 6,
+   "U2": 14,
+   "U3": 2,
+   "R1": 1,
+   "P4": 2,
+   "S": 2
+  },
+  "top5UnitsShare": {
+   "T": 0.826,
+   "R5": 0.333,
+   "R3": 0.639,
+   "P2": 0.211,
+   "U5": 1.0,
+   "R6": 1.0,
+   "R2": 0.8,
+   "P1": 0.287,
+   "U1": 0.93,
+   "W": 0.347,
+   "N": 0.769,
+   "P3": 0.981,
+   "U2": 0.805,
+   "U3": 1.0,
+   "R1": 1.0,
+   "P4": 1.0,
+   "S": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "@marijn/find-cluster-break",
+     0.6
+    ],
+    [
+     "es-errors",
+     0.3
+    ],
+    [
+     "math-intrinsics",
+     0.2
+    ],
+    [
+     "extend-shallow",
+     0.2
+    ],
+    [
+     "@csstools/css-tokenizer",
+     0.2
+    ],
+    [
+     "binary-search-tree",
+     0.1
+    ],
+    [
+     "scule",
+     0.1
+    ],
+    [
+     "call-bind-apply-helpers",
+     0.1
+    ]
+   ],
+   "S": [
+    [
+     "class-utils",
+     5.3
+    ],
+    [
+     "isobject",
+     0.5
+    ]
+   ],
+   "N": [
+    [
+     "@npmcli/name-from-folder",
+     0.0
+    ],
+    [
+     "flush-write-stream",
+     0.0
+    ],
+    [
+     "num2fraction",
+     0.0
+    ],
+    [
+     "from2",
+     0.0
+    ],
+    [
+     "call-me-maybe",
+     0.0
+    ],
+    [
+     "form-data",
+     0.0
+    ],
+    [
+     "jsprim",
+     0.0
+    ]
+   ],
+   "R1": [
+    [
+     "ms",
+     0.1
+    ]
+   ],
+   "R2": [
+    [
+     "npm-package-arg",
+     17.8
+    ],
+    [
+     "rrweb-cssom",
+     3.7
+    ],
+    [
+     "picocolors",
+     1.7
+    ],
+    [
+     "natural-compare",
+     1.4
+    ],
+    [
+     "ms",
+     1.3
+    ],
+    [
+     "safe-buffer",
+     1.0
+    ],
+    [
+     "source-map",
+     0.9
+    ],
+    [
+     "strip-ansi",
+     0.2
+    ]
+   ],
+   "R3": [
+    [
+     "@codemirror/lang-css",
+     6.5
+    ],
+    [
+     "ajv",
+     1.9
+    ],
+    [
+     "just-diff",
+     1.7
+    ],
+    [
+     "semver",
+     1.2
+    ],
+    [
+     "hastscript",
+     0.9
+    ],
+    [
+     "url-join",
+     0.8
+    ],
+    [
+     "proxy-agent-negotiate",
+     0.7
+    ],
+    [
+     "index-to-position",
+     0.7
+    ]
+   ],
+   "R5": [
+    [
+     "@marijn/find-cluster-break",
+     1.4
+    ],
+    [
+     "define-property",
+     0.6
+    ],
+    [
+     "object-visit",
+     0.4
+    ],
+    [
+     "untildify",
+     0.3
+    ],
+    [
+     "extend-shallow",
+     0.3
+    ],
+    [
+     "map-cache",
+     0.3
+    ],
+    [
+     "is-buffer",
+     0.3
+    ],
+    [
+     "is-data-descriptor",
+     0.3
+    ]
+   ],
+   "R6": [
+    [
+     "is-descriptor",
+     0.4
+    ],
+    [
+     "define-property",
+     0.3
+    ],
+    [
+     "@npmcli/git",
+     0.3
+    ],
+    [
+     "micromark-factory-space",
+     0.2
+    ],
+    [
+     "citty",
+     0.1
+    ]
+   ],
+   "P1": [
+    [
+     "@codemirror/view",
+     136.5
+    ],
+    [
+     "web-streams-polyfill",
+     56.6
+    ],
+    [
+     "tldts",
+     48.4
+    ],
+    [
+     "@lezer/lr",
+     19.1
+    ],
+    [
+     "@lezer/common",
+     8.8
+    ],
+    [
+     "@codemirror/lang-html",
+     7.3
+    ],
+    [
+     "@codemirror/lang-css",
+     4.0
+    ],
+    [
+     "@codemirror/lang-jinja",
+     3.6
+    ]
+   ],
+   "P2": [
+    [
+     "tldts",
+     0.9
+    ],
+    [
+     "semver",
+     0.6
+    ],
+    [
+     "ajv",
+     0.3
+    ],
+    [
+     "scule",
+     0.3
+    ],
+    [
+     "rrweb-cssom",
+     0.3
+    ],
+    [
+     "@marijn/find-cluster-break",
+     0.2
+    ],
+    [
+     "is-extendable",
+     0.2
+    ],
+    [
+     "dunder-proto",
+     0.2
+    ]
+   ],
+   "P3": [
+    [
+     "lodash.sortby",
+     12.8
+    ],
+    [
+     "kind-of",
+     2.2
+    ],
+    [
+     "cache-base",
+     1.8
+    ],
+    [
+     "scule",
+     1.4
+    ],
+    [
+     "callsites",
+     0.4
+    ]
+   ],
+   "P4": [
+    [
+     "@codemirror/view",
+     0.6
+    ],
+    [
+     "@codemirror/lang-javascript",
+     0.3
+    ]
+   ],
+   "T": [
+    [
+     "tldts",
+     67.1
+    ],
+    [
+     "web-streams-polyfill",
+     4.6
+    ],
+    [
+     "@codemirror/view",
+     2.0
+    ],
+    [
+     "semver",
+     1.3
+    ],
+    [
+     "ajv",
+     1.2
+    ],
+    [
+     "@codemirror/lang-jinja",
+     1.0
+    ],
+    [
+     "kolorist",
+     0.5
+    ],
+    [
+     "@codemirror/lang-html",
+     0.5
+    ]
+   ],
+   "U1": [
+    [
+     "normalize-package-data",
+     1.6
+    ],
+    [
+     "@codemirror/lang-html",
+     0.5
+    ],
+    [
+     "@codemirror/view",
+     0.5
+    ],
+    [
+     "web-streams-polyfill",
+     0.4
+    ],
+    [
+     "parse-json",
+     0.2
+    ],
+    [
+     "property-information",
+     0.2
+    ],
+    [
+     "domelementtype",
+     0.1
+    ]
+   ],
+   "U2": [
+    [
+     "hast-util-from-parse5",
+     1.6
+    ],
+    [
+     "hastscript",
+     1.2
+    ],
+    [
+     "vfile-message",
+     1.1
+    ],
+    [
+     "tough-cookie",
+     0.7
+    ],
+    [
+     "is-stream",
+     0.7
+    ],
+    [
+     "call-bind-apply-helpers",
+     0.2
+    ],
+    [
+     "es-set-tostringtag",
+     0.2
+    ],
+    [
+     "micromark-core-commonmark",
+     0.2
+    ]
+   ],
+   "U3": [
+    [
+     "tldts-core",
+     1.1
+    ],
+    [
+     "hasown",
+     0.1
+    ]
+   ],
+   "U5": [
+    [
+     "spdx-expression-parse",
+     0.1
+    ]
+   ]
+  }
+ },
+ "dev-webpack": {
+  "classes": {
+   "W": 4.0,
+   "S": 36.3,
+   "N": 3.3,
+   "R1": 1.0,
+   "R2": 11.6,
+   "R3": 25.7,
+   "R5": 10.6,
+   "P1": 222.1,
+   "P2": 6.9,
+   "P3": 4.0,
+   "P4": 8.8,
+   "T": 142.5,
+   "U1": 0.6,
+   "U2": 179.1,
+   "U3": 4.5,
+   "U4": 1.7,
+   "total": 662.7
+  },
+  "sub": {
+   "P2: 20-29 nodes": 6.9,
+   "R3: module of several units": 17.1,
+   "R3: top level": 8.6,
+   "T: family-claimed module": 2.9,
+   "T: top level": 62.3,
+   "T: top level, literal-heavy (>= 16 B/node)": 69.9,
+   "T: unclaimed module": 7.4,
+   "U2: held in another slice": 153.3,
+   "U2: no slice holds it": 25.9,
+   "U4: held in another slice": 0.6,
+   "W: family": 4.0
+  },
+  "inFamilyClaimedModule": {
+   "P2": 0.2,
+   "P3": 0.3,
+   "R1": 0.3,
+   "R3": 2.1,
+   "T": 2.9,
+   "U2": 3.2
+  },
+  "units": {
+   "S": 14,
+   "P2": 91,
+   "T": 771,
+   "R3": 34,
+   "R5": 57,
+   "N": 131,
+   "U2": 82,
+   "P1": 368,
+   "P4": 14,
+   "W": 24,
+   "P3": 9,
+   "U4": 3,
+   "R2": 16,
+   "R1": 2,
+   "U1": 2,
+   "U3": 3
+  },
+  "top5UnitsShare": {
+   "S": 0.991,
+   "P2": 0.121,
+   "T": 0.81,
+   "R3": 0.506,
+   "R5": 0.157,
+   "N": 0.648,
+   "U2": 0.663,
+   "P1": 0.248,
+   "P4": 0.764,
+   "W": 0.904,
+   "P3": 0.676,
+   "U4": 1.0,
+   "R2": 0.699,
+   "R1": 1.0,
+   "U1": 1.0,
+   "U3": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "parse5",
+     2.8
+    ],
+    [
+     "@marijn/find-cluster-break",
+     0.6
+    ],
+    [
+     "socks",
+     0.4
+    ],
+    [
+     "tough-cookie",
+     0.1
+    ],
+    [
+     "property-information",
+     0.0
+    ],
+    [
+     "shebang-regex",
+     0.0
+    ],
+    [
+     "@babel/code-frame",
+     0.0
+    ],
+    [
+     "set-cookie-parser",
+     0.0
+    ]
+   ],
+   "S": [
+    [
+     "pino",
+     35.6
+    ],
+    [
+     "source-map",
+     0.1
+    ],
+    [
+     "glob",
+     0.1
+    ],
+    [
+     "lru-cache",
+     0.1
+    ],
+    [
+     "ip-address",
+     0.0
+    ],
+    [
+     "scule",
+     0.0
+    ],
+    [
+     "split-string",
+     0.0
+    ],
+    [
+     "socks",
+     0.0
+    ]
+   ],
+   "N": [
+    [
+     "parse5",
+     1.4
+    ],
+    [
+     "@csstools/css-tokenizer",
+     0.7
+    ],
+    [
+     "ajv",
+     0.4
+    ],
+    [
+     "semver",
+     0.3
+    ],
+    [
+     "minimatch",
+     0.0
+    ],
+    [
+     "rrweb-cssom",
+     0.0
+    ],
+    [
+     "web-streams-polyfill",
+     0.0
+    ],
+    [
+     "tldts",
+     0.0
+    ]
+   ],
+   "R1": [
+    [
+     "ip-address",
+     0.6
+    ],
+    [
+     "node-fetch",
+     0.3
+    ]
+   ],
+   "R2": [
+    [
+     "debug",
+     4.5
+    ],
+    [
+     "rrweb-cssom",
+     4.5
+    ],
+    [
+     "source-map",
+     2.0
+    ],
+    [
+     "domexception",
+     0.2
+    ],
+    [
+     "has-values",
+     0.2
+    ],
+    [
+     "asynckit",
+     0.2
+    ]
+   ],
+   "R3": [
+    [
+     "semver",
+     6.0
+    ],
+    [
+     "@codemirror/autocomplete",
+     2.8
+    ],
+    [
+     "hosted-git-info",
+     2.5
+    ],
+    [
+     "ajv",
+     2.3
+    ],
+    [
+     "@tufjs/models",
+     2.1
+    ],
+    [
+     "just-diff",
+     1.6
+    ],
+    [
+     "picocolors",
+     1.6
+    ],
+    [
+     "rrweb-cssom",
+     1.1
+    ]
+   ],
+   "R5": [
+    [
+     "define-property",
+     1.3
+    ],
+    [
+     "is-descriptor",
+     0.7
+    ],
+    [
+     "is-windows",
+     0.5
+    ],
+    [
+     "extend-shallow",
+     0.4
+    ],
+    [
+     "untildify",
+     0.4
+    ],
+    [
+     "object-visit",
+     0.3
+    ],
+    [
+     "map-cache",
+     0.3
+    ],
+    [
+     "pascalcase",
+     0.3
+    ]
+   ],
+   "P1": [
+    [
+     "@codemirror/view",
+     131.4
+    ],
+    [
+     "web-streams-polyfill",
+     55.3
+    ],
+    [
+     "@lezer/lr",
+     18.8
+    ],
+    [
+     "@codemirror/state",
+     4.0
+    ],
+    [
+     "@lezer/common",
+     3.8
+    ],
+    [
+     "@codemirror/lang-jinja",
+     3.1
+    ],
+    [
+     "@codemirror/language",
+     1.7
+    ],
+    [
+     "citty",
+     1.1
+    ]
+   ],
+   "P2": [
+    [
+     "semver",
+     0.9
+    ],
+    [
+     "hookable",
+     0.8
+    ],
+    [
+     "ip-address",
+     0.4
+    ],
+    [
+     "source-map",
+     0.3
+    ],
+    [
+     "is-extendable",
+     0.3
+    ],
+    [
+     "rrweb-cssom",
+     0.3
+    ],
+    [
+     "scule",
+     0.2
+    ],
+    [
+     "@marijn/find-cluster-break",
+     0.2
+    ]
+   ],
+   "P3": [
+    [
+     "ajv",
+     1.8
+    ],
+    [
+     "index-to-position",
+     0.7
+    ],
+    [
+     "is-stream",
+     0.7
+    ],
+    [
+     "@whatwg-node/promise-helpers",
+     0.4
+    ],
+    [
+     "@tufjs/models",
+     0.3
+    ],
+    [
+     "safe-identifier",
+     0.2
+    ]
+   ],
+   "P4": [
+    [
+     "@codemirror/view",
+     3.0
+    ],
+    [
+     "@codemirror/lang-jinja",
+     1.3
+    ],
+    [
+     "@codemirror/lang-css",
+     1.3
+    ],
+    [
+     "@lezer/html",
+     1.2
+    ],
+    [
+     "web-streams-polyfill",
+     0.6
+    ],
+    [
+     "@lezer/javascript",
+     0.4
+    ],
+    [
+     "@codemirror/autocomplete",
+     0.3
+    ],
+    [
+     "@codemirror/lang-javascript",
+     0.3
+    ]
+   ],
+   "T": [
+    [
+     "tldts",
+     115.5
+    ],
+    [
+     "web-streams-polyfill",
+     4.7
+    ],
+    [
+     "@codemirror/view",
+     2.8
+    ],
+    [
+     "semver",
+     2.4
+    ],
+    [
+     "ajv",
+     1.6
+    ],
+    [
+     "@marijn/find-cluster-break",
+     1.4
+    ],
+    [
+     "@codemirror/lang-jinja",
+     1.0
+    ],
+    [
+     "@tufjs/models",
+     0.9
+    ]
+   ],
+   "U1": [
+    [
+     "@codemirror/lang-html",
+     0.5
+    ],
+    [
+     "domelementtype",
+     0.1
+    ]
+   ],
+   "U2": [
+    [
+     "@lezer/javascript",
+     74.7
+    ],
+    [
+     "@lezer/css",
+     15.3
+    ],
+    [
+     "parse5",
+     14.9
+    ],
+    [
+     "@codemirror/lang-jinja",
+     14.7
+    ],
+    [
+     "@lezer/html",
+     10.3
+    ],
+    [
+     "property-information",
+     9.9
+    ],
+    [
+     "@codemirror/lang-css",
+     8.3
+    ],
+    [
+     "@codemirror/lang-html",
+     7.1
+    ]
+   ],
+   "U3": [
+    [
+     "property-information",
+     4.5
+    ]
+   ],
+   "U4": [
+    [
+     "tldts-core",
+     1.1
+    ],
+    [
+     "cssnano-utils",
+     0.3
+    ],
+    [
+     "ky",
+     0.3
+    ]
+   ]
+  }
+ },
+ "esbuild-app": {
+  "classes": {
+   "W": 77.1,
+   "R1": 15.3,
+   "R2": 109.4,
+   "R3": 850.5,
+   "R5": 7.0,
+   "R6": 1872.0,
+   "P1": 0.0,
+   "P2": 111.5,
+   "P3": 15.5,
+   "P4": 15.3,
+   "T": 288.4,
+   "U1": 0.5,
+   "U2": 35.9,
+   "U4": 0.5,
+   "U5": 23.7,
+   "total": 3422.7
+  },
+  "sub": {
+   "P2: 20-29 nodes": 110.8,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 0.7,
+   "R3: module of several units": 847.5,
+   "R3: top level": 3.1,
+   "R6: unambiguous": 1872.0,
+   "T: family-claimed module": 12.1,
+   "T: top level": 6.6,
+   "T: unclaimed module": 73.6,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 196.0,
+   "U2: held in another slice": 3.8,
+   "U2: no slice holds it": 32.1,
+   "U5: held in another slice": 0.9,
+   "W: family": 77.1
+  },
+  "inFamilyClaimedModule": {
+   "P2": 1.4,
+   "P3": 2.4,
+   "P4": 15.3,
+   "R1": 1.8,
+   "R2": 16.7,
+   "R3": 2.3,
+   "R6": 121.0,
+   "T": 12.1,
+   "U2": 19.9,
+   "U5": 2.6
+  },
+  "units": {
+   "W": 171,
+   "U2": 97,
+   "T": 5102,
+   "P2": 365,
+   "R3": 374,
+   "P3": 17,
+   "R2": 158,
+   "R5": 33,
+   "U5": 23,
+   "U1": 3,
+   "R6": 58,
+   "R1": 44,
+   "P4": 4,
+   "U4": 1,
+   "P1": 1
+  },
+  "top5UnitsShare": {
+   "W": 0.853,
+   "U2": 0.254,
+   "T": 0.606,
+   "P2": 0.693,
+   "R3": 0.407,
+   "P3": 0.408,
+   "R2": 0.269,
+   "R5": 0.253,
+   "U5": 0.86,
+   "U1": 1.0,
+   "R6": 0.713,
+   "R1": 0.255,
+   "P4": 1.0,
+   "U4": 1.0,
+   "P1": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "web-tree-sitter",
+     70.8
+    ],
+    [
+     "chalk",
+     1.9
+    ],
+    [
+     "supports-color",
+     1.7
+    ],
+    [
+     "ollama-ai-provider-v2",
+     0.7
+    ],
+    [
+     "wsl-utils",
+     0.6
+    ],
+    [
+     "@google-cloud/projectify",
+     0.3
+    ],
+    [
+     "ws",
+     0.2
+    ],
+    [
+     "fetch-blob",
+     0.1
+    ]
+   ],
+   "R1": [
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     4.0
+    ],
+    [
+     "gaxios",
+     2.6
+    ],
+    [
+     "google-gax",
+     2.4
+    ],
+    [
+     "@vercel/oidc",
+     1.8
+    ],
+    [
+     "google-logging-utils",
+     1.7
+    ],
+    [
+     "google-auth-library",
+     0.9
+    ],
+    [
+     "@google-cloud/opentelemetry-cloud-trace-exporter",
+     0.4
+    ],
+    [
+     "@google-cloud/opentelemetry-cloud-monitoring-exporter",
+     0.4
+    ]
+   ],
+   "R2": [
+    [
+     "@mixmark-io/domino",
+     54.2
+    ],
+    [
+     "debug",
+     25.4
+    ],
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     18.0
+    ],
+    [
+     "color-name",
+     3.3
+    ],
+    [
+     "@protobufjs/float",
+     2.6
+    ],
+    [
+     "supports-hyperlinks",
+     1.0
+    ],
+    [
+     "@google-cloud/opentelemetry-resource-util",
+     1.0
+    ],
+    [
+     "@protobufjs/codegen",
+     0.9
+    ]
+   ],
+   "R3": [
+    [
+     "highlight.js",
+     681.6
+    ],
+    [
+     "google-auth-library",
+     92.0
+    ],
+    [
+     "google-gax",
+     8.5
+    ],
+    [
+     "@supabase/realtime-js",
+     6.9
+    ],
+    [
+     "@opentelemetry/sdk-metrics",
+     6.2
+    ],
+    [
+     "commander",
+     5.9
+    ],
+    [
+     "parse5",
+     5.1
+    ],
+    [
+     "@grpc/grpc-js",
+     4.5
+    ]
+   ],
+   "R5": [
+    [
+     "ansi-regex",
+     1.1
+    ],
+    [
+     "is-unicode-supported",
+     0.7
+    ],
+    [
+     "@opentelemetry/resources",
+     0.6
+    ],
+    [
+     "bundle-name",
+     0.4
+    ],
+    [
+     "@kwsites/file-exists",
+     0.4
+    ],
+    [
+     "cli-width",
+     0.3
+    ],
+    [
+     "@modelcontextprotocol/sdk",
+     0.3
+    ],
+    [
+     "supports-hyperlinks",
+     0.2
+    ]
+   ],
+   "R6": [
+    [
+     "google-gax",
+     935.6
+    ],
+    [
+     "@google-cloud/logging-api",
+     719.3
+    ],
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     121.0
+    ],
+    [
+     "gaxios",
+     33.6
+    ],
+    [
+     "@grpc/grpc-js",
+     17.8
+    ],
+    [
+     "undici",
+     17.3
+    ],
+    [
+     "google-auth-library",
+     13.1
+    ],
+    [
+     "@google-cloud/common",
+     3.8
+    ]
+   ],
+   "P1": [
+    [
+     "@modelcontextprotocol/sdk",
+     0.0
+    ]
+   ],
+   "P2": [
+    [
+     "parse5",
+     71.7
+    ],
+    [
+     "@opentelemetry/resources",
+     5.4
+    ],
+    [
+     "get-east-asian-width",
+     3.7
+    ],
+    [
+     "rxjs",
+     3.0
+    ],
+    [
+     "@mixmark-io/domino",
+     2.3
+    ],
+    [
+     "@grpc/grpc-js",
+     1.5
+    ],
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     1.3
+    ],
+    [
+     "@opentelemetry/core",
+     1.3
+    ]
+   ],
+   "P3": [
+    [
+     "google-auth-library",
+     7.8
+    ],
+    [
+     "open",
+     2.4
+    ],
+    [
+     "@inquirer/core",
+     2.2
+    ],
+    [
+     "undici",
+     1.7
+    ],
+    [
+     "fetch-blob",
+     0.9
+    ],
+    [
+     "steno",
+     0.6
+    ]
+   ],
+   "P4": [
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     14.6
+    ],
+    [
+     "@openrouter/ai-sdk-provider",
+     0.8
+    ]
+   ],
+   "T": [
+    [
+     "undici",
+     142.1
+    ],
+    [
+     "emoji-regex",
+     53.8
+    ],
+    [
+     "google-auth-library",
+     14.7
+    ],
+    [
+     "highlight.js",
+     8.9
+    ],
+    [
+     "rxjs",
+     5.1
+    ],
+    [
+     "google-gax",
+     4.3
+    ],
+    [
+     "@mixmark-io/domino",
+     4.3
+    ],
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     3.2
+    ]
+   ],
+   "U1": [
+    [
+     "@sentry/core",
+     0.4
+    ],
+    [
+     "has-flag",
+     0.1
+    ]
+   ],
+   "U2": [
+    [
+     "undici",
+     14.4
+    ],
+    [
+     "@anthropic-ai/claude-agent-sdk",
+     5.5
+    ],
+    [
+     "google-auth-library",
+     2.7
+    ],
+    [
+     "html-to-text",
+     2.7
+    ],
+    [
+     "default-browser",
+     1.9
+    ],
+    [
+     "@smithy/core",
+     1.3
+    ],
+    [
+     "supports-hyperlinks",
+     0.9
+    ],
+    [
+     "uuid",
+     0.8
+    ]
+   ],
+   "U4": [
+    [
+     "mnemonist",
+     0.5
+    ]
+   ],
+   "U5": [
+    [
+     "figlet",
+     18.1
+    ],
+    [
+     "@sentry/conventions",
+     1.9
+    ],
+    [
+     "@grpc/grpc-js",
+     1.1
+    ],
+    [
+     "teeny-request",
+     0.8
+    ],
+    [
+     "@sentry/core",
+     0.5
+    ],
+    [
+     "@streamparser/json",
+     0.3
+    ],
+    [
+     "gaxios",
+     0.2
+    ],
+    [
+     "google-gax",
+     0.2
+    ]
+   ]
+  }
+ },
+ "heldout": {
+  "classes": {
+   "W": 426.3,
+   "S": 1356.9,
+   "R1": 751.4,
+   "R2": 2124.6,
+   "R3": 8492.9,
+   "R4": 0.9,
+   "R5": 231.4,
+   "R6": 2923.6,
+   "P1": 13.4,
+   "P2": 3630.9,
+   "P3": 706.1,
+   "P4": 133.5,
+   "T": 3730.5,
+   "U1": 316.1,
+   "U2": 10542.5,
+   "U3": 284.6,
+   "U4": 416.6,
+   "U5": 283.5,
+   "total": 36365.6
+  },
+  "sub": {
+   "P2: 20-29 nodes": 2709.0,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 921.8,
+   "R3: module of several units": 8335.1,
+   "R3: top level": 75.4,
+   "R3: whole module body": 82.4,
+   "R6: unambiguous": 2923.6,
+   "T: family-claimed module": 253.2,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 13.5,
+   "T: top level": 368.0,
+   "T: top level, literal-heavy (>= 16 B/node)": 28.2,
+   "T: unclaimed module": 1661.0,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 1406.6,
+   "U2: held in another slice": 178.6,
+   "U2: no slice holds it": 10364.0,
+   "U4: held in another slice": 155.0,
+   "U5: held in another slice": 2.4,
+   "W: family": 426.3
+  },
+  "inFamilyClaimedModule": {
+   "P1": 3.3,
+   "P2": 23.4,
+   "P3": 187.5,
+   "P4": 124.9,
+   "R1": 34.6,
+   "R2": 27.8,
+   "R3": 57.2,
+   "R4": 0.9,
+   "R5": 0.5,
+   "R6": 156.1,
+   "S": 1.8,
+   "T": 266.7,
+   "U1": 16.6,
+   "U2": 705.6,
+   "U3": 23.0,
+   "U4": 6.5,
+   "U5": 3.3
+  },
+  "units": {
+   "R3": 4717,
+   "T": 90239,
+   "P2": 21864,
+   "R1": 2609,
+   "R2": 4798,
+   "W": 2687,
+   "R5": 1107,
+   "U2": 1244,
+   "S": 139,
+   "P1": 115,
+   "R6": 374,
+   "U1": 247,
+   "U5": 152,
+   "P4": 30,
+   "U4": 238,
+   "P3": 133,
+   "U3": 142,
+   "R4": 3
+  },
+  "top5UnitsShare": {
+   "R3": 0.053,
+   "T": 0.235,
+   "P2": 0.117,
+   "R1": 0.082,
+   "R2": 0.061,
+   "W": 0.401,
+   "R5": 0.097,
+   "U2": 0.94,
+   "S": 0.626,
+   "P1": 0.253,
+   "R6": 0.646,
+   "U1": 0.773,
+   "U5": 0.746,
+   "P4": 0.922,
+   "U4": 0.535,
+   "P3": 0.501,
+   "U3": 0.79,
+   "R4": 1.0
+  }
+ },
+ "pop-bun": {
+  "classes": {
+   "W": 449.9,
+   "S": 1523.6,
+   "R1": 521.2,
+   "R2": 1832.5,
+   "R3": 7451.6,
+   "R5": 138.8,
+   "R6": 16030.0,
+   "P1": 482.9,
+   "P2": 5185.1,
+   "P3": 1048.6,
+   "P4": 163.7,
+   "T": 6474.2,
+   "U1": 233.6,
+   "U2": 2217.4,
+   "U3": 762.9,
+   "U4": 37.2,
+   "U5": 191.6,
+   "total": 44744.9
+  },
+  "sub": {
+   "P2: 20-29 nodes": 1870.3,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 3314.8,
+   "R3: module of several units": 7301.5,
+   "R3: top level": 150.1,
+   "R6: ambiguous (another package reaches the cover)": 7167.6,
+   "R6: unambiguous": 8862.4,
+   "T: family-claimed module": 214.8,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 41.1,
+   "T: top level": 269.6,
+   "T: top level, literal-heavy (>= 16 B/node)": 519.4,
+   "T: unclaimed module": 1802.9,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 3626.3,
+   "U2: held in another slice": 512.3,
+   "U2: no slice holds it": 1705.1,
+   "U4: held in another slice": 9.3,
+   "U5: held in another slice": 138.8,
+   "W: family": 449.9
+  },
+  "inFamilyClaimedModule": {
+   "P1": 1.3,
+   "P2": 25.0,
+   "P3": 218.9,
+   "P4": 14.3,
+   "R1": 31.8,
+   "R2": 148.5,
+   "R3": 138.2,
+   "R5": 0.6,
+   "R6": 775.6,
+   "T": 255.9,
+   "U1": 3.7,
+   "U2": 1202.7,
+   "U3": 77.7,
+   "U4": 0.8
+  },
+  "units": {
+   "U2": 3489,
+   "T": 93604,
+   "R3": 5428,
+   "P2": 9307,
+   "R2": 3572,
+   "R1": 2242,
+   "R5": 613,
+   "S": 141,
+   "W": 3002,
+   "U5": 95,
+   "U1": 189,
+   "R6": 322,
+   "U3": 804,
+   "P1": 1647,
+   "P4": 169,
+   "U4": 56,
+   "P3": 196
+  },
+  "top5UnitsShare": {
+   "U2": 0.123,
+   "T": 0.114,
+   "R3": 0.099,
+   "P2": 0.527,
+   "R2": 0.127,
+   "R1": 0.052,
+   "R5": 0.123,
+   "S": 0.485,
+   "W": 0.324,
+   "U5": 0.779,
+   "U1": 0.721,
+   "R6": 0.904,
+   "U3": 0.497,
+   "P1": 0.075,
+   "P4": 0.167,
+   "U4": 0.466,
+   "P3": 0.345
+  },
+  "top": {
+   "W": [
+    [
+     "@netlify/edge-bundler",
+     106.6
+    ],
+    [
+     "meow",
+     62.5
+    ],
+    [
+     "string_decoder",
+     46.7
+    ],
+    [
+     "prettier",
+     27.3
+    ],
+    [
+     "@babel/core",
+     24.3
+    ],
+    [
+     "jsdom",
+     18.3
+    ],
+    [
+     "minimatch",
+     17.1
+    ],
+    [
+     "highlight.js",
+     14.9
+    ]
+   ],
+   "S": [
+    [
+     "tr46",
+     839.8
+    ],
+    [
+     "eslint-rule-docs",
+     168.7
+    ],
+    [
+     "node-releases",
+     163.3
+    ],
+    [
+     "@exodus/bytes",
+     147.1
+    ],
+    [
+     "iconv-lite",
+     113.8
+    ],
+    [
+     "ora",
+     32.8
+    ],
+    [
+     "cli-spinners",
+     19.0
+    ],
+    [
+     "encoding-sniffer",
+     16.5
+    ]
+   ],
+   "R1": [
+    [
+     "date-fns",
+     169.3
+    ],
+    [
+     "@base-ui/react",
+     42.3
+    ],
+    [
+     "@anthropic-ai/sdk",
+     31.0
+    ],
+    [
+     "debug",
+     20.2
+    ],
+    [
+     "node-fetch",
+     19.6
+    ],
+    [
+     "needle",
+     17.2
+    ],
+    [
+     "prompts",
+     16.6
+    ],
+    [
+     "langsmith",
+     14.0
+    ]
+   ],
+   "R2": [
+    [
+     "prompts",
+     223.6
+    ],
+    [
+     "css-tree",
+     203.3
+    ],
+    [
+     "debug",
+     153.1
+    ],
+    [
+     "blessed",
+     137.4
+    ],
+    [
+     "date-fns",
+     127.8
+    ],
+    [
+     "prettier",
+     98.9
+    ],
+    [
+     "source-map",
+     77.8
+    ],
+    [
+     "better-sqlite3",
+     58.3
+    ]
+   ],
+   "R3": [
+    [
+     "naive-ui",
+     2519.1
+    ],
+    [
+     "highlight.js",
+     1418.4
+    ],
+    [
+     "lucide-vue-next",
+     470.1
+    ],
+    [
+     "element-plus",
+     341.3
+    ],
+    [
+     "@langchain/core",
+     277.4
+    ],
+    [
+     "date-fns",
+     249.7
+    ],
+    [
+     "semver",
+     187.9
+    ],
+    [
+     "@langchain/openai",
+     142.5
+    ]
+   ],
+   "R5": [
+    [
+     "@base-ui/react",
+     9.1
+    ],
+    [
+     "@emotion/is-prop-valid",
+     8.2
+    ],
+    [
+     "d3-scale-chromatic",
+     6.1
+    ],
+    [
+     "define-property",
+     5.1
+    ],
+    [
+     "lodash.escaperegexp",
+     3.2
+    ],
+    [
+     "path-key",
+     2.9
+    ],
+    [
+     "@marijn/find-cluster-break",
+     2.8
+    ],
+    [
+     "inflight",
+     2.2
+    ]
+   ],
+   "R6": [
+    [
+     "typescript",
+     7167.6
+    ],
+    [
+     "@ts-morph/common",
+     7137.4
+    ],
+    [
+     "@modelcontextprotocol/client",
+     433.4
+    ],
+    [
+     "jiti",
+     362.7
+    ],
+    [
+     "@modelcontextprotocol/server",
+     289.0
+    ],
+    [
+     "@dotenvx/primitives",
+     220.8
+    ],
+    [
+     "@base-ui/react",
+     127.3
+    ],
+    [
+     "bootstrap",
+     62.5
+    ]
+   ],
+   "P1": [
+    [
+     "eslint-plugin-unicorn",
+     129.8
+    ],
+    [
+     "acorn",
+     98.5
+    ],
+    [
+     "terser",
+     66.7
+    ],
+    [
+     "eslint-plugin-regexp",
+     36.8
+    ],
+    [
+     "js-yaml",
+     35.2
+    ],
+    [
+     "@netlify/serverless-functions-api",
+     25.5
+    ],
+    [
+     "meow",
+     18.3
+    ],
+    [
+     "@eslint-community/regexpp",
+     15.1
+    ]
+   ],
+   "P2": [
+    [
+     "@shikijs/engine-oniguruma",
+     1823.1
+    ],
+    [
+     "undici",
+     1130.7
+    ],
+    [
+     "brotli",
+     918.5
+    ],
+    [
+     "entities",
+     331.8
+    ],
+    [
+     "@base-ui/react",
+     176.9
+    ],
+    [
+     "regexpu-core",
+     61.0
+    ],
+    [
+     "naive-ui",
+     52.7
+    ],
+    [
+     "lodash",
+     47.0
+    ]
+   ],
+   "P3": [
+    [
+     "vite",
+     460.2
+    ],
+    [
+     "prettier",
+     141.8
+    ],
+    [
+     "@base-ui/react",
+     108.1
+    ],
+    [
+     "eslint-plugin-regexp",
+     51.6
+    ],
+    [
+     "ow",
+     50.1
+    ],
+    [
+     "localforage",
+     31.1
+    ],
+    [
+     "magicast",
+     28.5
+    ],
+    [
+     "cloudflare",
+     22.4
+    ]
+   ],
+   "P4": [
+    [
+     "@netlify/serverless-functions-api",
+     72.3
+    ],
+    [
+     "eslint-plugin-regexp",
+     38.4
+    ],
+    [
+     "vite",
+     12.1
+    ],
+    [
+     "node-fetch",
+     6.9
+    ],
+    [
+     "cloudflare",
+     6.1
+    ],
+    [
+     "tar",
+     3.6
+    ],
+    [
+     "eslint-plugin-unicorn",
+     3.5
+    ],
+    [
+     "js-yaml",
+     3.5
+    ]
+   ],
+   "T": [
+    [
+     "@mdi/js",
+     2057.1
+    ],
+    [
+     "katex",
+     550.7
+    ],
+    [
+     "entities",
+     496.9
+    ],
+    [
+     "@primeuix/styles",
+     346.0
+    ],
+    [
+     "@base-ui/react",
+     202.4
+    ],
+    [
+     "emoji-regex",
+     162.7
+    ],
+    [
+     "undici",
+     152.0
+    ],
+    [
+     "naive-ui",
+     125.8
+    ]
+   ],
+   "U1": [
+    [
+     "@exodus/bytes",
+     140.5
+    ],
+    [
+     "encoding-sniffer",
+     22.0
+    ],
+    [
+     "@img/colour",
+     16.6
+    ],
+    [
+     "lru-cache",
+     12.8
+    ],
+    [
+     "@babel/core",
+     11.0
+    ],
+    [
+     "tr46",
+     5.1
+    ],
+    [
+     "cssstyle",
+     3.9
+    ],
+    [
+     "cloudflare",
+     3.3
+    ]
+   ],
+   "U2": [
+    [
+     "@vicons/ionicons5",
+     1014.6
+    ],
+    [
+     "terser",
+     145.6
+    ],
+    [
+     "eslint-plugin-unicorn",
+     136.9
+    ],
+    [
+     "eslint-plugin-n",
+     102.3
+    ],
+    [
+     "@eslint/css",
+     79.3
+    ],
+    [
+     "@base-ui/react",
+     49.4
+    ],
+    [
+     "shadcn",
+     40.8
+    ],
+    [
+     "@sindresorhus/transliterate",
+     31.5
+    ]
+   ],
+   "U3": [
+    [
+     "jsdom",
+     379.4
+    ],
+    [
+     "cloudflare",
+     260.8
+    ],
+    [
+     "cssstyle",
+     68.9
+    ],
+    [
+     "@netlify/config",
+     13.2
+    ],
+    [
+     "sharp",
+     9.7
+    ],
+    [
+     "hot-shots",
+     8.5
+    ],
+    [
+     "chalk",
+     6.1
+    ],
+    [
+     "typescript-transform-paths",
+     4.8
+    ]
+   ],
+   "U4": [
+    [
+     "cloudflare",
+     19.3
+    ],
+    [
+     "sharp",
+     6.7
+    ],
+    [
+     "@swc/core",
+     5.8
+    ],
+    [
+     "typescript-transform-paths",
+     2.9
+    ],
+    [
+     "@netlify/config",
+     1.3
+    ],
+    [
+     "cssstyle",
+     0.8
+    ],
+    [
+     "oxfmt",
+     0.4
+    ]
+   ],
+   "U5": [
+    [
+     "uglify-js",
+     138.6
+    ],
+    [
+     "@babel/core",
+     42.1
+    ],
+    [
+     "@netlify/edge-bundler",
+     9.4
+    ],
+    [
+     "oxfmt",
+     0.4
+    ],
+    [
+     "vite",
+     0.4
+    ],
+    [
+     "@sentry/core",
+     0.3
+    ],
+    [
+     "clipanion",
+     0.2
+    ],
+    [
+     "prettier",
+     0.1
+    ]
+   ]
+  }
+ },
+ "pop-esbuild": {
+  "classes": {
+   "W": 420.6,
+   "S": 0.6,
+   "N": 0.1,
+   "R1": 460.3,
+   "R2": 1466.2,
+   "R3": 8881.8,
+   "R5": 144.9,
+   "R6": 15527.4,
+   "P1": 2.7,
+   "P2": 2172.6,
+   "P3": 1705.4,
+   "P4": 31.6,
+   "T": 6886.8,
+   "U1": 51.1,
+   "U2": 1234.5,
+   "U3": 736.1,
+   "U4": 577.4,
+   "U5": 616.9,
+   "total": 40916.8
+  },
+  "sub": {
+   "P2: 20-29 nodes": 1817.2,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 355.4,
+   "R3: module of several units": 8060.6,
+   "R3: top level": 821.2,
+   "R6: ambiguous (another package reaches the cover)": 7197.1,
+   "R6: unambiguous": 8330.2,
+   "T: family-claimed module": 234.9,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 36.0,
+   "T: top level": 36.9,
+   "T: top level, literal-heavy (>= 16 B/node)": 0.3,
+   "T: unclaimed module": 1783.3,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 4795.3,
+   "U2: held in another slice": 32.1,
+   "U2: no slice holds it": 1202.3,
+   "U4: held in another slice": 205.1,
+   "U5: held in another slice": 13.3,
+   "W: family": 420.6
+  },
+  "inFamilyClaimedModule": {
+   "P2": 19.3,
+   "P3": 540.7,
+   "P4": 23.2,
+   "R1": 18.0,
+   "R2": 40.8,
+   "R3": 121.8,
+   "R6": 61.0,
+   "T": 271.0,
+   "U1": 4.3,
+   "U2": 1112.6,
+   "U3": 71.2,
+   "U4": 7.0,
+   "U5": 453.7
+  },
+  "units": {
+   "U5": 279,
+   "T": 89082,
+   "R3": 6128,
+   "P2": 8608,
+   "R2": 3166,
+   "R5": 693,
+   "W": 2829,
+   "R1": 2056,
+   "R6": 264,
+   "U2": 1770,
+   "U1": 102,
+   "P1": 14,
+   "P3": 455,
+   "U3": 1327,
+   "P4": 17,
+   "U4": 1237,
+   "N": 7,
+   "S": 1
+  },
+  "top5UnitsShare": {
+   "U5": 0.758,
+   "T": 0.109,
+   "R3": 0.115,
+   "P2": 0.481,
+   "R2": 0.057,
+   "R5": 0.069,
+   "W": 0.359,
+   "R1": 0.037,
+   "R6": 0.918,
+   "U2": 0.023,
+   "U1": 0.245,
+   "P1": 0.357,
+   "P3": 0.154,
+   "U3": 0.048,
+   "P4": 0.615,
+   "U4": 0.111,
+   "N": 0.728,
+   "S": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "@netlify/edge-bundler",
+     115.4
+    ],
+    [
+     "@img/colour",
+     49.3
+    ],
+    [
+     "@sidvind/better-ajv-errors",
+     27.5
+    ],
+    [
+     "word-extractor",
+     23.3
+    ],
+    [
+     "jsdom",
+     23.3
+    ],
+    [
+     "@babel/core",
+     18.7
+    ],
+    [
+     "@shadcn/registry",
+     14.3
+    ],
+    [
+     "highlight.js",
+     9.9
+    ]
+   ],
+   "S": [
+    [
+     "cmdk",
+     0.6
+    ]
+   ],
+   "N": [
+    [
+     "shelljs",
+     0.1
+    ],
+    [
+     "core-js",
+     0.0
+    ]
+   ],
+   "R1": [
+    [
+     "date-fns",
+     153.0
+    ],
+    [
+     "@base-ui/react",
+     37.4
+    ],
+    [
+     "drizzle-orm",
+     30.7
+    ],
+    [
+     "@anthropic-ai/sdk",
+     30.2
+    ],
+    [
+     "@shadcn/registry",
+     27.4
+    ],
+    [
+     "prompts",
+     16.2
+    ],
+    [
+     "vite",
+     15.6
+    ],
+    [
+     "langsmith",
+     13.7
+    ]
+   ],
+   "R2": [
+    [
+     "prompts",
+     221.2
+    ],
+    [
+     "blessed",
+     185.4
+    ],
+    [
+     "debug",
+     155.1
+    ],
+    [
+     "date-fns",
+     126.7
+    ],
+    [
+     "source-map",
+     75.4
+    ],
+    [
+     "better-sqlite3",
+     59.1
+    ],
+    [
+     "jsdom",
+     46.6
+    ],
+    [
+     "yargs-parser",
+     44.6
+    ]
+   ],
+   "R3": [
+    [
+     "highlight.js",
+     2399.1
+    ],
+    [
+     "naive-ui",
+     2199.7
+    ],
+    [
+     "lucide-vue-next",
+     471.8
+    ],
+    [
+     "element-plus",
+     424.7
+    ],
+    [
+     "date-fns",
+     348.5
+    ],
+    [
+     "@langchain/core",
+     275.2
+    ],
+    [
+     "semver",
+     168.3
+    ],
+    [
+     "@langchain/openai",
+     141.3
+    ]
+   ],
+   "R5": [
+    [
+     "@base-ui/react",
+     8.2
+    ],
+    [
+     "define-property",
+     5.0
+    ],
+    [
+     "spdx-exceptions",
+     4.5
+    ],
+    [
+     "@emotion/is-prop-valid",
+     4.0
+    ],
+    [
+     "lodash.escaperegexp",
+     3.2
+    ],
+    [
+     "ansi-regex",
+     2.9
+    ],
+    [
+     "path-key",
+     2.9
+    ],
+    [
+     "@marijn/find-cluster-break",
+     2.8
+    ]
+   ],
+   "R6": [
+    [
+     "typescript",
+     7046.2
+    ],
+    [
+     "@ts-morph/common",
+     7016.6
+    ],
+    [
+     "naive-ui",
+     458.1
+    ],
+    [
+     "jiti",
+     369.5
+    ],
+    [
+     "prettier",
+     143.3
+    ],
+    [
+     "tar",
+     101.3
+    ],
+    [
+     "bootstrap",
+     61.6
+    ],
+    [
+     "vite",
+     47.2
+    ]
+   ],
+   "P1": [
+    [
+     "react-dom",
+     2.7
+    ]
+   ],
+   "P2": [
+    [
+     "brotli",
+     918.5
+    ],
+    [
+     "entities",
+     323.9
+    ],
+    [
+     "@base-ui/react",
+     145.4
+    ],
+    [
+     "regexpu-core",
+     61.0
+    ],
+    [
+     "naive-ui",
+     53.1
+    ],
+    [
+     "lodash",
+     46.0
+    ],
+    [
+     "core-js",
+     29.5
+    ],
+    [
+     "@langchain/core",
+     26.1
+    ]
+   ],
+   "P3": [
+    [
+     "@base-ui/react",
+     957.0
+    ],
+    [
+     "vite",
+     452.0
+    ],
+    [
+     "naive-ui",
+     68.1
+    ],
+    [
+     "eslint-plugin-import-x",
+     39.4
+    ],
+    [
+     "localforage",
+     30.8
+    ],
+    [
+     "magicast",
+     27.8
+    ],
+    [
+     "globby",
+     20.5
+    ],
+    [
+     "@modelcontextprotocol/core",
+     16.4
+    ]
+   ],
+   "P4": [
+    [
+     "vite",
+     16.8
+    ],
+    [
+     "@shadcn/registry",
+     6.7
+    ],
+    [
+     "@sidvind/better-ajv-errors",
+     2.5
+    ],
+    [
+     "@vercel/nft",
+     1.4
+    ],
+    [
+     "@netlify/serverless-functions-api",
+     1.4
+    ],
+    [
+     "@napi-rs/canvas",
+     1.3
+    ],
+    [
+     "cn",
+     1.1
+    ],
+    [
+     "find-up",
+     0.4
+    ]
+   ],
+   "T": [
+    [
+     "@mdi/js",
+     2057.1
+    ],
+    [
+     "undici",
+     1277.1
+    ],
+    [
+     "katex",
+     535.7
+    ],
+    [
+     "entities",
+     493.2
+    ],
+    [
+     "@base-ui/react",
+     471.3
+    ],
+    [
+     "emoji-regex",
+     176.5
+    ],
+    [
+     "naive-ui",
+     126.9
+    ],
+    [
+     "jsdom",
+     74.2
+    ]
+   ],
+   "U1": [
+    [
+     "@babel/core",
+     32.7
+    ],
+    [
+     "@img/colour",
+     10.0
+    ],
+    [
+     "@modelcontextprotocol/client",
+     3.8
+    ],
+    [
+     "@base-ui/react",
+     1.2
+    ],
+    [
+     "katex",
+     0.5
+    ],
+    [
+     "tsconfig-paths",
+     0.5
+    ],
+    [
+     "@sentry/core",
+     0.4
+    ],
+    [
+     "unrs-resolver",
+     0.3
+    ]
+   ],
+   "U2": [
+    [
+     "@vicons/ionicons5",
+     1014.6
+    ],
+    [
+     "shadcn",
+     41.0
+    ],
+    [
+     "@shadcn/registry",
+     28.8
+    ],
+    [
+     "systeminformation",
+     18.8
+    ],
+    [
+     "undici",
+     14.4
+    ],
+    [
+     "@netlify/edge-bundler",
+     7.5
+    ],
+    [
+     "pm2",
+     5.5
+    ],
+    [
+     "vue-router",
+     4.9
+    ]
+   ],
+   "U3": [
+    [
+     "@base-ui/react",
+     673.6
+    ],
+    [
+     "@ast-grep/napi",
+     13.3
+    ],
+    [
+     "hot-shots",
+     8.3
+    ],
+    [
+     "all-contributors-cli",
+     7.8
+    ],
+    [
+     "@napi-rs/canvas",
+     6.9
+    ],
+    [
+     "chalk",
+     6.4
+    ],
+    [
+     "favicons-webpack-plugin",
+     5.7
+    ],
+    [
+     "@swc/core",
+     4.5
+    ]
+   ],
+   "U4": [
+    [
+     "@base-ui/react",
+     377.9
+    ],
+    [
+     "@netlify/zip-it-and-ship-it",
+     65.0
+    ],
+    [
+     "@vercel/nft",
+     61.6
+    ],
+    [
+     "@napi-rs/canvas",
+     21.6
+    ],
+    [
+     "unrs-resolver",
+     14.7
+    ],
+    [
+     "@napi-rs/wasm-tools",
+     14.4
+    ],
+    [
+     "@mapbox/node-pre-gyp",
+     11.3
+    ],
+    [
+     "json-fixer",
+     7.5
+    ]
+   ],
+   "U5": [
+    [
+     "@modelcontextprotocol/client",
+     432.8
+    ],
+    [
+     "eslint-plugin-import-x",
+     54.7
+    ],
+    [
+     "@mapbox/node-pre-gyp",
+     42.9
+    ],
+    [
+     "@novnc/novnc",
+     22.5
+    ],
+    [
+     "blessed",
+     21.8
+    ],
+    [
+     "@babel/core",
+     6.4
+    ],
+    [
+     "sass-embedded",
+     5.5
+    ],
+    [
+     "@tanstack/react-query",
+     5.3
+    ]
+   ]
+  }
+ },
+ "remin-esbuild": {
+  "classes": {
+   "W": 88.6,
+   "S": 0.9,
+   "N": 0.3,
+   "R1": 446.8,
+   "R2": 2180.7,
+   "R3": 2170.6,
+   "R5": 153.4,
+   "R6": 763.0,
+   "P1": 2.1,
+   "P2": 979.4,
+   "P3": 12511.8,
+   "P4": 86.5,
+   "T": 4570.1,
+   "U1": 24.5,
+   "U2": 5023.1,
+   "U3": 115.0,
+   "U4": 181.9,
+   "U5": 3337.2,
+   "total": 32635.9
+  },
+  "sub": {
+   "P2: 20-29 nodes": 573.9,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 405.6,
+   "R3: module of several units": 2110.6,
+   "R3: top level": 60.0,
+   "R6: ambiguous (another package reaches the cover)": 42.4,
+   "R6: unambiguous": 720.6,
+   "T: family-claimed module": 246.2,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 2.5,
+   "T: top level": 40.1,
+   "T: top level, literal-heavy (>= 16 B/node)": 0.2,
+   "T: unclaimed module": 806.9,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 3474.3,
+   "U2: held in another slice": 646.7,
+   "U2: no slice holds it": 4376.5,
+   "U4: held in another slice": 13.7,
+   "U5: held in another slice": 745.3,
+   "W: family": 88.6
+  },
+  "inFamilyClaimedModule": {
+   "P2": 16.4,
+   "P3": 689.3,
+   "P4": 20.9,
+   "R1": 25.3,
+   "R2": 23.2,
+   "R3": 9.0,
+   "R6": 4.0,
+   "S": 0.3,
+   "T": 248.6,
+   "U1": 9.6,
+   "U2": 1740.9,
+   "U3": 25.8,
+   "U4": 64.3,
+   "U5": 1541.2
+  },
+  "units": {
+   "R6": 581,
+   "P2": 4474,
+   "T": 26240,
+   "P4": 43,
+   "P3": 1873,
+   "U3": 173,
+   "R3": 1584,
+   "U2": 9052,
+   "R2": 1550,
+   "R5": 763,
+   "R1": 1225,
+   "U4": 245,
+   "U1": 126,
+   "W": 348,
+   "U5": 6961,
+   "P1": 9,
+   "N": 3,
+   "S": 2
+  },
+  "top5UnitsShare": {
+   "R6": 0.244,
+   "P2": 0.534,
+   "T": 0.615,
+   "P4": 0.41,
+   "P3": 0.45,
+   "U3": 0.419,
+   "R3": 0.589,
+   "U2": 0.067,
+   "R2": 0.337,
+   "R5": 0.027,
+   "R1": 0.029,
+   "U4": 0.341,
+   "U1": 0.124,
+   "W": 0.537,
+   "U5": 0.069,
+   "P1": 0.645,
+   "N": 1.0,
+   "S": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "entities",
+     36.0
+    ],
+    [
+     "bunyan",
+     15.4
+    ],
+    [
+     "prettier",
+     7.5
+    ],
+    [
+     "liquid-json",
+     6.0
+    ],
+    [
+     "@babel/core",
+     5.9
+    ],
+    [
+     "sqlite3",
+     2.5
+    ],
+    [
+     "colorette",
+     2.1
+    ],
+    [
+     "minipass",
+     1.3
+    ]
+   ],
+   "S": [
+    [
+     "@radix-ui/react-use-size",
+     0.6
+    ],
+    [
+     "socks",
+     0.3
+    ]
+   ],
+   "N": [
+    [
+     "memoizee",
+     0.1
+    ],
+    [
+     "core-js",
+     0.1
+    ],
+    [
+     "rxjs",
+     0.1
+    ]
+   ],
+   "R1": [
+    [
+     "@typespec/ts-http-runtime",
+     69.3
+    ],
+    [
+     "react-dom",
+     63.4
+    ],
+    [
+     "@typescript-eslint/eslint-plugin",
+     46.3
+    ],
+    [
+     "@azure/core-rest-pipeline",
+     44.0
+    ],
+    [
+     "drizzle-orm",
+     22.0
+    ],
+    [
+     "@hot-loader/react-dom",
+     15.6
+    ],
+    [
+     "@vscode/vsce",
+     13.2
+    ],
+    [
+     "@typescript-eslint/typescript-estree",
+     12.5
+    ]
+   ],
+   "R2": [
+    [
+     "busboy",
+     485.1
+    ],
+    [
+     "@faker-js/faker",
+     335.7
+    ],
+    [
+     "react-dom",
+     231.3
+    ],
+    [
+     "neo-blessed",
+     211.2
+    ],
+    [
+     "blessed",
+     190.2
+    ],
+    [
+     "entities",
+     104.9
+    ],
+    [
+     "source-map",
+     84.2
+    ],
+    [
+     "@mixmark-io/domino",
+     67.3
+    ]
+   ],
+   "R3": [
+    [
+     "cld3-asm",
+     1017.4
+    ],
+    [
+     "highlight.js",
+     383.8
+    ],
+    [
+     "handlebars",
+     54.0
+    ],
+    [
+     "@huggingface/transformers",
+     53.7
+    ],
+    [
+     "quicktype-core",
+     31.8
+    ],
+    [
+     "eslint-visitor-keys",
+     31.7
+    ],
+    [
+     "recharts",
+     30.5
+    ],
+    [
+     "semver",
+     27.1
+    ]
+   ],
+   "R5": [
+    [
+     "@hot-loader/react-dom",
+     16.3
+    ],
+    [
+     "chalk",
+     5.4
+    ],
+    [
+     "is-wsl",
+     3.3
+    ],
+    [
+     "@sentry/browser",
+     3.3
+    ],
+    [
+     "safe-buffer",
+     2.9
+    ],
+    [
+     "cockatiel",
+     2.8
+    ],
+    [
+     "quicktype-core",
+     2.6
+    ],
+    [
+     "inflight",
+     2.3
+    ]
+   ],
+   "R6": [
+    [
+     "moment",
+     128.5
+    ],
+    [
+     "@hot-loader/react-dom",
+     64.3
+    ],
+    [
+     "semver",
+     30.6
+    ],
+    [
+     "parse5",
+     30.4
+    ],
+    [
+     "readable-stream",
+     29.1
+    ],
+    [
+     "react-lazy-load-image-component",
+     28.2
+    ],
+    [
+     "jszip",
+     27.1
+    ],
+    [
+     "yamljs",
+     25.8
+    ]
+   ],
+   "P1": [
+    [
+     "react-dom",
+     1.3
+    ],
+    [
+     "lru-cache",
+     0.6
+    ],
+    [
+     "@hot-loader/react-dom",
+     0.2
+    ]
+   ],
+   "P2": [
+    [
+     "vm2",
+     395.6
+    ],
+    [
+     "parse5",
+     76.3
+    ],
+    [
+     "regexpu-core",
+     56.3
+    ],
+    [
+     "lodash",
+     30.7
+    ],
+    [
+     "react-dom",
+     23.9
+    ],
+    [
+     "@sentry/core",
+     13.5
+    ],
+    [
+     "quicktype-core",
+     12.7
+    ],
+    [
+     "debug",
+     11.9
+    ]
+   ],
+   "P3": [
+    [
+     "typescript",
+     3537.4
+    ],
+    [
+     "intl-relativeformat",
+     963.4
+    ],
+    [
+     "chrome-remote-interface",
+     684.0
+    ],
+    [
+     "quicktype-core",
+     441.9
+    ],
+    [
+     "psl",
+     309.2
+    ],
+    [
+     "@typescript-eslint/eslint-plugin",
+     252.8
+    ],
+    [
+     "chance",
+     247.6
+    ],
+    [
+     "picomatch",
+     229.4
+    ]
+   ],
+   "P4": [
+    [
+     "@stylistic/eslint-plugin",
+     32.8
+    ],
+    [
+     "command-line-usage",
+     19.0
+    ],
+    [
+     "chalk",
+     9.6
+    ],
+    [
+     "which",
+     5.5
+    ],
+    [
+     "psl",
+     4.9
+    ],
+    [
+     "@jridgewell/remapping",
+     3.6
+    ],
+    [
+     "react-split",
+     3.6
+    ],
+    [
+     "@sentry/replay",
+     1.9
+    ]
+   ],
+   "T": [
+    [
+     "postman-sandbox",
+     2528.3
+    ],
+    [
+     "undici",
+     582.1
+    ],
+    [
+     "entities",
+     149.7
+    ],
+    [
+     "emoji-regex",
+     109.0
+    ],
+    [
+     "quicktype-core",
+     69.5
+    ],
+    [
+     "@sentry/core",
+     38.7
+    ],
+    [
+     "@mobily/ts-belt",
+     33.4
+    ],
+    [
+     "rxjs",
+     31.3
+    ]
+   ],
+   "U1": [
+    [
+     "open",
+     2.1
+    ],
+    [
+     "lodash.isequal",
+     1.6
+    ],
+    [
+     "react",
+     1.6
+    ],
+    [
+     "cockatiel",
+     1.6
+    ],
+    [
+     "supports-color",
+     1.2
+    ],
+    [
+     "@floating-ui/react-dom",
+     1.1
+    ],
+    [
+     "unrs-resolver",
+     1.0
+    ],
+    [
+     "punycode.js",
+     0.9
+    ]
+   ],
+   "U2": [
+    [
+     "highlight.js",
+     623.7
+    ],
+    [
+     "undici",
+     445.9
+    ],
+    [
+     "semver",
+     169.1
+    ],
+    [
+     "yaml",
+     169.0
+    ],
+    [
+     "parse5",
+     158.7
+    ],
+    [
+     "@typescript-eslint/eslint-plugin",
+     141.3
+    ],
+    [
+     "quicktype-core",
+     128.8
+    ],
+    [
+     "graphql",
+     125.3
+    ]
+   ],
+   "U3": [
+    [
+     "@vscode/vsce",
+     37.9
+    ],
+    [
+     "@node-rs/crc32",
+     28.0
+    ],
+    [
+     "@napi-rs/keyring",
+     12.4
+    ],
+    [
+     "better-sqlite3",
+     12.3
+    ],
+    [
+     "neostandard",
+     9.1
+    ],
+    [
+     "eslint-import-resolver-typescript",
+     4.2
+    ],
+    [
+     "yauzl-promise",
+     3.1
+    ],
+    [
+     "fs-extra",
+     2.8
+    ]
+   ],
+   "U4": [
+    [
+     "eslint-plugin-import-x",
+     64.3
+    ],
+    [
+     "yauzl-promise",
+     41.7
+    ],
+    [
+     "@napi-rs/wasm-tools",
+     15.9
+    ],
+    [
+     "unrs-resolver",
+     14.6
+    ],
+    [
+     "node-pre-gyp",
+     9.9
+    ],
+    [
+     "highlight.js",
+     8.6
+    ],
+    [
+     "@vscode/vsce",
+     8.0
+    ],
+    [
+     "@faker-js/faker",
+     3.5
+    ]
+   ],
+   "U5": [
+    [
+     "@sentry/core",
+     353.8
+    ],
+    [
+     "entities",
+     342.1
+    ],
+    [
+     "@babel/types",
+     247.1
+    ],
+    [
+     "happy-dom",
+     145.4
+    ],
+    [
+     "@babel/traverse",
+     115.7
+    ],
+    [
+     "ajv",
+     98.0
+    ],
+    [
+     "@typespec/ts-http-runtime",
+     95.6
+    ],
+    [
+     "@azure/core-client",
+     93.1
+    ]
+   ]
+  }
+ },
+ "remin-terser": {
+  "classes": {
+   "W": 15.9,
+   "N": 0.2,
+   "R1": 92.1,
+   "R2": 1034.3,
+   "R3": 541.9,
+   "R5": 221.8,
+   "R6": 310.1,
+   "P1": 1.1,
+   "P2": 572.9,
+   "P3": 23917.2,
+   "P4": 491.5,
+   "T": 5263.2,
+   "U1": 62.2,
+   "U2": 16222.7,
+   "U3": 169.6,
+   "U4": 262.4,
+   "U5": 6611.4,
+   "total": 55790.4
+  },
+  "sub": {
+   "P2: 20-29 nodes": 555.8,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 17.1,
+   "R3: module of several units": 539.3,
+   "R3: top level": 2.6,
+   "R6: unambiguous": 310.1,
+   "T: family-claimed module": 136.3,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 11.5,
+   "T: top level": 99.6,
+   "T: top level, literal-heavy (>= 16 B/node)": 0.8,
+   "T: unclaimed module": 1288.4,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 3726.6,
+   "U2: held in another slice": 8209.5,
+   "U2: no slice holds it": 8013.2,
+   "U4: held in another slice": 80.7,
+   "U5: held in another slice": 3149.6,
+   "W: family": 15.9
+  },
+  "inFamilyClaimedModule": {
+   "P2": 7.9,
+   "P3": 928.1,
+   "P4": 31.4,
+   "R1": 0.6,
+   "R2": 3.0,
+   "R3": 13.9,
+   "R6": 0.4,
+   "T": 147.8,
+   "U1": 7.4,
+   "U2": 1900.2,
+   "U3": 37.2,
+   "U5": 1068.3
+  },
+  "units": {
+   "P3": 3580,
+   "U2": 20935,
+   "T": 31378,
+   "P2": 3463,
+   "U3": 267,
+   "R3": 1153,
+   "R2": 483,
+   "R5": 1066,
+   "P4": 329,
+   "R6": 284,
+   "U1": 307,
+   "U4": 279,
+   "U5": 6816,
+   "R1": 444,
+   "W": 165,
+   "P1": 9,
+   "N": 2
+  },
+  "top5UnitsShare": {
+   "P3": 0.273,
+   "U2": 0.02,
+   "T": 0.555,
+   "P2": 0.234,
+   "U3": 0.284,
+   "R3": 0.318,
+   "R2": 0.677,
+   "R5": 0.023,
+   "P4": 0.227,
+   "R6": 0.2,
+   "U1": 0.09,
+   "U4": 0.243,
+   "U5": 0.197,
+   "R1": 0.02,
+   "W": 0.466,
+   "P1": 0.656,
+   "N": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "bunyan",
+     5.7
+    ],
+    [
+     "@sindresorhus/is",
+     2.7
+    ],
+    [
+     "js-yaml",
+     2.6
+    ],
+    [
+     "rollup",
+     1.8
+    ],
+    [
+     "prettier",
+     1.1
+    ],
+    [
+     "es-abstract-get",
+     0.4
+    ],
+    [
+     "react-dom",
+     0.3
+    ],
+    [
+     "zip-stream",
+     0.2
+    ]
+   ],
+   "N": [
+    [
+     "core-js",
+     0.1
+    ],
+    [
+     "memoizee",
+     0.1
+    ]
+   ],
+   "R1": [
+    [
+     "azure-devops-node-api",
+     42.8
+    ],
+    [
+     "recharts",
+     19.1
+    ],
+    [
+     "readable-stream",
+     3.6
+    ],
+    [
+     "react-dom",
+     3.4
+    ],
+    [
+     "typed-rest-client",
+     3.3
+    ],
+    [
+     "lodash.isequal",
+     1.8
+    ],
+    [
+     "lodash.clonedeep",
+     1.5
+    ],
+    [
+     "lodash.union",
+     1.3
+    ]
+   ],
+   "R2": [
+    [
+     "busboy",
+     485.1
+    ],
+    [
+     "@faker-js/faker",
+     283.9
+    ],
+    [
+     "http-server",
+     60.2
+    ],
+    [
+     "color-name",
+     49.9
+    ],
+    [
+     "is-core-module",
+     31.3
+    ],
+    [
+     "resolve",
+     26.2
+    ],
+    [
+     "react-dom",
+     10.9
+    ],
+    [
+     "picocolors",
+     9.6
+    ]
+   ],
+   "R3": [
+    [
+     "highlight.js",
+     123.8
+    ],
+    [
+     "undici",
+     39.6
+    ],
+    [
+     "eslint-visitor-keys",
+     31.7
+    ],
+    [
+     "eslint-plugin-react",
+     29.5
+    ],
+    [
+     "quicktype-core",
+     29.3
+    ],
+    [
+     "parse5",
+     27.4
+    ],
+    [
+     "eslint-plugin-n",
+     21.2
+    ],
+    [
+     "readable-stream",
+     16.1
+    ]
+   ],
+   "R5": [
+    [
+     "minimatch",
+     6.8
+    ],
+    [
+     "@sentry/core",
+     6.6
+    ],
+    [
+     "inherits",
+     6.0
+    ],
+    [
+     "recharts",
+     4.5
+    ],
+    [
+     "@typespec/ts-http-runtime",
+     4.5
+    ],
+    [
+     "semver",
+     4.1
+    ],
+    [
+     "@hot-loader/react-dom",
+     4.0
+    ],
+    [
+     "@sentry/browser",
+     3.9
+    ]
+   ],
+   "R6": [
+    [
+     "azure-devops-node-api",
+     49.1
+    ],
+    [
+     "iconv-lite",
+     35.6
+    ],
+    [
+     "parse5",
+     28.2
+    ],
+    [
+     "rxjs",
+     23.6
+    ],
+    [
+     "chardet",
+     23.4
+    ],
+    [
+     "recharts",
+     11.8
+    ],
+    [
+     "typed-rest-client",
+     11.6
+    ],
+    [
+     "function-bind",
+     10.0
+    ]
+   ],
+   "P1": [
+    [
+     "@babel/generator",
+     0.4
+    ],
+    [
+     "lodash",
+     0.3
+    ],
+    [
+     "lodash-es",
+     0.2
+    ],
+    [
+     "@babel/plugin-transform-block-scoping",
+     0.1
+    ],
+    [
+     "@babel/plugin-transform-parameters",
+     0.1
+    ]
+   ],
+   "P2": [
+    [
+     "parse5",
+     79.3
+    ],
+    [
+     "regexpu-core",
+     56.3
+    ],
+    [
+     "@babel/helper-validator-identifier",
+     24.2
+    ],
+    [
+     "quicktype-core",
+     18.3
+    ],
+    [
+     "crc",
+     15.1
+    ],
+    [
+     "eslint-plugin-react",
+     15.0
+    ],
+    [
+     "@sentry/core",
+     13.0
+    ],
+    [
+     "yauzl",
+     10.8
+    ]
+   ],
+   "P3": [
+    [
+     "typescript",
+     3430.8
+    ],
+    [
+     "azure-devops-node-api",
+     2317.7
+    ],
+    [
+     "cld3-asm",
+     1012.0
+    ],
+    [
+     "intl-relativeformat",
+     787.5
+    ],
+    [
+     "chrome-remote-interface",
+     682.0
+    ],
+    [
+     "@tootallnate/quickjs-emscripten",
+     627.8
+    ],
+    [
+     "lodash",
+     626.6
+    ],
+    [
+     "parse5",
+     558.1
+    ]
+   ],
+   "P4": [
+    [
+     "@babel/generator",
+     88.0
+    ],
+    [
+     "@typescript-eslint/eslint-plugin",
+     56.9
+    ],
+    [
+     "@stylistic/eslint-plugin",
+     34.3
+    ],
+    [
+     "node-unrar-js",
+     33.6
+    ],
+    [
+     "@luma.gl/webgl",
+     32.3
+    ],
+    [
+     "command-line-usage",
+     23.2
+    ],
+    [
+     "@jridgewell/sourcemap-codec",
+     22.6
+    ],
+    [
+     "mixpanel-browser",
+     22.1
+    ]
+   ],
+   "T": [
+    [
+     "postman-sandbox",
+     2295.2
+    ],
+    [
+     "undici",
+     589.9
+    ],
+    [
+     "vm2",
+     419.1
+    ],
+    [
+     "entities",
+     216.8
+    ],
+    [
+     "emoji-regex",
+     109.0
+    ],
+    [
+     "quicktype-core",
+     69.2
+    ],
+    [
+     "semver",
+     44.0
+    ],
+    [
+     "readable-stream",
+     41.8
+    ]
+   ],
+   "U1": [
+    [
+     "string_decoder",
+     11.5
+    ],
+    [
+     "pako",
+     10.0
+    ],
+    [
+     "react-dom",
+     3.4
+    ],
+    [
+     "semver",
+     3.2
+    ],
+    [
+     "readable-stream",
+     2.8
+    ],
+    [
+     "ms",
+     2.3
+    ],
+    [
+     "glob",
+     2.2
+    ],
+    [
+     "linkify-it",
+     2.0
+    ]
+   ],
+   "U2": [
+    [
+     "azure-devops-node-api",
+     2016.3
+    ],
+    [
+     "undici",
+     781.6
+    ],
+    [
+     "highlight.js",
+     761.6
+    ],
+    [
+     "readable-stream",
+     586.7
+    ],
+    [
+     "iconv-lite",
+     510.8
+    ],
+    [
+     "parse5",
+     434.5
+    ],
+    [
+     "recharts",
+     380.7
+    ],
+    [
+     "@typescript-eslint/eslint-plugin",
+     279.2
+    ]
+   ],
+   "U3": [
+    [
+     "@vscode/vsce",
+     55.5
+    ],
+    [
+     "@node-rs/crc32",
+     31.9
+    ],
+    [
+     "better-sqlite3",
+     13.0
+    ],
+    [
+     "@napi-rs/keyring",
+     13.0
+    ],
+    [
+     "lodash",
+     9.8
+    ],
+    [
+     "neostandard",
+     9.5
+    ],
+    [
+     "handlebars",
+     7.1
+    ],
+    [
+     "resolve",
+     6.5
+    ]
+   ],
+   "U4": [
+    [
+     "eslint-plugin-import-x",
+     106.6
+    ],
+    [
+     "yauzl-promise",
+     41.8
+    ],
+    [
+     "uc.micro",
+     20.0
+    ],
+    [
+     "@napi-rs/wasm-tools",
+     16.8
+    ],
+    [
+     "unrs-resolver",
+     15.7
+    ],
+    [
+     "node-pre-gyp",
+     10.0
+    ],
+    [
+     "bunyan",
+     8.8
+    ],
+    [
+     "highlight.js",
+     8.6
+    ]
+   ],
+   "U5": [
+    [
+     "@sentry/conventions",
+     579.0
+    ],
+    [
+     "lucide-react",
+     578.7
+    ],
+    [
+     "@babel/types",
+     553.8
+    ],
+    [
+     "@sentry/core",
+     441.7
+    ],
+    [
+     "@luma.gl/shadertools",
+     361.9
+    ],
+    [
+     "happy-dom",
+     230.9
+    ],
+    [
+     "entities",
+     219.3
+    ],
+    [
+     "@azure/msal-node",
+     165.4
+    ]
+   ]
+  }
+ },
+ "remin3-esbuild": {
+  "classes": {
+   "W": 77.2,
+   "S": 1.6,
+   "N": 0.4,
+   "R1": 1099.6,
+   "R2": 1809.0,
+   "R3": 7586.5,
+   "R5": 280.6,
+   "R6": 2961.6,
+   "P1": 2.7,
+   "P2": 1385.1,
+   "P3": 23726.4,
+   "P4": 206.8,
+   "T": 5803.8,
+   "U1": 44.6,
+   "U2": 20248.9,
+   "U3": 437.9,
+   "U4": 320.7,
+   "U5": 4474.2,
+   "total": 70467.7
+  },
+  "sub": {
+   "P2: 20-29 nodes": 1368.2,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 16.9,
+   "R3: module of several units": 7545.3,
+   "R3: module of several units, ambiguous": 15.1,
+   "R3: top level": 26.1,
+   "R6: ambiguous (another package reaches the cover)": 514.7,
+   "R6: unambiguous": 2446.9,
+   "T: family-claimed module": 342.0,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 0.3,
+   "T: top level": 162.2,
+   "T: top level, literal-heavy (>= 16 B/node)": 0.3,
+   "T: unclaimed module": 1998.3,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 3300.9,
+   "U2: held in another slice": 1726.9,
+   "U2: no slice holds it": 18522.0,
+   "U4: held in another slice": 13.9,
+   "U5: held in another slice": 1330.2,
+   "W: family": 77.2
+  },
+  "inFamilyClaimedModule": {
+   "P2": 27.5,
+   "P3": 1747.4,
+   "P4": 76.9,
+   "R1": 42.5,
+   "R2": 77.5,
+   "R3": 16.4,
+   "R5": 0.7,
+   "R6": 4.7,
+   "S": 0.3,
+   "T": 342.2,
+   "U1": 10.7,
+   "U2": 6574.7,
+   "U3": 109.3,
+   "U4": 2.1,
+   "U5": 1565.4
+  },
+  "units": {
+   "T": 70396,
+   "U2": 23245,
+   "R5": 1352,
+   "P3": 5214,
+   "R2": 2004,
+   "R3": 6906,
+   "R6": 894,
+   "P2": 8835,
+   "W": 920,
+   "U5": 8694,
+   "P4": 134,
+   "U3": 713,
+   "R1": 3526,
+   "U4": 412,
+   "U1": 157,
+   "S": 4,
+   "N": 6,
+   "P1": 14
+  },
+  "top5UnitsShare": {
+   "T": 0.13,
+   "U2": 0.089,
+   "R5": 0.036,
+   "P3": 0.303,
+   "R2": 0.345,
+   "R3": 0.079,
+   "R6": 0.455,
+   "P2": 0.331,
+   "W": 0.328,
+   "U5": 0.064,
+   "P4": 0.245,
+   "U3": 0.148,
+   "R1": 0.013,
+   "U4": 0.172,
+   "U1": 0.099,
+   "S": 1.0,
+   "N": 0.9,
+   "P1": 0.357
+  },
+  "top": {
+   "W": [
+    [
+     "@babel/core",
+     17.8
+    ],
+    [
+     "meow",
+     14.2
+    ],
+    [
+     "css-tree",
+     6.8
+    ],
+    [
+     "yazl",
+     6.0
+    ],
+    [
+     "validator",
+     5.1
+    ],
+    [
+     "playwright-core",
+     2.8
+    ],
+    [
+     "minipass",
+     2.5
+    ],
+    [
+     "http-proxy-agent",
+     2.5
+    ]
+   ],
+   "S": [
+    [
+     "@radix-ui/react-use-size",
+     0.6
+    ],
+    [
+     "@ghostery/url-parser",
+     0.5
+    ],
+    [
+     "socks",
+     0.3
+    ],
+    [
+     "node-html-markdown",
+     0.2
+    ]
+   ],
+   "N": [
+    [
+     "@babel/types",
+     0.1
+    ],
+    [
+     "shelljs",
+     0.1
+    ],
+    [
+     "dom-converter",
+     0.1
+    ],
+    [
+     "@serialport/bindings-interface",
+     0.1
+    ],
+    [
+     "core-js",
+     0.1
+    ]
+   ],
+   "R1": [
+    [
+     "@typespec/ts-http-runtime",
+     213.2
+    ],
+    [
+     "@azure/core-rest-pipeline",
+     135.0
+    ],
+    [
+     "react-dom",
+     69.3
+    ],
+    [
+     "date-fns",
+     55.3
+    ],
+    [
+     "@mui/material",
+     53.6
+    ],
+    [
+     "zod",
+     42.3
+    ],
+    [
+     "@vscode/vsce",
+     41.6
+    ],
+    [
+     "@mui/x-data-grid",
+     40.1
+    ]
+   ],
+   "R2": [
+    [
+     "busboy",
+     485.1
+    ],
+    [
+     "react-dom",
+     235.0
+    ],
+    [
+     "entities",
+     213.4
+    ],
+    [
+     "source-map",
+     152.7
+    ],
+    [
+     "prompts",
+     96.1
+    ],
+    [
+     "color-name",
+     79.8
+    ],
+    [
+     "yazl",
+     63.3
+    ],
+    [
+     "debug",
+     56.4
+    ]
+   ],
+   "R3": [
+    [
+     "@icon-park/vue-next",
+     2809.0
+    ],
+    [
+     "highlight.js",
+     1535.7
+    ],
+    [
+     "@ant-design/icons-svg",
+     665.3
+    ],
+    [
+     "naive-ui",
+     578.3
+    ],
+    [
+     "tar",
+     205.3
+    ],
+    [
+     "@octokit/plugin-rest-endpoint-methods",
+     131.8
+    ],
+    [
+     "tldts",
+     118.8
+    ],
+    [
+     "applicationinsights",
+     97.0
+    ]
+   ],
+   "R5": [
+    [
+     "cockatiel",
+     7.8
+    ],
+    [
+     "is-wsl",
+     7.7
+    ],
+    [
+     "@nodelib/fs.stat",
+     5.8
+    ],
+    [
+     "get-stream",
+     5.6
+    ],
+    [
+     "@vscode/test-electron",
+     5.5
+    ],
+    [
+     "whatwg-encoding",
+     5.4
+    ],
+    [
+     "chalk",
+     5.3
+    ],
+    [
+     "bundle-name",
+     4.9
+    ]
+   ],
+   "R6": [
+    [
+     "prettier",
+     459.8
+    ],
+    [
+     "yoga-layout-prebuilt",
+     345.3
+    ],
+    [
+     "xgplayer",
+     295.6
+    ],
+    [
+     "envinfo",
+     142.6
+    ],
+    [
+     "moment",
+     124.7
+    ],
+    [
+     "@kangc/v-md-editor",
+     105.3
+    ],
+    [
+     "tar",
+     103.5
+    ],
+    [
+     "graphemer",
+     89.4
+    ]
+   ],
+   "P1": [
+    [
+     "react-dom",
+     2.7
+    ]
+   ],
+   "P2": [
+    [
+     "encoding-japanese",
+     198.5
+    ],
+    [
+     "@mui/icons-material",
+     135.6
+    ],
+    [
+     "tldts-experimental",
+     96.6
+    ],
+    [
+     "regexpu-core",
+     56.3
+    ],
+    [
+     "rxjs",
+     53.8
+    ],
+    [
+     "lodash",
+     35.1
+    ],
+    [
+     "@icon-park/vue-next",
+     31.1
+    ],
+    [
+     "naive-ui",
+     28.9
+    ]
+   ],
+   "P3": [
+    [
+     "typescript",
+     3508.0
+    ],
+    [
+     "jiti",
+     1649.5
+    ],
+    [
+     "lucide-react",
+     1128.5
+    ],
+    [
+     "playwright-core",
+     935.9
+    ],
+    [
+     "svelte",
+     873.3
+    ],
+    [
+     "naive-ui",
+     709.2
+    ],
+    [
+     "undici",
+     574.7
+    ],
+    [
+     "js-yaml",
+     501.9
+    ]
+   ],
+   "P4": [
+    [
+     "playwright-core",
+     68.4
+    ],
+    [
+     "chalk",
+     43.4
+    ],
+    [
+     "eslint",
+     39.8
+    ],
+    [
+     "which",
+     12.4
+    ],
+    [
+     "@jridgewell/remapping",
+     10.7
+    ],
+    [
+     "meow",
+     7.9
+    ],
+    [
+     "d3-sankey",
+     6.0
+    ],
+    [
+     "node-fetch",
+     4.1
+    ]
+   ],
+   "T": [
+    [
+     "undici",
+     1601.6
+    ],
+    [
+     "entities",
+     598.4
+    ],
+    [
+     "katex",
+     545.1
+    ],
+    [
+     "emoji-regex",
+     342.2
+    ],
+    [
+     "@icon-park/vue-next",
+     200.0
+    ],
+    [
+     "json5",
+     126.1
+    ],
+    [
+     "@ant-design/icons",
+     79.9
+    ],
+    [
+     "@typespec/ts-http-runtime",
+     73.4
+    ]
+   ],
+   "U1": [
+    [
+     "open",
+     6.0
+    ],
+    [
+     "cockatiel",
+     4.4
+    ],
+    [
+     "punycode.js",
+     3.1
+    ],
+    [
+     "node-fetch",
+     2.9
+    ],
+    [
+     "lodash.isequal",
+     2.9
+    ],
+    [
+     "playwright-core",
+     2.4
+    ],
+    [
+     "@babel/core",
+     2.3
+    ],
+    [
+     "react",
+     2.3
+    ]
+   ],
+   "U2": [
+    [
+     "@faker-js/faker",
+     2607.0
+    ],
+    [
+     "highlight.js",
+     2500.7
+    ],
+    [
+     "jsdom",
+     2072.4
+    ],
+    [
+     "undici",
+     1242.7
+    ],
+    [
+     "@mui/icons-material",
+     999.0
+    ],
+    [
+     "playwright-core",
+     565.5
+    ],
+    [
+     "semver",
+     394.7
+    ],
+    [
+     "yaml",
+     391.0
+    ]
+   ],
+   "U3": [
+    [
+     "@vscode/vsce",
+     149.5
+    ],
+    [
+     "@mui/material",
+     141.5
+    ],
+    [
+     "@napi-rs/keyring",
+     61.7
+    ],
+    [
+     "@node-rs/crc32",
+     42.3
+    ],
+    [
+     "all-contributors-cli",
+     7.9
+    ],
+    [
+     "chalk",
+     7.2
+    ],
+    [
+     "hono",
+     5.2
+    ],
+    [
+     "yauzl-promise",
+     4.7
+    ]
+   ],
+   "U4": [
+    [
+     "@mui/x-date-pickers",
+     142.2
+    ],
+    [
+     "yauzl-promise",
+     63.2
+    ],
+    [
+     "@vscode/vsce",
+     32.1
+    ],
+    [
+     "highlight.js",
+     28.4
+    ],
+    [
+     "json-fixer",
+     7.6
+    ],
+    [
+     "ajv",
+     6.8
+    ],
+    [
+     "jszip",
+     4.3
+    ],
+    [
+     "rrweb-cssom",
+     4.2
+    ]
+   ],
+   "U5": [
+    [
+     "entities",
+     796.4
+    ],
+    [
+     "@babel/types",
+     329.5
+    ],
+    [
+     "@typespec/ts-http-runtime",
+     288.9
+    ],
+    [
+     "@azure/core-client",
+     258.4
+    ],
+    [
+     "ajv",
+     159.5
+    ],
+    [
+     "cheerio",
+     153.0
+    ],
+    [
+     "@babel/traverse",
+     147.2
+    ],
+    [
+     "@babel/core",
+     144.6
+    ]
+   ]
+  }
+ },
+ "remin3-terser": {
+  "classes": {
+   "W": 33.7,
+   "S": 0.5,
+   "N": 0.6,
+   "R1": 165.7,
+   "R2": 773.6,
+   "R3": 1448.4,
+   "R5": 545.8,
+   "R6": 3584.0,
+   "P1": 1.5,
+   "P2": 1652.0,
+   "P3": 49300.7,
+   "P4": 909.3,
+   "T": 11270.9,
+   "U1": 127.6,
+   "U2": 44025.4,
+   "U3": 692.0,
+   "U4": 437.7,
+   "U5": 7351.7,
+   "total": 122321.0
+  },
+  "sub": {
+   "P2: 20-29 nodes": 1622.7,
+   "P2: 20-29 nodes, literal-heavy (>= 16 B/node)": 29.4,
+   "R3: module of several units": 1443.3,
+   "R3: top level": 5.1,
+   "R6: unambiguous": 3584.0,
+   "T: family-claimed module": 249.4,
+   "T: family-claimed module, literal-heavy (>= 16 B/node)": 0.5,
+   "T: top level": 325.9,
+   "T: top level, literal-heavy (>= 16 B/node)": 2.5,
+   "T: unclaimed module": 6086.9,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 4605.8,
+   "U2: held in another slice": 21832.9,
+   "U2: no slice holds it": 22192.5,
+   "U4: held in another slice": 106.1,
+   "U5: held in another slice": 3361.4,
+   "W: family": 33.7
+  },
+  "inFamilyClaimedModule": {
+   "P2": 14.0,
+   "P3": 2476.6,
+   "P4": 62.3,
+   "R1": 1.9,
+   "R2": 9.1,
+   "R3": 20.2,
+   "R5": 0.1,
+   "R6": 0.9,
+   "T": 249.9,
+   "U1": 31.6,
+   "U2": 5152.6,
+   "U3": 152.0,
+   "U4": 2.3,
+   "U5": 921.7
+  },
+  "units": {
+   "T": 118781,
+   "U2": 47192,
+   "P3": 6975,
+   "W": 328,
+   "R3": 1964,
+   "U4": 603,
+   "R2": 648,
+   "U1": 614,
+   "P2": 7219,
+   "R5": 2161,
+   "R6": 3208,
+   "U5": 9467,
+   "P4": 736,
+   "U3": 1197,
+   "R1": 729,
+   "P1": 13,
+   "N": 6,
+   "S": 1
+  },
+  "top5UnitsShare": {
+   "T": 0.072,
+   "U2": 0.023,
+   "P3": 0.194,
+   "W": 0.605,
+   "R3": 0.372,
+   "U4": 0.128,
+   "R2": 0.654,
+   "U1": 0.064,
+   "P2": 0.436,
+   "R5": 0.026,
+   "R6": 0.019,
+   "U5": 0.066,
+   "P4": 0.256,
+   "U3": 0.094,
+   "R1": 0.013,
+   "P1": 0.483,
+   "N": 0.885,
+   "S": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "graphql",
+     17.9
+    ],
+    [
+     "lodash-es",
+     5.8
+    ],
+    [
+     "dagre-d3-es",
+     1.9
+    ],
+    [
+     "playwright-core",
+     1.3
+    ],
+    [
+     "layerr",
+     1.2
+    ],
+    [
+     "node-fetch",
+     0.8
+    ],
+    [
+     "es-abstract-get",
+     0.7
+    ],
+    [
+     "vue-router",
+     0.7
+    ]
+   ],
+   "S": [
+    [
+     "tldts",
+     0.5
+    ]
+   ],
+   "N": [
+    [
+     "@babel/types",
+     0.1
+    ],
+    [
+     "shelljs",
+     0.1
+    ],
+    [
+     "core-js",
+     0.1
+    ],
+    [
+     "@serialport/bindings-interface",
+     0.1
+    ],
+    [
+     "dom-converter",
+     0.1
+    ]
+   ],
+   "R1": [
+    [
+     "azure-devops-node-api",
+     104.3
+    ],
+    [
+     "typed-rest-client",
+     9.9
+    ],
+    [
+     "css-tree",
+     8.6
+    ],
+    [
+     "readable-stream",
+     5.9
+    ],
+    [
+     "renderkid",
+     4.4
+    ],
+    [
+     "react-dom",
+     3.9
+    ],
+    [
+     "lodash.isequal",
+     3.2
+    ],
+    [
+     "libphonenumber-js",
+     3.2
+    ]
+   ],
+   "R2": [
+    [
+     "busboy",
+     485.1
+    ],
+    [
+     "color-name",
+     79.8
+    ],
+    [
+     "is-core-module",
+     26.1
+    ],
+    [
+     "resolve",
+     26.1
+    ],
+    [
+     "picocolors",
+     14.4
+    ],
+    [
+     "react-dom",
+     13.0
+    ],
+    [
+     "date-fns",
+     9.9
+    ],
+    [
+     "parse5",
+     9.8
+    ]
+   ],
+   "R3": [
+    [
+     "highlight.js",
+     495.0
+    ],
+    [
+     "undici",
+     108.8
+    ],
+    [
+     "jsdom",
+     93.6
+    ],
+    [
+     "@octokit/plugin-rest-endpoint-methods",
+     58.8
+    ],
+    [
+     "parse5",
+     58.2
+    ],
+    [
+     "eslint-visitor-keys",
+     49.0
+    ],
+    [
+     "markdown-it-emoji",
+     40.9
+    ],
+    [
+     "@lezer/python",
+     34.2
+    ]
+   ],
+   "R5": [
+    [
+     "@icon-park/vue-next",
+     132.4
+    ],
+    [
+     "rxjs",
+     18.8
+    ],
+    [
+     "minimatch",
+     13.2
+    ],
+    [
+     "@typespec/ts-http-runtime",
+     13.2
+    ],
+    [
+     "typed-rest-client",
+     9.9
+    ],
+    [
+     "jsdom",
+     9.8
+    ],
+    [
+     "semver",
+     9.4
+    ],
+    [
+     "inherits",
+     7.8
+    ]
+   ],
+   "R6": [
+    [
+     "@icon-park/vue-next",
+     2728.5
+    ],
+    [
+     "chardet",
+     163.5
+    ],
+    [
+     "@ant-design/icons-svg",
+     158.3
+    ],
+    [
+     "azure-devops-node-api",
+     119.1
+    ],
+    [
+     "iconv-lite",
+     46.8
+    ],
+    [
+     "typed-rest-client",
+     34.7
+    ],
+    [
+     "applicationinsights",
+     30.4
+    ],
+    [
+     "xmlbuilder",
+     27.0
+    ]
+   ],
+   "P1": [
+    [
+     "@babel/generator",
+     0.7
+    ],
+    [
+     "lodash-es",
+     0.5
+    ],
+    [
+     "fast-xml-builder",
+     0.1
+    ],
+    [
+     "@babel/plugin-transform-block-scoping",
+     0.1
+    ],
+    [
+     "@babel/plugin-transform-parameters",
+     0.1
+    ]
+   ],
+   "P2": [
+    [
+     "@mui/icons-material",
+     356.0
+    ],
+    [
+     "encoding-japanese",
+     195.4
+    ],
+    [
+     "tldts-experimental",
+     96.6
+    ],
+    [
+     "@icon-park/vue-next",
+     72.3
+    ],
+    [
+     "rxjs",
+     57.6
+    ],
+    [
+     "regexpu-core",
+     56.3
+    ],
+    [
+     "@babel/helper-validator-identifier",
+     42.4
+    ],
+    [
+     "naive-ui",
+     34.0
+    ]
+   ],
+   "P3": [
+    [
+     "typescript",
+     5873.1
+    ],
+    [
+     "azure-devops-node-api",
+     5679.0
+    ],
+    [
+     "jiti",
+     1612.9
+    ],
+    [
+     "elkjs",
+     1435.1
+    ],
+    [
+     "parse5",
+     1219.3
+    ],
+    [
+     "lucide-react",
+     1128.4
+    ],
+    [
+     "undici",
+     1110.1
+    ],
+    [
+     "prettier",
+     1003.5
+    ]
+   ],
+   "P4": [
+    [
+     "acorn",
+     145.4
+    ],
+    [
+     "@babel/generator",
+     138.1
+    ],
+    [
+     "mermaid",
+     66.9
+    ],
+    [
+     "meow",
+     66.5
+    ],
+    [
+     "react-feather",
+     57.1
+    ],
+    [
+     "@vscode/vsce",
+     49.1
+    ],
+    [
+     "playwright-core",
+     47.5
+    ],
+    [
+     "@jridgewell/sourcemap-codec",
+     34.5
+    ]
+   ],
+   "T": [
+    [
+     "@mui/icons-material",
+     4323.5
+    ],
+    [
+     "undici",
+     1622.3
+    ],
+    [
+     "katex",
+     673.1
+    ],
+    [
+     "entities",
+     641.5
+    ],
+    [
+     "emoji-regex",
+     342.2
+    ],
+    [
+     "@icon-park/vue-next",
+     200.1
+    ],
+    [
+     "json5",
+     129.9
+    ],
+    [
+     "@mui/material",
+     119.3
+    ]
+   ],
+   "U1": [
+    [
+     "pako",
+     23.9
+    ],
+    [
+     "react-dom",
+     20.0
+    ],
+    [
+     "string_decoder",
+     7.7
+    ],
+    [
+     "semver",
+     5.8
+    ],
+    [
+     "readable-stream",
+     4.6
+    ],
+    [
+     "postcss-selector-parser",
+     4.6
+    ],
+    [
+     "jszip",
+     4.3
+    ],
+    [
+     "linkify-it",
+     4.0
+    ]
+   ],
+   "U2": [
+    [
+     "azure-devops-node-api",
+     4887.1
+    ],
+    [
+     "highlight.js",
+     3046.3
+    ],
+    [
+     "@mui/icons-material",
+     2292.9
+    ],
+    [
+     "undici",
+     2149.0
+    ],
+    [
+     "jsdom",
+     2105.1
+    ],
+    [
+     "@faker-js/faker",
+     2044.6
+    ],
+    [
+     "playwright-core",
+     1061.0
+    ],
+    [
+     "parse5",
+     1000.8
+    ]
+   ],
+   "U3": [
+    [
+     "@mui/material",
+     285.5
+    ],
+    [
+     "@vscode/vsce",
+     221.2
+    ],
+    [
+     "@napi-rs/keyring",
+     64.5
+    ],
+    [
+     "@node-rs/crc32",
+     47.9
+    ],
+    [
+     "hono",
+     13.6
+    ],
+    [
+     "all-contributors-cli",
+     12.9
+    ],
+    [
+     "handlebars",
+     7.1
+    ],
+    [
+     "chalk",
+     6.3
+    ]
+   ],
+   "U4": [
+    [
+     "@mui/x-date-pickers",
+     182.9
+    ],
+    [
+     "yauzl-promise",
+     62.6
+    ],
+    [
+     "uc.micro",
+     49.7
+    ],
+    [
+     "@vscode/vsce",
+     33.3
+    ],
+    [
+     "highlight.js",
+     32.3
+    ],
+    [
+     "json-fixer",
+     7.8
+    ],
+    [
+     "ajv",
+     6.8
+    ],
+    [
+     "rrweb-cssom",
+     5.3
+    ]
+   ],
+   "U5": [
+    [
+     "@babel/types",
+     738.5
+    ],
+    [
+     "entities",
+     524.6
+    ],
+    [
+     "@azure/msal-node",
+     454.8
+    ],
+    [
+     "@typespec/ts-http-runtime",
+     351.8
+    ],
+    [
+     "@azure/core-client",
+     332.9
+    ],
+    [
+     "happy-dom",
+     231.1
+    ],
+    [
+     "@babel/core",
+     221.0
+    ],
+    [
+     "tldts",
+     214.2
+    ]
+   ]
+  }
+ },
+ "wrangler": {
+  "classes": {
+   "W": 5.6,
+   "S": 0.1,
+   "R1": 2.2,
+   "R2": 74.5,
+   "R3": 11.6,
+   "R5": 8.2,
+   "R6": 31.8,
+   "P1": 0.5,
+   "P2": 6.2,
+   "P3": 201.9,
+   "P4": 29.5,
+   "T": 238.9,
+   "U1": 2.3,
+   "U2": 231.2,
+   "U3": 4.9,
+   "U4": 48.0,
+   "U5": 11.5,
+   "total": 908.9
+  },
+  "sub": {
+   "P2: 20-29 nodes": 6.2,
+   "R3: module of several units": 10.7,
+   "R3: top level": 0.9,
+   "R6: unambiguous": 31.8,
+   "T: family-claimed module": 4.2,
+   "T: top level": 24.5,
+   "T: top level, literal-heavy (>= 16 B/node)": 17.2,
+   "T: unclaimed module": 23.3,
+   "T: unclaimed module, literal-heavy (>= 16 B/node)": 169.8,
+   "U2: held in another slice": 22.0,
+   "U2: no slice holds it": 209.2,
+   "U5: held in another slice": 4.0,
+   "W: family": 5.6
+  },
+  "inFamilyClaimedModule": {
+   "P2": 0.2,
+   "P3": 1.5,
+   "R3": 0.4,
+   "T": 4.2,
+   "U1": 0.5,
+   "U2": 66.9,
+   "U5": 1.0
+  },
+  "units": {
+   "U2": 484,
+   "T": 2044,
+   "R5": 45,
+   "R6": 34,
+   "R3": 22,
+   "P3": 91,
+   "P2": 69,
+   "U5": 22,
+   "U4": 113,
+   "R2": 79,
+   "U1": 12,
+   "R1": 12,
+   "P4": 26,
+   "W": 11,
+   "U3": 16,
+   "S": 3,
+   "P1": 5
+  },
+  "top5UnitsShare": {
+   "U2": 0.206,
+   "T": 0.775,
+   "R5": 0.182,
+   "R6": 0.446,
+   "R3": 0.726,
+   "P3": 0.276,
+   "P2": 0.195,
+   "U5": 0.698,
+   "U4": 0.258,
+   "R2": 0.317,
+   "U1": 0.556,
+   "R1": 0.64,
+   "P4": 0.547,
+   "W": 0.986,
+   "U3": 0.505,
+   "S": 1.0,
+   "P1": 1.0
+  },
+  "top": {
+   "W": [
+    [
+     "@clack/core",
+     4.1
+    ],
+    [
+     "jsonc-parser",
+     1.4
+    ],
+    [
+     "https-proxy-agent",
+     0.1
+    ],
+    [
+     "strip-final-newline",
+     0.0
+    ],
+    [
+     "is-stream",
+     0.0
+    ]
+   ],
+   "S": [
+    [
+     "@smithy/eventstream-codec",
+     0.1
+    ],
+    [
+     "wrap-ansi",
+     0.0
+    ],
+    [
+     "p-locate",
+     0.0
+    ]
+   ],
+   "R1": [
+    [
+     "prompts",
+     1.8
+    ],
+    [
+     "@smithy/eventstream-codec",
+     0.3
+    ],
+    [
+     "@smithy/util-hex-encoding",
+     0.1
+    ]
+   ],
+   "R2": [
+    [
+     "prompts",
+     44.6
+    ],
+    [
+     "ws",
+     5.2
+    ],
+    [
+     "is-core-module",
+     4.9
+    ],
+    [
+     "resolve",
+     4.9
+    ],
+    [
+     "eastasianwidth",
+     4.0
+    ],
+    [
+     "jsonc-parser",
+     2.3
+    ],
+    [
+     "debug",
+     2.1
+    ],
+    [
+     "picocolors",
+     1.9
+    ]
+   ],
+   "R3": [
+    [
+     "@fastify/busboy",
+     6.0
+    ],
+    [
+     "undici",
+     4.1
+    ],
+    [
+     "execa",
+     0.6
+    ],
+    [
+     "@iarna/toml",
+     0.4
+    ],
+    [
+     "chalk",
+     0.3
+    ],
+    [
+     "cross-spawn",
+     0.1
+    ]
+   ],
+   "R5": [
+    [
+     "undici",
+     3.4
+    ],
+    [
+     "resolve",
+     0.7
+    ],
+    [
+     "path-parse",
+     0.7
+    ],
+    [
+     "@iarna/toml",
+     0.3
+    ],
+    [
+     "is-wsl",
+     0.3
+    ],
+    [
+     "mime",
+     0.3
+    ],
+    [
+     "get-stream",
+     0.2
+    ],
+    [
+     "human-signals",
+     0.2
+    ]
+   ],
+   "R6": [
+    [
+     "node-forge",
+     10.0
+    ],
+    [
+     "resolve",
+     7.1
+    ],
+    [
+     "undici",
+     4.5
+    ],
+    [
+     "@colors/colors",
+     3.6
+    ],
+    [
+     "command-exists",
+     1.8
+    ],
+    [
+     "signal-exit",
+     1.7
+    ],
+    [
+     "glob-to-regexp",
+     0.8
+    ],
+    [
+     "strip-json-comments",
+     0.5
+    ]
+   ],
+   "P1": [
+    [
+     "zod",
+     0.2
+    ],
+    [
+     "yargs",
+     0.2
+    ],
+    [
+     "@clack/core",
+     0.1
+    ]
+   ],
+   "P2": [
+    [
+     "debug",
+     0.8
+    ],
+    [
+     "undici",
+     0.8
+    ],
+    [
+     "is-fullwidth-code-point",
+     0.4
+    ],
+    [
+     "prompts",
+     0.3
+    ],
+    [
+     "yargs",
+     0.3
+    ],
+    [
+     "@fastify/busboy",
+     0.3
+    ],
+    [
+     "uuid",
+     0.3
+    ],
+    [
+     "cliui",
+     0.3
+    ]
+   ],
+   "P3": [
+    [
+     "yargs",
+     51.4
+    ],
+    [
+     "undici",
+     37.9
+    ],
+    [
+     "prompts",
+     19.5
+    ],
+    [
+     "ws",
+     16.7
+    ],
+    [
+     "@fastify/busboy",
+     11.2
+    ],
+    [
+     "minimatch",
+     6.3
+    ],
+    [
+     "debug",
+     4.3
+    ],
+    [
+     "@smithy/smithy-client",
+     4.2
+    ]
+   ],
+   "P4": [
+    [
+     "zod",
+     18.5
+    ],
+    [
+     "@smithy/signature-v4",
+     2.2
+    ],
+    [
+     "@smithy/smithy-client",
+     1.9
+    ],
+    [
+     "which",
+     1.5
+    ],
+    [
+     "@clack/core",
+     1.4
+    ],
+    [
+     "@smithy/util-endpoints",
+     1.3
+    ],
+    [
+     "jsonc-parser",
+     1.0
+    ],
+    [
+     "yargs",
+     0.6
+    ]
+   ],
+   "T": [
+    [
+     "undici",
+     151.1
+    ],
+    [
+     "emoji-regex",
+     25.3
+    ],
+    [
+     "@clack/core",
+     15.9
+    ],
+    [
+     "yargs",
+     5.4
+    ],
+    [
+     "zod",
+     3.2
+    ],
+    [
+     "prompts",
+     2.8
+    ],
+    [
+     "@aws-crypto/crc32c",
+     2.7
+    ],
+    [
+     "@aws-crypto/crc32",
+     2.7
+    ]
+   ],
+   "U1": [
+    [
+     "prompts",
+     1.1
+    ],
+    [
+     "node-forge",
+     0.6
+    ],
+    [
+     "jsonc-parser",
+     0.3
+    ],
+    [
+     "@colors/colors",
+     0.2
+    ],
+    [
+     "fast-xml-parser",
+     0.1
+    ]
+   ],
+   "U2": [
+    [
+     "undici",
+     67.9
+    ],
+    [
+     "mime",
+     34.6
+    ],
+    [
+     "zod",
+     15.7
+    ],
+    [
+     "fast-xml-parser",
+     14.5
+    ],
+    [
+     "ws",
+     13.7
+    ],
+    [
+     "node-forge",
+     12.2
+    ],
+    [
+     "prompts",
+     6.2
+    ],
+    [
+     "date-fns",
+     5.5
+    ]
+   ],
+   "U3": [
+    [
+     "@smithy/node-http-handler",
+     0.9
+    ],
+    [
+     "date-fns",
+     0.9
+    ],
+    [
+     "@smithy/credential-provider-imds",
+     0.6
+    ],
+    [
+     "@smithy/fetch-http-handler",
+     0.5
+    ],
+    [
+     "@smithy/middleware-content-length",
+     0.5
+    ],
+    [
+     "@smithy/util-hex-encoding",
+     0.3
+    ],
+    [
+     "@smithy/querystring-builder",
+     0.2
+    ],
+    [
+     "@smithy/querystring-parser",
+     0.2
+    ]
+   ],
+   "U4": [
+    [
+     "jsonc-parser",
+     11.7
+    ],
+    [
+     "@smithy/util-endpoints",
+     5.1
+    ],
+    [
+     "@smithy/eventstream-codec",
+     4.7
+    ],
+    [
+     "@smithy/middleware-endpoint",
+     4.2
+    ],
+    [
+     "@smithy/shared-ini-file-loader",
+     3.0
+    ],
+    [
+     "@smithy/signature-v4",
+     2.6
+    ],
+    [
+     "@smithy/middleware-retry",
+     2.4
+    ],
+    [
+     "@smithy/smithy-client",
+     2.2
+    ]
+   ],
+   "U5": [
+    [
+     "human-signals",
+     4.6
+    ],
+    [
+     "https-proxy-agent",
+     3.8
+    ],
+    [
+     "undici",
+     1.0
+    ],
+    [
+     "@aws-crypto/crc32c",
+     0.7
+    ],
+    [
+     "@aws-crypto/crc32",
+     0.7
+    ],
+    [
+     "agent-base",
+     0.6
+    ]
+   ]
+  }
+ }
+}

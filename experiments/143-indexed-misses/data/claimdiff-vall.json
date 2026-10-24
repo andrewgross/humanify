@@ -1,0 +1,521 @@
+{
+ "apps-esbuild": {
+  "gainedRight": {
+   "total": 3631.7,
+   "seed | >=100": 1918.8,
+   "seed | 30-99 literal-heavy": 595.5,
+   "seed | 30-99": 462.4,
+   "seed | >=100 literal-heavy": 421.3,
+   "module | <20": 162.3,
+   "module | >=100": 20.7,
+   "module | 20-29": 19.5,
+   "seed | 20-29": 15.4
+  },
+  "lostRight": {
+   "total": 7.3,
+   "seed | 20-29": 4.7,
+   "down | <20": 1.8,
+   "module | <20": 0.4,
+   "seed | 30-99": 0.3,
+   "module | 20-29": 0.1,
+   "module | 30-99": 0.1
+  },
+  "newWrong": {
+   "total": 1.2,
+   "module | <20": 1.2,
+   "module | 20-29": 0.1
+  },
+  "fixedWrong": {
+   "total": 0.0,
+   "module | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "ip-address <- socks",
+    0.4
+   ],
+   [
+    "@babel/generator <- @jridgewell/gen-mapping",
+    0.2
+   ],
+   [
+    "testcafe <- bowser",
+    0.1
+   ],
+   [
+    "@redocly/ajv <- ajv-formats",
+    0.1
+   ],
+   [
+    "@sentry/integrations <- localforage",
+    0.0
+   ],
+   [
+    "human-signals <- get-os-info",
+    0.0
+   ]
+  ]
+ },
+ "apps-rollup": {
+  "gainedRight": {
+   "total": 100.9,
+   "seed | >=100": 66.4,
+   "seed | 30-99": 17.2,
+   "module | <20": 5.8,
+   "module | >=100": 3.6,
+   "module | 20-29": 3.3,
+   "seed | 20-29": 2.0,
+   "down | 20-29": 1.3,
+   "down | <20": 0.8
+  },
+  "lostRight": {
+   "total": 5.5,
+   "seed | >=100": 3.0,
+   "seed | 20-29": 1.3,
+   "seed | 30-99": 0.7,
+   "down | <20": 0.3,
+   "down | 20-29": 0.1,
+   "module | <20": 0.0
+  },
+  "newWrong": {
+   "total": 31.9,
+   "seed | >=100": 30.0,
+   "module | >=100": 1.2,
+   "seed | 30-99": 0.3,
+   "module | <20": 0.2,
+   "down | <20": 0.2
+  },
+  "fixedWrong": {
+   "total": 0.1,
+   "module | <20": 0.1
+  },
+  "topWrong": [
+   [
+    "postcss-calc <- stylelint",
+    29.0
+   ],
+   [
+    "react-autowhatever <- react-soundplayer",
+    1.6
+   ],
+   [
+    "@achrinza/node-ipc <- node-ipc",
+    0.7
+   ],
+   [
+    "source-map <- source-map-js",
+    0.3
+   ],
+   [
+    "@octokit/rest <- octokit-pagination-methods",
+    0.1
+   ],
+   [
+    "proxy-agent-negotiate <- core-js",
+    0.0
+   ]
+  ]
+ },
+ "apps-webpack": {
+  "gainedRight": {
+   "total": 448.7,
+   "seed | >=100": 439.8,
+   "seed | 30-99": 4.8,
+   "module | 30-99": 2.0,
+   "module | 20-29": 0.9,
+   "module | <20": 0.7,
+   "module | >=100": 0.4,
+   "down | <20": 0.1
+  },
+  "topWrong": []
+ },
+ "dev-rollup": {
+  "gainedRight": {
+   "total": 4.4,
+   "seed | 30-99": 1.8,
+   "seed | >=100": 1.7,
+   "module | <20": 0.3,
+   "seed | 20-29": 0.2,
+   "down | 20-29": 0.2,
+   "module | 20-29": 0.1,
+   "down | <20": 0.0
+  },
+  "topWrong": []
+ },
+ "esbuild-app": {
+  "gainedRight": {
+   "total": 869.7,
+   "seed | >=100 literal-heavy": 396.4,
+   "seed | >=100": 266.4,
+   "seed | 30-99 literal-heavy": 146.5,
+   "seed | 30-99": 34.3,
+   "module | <20": 19.5,
+   "module | >=100": 3.2,
+   "module | 20-29": 1.2,
+   "module | 30-99": 1.0
+  },
+  "lostRight": {
+   "total": 0.2,
+   "seed | 20-29": 0.1,
+   "module | <20": 0.1,
+   "down | <20": 0.1
+  },
+  "topWrong": []
+ },
+ "heldout": {
+  "gainedRight": {
+   "total": 8679.7,
+   "seed | >=100": 4376.5,
+   "seed | >=100 literal-heavy": 2594.9,
+   "seed | 30-99 literal-heavy": 873.0,
+   "seed | 30-99": 456.7,
+   "module | <20": 225.5,
+   "module | >=100": 33.2,
+   "module | 20-29 literal-heavy": 30.6,
+   "module | <20 literal-heavy": 25.4
+  },
+  "newWrong": {
+   "total": 20.1,
+   "seed | >=100": 13.9,
+   "module | <20": 3.4,
+   "seed | 30-99": 2.0,
+   "seed | 20-29": 0.3,
+   "down | >=100": 0.2,
+   "module | 20-29": 0.2,
+   "down | <20": 0.1
+  },
+  "lostRight": {
+   "total": 5.2,
+   "seed | 20-29": 3.1,
+   "down | <20": 1.1,
+   "seed | 30-99": 0.5,
+   "module | <20": 0.4,
+   "down | 20-29": 0.1
+  },
+  "fixedWrong": {
+   "total": 0.3,
+   "module | <20": 0.3,
+   "down | <20": 0.0
+  }
+ },
+ "pop-bun": {
+  "gainedRight": {
+   "total": 8129.8,
+   "seed | >=100": 5989.3,
+   "seed | >=100 literal-heavy": 741.2,
+   "seed | 30-99": 556.7,
+   "module | <20": 501.7,
+   "seed | 30-99 literal-heavy": 172.2,
+   "module | 20-29": 92.1,
+   "module | >=100": 28.5,
+   "seed | 20-29": 26.5
+  },
+  "lostRight": {
+   "total": 18.7,
+   "seed | 20-29": 5.1,
+   "down | <20": 4.0,
+   "module | <20": 3.3,
+   "seed | >=100": 2.4,
+   "seed | 30-99": 1.2,
+   "module | 20-29": 1.2,
+   "down | >=100": 0.9,
+   "down | 30-99": 0.2
+  },
+  "newWrong": {
+   "total": 24.2,
+   "seed | >=100": 9.4,
+   "module | <20": 7.0,
+   "seed | 30-99": 5.9,
+   "seed | 20-29": 0.8,
+   "down | <20": 0.3,
+   "module | 20-29": 0.3,
+   "down | 30-99": 0.2,
+   "down | >=100": 0.2
+  },
+  "fixedWrong": {
+   "total": 1.2,
+   "seed | 30-99": 0.6,
+   "module | <20": 0.5,
+   "down | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "css-tree <- lru-cache",
+    5.3
+   ],
+   [
+    "stylelint <- lru-cache",
+    3.5
+   ],
+   [
+    "resend <- helper-js",
+    3.3
+   ],
+   [
+    "@langchain/core <- langsmith",
+    2.8
+   ],
+   [
+    "@elevenlabs/elevenlabs-js <- agentmail",
+    2.4
+   ],
+   [
+    "css-tree <- cssstyle",
+    1.3
+   ]
+  ]
+ },
+ "pop-esbuild": {
+  "gainedRight": {
+   "total": 8900.7,
+   "seed | >=100": 6266.2,
+   "seed | >=100 literal-heavy": 1357.6,
+   "seed | 30-99": 616.0,
+   "module | <20": 307.7,
+   "seed | 30-99 literal-heavy": 175.5,
+   "module | 20-29": 73.3,
+   "module | >=100": 46.0,
+   "seed | 20-29": 30.4
+  },
+  "newWrong": {
+   "total": 12.7,
+   "seed | 20-29": 4.1,
+   "seed | >=100": 2.4,
+   "module | <20": 2.0,
+   "seed | 30-99": 2.0,
+   "down | <20": 1.9,
+   "down | 30-99": 0.2,
+   "module | 20-29": 0.1
+  },
+  "lostRight": {
+   "total": 19.1,
+   "seed | 20-29": 7.2,
+   "down | <20": 4.0,
+   "seed | >=100": 2.4,
+   "module | <20": 2.0,
+   "down | >=100": 0.9,
+   "module | >=100": 0.9,
+   "module | 20-29": 0.7,
+   "seed | 30-99": 0.6
+  },
+  "fixedWrong": {
+   "total": 0.5,
+   "seed | 30-99": 0.3,
+   "module | <20": 0.2
+  },
+  "topWrong": [
+   [
+    "@elevenlabs/elevenlabs-js <- agentmail",
+    8.0
+   ],
+   [
+    "@langchain/core <- langsmith",
+    2.8
+   ],
+   [
+    "npmconf <- npm",
+    0.6
+   ],
+   [
+    "ip-address <- socks",
+    0.2
+   ],
+   [
+    "tailwind-merge <- sonner",
+    0.2
+   ],
+   [
+    "@babel/generator <- @jridgewell/gen-mapping",
+    0.1
+   ]
+  ]
+ },
+ "remin-esbuild": {
+  "gainedRight": {
+   "total": 3020.0,
+   "seed | >=100 literal-heavy": 1135.9,
+   "seed | >=100": 793.7,
+   "module | >=100": 598.1,
+   "seed | 30-99": 192.9,
+   "seed | 30-99 literal-heavy": 94.9,
+   "module | <20": 69.3,
+   "down | >=100": 64.0,
+   "module | 30-99": 26.6
+  },
+  "lostRight": {
+   "total": 5.6,
+   "down | >=100": 1.4,
+   "seed | 20-29": 1.0,
+   "seed | 30-99": 0.8,
+   "down | <20": 0.8,
+   "module | <20": 0.6,
+   "down | 30-99": 0.6,
+   "down | 20-29": 0.3,
+   "module | 20-29": 0.1
+  },
+  "newWrong": {
+   "total": 0.3,
+   "module | <20": 0.2,
+   "down | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "ajv-formats <- ajv",
+    0.1
+   ],
+   [
+    "cockatiel <- @vscode/vsce",
+    0.1
+   ],
+   [
+    "ajv <- ajv-formats",
+    0.0
+   ],
+   [
+    "agent-base <- @tootallnate/once",
+    0.0
+   ],
+   [
+    "@web/dev-server-core <- es-module-lexer",
+    0.0
+   ]
+  ]
+ },
+ "remin-terser": {
+  "gainedRight": {
+   "total": 1483.4,
+   "module | >=100": 1150.8,
+   "seed | >=100": 119.0,
+   "seed | 30-99": 104.4,
+   "module | <20": 44.3,
+   "seed | >=100 literal-heavy": 18.4,
+   "module | 30-99": 17.1,
+   "module | 20-29": 12.5,
+   "seed | 20-29": 8.6
+  },
+  "lostRight": {
+   "total": 14.8,
+   "down | >=100": 8.4,
+   "module | >=100": 4.4,
+   "seed | 30-99": 0.9,
+   "module | <20": 0.6,
+   "module | 20-29": 0.2,
+   "down | <20": 0.2,
+   "down | 20-29": 0.1
+  },
+  "topWrong": []
+ },
+ "remin3-esbuild": {
+  "gainedRight": {
+   "total": 9231.2,
+   "seed | >=100": 4950.2,
+   "module | >=100": 1215.4,
+   "seed | 30-99 literal-heavy": 811.1,
+   "seed | >=100 literal-heavy": 805.4,
+   "seed | 30-99": 725.1,
+   "module | <20": 401.8,
+   "down | >=100": 186.3,
+   "module | 30-99": 49.2
+  },
+  "newWrong": {
+   "total": 29.9,
+   "module | >=100": 22.8,
+   "module | <20": 2.8,
+   "seed | >=100": 2.0,
+   "module | 30-99": 1.0,
+   "module | 20-29": 0.4,
+   "down | <20": 0.3,
+   "down | >=100": 0.2,
+   "down | <20 literal-heavy": 0.2
+  },
+  "lostRight": {
+   "total": 4.3,
+   "seed | 20-29": 1.4,
+   "down | >=100": 1.1,
+   "seed | 30-99": 0.7,
+   "module | 20-29": 0.4,
+   "down | <20": 0.4,
+   "module | <20": 0.3,
+   "down | 20-29": 0.0
+  },
+  "fixedWrong": {
+   "total": 10.3,
+   "module | >=100": 9.7,
+   "seed | 30-99": 0.3,
+   "module | <20": 0.2,
+   "module | 30-99": 0.1,
+   "down | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "yargs <- @curlconverter/yargs",
+    23.9
+   ],
+   [
+    "@isaacs/brace-expansion <- brace-expansion",
+    1.9
+   ],
+   [
+    "@langchain/core <- uuid",
+    0.9
+   ],
+   [
+    "dompurify <- d3",
+    0.5
+   ],
+   [
+    "@typespec/ts-http-runtime <- tslib",
+    0.4
+   ],
+   [
+    "@isaacs/brace-expansion <- glob",
+    0.4
+   ]
+  ]
+ },
+ "remin3-terser": {
+  "gainedRight": {
+   "total": 3337.5,
+   "module | >=100": 2585.9,
+   "seed | >=100": 219.3,
+   "seed | 30-99": 196.2,
+   "seed | >=100 literal-heavy": 157.6,
+   "module | <20": 89.4,
+   "module | 30-99": 30.6,
+   "module | 20-29": 22.1,
+   "down | >=100": 18.5
+  },
+  "lostRight": {
+   "total": 19.3,
+   "down | >=100": 11.2,
+   "module | >=100": 5.8,
+   "seed | 30-99": 1.0,
+   "module | <20": 0.8,
+   "module | 20-29": 0.3,
+   "down | <20": 0.2
+  },
+  "newWrong": {
+   "total": 0.3,
+   "module | <20": 0.3
+  },
+  "topWrong": [
+   [
+    "react <- gatsby-cli",
+    0.3
+   ]
+  ]
+ },
+ "wrangler": {
+  "gainedRight": {
+   "total": 24.8,
+   "module | >=100": 13.4,
+   "seed | >=100": 6.1,
+   "seed | 30-99": 2.2,
+   "seed | >=100 literal-heavy": 1.6,
+   "module | <20": 1.2,
+   "module | 20-29": 0.1,
+   "module | 30-99": 0.1
+  },
+  "topWrong": []
+ }
+}

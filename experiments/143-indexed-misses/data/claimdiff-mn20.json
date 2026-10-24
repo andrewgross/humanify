@@ -1,0 +1,779 @@
+{
+ "apps-esbuild": {
+  "gainedRight": {
+   "total": 2110.7,
+   "seed | 20-29 literal-heavy": 1050.7,
+   "down | <20 literal-heavy": 564.2,
+   "seed | >=100": 214.7,
+   "seed | 20-29": 108.4,
+   "seed | 30-99": 48.9,
+   "down | <20": 39.7,
+   "module | <20": 32.4,
+   "down | 20-29": 17.7
+  },
+  "fixedWrong": {
+   "total": 4.0,
+   "seed | 20-29": 1.0,
+   "module | <20": 1.0,
+   "seed | 30-99": 0.8,
+   "down | <20": 0.7,
+   "seed | >=100": 0.2,
+   "down | 30-99": 0.2,
+   "down | 20-29": 0.1
+  },
+  "lostRight": {
+   "total": 25.2,
+   "module | >=100": 5.6,
+   "seed | 20-29": 4.8,
+   "down | <20": 3.0,
+   "down | 20-29": 2.3,
+   "seed | >=100": 2.3,
+   "module | <20": 1.8,
+   "down | >=100": 1.7,
+   "down | 30-99": 1.6
+  },
+  "newWrong": {
+   "total": 4.3,
+   "down | <20": 1.0,
+   "seed | >=100": 0.9,
+   "seed | 20-29": 0.8,
+   "module | <20": 0.6,
+   "seed | 30-99": 0.5,
+   "down | >=100": 0.3,
+   "down | 20-29": 0.2
+  },
+  "topWrong": [
+   [
+    "@clack/core <- rolldown",
+    1.0
+   ],
+   [
+    "@formatjs/fast-memoize <- fast-memoize",
+    0.9
+   ],
+   [
+    "next-i18next <- react-i18next",
+    0.5
+   ],
+   [
+    "pac-resolver <- netmask",
+    0.4
+   ],
+   [
+    "table <- lodash.truncate",
+    0.3
+   ],
+   [
+    "entities <- domhandler",
+    0.2
+   ]
+  ]
+ },
+ "apps-rollup": {
+  "gainedRight": {
+   "total": 158.9,
+   "seed | >=100": 57.2,
+   "seed | 20-29": 37.3,
+   "seed | 30-99": 20.6,
+   "down | <20": 16.8,
+   "down | >=100": 15.2,
+   "seed | 20-29 literal-heavy": 3.4,
+   "down | 30-99": 3.0,
+   "down | 20-29": 2.2
+  },
+  "fixedWrong": {
+   "total": 3.1,
+   "down | <20": 1.0,
+   "seed | >=100": 0.9,
+   "seed | 20-29": 0.5,
+   "seed | 30-99": 0.3,
+   "module | <20": 0.3,
+   "module | <20 literal-heavy": 0.1,
+   "down | 20-29": 0.1
+  },
+  "newWrong": {
+   "total": 4.1,
+   "seed | >=100": 2.3,
+   "seed | 20-29": 0.5,
+   "seed | 30-99": 0.5,
+   "module | 20-29": 0.3,
+   "down | 20-29": 0.3,
+   "down | <20": 0.3,
+   "down | no print": 0.0
+  },
+  "lostRight": {
+   "total": 52.9,
+   "seed | >=100": 29.0,
+   "down | >=100": 17.0,
+   "seed | 20-29": 2.1,
+   "down | <20": 1.6,
+   "down | 30-99": 1.0,
+   "seed | 30-99": 1.0,
+   "down | 20-29": 0.9,
+   "module | <20": 0.2
+  },
+  "topWrong": [
+   [
+    "v8-compile-cache <- v8-compile-cache-lib",
+    1.8
+   ],
+   [
+    "puppeteer-core <- mitt",
+    0.5
+   ],
+   [
+    "editorconfig <- prettier",
+    0.3
+   ],
+   [
+    "has-value <- has-values",
+    0.2
+   ],
+   [
+    "@prisma/fetch-engine <- is-stream",
+    0.2
+   ],
+   [
+    "es5-ext <- memoizee",
+    0.2
+   ]
+  ]
+ },
+ "apps-webpack": {
+  "gainedRight": {
+   "total": 997.3,
+   "seed | 20-29 literal-heavy": 590.6,
+   "seed | >=100": 123.7,
+   "down | >=100": 119.8,
+   "seed | 20-29": 90.8,
+   "seed | 30-99": 28.2,
+   "down | <20": 23.5,
+   "down | 20-29": 11.1,
+   "down | 30-99": 7.0
+  },
+  "lostRight": {
+   "total": 26.9,
+   "seed | >=100": 9.7,
+   "down | >=100": 5.7,
+   "down | 30-99": 4.0,
+   "down | <20": 2.6,
+   "down | 20-29": 1.9,
+   "seed | 30-99": 1.3,
+   "module | >=100": 0.8,
+   "module | 30-99": 0.4
+  },
+  "newWrong": {
+   "total": 9.1,
+   "seed | >=100": 5.7,
+   "seed | 30-99": 1.2,
+   "seed | 20-29": 1.0,
+   "seed | 20-29 literal-heavy": 0.9,
+   "down | <20": 0.4
+  },
+  "fixedWrong": {
+   "total": 9.1,
+   "down | >=100": 6.9,
+   "down | <20": 1.4,
+   "module | 30-99": 0.5,
+   "module | 20-29": 0.1,
+   "module | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "mermaid <- d3-path",
+    1.8
+   ],
+   [
+    "source-map <- source-map-js",
+    1.6
+   ],
+   [
+    "source-map-js <- source-map",
+    1.6
+   ],
+   [
+    "react-dom <- @hot-loader/react-dom",
+    1.0
+   ],
+   [
+    "@dual-bundle/import-meta-resolve <- @babel/core",
+    0.7
+   ],
+   [
+    "@vscode/sqlite3 <- sqlite3",
+    0.6
+   ]
+  ]
+ },
+ "dev-rollup": {
+  "gainedRight": {
+   "total": 7.1,
+   "seed | >=100": 3.4,
+   "seed | 30-99": 1.6,
+   "seed | 20-29": 1.4,
+   "module | 30-99": 0.4,
+   "down | <20": 0.1,
+   "down | 30-99": 0.1,
+   "module | <20": 0.0,
+   "module | no print": 0.0
+  },
+  "newWrong": {
+   "total": 0.5,
+   "seed | >=100": 0.5
+  },
+  "lostRight": {
+   "total": 0.3,
+   "down | 30-99": 0.1,
+   "down | 20-29": 0.1,
+   "down | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "has-value <- isobject",
+    0.5
+   ]
+  ]
+ },
+ "dev-webpack": {
+  "gainedRight": {
+   "total": 15.1,
+   "seed | >=100": 9.5,
+   "seed | 20-29": 2.3,
+   "seed | 30-99": 2.1,
+   "module | >=100": 0.6,
+   "down | <20": 0.6
+  },
+  "topWrong": []
+ },
+ "esbuild-app": {
+  "gainedRight": {
+   "total": 172.9,
+   "down | <20 literal-heavy": 141.0,
+   "seed | 20-29": 13.9,
+   "seed | >=100": 8.6,
+   "down | <20": 3.8,
+   "seed | 30-99": 3.5,
+   "module | <20": 0.9,
+   "down | >=100": 0.4,
+   "down | 20-29": 0.4
+  },
+  "newWrong": {
+   "total": 0.6,
+   "seed | 30-99": 0.2,
+   "seed | 20-29": 0.2,
+   "module | 20-29": 0.1,
+   "module | <20": 0.0,
+   "down | <20": 0.0
+  },
+  "lostRight": {
+   "total": 0.8,
+   "seed | >=100": 0.7,
+   "seed | 20-29": 0.1,
+   "down | <20": 0.0,
+   "module | <20": 0.0
+  },
+  "fixedWrong": {
+   "total": 0.1,
+   "down | <20": 0.1
+  },
+  "topWrong": [
+   [
+    "@opentelemetry/instrumentation-mongoose <- @sentry/node",
+    0.3
+   ],
+   [
+    "@anthropic-ai/claude-agent-sdk <- zod",
+    0.3
+   ],
+   [
+    "terminal-link <- supports-hyperlinks",
+    0.0
+   ]
+  ]
+ },
+ "heldout": {
+  "gainedRight": {
+   "total": 3742.8,
+   "down | 20-29": 1021.2,
+   "seed | 20-29 literal-heavy": 911.0,
+   "seed | >=100": 848.2,
+   "module | <20": 307.4,
+   "seed | 20-29": 252.1,
+   "down | >=100": 160.3,
+   "down | <20": 81.7,
+   "seed | 30-99": 77.5
+  },
+  "fixedWrong": {
+   "total": 10.2,
+   "seed | 30-99": 5.2,
+   "seed | >=100": 1.3,
+   "seed | 20-29": 1.3,
+   "down | <20": 1.2,
+   "module | <20": 0.7,
+   "down | 30-99": 0.3,
+   "down | 20-29": 0.2,
+   "down | <20 literal-heavy": 0.1
+  },
+  "lostRight": {
+   "total": 105.8,
+   "module | >=100": 52.5,
+   "down | >=100": 8.9,
+   "module | <20": 8.1,
+   "seed | 20-29": 7.7,
+   "seed | 30-99": 6.8,
+   "down | <20": 5.8,
+   "seed | >=100": 4.5,
+   "module | 30-99": 3.9
+  },
+  "newWrong": {
+   "total": 18.0,
+   "down | 20-29": 4.2,
+   "seed | 20-29": 4.1,
+   "seed | 30-99": 2.6,
+   "seed | >=100": 1.9,
+   "module | <20": 1.8,
+   "down | <20": 1.1,
+   "module | >=100": 0.8,
+   "down | 30-99": 0.7
+  }
+ },
+ "pop-bun": {
+  "gainedRight": {
+   "total": 5404.1,
+   "seed | 20-29 literal-heavy": 3585.3,
+   "seed | >=100": 782.4,
+   "seed | 20-29": 483.8,
+   "down | <20": 268.2,
+   "module | <20": 82.6,
+   "seed | 30-99": 59.8,
+   "down | >=100": 38.9,
+   "down | 20-29": 34.8
+  },
+  "lostRight": {
+   "total": 66.5,
+   "down | >=100": 18.6,
+   "module | >=100": 15.1,
+   "seed | >=100": 8.8,
+   "down | <20": 6.0,
+   "seed | 20-29": 5.0,
+   "module | <20": 3.8,
+   "seed | 30-99": 3.7,
+   "down | 20-29": 1.8
+  },
+  "fixedWrong": {
+   "total": 16.5,
+   "seed | 30-99": 5.7,
+   "module | <20": 4.2,
+   "down | <20": 2.0,
+   "seed | 20-29": 2.0,
+   "seed | >=100": 1.9,
+   "down | 20-29": 0.5,
+   "module | <20 literal-heavy": 0.1,
+   "down | <20 literal-heavy": 0.1
+  },
+  "newWrong": {
+   "total": 36.3,
+   "down | >=100": 16.4,
+   "seed | >=100": 8.7,
+   "seed | 20-29": 2.6,
+   "down | <20": 2.6,
+   "module | <20": 2.2,
+   "seed | 30-99": 2.1,
+   "down | 30-99": 1.5,
+   "down | 20-29": 0.1
+  },
+  "topWrong": [
+   [
+    "file-set <- lru-cache",
+    16.2
+   ],
+   [
+    "spdx-correct <- meow",
+    5.1
+   ],
+   [
+    "@clack/core <- rolldown",
+    2.5
+   ],
+   [
+    "json-schema-to-zod <- @composio/json-schema-to-zod",
+    1.1
+   ],
+   [
+    "pm2 <- pm2-axon",
+    1.0
+   ],
+   [
+    "mongodb <- whatwg-url",
+    1.0
+   ]
+  ]
+ },
+ "pop-esbuild": {
+  "gainedRight": {
+   "total": 3436.0,
+   "down | <20 literal-heavy": 1412.5,
+   "seed | >=100": 962.2,
+   "seed | 20-29": 418.2,
+   "seed | 20-29 literal-heavy": 249.6,
+   "down | <20": 202.1,
+   "module | <20": 52.2,
+   "seed | 30-99": 49.0,
+   "down | 20-29": 20.8
+  },
+  "newWrong": {
+   "total": 20.9,
+   "seed | 20-29": 6.3,
+   "seed | >=100": 3.8,
+   "down | >=100": 3.4,
+   "seed | 30-99": 3.3,
+   "down | <20": 2.9,
+   "module | >=100": 0.8,
+   "module | <20": 0.5
+  },
+  "lostRight": {
+   "total": 115.0,
+   "down | 20-29 literal-heavy": 46.0,
+   "seed | >=100": 22.1,
+   "module | >=100": 16.5,
+   "seed | 30-99": 7.1,
+   "module | <20": 5.2,
+   "seed | 20-29": 4.7,
+   "down | <20": 4.2,
+   "down | >=100": 2.4
+  },
+  "fixedWrong": {
+   "total": 12.7,
+   "down | >=100": 4.4,
+   "module | <20": 2.5,
+   "module | >=100": 1.6,
+   "down | <20": 1.2,
+   "seed | 20-29": 0.9,
+   "seed | >=100": 0.7,
+   "seed | 30-99": 0.5,
+   "down | 30-99": 0.5
+  },
+  "topWrong": [
+   [
+    "@elevenlabs/elevenlabs-js <- agentmail",
+    5.4
+   ],
+   [
+    "@babel/parser <- oxfmt",
+    3.5
+   ],
+   [
+    "@babel/template <- @putout/minify",
+    1.9
+   ],
+   [
+    "@angular/build <- ng-packagr",
+    1.8
+   ],
+   [
+    "pm2 <- pm2-axon",
+    1.0
+   ],
+   [
+    "@clack/core <- rolldown",
+    1.0
+   ]
+  ]
+ },
+ "remin-esbuild": {
+  "gainedRight": {
+   "total": 2489.7,
+   "seed | >=100": 672.6,
+   "down | <20 literal-heavy": 564.0,
+   "seed | 20-29 literal-heavy": 403.1,
+   "down | >=100": 308.8,
+   "module | >=100": 198.5,
+   "seed | 20-29": 109.0,
+   "seed | 30-99": 85.4,
+   "down | <20": 50.6
+  },
+  "lostRight": {
+   "total": 74.4,
+   "module | >=100": 55.3,
+   "seed | >=100": 6.0,
+   "down | >=100": 3.4,
+   "seed | 30-99": 2.6,
+   "module | 30-99 literal-heavy": 2.2,
+   "module | <20": 1.5,
+   "module | 30-99": 1.3,
+   "seed | 20-29": 0.6
+  },
+  "fixedWrong": {
+   "total": 1.1,
+   "module | <20": 0.5,
+   "seed | 20-29": 0.2,
+   "down | 30-99": 0.2,
+   "down | <20": 0.1,
+   "module | 30-99": 0.1
+  },
+  "newWrong": {
+   "total": 1.6,
+   "down | >=100": 0.8,
+   "module | >=100": 0.4,
+   "module | <20": 0.1,
+   "seed | 30-99": 0.1,
+   "seed | 20-29": 0.1,
+   "down | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "http-proxy-agent <- @tootallnate/once",
+    0.4
+   ],
+   [
+    "@radix-ui/primitive <- react",
+    0.4
+   ],
+   [
+    "@math.gl/web-mercator <- mjolnir.js",
+    0.4
+   ],
+   [
+    "@vue/compiler-core <- vite",
+    0.2
+   ],
+   [
+    "cockatiel <- @vscode/vsce",
+    0.1
+   ],
+   [
+    "chardet <- @inquirer/checkbox",
+    0.0
+   ]
+  ]
+ },
+ "remin-terser": {
+  "gainedRight": {
+   "total": 1639.0,
+   "module | >=100": 624.5,
+   "down | >=100": 559.0,
+   "seed | >=100": 173.3,
+   "seed | 20-29": 77.2,
+   "seed | 30-99": 73.3,
+   "down | <20": 41.9,
+   "down | <20 literal-heavy": 31.9,
+   "module | <20": 24.6
+  },
+  "lostRight": {
+   "total": 48.3,
+   "down | >=100": 21.8,
+   "module | >=100": 19.0,
+   "module | <20": 2.5,
+   "module | 30-99": 1.1,
+   "seed | 20-29": 1.1,
+   "seed | 30-99": 1.1,
+   "down | <20": 0.7,
+   "module | 20-29": 0.4
+  },
+  "newWrong": {
+   "total": 51.0,
+   "module | <20 literal-heavy": 31.5,
+   "down | >=100": 6.8,
+   "down | <20 literal-heavy": 5.4,
+   "module | >=100": 4.1,
+   "seed | 30-99": 1.2,
+   "module | <20": 0.9,
+   "seed | 20-29": 0.4,
+   "module | 30-99": 0.4
+  },
+  "fixedWrong": {
+   "total": 3.6,
+   "module | <20": 2.6,
+   "down | <20": 0.6,
+   "seed | 20-29": 0.4
+  },
+  "topWrong": [
+   [
+    "markdown-it <- entities",
+    35.8
+   ],
+   [
+    "@vue/compiler-dom <- vite",
+    9.3
+   ],
+   [
+    "@dual-bundle/import-meta-resolve <- @babel/core",
+    5.1
+   ],
+   [
+    "@vue/compiler-core <- vite",
+    0.4
+   ],
+   [
+    "is-docker <- tslib",
+    0.2
+   ],
+   [
+    "svelte-i18n <- svelte",
+    0.1
+   ]
+  ]
+ },
+ "remin3-esbuild": {
+  "gainedRight": {
+   "total": 4723.9,
+   "down | <20 literal-heavy": 1551.5,
+   "seed | >=100": 1304.4,
+   "down | >=100": 857.5,
+   "module | >=100": 325.8,
+   "seed | 20-29": 234.1,
+   "seed | 30-99": 177.2,
+   "down | <20": 91.2,
+   "module | <20": 57.8
+  },
+  "lostRight": {
+   "total": 271.5,
+   "module | >=100": 215.4,
+   "down | >=100": 32.3,
+   "seed | >=100": 9.4,
+   "seed | 30-99": 4.6,
+   "module | <20": 3.8,
+   "down | 30-99": 1.6,
+   "seed | 20-29": 1.5,
+   "down | <20": 1.0
+  },
+  "newWrong": {
+   "total": 63.1,
+   "down | >=100": 35.9,
+   "module | >=100": 21.6,
+   "seed | >=100": 1.5,
+   "module | <20": 1.1,
+   "seed | 20-29": 0.7,
+   "module | 30-99": 0.7,
+   "seed | 30-99": 0.6,
+   "down | <20": 0.5
+  },
+  "fixedWrong": {
+   "total": 0.4,
+   "module | <20": 0.2,
+   "down | <20": 0.2
+  },
+  "topWrong": [
+   [
+    "yargs <- @curlconverter/yargs",
+    58.0
+   ],
+   [
+    "http-proxy-agent <- @tootallnate/once",
+    2.2
+   ],
+   [
+    "playwright-core <- yazl",
+    1.0
+   ],
+   [
+    "@radix-ui/primitive <- @ai-ins/vite",
+    0.4
+   ],
+   [
+    "normalize-package-data <- meow",
+    0.4
+   ],
+   [
+    "ufo <- vue-router",
+    0.3
+   ]
+  ]
+ },
+ "remin3-terser": {
+  "gainedRight": {
+   "total": 3029.4,
+   "module | >=100": 1318.2,
+   "down | >=100": 973.3,
+   "seed | 20-29": 193.5,
+   "seed | >=100": 193.5,
+   "seed | 30-99": 106.2,
+   "down | <20": 98.5,
+   "module | <20": 38.1,
+   "down | <20 literal-heavy": 32.4
+  },
+  "lostRight": {
+   "total": 167.0,
+   "module | >=100": 76.5,
+   "module | <20": 23.7,
+   "module | 30-99": 21.5,
+   "seed | >=100": 15.6,
+   "down | >=100": 12.9,
+   "module | 20-29": 10.9,
+   "down | 30-99": 2.3,
+   "seed | 30-99": 1.9
+  },
+  "newWrong": {
+   "total": 40.5,
+   "module | >=100": 20.6,
+   "down | >=100": 11.1,
+   "module | <20": 3.6,
+   "seed | 30-99": 3.0,
+   "module | 30-99": 1.0,
+   "seed | 20-29": 0.7,
+   "down | <20": 0.5
+  },
+  "fixedWrong": {
+   "total": 0.8,
+   "seed | 20-29": 0.4,
+   "down | <20": 0.3,
+   "module | <20": 0.1
+  },
+  "topWrong": [
+   [
+    "yargs <- @curlconverter/yargs",
+    21.5
+   ],
+   [
+    "@dual-bundle/import-meta-resolve <- @babel/core",
+    15.4
+   ],
+   [
+    "@rsbuild/core <- playwright-core",
+    1.4
+   ],
+   [
+    "is-docker <- tslib",
+    0.4
+   ],
+   [
+    "webdav <- fast-xml-builder",
+    0.3
+   ],
+   [
+    "micromark-extension-directive <- micromark-util-character",
+    0.3
+   ]
+  ]
+ },
+ "wrangler": {
+  "gainedRight": {
+   "total": 27.9,
+   "down | >=100": 10.1,
+   "module | >=100": 6.4,
+   "seed | >=100": 5.5,
+   "seed | 30-99": 2.0,
+   "seed | 20-29": 1.3,
+   "down | <20": 1.1,
+   "module | <20": 0.9,
+   "module | 30-99": 0.4
+  },
+  "newWrong": {
+   "total": 0.3,
+   "seed | 20-29": 0.1,
+   "seed | 30-99": 0.1,
+   "down | <20": 0.1
+  },
+  "lostRight": {
+   "total": 0.1,
+   "seed | 30-99": 0.1,
+   "down | <20": 0.0
+  },
+  "topWrong": [
+   [
+    "wrap-ansi <- @clack/core",
+    0.3
+   ]
+  ]
+ }
+}
