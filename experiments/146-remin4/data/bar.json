@@ -1,0 +1,240 @@
+{
+  "bar": {
+    "remin+remin3 (exp145)": {
+      "T36KB": 0.8972884303796932,
+      "bar": "reject",
+      "bundlesAtOrAboveT36": 9,
+      "check1": true,
+      "check1_p05": 1.170539485584321e-5,
+      "check2": false,
+      "maxAddKB": 8.348,
+      "pFail36": 0.3383419794813305
+    },
+    "remin+remin3+remin4": {
+      "T36KB": 2.2113871964843423,
+      "bar": "reject",
+      "bundlesAtOrAboveT36": 2,
+      "check1": true,
+      "check1_p05": 1.7688518308633938e-5,
+      "check2": false,
+      "maxAddKB": 8.348,
+      "pFail36": 0.08732059754982602
+    },
+    "remin4": {
+      "T36KB": 3.08824894043892,
+      "bar": "reject",
+      "bundlesAtOrAboveT36": 1,
+      "check1": true,
+      "check1_p05": 2.562056142596525e-5,
+      "check2": false,
+      "maxAddKB": 8.348,
+      "pFail36": 0.04462974834404965
+    }
+  },
+  "candidate": "exp144 veto_support=shown",
+  "devBundles": 789,
+  "maxBundleAddKB": {
+    "anyDev": 8.348,
+    "anyDevSet": "pop-esbuild",
+    "exp145DevOnly": 8.348,
+    "exp145DevOnlySet": "pop-esbuild",
+    "remin4": 0.592,
+    "remin4Set": "remin4-esbuild"
+  },
+  "pooled": {
+    "remin+remin3 (exp145)": {
+      "P_base": 0.9987267098318156,
+      "T36KB": 0.8972884303796932,
+      "addedWrongKB": 0.0,
+      "apps": 108,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 1.170539485584321e-5,
+        "p50": 4.527569949741572e-5,
+        "p95": 0.00010146676179079162,
+        "replace": false
+      },
+      "dNamedKB": 2114.102,
+      "dP": 4.828394091249688e-5,
+      "dWrongKB": 0.0,
+      "headroomKB": 2.6918652911390795,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    },
+    "remin+remin3+remin4": {
+      "P_base": 0.9970146139358056,
+      "T36KB": 2.2113871964843423,
+      "addedWrongKB": 0.0,
+      "apps": 252,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 1.7688518308633938e-5,
+        "p50": 6.416087287752781e-5,
+        "p95": 0.00030628223379514097,
+        "replace": false
+      },
+      "dNamedKB": 5185.162,
+      "dP": 0.00010503538167694337,
+      "dWrongKB": 0.0,
+      "headroomKB": 15.479710375390395,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    },
+    "remin4": {
+      "P_base": 0.9959776117165553,
+      "T36KB": 3.08824894043892,
+      "addedWrongKB": 0.0,
+      "apps": 144,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 2.562056142596525e-5,
+        "p50": 8.885724497442737e-5,
+        "p95": 0.0003210963071679229,
+        "replace": false
+      },
+      "dNamedKB": 3071.06,
+      "dP": 0.00013482062549741158,
+      "dWrongKB": 0.0,
+      "headroomKB": 12.35299576175568,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    }
+  },
+  "sets": {
+    "remin-esbuild": {
+      "P_base": 0.9971976296978886,
+      "addedWrongKB": 0.188,
+      "apps": 36,
+      "appsWrongUp": 4,
+      "boot": {
+        "below0": 0.0,
+        "p05": 4.3458821486930255e-5,
+        "p50": 0.00012459096382733126,
+        "p95": 0.00030009451707857515,
+        "replace": true
+      },
+      "dNamedKB": 2697.664,
+      "dP": 0.00013522858669023918,
+      "dWrongKB": 0.188,
+      "headroomKB": 7.37185347867502,
+      "maxAppAddKB": 0.074,
+      "top1": 0.39361702127659576,
+      "top3": 0.9148936170212766,
+      "top5": 1.0
+    },
+    "remin-terser": {
+      "P_base": 0.9991626073590384,
+      "addedWrongKB": 0.0,
+      "apps": 36,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 1.0604722326279514e-5,
+        "p50": 2.7486202372029034e-5,
+        "p95": 6.653369941889142e-5,
+        "replace": true
+      },
+      "dNamedKB": 691.059,
+      "dP": 2.9257862443565763e-5,
+      "dWrongKB": 0.0,
+      "headroomKB": 0.5786877210702889,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    },
+    "remin3-esbuild": {
+      "P_base": 0.9967903715818147,
+      "addedWrongKB": 1.468,
+      "apps": 72,
+      "appsWrongUp": 11,
+      "boot": {
+        "below0": 0.00015,
+        "p05": 5.184819334536073e-5,
+        "p50": 0.00018167383578848728,
+        "p95": 0.000516704969230064,
+        "replace": false
+      },
+      "dNamedKB": 8356.019,
+      "dP": 0.00022730148262872785,
+      "dWrongKB": 1.468,
+      "headroomKB": 25.35171604529618,
+      "maxAppAddKB": 0.463,
+      "top1": 0.31539509536784743,
+      "top3": 0.6164850136239782,
+      "top5": 0.7213896457765667
+    },
+    "remin3-terser": {
+      "P_base": 0.9984858814983958,
+      "addedWrongKB": 0.0,
+      "apps": 72,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 1.286099811836916e-5,
+        "p50": 5.911421625937052e-5,
+        "p95": 0.00011214997440978092,
+        "replace": false
+      },
+      "dNamedKB": 1423.043,
+      "dP": 5.9898372079647544e-5,
+      "dWrongKB": 0.0,
+      "headroomKB": 2.1546557348783617,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    },
+    "remin4-esbuild": {
+      "P_base": 0.994005679593057,
+      "addedWrongKB": 1.879,
+      "apps": 144,
+      "appsWrongUp": 17,
+      "boot": {
+        "below0": 0.0,
+        "p05": 6.110728004482535e-5,
+        "p50": 0.00021229910971720667,
+        "p95": 0.0005367412036192398,
+        "replace": false
+      },
+      "dNamedKB": 10636.255,
+      "dP": 0.00024097207556705857,
+      "dWrongKB": 1.879,
+      "headroomKB": 61.878120399949864,
+      "maxAppAddKB": 0.592,
+      "top1": 0.3150612027674295,
+      "top3": 0.552421500798297,
+      "top5": 0.6343799893560405
+    },
+    "remin4-terser": {
+      "P_base": 0.9959776117165553,
+      "addedWrongKB": 0.0,
+      "apps": 144,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 2.562056142596525e-5,
+        "p50": 8.885724497442737e-5,
+        "p95": 0.0003210963071679229,
+        "replace": false
+      },
+      "dNamedKB": 3071.06,
+      "dP": 0.00013482062549741158,
+      "dWrongKB": 0.0,
+      "headroomKB": 12.35299576175568,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    }
+  }
+}
