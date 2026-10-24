@@ -1,0 +1,186 @@
+apps-esbuild lost claim TW>:7.8 TW<:6.1 -W<:1.6 TW=:0.1
+apps-esbuild lost ctx T<=W:8.8 T>W:6.8
+apps-esbuild lost excl TW<:6.8 T->:3.7 TW>:3.6 -W<:1.3 TW=:0.1
+apps-esbuild lost exclClaim TW>:7.3 TW<:6.5 -W<:1.6 TW=:0.1
+apps-esbuild lost held TW<:8.5 TW>:4.7 T->:2.1 -W<:0.2 TW=:0.1
+apps-esbuild lost total all:15.6
+apps-esbuild won claim T->:9752.3 TW>:1432.3 TW<:1331.0 --=:0.4
+apps-esbuild won ctx T<=W:11340.3 T>W:1175.6
+apps-esbuild won excl T->:9609.8 TW>:1494.6 TW<:1386.9 --=:20.4 -W<:4.2
+apps-esbuild won exclClaim T->:9752.3 TW>:1449.4 TW<:1313.9 --=:0.4
+apps-esbuild won held T->:5675.6 TW>:5006.3 TW<:1819.7 -W<:8.8 --=:4.8 TW=:0.7
+apps-esbuild won total all:12515.9
+apps-rollup lost claim TW>:116.1 -W<:96.2 TW<:35.2 T->:0.9
+apps-rollup lost ctx T<=W:238.1 T>W:9.4 ?:0.9
+apps-rollup lost excl T->:111.7 -W<:82.7 TW<:34.7 --=:14.0 TW>:5.3
+apps-rollup lost exclClaim TW>:116.3 -W<:96.2 TW<:35.0 T->:0.9
+apps-rollup lost held T->:111.7 -W<:82.4 TW<:40.6 --=:10.9 TW>:2.8
+apps-rollup lost total all:248.4
+apps-rollup won claim T->:4137.3 TW<:760.7 TW>:309.1 --=:0.7
+apps-rollup won ctx T<=W:4685.7 T>W:522.1
+apps-rollup won excl T->:3497.4 TW<:958.3 TW>:472.0 -W<:161.4 --=:118.6
+apps-rollup won exclClaim T->:4137.3 TW<:756.7 TW>:313.1 --=:0.7
+apps-rollup won held TW>:2033.9 T->:1805.3 TW<:1119.9 -W<:154.8 --=:93.9
+apps-rollup won total all:5207.7
+apps-webpack lost claim -W<:60.5 TW>:10.1 TW<:3.2 T->:1.9
+apps-webpack lost ctx T<=W:66.3 T>W:9.4
+apps-webpack lost excl --=:39.6 -W<:20.1 TW>:12.0 TW<:2.2 T->:1.9
+apps-webpack lost exclClaim -W<:60.5 TW>:12.0 T->:1.9 TW<:1.3
+apps-webpack lost held TW>:35.5 -W<:22.4 --=:11.9 TW<:4.1 T->:1.9
+apps-webpack lost total all:75.7
+apps-webpack won claim T->:3473.2 TW<:765.7 TW>:308.0 -W<:10.8 --=:0.3
+apps-webpack won ctx T<=W:4070.2 T>W:487.8
+apps-webpack won excl T->:3417.6 TW<:746.6 TW>:346.9 -W<:25.9 --=:21.0
+apps-webpack won exclClaim T->:3473.2 TW<:735.3 TW>:338.4 -W<:10.8 --=:0.3
+apps-webpack won held TW>:2012.4 T->:1656.3 TW<:850.2 -W<:31.7 --=:7.5
+apps-webpack won total all:4558.0
+dev-rollup lost claim -W<:0.5
+dev-rollup lost ctx T<=W:0.5
+dev-rollup lost excl TW<:0.5
+dev-rollup lost exclClaim -W<:0.5
+dev-rollup lost held TW<:0.5
+dev-rollup lost total all:0.5
+dev-rollup won claim T->:251.2 TW>:2.9 TW<:1.1
+dev-rollup won ctx T<=W:246.0 T>W:9.2
+dev-rollup won excl T->:230.1 --=:17.5 TW>:6.6 -W<:1.0 TW<:0.1
+dev-rollup won exclClaim T->:251.2 TW>:2.9 TW<:1.1
+dev-rollup won held T->:205.2 TW>:28.7 --=:16.9 TW<:2.8 -W<:1.6
+dev-rollup won total all:255.3
+dev-webpack lost claim -W<:0.5 TW>:0.4
+dev-webpack lost ctx T<=W:0.9
+dev-webpack lost excl TW<:0.5 TW>:0.4
+dev-webpack lost exclClaim -W<:0.5 TW>:0.4
+dev-webpack lost held TW<:0.5 TW>:0.4
+dev-webpack lost total all:0.9
+dev-webpack won claim T->:162.9 TW>:3.1 TW<:1.4
+dev-webpack won ctx T<=W:161.1 T>W:6.4
+dev-webpack won excl T->:160.0 --=:2.9 TW>:2.4 TW<:2.1
+dev-webpack won exclClaim T->:162.9 TW>:3.1 TW<:1.4
+dev-webpack won held T->:153.3 TW>:10.1 --=:2.9 TW<:1.2
+dev-webpack won total all:167.5
+esbuild-app lost claim TW>:17.7 TW<:1.5
+esbuild-app lost ctx T<=W:19.1
+esbuild-app lost excl TW>:17.7 TW<:1.5
+esbuild-app lost exclClaim TW>:17.7 TW<:1.5
+esbuild-app lost held TW>:17.7 TW<:1.5
+esbuild-app lost total all:19.1
+esbuild-app won claim T->:673.5 TW>:426.9 TW<:85.8
+esbuild-app won ctx T<=W:1049.8 T>W:136.4
+esbuild-app won excl T->:599.8 TW>:497.3 TW<:89.1
+esbuild-app won exclClaim T->:673.5 TW>:426.7 TW<:86.1
+esbuild-app won held TW>:799.2 T->:225.1 TW<:161.9
+esbuild-app won total all:1186.2
+heldout lost claim -W<:58.9 TW<:33.1 TW>:29.3 T->:5.0
+heldout lost ctx T>W:85.1 T<=W:40.8 ?:0.3
+heldout lost excl TW<:79.6 TW>:24.2 T->:10.4 -W<:7.6 --=:4.4
+heldout lost exclClaim -W<:58.9 TW<:32.8 TW>:29.6 T->:5.0
+heldout lost held TW<:85.5 TW>:27.8 -W<:7.0 T->:4.6 --=:1.2
+heldout lost total all:126.2
+heldout won claim T->:10272.6 TW>:3787.1 TW<:2340.6
+heldout won ctx T<=W:14448.2 T>W:1952.0
+heldout won excl T->:9960.5 TW>:3993.8 TW<:2407.5 --=:30.3 -W<:8.1
+heldout won exclClaim T->:10272.9 TW>:3907.9 TW<:2219.5
+heldout won held TW>:8855.5 T->:3966.9 TW<:3559.4 -W<:13.0 --=:5.5
+heldout won total all:16400.2
+pop-bun lost claim -W<:51.7 TW<:35.4 TW>:34.2 T->:25.9 TW=:0.8
+pop-bun lost ctx T>W:70.0 T<=W:56.9 ?:21.3
+pop-bun lost excl TW<:70.2 TW>:33.4 T->:27.4 -W<:10.6 --=:4.1 TW=:2.4
+pop-bun lost exclClaim -W<:51.7 TW>:34.9 TW<:34.7 T->:25.9 TW=:0.8
+pop-bun lost held TW<:71.7 TW>:42.5 T->:21.3 -W<:11.9 TW=:0.8
+pop-bun lost total all:148.1
+pop-bun won claim T->:11035.4 TW>:3561.5 TW<:3233.4 --=:0.4
+pop-bun won ctx T<=W:15780.1 T>W:2050.6
+pop-bun won excl T->:10524.7 TW>:4183.6 TW<:3049.0 --=:58.9 -W<:14.5
+pop-bun won exclClaim T->:11035.7 TW>:3593.7 TW<:3200.9 --=:0.4
+pop-bun won held TW>:10075.9 TW<:3902.5 T->:3802.4 -W<:45.9 --=:3.9 TW=:0.1
+pop-bun won total all:17830.7
+pop-esbuild lost claim TW>:140.4 TW<:29.3 -W<:10.2 TW=:0.5
+pop-esbuild lost ctx T<=W:148.8 T>W:31.5
+pop-esbuild lost excl TW>:121.3 TW<:30.0 T->:18.3 -W<:8.2 --=:2.0 TW=:0.5
+pop-esbuild lost exclClaim TW>:139.5 TW<:30.2 -W<:10.2 TW=:0.5
+pop-esbuild lost held TW>:125.1 TW<:31.8 T->:14.6 -W<:6.8 --=:1.6 TW=:0.5
+pop-esbuild lost total all:180.4
+pop-esbuild won claim T->:11958.4 TW>:3536.5 TW<:2870.0 --=:0.4
+pop-esbuild won ctx T<=W:16364.4 T>W:2000.8
+pop-esbuild won excl T->:11366.7 TW>:4233.6 TW<:2732.2 --=:17.1 -W<:15.6
+pop-esbuild won exclClaim T->:11958.4 TW>:3547.0 TW<:2859.4 --=:0.4
+pop-esbuild won held TW>:10035.4 T->:4990.2 TW<:3323.0 -W<:13.6 --=:3.1
+pop-esbuild won total all:18365.2
+remin-esbuild lost claim TW>:10.6 TW<:1.2 -W<:0.5
+remin-esbuild lost ctx T>W:8.7 T<=W:3.6
+remin-esbuild lost excl TW>:10.6 TW<:1.5 -W<:0.3
+remin-esbuild lost exclClaim TW>:10.6 TW<:1.2 -W<:0.5
+remin-esbuild lost held TW>:10.6 TW<:1.5 -W<:0.3
+remin-esbuild lost total all:12.3
+remin-esbuild won claim T->:3186.5 TW>:432.8 TW<:394.7
+remin-esbuild won ctx T<=W:3605.4 T>W:408.6
+remin-esbuild won excl T->:3098.0 TW>:549.4 TW<:353.2 --=:12.5 -W<:1.0
+remin-esbuild won exclClaim T->:3186.5 TW>:433.2 TW<:394.3
+remin-esbuild won held T->:2117.3 TW>:1396.6 TW<:489.4 --=:6.3 -W<:4.4
+remin-esbuild won total all:4014.0
+remin-terser lost claim TW>:0.6 -W<:0.4
+remin-terser lost ctx T>W:0.5 T<=W:0.5
+remin-terser lost excl TW<:0.6 -W<:0.3 TW>:0.1
+remin-terser lost exclClaim TW>:0.6 -W<:0.4
+remin-terser lost held TW<:0.6 -W<:0.3 TW>:0.1
+remin-terser lost total all:1.1
+remin-terser won claim T->:265.0 TW>:31.3 TW<:25.3
+remin-terser won ctx T<=W:287.2 T>W:34.4
+remin-terser won excl T->:248.5 TW>:48.2 TW<:24.1 --=:0.8
+remin-terser won exclClaim T->:265.0 TW>:30.5 TW<:26.1
+remin-terser won held T->:188.5 TW>:87.0 TW<:45.3 --=:0.7
+remin-terser won total all:321.5
+remin3-esbuild lost claim TW>:31.6 TW<:9.8
+remin3-esbuild lost ctx T<=W:39.2 T>W:2.3
+remin3-esbuild lost excl TW<:38.4 T->:2.3 TW>:0.8
+remin3-esbuild lost exclClaim TW<:38.4 TW>:3.1
+remin3-esbuild lost held TW<:23.4 TW>:15.8 T->:2.3
+remin3-esbuild lost total all:41.5
+remin3-esbuild won claim T->:5344.1 TW>:1098.9 TW<:603.4
+remin3-esbuild won ctx T<=W:6393.6 T>W:652.9
+remin3-esbuild won excl T->:5105.1 TW>:1330.2 TW<:584.0 --=:23.1 -W<:3.9 TW=:0.1
+remin3-esbuild won exclClaim T->:5344.1 TW>:1091.0 TW<:611.4
+remin3-esbuild won held T->:3458.2 TW>:2431.8 TW<:1135.0 --=:12.1 -W<:9.4
+remin3-esbuild won total all:7046.5
+remin3-terser lost claim TW>:1.8 -W<:1.4 T->:0.7
+remin3-terser lost ctx T<=W:2.5 T>W:1.3
+remin3-terser lost excl TW>:1.6 T->:1.3 -W<:0.9 TW<:0.1
+remin3-terser lost exclClaim TW>:1.8 -W<:1.4 T->:0.7
+remin3-terser lost held TW>:2.0 T->:0.8 TW<:0.5 -W<:0.4
+remin3-terser lost total all:3.8
+remin3-terser won claim T->:646.7 TW>:74.2 TW<:47.2
+remin3-terser won ctx T<=W:711.5 T>W:56.7
+remin3-terser won excl T->:597.2 TW>:134.0 TW<:31.2 --=:5.4 -W<:0.3
+remin3-terser won exclClaim T->:646.7 TW>:74.2 TW<:47.2
+remin3-terser won held T->:462.3 TW>:230.8 TW<:69.4 -W<:5.5 --=:0.2
+remin3-terser won total all:768.2
+remin4-esbuild lost claim TW<:75.2 TW>:21.7 -W<:4.5 T->:1.1
+remin4-esbuild lost ctx T>W:88.3 T<=W:14.1
+remin4-esbuild lost excl TW>:84.4 TW<:9.8 T->:4.1 -W<:2.7 --=:1.5
+remin4-esbuild lost exclClaim TW<:75.2 TW>:21.7 -W<:4.5 T->:1.1
+remin4-esbuild lost held TW>:84.5 TW<:12.2 T->:3.1 --=:1.5 -W<:1.2
+remin4-esbuild lost total all:102.5
+remin4-esbuild won claim T->:14157.4 TW>:2319.0 TW<:1523.9
+remin4-esbuild won ctx T<=W:16567.8 T>W:1432.5
+remin4-esbuild won excl T->:13579.6 TW>:2780.8 TW<:1559.9 --=:65.8 -W<:14.2
+remin4-esbuild won exclClaim T->:14157.7 TW>:2334.5 TW<:1508.1
+remin4-esbuild won held T->:8829.9 TW>:6328.1 TW<:2776.4 -W<:38.9 --=:26.4 TW=:0.7
+remin4-esbuild won total all:18000.3
+remin4-terser lost claim TW>:5.5 -W<:4.4 TW<:2.7 T->:0.7
+remin4-terser lost ctx T<=W:7.1 T>W:6.1
+remin4-terser lost excl TW>:6.9 -W<:2.9 TW<:1.8 T->:1.6
+remin4-terser lost exclClaim TW>:5.5 -W<:4.4 TW<:2.7 T->:0.7
+remin4-terser lost held TW>:8.7 TW<:2.1 -W<:1.7 T->:0.7
+remin4-terser lost total all:13.2
+remin4-terser won claim T->:1406.1 TW<:117.3 TW>:105.8
+remin4-terser won ctx T<=W:1536.8 T>W:92.3
+remin4-terser won excl T->:1280.7 TW>:246.9 TW<:92.2 --=:8.7 -W<:0.6
+remin4-terser won exclClaim T->:1406.1 TW<:117.6 TW>:105.5
+remin4-terser won held T->:930.4 TW>:481.7 TW<:209.7 -W<:6.9 --=:0.5
+remin4-terser won total all:1629.1
+wrangler won claim T->:126.4 TW<:0.1
+wrangler won ctx T<=W:121.7 T>W:4.8
+wrangler won excl T->:125.6 --=:0.7 -W<:0.1 TW<:0.1
+wrangler won exclClaim T->:126.4 TW<:0.1
+wrangler won held T->:86.9 TW>:38.2 --=:0.7 TW<:0.5 -W<:0.1
+wrangler won total all:126.5
