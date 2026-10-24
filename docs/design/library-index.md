@@ -502,3 +502,68 @@ runs offline against a registry snapshot except npm installs):
 one command, with `seed-work.sh` beside it for the work dir. Since
 exp111 (mimalloc) the builder's memory is flat, so step 3's short-lived
 chunks are optional.
+
+## 11. Where the library score stands (F1 campaign close, 2026-10-24)
+
+The overnight campaign (exp139-exp149, ending 2026-10-24) ended with one change adopted, the as-of index above,
+and every other lever refuted or not flippable. Main's defaults on `k2-all-r5-origin-prod-asof20261015`
+(scorer 14, both scopes; labels `*-exp142-asof`):
+
+| sets                                             | precision                     | recall | F0.5  |
+| ------------------------------------------------ | ----------------------------- | ------ | ----- |
+| plain bundles (test, test2, held-out, pop, apps) | 99.0-99.7 (test2-rollup 96.5) | 69-82  | 91-95 |
+| re-minified, esbuild (remin, remin2-4)           | 99.4-99.7                     | 46-52  | 81-84 |
+| re-minified, terser (remin, remin2-4)            | 99.6-99.9                     | 17-20  | 50-56 |
+
+App claimed is 0 on every judge set. Precision is at the bar almost everywhere, so what is left is recall.
+
+**Where the missed bytes go.** On the plain sets, 50-77% of missed library bytes are units whose (package, version)
+the index holds (exp142, exp143). On held-out (36 MB missed at an indexed version), the main causes are:
+
+- the isolation veto drops a seed no neighbour of the same family supports: 8.5 MB;
+- the bundle's print differs from the indexed one: 10.5 MB;
+- units too small to print, under the index's 20-node floor: 3.7 MB;
+- units under the lookup's 30-node floor: 3.6 MB;
+- ties and the other discovery guards: about 5 MB.
+
+The rest of the misses is packages or versions the index does not hold. On terser sets the print itself mostly
+does not survive: terser merges statements, inlines, rewrites control flow and drops code, so a unit's shape
+differs from every indexed build (remin3: 20-44 MB of print-differs, 24-49 MB of partial function cover).
+
+**Refuted or not flipped.** Every branch below is pushed and not merged; each README carries the numbers.
+
+- **Terser slices and statement anchors** (`exp139-carriers`, `exp140`, `exp141-terser-statements`, default-off
+  keys `terser_*`): precision fell on the frozen remin2 judge twice. Paused. Do not re-judge a variant on remin2.
+- **Relaxing the isolation veto**:
+  - `veto_support = "all-rules"` (exp143) gained about +1 F0.5 on most dev sets.
+  - `veto_support = "shown"` (`exp144-veto-flip`, default-off key, crates only on that branch) adds 0 wrong bytes
+    on 252 dev terser apps. It still fails remin2-terser P -0.069 and adds 592 B of app claimed on remin4-esbuild.
+    Andrew skipped it 2026-10-24.
+  - Its residual errors extend wrong families main already claims, and no generic guard separates them
+    (`exp147-shown-guard`, 7 guards simulated).
+- **Indexing carriers** (`exp148-carrier-coverage`: 269 top-25k packages holding verbatim copies, 595 versions):
+  it fixes the copy-is-bundled case but refuses the original wherever the original is bundled. Fails the bar on
+  15 of 17 dev sets (-4.3 MB named). Main's 6.91 MB of dev wrong-family bytes:
+  - 55% at an indexed version;
+  - 23% at an unindexed version;
+  - 14.5% from an unindexed package.
+- **Bundle-level tie vote** (`exp149-bundle-tie-vote`): lost ties are 989 KB against 109 MB of won ties, and in 61%
+  of the lost ones both families show elsewhere in the bundle. No vote rule is net-positive on every dev set.
+  This joins exp133, exp134 and exp139 as tie-breaks that do not work.
+
+**Measurement lessons** (exp145, merged):
+
+- A 36-app terser judge absorbs only about 1-3 KB of new wrong bytes before its precision drops, so it cannot
+  certify a small change either way.
+- A rule picked on the same dev corpora it is measured on reads optimistic (exp141).
+- exp145's two-check dev screen for terser changes is in its README.
+- remin4 (exp146, 144 apps, merged) is the largest terser dev corpus.
+
+**Cheap leads left** (exp148):
+
+- 1,379 pinned versions (448 packages) own no rows, mostly esbuild syntax errors and missing loaders for non-JS
+  assets (`.vue`, `.node`, `.woff2`, ...).
+- Prereleases are never indexed.
+
+A real recall gain on terser code needs a print that is invariant to terser's compress transforms, or undoing them
+before lookup. That is a project of its own, not a tuning lever.
