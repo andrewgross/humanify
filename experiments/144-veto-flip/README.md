@@ -41,7 +41,8 @@ Dev corpora only (held-out by aggregate; test / test2 / remin2 never scored or d
 - **Builder check (plan only, no rebuild):** a unit row whose `moduleBytes` exceeds its installed file's size by
   a margin (Bun map defect: a row filed under a small file holding another package's large module) should be
   dropped or refiled at index build time.
-- **Neutrality** (keys off, warm, vs `bdd468b5b`, 2.1.215 -> 2.1.216): see §5.
+- **Neutrality** (keys off, warm, vs `bdd468b5b`, 2.1.215 -> 2.1.216): NEUTRAL 0 / 0, +0 / +0, default AND report
+  mode (`library-report.json` identical). Gate 13/13 bare.
 
 ## 1. What was run
 
@@ -138,12 +139,12 @@ Bases: `test-exp142-asof`, `test2-exp142-asof`, `remin2-exp142-asof` (main defau
 
 ## 5. Gate and neutrality
 
-| check                                                                                  | result                                                                    |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| red -> green: `shown_support_*` (3 discovery tests), `the_exp144_shown_veto_support_*` | red seen for each (assertion failures with the condition off), then green |
-| warm neutrality, default, `8592e0e9d` vs `bdd468b5b`, 2.1.215 -> 2.1.216               | NEUTRALITY_DEFAULT                                                        |
-| warm neutrality, report mode (`library.matching=report`, new index), same pair         | NEUTRALITY_REPORT                                                         |
-| `npm run check` (bare, `/work/exp144-data/gate.log`)                                   | GATE_RESULT                                                               |
+| check                                                                                                                  | result                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| red -> green: `shown_support_*` (3 discovery tests), `the_exp144_shown_veto_support_*`                                 | red seen for each (assertion failures with the condition off), then green              |
+| warm neutrality, default, `8592e0e9d` vs `bdd468b5b`, 2.1.215 -> 2.1.216                                               | NEUTRAL: 0 files / 0 lines, cache candidate +0 / baseline +0, exit 0 / 0               |
+| warm neutrality, report mode (`library.matching=report`, new index), `dabb391eb` (crates = `8592e0e9d`) vs `bdd468b5b` | NEUTRAL: 0 files / 0 lines, +0 / +0, exit 0 / 0; `library-report.json` byte-identical  |
+| `npm run check` (bare, `/work/exp144-data/gate.log`)                                                                   | exit 0, ALL 13 STAGES PASSED on `dabb391eb` (the crates of the commit with this table) |
 
 ## 6. Files
 
