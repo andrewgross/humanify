@@ -1,0 +1,173 @@
+{
+ "bundleSha256": "9a87705ec45be3f49f2a622580a1034e1555b71fd0b07bdd550cf74d83bc77f0",
+ "claimedBytes": {
+  "family": 148393,
+  "foreign": 64728,
+  "origin": 3515,
+  "right": 5645040,
+  "unmapped": 4016,
+  "wrongFamily": 2369
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin4-esbuild-vscode_gh-antfu__vscode-browse-lite-443e15",
+ "exploratory": {
+  "names": {
+   "bindings": 54415,
+   "bindingsSameVersion": 54264,
+   "bindingsVersionKnown": 54415,
+   "exactBytes": 3806950,
+   "exactUnits": 5091,
+   "sameVersionShare": 0.997225
+  }
+ },
+ "indexId": "8f8203a0537719c13a7c13d194afc5d267792e354162048f6ecceff5704364ff",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.704245,
+  "f1": 0.487873,
+  "namedBytes": 3837209,
+  "precision": 0.999877,
+  "recall": 0.322653
+ },
+ "label": "remin4-exp148-car",
+ "missBytes": {
+  "a": 51957,
+  "b": 487780,
+  "c": 556200,
+  "d-absent": 727492,
+  "d-file": 3357855,
+  "d-variant": 8015,
+  "e-ambig": 38899,
+  "e-other": 644587,
+  "e-support": 45270,
+  "e-veto": 170407,
+  "f": 7269
+ },
+ "noDiscovery": null,
+ "reportSha256": "0a819c68a9a913126301b85a944b07cb9ddcad58c9d5a72f897a15812fece47a",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 148393,
+    "foreign": 64728,
+    "origin": 3515,
+    "right": 5530566,
+    "unmapped": 3972,
+    "wrongFamily": 1528
+   },
+   "copyBytes": 207688,
+   "f05": 0.825289,
+   "f05ShipperOnly": 0.824779,
+   "f1": 0.654092,
+   "f1ShipperOnly": 0.653687,
+   "libraryBytes": 11691164,
+   "missBytes": {
+    "a": 40218,
+    "b": 487780,
+    "c": 549849,
+    "d-absent": 727492,
+    "d-file": 3297856,
+    "d-variant": 8015,
+    "e-ambig": 38562,
+    "e-other": 640956,
+    "e-support": 42917,
+    "e-veto": 167776,
+    "f": 7269
+   },
+   "namedAsOriginBytes": 3515,
+   "namedBytes": 5682474,
+   "namedBytesShipperOnly": 5678959,
+   "precision": 0.999731,
+   "precisionShipperOnly": 0.999113,
+   "recall": 0.486049,
+   "recallShipperOnly": 0.485748,
+   "statementBytes": {
+    "<foreign>": 120900,
+    "<unmapped>": 23400,
+    "copy": 207688,
+    "library": 11691164
+   },
+   "wrongFamilyBytes": 1528,
+   "wrongFamilyBytesShipperOnly": 5043
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "right": 114474,
+    "unmapped": 44,
+    "wrongFamily": 841
+   },
+   "copyBytes": 79556,
+   "f05": 0.863596,
+   "f05ShipperOnly": 0.863596,
+   "f1": 0.722621,
+   "f1ShipperOnly": 0.722621,
+   "libraryBytes": 201515,
+   "missBytes": {
+    "a": 11739,
+    "c": 6351,
+    "d-file": 59999,
+    "e-ambig": 337,
+    "e-other": 3631,
+    "e-support": 2353,
+    "e-veto": 2631
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 114474,
+   "namedBytesShipperOnly": 114474,
+   "precision": 0.992707,
+   "precisionShipperOnly": 0.992707,
+   "recall": 0.568067,
+   "recallShipperOnly": 0.568067,
+   "statementBytes": {
+    "<app>": 795,
+    "<unmapped>": 10240,
+    "copy": 79556,
+    "library": 201515
+   },
+   "wrongFamilyBytes": 841,
+   "wrongFamilyBytesShipperOnly": 841
+  }
+ },
+ "set": "remin4-esbuild",
+ "statementBytes": {
+  "<app>": 795,
+  "<foreign>": 120900,
+  "<unmapped>": 33640,
+  "copy": 287244,
+  "library": 11892679
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 287244,
+  "f05": 0.826013,
+  "f05ShipperOnly": 0.825512,
+  "f1": 0.655318,
+  "f1ShipperOnly": 0.654921,
+  "libraryBytes": 11892679,
+  "namedAsOriginBytes": 3515,
+  "namedAsShipperBytes": 5793433,
+  "namedBytes": 5796948,
+  "namedBytesShipperOnly": 5793433,
+  "precision": 0.999592,
+  "precisionShipperOnly": 0.998985,
+  "recall": 0.487438,
+  "recallShipperOnly": 0.487143,
+  "wrongFamilyBytes": 2369,
+  "wrongFamilyBytesShipperOnly": 5884
+ },
+ "truthMethod": "sourcemap"
+}

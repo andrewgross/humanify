@@ -1,0 +1,175 @@
+{
+ "bundleSha256": "077b7c73d08dad07c7384f654ee7bd3f4c22a89353ca53281f3f63d9931d44b1",
+ "claimedBytes": {
+  "family": 11363,
+  "origin": 13372,
+  "right": 2179289,
+  "self": 1756,
+  "unmapped": 780,
+  "wrongFamily": 11854
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin4-terser-cli_remotion_cli-0ec4d1",
+ "exploratory": {
+  "names": {
+   "bindings": 1996,
+   "bindingsSameVersion": 1548,
+   "bindingsVersionKnown": 1996,
+   "exactBytes": 458631,
+   "exactUnits": 468,
+   "sameVersionShare": 0.775551
+  }
+ },
+ "indexId": "8f8203a0537719c13a7c13d194afc5d267792e354162048f6ecceff5704364ff",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.14617,
+  "f1": 0.064098,
+  "namedBytes": 403374,
+  "precision": 0.998465,
+  "recall": 0.033112
+ },
+ "label": "remin4-exp148-car-shown",
+ "missBytes": {
+  "a": 118187,
+  "b": 1427500,
+  "c": 271766,
+  "d-absent": 4160302,
+  "d-file": 3886395,
+  "d-variant": 8657,
+  "e-ambig": 5073,
+  "e-other": 22273,
+  "e-spec": 155,
+  "e-support": 26697,
+  "e-veto": 16744,
+  "f": 34164
+ },
+ "noDiscovery": null,
+ "reportSha256": "266d431bebaa3041a9e182de349ffd38f934e24f3fd0c02beaf14828964f7885",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 10768,
+    "origin": 13372,
+    "right": 2115497,
+    "self": 1756,
+    "unmapped": 712,
+    "wrongFamily": 11501
+   },
+   "copyBytes": 406871,
+   "f05": 0.538454,
+   "f05ShipperOnly": 0.535089,
+   "f1": 0.318993,
+   "f1ShipperOnly": 0.317,
+   "libraryBytes": 11263767,
+   "missBytes": {
+    "a": 105483,
+    "b": 1427500,
+    "c": 239021,
+    "d-absent": 4141157,
+    "d-file": 3097610,
+    "d-variant": 8657,
+    "e-ambig": 5073,
+    "e-other": 22273,
+    "e-spec": 155,
+    "e-support": 26293,
+    "e-veto": 16744,
+    "f": 34164
+   },
+   "namedAsOriginBytes": 13372,
+   "namedBytes": 2139637,
+   "namedBytesShipperOnly": 2126265,
+   "precision": 0.994654,
+   "precisionShipperOnly": 0.988437,
+   "recall": 0.189957,
+   "recallShipperOnly": 0.18877,
+   "statementBytes": {
+    "<foreign>": 61526,
+    "<self>": 201797,
+    "<unmapped>": 167198,
+    "copy": 406871,
+    "library": 11263767
+   },
+   "wrongFamilyBytes": 11501,
+   "wrongFamilyBytesShipperOnly": 24873
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 595,
+    "right": 63792,
+    "unmapped": 68,
+    "wrongFamily": 353
+   },
+   "copyBytes": 0,
+   "f05": 0.27349,
+   "f05ShipperOnly": 0.27349,
+   "f1": 0.131012,
+   "f1ShipperOnly": 0.131012,
+   "libraryBytes": 918170,
+   "missBytes": {
+    "a": 12704,
+    "c": 32745,
+    "d-absent": 19145,
+    "d-file": 788785,
+    "e-support": 404
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 64387,
+   "namedBytesShipperOnly": 64387,
+   "precision": 0.994547,
+   "precisionShipperOnly": 0.994547,
+   "recall": 0.070125,
+   "recallShipperOnly": 0.070125,
+   "statementBytes": {
+    "<app>": 89,
+    "<unmapped>": 68,
+    "library": 918170
+   },
+   "wrongFamilyBytes": 353,
+   "wrongFamilyBytesShipperOnly": 353
+  }
+ },
+ "set": "remin4-terser",
+ "statementBytes": {
+  "<app>": 89,
+  "<foreign>": 61526,
+  "<self>": 201797,
+  "<unmapped>": 167266,
+  "copy": 406871,
+  "library": 12181937
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 406871,
+  "f05": 0.523635,
+  "f05ShipperOnly": 0.520458,
+  "f1": 0.306161,
+  "f1ShipperOnly": 0.304304,
+  "libraryBytes": 12181937,
+  "namedAsOriginBytes": 13372,
+  "namedAsShipperBytes": 2190652,
+  "namedBytes": 2204024,
+  "namedBytesShipperOnly": 2190652,
+  "precision": 0.99465,
+  "precisionShipperOnly": 0.988616,
+  "recall": 0.180926,
+  "recallShipperOnly": 0.179828,
+  "wrongFamilyBytes": 11854,
+  "wrongFamilyBytesShipperOnly": 25226
+ },
+ "truthMethod": "sourcemap"
+}

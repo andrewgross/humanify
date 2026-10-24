@@ -1,0 +1,173 @@
+{
+ "bundleSha256": "353e201cbbe46b2022da59e6cb8d4cb27df6fad592f433a950edcd13443c2caa",
+ "claimedBytes": {
+  "family": 87650,
+  "foreign": 69415,
+  "right": 4410325,
+  "unmapped": 7762,
+  "wrongFamily": 104069
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin4-esbuild-electron_gh-lacymorrow__cinematic-341c5b",
+ "exploratory": {
+  "names": {
+   "bindings": 33884,
+   "bindingsSameVersion": 33143,
+   "bindingsVersionKnown": 33884,
+   "exactBytes": 3337178,
+   "exactUnits": 5115,
+   "sameVersionShare": 0.978131
+  }
+ },
+ "indexId": "8f8203a0537719c13a7c13d194afc5d267792e354162048f6ecceff5704364ff",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.738199,
+  "f1": 0.535675,
+  "namedBytes": 3236980,
+  "precision": 0.986961,
+  "recall": 0.367594
+ },
+ "label": "remin4-exp148-car",
+ "missBytes": {
+  "a": 228435,
+  "b": 615417,
+  "c": 308419,
+  "d-absent": 1175464,
+  "d-file": 1522713,
+  "d-variant": 1562,
+  "e-ambig": 41214,
+  "e-other": 191979,
+  "e-support": 28695,
+  "e-veto": 92449,
+  "f": 101523
+ },
+ "noDiscovery": null,
+ "reportSha256": "1a0efc9ca5c0048547b2f2a29a9f9431766ba656dfa680d6f2da616cd5267da5",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 64280,
+    "foreign": 69415,
+    "right": 3911653,
+    "unmapped": 7694,
+    "wrongFamily": 6405
+   },
+   "copyBytes": 5941,
+   "f05": 0.846858,
+   "f05ShipperOnly": 0.846858,
+   "f1": 0.689811,
+   "f1ShipperOnly": 0.689811,
+   "libraryBytes": 7545263,
+   "missBytes": {
+    "a": 216067,
+    "b": 615417,
+    "c": 267952,
+    "d-absent": 1170767,
+    "d-file": 1009217,
+    "d-variant": 1562,
+    "e-ambig": 21416,
+    "e-other": 149314,
+    "e-support": 27299,
+    "e-veto": 76704,
+    "f": 13615
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 3975933,
+   "namedBytesShipperOnly": 3975933,
+   "precision": 0.998392,
+   "precisionShipperOnly": 0.998392,
+   "recall": 0.526944,
+   "recallShipperOnly": 0.526944,
+   "statementBytes": {
+    "<app>": 4319,
+    "<foreign>": 128329,
+    "<unmapped>": 89631,
+    "copy": 5941,
+    "library": 7545263
+   },
+   "wrongFamilyBytes": 6405,
+   "wrongFamilyBytesShipperOnly": 6405
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 23370,
+    "right": 498672,
+    "unmapped": 68,
+    "wrongFamily": 97664
+   },
+   "copyBytes": 0,
+   "f05": 0.698028,
+   "f05ShipperOnly": 0.698028,
+   "f1": 0.555279,
+   "f1ShipperOnly": 0.555279,
+   "libraryBytes": 1260582,
+   "missBytes": {
+    "a": 12368,
+    "c": 40467,
+    "d-absent": 4697,
+    "d-file": 513496,
+    "e-ambig": 19798,
+    "e-other": 42665,
+    "e-support": 1396,
+    "e-veto": 15745,
+    "f": 87908
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 522042,
+   "namedBytesShipperOnly": 522042,
+   "precision": 0.842403,
+   "precisionShipperOnly": 0.842403,
+   "recall": 0.414128,
+   "recallShipperOnly": 0.414128,
+   "statementBytes": {
+    "<unmapped>": 109,
+    "library": 1260582
+   },
+   "wrongFamilyBytes": 97664,
+   "wrongFamilyBytesShipperOnly": 97664
+  }
+ },
+ "set": "remin4-esbuild",
+ "statementBytes": {
+  "<app>": 4319,
+  "<foreign>": 128329,
+  "<unmapped>": 89740,
+  "copy": 5941,
+  "library": 8805845
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 5941,
+  "f05": 0.826407,
+  "f05ShipperOnly": 0.826407,
+  "f1": 0.670944,
+  "f1ShipperOnly": 0.670944,
+  "libraryBytes": 8805845,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 4497975,
+  "namedBytes": 4497975,
+  "namedBytesShipperOnly": 4497975,
+  "precision": 0.977386,
+  "precisionShipperOnly": 0.977386,
+  "recall": 0.510794,
+  "recallShipperOnly": 0.510794,
+  "wrongFamilyBytes": 104069,
+  "wrongFamilyBytesShipperOnly": 104069
+ },
+ "truthMethod": "sourcemap"
+}

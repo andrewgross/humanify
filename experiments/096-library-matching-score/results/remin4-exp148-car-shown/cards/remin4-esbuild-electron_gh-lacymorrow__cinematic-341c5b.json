@@ -1,0 +1,173 @@
+{
+ "bundleSha256": "353e201cbbe46b2022da59e6cb8d4cb27df6fad592f433a950edcd13443c2caa",
+ "claimedBytes": {
+  "family": 89344,
+  "foreign": 69415,
+  "right": 4509063,
+  "unmapped": 8523,
+  "wrongFamily": 104069
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin4-esbuild-electron_gh-lacymorrow__cinematic-341c5b",
+ "exploratory": {
+  "names": {
+   "bindings": 34611,
+   "bindingsSameVersion": 33859,
+   "bindingsVersionKnown": 34611,
+   "exactBytes": 3369628,
+   "exactUnits": 5208,
+   "sameVersionShare": 0.978273
+  }
+ },
+ "indexId": "8f8203a0537719c13a7c13d194afc5d267792e354162048f6ecceff5704364ff",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.742063,
+  "f1": 0.540709,
+  "namedBytes": 3278662,
+  "precision": 0.987125,
+  "recall": 0.372328
+ },
+ "label": "remin4-exp148-car-shown",
+ "missBytes": {
+  "a": 228435,
+  "b": 615050,
+  "c": 302984,
+  "d-absent": 1121111,
+  "d-file": 1513359,
+  "d-variant": 1562,
+  "e-ambig": 41347,
+  "e-other": 191979,
+  "e-support": 28695,
+  "e-veto": 61393,
+  "f": 101523
+ },
+ "noDiscovery": null,
+ "reportSha256": "147693a6d71821b9e5549a11c8f2815d1565a1f356defb05b028be298a2285a0",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 65974,
+    "foreign": 69415,
+    "right": 4010391,
+    "unmapped": 8455,
+    "wrongFamily": 6405
+   },
+   "copyBytes": 5941,
+   "f05": 0.853641,
+   "f05ShipperOnly": 0.853641,
+   "f1": 0.701127,
+   "f1ShipperOnly": 0.701127,
+   "libraryBytes": 7545263,
+   "missBytes": {
+    "a": 216067,
+    "b": 615050,
+    "c": 262517,
+    "d-absent": 1116414,
+    "d-file": 999863,
+    "d-variant": 1562,
+    "e-ambig": 21549,
+    "e-other": 149314,
+    "e-support": 27299,
+    "e-veto": 45648,
+    "f": 13615
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 4076365,
+   "namedBytesShipperOnly": 4076365,
+   "precision": 0.998431,
+   "precisionShipperOnly": 0.998431,
+   "recall": 0.540255,
+   "recallShipperOnly": 0.540255,
+   "statementBytes": {
+    "<app>": 4319,
+    "<foreign>": 128329,
+    "<unmapped>": 89631,
+    "copy": 5941,
+    "library": 7545263
+   },
+   "wrongFamilyBytes": 6405,
+   "wrongFamilyBytesShipperOnly": 6405
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 23370,
+    "right": 498672,
+    "unmapped": 68,
+    "wrongFamily": 97664
+   },
+   "copyBytes": 0,
+   "f05": 0.698028,
+   "f05ShipperOnly": 0.698028,
+   "f1": 0.555279,
+   "f1ShipperOnly": 0.555279,
+   "libraryBytes": 1260582,
+   "missBytes": {
+    "a": 12368,
+    "c": 40467,
+    "d-absent": 4697,
+    "d-file": 513496,
+    "e-ambig": 19798,
+    "e-other": 42665,
+    "e-support": 1396,
+    "e-veto": 15745,
+    "f": 87908
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 522042,
+   "namedBytesShipperOnly": 522042,
+   "precision": 0.842403,
+   "precisionShipperOnly": 0.842403,
+   "recall": 0.414128,
+   "recallShipperOnly": 0.414128,
+   "statementBytes": {
+    "<unmapped>": 109,
+    "library": 1260582
+   },
+   "wrongFamilyBytes": 97664,
+   "wrongFamilyBytesShipperOnly": 97664
+  }
+ },
+ "set": "remin4-esbuild",
+ "statementBytes": {
+  "<app>": 4319,
+  "<foreign>": 128329,
+  "<unmapped>": 89740,
+  "copy": 5941,
+  "library": 8805845
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 5941,
+  "f05": 0.832569,
+  "f05ShipperOnly": 0.832569,
+  "f1": 0.680825,
+  "f1ShipperOnly": 0.680825,
+  "libraryBytes": 8805845,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 4598407,
+  "namedBytes": 4598407,
+  "namedBytesShipperOnly": 4598407,
+  "precision": 0.977869,
+  "precisionShipperOnly": 0.977869,
+  "recall": 0.522199,
+  "recallShipperOnly": 0.522199,
+  "wrongFamilyBytes": 104069,
+  "wrongFamilyBytesShipperOnly": 104069
+ },
+ "truthMethod": "sourcemap"
+}
