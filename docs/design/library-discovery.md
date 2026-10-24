@@ -457,6 +457,12 @@ The guards, in order:
    support is counted after the fixpoint's DOWN and GLUE rules, not
    MODULE's fills (core, 2026-10-11): a fill grown from the seed itself is
    not independent evidence (Claude Code 2.1.86's ink fork).
+   `veto_support = "shown"` (exp144, default off) relaxes that for a
+   family the bundle already shows without fills: an unambiguous seed of
+   such a family may count its module's fill as support. A family whose
+   every seed only its own fill supports (a lone copied file) and a seed
+   another family's prints also accept (a fork, a copy) are vetoed as
+   before; a seed the default veto keeps is never dropped.
 5. **No upward growth without evidence.** A caller of a library is app code
    until its own evidence says otherwise. UP regions are only a queue.
 6. **The closure guard on fills.** A fill never crosses a unit whose
