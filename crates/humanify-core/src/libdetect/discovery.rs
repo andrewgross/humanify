@@ -129,9 +129,11 @@ pub enum VetoSupport {
     /// `WithoutModule`'s support, or `AllRules`' for a seed whose family
     /// the bundle shows without the MODULE rule (exp144): one of the
     /// family's index seeds `WithoutModule` keeps, or a declared or banner
-    /// seed. A package whose every seed only its own module fill supports
-    /// (a lone file one package copied from another, whose own version the
-    /// index lacks) is vetoed as under `WithoutModule`; a seed `WithoutModule`
+    /// seed, and the index is not ambiguous about the seed (one family's
+    /// prints accept it: a fork's or a copy's seed gets no fill support). A
+    /// package whose every seed only its own module fill supports (a lone
+    /// file one package copied from another, whose own version the index
+    /// lacks) is vetoed as under `WithoutModule`; a seed `WithoutModule`
     /// keeps is never dropped (`AllRules` alone can drop one: its full
     /// fixpoint may give the neighbour to another family).
     Shown,
@@ -2513,6 +2515,11 @@ pub fn discover_with(
                 let relaxed = isolated(&st, &groups, &active, families, containment);
                 let mut drop: BTreeSet<u32> = strict.intersection(&relaxed).copied().collect();
                 drop.extend(unshown(&active, &strict, families));
+                drop.extend(
+                    strict
+                        .iter()
+                        .filter(|&&u| containment.is_some_and(|c| c.families_accepting(u) > 1)),
+                );
                 drop
             }
             VetoSupport::AllRules => isolated(&st, &groups, &active, families, containment),

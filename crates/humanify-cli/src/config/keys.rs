@@ -646,7 +646,8 @@ pub static KEYS: &[Key] = &[
         unset: "",
         doc: "What may support a seed against the isolation veto: \"without-module\", \
               \"all-rules\" (the lab prototype's), or \"shown\" (exp144: without-module's \
-              support, or all-rules' for a family the bundle shows without module fill).",
+              support, or all-rules' for an unambiguous seed of a family the bundle shows \
+              without module fill).",
     },
     Key {
         section: "library.discovery",

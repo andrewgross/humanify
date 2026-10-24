@@ -2,7 +2,8 @@
 base does not is dropped when its package had no kept seed in the base run of the same bundle (the base's strict
 veto removed every seed the package had: the bundle shows the package nowhere but in self-supported seeds).
 Reads newwrong.py rows + base reports. Prints KB per set: gained right kept / dropped, new wrong kept / dropped.
-usage: python3 -I simpresent.py <rows.json> <corpus>=<base label> ... [--split] [--out=<sim.json>]"""
+usage: python3 -I simpresent.py <rows.json> <corpus>=<base label> ... [--split] [--out=<sim.json>] [--min-units=N] [--min-bytes=B]
+  (the floor variants: a package counts as shown only with >= N kept seeds of >= B bytes in the base run)"""
 import collections
 import hashlib
 import json
@@ -19,20 +20,24 @@ def present(corpus, base, entry, cache={}):
     if k not in cache:
         lib096.use(corpus)
         r = json.load(open(os.path.join(lib096.DATA, "results", base, "reports", entry + ".json")))["libraryDiscovery"]
-        cache[k] = {p["package"] for p in r["packages"] if p["seedUnits"] > 0}
+        cache[k] = {p["package"]: (p["seedUnits"], p["seedBytes"]) for p in r["packages"] if p["seedUnits"] > 0}
     return cache[k]
 
 
 def main():
     rows = json.load(open(sys.argv[1]))
+    global MIN_UNITS, MIN_BYTES
     split = "--split" in sys.argv
+    MIN_UNITS = int(next((a.split("=")[1] for a in sys.argv if a.startswith("--min-units=")), 1))
+    MIN_BYTES = int(next((a.split("=")[1] for a in sys.argv if a.startswith("--min-bytes=")), 0))
     bases = dict(a.split("=", 1) for a in sys.argv[2:] if "=" in a and not a.startswith("--"))
     out = next((a.split("=", 1)[1] for a in sys.argv[2:] if a.startswith("--out=")), None)
     agg = collections.defaultdict(collections.Counter)
     for r in rows:
         if r["kind"] not in ("gainedRight", "newWrong") or r["new"] is None:
             continue
-        keep = r["new"] in present(r["corpus"], bases[r["corpus"]], r["entry"])
+        units, nbytes = present(r["corpus"], bases[r["corpus"]], r["entry"]).get(r["new"], (0, 0))
+        keep = units >= MIN_UNITS and nbytes >= MIN_BYTES
         s = r["set"]
         if split:
             s += "/h" + str(int(hashlib.sha256(r["entry"].encode()).hexdigest(), 16) % 2)

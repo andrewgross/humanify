@@ -1762,3 +1762,37 @@ fn shown_support_never_drops_a_seed_the_default_veto_keeps() {
         assert_eq!(r.claim("var realPriv"), Some(("ink", Rule::Seed, 0)));
     }
 }
+
+#[test]
+fn shown_support_never_lets_module_fill_vouch_for_a_seed_the_index_is_ambiguous_about() {
+    // P is shown (lib and dep support each other in their own module);
+    // big is P's seed in another module whose only neighbours are that
+    // module's fill. Held by P alone, `shown` lets the fill vouch for it;
+    // held by P and Q too (a fork, a copy), the fill vouches for nothing:
+    // vetoed, as under the default (`all-rules` keeps it).
+    let code = "var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);\nvar lib = function (t) { return t.split(\",\").map(dep).filter(Boolean).join(\"|\").concat(t.length); };\nvar dep = function (e) { return e.trim().toLowerCase().replace(/\\s+/g, \"-\").split(\"-\").filter(Boolean).slice(0, e.length); };\nvar y;\nvar init_a = __esm(() => { y = lib(\"z\"); });\nvar big = function (s) { return s.split(\"\").reverse().map(function (c) { return c.charCodeAt(0); }).filter(Boolean).join(\",\").concat(s.length); };\nvar x;\nvar init_m = __esm(() => { x = big; });\nvar app = () => (init_a(), init_m(), x + y);\n";
+    let with = |v: VetoSupport| DiscoveryOptions {
+        veto_support: v,
+        ..DiscoveryOptions::default()
+    };
+    let only_p = [
+        Held::whole("var lib", "P"),
+        Held::whole("var dep", "P"),
+        Held::whole("var big", "P"),
+    ];
+    let (_, found, rows) = run_indexed_with(code, &only_p, vec![], with(VetoSupport::Shown));
+    assert!(found.vetoed.is_empty());
+    assert_eq!(claim_of(&rows, "var big"), Some(("P".into(), Rule::Seed)));
+    let tied = [
+        Held::whole("var lib", "P"),
+        Held::whole("var dep", "P"),
+        Held::whole("var big", "P"),
+        Held::whole("var big", "Q"),
+    ];
+    let (_, _, rows) = run_indexed_with(code, &tied, vec![], with(VetoSupport::AllRules));
+    assert_eq!(claim_of(&rows, "var big"), Some(("P".into(), Rule::Seed)));
+    let (_, found, rows) = run_indexed_with(code, &tied, vec![], with(VetoSupport::Shown));
+    assert_eq!(found.vetoed.len(), 1);
+    assert_eq!(claim_of(&rows, "var big"), None);
+    assert_eq!(claim_of(&rows, "var lib"), Some(("P".into(), Rule::Seed)));
+}
