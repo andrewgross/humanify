@@ -1,0 +1,614 @@
+{
+  "exp140 terser_slices + exp139 keys": {
+    "eventStress": {
+      "atOrAboveT": 2,
+      "bundles": 501,
+      "pFail36": 0.13411241819162545,
+      "pFail36RuleOfThree": 0.19443941590768865,
+      "q": 0.003992015968063872,
+      "toleranceKB": 40.720631333759535
+    },
+    "judge": "FAIL",
+    "judge_dP": -0.194,
+    "maxAppAddAnyDevKB": 120.454,
+    "pooled-terser": {
+      "P_base": 0.9987170996559591,
+      "addedWrongKB": 314.349,
+      "apps": 108,
+      "appsWrongUp": 46,
+      "boot": {
+        "below0": 0.8543,
+        "p05": -0.003130003440858564,
+        "p50": -0.001047049913545206,
+        "p95": 0.0004053001154616931,
+        "replace": false
+      },
+      "dNamedKB": 95223.214,
+      "dP": -0.001191876267473857,
+      "dWrongKB": 299.747,
+      "headroomKB": -177.58510599872142,
+      "judgePercentile": 0.26025,
+      "maxAppAddKB": 120.454,
+      "top1": 0.38318556763342654,
+      "top3": 0.6315623717587777,
+      "top5": 0.7480793640189726
+    },
+    "sets": {
+      "remin-esbuild": {
+        "P_base": 0.9971906885599725,
+        "addedWrongKB": 0.0,
+        "apps": 36,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 0.0,
+          "p50": 3.7818652737220404e-6,
+          "p95": 1.5808476137246785e-5,
+          "replace": true
+        },
+        "dNamedKB": 83.225,
+        "dP": 4.515766511614672e-6,
+        "dWrongKB": 0.0,
+        "headroomKB": 0.23380494459628828,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      },
+      "remin-terser": {
+        "P_base": 0.9990187289830073,
+        "addedWrongKB": 34.436,
+        "apps": 36,
+        "appsWrongUp": 12,
+        "boot": {
+          "below0": 0.3823,
+          "p05": -0.0006747027198069633,
+          "p50": 0.00015951580587847403,
+          "p95": 0.0012605155778159238,
+          "replace": true
+        },
+        "dNamedKB": 30640.789,
+        "dP": 0.00014982570453603294,
+        "dWrongKB": 22.648,
+        "headroomKB": 7.418918183490153,
+        "judgePercentile": 0.0,
+        "maxAppAddKB": 18.05,
+        "top1": 0.5241607619932629,
+        "top3": 0.8264316413056104,
+        "top5": 0.89371587873156
+      },
+      "remin3-esbuild": {
+        "P_base": 0.9967891404030219,
+        "addedWrongKB": 1.176,
+        "apps": 72,
+        "appsWrongUp": 4,
+        "boot": {
+          "below0": 0.33945,
+          "p05": -1.1821007837697906e-5,
+          "p50": 4.300382063116004e-6,
+          "p95": 3.8277110345985577e-5,
+          "replace": false
+        },
+        "dNamedKB": 630.967,
+        "dP": 8.261010761123622e-6,
+        "dWrongKB": 1.176,
+        "headroomKB": 0.8499464473264736,
+        "maxAppAddKB": 0.792,
+        "top1": 0.673469387755102,
+        "top3": 0.9336734693877551,
+        "top5": 1.0
+      },
+      "remin3-terser": {
+        "P_base": 0.9985492597772324,
+        "addedWrongKB": 279.913,
+        "apps": 72,
+        "appsWrongUp": 34,
+        "boot": {
+          "below0": 0.94995,
+          "p05": -0.003657933476289621,
+          "p50": -0.0018450067591488928,
+          "p95": 7.917208976193635e-7,
+          "replace": false
+        },
+        "dNamedKB": 64582.425,
+        "dP": -0.0018483771906031565,
+        "dWrongKB": 277.099,
+        "headroomKB": -183.40667836862895,
+        "judgePercentile": 0.4736,
+        "maxAppAddKB": 120.454,
+        "top1": 0.4303265657543594,
+        "top3": 0.7092596628238059,
+        "top5": 0.8103982308788802
+      }
+    }
+  },
+  "exp140 terser_slices alone": {
+    "eventStress": {
+      "atOrAboveT": 3,
+      "bundles": 501,
+      "pFail36": 0.19443941590768865,
+      "pFail36RuleOfThree": 0.19443941590768865,
+      "q": 0.005988023952095809,
+      "toleranceKB": 40.8110685382458
+    },
+    "judge": "FAIL",
+    "judge_dP": -0.257,
+    "maxAppAddAnyDevKB": 276.534,
+    "pooled-terser": {
+      "P_base": 0.9987170996559591,
+      "addedWrongKB": 668.762,
+      "apps": 108,
+      "appsWrongUp": 53,
+      "boot": {
+        "below0": 0.97715,
+        "p05": -0.008734010899914546,
+        "p50": -0.0026415512295375754,
+        "p95": -0.00026502252082727384,
+        "replace": false
+      },
+      "dNamedKB": 95434.697,
+      "dP": -0.0035738223919863366,
+      "dWrongKB": 656.64,
+      "headroomKB": -534.2067943852627,
+      "judgePercentile": 0.5104,
+      "maxAppAddKB": 276.534,
+      "top1": 0.41350136520914765,
+      "top3": 0.6807892792951753,
+      "top5": 0.7469398679948921
+    },
+    "sets": {
+      "remin-esbuild": {
+        "P_base": 0.9969057262524184,
+        "addedWrongKB": 0.0,
+        "apps": 36,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 0.0,
+          "p50": 4.233283781518438e-6,
+          "p95": 1.720422537998534e-5,
+          "replace": true
+        },
+        "dNamedKB": 83.225,
+        "dP": 4.972403907843592e-6,
+        "dWrongKB": 0.0,
+        "headroomKB": 0.2575209326424823,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      },
+      "remin-terser": {
+        "P_base": 0.9990187289830073,
+        "addedWrongKB": 340.466,
+        "apps": 36,
+        "appsWrongUp": 16,
+        "boot": {
+          "below0": 0.9354,
+          "p05": -0.016989765651174715,
+          "p50": -0.00567348210568297,
+          "p95": 0.00011461083090358315,
+          "replace": true
+        },
+        "dNamedKB": 30782.827,
+        "dP": -0.00598500106067279,
+        "dWrongKB": 330.47,
+        "headroomKB": -300.2637040437982,
+        "judgePercentile": 0.63705,
+        "maxAppAddKB": 276.534,
+        "top1": 0.812222072101179,
+        "top3": 0.9070538614722174,
+        "top5": 0.9481622247155369
+      },
+      "remin3-esbuild": {
+        "P_base": 0.9967891404030219,
+        "addedWrongKB": 1.176,
+        "apps": 72,
+        "appsWrongUp": 4,
+        "boot": {
+          "below0": 0.33945,
+          "p05": -1.1821007837697906e-5,
+          "p50": 4.300382063116004e-6,
+          "p95": 3.8277110345985577e-5,
+          "replace": false
+        },
+        "dNamedKB": 630.967,
+        "dP": 8.261010761123622e-6,
+        "dWrongKB": 1.176,
+        "headroomKB": 0.8499464473264736,
+        "maxAppAddKB": 0.792,
+        "top1": 0.673469387755102,
+        "top3": 0.9336734693877551,
+        "top5": 1.0
+      },
+      "remin3-terser": {
+        "P_base": 0.9985492597772324,
+        "addedWrongKB": 328.296,
+        "apps": 72,
+        "appsWrongUp": 37,
+        "boot": {
+          "below0": 0.98855,
+          "p05": -0.004226629920376035,
+          "p50": -0.0023362947510848775,
+          "p95": -0.00042421060137820543,
+          "replace": false
+        },
+        "dNamedKB": 64651.87,
+        "dP": -0.0023394653214154904,
+        "dWrongKB": 326.17,
+        "headroomKB": -232.37693171385885,
+        "judgePercentile": 0.43685,
+        "maxAppAddKB": 125.637,
+        "top1": 0.38269427589736094,
+        "top3": 0.6205192874722811,
+        "top5": 0.7259150279016497
+      }
+    }
+  },
+  "exp141 + terser_anchor=all": {
+    "eventStress": {
+      "atOrAboveT": 0,
+      "bundles": 501,
+      "pFail36": 0.0,
+      "pFail36RuleOfThree": 0.19443941590768865,
+      "q": 0.0,
+      "toleranceKB": 35.57883132749432
+    },
+    "judge": "FAIL",
+    "judge_dP": -0.15,
+    "maxAppAddAnyDevKB": 24.103,
+    "pooled-terser": {
+      "P_base": 0.9987170996559591,
+      "addedWrongKB": 58.037,
+      "apps": 108,
+      "appsWrongUp": 31,
+      "boot": {
+        "below0": 0.15115,
+        "p05": -0.0003143807215015837,
+        "p50": 0.0005272456842092543,
+        "p95": 0.00162672992067181,
+        "replace": false
+      },
+      "dNamedKB": 83199.365,
+      "dP": 0.000579625794466132,
+      "dWrongKB": 27.724,
+      "headroomKB": 79.01249398248297,
+      "judgePercentile": 0.0,
+      "maxAppAddKB": 24.103,
+      "top1": 0.4153040301876389,
+      "top3": 0.5953960404569498,
+      "top5": 0.6789289591122905
+    },
+    "sets": {
+      "remin-esbuild": {
+        "P_base": 0.9971906885599725,
+        "addedWrongKB": 0.0,
+        "apps": 36,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 0.0,
+          "p50": 3.7818652737220404e-6,
+          "p95": 1.5808476137246785e-5,
+          "replace": true
+        },
+        "dNamedKB": 83.225,
+        "dP": 4.515766511614672e-6,
+        "dWrongKB": 0.0,
+        "headroomKB": 0.23380494459628828,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      },
+      "remin-terser": {
+        "P_base": 0.9990187289830073,
+        "addedWrongKB": 6.529,
+        "apps": 36,
+        "appsWrongUp": 8,
+        "boot": {
+          "below0": 0.0046,
+          "p05": 0.0002069452574551267,
+          "p50": 0.0007406273811612074,
+          "p95": 0.0016906625015898902,
+          "replace": true
+        },
+        "dNamedKB": 27472.257,
+        "dP": 0.0007654981309327402,
+        "dWrongKB": -8.62,
+        "headroomKB": 35.5777295654761,
+        "judgePercentile": 0.0,
+        "maxAppAddKB": 1.859,
+        "top1": 0.2847296676366978,
+        "top3": 0.6396079032011027,
+        "top5": 0.9182110583550314
+      },
+      "remin3-esbuild": {
+        "P_base": 0.9967891404030219,
+        "addedWrongKB": 1.176,
+        "apps": 72,
+        "appsWrongUp": 4,
+        "boot": {
+          "below0": 0.35575,
+          "p05": -1.209406220947784e-5,
+          "p50": 3.6090912397535035e-6,
+          "p95": 3.672961928957719e-5,
+          "replace": false
+        },
+        "dNamedKB": 607.503,
+        "dP": 7.533700563833179e-6,
+        "dWrongKB": 1.176,
+        "headroomKB": 0.7746068377429797,
+        "maxAppAddKB": 0.792,
+        "top1": 0.673469387755102,
+        "top3": 0.9336734693877551,
+        "top5": 1.0
+      },
+      "remin3-terser": {
+        "P_base": 0.9985492597772324,
+        "addedWrongKB": 51.508,
+        "apps": 72,
+        "appsWrongUp": 23,
+        "boot": {
+          "below0": 0.2283,
+          "p05": -0.0005086324384148133,
+          "p50": 0.0004931550951428054,
+          "p95": 0.0014479554208002288,
+          "replace": false
+        },
+        "dNamedKB": 55727.108,
+        "dP": 0.0004955308611397369,
+        "dWrongKB": 36.344,
+        "headroomKB": 44.50155707411344,
+        "judgePercentile": 0.0,
+        "maxAppAddKB": 24.103,
+        "top1": 0.4679467267220626,
+        "top3": 0.6708666614894774,
+        "top5": 0.7603479071212239
+      }
+    }
+  },
+  "exp142 as-of index (control)": {
+    "eventStress": {
+      "atOrAboveT": 8,
+      "bundles": 501,
+      "pFail36": 0.43981566149535345,
+      "pFail36RuleOfThree": 0.19443941590768865,
+      "q": 0.015968063872255488,
+      "toleranceKB": 0.20777298048603718
+    },
+    "judge": "PASS",
+    "judge_dP": null,
+    "maxAppAddAnyDevKB": 23.007,
+    "pooled-terser": {
+      "P_base": 0.9987170996559591,
+      "addedWrongKB": 2.77,
+      "apps": 108,
+      "appsWrongUp": 1,
+      "boot": {
+        "below0": 0.2372,
+        "p05": -0.00015825018007897818,
+        "p50": 8.258170894781536e-6,
+        "p95": 0.00019434566878806514,
+        "replace": false
+      },
+      "dNamedKB": 485.867,
+      "dP": 9.610175856433756e-6,
+      "dWrongKB": 0.108,
+      "headroomKB": 0.5153189414581114,
+      "maxAppAddKB": 2.77,
+      "top1": 1.0,
+      "top3": 1.0,
+      "top5": 1.0
+    },
+    "sets": {
+      "remin-esbuild": {
+        "P_base": 0.9971906885599725,
+        "addedWrongKB": 0.0,
+        "apps": 36,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 1.742063691523299e-6,
+          "p50": 6.293401905943519e-6,
+          "p95": 1.369337234746748e-5,
+          "replace": true
+        },
+        "dNamedKB": 128.035,
+        "dP": 6.941137916105511e-6,
+        "dWrongKB": 0.0,
+        "headroomKB": 0.35969019022392035,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      },
+      "remin-terser": {
+        "P_base": 0.9990187289830073,
+        "addedWrongKB": 0.0,
+        "apps": 36,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 6.796595430902386e-7,
+          "p50": 0.0001358833492903777,
+          "p95": 0.00048269385537946796,
+          "replace": true
+        },
+        "dNamedKB": 88.596,
+        "dP": 0.00014387837603113685,
+        "dWrongKB": -2.662,
+        "headroomKB": 2.7489366870214895,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      },
+      "remin3-esbuild": {
+        "P_base": 0.9967891404030219,
+        "addedWrongKB": 1.431,
+        "apps": 72,
+        "appsWrongUp": 2,
+        "boot": {
+          "below0": 0.4497,
+          "p05": -1.7103150802832978e-5,
+          "p50": 1.5556316510512147e-6,
+          "p95": 2.0419540991190033e-5,
+          "replace": false
+        },
+        "dNamedKB": 483.814,
+        "dP": 1.2311787928043216e-6,
+        "dWrongKB": 1.431,
+        "headroomKB": 0.12245882505235682,
+        "maxAppAddKB": 0.797,
+        "top1": 0.556953179594689,
+        "top3": 1.0,
+        "top5": 1.0
+      },
+      "remin3-terser": {
+        "P_base": 0.9985492597772324,
+        "addedWrongKB": 2.77,
+        "apps": 72,
+        "appsWrongUp": 1,
+        "boot": {
+          "below0": 0.4991,
+          "p05": -0.00017364151527732297,
+          "p50": 2.603182516214275e-7,
+          "p95": 2.5280387739967658e-5,
+          "replace": false
+        },
+        "dNamedKB": 397.271,
+        "dP": -6.337827883662328e-5,
+        "dWrongKB": 2.77,
+        "headroomKB": -2.1936629809608976,
+        "maxAppAddKB": 2.77,
+        "top1": 1.0,
+        "top3": 1.0,
+        "top5": 1.0
+      }
+    }
+  },
+  "exp144 veto_support=shown": {
+    "eventStress": {
+      "atOrAboveT": 9,
+      "bundles": 501,
+      "pFail36": 0.4793024090227447,
+      "pFail36RuleOfThree": 0.19443941590768865,
+      "q": 0.017964071856287425,
+      "toleranceKB": 0.8972884303796932
+    },
+    "judge": "FAIL",
+    "judge_dP": -0.069,
+    "maxAppAddAnyDevKB": 8.348,
+    "pooled-terser": {
+      "P_base": 0.9987267098318156,
+      "addedWrongKB": 0.0,
+      "apps": 108,
+      "appsWrongUp": 0,
+      "boot": {
+        "below0": 0.0,
+        "p05": 1.195439563916878e-5,
+        "p50": 4.5394189618352954e-5,
+        "p95": 0.00010174142240115813,
+        "replace": false
+      },
+      "dNamedKB": 2114.102,
+      "dP": 4.828394091249688e-5,
+      "dWrongKB": 0.0,
+      "headroomKB": 2.6918652911390795,
+      "judgePercentile": 0.0,
+      "maxAppAddKB": 0.0,
+      "top1": 0,
+      "top3": 0,
+      "top5": 0
+    },
+    "sets": {
+      "remin-esbuild": {
+        "P_base": 0.9971976296978886,
+        "addedWrongKB": 0.188,
+        "apps": 36,
+        "appsWrongUp": 4,
+        "boot": {
+          "below0": 0.0,
+          "p05": 4.3458821486930255e-5,
+          "p50": 0.00012459096382733126,
+          "p95": 0.00030009451707857515,
+          "replace": true
+        },
+        "dNamedKB": 2697.664,
+        "dP": 0.00013522858669023918,
+        "dWrongKB": 0.188,
+        "headroomKB": 7.37185347867502,
+        "maxAppAddKB": 0.074,
+        "top1": 0.39361702127659576,
+        "top3": 0.9148936170212766,
+        "top5": 1.0
+      },
+      "remin-terser": {
+        "P_base": 0.9991626073590384,
+        "addedWrongKB": 0.0,
+        "apps": 36,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 1.0604722326279514e-5,
+          "p50": 2.7486202372029034e-5,
+          "p95": 6.653369941889142e-5,
+          "replace": true
+        },
+        "dNamedKB": 691.059,
+        "dP": 2.9257862443565763e-5,
+        "dWrongKB": 0.0,
+        "headroomKB": 0.5786877210702889,
+        "judgePercentile": 0.0,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      },
+      "remin3-esbuild": {
+        "P_base": 0.9967903715818147,
+        "addedWrongKB": 1.468,
+        "apps": 72,
+        "appsWrongUp": 11,
+        "boot": {
+          "below0": 0.00015,
+          "p05": 5.184819334536073e-5,
+          "p50": 0.00018167383578848728,
+          "p95": 0.000516704969230064,
+          "replace": false
+        },
+        "dNamedKB": 8356.019,
+        "dP": 0.00022730148262872785,
+        "dWrongKB": 1.468,
+        "headroomKB": 25.35171604529618,
+        "maxAppAddKB": 0.463,
+        "top1": 0.31539509536784743,
+        "top3": 0.6164850136239782,
+        "top5": 0.7213896457765667
+      },
+      "remin3-terser": {
+        "P_base": 0.9984858814983958,
+        "addedWrongKB": 0.0,
+        "apps": 72,
+        "appsWrongUp": 0,
+        "boot": {
+          "below0": 0.0,
+          "p05": 1.286099811836916e-5,
+          "p50": 5.911421625937052e-5,
+          "p95": 0.00011214997440978092,
+          "replace": false
+        },
+        "dNamedKB": 1423.043,
+        "dP": 5.9898372079647544e-5,
+        "dWrongKB": 0.0,
+        "headroomKB": 2.1546557348783617,
+        "judgePercentile": 0.0,
+        "maxAppAddKB": 0.0,
+        "top1": 0,
+        "top3": 0,
+        "top5": 0
+      }
+    }
+  }
+}
