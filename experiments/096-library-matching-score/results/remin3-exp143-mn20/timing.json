@@ -1,0 +1,583 @@
+{
+ "maxPeakRssMb": 1387,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "remin3-esbuild-cli_alcalzone_release-script-9e09f0": {
+   "peakRssMb": 203,
+   "wallSeconds": 0.32
+  },
+  "remin3-esbuild-cli_astrojs_language-server-0926c5": {
+   "peakRssMb": 545,
+   "wallSeconds": 2.69
+  },
+  "remin3-esbuild-cli_babel-watch-9ea2b9": {
+   "peakRssMb": 204,
+   "wallSeconds": 0.3
+  },
+  "remin3-esbuild-cli_cmake-js-e29090": {
+   "peakRssMb": 258,
+   "wallSeconds": 0.67
+  },
+  "remin3-esbuild-cli_conventional-github-releaser-6ca6de": {
+   "peakRssMb": 281,
+   "wallSeconds": 0.95
+  },
+  "remin3-esbuild-cli_electron-vite-23b4a5": {
+   "peakRssMb": 375,
+   "wallSeconds": 0.91
+  },
+  "remin3-esbuild-cli_electron_rebuild-2c1efe": {
+   "peakRssMb": 198,
+   "wallSeconds": 0.27
+  },
+  "remin3-esbuild-cli_f2elint-8791d9": {
+   "peakRssMb": 258,
+   "wallSeconds": 0.57
+  },
+  "remin3-esbuild-cli_gatsby-5e5162": {
+   "peakRssMb": 712,
+   "wallSeconds": 4.35
+  },
+  "remin3-esbuild-cli_grunt-cli-00d477": {
+   "peakRssMb": 200,
+   "wallSeconds": 0.3
+  },
+  "remin3-esbuild-cli_metalsmith-285bc4": {
+   "peakRssMb": 210,
+   "wallSeconds": 0.39
+  },
+  "remin3-esbuild-cli_metro-inspector-proxy-f48511": {
+   "peakRssMb": 246,
+   "wallSeconds": 0.51
+  },
+  "remin3-esbuild-cli_microbundle-crl-7c5731": {
+   "peakRssMb": 1138,
+   "wallSeconds": 6.99
+  },
+  "remin3-esbuild-cli_n8n-core-1c36ca": {
+   "peakRssMb": 252,
+   "wallSeconds": 1.0
+  },
+  "remin3-esbuild-cli_prettier-eslint-cli-c39716": {
+   "peakRssMb": 429,
+   "wallSeconds": 1.01
+  },
+  "remin3-esbuild-cli_sonarqube-scanner-f71925": {
+   "peakRssMb": 291,
+   "wallSeconds": 0.54
+  },
+  "remin3-esbuild-cli_svg2ttf-cfc940": {
+   "peakRssMb": 268,
+   "wallSeconds": 0.46
+  },
+  "remin3-esbuild-cli_svgicons2svgfont-ea30f9": {
+   "peakRssMb": 252,
+   "wallSeconds": 0.37
+  },
+  "remin3-esbuild-cli_tap-min-cdf3e3": {
+   "peakRssMb": 203,
+   "wallSeconds": 0.29
+  },
+  "remin3-esbuild-cli_typescript-json-schema-e8c37b": {
+   "peakRssMb": 1219,
+   "wallSeconds": 7.42
+  },
+  "remin3-esbuild-cli_ultracite-91ac1d": {
+   "peakRssMb": 520,
+   "wallSeconds": 0.92
+  },
+  "remin3-esbuild-cli_yeoman-doctor-f29137": {
+   "peakRssMb": 234,
+   "wallSeconds": 0.38
+  },
+  "remin3-esbuild-cli_yeoman-environment-ce36cc": {
+   "peakRssMb": 447,
+   "wallSeconds": 6.74
+  },
+  "remin3-esbuild-cli_yosay-a6f972": {
+   "peakRssMb": 234,
+   "wallSeconds": 0.34
+  },
+  "remin3-esbuild-electron_gh-aivis-project__aivisspeech-12f4f8": {
+   "peakRssMb": 1074,
+   "wallSeconds": 12.42
+  },
+  "remin3-esbuild-electron_gh-alexishida__moji-c470a5": {
+   "peakRssMb": 1387,
+   "wallSeconds": 8.47
+  },
+  "remin3-esbuild-electron_gh-alexkim205__g-desktop-suite-5c7dc8": {
+   "peakRssMb": 277,
+   "wallSeconds": 0.67
+  },
+  "remin3-esbuild-electron_gh-antropos17__aegis-b57998": {
+   "peakRssMb": 709,
+   "wallSeconds": 2.65
+  },
+  "remin3-esbuild-electron_gh-cerzi__videoswarm-3d12b2": {
+   "peakRssMb": 599,
+   "wallSeconds": 1.94
+  },
+  "remin3-esbuild-electron_gh-dznass-cmd__radarrss-6546f8": {
+   "peakRssMb": 598,
+   "wallSeconds": 2.54
+  },
+  "remin3-esbuild-electron_gh-guasam__electron-react-app-7d7e21": {
+   "peakRssMb": 772,
+   "wallSeconds": 9.15
+  },
+  "remin3-esbuild-electron_gh-iimeta__iim-web-8609e9": {
+   "peakRssMb": 1092,
+   "wallSeconds": 4.81
+  },
+  "remin3-esbuild-electron_gh-inulute__simplexity-ai-app-4a3432": {
+   "peakRssMb": 216,
+   "wallSeconds": 0.45
+  },
+  "remin3-esbuild-electron_gh-japdl__japdl-50b326": {
+   "peakRssMb": 395,
+   "wallSeconds": 0.87
+  },
+  "remin3-esbuild-electron_gh-klotzbrocken__reframe-088b8c": {
+   "peakRssMb": 291,
+   "wallSeconds": 1.05
+  },
+  "remin3-esbuild-electron_gh-loranallensmith__brightwheel-8201a2": {
+   "peakRssMb": 294,
+   "wallSeconds": 0.91
+  },
+  "remin3-esbuild-electron_gh-nathanlesage__local-chat-85d7b3": {
+   "peakRssMb": 559,
+   "wallSeconds": 2.32
+  },
+  "remin3-esbuild-electron_gh-onmyway133__pushnotifications-17a4eb": {
+   "peakRssMb": 266,
+   "wallSeconds": 0.71
+  },
+  "remin3-esbuild-electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955": {
+   "peakRssMb": 286,
+   "wallSeconds": 0.94
+  },
+  "remin3-esbuild-electron_gh-ploxc__modbux-9f89a7": {
+   "peakRssMb": 1221,
+   "wallSeconds": 9.35
+  },
+  "remin3-esbuild-electron_gh-qufei1993__dsh-desktop-f5483b": {
+   "peakRssMb": 243,
+   "wallSeconds": 1.16
+  },
+  "remin3-esbuild-electron_gh-rn0x__altaqwaa-desktop-69b6f0": {
+   "peakRssMb": 312,
+   "wallSeconds": 0.8
+  },
+  "remin3-esbuild-electron_gh-sanjevirau__gsubs-2bfa7a": {
+   "peakRssMb": 323,
+   "wallSeconds": 0.62
+  },
+  "remin3-esbuild-electron_gh-sindresorhus__electron-reloader-b02378": {
+   "peakRssMb": 200,
+   "wallSeconds": 0.23
+  },
+  "remin3-esbuild-electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b": {
+   "peakRssMb": 208,
+   "wallSeconds": 0.24
+  },
+  "remin3-esbuild-electron_gh-tahnik__electron-react-8bef0d": {
+   "peakRssMb": 287,
+   "wallSeconds": 0.98
+  },
+  "remin3-esbuild-electron_gh-tomkp__card-spy-4c2a3e": {
+   "peakRssMb": 430,
+   "wallSeconds": 5.62
+  },
+  "remin3-esbuild-electron_gh-wangrongding__wallpaper-box-262dc5": {
+   "peakRssMb": 909,
+   "wallSeconds": 4.18
+  },
+  "remin3-esbuild-vscode_gh-alefragnani__vscode-project-manager-2f5fdb": {
+   "peakRssMb": 230,
+   "wallSeconds": 0.94
+  },
+  "remin3-esbuild-vscode_gh-andreafrederica__andrea-novel-helper-01158a": {
+   "peakRssMb": 629,
+   "wallSeconds": 3.11
+  },
+  "remin3-esbuild-vscode_gh-arrterian__nix-env-selector-7ecd90": {
+   "peakRssMb": 665,
+   "wallSeconds": 6.41
+  },
+  "remin3-esbuild-vscode_gh-bmewburn__vscode-intelephense-9c105c": {
+   "peakRssMb": 971,
+   "wallSeconds": 2.69
+  },
+  "remin3-esbuild-vscode_gh-bourhaouta__vscode-tailwindshades-28c415": {
+   "peakRssMb": 693,
+   "wallSeconds": 7.21
+  },
+  "remin3-esbuild-vscode_gh-geriyoco__vscode-image-gallery-f6399e": {
+   "peakRssMb": 991,
+   "wallSeconds": 6.39
+  },
+  "remin3-esbuild-vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f": {
+   "peakRssMb": 705,
+   "wallSeconds": 10.17
+  },
+  "remin3-esbuild-vscode_gh-kejunmao__vscode-devtoys-a1140c": {
+   "peakRssMb": 886,
+   "wallSeconds": 6.67
+  },
+  "remin3-esbuild-vscode_gh-kenhowardpdx__vscode-gist-7a8987": {
+   "peakRssMb": 250,
+   "wallSeconds": 0.59
+  },
+  "remin3-esbuild-vscode_gh-kokororin__vscode-phpfmt-6129f4": {
+   "peakRssMb": 193,
+   "wallSeconds": 0.22
+  },
+  "remin3-esbuild-vscode_gh-mattbierner__vscode-docs-view-11a464": {
+   "peakRssMb": 624,
+   "wallSeconds": 1.78
+  },
+  "remin3-esbuild-vscode_gh-mblode__vscode-zotero-63d7c9": {
+   "peakRssMb": 618,
+   "wallSeconds": 4.84
+  },
+  "remin3-esbuild-vscode_gh-microsoft__vscode-js-debug-9920bd": {
+   "peakRssMb": 818,
+   "wallSeconds": 8.96
+  },
+  "remin3-esbuild-vscode_gh-n2ns__antigravity-panel-423973": {
+   "peakRssMb": 736,
+   "wallSeconds": 11.62
+  },
+  "remin3-esbuild-vscode_gh-pajoma__vscode-journal-e5402e": {
+   "peakRssMb": 351,
+   "wallSeconds": 3.18
+  },
+  "remin3-esbuild-vscode_gh-qcz__vscode-text-power-tools-502c9a": {
+   "peakRssMb": 438,
+   "wallSeconds": 1.07
+  },
+  "remin3-esbuild-vscode_gh-raathigesh__waypoint-e1437b": {
+   "peakRssMb": 833,
+   "wallSeconds": 16.64
+  },
+  "remin3-esbuild-vscode_gh-sthamann__nyx-local-ai-e50dee": {
+   "peakRssMb": 946,
+   "wallSeconds": 7.95
+  },
+  "remin3-esbuild-vscode_gh-stylelint__vscode-stylelint-33eb20": {
+   "peakRssMb": 941,
+   "wallSeconds": 12.17
+  },
+  "remin3-esbuild-vscode_gh-supabase-community__supabase-vscode-extension-a5f28f": {
+   "peakRssMb": 303,
+   "wallSeconds": 0.73
+  },
+  "remin3-esbuild-vscode_gh-vadimcn__codelldb-f46207": {
+   "peakRssMb": 742,
+   "wallSeconds": 8.23
+  },
+  "remin3-esbuild-vscode_gh-wx-minapp__minapp-vscode-2cd7f4": {
+   "peakRssMb": 689,
+   "wallSeconds": 6.12
+  },
+  "remin3-esbuild-vscode_gh-yukaii__vscode-ptt-b9168a": {
+   "peakRssMb": 770,
+   "wallSeconds": 11.77
+  },
+  "remin3-esbuild-vscode_gh-zokugun__vscode-explicit-folding-ef71ec": {
+   "peakRssMb": 230,
+   "wallSeconds": 0.29
+  },
+  "remin3-terser-cli_alcalzone_release-script-9e09f0": {
+   "peakRssMb": 202,
+   "wallSeconds": 0.34
+  },
+  "remin3-terser-cli_astrojs_language-server-0926c5": {
+   "peakRssMb": 505,
+   "wallSeconds": 1.51
+  },
+  "remin3-terser-cli_babel-watch-9ea2b9": {
+   "peakRssMb": 204,
+   "wallSeconds": 0.29
+  },
+  "remin3-terser-cli_cmake-js-e29090": {
+   "peakRssMb": 244,
+   "wallSeconds": 0.5
+  },
+  "remin3-terser-cli_conventional-github-releaser-6ca6de": {
+   "peakRssMb": 311,
+   "wallSeconds": 0.63
+  },
+  "remin3-terser-cli_electron-vite-23b4a5": {
+   "peakRssMb": 382,
+   "wallSeconds": 0.78
+  },
+  "remin3-terser-cli_electron_rebuild-2c1efe": {
+   "peakRssMb": 190,
+   "wallSeconds": 0.25
+  },
+  "remin3-terser-cli_f2elint-8791d9": {
+   "peakRssMb": 247,
+   "wallSeconds": 0.58
+  },
+  "remin3-terser-cli_gatsby-5e5162": {
+   "peakRssMb": 704,
+   "wallSeconds": 2.72
+  },
+  "remin3-terser-cli_grunt-cli-00d477": {
+   "peakRssMb": 202,
+   "wallSeconds": 0.29
+  },
+  "remin3-terser-cli_metalsmith-285bc4": {
+   "peakRssMb": 208,
+   "wallSeconds": 0.36
+  },
+  "remin3-terser-cli_metro-inspector-proxy-f48511": {
+   "peakRssMb": 280,
+   "wallSeconds": 0.49
+  },
+  "remin3-terser-cli_microbundle-crl-7c5731": {
+   "peakRssMb": 1264,
+   "wallSeconds": 7.12
+  },
+  "remin3-terser-cli_n8n-core-1c36ca": {
+   "peakRssMb": 262,
+   "wallSeconds": 0.56
+  },
+  "remin3-terser-cli_prettier-eslint-cli-c39716": {
+   "peakRssMb": 432,
+   "wallSeconds": 0.97
+  },
+  "remin3-terser-cli_sonarqube-scanner-f71925": {
+   "peakRssMb": 284,
+   "wallSeconds": 0.51
+  },
+  "remin3-terser-cli_svg2ttf-cfc940": {
+   "peakRssMb": 232,
+   "wallSeconds": 0.46
+  },
+  "remin3-terser-cli_svgicons2svgfont-ea30f9": {
+   "peakRssMb": 256,
+   "wallSeconds": 0.33
+  },
+  "remin3-terser-cli_tap-min-cdf3e3": {
+   "peakRssMb": 203,
+   "wallSeconds": 0.29
+  },
+  "remin3-terser-cli_typescript-json-schema-e8c37b": {
+   "peakRssMb": 1237,
+   "wallSeconds": 7.5
+  },
+  "remin3-terser-cli_ultracite-91ac1d": {
+   "peakRssMb": 509,
+   "wallSeconds": 0.91
+  },
+  "remin3-terser-cli_yeoman-doctor-f29137": {
+   "peakRssMb": 233,
+   "wallSeconds": 0.37
+  },
+  "remin3-terser-cli_yeoman-environment-ce36cc": {
+   "peakRssMb": 448,
+   "wallSeconds": 1.38
+  },
+  "remin3-terser-cli_yosay-a6f972": {
+   "peakRssMb": 240,
+   "wallSeconds": 0.31
+  },
+  "remin3-terser-electron_gh-aivis-project__aivisspeech-12f4f8": {
+   "peakRssMb": 1077,
+   "wallSeconds": 5.24
+  },
+  "remin3-terser-electron_gh-alexishida__moji-c470a5": {
+   "peakRssMb": 1352,
+   "wallSeconds": 7.88
+  },
+  "remin3-terser-electron_gh-alexkim205__g-desktop-suite-5c7dc8": {
+   "peakRssMb": 271,
+   "wallSeconds": 0.59
+  },
+  "remin3-terser-electron_gh-antropos17__aegis-b57998": {
+   "peakRssMb": 710,
+   "wallSeconds": 2.16
+  },
+  "remin3-terser-electron_gh-cerzi__videoswarm-3d12b2": {
+   "peakRssMb": 564,
+   "wallSeconds": 1.51
+  },
+  "remin3-terser-electron_gh-dznass-cmd__radarrss-6546f8": {
+   "peakRssMb": 660,
+   "wallSeconds": 1.96
+  },
+  "remin3-terser-electron_gh-guasam__electron-react-app-7d7e21": {
+   "peakRssMb": 840,
+   "wallSeconds": 4.44
+  },
+  "remin3-terser-electron_gh-iimeta__iim-web-8609e9": {
+   "peakRssMb": 1010,
+   "wallSeconds": 4.14
+  },
+  "remin3-terser-electron_gh-inulute__simplexity-ai-app-4a3432": {
+   "peakRssMb": 234,
+   "wallSeconds": 0.4
+  },
+  "remin3-terser-electron_gh-japdl__japdl-50b326": {
+   "peakRssMb": 393,
+   "wallSeconds": 0.86
+  },
+  "remin3-terser-electron_gh-klotzbrocken__reframe-088b8c": {
+   "peakRssMb": 275,
+   "wallSeconds": 0.64
+  },
+  "remin3-terser-electron_gh-loranallensmith__brightwheel-8201a2": {
+   "peakRssMb": 311,
+   "wallSeconds": 0.72
+  },
+  "remin3-terser-electron_gh-nathanlesage__local-chat-85d7b3": {
+   "peakRssMb": 557,
+   "wallSeconds": 1.64
+  },
+  "remin3-terser-electron_gh-onmyway133__pushnotifications-17a4eb": {
+   "peakRssMb": 214,
+   "wallSeconds": 0.57
+  },
+  "remin3-terser-electron_gh-pedr0fontoura__gtav-audio-occlusion-16e955": {
+   "peakRssMb": 273,
+   "wallSeconds": 0.55
+  },
+  "remin3-terser-electron_gh-ploxc__modbux-9f89a7": {
+   "peakRssMb": 981,
+   "wallSeconds": 8.0
+  },
+  "remin3-terser-electron_gh-qufei1993__dsh-desktop-f5483b": {
+   "peakRssMb": 281,
+   "wallSeconds": 0.52
+  },
+  "remin3-terser-electron_gh-rn0x__altaqwaa-desktop-69b6f0": {
+   "peakRssMb": 417,
+   "wallSeconds": 0.74
+  },
+  "remin3-terser-electron_gh-sanjevirau__gsubs-2bfa7a": {
+   "peakRssMb": 315,
+   "wallSeconds": 0.58
+  },
+  "remin3-terser-electron_gh-sindresorhus__electron-reloader-b02378": {
+   "peakRssMb": 222,
+   "wallSeconds": 0.24
+  },
+  "remin3-terser-electron_gh-soulehshaikh99__create-svelte-electron-app-79de1b": {
+   "peakRssMb": 228,
+   "wallSeconds": 0.26
+  },
+  "remin3-terser-electron_gh-tahnik__electron-react-8bef0d": {
+   "peakRssMb": 244,
+   "wallSeconds": 0.6
+  },
+  "remin3-terser-electron_gh-tomkp__card-spy-4c2a3e": {
+   "peakRssMb": 418,
+   "wallSeconds": 1.82
+  },
+  "remin3-terser-electron_gh-wangrongding__wallpaper-box-262dc5": {
+   "peakRssMb": 888,
+   "wallSeconds": 3.42
+  },
+  "remin3-terser-vscode_gh-alefragnani__vscode-project-manager-2f5fdb": {
+   "peakRssMb": 236,
+   "wallSeconds": 0.41
+  },
+  "remin3-terser-vscode_gh-andreafrederica__andrea-novel-helper-01158a": {
+   "peakRssMb": 601,
+   "wallSeconds": 1.73
+  },
+  "remin3-terser-vscode_gh-arrterian__nix-env-selector-7ecd90": {
+   "peakRssMb": 660,
+   "wallSeconds": 1.94
+  },
+  "remin3-terser-vscode_gh-bmewburn__vscode-intelephense-9c105c": {
+   "peakRssMb": 918,
+   "wallSeconds": 2.34
+  },
+  "remin3-terser-vscode_gh-bourhaouta__vscode-tailwindshades-28c415": {
+   "peakRssMb": 702,
+   "wallSeconds": 2.46
+  },
+  "remin3-terser-vscode_gh-geriyoco__vscode-image-gallery-f6399e": {
+   "peakRssMb": 972,
+   "wallSeconds": 4.45
+  },
+  "remin3-terser-vscode_gh-harrydowning__vscode-yaml-embedded-languages-95713f": {
+   "peakRssMb": 639,
+   "wallSeconds": 2.74
+  },
+  "remin3-terser-vscode_gh-kejunmao__vscode-devtoys-a1140c": {
+   "peakRssMb": 833,
+   "wallSeconds": 3.16
+  },
+  "remin3-terser-vscode_gh-kenhowardpdx__vscode-gist-7a8987": {
+   "peakRssMb": 228,
+   "wallSeconds": 0.51
+  },
+  "remin3-terser-vscode_gh-kokororin__vscode-phpfmt-6129f4": {
+   "peakRssMb": 194,
+   "wallSeconds": 0.23
+  },
+  "remin3-terser-vscode_gh-mattbierner__vscode-docs-view-11a464": {
+   "peakRssMb": 608,
+   "wallSeconds": 1.54
+  },
+  "remin3-terser-vscode_gh-mblode__vscode-zotero-63d7c9": {
+   "peakRssMb": 557,
+   "wallSeconds": 1.52
+  },
+  "remin3-terser-vscode_gh-microsoft__vscode-js-debug-9920bd": {
+   "peakRssMb": 785,
+   "wallSeconds": 2.67
+  },
+  "remin3-terser-vscode_gh-n2ns__antigravity-panel-423973": {
+   "peakRssMb": 728,
+   "wallSeconds": 3.27
+  },
+  "remin3-terser-vscode_gh-pajoma__vscode-journal-e5402e": {
+   "peakRssMb": 392,
+   "wallSeconds": 0.89
+  },
+  "remin3-terser-vscode_gh-qcz__vscode-text-power-tools-502c9a": {
+   "peakRssMb": 405,
+   "wallSeconds": 0.85
+  },
+  "remin3-terser-vscode_gh-raathigesh__waypoint-e1437b": {
+   "peakRssMb": 807,
+   "wallSeconds": 3.47
+  },
+  "remin3-terser-vscode_gh-sthamann__nyx-local-ai-e50dee": {
+   "peakRssMb": 889,
+   "wallSeconds": 3.63
+  },
+  "remin3-terser-vscode_gh-stylelint__vscode-stylelint-33eb20": {
+   "peakRssMb": 860,
+   "wallSeconds": 3.61
+  },
+  "remin3-terser-vscode_gh-supabase-community__supabase-vscode-extension-a5f28f": {
+   "peakRssMb": 291,
+   "wallSeconds": 0.64
+  },
+  "remin3-terser-vscode_gh-vadimcn__codelldb-f46207": {
+   "peakRssMb": 705,
+   "wallSeconds": 2.32
+  },
+  "remin3-terser-vscode_gh-wx-minapp__minapp-vscode-2cd7f4": {
+   "peakRssMb": 672,
+   "wallSeconds": 1.93
+  },
+  "remin3-terser-vscode_gh-yukaii__vscode-ptt-b9168a": {
+   "peakRssMb": 739,
+   "wallSeconds": 3.32
+  },
+  "remin3-terser-vscode_gh-zokugun__vscode-explicit-folding-ef71ec": {
+   "peakRssMb": 194,
+   "wallSeconds": 0.3
+  }
+ },
+ "totalWallSeconds": 380.4
+}

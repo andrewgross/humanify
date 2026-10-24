@@ -1,0 +1,174 @@
+{
+ "bundleSha256": "6aac0b17ea61bcd8c78df515f5aa214f3a60b4ed2d9f569736bac9cf7460bc92",
+ "claimedBytes": {
+  "family": 43627,
+  "right": 2345748,
+  "unmapped": 8711,
+  "wrongFamily": 623
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "remin3-terser-electron_gh-aivis-project__aivisspeech-12f4f8",
+ "exploratory": {
+  "names": {
+   "bindings": 3380,
+   "bindingsSameVersion": 1459,
+   "bindingsVersionKnown": 3380,
+   "exactBytes": 641293,
+   "exactUnits": 1337,
+   "sameVersionShare": 0.431657
+  }
+ },
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.256206,
+  "f1": 0.121105,
+  "namedBytes": 698446,
+  "precision": 0.999665,
+  "recall": 0.064457
+ },
+ "label": "remin3-exp143-mn20",
+ "missBytes": {
+  "a": 2068672,
+  "b": 3678632,
+  "c": 323331,
+  "d-absent": 537265,
+  "d-file": 1714674,
+  "d-variant": 2896,
+  "e-ambig": 5212,
+  "e-other": 21334,
+  "e-support": 26054,
+  "e-veto": 57469,
+  "f": 9651,
+  "factory": 1250
+ },
+ "noDiscovery": null,
+ "reportSha256": "c29fac2c3d4cc3231b1228656836d57900a92629a4c39f4a16f57ad24a89fe91",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 17765,
+    "right": 1511750,
+    "unmapped": 1985,
+    "wrongFamily": 234
+   },
+   "copyBytes": 15216,
+   "f05": 0.523704,
+   "f05ShipperOnly": 0.523704,
+   "f1": 0.305487,
+   "f1ShipperOnly": 0.305487,
+   "libraryBytes": 8483872,
+   "missBytes": {
+    "a": 2050431,
+    "b": 2551037,
+    "c": 302865,
+    "d-absent": 449055,
+    "d-file": 1482554,
+    "d-variant": 2896,
+    "e-ambig": 4684,
+    "e-other": 20532,
+    "e-support": 22961,
+    "e-veto": 56441,
+    "f": 9651,
+    "factory": 1250
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 1529515,
+   "namedBytesShipperOnly": 1529515,
+   "precision": 0.999847,
+   "precisionShipperOnly": 0.999847,
+   "recall": 0.180285,
+   "recallShipperOnly": 0.180285,
+   "statementBytes": {
+    "<foreign>": 112450,
+    "<unmapped>": 112306,
+    "copy": 15216,
+    "library": 8483872
+   },
+   "wrongFamilyBytes": 234,
+   "wrongFamilyBytesShipperOnly": 234
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 25862,
+    "right": 833998,
+    "unmapped": 6726,
+    "wrongFamily": 389
+   },
+   "copyBytes": 588,
+   "f05": 0.742163,
+   "f05ShipperOnly": 0.742163,
+   "f1": 0.535373,
+   "f1ShipperOnly": 0.535373,
+   "libraryBytes": 2351943,
+   "missBytes": {
+    "a": 18241,
+    "b": 1127595,
+    "c": 20466,
+    "d-absent": 88210,
+    "d-file": 232120,
+    "e-ambig": 528,
+    "e-other": 802,
+    "e-support": 3093,
+    "e-veto": 1028
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 859860,
+   "namedBytesShipperOnly": 859860,
+   "precision": 0.999548,
+   "precisionShipperOnly": 0.999548,
+   "recall": 0.365596,
+   "recallShipperOnly": 0.365596,
+   "statementBytes": {
+    "<app>": 4049,
+    "<unmapped>": 22768,
+    "copy": 588,
+    "library": 2351943
+   },
+   "wrongFamilyBytes": 389,
+   "wrongFamilyBytesShipperOnly": 389
+  }
+ },
+ "set": "remin3-terser",
+ "statementBytes": {
+  "<app>": 4049,
+  "<foreign>": 112450,
+  "<unmapped>": 135074,
+  "copy": 15804,
+  "library": 10835815
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "terser",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 15804,
+  "f05": 0.585751,
+  "f05ShipperOnly": 0.585751,
+  "f1": 0.36132,
+  "f1ShipperOnly": 0.36132,
+  "libraryBytes": 10835815,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 2389375,
+  "namedBytes": 2389375,
+  "namedBytesShipperOnly": 2389375,
+  "precision": 0.999739,
+  "precisionShipperOnly": 0.999739,
+  "recall": 0.220507,
+  "recallShipperOnly": 0.220507,
+  "wrongFamilyBytes": 623,
+  "wrongFamilyBytesShipperOnly": 623
+ },
+ "truthMethod": "sourcemap"
+}

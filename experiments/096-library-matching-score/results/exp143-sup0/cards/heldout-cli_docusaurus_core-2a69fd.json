@@ -1,0 +1,175 @@
+{
+ "bundleSha256": "5327ffebc4cee3d0ccc2b86197909cff9d60cc8fb4951f5ee0ddde2f993896dc",
+ "claimedBytes": {
+  "family": 94042,
+  "origin": 87982,
+  "right": 11718575,
+  "unmapped": 91239,
+  "wrongFamily": 36196
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "heldout-cli_docusaurus_core-2a69fd",
+ "exploratory": {
+  "names": {
+   "bindings": 166726,
+   "bindingsSameVersion": 166151,
+   "bindingsVersionKnown": 166726,
+   "exactBytes": 10895881,
+   "exactUnits": 15941,
+   "sameVersionShare": 0.996551
+  }
+ },
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.907202,
+  "f1": 0.796854,
+  "namedBytes": 10550375,
+  "precision": 0.999473,
+  "recall": 0.66254
+ },
+ "label": "exp143-sup0",
+ "missBytes": {
+  "a": 480912,
+  "b": 29658,
+  "c": 440249,
+  "d-absent": 49235,
+  "d-file": 196076,
+  "d-variant": 12759,
+  "e-ambig": 60271,
+  "e-other": 1918274,
+  "e-spec": 233,
+  "e-support": 17384,
+  "e-veto": 553226,
+  "f": 265268
+ },
+ "noDiscovery": null,
+ "reportSha256": "204f996edf91d245b19c63ee0ef9111a06de65c286fa506cf886bcdcc129385b",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 92470,
+    "origin": 86345,
+    "right": 11040522,
+    "unmapped": 85398,
+    "wrongFamily": 12177
+   },
+   "copyBytes": 133127,
+   "f05": 0.934139,
+   "f05ShipperOnly": 0.92695,
+   "f1": 0.851329,
+   "f1ShipperOnly": 0.844777,
+   "libraryBytes": 15125715,
+   "missBytes": {
+    "a": 453149,
+    "b": 29411,
+    "c": 395262,
+    "d-absent": 49235,
+    "d-file": 174997,
+    "d-variant": 12759,
+    "e-ambig": 58733,
+    "e-other": 1917494,
+    "e-support": 17384,
+    "e-veto": 535072,
+    "f": 262882
+   },
+   "namedAsOriginBytes": 86345,
+   "namedBytes": 11219337,
+   "namedBytesShipperOnly": 11132992,
+   "precision": 0.998916,
+   "precisionShipperOnly": 0.991228,
+   "recall": 0.741739,
+   "recallShipperOnly": 0.736031,
+   "statementBytes": {
+    "<self>": 134468,
+    "<unmapped>": 2788771,
+    "copy": 133127,
+    "library": 15125715
+   },
+   "wrongFamilyBytes": 12177,
+   "wrongFamilyBytesShipperOnly": 98522
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 1572,
+    "origin": 1637,
+    "right": 678053,
+    "unmapped": 5841,
+    "wrongFamily": 24019
+   },
+   "copyBytes": 5350,
+   "f05": 0.941086,
+   "f05ShipperOnly": 0.938825,
+   "f1": 0.906108,
+   "f1ShipperOnly": 0.903931,
+   "libraryBytes": 798429,
+   "missBytes": {
+    "a": 27763,
+    "b": 247,
+    "c": 44987,
+    "d-file": 21079,
+    "e-ambig": 1538,
+    "e-other": 780,
+    "e-spec": 233,
+    "e-veto": 18154,
+    "f": 2386
+   },
+   "namedAsOriginBytes": 1637,
+   "namedBytes": 681262,
+   "namedBytesShipperOnly": 679625,
+   "precision": 0.965944,
+   "precisionShipperOnly": 0.963623,
+   "recall": 0.853253,
+   "recallShipperOnly": 0.851203,
+   "statementBytes": {
+    "<self>": 2796,
+    "<unmapped>": 8273,
+    "copy": 5350,
+    "library": 798429
+   },
+   "wrongFamilyBytes": 24019,
+   "wrongFamilyBytesShipperOnly": 25656
+  }
+ },
+ "set": "heldout",
+ "statementBytes": {
+  "<self>": 137264,
+  "<unmapped>": 2797044,
+  "copy": 138477,
+  "library": 15924144
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 138477,
+  "f05": 0.934534,
+  "f05ShipperOnly": 0.927624,
+  "f1": 0.854286,
+  "f1ShipperOnly": 0.847969,
+  "libraryBytes": 15924144,
+  "namedAsOriginBytes": 87982,
+  "namedAsShipperBytes": 11812617,
+  "namedBytes": 11900599,
+  "namedBytesShipperOnly": 11812617,
+  "precision": 0.996968,
+  "precisionShipperOnly": 0.989597,
+  "recall": 0.747331,
+  "recallShipperOnly": 0.741805,
+  "wrongFamilyBytes": 36196,
+  "wrongFamilyBytesShipperOnly": 124178
+ },
+ "truthMethod": "sourcemap"
+}

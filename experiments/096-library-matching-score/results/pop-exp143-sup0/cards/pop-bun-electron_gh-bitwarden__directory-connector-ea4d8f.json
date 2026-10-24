@@ -1,0 +1,173 @@
+{
+ "bundleSha256": "3dd6bcdee263b553ff443af1a6355a3bd73786aa981f6a9dda6322a6d2d127ad",
+ "claimedBytes": {
+  "family": 69039,
+  "origin": 1040526,
+  "right": 17126110,
+  "unmapped": 33364,
+  "wrongFamily": 15262
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "pop-bun-electron_gh-bitwarden__directory-connector-ea4d8f",
+ "exploratory": {
+  "names": {
+   "bindings": 253604,
+   "bindingsSameVersion": 115855,
+   "bindingsVersionKnown": 253604,
+   "exactBytes": 16522186,
+   "exactUnits": 13943,
+   "sameVersionShare": 0.456834
+  }
+ },
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.909887,
+  "f1": 0.801824,
+  "namedBytes": 16936935,
+  "precision": 0.999708,
+  "recall": 0.669334
+ },
+ "label": "pop-exp143-sup0",
+ "missBytes": {
+  "a": 201465,
+  "b": 366185,
+  "c": 411390,
+  "d-absent": 43837,
+  "d-file": 26618,
+  "d-variant": 3185,
+  "e-ambig": 38402,
+  "e-other": 5739035,
+  "e-support": 2922,
+  "e-veto": 73766,
+  "f": 161663
+ },
+ "noDiscovery": null,
+ "reportSha256": "a755d6f53b90391b236adf88af5bf50a83cf5457b1e880d90c788dd9f83279f3",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 62772,
+    "origin": 622480,
+    "right": 14113316,
+    "unmapped": 21578,
+    "wrongFamily": 11862
+   },
+   "copyBytes": 677292,
+   "f05": 0.915133,
+   "f05ShipperOnly": 0.876639,
+   "f1": 0.812584,
+   "f1ShipperOnly": 0.778404,
+   "libraryBytes": 21613046,
+   "missBytes": {
+    "a": 180198,
+    "b": 359727,
+    "c": 377060,
+    "d-absent": 43436,
+    "d-file": 489,
+    "e-ambig": 25255,
+    "e-other": 5728699,
+    "e-support": 2922,
+    "e-veto": 69995,
+    "f": 26697
+   },
+   "namedAsOriginBytes": 622480,
+   "namedBytes": 14798568,
+   "namedBytesShipperOnly": 14176088,
+   "precision": 0.999199,
+   "precisionShipperOnly": 0.957169,
+   "recall": 0.684705,
+   "recallShipperOnly": 0.655904,
+   "statementBytes": {
+    "<unmapped>": 418257,
+    "copy": 677292,
+    "library": 21613046
+   },
+   "wrongFamilyBytes": 11862,
+   "wrongFamilyBytesShipperOnly": 634342
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 6267,
+    "origin": 418046,
+    "right": 3012794,
+    "unmapped": 11786,
+    "wrongFamily": 3400
+   },
+   "copyBytes": 816437,
+   "f05": 0.984668,
+   "f05ShipperOnly": 0.864906,
+   "f1": 0.963908,
+   "f1ShipperOnly": 0.846671,
+   "libraryBytes": 3691097,
+   "missBytes": {
+    "a": 21267,
+    "b": 6458,
+    "c": 34330,
+    "d-absent": 401,
+    "d-file": 26129,
+    "d-variant": 3185,
+    "e-ambig": 13147,
+    "e-other": 10336,
+    "e-veto": 3771,
+    "f": 134966
+   },
+   "namedAsOriginBytes": 418046,
+   "namedBytes": 3437107,
+   "namedBytesShipperOnly": 3019061,
+   "precision": 0.999012,
+   "precisionShipperOnly": 0.877505,
+   "recall": 0.931188,
+   "recallShipperOnly": 0.817931,
+   "statementBytes": {
+    "<app>": 2262,
+    "<unmapped>": 42772,
+    "copy": 816437,
+    "library": 3691097
+   },
+   "wrongFamilyBytes": 3400,
+   "wrongFamilyBytesShipperOnly": 421446
+  }
+ },
+ "set": "pop-bun",
+ "statementBytes": {
+  "<app>": 2262,
+  "<unmapped>": 461029,
+  "copy": 1493729,
+  "library": 25304143
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 1493729,
+  "f05": 0.927478,
+  "f05ShipperOnly": 0.874556,
+  "f1": 0.837362,
+  "f1ShipperOnly": 0.789582,
+  "libraryBytes": 25304143,
+  "namedAsOriginBytes": 1040526,
+  "namedAsShipperBytes": 17195149,
+  "namedBytes": 18235675,
+  "namedBytesShipperOnly": 17195149,
+  "precision": 0.999164,
+  "precisionShipperOnly": 0.942152,
+  "recall": 0.72066,
+  "recallShipperOnly": 0.679539,
+  "wrongFamilyBytes": 15262,
+  "wrongFamilyBytesShipperOnly": 1055788
+ },
+ "truthMethod": "sourcemap"
+}

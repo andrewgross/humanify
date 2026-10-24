@@ -1,0 +1,174 @@
+{
+ "bundleSha256": "7a31efe70444589b94c4abf7ece3dc62451cfc8bf9983dc673a8aaa332867812",
+ "claimedBytes": {
+  "family": 29018,
+  "origin": 11787,
+  "right": 8205744,
+  "unmapped": 89512,
+  "wrongFamily": 97978
+ },
+ "detected": {
+  "bundler": "esbuild",
+  "minifier": "bun"
+ },
+ "discoveryRan": true,
+ "entry": "pop-esbuild-electron_gh-orgoai__bops-1153c4",
+ "exploratory": {
+  "names": {
+   "bindings": 79216,
+   "bindingsSameVersion": 60180,
+   "bindingsVersionKnown": 79216,
+   "exactBytes": 7454887,
+   "exactUnits": 10365,
+   "sameVersionShare": 0.759695
+  }
+ },
+ "indexId": "9d40265aa1eed02cfd3922cb536730d2c1f794c429202025efbd626d11883f89",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.82818,
+  "f1": 0.663249,
+  "namedBytes": 7601215,
+  "precision": 0.992762,
+  "recall": 0.497966
+ },
+ "label": "pop-exp143-combo",
+ "missBytes": {
+  "a": 1869438,
+  "b": 428750,
+  "c": 208010,
+  "d-absent": 542207,
+  "d-file": 135148,
+  "e-ambig": 17331,
+  "e-other": 3745688,
+  "e-spec": 507,
+  "e-support": 21879,
+  "e-veto": 10438,
+  "f": 38587
+ },
+ "noDiscovery": null,
+ "reportSha256": "6e2de725a178ee2e99aaa600e3ce08a0d786ef68f62e0a0587eb4e4da715fa5c",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 26858,
+    "right": 7208087,
+    "unmapped": 89512,
+    "wrongFamily": 78335
+   },
+   "copyBytes": 3722326,
+   "f05": 0.84219,
+   "f05ShipperOnly": 0.84219,
+   "f1": 0.688605,
+   "f1ShipperOnly": 0.688605,
+   "libraryBytes": 13700047,
+   "missBytes": {
+    "a": 1509155,
+    "b": 427810,
+    "c": 187604,
+    "d-absent": 519166,
+    "d-file": 52327,
+    "e-ambig": 4652,
+    "e-other": 3714799,
+    "e-spec": 507,
+    "e-support": 19223,
+    "e-veto": 9428,
+    "f": 20431
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 7234945,
+   "namedBytesShipperOnly": 7234945,
+   "precision": 0.989289,
+   "precisionShipperOnly": 0.989289,
+   "recall": 0.528096,
+   "recallShipperOnly": 0.528096,
+   "statementBytes": {
+    "<app>": 938,
+    "<foreign>": 156300,
+    "<unmapped>": 231260,
+    "copy": 3722326,
+    "library": 13700047
+   },
+   "wrongFamilyBytes": 78335,
+   "wrongFamilyBytesShipperOnly": 78335
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "family": 2160,
+    "origin": 11787,
+    "right": 997657,
+    "wrongFamily": 19643
+   },
+   "copyBytes": 73089,
+   "f05": 0.889014,
+   "f05ShipperOnly": 0.878655,
+   "f1": 0.779436,
+   "f1ShipperOnly": 0.770354,
+   "libraryBytes": 1564485,
+   "missBytes": {
+    "a": 360283,
+    "b": 940,
+    "c": 20406,
+    "d-absent": 23041,
+    "d-file": 82821,
+    "e-ambig": 12679,
+    "e-other": 30889,
+    "e-support": 2656,
+    "e-veto": 1010,
+    "f": 18156
+   },
+   "namedAsOriginBytes": 11787,
+   "namedBytes": 1011604,
+   "namedBytesShipperOnly": 999817,
+   "precision": 0.980952,
+   "precisionShipperOnly": 0.969522,
+   "recall": 0.646605,
+   "recallShipperOnly": 0.639071,
+   "statementBytes": {
+    "<unmapped>": 65,
+    "copy": 73089,
+    "library": 1564485
+   },
+   "wrongFamilyBytes": 19643,
+   "wrongFamilyBytesShipperOnly": 31430
+  }
+ },
+ "set": "pop-esbuild",
+ "statementBytes": {
+  "<app>": 938,
+  "<foreign>": 156300,
+  "<unmapped>": 231325,
+  "copy": 3795415,
+  "library": 15264532
+ },
+ "toolchain": {
+  "adapter": "esbuild",
+  "bundler": "esbuild",
+  "minifier": "bun",
+  "slice": "esbuild-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 3795415,
+  "f05": 0.847667,
+  "f05ShipperOnly": 0.846455,
+  "f1": 0.698592,
+  "f1ShipperOnly": 0.697593,
+  "libraryBytes": 15264532,
+  "namedAsOriginBytes": 11787,
+  "namedAsShipperBytes": 8234762,
+  "namedBytes": 8246549,
+  "namedBytesShipperOnly": 8234762,
+  "precision": 0.988258,
+  "precisionShipperOnly": 0.986846,
+  "recall": 0.540243,
+  "recallShipperOnly": 0.53947,
+  "wrongFamilyBytes": 97978,
+  "wrongFamilyBytesShipperOnly": 109765
+ },
+ "truthMethod": "sourcemap"
+}
