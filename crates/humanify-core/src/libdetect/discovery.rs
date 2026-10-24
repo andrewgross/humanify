@@ -126,6 +126,15 @@ pub enum VetoSupport {
     /// Every claim after the full fixpoint: the lab prototype's rule, kept
     /// for the lab's reproduction of its numbers.
     AllRules,
+    /// `WithoutModule`'s support, or `AllRules`' for a seed whose family
+    /// the bundle shows without the MODULE rule (exp144): one of the
+    /// family's index seeds `WithoutModule` keeps, or a declared or banner
+    /// seed. A package whose every seed only its own module fill supports
+    /// (a lone file one package copied from another, whose own version the
+    /// index lacks) is vetoed as under `WithoutModule`; a seed `WithoutModule`
+    /// keeps is never dropped (`AllRules` alone can drop one: its full
+    /// fixpoint may give the neighbour to another family).
+    Shown,
 }
 
 /// Which names a kept `/*!` banner may seed (exp106).
@@ -1734,6 +1743,30 @@ fn isolated(
     out
 }
 
+/// The presence condition of [`VetoSupport::Shown`]:
+/// the index seeds the default veto drops (`strict`) whose family has no
+/// seed it keeps — no index seed outside `strict`, no declared or banner
+/// seed. The bundle shows such a family only through the module fill
+/// around its own seeds, which then cannot vouch for them.
+fn unshown(seeds: &[Seed], strict: &BTreeSet<u32>, families: &PackageFamilies) -> Vec<u32> {
+    let shown: Vec<&str> = seeds
+        .iter()
+        .filter(|s| !s.evidence.is_index() || !strict.contains(&s.unit))
+        .map(|s| s.package.as_str())
+        .collect();
+    let mut cache: HashMap<&str, bool> = HashMap::new();
+    seeds
+        .iter()
+        .filter(|s| strict.contains(&s.unit))
+        .filter(|s| {
+            !*cache
+                .entry(s.package.as_str())
+                .or_insert_with(|| shown.iter().any(|p| families.same(p, &s.package)))
+        })
+        .map(|s| s.unit)
+        .collect()
+}
+
 /// The bundle-level presence rules on the index seeds (exp114;
 /// [`DiscoveryOptions::context_presence`], [`DiscoveryOptions::shadow_ties`]):
 /// a package's index seeds answer "is this code P's?" one unit at a time;
@@ -2467,6 +2500,21 @@ pub fn discover_with(
     let (st, rounds) = loop {
         let (st, rounds) = fixpoint(graph, &groups, &active, options.max_rounds, all, guard);
         let drop = match options.veto_support {
+            VetoSupport::Shown => {
+                let (support, _) = fixpoint(
+                    graph,
+                    &groups,
+                    &active,
+                    options.max_rounds,
+                    &without_module,
+                    guard,
+                );
+                let strict = isolated(&support, &groups, &active, families, containment);
+                let relaxed = isolated(&st, &groups, &active, families, containment);
+                let mut drop: BTreeSet<u32> = strict.intersection(&relaxed).copied().collect();
+                drop.extend(unshown(&active, &strict, families));
+                drop
+            }
             VetoSupport::AllRules => isolated(&st, &groups, &active, families, containment),
             VetoSupport::WithoutModule => {
                 let (support, _) = fixpoint(

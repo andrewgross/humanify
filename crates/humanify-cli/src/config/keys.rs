@@ -65,13 +65,16 @@ fn unnamed_modes() -> Vec<String> {
     ["leave", "model"].map(String::from).to_vec()
 }
 fn veto_supports() -> Vec<String> {
-    ["without-module", "all-rules"].map(String::from).to_vec()
+    ["without-module", "all-rules", "shown"]
+        .map(String::from)
+        .to_vec()
 }
 /// The `library.discovery.veto_support` spelling of a rule.
 pub fn veto_support_name(v: VetoSupport) -> &'static str {
     match v {
         VetoSupport::WithoutModule => "without-module",
         VetoSupport::AllRules => "all-rules",
+        VetoSupport::Shown => "shown",
     }
 }
 /// `library.lookup.terser_share`'s default (exp127).
@@ -641,8 +644,9 @@ pub static KEYS: &[Key] = &[
         flag: None,
         default: || text(veto_support_name(discovery().veto_support)),
         unset: "",
-        doc: "What may support a seed against the isolation veto: \"without-module\" or \
-              \"all-rules\" (the lab prototype's).",
+        doc: "What may support a seed against the isolation veto: \"without-module\", \
+              \"all-rules\" (the lab prototype's), or \"shown\" (exp144: without-module's \
+              support, or all-rules' for a family the bundle shows without module fill).",
     },
     Key {
         section: "library.discovery",

@@ -130,7 +130,7 @@ closure_floor = 30
 queue_cap_bytes = 256000
 # Fixpoint round limit.
 max_rounds = 50
-# What may support a seed against the isolation veto: "without-module" or "all-rules" (the lab prototype's).
+# What may support a seed against the isolation veto: "without-module", "all-rules" (the lab prototype's), or "shown" (exp144: without-module's support, or all-rules' for a family the bundle shows without module fill).
 veto_support = "without-module"
 # Refuse an index seed or a propagated claim when another package family's index prints cover more of the unit than the claimed family's (exp102).
 evidence_conflict = true

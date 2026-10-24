@@ -9,7 +9,9 @@ use oxc_allocator::Allocator;
 use crate::cut::units::BundlerFacts;
 use crate::graph::references::{ReferenceGraph, build_reference_graph};
 use crate::ingest::Ingest;
-use crate::libdetect::discovery::{Discovery, DiscoveryOptions, Evidence, Rule, Seed, discover};
+use crate::libdetect::discovery::{
+    Discovery, DiscoveryOptions, Evidence, Rule, Seed, VetoSupport, discover,
+};
 use crate::libindex::families::PackageFamilies;
 
 struct Run {
@@ -44,6 +46,14 @@ fn declared() -> Evidence {
 }
 
 fn run(code: &'static str, seeds: &[(&str, &str, Evidence)]) -> Run {
+    run_with(code, seeds, DiscoveryOptions::default())
+}
+
+fn run_with(
+    code: &'static str,
+    seeds: &[(&str, &str, Evidence)],
+    options: DiscoveryOptions,
+) -> Run {
     let allocator = Allocator::default();
     let ingest = Ingest::parse(&allocator, code, "input.js");
     assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
@@ -66,12 +76,7 @@ fn run(code: &'static str, seeds: &[(&str, &str, Evidence)]) -> Run {
             evidence: evidence.clone(),
         })
         .collect();
-    r.found = discover(
-        &r.graph,
-        &seeds,
-        &PackageFamilies::shipped(),
-        DiscoveryOptions::default(),
-    );
+    r.found = discover(&r.graph, &seeds, &PackageFamilies::shipped(), options);
     r
 }
 
@@ -1682,4 +1687,78 @@ fn factory_banner_index_refuses_a_banner_the_module_s_own_code_contradicts() {
     // The index silent (or agreeing) on the statement: the banner stands.
     let rows = run(&held[1..], check);
     assert_eq!(claim_of(&rows, "var lib"), Some(("R".into(), Rule::Seed)));
+}
+
+#[test]
+fn shown_support_lets_module_fill_vouch_only_for_a_family_the_bundle_shows() {
+    // `big` is P's lone index seed; only its module's fill (`x = big`, the
+    // hoisted `x`) neighbours it. Under `all-rules` the fill supports it.
+    let lone = "var tiny = 1;\nvar big = () => 3;\nvar x;\nvar I = b(() => {\n  x = big;\n});\nvar app = () => (I(), x);\n";
+    let with = |v: VetoSupport| DiscoveryOptions {
+        veto_support: v,
+        ..DiscoveryOptions::default()
+    };
+    let seeds = [("var big", "P", Evidence::Index)];
+    assert_eq!(
+        run_with(lone, &seeds, DiscoveryOptions::default()).claim("var big"),
+        None
+    );
+    assert_eq!(
+        run_with(lone, &seeds, with(VetoSupport::AllRules)).claim("var big"),
+        Some(("P", Rule::Seed, 0))
+    );
+    // `shown`: a family whose every index seed only the module fill
+    // supports is not shown by the bundle: vetoed as under the default.
+    let r = run_with(lone, &seeds, with(VetoSupport::Shown));
+    assert_eq!(r.claim("var big"), None);
+    assert_eq!(r.found.vetoed.len(), 1);
+    // Once the bundle shows P elsewhere (two seeds supporting each other
+    // without any module fill), the fill counts again.
+    let shown = "var tiny = 1;\nvar big = () => 3;\nvar x;\nvar I = b(() => {\n  x = big;\n});\nvar d = () => c();\nvar c = () => 1;\nvar app = () => (I(), x) + d() + c();\n";
+    let seeds = [
+        ("var big", "P", Evidence::Index),
+        ("var d", "P", Evidence::Index),
+        ("var c", "P", Evidence::Index),
+    ];
+    let r = run_with(shown, &seeds, with(VetoSupport::Shown));
+    assert_eq!(r.claim("var big"), Some(("P", Rule::Seed, 0)));
+    assert_eq!(r.claim("var d"), Some(("P", Rule::Seed, 0)));
+    assert!(r.found.vetoed.is_empty());
+    // A declared seed shows the family too.
+    let seeds = [
+        ("var big", "P", Evidence::Index),
+        ("var d", "P", declared()),
+    ];
+    let r = run_with(shown, &seeds, with(VetoSupport::Shown));
+    assert_eq!(r.claim("var big"), Some(("P", Rule::Seed, 0)));
+    // Another family's seeds do not show P.
+    let seeds = [
+        ("var big", "P", Evidence::Index),
+        ("var d", "Q", Evidence::Index),
+        ("var c", "Q", Evidence::Index),
+    ];
+    let r = run_with(shown, &seeds, with(VetoSupport::Shown));
+    assert_eq!(r.claim("var big"), None);
+    assert_eq!(r.claim("var d"), Some(("Q", Rule::Seed, 0)));
+}
+
+#[test]
+fn shown_support_never_drops_a_seed_the_default_veto_keeps() {
+    // The default veto's fixtures read the same under `shown`.
+    let code = "var kept = () => 1;\nvar app1 = () => kept();\nvar app2 = () => kept() + 1;\nvar real = () => realPriv();\nvar realPriv = () => 1;\nvar appUse = () => real();\n";
+    let seeds = [
+        ("var kept", "ink", Evidence::Index),
+        ("var real =", "ink", Evidence::Index),
+        ("var realPriv", "ink", Evidence::Index),
+    ];
+    let shown = DiscoveryOptions {
+        veto_support: VetoSupport::Shown,
+        ..DiscoveryOptions::default()
+    };
+    for options in [DiscoveryOptions::default(), shown] {
+        let r = run_with(code, &seeds, options);
+        assert_eq!(r.claim("var kept"), None);
+        assert_eq!(r.claim("var real ="), Some(("ink", Rule::Seed, 0)));
+        assert_eq!(r.claim("var realPriv"), Some(("ink", Rule::Seed, 0)));
+    }
 }

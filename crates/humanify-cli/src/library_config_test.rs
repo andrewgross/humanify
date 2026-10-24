@@ -228,6 +228,25 @@ fn the_lab_knobs_are_keys_with_todays_values() {
 }
 
 #[test]
+fn the_exp144_shown_veto_support_is_a_choice_and_off_by_default() {
+    use humanify_core::libdetect::discovery::VetoSupport;
+    let c = build(
+        &["in.js"],
+        "[library.discovery]\nveto_support = \"shown\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        c.library.discovery_options().veto_support,
+        VetoSupport::Shown
+    );
+    let d = build(&["in.js"], "").unwrap();
+    assert_eq!(
+        d.library.discovery_options().veto_support,
+        VetoSupport::WithoutModule
+    );
+}
+
+#[test]
 fn the_exp102_precision_guards_are_keys() {
     let off = build(
         &["in.js"],

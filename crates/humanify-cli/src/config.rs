@@ -593,6 +593,7 @@ fn library_of(r: &Resolved) -> Library {
     let n = |k: &str| r.int(k).expect("defaulted");
     let veto = match r.text("library.discovery.veto_support").as_deref() {
         Some("all-rules") => humanify_core::libdetect::discovery::VetoSupport::AllRules,
+        Some("shown") => humanify_core::libdetect::discovery::VetoSupport::Shown,
         _ => humanify_core::libdetect::discovery::VetoSupport::WithoutModule,
     };
     Library {
