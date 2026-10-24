@@ -14,6 +14,11 @@ usage: python3 -I dev_remin.py plan               -> $DATA/plan.json
                                                 -> $DATA/frozen/, corpus-remin.json, origins-remin.json
        ... --corpus remin2                      exp140's JUDGE corpus `remin2` (seed 140, DATA /work/exp140-data/remin2,
                                                 no app of any other corpus); every verb takes it
+       ... --corpus remin3                      exp141's second DEV corpus (seed 141, 24 apps per kind, DATA
+                                                /work/exp141-data/remin3, no app of any other corpus, remin2's included)
+       ... --corpus remin4                      exp146's third DEV corpus (seed 146, 48 apps per kind, DATA
+                                                /work/exp146-data/remin4, no app of any other corpus, remin2's and
+                                                remin3's included)
 
 Selection: RANDOM_PER_KIND apps of each kind (cli, electron, vscode) at random (SEED) from the training apps
 whose closure is OK and whose library closure is at most MAX_LIB bytes. Two sets, one per second minifier:
@@ -37,8 +42,16 @@ from concurrent.futures import ThreadPoolExecutor
 CORPORA = {
     "remin": {"data": "/work/exp126-data/remin", "seed": 126},
     "remin2": {"data": "/work/exp140-data/remin2", "seed": 140},
+    # exp141's second DEV corpus of the same recipe (seed 141, 24 apps per kind): more terser material to diagnose,
+    # none of the apps of any other corpus (remin2's included)
+    "remin3": {"data": "/work/exp141-data/remin3", "seed": 141, "perKind": 24},
+    # exp146's third DEV corpus (seed 146, 48 apps per kind): enough terser apps to resolve a small change (exp145: a
+    # 36-app set absorbs ~1 KB of new wrong bytes), none of the apps of any other corpus (remin2's and remin3's included)
+    "remin4": {"data": "/work/exp146-data/remin4", "seed": 146, "perKind": 48},
 }
-CORPUS = "remin2" if "--corpus" in sys.argv and sys.argv[sys.argv.index("--corpus") + 1] == "remin2" else "remin"
+CORPUS = sys.argv[sys.argv.index("--corpus") + 1] if "--corpus" in sys.argv else "remin"
+if CORPUS not in CORPORA:
+    raise SystemExit(f"--corpus must be one of {', '.join(CORPORA)}")
 DATA = CORPORA[CORPUS]["data"]
 os.environ["SEL"] = DATA
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,10 +71,15 @@ OTHER_DEV = [os.path.join(REPO, "experiments/096-library-matching-score", f) for
 OTHER_ALL = [os.path.join(REPO, "experiments/096-library-matching-score", f) for f in
              ("corpus.json", "corpus-test.json", "corpus-test2.json", "corpus-apps.json", "corpus-pop.json",
               "corpus-remin.json", "corpus-bundlers.json")]
+# remin3 excludes remin2's apps as well (the judge's apps are never dev material)
+OTHER_ALL3 = OTHER_ALL + [os.path.join(REPO, "experiments/096-library-matching-score/corpus-remin2.json")]
+# remin4 excludes remin3's apps too
+OTHER_ALL4 = OTHER_ALL3 + [os.path.join(REPO, "experiments/096-library-matching-score/corpus-remin3.json")]
+EXCLUDE = {"remin2": OTHER_ALL, "remin3": OTHER_ALL3, "remin4": OTHER_ALL4}
 BUILD = os.path.join(HERE, "remin-build.mjs")
 SEED = CORPORA[CORPUS]["seed"]
 MAX_LIB = 15_000_000
-RANDOM_PER_KIND = 12
+RANDOM_PER_KIND = CORPORA[CORPUS].get("perKind", 12)
 KINDS = ("cli", "electron", "vscode")
 SETS = ("terser", "esbuild")
 DESC = {
@@ -77,6 +95,18 @@ NOTE2 = ("exp140 JUDGE corpus of RE-MINIFIED bundles (exp126's recipe, seed 140)
          "private: never tuned on, never diagnosed")
 
 
+NOTE3 = ("exp141 DEV corpus of RE-MINIFIED bundles (exp126's recipe, seed 141, 24 apps per kind): exp108 TRAINING apps "
+         "in none of remin, remin2, held-out, test, test2, apps, pop or dev, bundled against the packages' published "
+         "minified entries and minified again by terser and by esbuild (experiments/126-reminified/scripts/dev_remin.py "
+         "--corpus remin3)")
+NOTE4 = ("exp146 DEV corpus of RE-MINIFIED bundles (exp126's recipe, seed 146, 48 apps per kind): exp108 TRAINING apps "
+         "in none of remin, remin2, remin3, held-out, test, test2, apps, pop or dev, bundled against the packages' "
+         "published minified entries and minified again by terser and by esbuild "
+         "(experiments/126-reminified/scripts/dev_remin.py --corpus remin4)")
+NOTES = {"remin2": NOTE2, "remin3": NOTE3, "remin4": NOTE4}
+WHO = {"remin2": "exp140 judge", "remin3": "exp141 dev", "remin4": "exp146 dev"}
+
+
 def pool():
     apps = json.load(open(CORPUS108))["apps"]
     test = {c["id"] for c in json.load(open(TEST_SELECTION))["candidates"]}
@@ -85,8 +115,8 @@ def pool():
     for p in OTHER_DEV:
         for e in json.load(open(p))["entries"]:
             other.add(e["id"].split("-", 2)[2])  # <corpus>-<bundler>-<slug>
-    if CORPUS == "remin2":
-        for p in OTHER_ALL:
+    if CORPUS in EXCLUDE:
+        for p in EXCLUDE[CORPUS]:
             for e in json.load(open(p))["entries"]:
                 m = re.search(r"(cli|electron|vscode)_.*$", e["id"])
                 if m:
@@ -208,7 +238,7 @@ def do_freeze(jobs):
     p = json.load(open(DATA + "/plan.json"))
     built = {r["id"]: r for r in json.load(open(DATA + "/built.json"))}
     manifest = {"schema": "exp096-corpus/1", "corpus": CORPUS, "frozen": True,
-                "note": NOTE2 if CORPUS == "remin2" else "exp126 DEV corpus of RE-MINIFIED bundles: exp108 TRAINING apps (never held-out, test, "
+                "note": NOTES.get(CORPUS) or "exp126 DEV corpus of RE-MINIFIED bundles: exp108 TRAINING apps (never held-out, test, "
                         "test2, apps or pop), bundled against the packages' published minified entries and "
                         "minified again by terser and by esbuild (experiments/126-reminified/scripts/dev_remin.py)",
                 "entries": []}
@@ -221,7 +251,7 @@ def do_freeze(jobs):
             app = a["name"] if a["kind"] == "cli" else "-"
             entry = {"id": f"{CORPUS}-{b}-{a['slug']}", "set": f"{CORPUS}-{b}", "bundler": "esbuild", "builtWith": "esbuild", "minifier": b,
                      "appPackage": app, "kind": a["kind"], "stratum": a["stratum"],
-                     "description": f"{'exp140 judge' if CORPUS == 'remin2' else 'exp126 dev'} app {a['id']}: {DESC[b]}"}
+                     "description": f"{WHO.get(CORPUS, 'exp126 dev')} app {a['id']}: {DESC[b]}"}
             d = os.path.join(lib096.DATA, "corpus", entry["id"])
             os.makedirs(d, exist_ok=True)
             entry["files"] = {}
