@@ -1,896 +1,896 @@
 {
- "apps-esbuild": {
-  "all vetoed": {
-   "right": 3475.9,
-   "sim": {
-    "dF05": 0.664,
-    "dP": -0.014,
-    "dR": 2.33
-   },
-   "unscored": 7.3,
-   "wrong": 19.7
+  "apps-esbuild": {
+    "all vetoed": {
+      "right": 3475.9,
+      "sim": {
+        "dF05": 0.664,
+        "dP": -0.014,
+        "dR": 2.33
+      },
+      "unscored": 7.3,
+      "wrong": 19.7
+    },
+    "unambiguous": {
+      "right": 3459.4,
+      "sim": {
+        "dF05": 0.67,
+        "dP": -0.0,
+        "dR": 2.32
+      },
+      "unscored": 7.0,
+      "wrong": 3.5
+    },
+    "unambiguous, >= half its module": {
+      "right": 3354.7,
+      "sim": {
+        "dF05": 0.653,
+        "dP": 0.003,
+        "dR": 2.24
+      },
+      "unscored": 0.4
+    },
+    "unambiguous, exact whole print": {
+      "right": 3432.7,
+      "sim": {
+        "dF05": 0.665,
+        "dP": -0.0,
+        "dR": 2.3
+      },
+      "unscored": 1.7,
+      "wrong": 3.5
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 2271.2,
+      "sim": {
+        "dF05": 0.445,
+        "dP": 0.002,
+        "dR": 1.52
+      }
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 3335.8,
+      "sim": {
+        "dF05": 0.649,
+        "dP": 0.003,
+        "dR": 2.23
+      },
+      "unscored": 0.4
+    },
+    "unambiguous, factory body": {
+      "right": 3437.3,
+      "sim": {
+        "dF05": 0.666,
+        "dP": -0.0,
+        "dR": 2.3
+      },
+      "unscored": 6.4,
+      "wrong": 3.5
+    }
   },
-  "unambiguous": {
-   "right": 3459.4,
-   "sim": {
-    "dF05": 0.67,
-    "dP": -0.0,
-    "dR": 2.32
-   },
-   "unscored": 7.0,
-   "wrong": 3.5
+  "apps-rollup": {
+    "all vetoed": {
+      "right": 549.6,
+      "sim": {
+        "dF05": 0.091,
+        "dP": -0.098,
+        "dR": 0.58
+      },
+      "unscored": 12.4,
+      "wrong": 81.3
+    },
+    "unambiguous": {
+      "right": 386.9,
+      "sim": {
+        "dF05": 0.097,
+        "dP": -0.024,
+        "dR": 0.4
+      },
+      "unscored": 9.8,
+      "wrong": 22.3
+    },
+    "unambiguous, >= half its module": {
+      "right": 136.8,
+      "sim": {
+        "dF05": 0.042,
+        "dP": 0.002,
+        "dR": 0.14
+      }
+    },
+    "unambiguous, exact whole print": {
+      "right": 308.8,
+      "sim": {
+        "dF05": 0.077,
+        "dP": -0.02,
+        "dR": 0.32
+      },
+      "unscored": 9.1,
+      "wrong": 18.3
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 186.8,
+      "sim": {
+        "dF05": 0.052,
+        "dP": -0.005,
+        "dR": 0.2
+      },
+      "unscored": 8.7,
+      "wrong": 5.4
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 92.9,
+      "sim": {
+        "dF05": 0.028,
+        "dP": 0.001,
+        "dR": 0.1
+      }
+    }
   },
-  "unambiguous, >= half its module": {
-   "right": 3354.7,
-   "sim": {
-    "dF05": 0.653,
-    "dP": 0.003,
-    "dR": 2.24
-   },
-   "unscored": 0.4
+  "apps-webpack": {
+    "all vetoed": {
+      "right": 7146.0,
+      "sim": {
+        "dF05": 2.705,
+        "dP": -0.21,
+        "dR": 9.82
+      },
+      "unscored": 1312.3,
+      "wrong": 157.1
+    },
+    "unambiguous": {
+      "right": 6299.7,
+      "sim": {
+        "dF05": 2.574,
+        "dP": 0.034,
+        "dR": 8.66
+      },
+      "unscored": 1309.6,
+      "wrong": 5.0
+    },
+    "unambiguous, >= half its module": {
+      "right": 6099.3,
+      "sim": {
+        "dF05": 2.504,
+        "dP": 0.041,
+        "dR": 8.39
+      },
+      "unscored": 1293.9
+    },
+    "unambiguous, exact whole print": {
+      "right": 2687.7,
+      "sim": {
+        "dF05": 1.149,
+        "dP": 0.012,
+        "dR": 3.7
+      },
+      "unscored": 45.6,
+      "wrong": 4.0
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 2381.1,
+      "sim": {
+        "dF05": 1.026,
+        "dP": 0.017,
+        "dR": 3.27
+      },
+      "unscored": 41.1
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 2591.5,
+      "sim": {
+        "dF05": 1.114,
+        "dP": 0.018,
+        "dR": 3.56
+      },
+      "unscored": 30.6
+    }
   },
-  "unambiguous, exact whole print": {
-   "right": 3432.7,
-   "sim": {
-    "dF05": 0.665,
-    "dP": -0.0,
-    "dR": 2.3
-   },
-   "unscored": 1.7,
-   "wrong": 3.5
+  "dev-rollup": {
+    "all vetoed": {
+      "right": 24.4,
+      "sim": {
+        "dF05": 0.282,
+        "dP": -0.083,
+        "dR": 1.17
+      },
+      "wrong": 1.4
+    },
+    "unambiguous": {
+      "right": 17.0,
+      "sim": {
+        "dF05": 0.24,
+        "dP": 0.001,
+        "dR": 0.81
+      }
+    },
+    "unambiguous, >= half its module": {
+      "right": 3.7,
+      "sim": {
+        "dF05": 0.053,
+        "dP": 0.0,
+        "dR": 0.18
+      }
+    },
+    "unambiguous, exact whole print": {
+      "right": 12.5,
+      "sim": {
+        "dF05": 0.177,
+        "dP": 0.001,
+        "dR": 0.6
+      }
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 6.5,
+      "sim": {
+        "dF05": 0.092,
+        "dP": 0.001,
+        "dR": 0.31
+      }
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 3.4,
+      "sim": {
+        "dF05": 0.048,
+        "dP": 0.0,
+        "dR": 0.16
+      }
+    }
   },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 2271.2,
-   "sim": {
-    "dF05": 0.445,
-    "dP": 0.002,
-    "dR": 1.52
-   }
+  "dev-webpack": {
+    "all vetoed": {
+      "right": 38.7,
+      "sim": {
+        "dF05": 0.859,
+        "dP": 0.012,
+        "dR": 2.17
+      },
+      "unscored": 282.3
+    },
+    "unambiguous": {
+      "right": 27.3,
+      "sim": {
+        "dF05": 0.61,
+        "dP": 0.008,
+        "dR": 1.53
+      },
+      "unscored": 282.3
+    },
+    "unambiguous, >= half its module": {
+      "right": 17.9,
+      "sim": {
+        "dF05": 0.402,
+        "dP": 0.006,
+        "dR": 1.0
+      },
+      "unscored": 282.3
+    },
+    "unambiguous, exact whole print": {
+      "right": 22.5,
+      "sim": {
+        "dF05": 0.504,
+        "dP": 0.007,
+        "dR": 1.26
+      }
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 15.6,
+      "sim": {
+        "dF05": 0.351,
+        "dP": 0.005,
+        "dR": 0.87
+      }
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 14.7,
+      "sim": {
+        "dF05": 0.331,
+        "dP": 0.005,
+        "dR": 0.82
+      }
+    }
   },
-  "unambiguous, exact, >= half its module": {
-   "right": 3335.8,
-   "sim": {
-    "dF05": 0.649,
-    "dP": 0.003,
-    "dR": 2.23
-   },
-   "unscored": 0.4
+  "esbuild-app": {
+    "all vetoed": {
+      "right": 862.2,
+      "sim": {
+        "dF05": 1.421,
+        "dP": 0.024,
+        "dR": 4.75
+      },
+      "wrong": 4.5
+    },
+    "unambiguous": {
+      "right": 855.5,
+      "sim": {
+        "dF05": 1.427,
+        "dP": 0.046,
+        "dR": 4.71
+      },
+      "wrong": 1.2
+    },
+    "unambiguous, >= half its module": {
+      "right": 837.7,
+      "sim": {
+        "dF05": 1.404,
+        "dP": 0.053,
+        "dR": 4.61
+      }
+    },
+    "unambiguous, exact whole print": {
+      "right": 846.5,
+      "sim": {
+        "dF05": 1.413,
+        "dP": 0.046,
+        "dR": 4.66
+      },
+      "wrong": 1.1
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 761.0,
+      "sim": {
+        "dF05": 1.281,
+        "dP": 0.049,
+        "dR": 4.19
+      }
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 830.0,
+      "sim": {
+        "dF05": 1.392,
+        "dP": 0.053,
+        "dR": 4.57
+      }
+    },
+    "unambiguous, factory body": {
+      "right": 846.2,
+      "sim": {
+        "dF05": 1.418,
+        "dP": 0.054,
+        "dR": 4.66
+      }
+    }
   },
-  "unambiguous, factory body": {
-   "right": 3437.3,
-   "sim": {
-    "dF05": 0.666,
-    "dP": -0.0,
-    "dR": 2.3
-   },
-   "unscored": 6.4,
-   "wrong": 3.5
+  "heldout": {
+    "all vetoed": {
+      "right": 9028.2,
+      "sim": {
+        "dF05": 1.235,
+        "dP": -0.152,
+        "dR": 3.93
+      },
+      "unscored": 308.9,
+      "wrong": 288.1
+    },
+    "unambiguous": {
+      "right": 8798.0,
+      "sim": {
+        "dF05": 1.221,
+        "dP": -0.125,
+        "dR": 3.83
+      },
+      "unscored": 90.2,
+      "wrong": 241.3
+    },
+    "unambiguous, >= half its module": {
+      "right": 7886.2,
+      "sim": {
+        "dF05": 1.098,
+        "dP": -0.114,
+        "dR": 3.43
+      },
+      "unscored": 25.3,
+      "wrong": 218.3
+    },
+    "unambiguous, exact whole print": {
+      "right": 8754.1,
+      "sim": {
+        "dF05": 1.215,
+        "dP": -0.125,
+        "dR": 3.81
+      },
+      "unscored": 70.7,
+      "wrong": 241.1
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 7646.4,
+      "sim": {
+        "dF05": 1.06,
+        "dP": -0.119,
+        "dR": 3.33
+      },
+      "unscored": 30.8,
+      "wrong": 225.9
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 7864.9,
+      "sim": {
+        "dF05": 1.095,
+        "dP": -0.114,
+        "dR": 3.43
+      },
+      "unscored": 24.6,
+      "wrong": 218.3
+    },
+    "unambiguous, factory body": {
+      "right": 8705.7,
+      "sim": {
+        "dF05": 1.209,
+        "dP": -0.122,
+        "dR": 3.79
+      },
+      "unscored": 66.5,
+      "wrong": 237.0
+    }
+  },
+  "pop-bun": {
+    "all vetoed": {
+      "right": 7886.0,
+      "sim": {
+        "dF05": 0.651,
+        "dP": -0.093,
+        "dR": 2.48
+      },
+      "unscored": 19.4,
+      "wrong": 277.2
+    },
+    "unambiguous": {
+      "right": 7837.9,
+      "sim": {
+        "dF05": 0.701,
+        "dP": -0.018,
+        "dR": 2.46
+      },
+      "unscored": 12.0,
+      "wrong": 83.2
+    },
+    "unambiguous, >= half its module": {
+      "right": 7364.4,
+      "sim": {
+        "dF05": 0.679,
+        "dP": 0.01,
+        "dR": 2.31
+      },
+      "unscored": 6.4,
+      "wrong": 11.2
+    },
+    "unambiguous, exact whole print": {
+      "right": 7758.8,
+      "sim": {
+        "dF05": 0.699,
+        "dP": -0.011,
+        "dR": 2.44
+      },
+      "unscored": 10.3,
+      "wrong": 66.6
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 6365.6,
+      "sim": {
+        "dF05": 0.582,
+        "dP": -0.0,
+        "dR": 2.0
+      },
+      "unscored": 3.3,
+      "wrong": 31.8
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 7328.7,
+      "sim": {
+        "dF05": 0.676,
+        "dP": 0.01,
+        "dR": 2.3
+      },
+      "unscored": 6.4,
+      "wrong": 10.9
+    },
+    "unambiguous, factory body": {
+      "right": 7647.0,
+      "sim": {
+        "dF05": 0.697,
+        "dP": 0.0,
+        "dR": 2.4
+      },
+      "unscored": 8.3,
+      "wrong": 36.6
+    }
+  },
+  "pop-esbuild": {
+    "all vetoed": {
+      "right": 9485.8,
+      "sim": {
+        "dF05": 0.809,
+        "dP": -0.031,
+        "dR": 2.98
+      },
+      "unscored": 24.4,
+      "wrong": 147.5
+    },
+    "unambiguous": {
+      "right": 9429.8,
+      "sim": {
+        "dF05": 0.826,
+        "dP": -0.001,
+        "dR": 2.96
+      },
+      "unscored": 21.6,
+      "wrong": 68.2
+    },
+    "unambiguous, >= half its module": {
+      "right": 8306.8,
+      "sim": {
+        "dF05": 0.747,
+        "dP": 0.021,
+        "dR": 2.61
+      },
+      "unscored": 0.5,
+      "wrong": 1.3
+    },
+    "unambiguous, exact whole print": {
+      "right": 9370.0,
+      "sim": {
+        "dF05": 0.823,
+        "dP": 0.001,
+        "dR": 2.94
+      },
+      "unscored": 21.3,
+      "wrong": 62.6
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 7706.8,
+      "sim": {
+        "dF05": 0.684,
+        "dP": 0.006,
+        "dR": 2.42
+      },
+      "unscored": 18.5,
+      "wrong": 38.4
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 8270.9,
+      "sim": {
+        "dF05": 0.744,
+        "dP": 0.021,
+        "dR": 2.6
+      },
+      "unscored": 0.5,
+      "wrong": 1.3
+    },
+    "unambiguous, factory body": {
+      "right": 8581.2,
+      "sim": {
+        "dF05": 0.759,
+        "dP": 0.006,
+        "dR": 2.69
+      },
+      "unscored": 18.9,
+      "wrong": 44.2
+    }
+  },
+  "remin-esbuild": {
+    "all vetoed": {
+      "right": 2721.5,
+      "sim": {
+        "dF05": 1.435,
+        "dP": 0.014,
+        "dR": 2.8
+      },
+      "unscored": 4.6
+    },
+    "unambiguous": {
+      "right": 2702.1,
+      "sim": {
+        "dF05": 1.425,
+        "dP": 0.014,
+        "dR": 2.78
+      },
+      "unscored": 4.2
+    },
+    "unambiguous, >= half its module": {
+      "right": 2361.9,
+      "sim": {
+        "dF05": 1.251,
+        "dP": 0.013,
+        "dR": 2.43
+      },
+      "unscored": 3.5
+    },
+    "unambiguous, exact whole print": {
+      "right": 2659.1,
+      "sim": {
+        "dF05": 1.403,
+        "dP": 0.014,
+        "dR": 2.73
+      },
+      "unscored": 4.2
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 2181.4,
+      "sim": {
+        "dF05": 1.158,
+        "dP": 0.012,
+        "dR": 2.24
+      },
+      "unscored": 2.6
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 2351.0,
+      "sim": {
+        "dF05": 1.246,
+        "dP": 0.013,
+        "dR": 2.42
+      },
+      "unscored": 3.5
+    },
+    "unambiguous, factory body": {
+      "right": 2641.5,
+      "sim": {
+        "dF05": 1.394,
+        "dP": 0.014,
+        "dR": 2.72
+      },
+      "unscored": 4.2
+    }
+  },
+  "remin-terser": {
+    "all vetoed": {
+      "right": 714.7,
+      "sim": {
+        "dF05": 1.168,
+        "dP": -0.011,
+        "dR": 0.78
+      },
+      "unscored": 7.6,
+      "wrong": 2.8
+    },
+    "unambiguous": {
+      "right": 683.5,
+      "sim": {
+        "dF05": 1.119,
+        "dP": -0.005,
+        "dR": 0.75
+      },
+      "unscored": 6.7,
+      "wrong": 1.6
+    },
+    "unambiguous, >= half its module": {
+      "right": 328.9,
+      "sim": {
+        "dF05": 0.544,
+        "dP": 0.002,
+        "dR": 0.36
+      }
+    },
+    "unambiguous, exact whole print": {
+      "right": 659.1,
+      "sim": {
+        "dF05": 1.08,
+        "dP": -0.005,
+        "dR": 0.72
+      },
+      "unscored": 6.7,
+      "wrong": 1.6
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 311.4,
+      "sim": {
+        "dF05": 0.515,
+        "dP": 0.002,
+        "dR": 0.34
+      },
+      "unscored": 3.3
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 326.2,
+      "sim": {
+        "dF05": 0.54,
+        "dP": 0.002,
+        "dR": 0.36
+      }
+    },
+    "unambiguous, factory body": {
+      "right": 680.7,
+      "sim": {
+        "dF05": 1.115,
+        "dP": -0.005,
+        "dR": 0.75
+      },
+      "unscored": 6.7,
+      "wrong": 1.6
+    }
+  },
+  "remin3-esbuild": {
+    "all vetoed": {
+      "right": 8720.7,
+      "sim": {
+        "dF05": 2.255,
+        "dP": -0.057,
+        "dR": 4.32
+      },
+      "unscored": 1.0,
+      "wrong": 90.3
+    },
+    "unambiguous": {
+      "right": 8659.3,
+      "sim": {
+        "dF05": 2.244,
+        "dP": -0.05,
+        "dR": 4.29
+      },
+      "unscored": 1.0,
+      "wrong": 82.2
+    },
+    "unambiguous, >= half its module": {
+      "right": 8150.7,
+      "sim": {
+        "dF05": 2.16,
+        "dP": 0.024,
+        "dR": 4.03
+      },
+      "unscored": 0.4
+    },
+    "unambiguous, exact whole print": {
+      "right": 8579.1,
+      "sim": {
+        "dF05": 2.266,
+        "dP": 0.022,
+        "dR": 4.25
+      },
+      "unscored": 0.6,
+      "wrong": 3.2
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 6192.5,
+      "sim": {
+        "dF05": 1.662,
+        "dP": 0.019,
+        "dR": 3.06
+      }
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 8128.5,
+      "sim": {
+        "dF05": 2.155,
+        "dP": 0.024,
+        "dR": 4.02
+      },
+      "unscored": 0.4
+    },
+    "unambiguous, factory body": {
+      "right": 8623.0,
+      "sim": {
+        "dF05": 2.235,
+        "dP": -0.05,
+        "dR": 4.27
+      },
+      "unscored": 0.8,
+      "wrong": 82.1
+    }
+  },
+  "remin3-terser": {
+    "all vetoed": {
+      "right": 1690.1,
+      "sim": {
+        "dF05": 1.499,
+        "dP": -0.012,
+        "dR": 0.88
+      },
+      "unscored": 12.7,
+      "wrong": 6.5
+    },
+    "unambiguous": {
+      "right": 1662.9,
+      "sim": {
+        "dF05": 1.477,
+        "dP": -0.003,
+        "dR": 0.87
+      },
+      "unscored": 12.7,
+      "wrong": 3.6
+    },
+    "unambiguous, >= half its module": {
+      "right": 1069.7,
+      "sim": {
+        "dF05": 0.959,
+        "dP": 0.005,
+        "dR": 0.56
+      },
+      "unscored": 0.7
+    },
+    "unambiguous, exact whole print": {
+      "right": 1623.5,
+      "sim": {
+        "dF05": 1.443,
+        "dP": -0.004,
+        "dR": 0.85
+      },
+      "unscored": 12.6,
+      "wrong": 3.6
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 1035.2,
+      "sim": {
+        "dF05": 0.928,
+        "dP": 0.004,
+        "dR": 0.54
+      },
+      "unscored": 4.3
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 1066.0,
+      "sim": {
+        "dF05": 0.955,
+        "dP": 0.004,
+        "dR": 0.56
+      },
+      "unscored": 0.7
+    },
+    "unambiguous, factory body": {
+      "right": 1654.3,
+      "sim": {
+        "dF05": 1.47,
+        "dP": -0.002,
+        "dR": 0.86
+      },
+      "unscored": 12.7,
+      "wrong": 3.0
+    }
+  },
+  "wrangler": {
+    "all vetoed": {
+      "right": 17.6,
+      "sim": {
+        "dF05": 0.56,
+        "dP": -0.747,
+        "dR": 0.97
+      },
+      "wrong": 4.9
+    },
+    "unambiguous": {
+      "right": 16.9,
+      "sim": {
+        "dF05": 0.851,
+        "dP": 0.025,
+        "dR": 0.93
+      }
+    },
+    "unambiguous, >= half its module": {
+      "right": 7.7,
+      "sim": {
+        "dF05": 0.391,
+        "dP": 0.012,
+        "dR": 0.43
+      }
+    },
+    "unambiguous, exact whole print": {
+      "right": 10.7,
+      "sim": {
+        "dF05": 0.542,
+        "dP": 0.016,
+        "dR": 0.59
+      }
+    },
+    "unambiguous, exact, >= 1 KB": {
+      "right": 7.3,
+      "sim": {
+        "dF05": 0.371,
+        "dP": 0.011,
+        "dR": 0.4
+      }
+    },
+    "unambiguous, exact, >= half its module": {
+      "right": 7.7,
+      "sim": {
+        "dF05": 0.391,
+        "dP": 0.012,
+        "dR": 0.43
+      }
+    },
+    "unambiguous, factory body": {
+      "right": 10.8,
+      "sim": {
+        "dF05": 0.547,
+        "dP": 0.016,
+        "dR": 0.6
+      }
+    }
   }
- },
- "apps-rollup": {
-  "all vetoed": {
-   "right": 549.6,
-   "sim": {
-    "dF05": 0.091,
-    "dP": -0.098,
-    "dR": 0.58
-   },
-   "unscored": 12.4,
-   "wrong": 81.3
-  },
-  "unambiguous": {
-   "right": 386.9,
-   "sim": {
-    "dF05": 0.097,
-    "dP": -0.024,
-    "dR": 0.4
-   },
-   "unscored": 9.8,
-   "wrong": 22.3
-  },
-  "unambiguous, >= half its module": {
-   "right": 136.8,
-   "sim": {
-    "dF05": 0.042,
-    "dP": 0.002,
-    "dR": 0.14
-   }
-  },
-  "unambiguous, exact whole print": {
-   "right": 308.8,
-   "sim": {
-    "dF05": 0.077,
-    "dP": -0.02,
-    "dR": 0.32
-   },
-   "unscored": 9.1,
-   "wrong": 18.3
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 186.8,
-   "sim": {
-    "dF05": 0.052,
-    "dP": -0.005,
-    "dR": 0.2
-   },
-   "unscored": 8.7,
-   "wrong": 5.4
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 92.9,
-   "sim": {
-    "dF05": 0.028,
-    "dP": 0.001,
-    "dR": 0.1
-   }
-  }
- },
- "apps-webpack": {
-  "all vetoed": {
-   "right": 7146.0,
-   "sim": {
-    "dF05": 2.705,
-    "dP": -0.21,
-    "dR": 9.82
-   },
-   "unscored": 1312.3,
-   "wrong": 157.1
-  },
-  "unambiguous": {
-   "right": 6299.7,
-   "sim": {
-    "dF05": 2.574,
-    "dP": 0.034,
-    "dR": 8.66
-   },
-   "unscored": 1309.6,
-   "wrong": 5.0
-  },
-  "unambiguous, >= half its module": {
-   "right": 6099.3,
-   "sim": {
-    "dF05": 2.504,
-    "dP": 0.041,
-    "dR": 8.39
-   },
-   "unscored": 1293.9
-  },
-  "unambiguous, exact whole print": {
-   "right": 2687.7,
-   "sim": {
-    "dF05": 1.149,
-    "dP": 0.012,
-    "dR": 3.7
-   },
-   "unscored": 45.6,
-   "wrong": 4.0
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 2381.1,
-   "sim": {
-    "dF05": 1.026,
-    "dP": 0.017,
-    "dR": 3.27
-   },
-   "unscored": 41.1
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 2591.5,
-   "sim": {
-    "dF05": 1.114,
-    "dP": 0.018,
-    "dR": 3.56
-   },
-   "unscored": 30.6
-  }
- },
- "dev-rollup": {
-  "all vetoed": {
-   "right": 24.4,
-   "sim": {
-    "dF05": 0.282,
-    "dP": -0.083,
-    "dR": 1.17
-   },
-   "wrong": 1.4
-  },
-  "unambiguous": {
-   "right": 17.0,
-   "sim": {
-    "dF05": 0.24,
-    "dP": 0.001,
-    "dR": 0.81
-   }
-  },
-  "unambiguous, >= half its module": {
-   "right": 3.7,
-   "sim": {
-    "dF05": 0.053,
-    "dP": 0.0,
-    "dR": 0.18
-   }
-  },
-  "unambiguous, exact whole print": {
-   "right": 12.5,
-   "sim": {
-    "dF05": 0.177,
-    "dP": 0.001,
-    "dR": 0.6
-   }
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 6.5,
-   "sim": {
-    "dF05": 0.092,
-    "dP": 0.001,
-    "dR": 0.31
-   }
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 3.4,
-   "sim": {
-    "dF05": 0.048,
-    "dP": 0.0,
-    "dR": 0.16
-   }
-  }
- },
- "dev-webpack": {
-  "all vetoed": {
-   "right": 38.7,
-   "sim": {
-    "dF05": 0.859,
-    "dP": 0.012,
-    "dR": 2.17
-   },
-   "unscored": 282.3
-  },
-  "unambiguous": {
-   "right": 27.3,
-   "sim": {
-    "dF05": 0.61,
-    "dP": 0.008,
-    "dR": 1.53
-   },
-   "unscored": 282.3
-  },
-  "unambiguous, >= half its module": {
-   "right": 17.9,
-   "sim": {
-    "dF05": 0.402,
-    "dP": 0.006,
-    "dR": 1.0
-   },
-   "unscored": 282.3
-  },
-  "unambiguous, exact whole print": {
-   "right": 22.5,
-   "sim": {
-    "dF05": 0.504,
-    "dP": 0.007,
-    "dR": 1.26
-   }
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 15.6,
-   "sim": {
-    "dF05": 0.351,
-    "dP": 0.005,
-    "dR": 0.87
-   }
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 14.7,
-   "sim": {
-    "dF05": 0.331,
-    "dP": 0.005,
-    "dR": 0.82
-   }
-  }
- },
- "esbuild-app": {
-  "all vetoed": {
-   "right": 862.2,
-   "sim": {
-    "dF05": 1.421,
-    "dP": 0.024,
-    "dR": 4.75
-   },
-   "wrong": 4.5
-  },
-  "unambiguous": {
-   "right": 855.5,
-   "sim": {
-    "dF05": 1.427,
-    "dP": 0.046,
-    "dR": 4.71
-   },
-   "wrong": 1.2
-  },
-  "unambiguous, >= half its module": {
-   "right": 837.7,
-   "sim": {
-    "dF05": 1.404,
-    "dP": 0.053,
-    "dR": 4.61
-   }
-  },
-  "unambiguous, exact whole print": {
-   "right": 846.5,
-   "sim": {
-    "dF05": 1.413,
-    "dP": 0.046,
-    "dR": 4.66
-   },
-   "wrong": 1.1
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 761.0,
-   "sim": {
-    "dF05": 1.281,
-    "dP": 0.049,
-    "dR": 4.19
-   }
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 830.0,
-   "sim": {
-    "dF05": 1.392,
-    "dP": 0.053,
-    "dR": 4.57
-   }
-  },
-  "unambiguous, factory body": {
-   "right": 846.2,
-   "sim": {
-    "dF05": 1.418,
-    "dP": 0.054,
-    "dR": 4.66
-   }
-  }
- },
- "heldout": {
-  "all vetoed": {
-   "right": 9028.2,
-   "sim": {
-    "dF05": 1.235,
-    "dP": -0.152,
-    "dR": 3.93
-   },
-   "unscored": 308.9,
-   "wrong": 288.1
-  },
-  "unambiguous": {
-   "right": 8798.0,
-   "sim": {
-    "dF05": 1.221,
-    "dP": -0.125,
-    "dR": 3.83
-   },
-   "unscored": 90.2,
-   "wrong": 241.3
-  },
-  "unambiguous, >= half its module": {
-   "right": 7886.2,
-   "sim": {
-    "dF05": 1.098,
-    "dP": -0.114,
-    "dR": 3.43
-   },
-   "unscored": 25.3,
-   "wrong": 218.3
-  },
-  "unambiguous, exact whole print": {
-   "right": 8754.1,
-   "sim": {
-    "dF05": 1.215,
-    "dP": -0.125,
-    "dR": 3.81
-   },
-   "unscored": 70.7,
-   "wrong": 241.1
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 7646.4,
-   "sim": {
-    "dF05": 1.06,
-    "dP": -0.119,
-    "dR": 3.33
-   },
-   "unscored": 30.8,
-   "wrong": 225.9
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 7864.9,
-   "sim": {
-    "dF05": 1.095,
-    "dP": -0.114,
-    "dR": 3.43
-   },
-   "unscored": 24.6,
-   "wrong": 218.3
-  },
-  "unambiguous, factory body": {
-   "right": 8705.7,
-   "sim": {
-    "dF05": 1.209,
-    "dP": -0.122,
-    "dR": 3.79
-   },
-   "unscored": 66.5,
-   "wrong": 237.0
-  }
- },
- "pop-bun": {
-  "all vetoed": {
-   "right": 7886.0,
-   "sim": {
-    "dF05": 0.651,
-    "dP": -0.093,
-    "dR": 2.48
-   },
-   "unscored": 19.4,
-   "wrong": 277.2
-  },
-  "unambiguous": {
-   "right": 7837.9,
-   "sim": {
-    "dF05": 0.701,
-    "dP": -0.018,
-    "dR": 2.46
-   },
-   "unscored": 12.0,
-   "wrong": 83.2
-  },
-  "unambiguous, >= half its module": {
-   "right": 7364.4,
-   "sim": {
-    "dF05": 0.679,
-    "dP": 0.01,
-    "dR": 2.31
-   },
-   "unscored": 6.4,
-   "wrong": 11.2
-  },
-  "unambiguous, exact whole print": {
-   "right": 7758.8,
-   "sim": {
-    "dF05": 0.699,
-    "dP": -0.011,
-    "dR": 2.44
-   },
-   "unscored": 10.3,
-   "wrong": 66.6
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 6365.6,
-   "sim": {
-    "dF05": 0.582,
-    "dP": -0.0,
-    "dR": 2.0
-   },
-   "unscored": 3.3,
-   "wrong": 31.8
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 7328.7,
-   "sim": {
-    "dF05": 0.676,
-    "dP": 0.01,
-    "dR": 2.3
-   },
-   "unscored": 6.4,
-   "wrong": 10.9
-  },
-  "unambiguous, factory body": {
-   "right": 7647.0,
-   "sim": {
-    "dF05": 0.697,
-    "dP": 0.0,
-    "dR": 2.4
-   },
-   "unscored": 8.3,
-   "wrong": 36.6
-  }
- },
- "pop-esbuild": {
-  "all vetoed": {
-   "right": 9485.8,
-   "sim": {
-    "dF05": 0.809,
-    "dP": -0.031,
-    "dR": 2.98
-   },
-   "unscored": 24.4,
-   "wrong": 147.5
-  },
-  "unambiguous": {
-   "right": 9429.8,
-   "sim": {
-    "dF05": 0.826,
-    "dP": -0.001,
-    "dR": 2.96
-   },
-   "unscored": 21.6,
-   "wrong": 68.2
-  },
-  "unambiguous, >= half its module": {
-   "right": 8306.8,
-   "sim": {
-    "dF05": 0.747,
-    "dP": 0.021,
-    "dR": 2.61
-   },
-   "unscored": 0.5,
-   "wrong": 1.3
-  },
-  "unambiguous, exact whole print": {
-   "right": 9370.0,
-   "sim": {
-    "dF05": 0.823,
-    "dP": 0.001,
-    "dR": 2.94
-   },
-   "unscored": 21.3,
-   "wrong": 62.6
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 7706.8,
-   "sim": {
-    "dF05": 0.684,
-    "dP": 0.006,
-    "dR": 2.42
-   },
-   "unscored": 18.5,
-   "wrong": 38.4
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 8270.9,
-   "sim": {
-    "dF05": 0.744,
-    "dP": 0.021,
-    "dR": 2.6
-   },
-   "unscored": 0.5,
-   "wrong": 1.3
-  },
-  "unambiguous, factory body": {
-   "right": 8581.2,
-   "sim": {
-    "dF05": 0.759,
-    "dP": 0.006,
-    "dR": 2.69
-   },
-   "unscored": 18.9,
-   "wrong": 44.2
-  }
- },
- "remin-esbuild": {
-  "all vetoed": {
-   "right": 2721.5,
-   "sim": {
-    "dF05": 1.435,
-    "dP": 0.014,
-    "dR": 2.8
-   },
-   "unscored": 4.6
-  },
-  "unambiguous": {
-   "right": 2702.1,
-   "sim": {
-    "dF05": 1.425,
-    "dP": 0.014,
-    "dR": 2.78
-   },
-   "unscored": 4.2
-  },
-  "unambiguous, >= half its module": {
-   "right": 2361.9,
-   "sim": {
-    "dF05": 1.251,
-    "dP": 0.013,
-    "dR": 2.43
-   },
-   "unscored": 3.5
-  },
-  "unambiguous, exact whole print": {
-   "right": 2659.1,
-   "sim": {
-    "dF05": 1.403,
-    "dP": 0.014,
-    "dR": 2.73
-   },
-   "unscored": 4.2
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 2181.4,
-   "sim": {
-    "dF05": 1.158,
-    "dP": 0.012,
-    "dR": 2.24
-   },
-   "unscored": 2.6
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 2351.0,
-   "sim": {
-    "dF05": 1.246,
-    "dP": 0.013,
-    "dR": 2.42
-   },
-   "unscored": 3.5
-  },
-  "unambiguous, factory body": {
-   "right": 2641.5,
-   "sim": {
-    "dF05": 1.394,
-    "dP": 0.014,
-    "dR": 2.72
-   },
-   "unscored": 4.2
-  }
- },
- "remin-terser": {
-  "all vetoed": {
-   "right": 714.7,
-   "sim": {
-    "dF05": 1.168,
-    "dP": -0.011,
-    "dR": 0.78
-   },
-   "unscored": 7.6,
-   "wrong": 2.8
-  },
-  "unambiguous": {
-   "right": 683.5,
-   "sim": {
-    "dF05": 1.119,
-    "dP": -0.005,
-    "dR": 0.75
-   },
-   "unscored": 6.7,
-   "wrong": 1.6
-  },
-  "unambiguous, >= half its module": {
-   "right": 328.9,
-   "sim": {
-    "dF05": 0.544,
-    "dP": 0.002,
-    "dR": 0.36
-   }
-  },
-  "unambiguous, exact whole print": {
-   "right": 659.1,
-   "sim": {
-    "dF05": 1.08,
-    "dP": -0.005,
-    "dR": 0.72
-   },
-   "unscored": 6.7,
-   "wrong": 1.6
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 311.4,
-   "sim": {
-    "dF05": 0.515,
-    "dP": 0.002,
-    "dR": 0.34
-   },
-   "unscored": 3.3
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 326.2,
-   "sim": {
-    "dF05": 0.54,
-    "dP": 0.002,
-    "dR": 0.36
-   }
-  },
-  "unambiguous, factory body": {
-   "right": 680.7,
-   "sim": {
-    "dF05": 1.115,
-    "dP": -0.005,
-    "dR": 0.75
-   },
-   "unscored": 6.7,
-   "wrong": 1.6
-  }
- },
- "remin3-esbuild": {
-  "all vetoed": {
-   "right": 8720.7,
-   "sim": {
-    "dF05": 2.255,
-    "dP": -0.057,
-    "dR": 4.32
-   },
-   "unscored": 1.0,
-   "wrong": 90.3
-  },
-  "unambiguous": {
-   "right": 8659.3,
-   "sim": {
-    "dF05": 2.244,
-    "dP": -0.05,
-    "dR": 4.29
-   },
-   "unscored": 1.0,
-   "wrong": 82.2
-  },
-  "unambiguous, >= half its module": {
-   "right": 8150.7,
-   "sim": {
-    "dF05": 2.16,
-    "dP": 0.024,
-    "dR": 4.03
-   },
-   "unscored": 0.4
-  },
-  "unambiguous, exact whole print": {
-   "right": 8579.1,
-   "sim": {
-    "dF05": 2.266,
-    "dP": 0.022,
-    "dR": 4.25
-   },
-   "unscored": 0.6,
-   "wrong": 3.2
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 6192.5,
-   "sim": {
-    "dF05": 1.662,
-    "dP": 0.019,
-    "dR": 3.06
-   }
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 8128.5,
-   "sim": {
-    "dF05": 2.155,
-    "dP": 0.024,
-    "dR": 4.02
-   },
-   "unscored": 0.4
-  },
-  "unambiguous, factory body": {
-   "right": 8623.0,
-   "sim": {
-    "dF05": 2.235,
-    "dP": -0.05,
-    "dR": 4.27
-   },
-   "unscored": 0.8,
-   "wrong": 82.1
-  }
- },
- "remin3-terser": {
-  "all vetoed": {
-   "right": 1690.1,
-   "sim": {
-    "dF05": 1.499,
-    "dP": -0.012,
-    "dR": 0.88
-   },
-   "unscored": 12.7,
-   "wrong": 6.5
-  },
-  "unambiguous": {
-   "right": 1662.9,
-   "sim": {
-    "dF05": 1.477,
-    "dP": -0.003,
-    "dR": 0.87
-   },
-   "unscored": 12.7,
-   "wrong": 3.6
-  },
-  "unambiguous, >= half its module": {
-   "right": 1069.7,
-   "sim": {
-    "dF05": 0.959,
-    "dP": 0.005,
-    "dR": 0.56
-   },
-   "unscored": 0.7
-  },
-  "unambiguous, exact whole print": {
-   "right": 1623.5,
-   "sim": {
-    "dF05": 1.443,
-    "dP": -0.004,
-    "dR": 0.85
-   },
-   "unscored": 12.6,
-   "wrong": 3.6
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 1035.2,
-   "sim": {
-    "dF05": 0.928,
-    "dP": 0.004,
-    "dR": 0.54
-   },
-   "unscored": 4.3
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 1066.0,
-   "sim": {
-    "dF05": 0.955,
-    "dP": 0.004,
-    "dR": 0.56
-   },
-   "unscored": 0.7
-  },
-  "unambiguous, factory body": {
-   "right": 1654.3,
-   "sim": {
-    "dF05": 1.47,
-    "dP": -0.002,
-    "dR": 0.86
-   },
-   "unscored": 12.7,
-   "wrong": 3.0
-  }
- },
- "wrangler": {
-  "all vetoed": {
-   "right": 17.6,
-   "sim": {
-    "dF05": 0.56,
-    "dP": -0.747,
-    "dR": 0.97
-   },
-   "wrong": 4.9
-  },
-  "unambiguous": {
-   "right": 16.9,
-   "sim": {
-    "dF05": 0.851,
-    "dP": 0.025,
-    "dR": 0.93
-   }
-  },
-  "unambiguous, >= half its module": {
-   "right": 7.7,
-   "sim": {
-    "dF05": 0.391,
-    "dP": 0.012,
-    "dR": 0.43
-   }
-  },
-  "unambiguous, exact whole print": {
-   "right": 10.7,
-   "sim": {
-    "dF05": 0.542,
-    "dP": 0.016,
-    "dR": 0.59
-   }
-  },
-  "unambiguous, exact, >= 1 KB": {
-   "right": 7.3,
-   "sim": {
-    "dF05": 0.371,
-    "dP": 0.011,
-    "dR": 0.4
-   }
-  },
-  "unambiguous, exact, >= half its module": {
-   "right": 7.7,
-   "sim": {
-    "dF05": 0.391,
-    "dP": 0.012,
-    "dR": 0.43
-   }
-  },
-  "unambiguous, factory body": {
-   "right": 10.8,
-   "sim": {
-    "dF05": 0.547,
-    "dP": 0.016,
-    "dR": 0.6
-   }
-  }
- }
 }
