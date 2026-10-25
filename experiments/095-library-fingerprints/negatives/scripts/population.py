@@ -2,8 +2,9 @@
 src/ = every leaf unit NOT inside a CJS factory: depth-0 non-wrapper statements/declarators + depth-1 statements
 inside lazy-ESM init wrappers `var X=b(()=>{...})`. Offsets: s/e are JS char offsets == UTF-8 byte offsets (bundle is ASCII).
 Writes data/population.jsonl: idx(unit i), s, e, bytes, d, g (esm wrapper unit index or -1 for hoisted/top), grp (group number)"""
-import json
-U='/work/exp095-library-fingerprints/bundler-variation-and-boundaries/data/units/cc/min/cc-2.1.216/raw.jsonl'
+import json, os
+# exp150: CC_RAW / NEG_DATA move the inputs and outputs (the lane's /work dir was deleted 2026-10-25)
+U=os.environ.get('CC_RAW','/work/exp095-library-fingerprints/bundler-variation-and-boundaries/data/units/cc/min/cc-2.1.216/raw.jsonl')
 rows=[json.loads(l) for l in open(U)]
 wk={r['i']:r['wk'] for r in rows if r['w']}
 out=[]; grp=0; pend=[]
@@ -24,7 +25,7 @@ for u in pend: u['grp']=None
 gof={r['i']:r.get('_grp') for r in rows if r['d']==0 and r['w']}
 for u in out:
     if u['d']==1: u['grp']=gof[u['wrap']]
-with open('/work/exp095-library-fingerprints/negatives/data/population.jsonl','w') as f:
+with open(os.environ.get('NEG_DATA','/work/exp095-library-fingerprints/negatives/data')+'/population.jsonl','w') as f:
     for u in out: f.write(json.dumps(u)+'\n')
 import statistics
 tot=sum(u['bytes'] for u in out)

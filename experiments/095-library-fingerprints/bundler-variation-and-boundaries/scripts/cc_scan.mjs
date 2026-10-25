@@ -10,12 +10,14 @@ import { canonUnit, longStrings, hashStr } from './canon.mjs';
 
 const ver = process.argv[2];
 const LAB = '/work/exp095-library-fingerprints/lab';
-const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/units/cc');
+const OUT = process.env.CC_UNITS_OUT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/units/cc');
 const bundle = `/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-${ver}/binary-decompiled/src/entrypoints/index.js`;
 const src = fs.readFileSync(bundle, 'utf8');
 
 const labels = [];
 function addSet(file, mk) {
+  // the lab's real-world truth was deleted 2026-10-25: without it the units are still the population (exp150)
+  if (!fs.existsSync(`${LAB}/realworld/cc-${ver}/${file}`)) return console.error(file, 'absent: units without lab labels');
   const rows = fs.readFileSync(`${LAB}/realworld/cc-${ver}/${file}`, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   let miss = 0;
   for (const r of rows) {

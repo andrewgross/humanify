@@ -39,6 +39,10 @@ Each step lands on its own `expNNN-*` branch with a gate table and a results tab
 
 ### 0. Test bed (Bun)
 
+DONE (exp150, `experiments/150-bun-testbed/README.md`): `--corpus bun-dev` (45 apps, 90 bundles), `--corpus bun-held`
+(15 apps, 30 bundles, private) and `--corpus cc` (the seed-95 sample redrawn exactly and re-labelled, blind pass
+124/124), with main's baseline on each.
+
 The 2026-10-25 cleanup deleted the scoring corpora and Claude Code's ground truth (exp095's 620-statement labelled
 sample of 2.1.216). Rebuild only what Bun needs:
 

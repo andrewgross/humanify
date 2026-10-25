@@ -1,0 +1,878 @@
+{
+  "corpus": "bun-held",
+  "entries": [
+    {
+      "appPackage": "hostile",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:hostile: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 48581,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_hostile-1725f8/entry.js",
+          "sha256": "c3e9d99e742bd4a2b946fde4f032bcb251593b6030c33e7bbaa1e7cb44394006"
+        },
+        "map": {
+          "bytes": 166060,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_hostile-1725f8/entry.js.map",
+          "sha256": "085382a325417ad5998c341418bc5940cab404f83ddf6a25a1d77a47c6303033"
+        }
+      },
+      "id": "bun-held-node-cli_hostile-1725f8",
+      "kind": "cli",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "8cf0bdd551dbd363527c426a9058cb1740599ff6714722e14a1e05979e3325a6"
+      }
+    },
+    {
+      "appPackage": "zuul",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:zuul: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 184,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_zuul-f25eae/entry.js",
+          "sha256": "022c528ebaee140aec3f7d1502035e8a2e7873e73bab52c58aa0a49333fa8d66"
+        },
+        "map": {
+          "bytes": 317,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_zuul-f25eae/entry.js.map",
+          "sha256": "4d7a8116c68a7bbd573c1739bd70168725cce241ece474de96d9ab256f3929d1"
+        }
+      },
+      "id": "bun-held-node-cli_zuul-f25eae",
+      "kind": "cli",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "325b26053b0587775443a7e1f34af0fd840bbbabae6eb607297c775747e5ebe3"
+      }
+    },
+    {
+      "appPackage": "@tailwindcss/postcss7-compat",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:@tailwindcss/postcss7-compat: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 4111337,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_tailwindcss_postcss7-compat-30af7f/entry.js",
+          "sha256": "36892c7ea500cb1b5761bd860777bd17b00e92b6f3ed7206e8b08c850608a571"
+        },
+        "map": {
+          "bytes": 12904267,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_tailwindcss_postcss7-compat-30af7f/entry.js.map",
+          "sha256": "bb230a9e334b17ad6593580aa4446b04fd40249e7408b5183c62b681a2ed99d5"
+        }
+      },
+      "id": "bun-held-node-cli_tailwindcss_postcss7-compat-30af7f",
+      "kind": "cli",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "2d0b9a5fd64505b329b5d2cada99e577a453e4cc05769caf5df135721e85e728"
+      }
+    },
+    {
+      "appPackage": "insert-module-globals",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:insert-module-globals: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 217371,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_insert-module-globals-8ef288/entry.js",
+          "sha256": "c6a8f1720f5d58f01015f2c098d831695611297108b17d473b95dc0caa13b90a"
+        },
+        "map": {
+          "bytes": 747467,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_insert-module-globals-8ef288/entry.js.map",
+          "sha256": "c99b4bc95cac4200e8604bdf07532eddf65fbe189d93904a7b5e1bfd8fa10f6a"
+        }
+      },
+      "id": "bun-held-node-cli_insert-module-globals-8ef288",
+      "kind": "cli",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3064cde72234f3e3e399f57aa5ba55aaabcb1738098d3ee4f717ed0c452b49f9"
+      }
+    },
+    {
+      "appPackage": "eslint-doc-generator",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:eslint-doc-generator: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 734432,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_eslint-doc-generator-912f7e/entry.js",
+          "sha256": "81ea9c697bf876682f7ca8e466f5e1c31ba36873117726b7174dab373f58206e"
+        },
+        "map": {
+          "bytes": 2018461,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/cli_eslint-doc-generator-912f7e/entry.js.map",
+          "sha256": "123a5702371c0c1e9a05fb1d84e379253a2dc6183b56e16fa2f3a906aa6ae446"
+        }
+      },
+      "id": "bun-held-node-cli_eslint-doc-generator-912f7e",
+      "kind": "cli",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "236595cfe1419ac2f9af0f9713b0a0ad0c89607c3ae7a153ff8eed60b769be2f"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-dnschanger__dnschanger-desktop: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 1837314,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-dnschanger__dnschanger-desktop-2ad3a9/entry.js",
+          "sha256": "c9562b6ec77f0a065402e320fa4241ba2dfee8916a1fcb2e5ff892771d407f7c"
+        },
+        "map": {
+          "bytes": 5728026,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-dnschanger__dnschanger-desktop-2ad3a9/entry.js.map",
+          "sha256": "7f683e90cd7c843737e0ef1f5fe4fe1e713f626c2601548afba9e53dd53d8700"
+        }
+      },
+      "id": "bun-held-node-electron_gh-dnschanger__dnschanger-desktop-2ad3a9",
+      "kind": "electron",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c43847f2f993a49d393d31b8c212a3522881be3c3d31e7bbb36468d55d54f34e"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-marcincichocki__breach-protocol-autosolver: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 1658481,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-marcincichocki__breach-protocol-autosolver-373c35/entry.js",
+          "sha256": "179b4ca941ee1e14ad30f8bdf75482c8593db1c0a3165915a8fe53efd0e35cf9"
+        },
+        "map": {
+          "bytes": 5034839,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-marcincichocki__breach-protocol-autosolver-373c35/entry.js.map",
+          "sha256": "5947b0625b9b8955f70704fde0e59894c42a1561a39bcf05aa044e5c217ef997"
+        }
+      },
+      "id": "bun-held-node-electron_gh-marcincichocki__breach-protocol-autosolver-373c35",
+      "kind": "electron",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "1c9f2b14abf2663f5a3a46c6eaa25305f5f6be47e4aef15d76693d9be2a0d3df"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-deepender25__edge-drop: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 2270009,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-deepender25__edge-drop-9180d3/entry.js",
+          "sha256": "6260d595cba2b9a2a13f40d90971cc18c851870acd6894bbc182c4cb30558725"
+        },
+        "map": {
+          "bytes": 2908559,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-deepender25__edge-drop-9180d3/entry.js.map",
+          "sha256": "971c71032d7c5554eb338498bb0fcbdc0ee56a31be8d1a38fcef6da86ece8570"
+        }
+      },
+      "id": "bun-held-node-electron_gh-deepender25__edge-drop-9180d3",
+      "kind": "electron",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "6ecbed1a7b17815492dca97a781286808182f4f15d097b9b58ecd19e693701be"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-benherbst__dalaix: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 842352,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-benherbst__dalaix-2f0077/entry.js",
+          "sha256": "a9773b91112ebbd702427356226df06443e1b51f4cfeb6401322521c0678cf88"
+        },
+        "map": {
+          "bytes": 2892212,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-benherbst__dalaix-2f0077/entry.js.map",
+          "sha256": "15f351bc9a7c72403e17a17c942700197fed662ec885275396b2bff790fee2e8"
+        }
+      },
+      "id": "bun-held-node-electron_gh-benherbst__dalaix-2f0077",
+      "kind": "electron",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d465ff6680cb69aa13b8b5934c9d4c9cfa6634c589cf032e32420738389de2f8"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-codex-team__codex.notes: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 3862963,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-codex-team__codex.notes-4ada2b/entry.js",
+          "sha256": "a76814741d717a11249e315df34667387818f050ef8e81d298a3a671df56c22c"
+        },
+        "map": {
+          "bytes": 10537762,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/electron_gh-codex-team__codex.notes-4ada2b/entry.js.map",
+          "sha256": "a29075b34fa9a8af0a28cdca99f82610edf7b8295ec07ed708032b81456b9bd7"
+        }
+      },
+      "id": "bun-held-node-electron_gh-codex-team__codex.notes-4ada2b",
+      "kind": "electron",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "4edc512ba450d590d37013267c79e9c3c6462b135e8f5455a0b3fd0ade8b365d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-ryu1kn__vscode-partial-diff: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 624624,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-ryu1kn__vscode-partial-diff-893378/entry.js",
+          "sha256": "232ab5c5838faf94104e776641316aaca502a1709d75ef2a6c4fd016c8b2b16a"
+        },
+        "map": {
+          "bytes": 2672078,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-ryu1kn__vscode-partial-diff-893378/entry.js.map",
+          "sha256": "9143d09e96f6bd2a63cfa283c105d2ac878857a8bdab7522e0f8f4f688440d11"
+        }
+      },
+      "id": "bun-held-node-vscode_gh-ryu1kn__vscode-partial-diff-893378",
+      "kind": "vscode",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "f7d2451aa17a17f6dc82c20236e8123c45aa0dfa75b8930919ee74372923324b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-zd8899__tdad: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 6664150,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-zd8899__tdad-6da840/entry.js",
+          "sha256": "f86f0891b3414fb923eb0ef0521e0fbb9d5c4ef8739c44adc5d328f75a0045a1"
+        },
+        "map": {
+          "bytes": 20004332,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-zd8899__tdad-6da840/entry.js.map",
+          "sha256": "05592f93f6deaf220768bd57b1b52fddded6a0678c3b1d3b7277340bfc8d91a2"
+        }
+      },
+      "id": "bun-held-node-vscode_gh-zd8899__tdad-6da840",
+      "kind": "vscode",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "a7c33a39da8fb3ca04b5fbf7ec00ac647a54f21b6ce94a56703de7e4f7921a88"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-thelastoutpostworkshop__arduino-maker-workshop: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 429612,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21/entry.js",
+          "sha256": "3b124ceb57f6e9a005774c7ed42d543e29aebd8eae9fe5561c62d138f9257e8e"
+        },
+        "map": {
+          "bytes": 1621513,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21/entry.js.map",
+          "sha256": "6904d72ca172ad33c28ec303827f422079ec90dbeece4380166000f73920a770"
+        }
+      },
+      "id": "bun-held-node-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21",
+      "kind": "vscode",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ea8094388fff5b9705663002d26e0513c75b91b97540acf6bb6bb1db2bdebb88"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-lramseyer__vaporview: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 9933838,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-lramseyer__vaporview-461384/entry.js",
+          "sha256": "681d8265c059f6958e985525e30481961f194b46fe588e82b171188caaa7fd67"
+        },
+        "map": {
+          "bytes": 13720210,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-lramseyer__vaporview-461384/entry.js.map",
+          "sha256": "946426d44f626a90e4b0d9eded7209713035a422d438cbd60f8e4a2559f3ba07"
+        }
+      },
+      "id": "bun-held-node-vscode_gh-lramseyer__vaporview-461384",
+      "kind": "vscode",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3267be03b8d7d1ea6ee8e7034e820777ac12118cb630998625850d83b244b198"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-tidb-incubator__tide: Bun 1.4.0 build --target node --format cjs --minify --sourcemap=external (exp100's recipe, target node)",
+      "files": {
+        "bundle": {
+          "bytes": 111888,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-tidb-incubator__tide-65cdd1/entry.js",
+          "sha256": "249743ac8a740333993c58d9299f7826e05576f11db9600cfef2316255911a57"
+        },
+        "map": {
+          "bytes": 412088,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-node/vscode_gh-tidb-incubator__tide-65cdd1/entry.js.map",
+          "sha256": "197f663ca3756cfc58ebceefeee497160cc5c62a1b3a51faca50c867facc0ab0"
+        }
+      },
+      "id": "bun-held-node-vscode_gh-tidb-incubator__tide-65cdd1",
+      "kind": "vscode",
+      "set": "bun-held-node",
+      "stratum": "random",
+      "target": "node",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "5533ea07eae860ea6d251dd285c624f6c3802dcb7441488302862e5d52655149"
+      }
+    },
+    {
+      "appPackage": "hostile",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:hostile: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 48660,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_hostile-1725f8/entry.js",
+          "sha256": "858a1c4b0721d765f527f68cd2271e43f3899f88dc26ff638fac439ca6be9881"
+        },
+        "map": {
+          "bytes": 166061,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_hostile-1725f8/entry.js.map",
+          "sha256": "a157bc88d3309c24e57ce1c6a9b0542cd725204d4d69ab898814237516f44122"
+        }
+      },
+      "id": "bun-held-bun-cli_hostile-1725f8",
+      "kind": "cli",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "250348bd63d5613453c11bc039e32ec3a777c7a35145db8e0a0d6e4cfbad7a76"
+      }
+    },
+    {
+      "appPackage": "zuul",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:zuul: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 263,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_zuul-f25eae/entry.js",
+          "sha256": "b7bd7244861a672c001791b9bb20c576b0ea70db2bcda26466ff9cc03ed4f5fa"
+        },
+        "map": {
+          "bytes": 318,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_zuul-f25eae/entry.js.map",
+          "sha256": "efd7089c832fc808f0e4a48ef5dd1f9c7716f3a758fb09f8d2011d1ab245ecb4"
+        }
+      },
+      "id": "bun-held-bun-cli_zuul-f25eae",
+      "kind": "cli",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "10966d0557748bbd0e050c8c6e180f9a400dfde90a26b92d416ffccb8e56e45c"
+      }
+    },
+    {
+      "appPackage": "@tailwindcss/postcss7-compat",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:@tailwindcss/postcss7-compat: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 4125429,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_tailwindcss_postcss7-compat-30af7f/entry.js",
+          "sha256": "cdcd1b390715caacfc6a2deb7f8edb20e36538e3be367a3a61620afbe5767527"
+        },
+        "map": {
+          "bytes": 12904272,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_tailwindcss_postcss7-compat-30af7f/entry.js.map",
+          "sha256": "04038eac95d4801673ba995a7b6d1e24a44bb0a9522f04a8c551f2b123d9ff88"
+        }
+      },
+      "id": "bun-held-bun-cli_tailwindcss_postcss7-compat-30af7f",
+      "kind": "cli",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e35231d5d8c461348c4446b20c662522a5becf07acc1b67014053bca7c004fdf"
+      }
+    },
+    {
+      "appPackage": "insert-module-globals",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:insert-module-globals: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 222704,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_insert-module-globals-8ef288/entry.js",
+          "sha256": "25c74b1fb3c156e37193ea23ca95fe580b309c5a9ae26e5213eb5ea87bdda39f"
+        },
+        "map": {
+          "bytes": 755340,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_insert-module-globals-8ef288/entry.js.map",
+          "sha256": "900e6411f8d20cd6b678f33c230a5b695759a956e0995948c983b1d39db2a880"
+        }
+      },
+      "id": "bun-held-bun-cli_insert-module-globals-8ef288",
+      "kind": "cli",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "c17a9d0e2f0ed8572231e7c2d08eeb762caf0aea5c977081f106a1450e4f4b1b"
+      }
+    },
+    {
+      "appPackage": "eslint-doc-generator",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app cli:eslint-doc-generator: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 753475,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_eslint-doc-generator-912f7e/entry.js",
+          "sha256": "fb0778ace205afa7b2eb3f856ac499c3344946eb9781ec34c7fa99e7b6d75d9b"
+        },
+        "map": {
+          "bytes": 2018446,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/cli_eslint-doc-generator-912f7e/entry.js.map",
+          "sha256": "d35adde74a1a8a9465439cf29cf545bba2556457e0fc0a1b6babc51c8c026cbe"
+        }
+      },
+      "id": "bun-held-bun-cli_eslint-doc-generator-912f7e",
+      "kind": "cli",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d74cec110d5686d7be70f5492169f984a1ca0f064394aff7c965045bdc86c1b5"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-dnschanger__dnschanger-desktop: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 1838012,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-dnschanger__dnschanger-desktop-2ad3a9/entry.js",
+          "sha256": "d644db8f767f1540a3e9006b3b79030aacf065b1e93ad042e29c92b0293a5e35"
+        },
+        "map": {
+          "bytes": 5728031,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-dnschanger__dnschanger-desktop-2ad3a9/entry.js.map",
+          "sha256": "394117ef4b28bf85ce55d9dc115fb9cdf51c254bf3e7875a7ccdbb03a3740a72"
+        }
+      },
+      "id": "bun-held-bun-electron_gh-dnschanger__dnschanger-desktop-2ad3a9",
+      "kind": "electron",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "3e6ccc462bcd94cec5cc8805be7bf8c08b1c37740dadaac7c92315a839e26df0"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-marcincichocki__breach-protocol-autosolver: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 1347886,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-marcincichocki__breach-protocol-autosolver-373c35/entry.js",
+          "sha256": "b21ec4275c519c077106100f4e305cc4b1e32b944d290205faa99dca62e6d123"
+        },
+        "map": {
+          "bytes": 4871292,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-marcincichocki__breach-protocol-autosolver-373c35/entry.js.map",
+          "sha256": "108b67438a8ad4e1b861dc3e52f72cbfe89e567a89005b922ade7ce80bd697ca"
+        }
+      },
+      "id": "bun-held-bun-electron_gh-marcincichocki__breach-protocol-autosolver-373c35",
+      "kind": "electron",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "217e2bc1b816540fed7562dd5428d04eb6c9928ab174bbf76b1e8a8ad8b07d1d"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-deepender25__edge-drop: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 1959385,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-deepender25__edge-drop-9180d3/entry.js",
+          "sha256": "3b8c0e816d9b3219ce3722fdaf72268084508233029d3612dcbc92fb85dc68fc"
+        },
+        "map": {
+          "bytes": 2745172,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-deepender25__edge-drop-9180d3/entry.js.map",
+          "sha256": "b3089e18bb570a790261315926c5887b328abf40fb3e234e8be8eaee3193bcc2"
+        }
+      },
+      "id": "bun-held-bun-electron_gh-deepender25__edge-drop-9180d3",
+      "kind": "electron",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d73a8e7aebe550d51624c9615d7dc2cc8243e564a550a5fbb37cd233782ad622"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-benherbst__dalaix: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 846492,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-benherbst__dalaix-2f0077/entry.js",
+          "sha256": "ce00f6dcb3d6be68027e3207fcd459a746527ebfc1e97ce9162a674a72be10d4"
+        },
+        "map": {
+          "bytes": 2892213,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-benherbst__dalaix-2f0077/entry.js.map",
+          "sha256": "2908d9bc0b7fd5ae5e4277174e54ec5ae4ce3a477ffdb25493a66fca8778bd34"
+        }
+      },
+      "id": "bun-held-bun-electron_gh-benherbst__dalaix-2f0077",
+      "kind": "electron",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d02296fd0d4c1995d7ae32e0998ce768cbc7c759a7f8c49c40475d1baaa22cb6"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app electron:gh-codex-team__codex.notes: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 3564993,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-codex-team__codex.notes-4ada2b/entry.js",
+          "sha256": "316829eacb29f4dd16ea368e2ec653b270e305f78cda8a2483342c61510f4cb3"
+        },
+        "map": {
+          "bytes": 10160035,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/electron_gh-codex-team__codex.notes-4ada2b/entry.js.map",
+          "sha256": "b1f1aed4fe04d0d8316ad309672686da2d3d4a68b3d6fdadd1ea0352346b23a5"
+        }
+      },
+      "id": "bun-held-bun-electron_gh-codex-team__codex.notes-4ada2b",
+      "kind": "electron",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "305f7313343d1f4d96173a0f0f8580d6de6f8b4bb535e31fb27923b9f7c7cf0b"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-ryu1kn__vscode-partial-diff: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 628059,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-ryu1kn__vscode-partial-diff-893378/entry.js",
+          "sha256": "ef348182ffc68c337193eddc0f9bb52f549b716785f6fc1040a5654e1841de47"
+        },
+        "map": {
+          "bytes": 2672083,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-ryu1kn__vscode-partial-diff-893378/entry.js.map",
+          "sha256": "62e477148848af98e2e3910a8517f38140b1333006583929a636ffd6ea38fa04"
+        }
+      },
+      "id": "bun-held-bun-vscode_gh-ryu1kn__vscode-partial-diff-893378",
+      "kind": "vscode",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "ef1e73d831fe070001a4ca5312db88d746b31a9a33e8828438cece2e1c0f4afc"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-zd8899__tdad: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 6809463,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-zd8899__tdad-6da840/entry.js",
+          "sha256": "e88fd65e96cbf054a0e4333a79a0a7043df0ec9b1a7b0996d1a0f07a722ff5ca"
+        },
+        "map": {
+          "bytes": 18113875,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-zd8899__tdad-6da840/entry.js.map",
+          "sha256": "056b16917ba09412715bcc75d400012c7c4d966657fc7d18925ec909a678801f"
+        }
+      },
+      "id": "bun-held-bun-vscode_gh-zd8899__tdad-6da840",
+      "kind": "vscode",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "843ce60d9cf60668626289666c5967268870094e6bf1cc180c45aeb9415c0370"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-thelastoutpostworkshop__arduino-maker-workshop: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 441358,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21/entry.js",
+          "sha256": "baef0a3b9794e90122e425418e9f91f805696a715e2dc1ef528f952a3f66885b"
+        },
+        "map": {
+          "bytes": 1621493,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21/entry.js.map",
+          "sha256": "018b665e4b3dfe6e37e78a1c308e3ea5b4d7f41f6da101e41f4abc89d9385a09"
+        }
+      },
+      "id": "bun-held-bun-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21",
+      "kind": "vscode",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "69ff12fb73fd3de1ddf2ac047f2d6ad0c2ca3dec2bd5e603574adb6f9cdce14a"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-lramseyer__vaporview: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 10001214,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-lramseyer__vaporview-461384/entry.js",
+          "sha256": "45e59b1e276ed98d3fa8fbeb9b2c7ae294844f76b7a91e497a6bc372bc809637"
+        },
+        "map": {
+          "bytes": 13796861,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-lramseyer__vaporview-461384/entry.js.map",
+          "sha256": "86f9b4cbe804666c3fe43381d6c328546ba35f6b03417832af19ae572ce5b549"
+        }
+      },
+      "id": "bun-held-bun-vscode_gh-lramseyer__vaporview-461384",
+      "kind": "vscode",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "e49f5e1ea6c654b7a532a0278fa183a4bf0f6a394673c17c34876c1fefdca527"
+      }
+    },
+    {
+      "appPackage": "-",
+      "builtWith": "bun",
+      "bundler": "bun",
+      "description": "exp150 app vscode:gh-tidb-incubator__tide: Bun 1.4.0 build --target bun --format cjs --minify --sourcemap=external (exp100's recipe, target bun)",
+      "files": {
+        "bundle": {
+          "bytes": 111967,
+          "name": "entry.js",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-tidb-incubator__tide-65cdd1/entry.js",
+          "sha256": "fa1fb215a6ec29af6d2a47c4f85245c7a919e482cd8bbb5a2f4af23fae5984ba"
+        },
+        "map": {
+          "bytes": 412089,
+          "name": "entry.js.map",
+          "origin": "/work/exp150-data/bun/build/bun-bun/vscode_gh-tidb-incubator__tide-65cdd1/entry.js.map",
+          "sha256": "3a014fb32c56ebb68c0ac703c8c93d5d8792ac8230599d72a68472db3d955c9b"
+        }
+      },
+      "id": "bun-held-bun-vscode_gh-tidb-incubator__tide-65cdd1",
+      "kind": "vscode",
+      "set": "bun-held-bun",
+      "stratum": "random",
+      "target": "bun",
+      "truth": {
+        "method": "sourcemap",
+        "sha256": "d9886f7e500d68c5872fe454c96e61c1b5140c9d0150e9ae5ae753ded115175d"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp150 HELD-OUT corpus of Bun builds (same recipe and draw as bun-dev, the split's other side); private: scored once per candidate, summaries only, never tuned on or diagnosed",
+  "schema": "exp096-corpus/1"
+}

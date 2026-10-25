@@ -66,9 +66,24 @@ CORPORA = {
     "remin4": {"manifest": os.path.join(HERE, "corpus-remin4.json"), "origins": os.path.join(HERE, "origins-remin4.json"),
                "copies": os.path.join(HERE, "copies-remin4.json"), "chained": os.path.join(HERE, "chained-remin4.json"),
                "data": "/work/exp146-data/remin4/frozen"},
+    # exp150's Bun test bed (library-names plan step 0): exp108 TRAINING apps in no other corpus built by Bun 1.4.0
+    # with --target node and --target bun; bun-dev is a dev corpus (cards committed), bun-held its held-out split
+    # (private as test2: summaries only, scored once per candidate)
+    "bun-dev": {"manifest": os.path.join(HERE, "corpus-bun-dev.json"), "origins": os.path.join(HERE, "origins-bun-dev.json"),
+                "copies": os.path.join(HERE, "copies-bun-dev.json"), "chained": os.path.join(HERE, "chained-bun-dev.json"),
+                "data": "/work/exp150-data/bun-dev/frozen"},
+    "bun-held": {"manifest": os.path.join(HERE, "corpus-bun-held.json"),
+                 "origins": os.path.join(HERE, "origins-bun-held.json"),
+                 "copies": os.path.join(HERE, "copies-bun-held.json"),
+                 "chained": os.path.join(HERE, "chained-bun-held.json"), "data": "/work/exp150-data/bun-held/frozen"},
+    # exp150's Claude Code corpus: 2.1.216 with the exp095 negatives sample re-labelled (seed 95 redraw). Its truth
+    # quotes no code but sits beside the labels, which do: under /work/cc-library-truth/, never committed
+    "cc": {"manifest": os.path.join(HERE, "corpus-cc.json"), "origins": os.path.join(HERE, "origins-cc.json"),
+           "copies": os.path.join(HERE, "copies-cc.json"), "chained": os.path.join(HERE, "chained-cc.json"),
+           "data": "/work/cc-library-truth/frozen"},
 }
 # frozen judges: a label on one commits per-set aggregates only (no per-bundle cards, no bundle names in its log)
-PRIVATE = ("test", "test2", "remin2")
+PRIVATE = ("test", "test2", "remin2", "bun-held")
 INDEX_CACHE = "/work/exp096-data/cache"  # index-derived tables only (no corpus content): shared by both corpora
 CORPUS = "dev"
 DATA = CORPORA[CORPUS]["data"]  # the frozen corpus, truth and raw reports (not committed)
@@ -87,12 +102,12 @@ def use(corpus):
 
 
 def corpus_flag(argv):
-    """`--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4` from an argv (default dev), applied with use(); returns argv without it."""
+    """`--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|cc` from an argv (default dev), applied with use(); returns argv without it."""
     if "--corpus" not in argv:
         return list(argv)
     i = argv.index("--corpus")
     if i + 1 >= len(argv):
-        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4")
+        raise SystemExit("--corpus needs a value: dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|cc")
     use(argv[i + 1])
     return list(argv[:i]) + list(argv[i + 2:])
 # numpy/scipy for libix (family()); the exp095 labs' venv

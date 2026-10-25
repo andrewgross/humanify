@@ -1,0 +1,405 @@
+{
+  "about": "exp150: Claude Code 2.1.216 sample re-label, rates and package names only (labels under /work/cc-library-truth/2.1.216, never committed)",
+  "sampleMeta": {
+    "seed": 95,
+    "populationUnits": 73414,
+    "populationBytes": 15280719,
+    "strata": {
+      "S0": {
+        "lo": 0,
+        "hi": 100,
+        "N": 56859,
+        "bytes": 834509,
+        "n": 150
+      },
+      "S1": {
+        "lo": 100,
+        "hi": 1000,
+        "N": 13785,
+        "bytes": 4377939,
+        "n": 180
+      },
+      "S2": {
+        "lo": 1000,
+        "hi": 10000,
+        "N": 2608,
+        "bytes": 6591066,
+        "n": 180
+      },
+      "S3": {
+        "lo": 10000,
+        "hi": 1000000000000,
+        "N": 162,
+        "bytes": 3477205,
+        "n": 110
+      }
+    }
+  },
+  "countsByStratum": {
+    "S0": {
+      "library": 36,
+      "app": 114
+    },
+    "S1": {
+      "library": 33,
+      "app": 146,
+      "compiler-helper": 1
+    },
+    "S3": {
+      "app": 99,
+      "library": 11
+    },
+    "S2": {
+      "library": 28,
+      "app": 152
+    }
+  },
+  "counts": {
+    "library": 108,
+    "app": 511,
+    "compiler-helper": 1
+  },
+  "blindPass": {
+    "seed": 9520,
+    "units": 124,
+    "classAgreement": 124,
+    "bothLibrary": 24,
+    "packageAgreement": 23,
+    "packageDisagreements": [["@smithy/smithy-client", "@smithy/core"]]
+  },
+  "estimate": {
+    "library": {
+      "share": 0.1454,
+      "ci95": [0.1124, 0.1811],
+      "MB": 2.22,
+      "MBci95": [1.72, 2.77]
+    },
+    "library+compiler-helper+runtime": {
+      "share": 0.1469,
+      "ci95": [0.1139, 0.1826],
+      "MB": 2.24,
+      "MBci95": [1.74, 2.79]
+    },
+    "app": {
+      "share": 0.8531,
+      "ci95": [0.8174, 0.8862],
+      "MB": 13.04,
+      "MBci95": [12.49, 13.54]
+    },
+    "app-fork": {
+      "share": 0.017,
+      "ci95": [0.0058, 0.0309],
+      "MB": 0.26,
+      "MBci95": [0.09, 0.47]
+    },
+    "unsure": {
+      "share": 0.0,
+      "ci95": [0.0, 0.0],
+      "MB": 0.0,
+      "MBci95": [0.0, 0.0]
+    }
+  },
+  "families": {
+    "@aws-sdk/* + @smithy/*": {
+      "estKB": 560,
+      "ci95KB": [318, 859]
+    },
+    "zod": {
+      "estKB": 384,
+      "ci95KB": [142, 685]
+    },
+    "@anthropic-ai/* (sdk family)": {
+      "estKB": 273,
+      "ci95KB": [112, 481]
+    },
+    "@azure/*": {
+      "estKB": 225,
+      "ci95KB": [80, 420]
+    },
+    "@modelcontextprotocol/sdk": {
+      "estKB": 148,
+      "ci95KB": [22, 346]
+    },
+    "@inquirer/figures": {
+      "estKB": 100,
+      "ci95KB": [0, 308]
+    },
+    "lodash-es": {
+      "estKB": 99,
+      "ci95KB": [35, 182]
+    },
+    "jose": {
+      "estKB": 98,
+      "ci95KB": [17, 216]
+    },
+    "@bufbuild/protobuf": {
+      "estKB": 55,
+      "ci95KB": [0, 144]
+    },
+    "@growthbook/growthbook": {
+      "estKB": 54,
+      "ci95KB": [0, 144]
+    },
+    "axios": {
+      "estKB": 52,
+      "ci95KB": [0, 120]
+    },
+    "@pondwader/socks5-server": {
+      "estKB": 48,
+      "ci95KB": [0, 152]
+    },
+    "@alcalzone/ansi-tokenize": {
+      "estKB": 25,
+      "ci95KB": [0, 82]
+    },
+    "lru-cache": {
+      "estKB": 22,
+      "ci95KB": [0, 75]
+    },
+    "p-map": {
+      "estKB": 21,
+      "ci95KB": [0, 67]
+    },
+    "@inquirer/core": {
+      "estKB": 16,
+      "ci95KB": [0, 51]
+    },
+    "marked": {
+      "estKB": 15,
+      "ci95KB": [0, 49]
+    },
+    "@bufbuild/cel": {
+      "estKB": 12,
+      "ci95KB": [0, 40]
+    },
+    "turndown": {
+      "estKB": 10,
+      "ci95KB": [0, 33]
+    },
+    "uuid": {
+      "estKB": 2,
+      "ci95KB": [0, 7]
+    },
+    "execa": {
+      "estKB": 1,
+      "ci95KB": [0, 4]
+    }
+  },
+  "packages": {
+    "zod": {
+      "items": 13,
+      "estKB": 384,
+      "ci95KB": [142, 685]
+    },
+    "@aws-sdk/client-bedrock": {
+      "items": 10,
+      "estKB": 208,
+      "ci95KB": [59, 418]
+    },
+    "@modelcontextprotocol/sdk": {
+      "items": 5,
+      "estKB": 148,
+      "ci95KB": [22, 346]
+    },
+    "@anthropic-ai/sandbox-runtime": {
+      "items": 4,
+      "estKB": 116,
+      "ci95KB": [9, 290]
+    },
+    "@inquirer/figures": {
+      "items": 1,
+      "estKB": 100,
+      "ci95KB": [0, 308]
+    },
+    "lodash-es": {
+      "items": 11,
+      "estKB": 99,
+      "ci95KB": [35, 182]
+    },
+    "@azure/msal-node": {
+      "items": 2,
+      "estKB": 98,
+      "ci95KB": [0, 255]
+    },
+    "jose": {
+      "items": 4,
+      "estKB": 98,
+      "ci95KB": [17, 216]
+    },
+    "@smithy/smithy-client": {
+      "items": 2,
+      "estKB": 82,
+      "ci95KB": [0, 208]
+    },
+    "@aws-sdk/client-bedrock-runtime": {
+      "items": 3,
+      "estKB": 77,
+      "ci95KB": [0, 204]
+    },
+    "@azure/msal-common": {
+      "items": 3,
+      "estKB": 68,
+      "ci95KB": [0, 156]
+    },
+    "@anthropic-ai/sdk": {
+      "items": 3,
+      "estKB": 64,
+      "ci95KB": [0, 153]
+    },
+    "@smithy/signature-v4": {
+      "items": 3,
+      "estKB": 61,
+      "ci95KB": [0, 151]
+    },
+    "@anthropic-ai/mcpb": {
+      "items": 3,
+      "estKB": 60,
+      "ci95KB": [0, 139]
+    },
+    "@bufbuild/protobuf": {
+      "items": 2,
+      "estKB": 55,
+      "ci95KB": [0, 144]
+    },
+    "@growthbook/growthbook": {
+      "items": 2,
+      "estKB": 54,
+      "ci95KB": [0, 144]
+    },
+    "axios": {
+      "items": 3,
+      "estKB": 52,
+      "ci95KB": [0, 120]
+    },
+    "@pondwader/socks5-server": {
+      "items": 1,
+      "estKB": 48,
+      "ci95KB": [0, 152]
+    },
+    "@azure/identity": {
+      "items": 2,
+      "estKB": 35,
+      "ci95KB": [0, 95]
+    },
+    "@anthropic-ai/bedrock-sdk": {
+      "items": 1,
+      "estKB": 30,
+      "ci95KB": [0, 96]
+    },
+    "@smithy/types": {
+      "items": 4,
+      "estKB": 25,
+      "ci95KB": [2, 56]
+    },
+    "@alcalzone/ansi-tokenize": {
+      "items": 1,
+      "estKB": 25,
+      "ci95KB": [0, 82]
+    },
+    "@aws-sdk/credential-provider-ini": {
+      "items": 1,
+      "estKB": 23,
+      "ci95KB": [0, 74]
+    },
+    "lru-cache": {
+      "items": 1,
+      "estKB": 22,
+      "ci95KB": [0, 75]
+    },
+    "@aws-sdk/client-sso": {
+      "items": 2,
+      "estKB": 22,
+      "ci95KB": [0, 68]
+    },
+    "p-map": {
+      "items": 1,
+      "estKB": 21,
+      "ci95KB": [0, 67]
+    },
+    "@azure/core-client": {
+      "items": 1,
+      "estKB": 20,
+      "ci95KB": [0, 65]
+    },
+    "@aws-sdk/client-sts": {
+      "items": 1,
+      "estKB": 16,
+      "ci95KB": [0, 52]
+    },
+    "@inquirer/core": {
+      "items": 1,
+      "estKB": 16,
+      "ci95KB": [0, 51]
+    },
+    "@smithy/credential-provider-imds": {
+      "items": 1,
+      "estKB": 15,
+      "ci95KB": [0, 50]
+    },
+    "marked": {
+      "items": 1,
+      "estKB": 15,
+      "ci95KB": [0, 49]
+    },
+    "@smithy/util-buffer-from": {
+      "items": 1,
+      "estKB": 14,
+      "ci95KB": [0, 47]
+    },
+    "@bufbuild/cel": {
+      "items": 1,
+      "estKB": 12,
+      "ci95KB": [0, 40]
+    },
+    "@aws-sdk/client-cognito-identity": {
+      "items": 3,
+      "estKB": 11,
+      "ci95KB": [0, 27]
+    },
+    "turndown": {
+      "items": 1,
+      "estKB": 10,
+      "ci95KB": [0, 33]
+    },
+    "@smithy/eventstream-codec": {
+      "items": 2,
+      "estKB": 5,
+      "ci95KB": [0, 13]
+    },
+    "@typespec/ts-http-runtime": {
+      "items": 1,
+      "estKB": 3,
+      "ci95KB": [0, 11]
+    },
+    "@smithy/protocol-http": {
+      "items": 1,
+      "estKB": 2,
+      "ci95KB": [0, 6]
+    },
+    "@anthropic-ai/foundry-sdk": {
+      "items": 1,
+      "estKB": 2,
+      "ci95KB": [0, 7]
+    },
+    "uuid": {
+      "items": 1,
+      "estKB": 2,
+      "ci95KB": [0, 7]
+    },
+    "execa": {
+      "items": 1,
+      "estKB": 1,
+      "ci95KB": [0, 4]
+    },
+    "@aws-sdk/credential-provider-web-identity": {
+      "items": 1,
+      "estKB": 1,
+      "ci95KB": [0, 4]
+    },
+    "@anthropic-ai/google-cloud-sdk": {
+      "items": 1,
+      "estKB": 1,
+      "ci95KB": [0, 4]
+    }
+  }
+}

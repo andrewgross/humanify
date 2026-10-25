@@ -1,0 +1,132 @@
+{
+ "bundleSha256": "344a39440f8db664b97baa4dc2a97d7a9c0cf3a2948ea6b672206f02d3650ff9",
+ "claimedBytes": {
+  "right": 54760
+ },
+ "detected": {
+  "bundler": "bun",
+  "minifier": "terser"
+ },
+ "discoveryRan": true,
+ "entry": "bun-dev-node-electron_gh-simon-fraser__musictube-player-904ca4",
+ "exploratory": {
+  "names": {
+   "bindings": 1017,
+   "bindingsSameVersion": 922,
+   "bindingsVersionKnown": 1017,
+   "exactBytes": 47668,
+   "exactUnits": 154,
+   "sameVersionShare": 0.906588
+  }
+ },
+ "indexId": "c4d2bd6cfd3135c44db7b0c5a374c12450d040884483e063f1b4ef8a6c72fd5f",
+ "indexSeeds": {
+  "appClaimedBytes": 0,
+  "f05": 0.890728,
+  "f1": 0.765291,
+  "namedBytes": 44243,
+  "precision": 1.0,
+  "recall": 0.619815
+ },
+ "label": "bun-dev-exp150-main",
+ "missBytes": {
+  "b": 5768,
+  "c": 2455,
+  "e-ambig": 2126,
+  "e-other": 3533,
+  "e-support": 2011,
+  "e-veto": 728
+ },
+ "noDiscovery": null,
+ "reportSha256": "f073f9dfe5a87e1aa876af0537d1c52ea975fa7387c2041708eba40888b9039c",
+ "rule": "structural",
+ "schema": "exp096-score/14",
+ "scopes": {
+  "factory": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {
+    "right": 54760
+   },
+   "copyBytes": 0,
+   "f05": 0.942769,
+   "f05ShipperOnly": 0.942769,
+   "f1": 0.868235,
+   "f1ShipperOnly": 0.868235,
+   "libraryBytes": 71381,
+   "missBytes": {
+    "b": 5768,
+    "c": 2455,
+    "e-ambig": 2126,
+    "e-other": 3533,
+    "e-support": 2011,
+    "e-veto": 728
+   },
+   "namedAsOriginBytes": 0,
+   "namedBytes": 54760,
+   "namedBytesShipperOnly": 54760,
+   "precision": 1.0,
+   "precisionShipperOnly": 1.0,
+   "recall": 0.767151,
+   "recallShipperOnly": 0.767151,
+   "statementBytes": {
+    "library": 71381
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  },
+  "statement": {
+   "appClaimedBytes": 0,
+   "claimedBytes": {},
+   "copyBytes": 0,
+   "f05": 0.0,
+   "f05ShipperOnly": 0.0,
+   "f1": 0.0,
+   "f1ShipperOnly": 0.0,
+   "libraryBytes": 0,
+   "missBytes": {},
+   "namedAsOriginBytes": 0,
+   "namedBytes": 0,
+   "namedBytesShipperOnly": 0,
+   "precision": 0.0,
+   "precisionShipperOnly": 0.0,
+   "recall": 0.0,
+   "recallShipperOnly": 0.0,
+   "statementBytes": {
+    "<app>": 180
+   },
+   "wrongFamilyBytes": 0,
+   "wrongFamilyBytesShipperOnly": 0
+  }
+ },
+ "set": "bun-dev-node",
+ "statementBytes": {
+  "<app>": 180,
+  "library": 71381
+ },
+ "toolchain": {
+  "adapter": "bun",
+  "bundler": "bun",
+  "minifier": "terser",
+  "slice": "bun-node-cjs-min"
+ },
+ "totals": {
+  "appClaimedBytes": 0,
+  "copyBytes": 0,
+  "f05": 0.942769,
+  "f05ShipperOnly": 0.942769,
+  "f1": 0.868235,
+  "f1ShipperOnly": 0.868235,
+  "libraryBytes": 71381,
+  "namedAsOriginBytes": 0,
+  "namedAsShipperBytes": 54760,
+  "namedBytes": 54760,
+  "namedBytesShipperOnly": 54760,
+  "precision": 1.0,
+  "precisionShipperOnly": 1.0,
+  "recall": 0.767151,
+  "recallShipperOnly": 0.767151,
+  "wrongFamilyBytes": 0,
+  "wrongFamilyBytesShipperOnly": 0
+ },
+ "truthMethod": "sourcemap"
+}

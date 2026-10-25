@@ -504,10 +504,13 @@ export function libraryArgs(args: string[]): string[] | string {
         "remin",
         "remin2",
         "remin3",
-        "remin4"
+        "remin4",
+        "bun-dev",
+        "bun-held",
+        "cc"
       ].includes(corpus))
   ) {
-    return "--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4 (dev = corpus.json; test = exp100's frozen test split; test2 = exp116's frozen test split v2, the untouched final judge; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population; remin = exp126's dev-side RE-MINIFIED builds of training apps: bundled against the packages' published minified entries, then minified again by terser and by esbuild; remin2 = exp140's FROZEN judge of the same recipe on 36 other training apps, private exactly as test2; remin3 = exp141's second dev corpus of the same recipe on 72 more training apps; remin4 = exp146's third dev corpus of the same recipe on 144 more training apps)";
+    return "--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|cc (dev = corpus.json; test = exp100's frozen test split; test2 = exp116's frozen test split v2, the untouched final judge; bundlers = exp105's dev-side webpack and rollup builds; apps = exp107's dev-side esbuild, webpack and rollup builds of real training apps; pop = exp112's dev-side Bun and esbuild builds of training apps from the test split's population; remin = exp126's dev-side RE-MINIFIED builds of training apps: bundled against the packages' published minified entries, then minified again by terser and by esbuild; remin2 = exp140's FROZEN judge of the same recipe on 36 other training apps, private exactly as test2; remin3 = exp141's second dev corpus of the same recipe on 72 more training apps; remin4 = exp146's third dev corpus of the same recipe on 144 more training apps; bun-dev = exp150's dev corpus of Bun 1.4.0 builds, target node and target bun, of training apps in no other corpus; bun-held = exp150's held-out split of the same draw, private exactly as test2; cc = exp150's Claude Code 2.1.216 with the re-labelled exp095 sample, truth outside the repo)";
   }
   const sets = parsed.given.filter(
     (_, i) => parsed.given[i - 1] === "--pipeline-set"
@@ -764,7 +767,7 @@ const VERBS: Verb[] = [
   {
     name: "library",
     usage:
-      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4] [--force-mixed] [--pipeline-set library.<key>=value]...",
+      "library <label> --index <dir> --rule agreement|structural [--commit <ref>] [--jobs N] [--cpus LIST] [--corpus dev|test|test2|bundlers|apps|pop|remin|remin2|remin3|remin4|bun-dev|bun-held|cc] [--force-mixed] [--pipeline-set library.<key>=value]...",
     description:
       "Library-matching score (exp096): builds the binary at a commit, runs `humanify discover` (library discovery " +
       "on its own, no LLM) with one index and one claim rule over the FIXED corpus " +
@@ -780,7 +783,11 @@ const VERBS: Verb[] = [
       "minified again by terser and by esbuild (corpus-remin.json); `--corpus remin2` scores exp140's FROZEN judge of " +
       "the same recipe on 36 other training apps (corpus-remin2.json; private as test2: summaries only); `--corpus remin3` " +
       "scores exp141's second DEV corpus of the recipe on 72 more training apps (corpus-remin3.json); `--corpus remin4` " +
-      "scores exp146's third DEV corpus of the recipe on 144 more training apps (corpus-remin4.json). " +
+      "scores exp146's third DEV corpus of the recipe on 144 more training apps (corpus-remin4.json); `--corpus bun-dev` " +
+      "scores exp150's DEV corpus of Bun 1.4.0 builds (target node and target bun) of 45 more training apps " +
+      "(corpus-bun-dev.json); `--corpus bun-held` its 15-app held-out split (corpus-bun-held.json; private as test2: " +
+      "summaries only); `--corpus cc` scores Claude Code 2.1.216 on exp150's re-labelled 620-unit sample " +
+      "(corpus-cc.json; the truth stays in /work/cc-library-truth). " +
       "Each bundle runs with `--bundler` = the " +
       "bundler that built it. Compare labels with `library-leaderboard`.",
     proves:

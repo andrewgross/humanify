@@ -1,0 +1,41 @@
+{
+  "about": "scorer 7 origin layer (experiments/112-test-precision/scorer7/origins7.py): origins.py with RULES7; per entry the sha256 of <DATA>/truth/<id>.origins7.json.gz",
+  "corpusSha256": "db5f016057b975a8a53934160e44b6755ea4d6ac198eddf1648610e5b5140a3f",
+  "entries": {
+    "bun-held-bun-cli_eslint-doc-generator-912f7e": "cc26e5aa84edeba14e827346d1e3382f121ea20d8fe055cd03bb56ddc9e66334",
+    "bun-held-bun-cli_hostile-1725f8": "273358652fdcf499b4a2079909e09df2bb11b6afd755f6683a622b892aa87f39",
+    "bun-held-bun-cli_insert-module-globals-8ef288": "4b557022ac39ea5b05bbc15529bd08a8e92560dee76daf6391bd1c97f1371c91",
+    "bun-held-bun-cli_tailwindcss_postcss7-compat-30af7f": "9c20a2262fd0efd8b53940caac3aff2a18c24f46df1a7465121db7c5c73eb1f2",
+    "bun-held-bun-cli_zuul-f25eae": "c5f84287d2aa335b5a94fce9d8d925e441f5688443c70f10fb20ae7524129ea2",
+    "bun-held-bun-electron_gh-benherbst__dalaix-2f0077": "1b4419707556c5724793f025bd034fc3406b09ea81d96a7d6a78dbf4ea413196",
+    "bun-held-bun-electron_gh-codex-team__codex.notes-4ada2b": "e1a7e77d02abe687955745dcf04ce9e3d58ead608a39dd063bb9439a268a9549",
+    "bun-held-bun-electron_gh-deepender25__edge-drop-9180d3": "0834d1a1e02ff647df08d49e9d111e628636326e3a3e137e822fbef9d89d64d8",
+    "bun-held-bun-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "afb861a0fccac4c0c9ab3f6f1eb62529f4e649e4cf0946d44e17cd4e0b06016c",
+    "bun-held-bun-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "11d0f3d8285caf1415fa6b95c57df0ea6387e4d211b04470cc0916bec662bb58",
+    "bun-held-bun-vscode_gh-lramseyer__vaporview-461384": "252197e8a93f318a33894bc72c807896613b85a14fa1c341ade7282280216ce6",
+    "bun-held-bun-vscode_gh-ryu1kn__vscode-partial-diff-893378": "33b7da2581504977560b407b66e5c592caabdb8bc42dda0ad5db32d893092375",
+    "bun-held-bun-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "9dc8d60e4c062a9221fad1892071e6e3812e919da8c2ed3df5c95d4e70b476be",
+    "bun-held-bun-vscode_gh-tidb-incubator__tide-65cdd1": "039018af6f89dc1dc9a77d895fd2bbda1e6be1d992440fc38c6e2d12cdc0f159",
+    "bun-held-bun-vscode_gh-zd8899__tdad-6da840": "ab921aec4af4744d9ff846ff6f91fc9fdf5107fa8c3cf3cb57c36be7dc8a6487",
+    "bun-held-node-cli_eslint-doc-generator-912f7e": "e0bf6c60bfbd0237f4036f475bbcd26cae7b08e969a580227b49e974c65b121d",
+    "bun-held-node-cli_hostile-1725f8": "0f4e5843e6ecb670fad1e85af8cfd5cef58c4a2b4c37135c951192f57cf50781",
+    "bun-held-node-cli_insert-module-globals-8ef288": "ec5cb4b4ac6169c7ffcfcc519e787de6e79e37157b475385c43719202d418f1b",
+    "bun-held-node-cli_tailwindcss_postcss7-compat-30af7f": "462c698410d872b1ae22c64f2d8b25232aa3d432676645edc824d763f392bcd4",
+    "bun-held-node-cli_zuul-f25eae": "bea1d6f8d180f9ab80f9be31cf09a777c6c65c62c044d0a8e710ad924af01cd6",
+    "bun-held-node-electron_gh-benherbst__dalaix-2f0077": "84478fde7af3716c096672eadf7b62acbe5760d0468c94a6f5580ea6faf35bf2",
+    "bun-held-node-electron_gh-codex-team__codex.notes-4ada2b": "0b729743946d6982a2c5e762849e912ea40586094f313952760f23a52207502d",
+    "bun-held-node-electron_gh-deepender25__edge-drop-9180d3": "3a49cee22212a358ff01cc17801fad4f02089348128c1f71b310ca28a2f356f4",
+    "bun-held-node-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "2c59f730fa17265696c1bf20c2cfa04d944c22220379f4b0857c86ee8cb128da",
+    "bun-held-node-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "e16634d5a4a455c70cc992e3aeaddef99df33cb0f0d238042c9484ef521b98ef",
+    "bun-held-node-vscode_gh-lramseyer__vaporview-461384": "1be3d2086616606470f41f93530e34f19c94f835d7f93f262ef29e43e1eb3176",
+    "bun-held-node-vscode_gh-ryu1kn__vscode-partial-diff-893378": "126ff3028619bf9d367f2be166dd76836aa11273a2a69a2decb015b9504ca30f",
+    "bun-held-node-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "e48b56cfa29ef73e6f24ed9d19052c690bc84f19c2e5138855f6fa98a3c3418f",
+    "bun-held-node-vscode_gh-tidb-incubator__tide-65cdd1": "806f190b0bbc15d722985a4c69c70092a735ed751df4d602547d10ade2514b59",
+    "bun-held-node-vscode_gh-zd8899__tdad-6da840": "46b3535835002883214c061ce34eadbc346c4dc006e585d38bfb82dc12292d65"
+  },
+  "rules": {
+    "chunk": true,
+    "lazybody": true
+  },
+  "schema": "exp112-origins7/1"
+}

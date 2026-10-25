@@ -2,6 +2,7 @@
 <DATA>/truth/, write corpus.json with every sha256) and verify it.
 
 usage: <venv python> -I corpus.py freeze [--jobs N]      (once; rewrites corpus.json)
+       <venv python> -I corpus.py freeze --corpus cc       (exp150: Claude Code alone, the re-labelled sample)
        <venv python> -I corpus.py origins [--jobs N] [--corpus dev|test]   (the origin layer; rewrites origins.json
                                                          or origins-test.json, see origins.py)
        <venv python> -I corpus.py verify [--corpus dev|test]   (every file's sha256 against the manifest + origins)
@@ -25,6 +26,8 @@ Ground truth per statement unit (labelled at score time, against whatever units 
               Read from the frozen map's sources and sourcesContent only. Source-mapped entries only.
   sample      Claude Code 2.1.216: the exp095 negatives lane's 620-statement stratified random sample (labels.jsonl
               strata S0-S3, seed 95; blind second pass 124/124), with its strata sizes for the ratio estimator.
+              Since exp150 (`freeze --corpus cc`) read from NEG = /work/cc-library-truth/2.1.216: the seed-95 redraw,
+              re-labelled after exp095's lane was deleted (experiments/150-bun-testbed/README.md).
 """
 import json
 import multiprocessing
@@ -38,7 +41,9 @@ import lib096  # noqa: E402
 from lib096 import dump, sha256_file, write_gz_json  # noqa: E402
 
 E = "/work/exp095-index-v2-data/eval"
-NEG = "/work/exp095-library-fingerprints/negatives"
+# exp150: the Claude Code sample's labels live outside the repo (they quote Claude Code): the seed-95 redraw of the
+# exp095 negatives sample, re-labelled (/work/cc-library-truth/<version>/labels.jsonl + data/sample-meta.json)
+NEG = "/work/cc-library-truth/2.1.216"
 CC = ("/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.216/binary-decompiled/src/"
       "entrypoints/index.js")
 ESB_APP = "/work/exp096-data/build/esbuild-task-master-ai/entry.js"
@@ -112,7 +117,8 @@ def map_truth(js, app_pkg, version_of, base, inner=None):
 
 def cc_truth():
     specs = {}
-    for line in open(f"{NEG}/exactlab/specs.txt"):
+    spec_file = f"{NEG}/exactlab/specs.txt"  # exp095's exact-build specs: gone with its lane (2026-10-25), optional
+    for line in (open(spec_file) if os.path.exists(spec_file) else ()):
         if line.startswith("#") or "|" not in line:
             continue
         for spec in line.split("|")[1].split():
@@ -135,11 +141,15 @@ def cc_truth():
             "populationUnits": meta["populationUnits"], "populationBytes": meta["populationBytes"], "rows": rows}
 
 
+def cc_entry():
+    return ({"id": "cc-2.1.216", "set": "cc", "bundler": "bun", "description":
+             "Claude Code 2.1.216, the bun --compile binary's extracted entry (Bun, --target bun, minified)"},
+            {"bundle": CC}, ("cc",))
+
+
 def entries():
     """(entry skeleton, files {role: origin path}, truth builder)."""
-    out = [({"id": "cc-2.1.216", "set": "cc", "bundler": "bun", "description":
-             "Claude Code 2.1.216, the bun --compile binary's extracted entry (Bun, --target bun, minified)"},
-            {"bundle": CC}, ("cc",))]
+    out = [cc_entry()]
     for slug, js, app in json.load(open(f"{E}/heldout-apps.json")):
         out.append(({"id": "heldout-" + slug, "set": "heldout", "bundler": "bun", "appPackage": app,
                      "description": f"exp095 held-out app {slug}: Bun 1.4.0 --minify --target node + sourcemap"},
@@ -158,6 +168,31 @@ def entries():
 
 
 ESB_APP_INSTALL_BASE = os.path.dirname(ESB_APP)
+
+
+def freeze_cc():
+    """`freeze --corpus cc` (exp150): Claude Code 2.1.216 alone, its truth the re-labelled sample (cc_truth). No
+    entry has a source map, so every map-derived layer of the corpus is empty (each builder writes its manifest)."""
+    manifest = {"schema": "exp096-corpus/1", "corpus": "cc", "frozen": True,
+                "note": "exp150 Claude Code corpus: 2.1.216 scored on the seed-95 redraw of exp095's negatives sample, "
+                        "re-labelled (labels and truth under /work/cc-library-truth/, never committed)",
+                "entries": []}
+    entry, files, how = cc_entry()
+    d = os.path.join(lib096.DATA, "corpus", entry["id"])
+    os.makedirs(d, exist_ok=True)
+    src = files["bundle"]
+    dst = os.path.join(d, os.path.basename(src))
+    if not os.path.exists(dst) or sha256_file(dst) != sha256_file(src):
+        shutil.copyfile(src, dst)
+    entry["files"] = {"bundle": {"name": os.path.basename(src), "sha256": sha256_file(dst),
+                                 "bytes": os.path.getsize(dst), "origin": src}}
+    entry["truth"] = {"method": "sample"}
+    p = lib096.truth_path(entry)
+    write_gz_json(p, cc_truth())
+    entry["truth"]["sha256"] = sha256_file(p)
+    manifest["entries"].append(entry)
+    open(lib096.MANIFEST, "w").write(dump(manifest))
+    print(f"froze {len(manifest['entries'])} entry -> {lib096.MANIFEST}")
 
 
 def build_truth(job):
@@ -256,7 +291,10 @@ def verify():
 if __name__ == "__main__":
     ARGV = lib096.corpus_flag(sys.argv)
     JOBS = int(ARGV[ARGV.index("--jobs") + 1]) if "--jobs" in ARGV else 12
-    if ARGV[1] == "freeze":
+    if ARGV[1] == "freeze" and lib096.CORPUS == "cc":
+        freeze_cc()
+        freeze_origins(JOBS)
+    elif ARGV[1] == "freeze":
         if lib096.CORPUS != "dev":
             raise SystemExit("REFUSED: `freeze` builds the dev corpus; the test corpus is frozen by exp100's "
                              "freeze_test.py")

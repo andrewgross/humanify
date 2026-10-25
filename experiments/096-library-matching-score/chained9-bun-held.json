@@ -1,0 +1,41 @@
+{
+  "about": "scorer 9 rule `npmchain` (experiments/120-truth-families/scorer9/chained9.py): per entry, the sha256 of <DATA>/truth/<id>.chained9.json.gz; npmVerdicts = every `name@latest exists on npm` answer the rule read",
+  "corpusSha256": "db5f016057b975a8a53934160e44b6755ea4d6ac198eddf1648610e5b5140a3f",
+  "entries": {
+    "bun-held-bun-cli_eslint-doc-generator-912f7e": "b4727048d8c9a0212d82dce7cfa465a7973bb6a57c9fb07a2a0bb262fecf4e43",
+    "bun-held-bun-cli_hostile-1725f8": "b5b6f37dc16e8cd4c5b6fe7de57da179a534f52ac914515f746eaf5dd785c14b",
+    "bun-held-bun-cli_insert-module-globals-8ef288": "9c80d6aa986b9ee4142b3172d01f160420b1472f37109460794bf9b5317a91d1",
+    "bun-held-bun-cli_tailwindcss_postcss7-compat-30af7f": "4701875d4d83da1495ffce95806259559f09c6af1765f61a6e1c8c9f34987524",
+    "bun-held-bun-cli_zuul-f25eae": "b0f86b3f7143ada4eb98c96c9825963f36c52542b5a0bd34d2f664d64d5dcf07",
+    "bun-held-bun-electron_gh-benherbst__dalaix-2f0077": "ca97dfe47c987841d25987014f8be6c9331aecc8dc14acca92e37b7f14535e07",
+    "bun-held-bun-electron_gh-codex-team__codex.notes-4ada2b": "61861bba8218b7109f48280254af6305e9131e93cdefe8d28f5ec4cc95876956",
+    "bun-held-bun-electron_gh-deepender25__edge-drop-9180d3": "34d67e6c1afd92527ec1f311e3fd02feb27f4c4cd106e5983f73dde42aa1526f",
+    "bun-held-bun-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "9c0837fc27b7638f72bc533453d4533727ffe49beaf2c108ca70c032b7357691",
+    "bun-held-bun-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "52a381bd7167a12056af292b69f35de9a9dc5e3264a578229989a411f4560a04",
+    "bun-held-bun-vscode_gh-lramseyer__vaporview-461384": "02b0dd8d8ae49db74466885472f42ea4a36acd2f0c47a27f28632a19832ed63a",
+    "bun-held-bun-vscode_gh-ryu1kn__vscode-partial-diff-893378": "06007fa354d554bae5b4f927a406649a5636e5aea3f7c0b9dbd469824d3ae1ab",
+    "bun-held-bun-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "c35091ac9a807f7754d9a76bbd30768886d766c6c594f1fc7bd77532bce4b8b3",
+    "bun-held-bun-vscode_gh-tidb-incubator__tide-65cdd1": "8672b403eeb904ee5e4829fd71545af64ea017bd88e7e7fc0a2007f8047cbab8",
+    "bun-held-bun-vscode_gh-zd8899__tdad-6da840": "9149a47497bb4f7a9693db67ce99c1e5992795d151d84f0016d1ba486cffe8ee",
+    "bun-held-node-cli_eslint-doc-generator-912f7e": "dc2c966063d34e30aceb71a478f04afd22d1cee1181291610dc3d533f26d9079",
+    "bun-held-node-cli_hostile-1725f8": "bcf0fa63d52fd05ceb0d4302a589a4e9a4e493eb5c0c69b8505d5d0ab0170f6b",
+    "bun-held-node-cli_insert-module-globals-8ef288": "7a26bcde34eb2bd32dc594515dcad67123e938de98e2b6dc4825ff5ec25fcbf3",
+    "bun-held-node-cli_tailwindcss_postcss7-compat-30af7f": "db104bb7dfa1df34c650b8a3763ee1bd0b7b769383171926717d3886d92fb0ce",
+    "bun-held-node-cli_zuul-f25eae": "1a1a379b0f6b6019709d0bfaeebfc52b31602d461d38c3a5d52d34c798594846",
+    "bun-held-node-electron_gh-benherbst__dalaix-2f0077": "86355663d58a5212481a77b6fc839c095d9538b347b2ac799fde9728ff351c58",
+    "bun-held-node-electron_gh-codex-team__codex.notes-4ada2b": "536aff9714b302fb529ebbbcb22802ba873f7ad8599d8059581c5591ec458e91",
+    "bun-held-node-electron_gh-deepender25__edge-drop-9180d3": "5d498c591e686fb64a055906375caaa80c3b3018c3f2fc264a19dd9529f98c36",
+    "bun-held-node-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "8f6c2848cc47d8d9b92b7868df98568d05788728fa183916e8a9ebf9c41749bc",
+    "bun-held-node-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "f0d2704a784c58c63d1162c2e99b2f8f526212ca97909a55a7dd992cf474223b",
+    "bun-held-node-vscode_gh-lramseyer__vaporview-461384": "858ec55539df2f32094a2ac966ee360999b0d9d429e2cb397980df168b2111d9",
+    "bun-held-node-vscode_gh-ryu1kn__vscode-partial-diff-893378": "829c3eef17116a44193dc7b659eda90dfa8d32a166851075b54d45eee0adee2e",
+    "bun-held-node-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "a12aec32a5fd1a199c523ba1d69f5f5f5616dede25fe1ed206811a80af2bd417",
+    "bun-held-node-vscode_gh-tidb-incubator__tide-65cdd1": "2e8cc75f192c1a8b631d7ba56c5ec696395f6ec3b79acefb3e21365ff75df481",
+    "bun-held-node-vscode_gh-zd8899__tdad-6da840": "59329e1eb183fbd820be19790dcac8aa56142ab3bc4515ad403a9fd4162a2d3b"
+  },
+  "npmVerdicts": {
+    "count": 0,
+    "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+  },
+  "schema": "exp120-chained9/1"
+}

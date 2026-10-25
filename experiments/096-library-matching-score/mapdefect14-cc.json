@@ -1,0 +1,18 @@
+{
+  "about": "scorer 14 rule `mapdefect` (experiments/137-scorer-mapdefect/scorer14/mapdefect14.py): per entry, the sha256 of <DATA>/truth/<id>.mapdefect14.json.gz (rows: unit start, end, old package, new package, version, file, evidence tokens, closure share x1000, holder share x1000, old file; evaluated: every span the rule read, with its verdict)",
+  "bytes": {},
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "entries": {},
+  "rules": {
+    "candidate": 0.3,
+    "depKeys": ["dependencies", "optionalDependencies", "peerDependencies"],
+    "dfMax": 5,
+    "fileCap": 1000,
+    "hold": 0.8,
+    "lack": 0.2,
+    "minEvidence": 8,
+    "sample": 64
+  },
+  "schema": "exp137-mapdefect14/1",
+  "unitsLabels": ["cc-exp150-main"]
+}

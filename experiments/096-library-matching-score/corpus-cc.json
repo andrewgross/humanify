@@ -1,0 +1,26 @@
+{
+  "corpus": "cc",
+  "entries": [
+    {
+      "bundler": "bun",
+      "description": "Claude Code 2.1.216, the bun --compile binary's extracted entry (Bun, --target bun, minified)",
+      "files": {
+        "bundle": {
+          "bytes": 20455273,
+          "name": "index.js",
+          "origin": "/Users/andrewgross/Development/claude-code-versions/inputs/claude-code-2.1.216/binary-decompiled/src/entrypoints/index.js",
+          "sha256": "ec64d65a1e772ac04719715af0210dc0da6160a048d9922284cafc3cb5da1f76"
+        }
+      },
+      "id": "cc-2.1.216",
+      "set": "cc",
+      "truth": {
+        "method": "sample",
+        "sha256": "79c29eb3a148cc31c09ff8d570a9e3f6a7a1bfa4a4e4708249bc8d15f28d0f9d"
+      }
+    }
+  ],
+  "frozen": true,
+  "note": "exp150 Claude Code corpus: 2.1.216 scored on the seed-95 redraw of exp095's negatives sample, re-labelled (labels and truth under /work/cc-library-truth/, never committed)",
+  "schema": "exp096-corpus/1"
+}

@@ -1,0 +1,11 @@
+{
+  "about": "scorer 10 origin layer (experiments/125-nested-chunk-publisher/scorer10/origins10.py): origins.py with RULES10; per entry the sha256 of <DATA>/truth/<id>.origins10.json.gz",
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "entries": {},
+  "rules": {
+    "chunk": true,
+    "lazybody": true,
+    "via": true
+  },
+  "schema": "exp125-origins10/1"
+}

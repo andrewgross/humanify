@@ -1,0 +1,42 @@
+{
+  "about": "scorer 10 origin layer (experiments/125-nested-chunk-publisher/scorer10/origins10.py): origins.py with RULES10; per entry the sha256 of <DATA>/truth/<id>.origins10.json.gz",
+  "corpusSha256": "db5f016057b975a8a53934160e44b6755ea4d6ac198eddf1648610e5b5140a3f",
+  "entries": {
+    "bun-held-bun-cli_eslint-doc-generator-912f7e": "3c342e3e3236396ca1dc7e186aa210810c0bae522308fdba977d165780f12a66",
+    "bun-held-bun-cli_hostile-1725f8": "73571dc9f5eab2b8b2b2ea37abe7d2e673f6b085ee871dcd0f2a4f8b413fef06",
+    "bun-held-bun-cli_insert-module-globals-8ef288": "80976d5f5323ef65ce315f3d3359334d56f3ef02ff515224ae9583b254321e70",
+    "bun-held-bun-cli_tailwindcss_postcss7-compat-30af7f": "2c70cc2047214c3544edf19b994f748c84d380a3216fa1ba2c0aef75e5b0dae6",
+    "bun-held-bun-cli_zuul-f25eae": "1195e073ec648e4989425f19591442d2bbddbc59686c975782a73946d4567e3f",
+    "bun-held-bun-electron_gh-benherbst__dalaix-2f0077": "837ae8a7ee1e2c1d53b972d420dd4c82ba95c74f4cafebc026d5fbfc71482c1e",
+    "bun-held-bun-electron_gh-codex-team__codex.notes-4ada2b": "9f0e954b2598ae49f098588d8555390b0c6bd1d5e02000dd54e74ab8bcc55ef2",
+    "bun-held-bun-electron_gh-deepender25__edge-drop-9180d3": "82710e74026406e56d1d3af07f06d092f191bf0a2f080ba31997e08a9628aef0",
+    "bun-held-bun-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "24b1998063a471f3dbdc3383e738fbe5ae0f4e89a61b6023f5e12d8d139c3a18",
+    "bun-held-bun-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "b0b155d55cc869391ed6d143cbacd1ec123526295d996fbf8365f38067f30fe0",
+    "bun-held-bun-vscode_gh-lramseyer__vaporview-461384": "3ad75d8938ceb05586366f300beb34737f0b2e9c9631a1e09195201f437047b9",
+    "bun-held-bun-vscode_gh-ryu1kn__vscode-partial-diff-893378": "7ea72b3d48ee84fc5a67286979683feab4a919ebd9b5035a0a2ad4122390b83b",
+    "bun-held-bun-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "55cd0a292b3fdc653d107bab434ac20a3570ff306b209e9a46a2e5bb32f47fa1",
+    "bun-held-bun-vscode_gh-tidb-incubator__tide-65cdd1": "2b609a50a8f7af2c77e859807efe7f27f3947b4337223f236ddc0abf9edef7a4",
+    "bun-held-bun-vscode_gh-zd8899__tdad-6da840": "d9d6ca2eca655ad581c3db1c26657f8feaaa17ec9cf28ee746c37494b0f62c2b",
+    "bun-held-node-cli_eslint-doc-generator-912f7e": "12a586865074aed355e387ebbf9a9ce5b98cf9d5422fd8904d8ee3771b1c8058",
+    "bun-held-node-cli_hostile-1725f8": "e3f2e710eeed27fdc8f6dfb2608aafe3238fcee1d022d954743a317764e241ba",
+    "bun-held-node-cli_insert-module-globals-8ef288": "e6085160df8c3896024520444ec658bdc3ff64a67a36733a6e60c2e25fa17980",
+    "bun-held-node-cli_tailwindcss_postcss7-compat-30af7f": "e6c0ca4193b99de51e6cc2f573709141e8dc7ecee75384af0d1297c393c5f021",
+    "bun-held-node-cli_zuul-f25eae": "cd5e39b775d557461598e46c3317201bd79d308ba2db7ada99efadd0d6ab33fe",
+    "bun-held-node-electron_gh-benherbst__dalaix-2f0077": "ab1bfb6e92b0f5d9a5c645c8189377f6f266d6b9a71da19d9c49702c491612a8",
+    "bun-held-node-electron_gh-codex-team__codex.notes-4ada2b": "8ea4c0e0c0d07be28d2f2be93ed37c1e860abb6862cd06e7fea9cd6159c714c4",
+    "bun-held-node-electron_gh-deepender25__edge-drop-9180d3": "3993bfefb3e49272eab63ca3aeb9d2f627ede523b3f3bfbea34d672b984ac378",
+    "bun-held-node-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "d4158d5bf2663672ee3de7f1a4d551f8ca34d49188a1f177f06cd75f1b3fec8f",
+    "bun-held-node-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "899b7bf732bf145df5059fa67b61d42d83316282ed7aeee47969d8247b7da964",
+    "bun-held-node-vscode_gh-lramseyer__vaporview-461384": "1bef804d99384d387368f50f937f010648d90284e0aacfd080eff2dd77e0fe94",
+    "bun-held-node-vscode_gh-ryu1kn__vscode-partial-diff-893378": "f7bbece371ab0e0f05ce2e62404d2cc1b0217ba3a7628321287bdfd9ca625238",
+    "bun-held-node-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "6dd85fd9c4f2a89d33d316428f352246a9d3331f5398f802b3e03f9e7354f7da",
+    "bun-held-node-vscode_gh-tidb-incubator__tide-65cdd1": "b2f6eb41c9bf19d6e194c98c457231d70caab5c7b70607b25916d2251edede90",
+    "bun-held-node-vscode_gh-zd8899__tdad-6da840": "c5c927697d07fc76026c9763d67a6357e970d10a3d4eae386c9283f284184472"
+  },
+  "rules": {
+    "chunk": true,
+    "lazybody": true,
+    "via": true
+  },
+  "schema": "exp125-origins10/1"
+}

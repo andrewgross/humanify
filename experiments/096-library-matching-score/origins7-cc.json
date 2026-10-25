@@ -1,0 +1,10 @@
+{
+  "about": "scorer 7 origin layer (experiments/112-test-precision/scorer7/origins7.py): origins.py with RULES7; per entry the sha256 of <DATA>/truth/<id>.origins7.json.gz",
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "entries": {},
+  "rules": {
+    "chunk": true,
+    "lazybody": true
+  },
+  "schema": "exp112-origins7/1"
+}
