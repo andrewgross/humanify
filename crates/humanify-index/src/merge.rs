@@ -21,9 +21,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use humanify_core::libindex::format::{
-    HelperRow, INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow, PackageRecord,
-    RefusedRecord, RegistrySnapshot, SliceRecord, UnitRow, fingerprint_versions, sort_versions,
-    version_ranges,
+    Callee, EdgeRow, HelperRow, INDEX_FORMAT, LiteralFileRow, LiteralRow, Manifest, ModuleRow,
+    PackageRecord, RefusedRecord, RegistrySnapshot, SliceRecord, UnitRow, fingerprint_versions,
+    sort_versions, version_ranges,
 };
 use humanify_core::libindex::table::unit_key;
 use serde::Serialize;
@@ -136,12 +136,17 @@ impl Interner {
 }
 
 /// A unit group: the FIRST shard's nodes and content (shards come in
-/// label order), the smallest module, the versions it was seen in.
+/// label order), the smallest module, the versions it was seen in, and
+/// the callees any of its occurrences recorded (a union: an index edge a
+/// bundle lacks says nothing, docs/matching-architecture.md §4).
 struct UnitGroup {
     nodes: u32,
     content: u32,
     module_bytes: u64,
     versions: Vec<u32>,
+    inside: BTreeSet<u64>,
+    /// (owner, print) of each OUT-OF callee.
+    out_of: BTreeSet<(u32, u64)>,
 }
 
 /// One slice's groups.
@@ -248,15 +253,37 @@ impl Merger {
             }
             let (owner, version) = self.seen(&u.owner, &u.version);
             let file = self.strings.id(&u.file);
+            let callee = |h: &str| {
+                unit_key(h).ok_or_else(|| {
+                    format!(
+                        "shard {}: callee hash {h:?} is not 16 lowercase hex digits",
+                        shard.label()
+                    )
+                })
+            };
+            let inside = u
+                .inside
+                .iter()
+                .map(|h| callee(h))
+                .collect::<Result<Vec<u64>, String>>()?;
+            // a stop-listed helper is in no table: no OUT-OF edge names it
+            let mut out_of = Vec::with_capacity(u.out_of.len());
+            for c in u.out_of.iter().filter(|c| !is_helper(&c.owner, &self.stop)) {
+                out_of.push((self.strings.id(&c.owner), callee(&c.hash)?));
+            }
             let g = self.slices.get_mut(&shard.kind).expect("the shard's slice");
             let e = g.units.entry((hash, owner, file)).or_insert(UnitGroup {
                 nodes: u.nodes,
                 content: u.content,
                 module_bytes: u.module_bytes,
                 versions: Vec::new(),
+                inside: BTreeSet::new(),
+                out_of: BTreeSet::new(),
             });
             e.module_bytes = e.module_bytes.min(u.module_bytes);
             e.versions.push(version);
+            e.inside.extend(inside);
+            e.out_of.extend(out_of);
         }
         Ok(())
     }
@@ -353,6 +380,45 @@ impl Merger {
             .collect()
     }
 
+    /// `edges.<slice>.jsonl`: the unit rows' recorded callees, in unit row
+    /// order (a row with none has no edge row); OUT-OF callees sorted by
+    /// (owner name, hash).
+    fn edge_rows(&self, g: &SliceGroups) -> Vec<EdgeRow> {
+        let s = &self.strings;
+        let mut keys: Vec<&(u64, u32, u32)> = g
+            .units
+            .iter()
+            .filter(|(_, u)| !u.inside.is_empty() || !u.out_of.is_empty())
+            .map(|(k, _)| k)
+            .collect();
+        keys.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| s.cmp(a.1, b.1))
+                .then_with(|| s.cmp(a.2, b.2))
+        });
+        keys.into_iter()
+            .map(|k| {
+                let u = &g.units[k];
+                let mut out_of: Vec<Callee> = u
+                    .out_of
+                    .iter()
+                    .map(|&(o, h)| Callee {
+                        owner: s.get(o).to_string(),
+                        hash: format!("{h:016x}"),
+                    })
+                    .collect();
+                out_of.sort();
+                EdgeRow {
+                    hash: format!("{:016x}", k.0),
+                    owner: s.get(k.1).to_string(),
+                    file: s.get(k.2).to_string(),
+                    inside: u.inside.iter().map(|h| format!("{h:016x}")).collect(),
+                    out_of,
+                }
+            })
+            .collect()
+    }
+
     /// The literal file rows, sorted by (owner, file, literal set).
     fn literal_rows(&self, indexed: &BTreeMap<String, Vec<String>>) -> Vec<LiteralRow> {
         let s = &self.strings;
@@ -380,6 +446,7 @@ impl Merger {
         let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         files.insert("versions.json".into(), pretty(&indexed));
         let mut units: BTreeMap<String, Vec<UnitRow>> = BTreeMap::new();
+        let mut edges: BTreeMap<String, Vec<EdgeRow>> = BTreeMap::new();
         for (kind, g) in &self.slices {
             files.insert(
                 format!("modules.{kind}.jsonl"),
@@ -389,13 +456,22 @@ impl Merger {
             if !rows.is_empty() {
                 files.insert(format!("units.{kind}.jsonl"), jsonl(&rows));
                 units.insert(kind.clone(), rows);
+                let edge_rows = self.edge_rows(g);
+                files.insert(
+                    humanify_core::libindex::table::edge_rows_file(kind),
+                    jsonl(&edge_rows),
+                );
+                edges.insert(kind.clone(), edge_rows);
             }
         }
         let literals = self.literal_rows(&indexed);
         files.extend(humanify_core::libindex::table::lookup_files(
-            &units, &literals,
+            &units,
+            Some(&edges),
+            &literals,
         )?);
         drop(units);
+        drop(edges);
         let provenance: Vec<LiteralFileRow> = literals
             .into_iter()
             .map(|r| LiteralFileRow {

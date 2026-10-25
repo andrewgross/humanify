@@ -357,7 +357,10 @@ fn library_index_with(dir: &Path, recipes: &[(&str, &str)]) -> String {
         .iter()
         .map(|(slice, _)| (slice.to_string(), Vec::new()))
         .collect();
-    for (name, bytes) in humanify_core::libindex::table::lookup_files(&units, &[]).unwrap() {
+    for (name, bytes) in
+        humanify_core::libindex::table::lookup_files(&units, Some(&Default::default()), &[])
+            .unwrap()
+    {
         std::fs::write(dir.join(name), bytes).unwrap();
     }
     dir.display().to_string()

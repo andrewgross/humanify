@@ -100,6 +100,10 @@ fn the_fingerprint_stamp_names_the_pipelines_own_versions() {
         format!("literals/{}", crate::hash::forms::LIBRARY_LITERALS_VERSION)
     );
     assert_eq!(f.units, crate::hash::forms::LIBRARY_UNITS.stamp());
+    assert_eq!(
+        f.edges.as_deref(),
+        Some(super::format::LIBRARY_EDGES_VERSION)
+    );
 }
 
 fn manifest_for(recipes: &[&str]) -> super::format::Manifest {
@@ -147,7 +151,9 @@ fn every_compatibility_version_is_checked_and_named() {
     // Each stamp alone: the refusal names the field, both spellings, and
     // how to rebuild (fail early, never half-match).
     type Edit = fn(&mut super::format::Manifest);
-    let cases: [(&str, Edit); 7] = [
+    let cases: [(&str, Edit); 9] = [
+        ("edges", |m| m.fingerprints.edges = Some("edges/0".into())),
+        ("edges", |m| m.fingerprints.edges = None),
         ("format", |m| m.format = "humanify-library-index/0".into()),
         ("module", |m| {
             m.fingerprints.module = "vendor-content-key/3".into()
@@ -225,4 +231,26 @@ fn an_older_manifest_is_refused_by_its_stamps_not_a_parse_error() {
     ours["fingerprints"]["serializer"] = "x/1".into();
     let err = super::format::check_manifest_stamps(&ours.to_string()).expect_err("unknown");
     assert!(err.contains("serializer"), "{err}");
+}
+
+#[test]
+fn a_format_3_manifest_is_read_without_edges_and_only_without() {
+    use super::format::INDEX_FORMAT_NO_EDGES;
+    let mut old = manifest_for(&[BUN]);
+    old.format = INDEX_FORMAT_NO_EDGES.into();
+    old.fingerprints.edges = None;
+    assert_eq!(old.check_compatible(), Ok(()));
+    assert!(!old.has_edges());
+    let text = serde_json::to_string(&old).unwrap();
+    assert!(
+        !text.contains("edges"),
+        "a /3 manifest spells no edges stamp"
+    );
+    assert_eq!(super::format::check_manifest_stamps(&text), Ok(()));
+    old.fingerprints.edges = fingerprint_versions().edges;
+    let err = old
+        .check_compatible()
+        .expect_err("a /3 index has no edge rows");
+    assert!(err.contains("edges"), "{err}");
+    assert!(manifest_for(&[BUN]).has_edges());
 }

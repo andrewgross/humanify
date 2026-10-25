@@ -7,9 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-use super::format::{HelperRow, LiteralRow, Manifest, UnitRow};
+use super::format::{EdgeRow, HelperRow, LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
-use super::table::{self, LiteralTable, Source, UnitTable};
+use super::table::{self, EdgeCallee, EdgeTable, LiteralTable, Source, UnitTable};
 use super::units::{StatementPrints, UnitPrint};
 use crate::matching::store::ReferenceStore;
 
@@ -21,6 +21,11 @@ pub struct UnitHit {
     pub owner: u32,
     /// The smallest bundled module the unit was seen in (specificity).
     pub module_bytes: u64,
+    /// The row's position in its unit table (the edge table's key).
+    pub row: u32,
+    /// Which unit table: 0 the chosen slice's, `i` the `i`-th terser-built
+    /// slice read beside it.
+    pub table: u8,
 }
 
 /// An opened index slice: its unit table and the literal table, read on
@@ -44,6 +49,10 @@ pub struct LibraryIndex {
     /// set once by [`LibraryIndex::decide_terser_slices`].
     terser_verdict: std::sync::OnceLock<(bool, f64)>,
     literals: LiteralTable,
+    /// The edge tables (format `/4`), parallel to the unit tables (chosen
+    /// slice first, then the terser-built ones); None for a `/3` index,
+    /// which records no edges.
+    edges: Option<Vec<EdgeTable>>,
     /// Every package name the index knows: its owners, and (loaded) the
     /// packages its manifest records registry metadata or builds for.
     known: BTreeSet<String>,
@@ -56,7 +65,30 @@ impl LibraryIndex {
     /// An index from its rows, through the same tables a run reads (the
     /// tests' constructor).
     pub fn from_rows(units: Vec<UnitRow>, literals: Vec<LiteralRow>) -> LibraryIndex {
-        let packages = table::package_table(&[&units], &literals);
+        Self::rows(units, None, literals)
+    }
+
+    /// [`LibraryIndex::from_rows`] with an edge table (a `/4` index; the
+    /// tests' constructor).
+    pub fn from_rows_with_edges(
+        units: Vec<UnitRow>,
+        edges: Vec<EdgeRow>,
+        literals: Vec<LiteralRow>,
+    ) -> LibraryIndex {
+        Self::rows(units, Some(edges), literals)
+    }
+
+    fn rows(
+        units: Vec<UnitRow>,
+        edges: Option<Vec<EdgeRow>>,
+        literals: Vec<LiteralRow>,
+    ) -> LibraryIndex {
+        let edge_rows: &[EdgeRow] = edges.as_deref().unwrap_or(&[]);
+        let packages = table::package_table(&[&units], &[edge_rows], &literals);
+        let edges = edges.map(|e| {
+            let bytes = EdgeTable::encode(&units, &e, &packages).expect("edge rows encode");
+            vec![EdgeTable::open(Source::Memory(bytes)).expect("an encoded edge table opens")]
+        });
         let units = UnitTable::encode(&units, &packages).expect("unit hashes are unit keys");
         LibraryIndex {
             id: String::new(),
@@ -70,6 +102,7 @@ impl LibraryIndex {
                 &literals, &packages,
             )))
             .expect("an encoded literal table opens"),
+            edges,
             known: packages.iter().cloned().collect(),
             packages,
             helpers: BTreeMap::new(),
@@ -219,6 +252,14 @@ impl LibraryIndex {
         let units_name = table::units_file(&slice);
         let units =
             UnitTable::open(open(&units_name)?).map_err(|e| format!("{units_name}: {e}"))?;
+        let open_edges = |slice: &str| {
+            let file = table::edges_file(slice);
+            EdgeTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))
+        };
+        let mut edges = manifest
+            .has_edges()
+            .then(|| open_edges(&slice).map(|t| vec![t]))
+            .transpose()?;
         let mut reason = reason.to_string();
         let mut terser_units = Vec::new();
         if terser != super::recipe::TerserSlices::Off {
@@ -228,6 +269,9 @@ impl LibraryIndex {
                 let file = table::units_file(name);
                 terser_units
                     .push(UnitTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))?);
+                if let Some(tables) = edges.as_mut() {
+                    tables.push(open_edges(name)?);
+                }
             }
             reason.push_str(&format!(
                 "; terser_slices = {}: also {}",
@@ -266,6 +310,7 @@ impl LibraryIndex {
             terser_reading: terser,
             terser_verdict: std::sync::OnceLock::new(),
             literals,
+            edges,
             helpers,
         })
     }
@@ -286,16 +331,35 @@ impl LibraryIndex {
         }
         // each owner once, where it is first seen, at its smallest module
         let mut merged: Vec<UnitHit> = Vec::with_capacity(hits.len());
-        for h in hits
-            .into_iter()
-            .chain(self.terser_units.iter().flat_map(|t| t.hits(hash)))
-        {
+        let terser = self.terser_units.iter().enumerate().flat_map(|(i, t)| {
+            t.hits(hash).into_iter().map(move |h| UnitHit {
+                table: i as u8 + 1,
+                ..h
+            })
+        });
+        for h in hits.into_iter().chain(terser) {
             match merged.iter_mut().find(|m| m.owner == h.owner) {
                 Some(m) => m.module_bytes = m.module_bytes.min(h.module_bytes),
                 None => merged.push(h),
             }
         }
         merged
+    }
+
+    /// Does the index record edges (format `/4`)?
+    pub fn has_edges(&self) -> bool {
+        self.edges.is_some()
+    }
+
+    /// The callees a unit hit's row records, sorted by (owner, print key);
+    /// None when the index records no edges (`/3`).
+    pub fn row_callees(&self, hit: UnitHit) -> Option<Vec<EdgeCallee>> {
+        let tables = self.edges.as_ref()?;
+        Some(
+            tables
+                .get(usize::from(hit.table))
+                .map_or_else(Vec::new, |t| t.callees(hit.row)),
+        )
     }
 
     /// An owner id's package name.

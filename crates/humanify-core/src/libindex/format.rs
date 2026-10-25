@@ -15,8 +15,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT};
 
-/// The format tag in every manifest.
-pub const INDEX_FORMAT: &str = "humanify-library-index/3";
+/// The format tag this binary writes: `/4` adds the edge tables
+/// (`edges.<slice>.bin` + `edges.<slice>.jsonl`, exp151).
+pub const INDEX_FORMAT: &str = "humanify-library-index/4";
+
+/// The one older format this binary still reads: the same tables without
+/// edges, so its store answers every edge read `NotRecorded`.
+pub const INDEX_FORMAT_NO_EDGES: &str = "humanify-library-index/3";
+
+/// The edge rows' version (exp151): per unit row, the WHOLE prints of the
+/// statement units its statement references in the bundle's reference
+/// graph (`graph::references`, factory bodies cut), split by the callee's
+/// owner into INSIDE (the row's own package) and OUT-OF (another package);
+/// a callee with no print (a container) or no owner is not recorded. In
+/// every module shard's key.
+pub const LIBRARY_EDGES_VERSION: &str = "edges/1";
 
 /// The build recipe's version (`humanify-index`'s `recipe` module: every
 /// rule of how a slice's bundles are made). Recorded per slice in the
@@ -167,6 +180,32 @@ pub struct UnitRow {
     pub versions: Vec<(String, String)>,
 }
 
+/// One row of `edges.<slice>.jsonl` (format `/4`, exp151): the callees a
+/// unit row records ([`LIBRARY_EDGES_VERSION`]), over every version the
+/// row was seen in (a union: an index edge a bundle lacks says nothing,
+/// docs/matching-architecture.md §4). Keyed like its [`UnitRow`] (hash,
+/// owner, file); a row with no callee has no edge row. Provenance for
+/// instruments; a run reads `edges.<slice>.bin`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeRow {
+    pub hash: String,
+    pub owner: String,
+    pub file: String,
+    /// The INSIDE callees' prints (the row's own package), sorted.
+    pub inside: Vec<String>,
+    /// The OUT-OF callees (another package's units), sorted by (owner,
+    /// hash).
+    pub out_of: Vec<Callee>,
+}
+
+/// An OUT-OF callee: the package owning it and its print.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct Callee {
+    pub owner: String,
+    pub hash: String,
+}
+
 /// One print of the index's HELPER table (exp129, `helpers.jsonl`): a
 /// unit hash a helper SOURCE's own build holds (tslib, @babel/runtime,
 /// @swc/helpers: the stop-listed packages whose code is the transpiler
@@ -221,6 +260,10 @@ pub struct FingerprintVersions {
     pub module: String,
     pub literals: String,
     pub units: String,
+    /// The edge rows ([`LIBRARY_EDGES_VERSION`]); absent in a
+    /// [`INDEX_FORMAT_NO_EDGES`] index, which has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edges: Option<String>,
 }
 
 /// This build's stamp.
@@ -229,7 +272,57 @@ pub fn fingerprint_versions() -> FingerprintVersions {
         module: VENDOR_CONTENT.stamp(),
         literals: format!("literals/{LIBRARY_LITERALS_VERSION}"),
         units: LIBRARY_UNITS.stamp(),
+        edges: Some(LIBRARY_EDGES_VERSION.to_string()),
     }
+}
+
+/// The stamps an index of `format` must carry to be read by this binary
+/// (field → spelling), None for a format it does not read: this build's,
+/// and for [`INDEX_FORMAT_NO_EDGES`] the same without `edges`.
+fn readable_stamps(format: &str) -> Option<BTreeMap<&'static str, String>> {
+    let f = fingerprint_versions();
+    let mut out: BTreeMap<&'static str, String> = [
+        ("module", f.module),
+        ("literals", f.literals),
+        ("units", f.units),
+    ]
+    .into_iter()
+    .collect();
+    match format {
+        INDEX_FORMAT => {
+            out.insert("edges", f.edges.expect("this build stamps edges"));
+            Some(out)
+        }
+        INDEX_FORMAT_NO_EDGES => Some(out),
+        _ => None,
+    }
+}
+
+/// Why `theirs` (field → stamp) is not what a `format` index must carry,
+/// one entry per field that differs; a format this binary does not read
+/// is named, and its stamps compared with this build's.
+fn stamp_mismatches(format: &str, theirs: &BTreeMap<String, String>) -> Vec<String> {
+    let mut wrong = Vec::new();
+    let ours = readable_stamps(format).unwrap_or_else(|| {
+        wrong.push(format!(
+            "format {format} (this binary reads {INDEX_FORMAT} and {INDEX_FORMAT_NO_EDGES})"
+        ));
+        readable_stamps(INDEX_FORMAT).expect("this build's format")
+    });
+    let keys: BTreeSet<&str> = ours
+        .keys()
+        .copied()
+        .chain(theirs.keys().map(String::as_str))
+        .collect();
+    let show = |v: Option<&str>| v.unwrap_or("(none)").to_string();
+    wrong.extend(keys.into_iter().filter_map(|k| {
+        let (t, o) = (
+            theirs.get(k).map(String::as_str),
+            ours.get(k).map(String::as_str),
+        );
+        (t != o).then(|| format!("{k} {} (this binary reads {})", show(t), show(o)))
+    }));
+    wrong
 }
 
 /// The registry snapshot an index was planned from.
@@ -319,36 +412,7 @@ struct Stamps {
 /// (an unknown or missing stamp included) and how to rebuild.
 pub fn check_manifest_stamps(text: &str) -> Result<(), String> {
     let theirs: Stamps = serde_json::from_str(text).map_err(|e| format!("manifest.json: {e}"))?;
-    let ours = fingerprint_versions();
-    let ours: BTreeMap<&str, &str> = [
-        ("module", ours.module.as_str()),
-        ("literals", ours.literals.as_str()),
-        ("units", ours.units.as_str()),
-    ]
-    .into_iter()
-    .collect();
-    let mut wrong = Vec::new();
-    if theirs.format != INDEX_FORMAT {
-        wrong.push(format!(
-            "format {} (this binary reads {INDEX_FORMAT})",
-            theirs.format
-        ));
-    }
-    let keys: BTreeSet<&str> = ours
-        .keys()
-        .copied()
-        .chain(theirs.fingerprints.keys().map(String::as_str))
-        .collect();
-    for k in keys {
-        let (t, o) = (
-            theirs.fingerprints.get(k).map(String::as_str),
-            ours.get(k).copied(),
-        );
-        if t != o {
-            let show = |v: Option<&str>| v.unwrap_or("(none)").to_string();
-            wrong.push(format!("{k} {} (this binary reads {})", show(t), show(o)));
-        }
-    }
+    let wrong = stamp_mismatches(&theirs.format, &theirs.fingerprints);
     if wrong.is_empty() {
         Ok(())
     } else {
@@ -364,17 +428,22 @@ impl Manifest {
     /// half-claim). Which slice a bundle reads is [`Manifest::recipes`] +
     /// `recipe::choose_slice`, a separate question.
     pub fn check_compatible(&self) -> Result<(), String> {
-        let ours = fingerprint_versions();
-        let mut wrong: Vec<String> = Vec::new();
+        let f = &self.fingerprints;
+        let stamps: BTreeMap<String, String> = [
+            ("module", Some(&f.module)),
+            ("literals", Some(&f.literals)),
+            ("units", Some(&f.units)),
+            ("edges", f.edges.as_ref()),
+        ]
+        .into_iter()
+        .filter_map(|(k, v)| Some((k.to_string(), v?.clone())))
+        .collect();
+        let mut wrong = stamp_mismatches(&self.format, &stamps);
         let mut differ = |field: &str, theirs: &str, ours: &str| {
             if theirs != ours {
                 wrong.push(format!("{field} {theirs} (this binary reads {ours})"));
             }
         };
-        differ("format", &self.format, INDEX_FORMAT);
-        differ("module", &self.fingerprints.module, &ours.module);
-        differ("literals", &self.fingerprints.literals, &ours.literals);
-        differ("units", &self.fingerprints.units, &ours.units);
         for s in &self.slices {
             differ(
                 &format!("recipe version (slice {})", s.slice),
@@ -390,6 +459,11 @@ impl Manifest {
         } else {
             Err(format!("built with {}; {REBUILD}", wrong.join(", ")))
         }
+    }
+
+    /// Does the index hold edge tables (format [`INDEX_FORMAT`])?
+    pub fn has_edges(&self) -> bool {
+        self.format == INDEX_FORMAT
     }
 
     /// The index's recipes in manifest order, each with its
