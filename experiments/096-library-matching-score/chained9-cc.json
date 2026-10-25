@@ -1,0 +1,7 @@
+{
+  "about": "scorer 9 rule `npmchain` (experiments/120-truth-families/scorer9/chained9.py): per entry, the sha256 of <DATA>/truth/<id>.chained9.json.gz; npmVerdicts = every `name@latest exists on npm` answer the rule read",
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "entries": {},
+  "npmVerdicts": {},
+  "schema": "exp120-chained9/1"
+}

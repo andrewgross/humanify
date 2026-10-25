@@ -1,0 +1,686 @@
+{
+  "seed": 150,
+  "splitSeed": 1501,
+  "maxLibBytes": 15000000,
+  "perKind": 20,
+  "heldPerKind": 5,
+  "npmBefore": "2026-10-15T23:59:59.999Z",
+  "pool": 1088,
+  "poolByKind": {
+    "cli": 208,
+    "electron": 654,
+    "vscode": 226
+  },
+  "excludedSlugs": 550,
+  "bun": {
+    "version": "1.4.0+34cbb9a40",
+    "path": "/work/tools/bun-1.4.0/node_modules/.bin/bun",
+    "binarySha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+    "releaseZip": "https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64.zip",
+    "releaseZipSha256": "2d03fb5fb83ac8b567aca0a281b2ce1a1a19d488f56c2968d88c3f25e92fe452",
+    "npmTarball": "@oven/bun-linux-x64@1.4.0",
+    "npmIntegrity": "sha512-Du44zebtPXJujvMLmtIxEQ6ykOhYt7L/Q+YIGVm+Yy+Pj/fpOnq60ggwIpKp/pGAFbYHNiTrA3JTjuZ9MTbZIg=="
+  },
+  "apps": [
+    {
+      "id": "cli:ember-cli",
+      "kind": "cli",
+      "slug": "cli_ember-cli-afb389",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:hostile",
+      "kind": "cli",
+      "slug": "cli_hostile-1725f8",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:@workflow/nest",
+      "kind": "cli",
+      "slug": "cli_workflow_nest-9c1822",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:babel-istanbul",
+      "kind": "cli",
+      "slug": "cli_babel-istanbul-f3b1f1",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:doctoc",
+      "kind": "cli",
+      "slug": "cli_doctoc-fa09a2",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:zuul",
+      "kind": "cli",
+      "slug": "cli_zuul-f25eae",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:just-bash",
+      "kind": "cli",
+      "slug": "cli_just-bash-6676e9",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:@tailwindcss/postcss7-compat",
+      "kind": "cli",
+      "slug": "cli_tailwindcss_postcss7-compat-30af7f",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:@umijs/fabric",
+      "kind": "cli",
+      "slug": "cli_umijs_fabric-f601b5",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:insert-module-globals",
+      "kind": "cli",
+      "slug": "cli_insert-module-globals-8ef288",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:@opennextjs/aws",
+      "kind": "cli",
+      "slug": "cli_opennextjs_aws-9820f5",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:ts-patch",
+      "kind": "cli",
+      "slug": "cli_ts-patch-3ab5bd",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:cz-customizable",
+      "kind": "cli",
+      "slug": "cli_cz-customizable-36f649",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:eslint-doc-generator",
+      "kind": "cli",
+      "slug": "cli_eslint-doc-generator-912f7e",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:cross-var",
+      "kind": "cli",
+      "slug": "cli_cross-var-efce52",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:ts-json-schema-generator",
+      "kind": "cli",
+      "slug": "cli_ts-json-schema-generator-1165fe",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:jsforce",
+      "kind": "cli",
+      "slug": "cli_jsforce-566556",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:ts-standard",
+      "kind": "cli",
+      "slug": "cli_ts-standard-e79c0d",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:health",
+      "kind": "cli",
+      "slug": "cli_health-88539c",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "cli:@lingui/cli",
+      "kind": "cli",
+      "slug": "cli_lingui_cli-33be9c",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-dnschanger__dnschanger-desktop",
+      "kind": "electron",
+      "slug": "electron_gh-dnschanger__dnschanger-desktop-2ad3a9",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-dfarm6__prism-browser-community",
+      "kind": "electron",
+      "slug": "electron_gh-dfarm6__prism-browser-community-d453ee",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-shotheadman__mdcz",
+      "kind": "electron",
+      "slug": "electron_gh-shotheadman__mdcz-d7405c",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-mubaidr__vue-electron-template",
+      "kind": "electron",
+      "slug": "electron_gh-mubaidr__vue-electron-template-9c708d",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-cclank__quickshot",
+      "kind": "electron",
+      "slug": "electron_gh-cclank__quickshot-6f4904",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-kryptokrona__hugin-desktop",
+      "kind": "electron",
+      "slug": "electron_gh-kryptokrona__hugin-desktop-474f08",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-sanlinhtik3__thalika-voice-clone",
+      "kind": "electron",
+      "slug": "electron_gh-sanlinhtik3__thalika-voice-clone-9c854e",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-marcincichocki__breach-protocol-autosolver",
+      "kind": "electron",
+      "slug": "electron_gh-marcincichocki__breach-protocol-autosolver-373c35",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-deepender25__edge-drop",
+      "kind": "electron",
+      "slug": "electron_gh-deepender25__edge-drop-9180d3",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-agustinmista__positron",
+      "kind": "electron",
+      "slug": "electron_gh-agustinmista__positron-7412d5",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-benherbst__dalaix",
+      "kind": "electron",
+      "slug": "electron_gh-benherbst__dalaix-2f0077",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-codex-team__codex.notes",
+      "kind": "electron",
+      "slug": "electron_gh-codex-team__codex.notes-4ada2b",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-dotenorio__clipboard-manager-electron",
+      "kind": "electron",
+      "slug": "electron_gh-dotenorio__clipboard-manager-electron-cc055f",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-toantranmei__electron-vite-starter",
+      "kind": "electron",
+      "slug": "electron_gh-toantranmei__electron-vite-starter-16153e",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-hamedgitty__bloks",
+      "kind": "electron",
+      "slug": "electron_gh-hamedgitty__bloks-5da2e6",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-john-paul-ruf__novel-engine",
+      "kind": "electron",
+      "slug": "electron_gh-john-paul-ruf__novel-engine-3b897e",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-yaonieyo__doubao-account-pool",
+      "kind": "electron",
+      "slug": "electron_gh-yaonieyo__doubao-account-pool-220bd1",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-z-------------__cpod",
+      "kind": "electron",
+      "slug": "electron_gh-z-------------__cpod-e10580",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-simon-fraser__musictube-player",
+      "kind": "electron",
+      "slug": "electron_gh-simon-fraser__musictube-player-904ca4",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "electron:gh-rhysd__tui",
+      "kind": "electron",
+      "slug": "electron_gh-rhysd__tui-a8566f",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-midudev__better-svg",
+      "kind": "vscode",
+      "slug": "vscode_gh-midudev__better-svg-2d5738",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-nuxtrdev__nuxtr-vscode",
+      "kind": "vscode",
+      "slug": "vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-mrmlnc__vscode-scss",
+      "kind": "vscode",
+      "slug": "vscode_gh-mrmlnc__vscode-scss-ef9914",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-yessglory17__argus",
+      "kind": "vscode",
+      "slug": "vscode_gh-yessglory17__argus-c36d36",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-panoply__vscode-liquid",
+      "kind": "vscode",
+      "slug": "vscode_gh-panoply__vscode-liquid-26655d",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-altimateai__vscode-dbt-power-user",
+      "kind": "vscode",
+      "slug": "vscode_gh-altimateai__vscode-dbt-power-user-a91260",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-ryu1kn__vscode-partial-diff",
+      "kind": "vscode",
+      "slug": "vscode_gh-ryu1kn__vscode-partial-diff-893378",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-zd8899__tdad",
+      "kind": "vscode",
+      "slug": "vscode_gh-zd8899__tdad-6da840",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-thelastoutpostworkshop__arduino-maker-workshop",
+      "kind": "vscode",
+      "slug": "vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-rudreshveerkhare__catalyst",
+      "kind": "vscode",
+      "slug": "vscode_gh-rudreshveerkhare__catalyst-05cf16",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-rusiaaman__chat.md",
+      "kind": "vscode",
+      "slug": "vscode_gh-rusiaaman__chat.md-331c54",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-lramseyer__vaporview",
+      "kind": "vscode",
+      "slug": "vscode_gh-lramseyer__vaporview-461384",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-cschlosser__doxdocgen",
+      "kind": "vscode",
+      "slug": "vscode_gh-cschlosser__doxdocgen-435b5b",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-ducphamngoc08__codevisualizer",
+      "kind": "vscode",
+      "slug": "vscode_gh-ducphamngoc08__codevisualizer-16f73c",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-antfu__vscode-array-index-inlay",
+      "kind": "vscode",
+      "slug": "vscode_gh-antfu__vscode-array-index-inlay-336411",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-tidb-incubator__tide",
+      "kind": "vscode",
+      "slug": "vscode_gh-tidb-incubator__tide-65cdd1",
+      "split": "held",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-github__vscode-github-actions",
+      "kind": "vscode",
+      "slug": "vscode_gh-github__vscode-github-actions-a3e642",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-lostintangent__gistpad",
+      "kind": "vscode",
+      "slug": "vscode_gh-lostintangent__gistpad-447521",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-deepmyst__mysti",
+      "kind": "vscode",
+      "slug": "vscode_gh-deepmyst__mysti-4faa9b",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    },
+    {
+      "id": "vscode:gh-tim-koehler__helm-intellisense",
+      "kind": "vscode",
+      "slug": "vscode_gh-tim-koehler__helm-intellisense-296441",
+      "split": "dev",
+      "stratum": "random",
+      "built": {
+        "node": true,
+        "bun": true
+      }
+    }
+  ]
+}

@@ -57,14 +57,14 @@ def record(o, res):
     return res
 
 
-def build_bun(d, o):
-    ok, ext, ld, esm, log = closure.bundle(d, tool=BUN, out_dir=o)
+def build_bun(d, o, target="node"):
+    ok, ext, ld, esm, log = closure.bundle(d, tool=BUN, out_dir=o, target=target)
     if not ok and "top-level await" in log:
         import re
         specs = re.findall(r'require\(("[^"]+")\)', open(d + "/entry.cjs").read())
         open(d + "/entry.mjs", "w").write("".join(f"import * as m{i} from {x};\nexport {{ m{i} }};\n"
                                                   for i, x in enumerate(specs)))
-        ok, ext, ld, esm, log = closure.bundle(d, tool=BUN, out_dir=o, entry_file="entry.mjs")
+        ok, ext, ld, esm, log = closure.bundle(d, tool=BUN, out_dir=o, entry_file="entry.mjs", target=target)
     return {"ok": ok and os.path.exists(o + "/entry.js"), "externals": ext, "loaders": ld, "esm": esm, "log": log}
 
 

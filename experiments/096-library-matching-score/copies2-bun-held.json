@@ -1,0 +1,61 @@
+{
+  "bytes": {
+    "codeMatch": 6801949,
+    "copy": 31593,
+    "manifest:installed": 6343764,
+    "manifest:registry": 453975,
+    "noManifest": 4210,
+    "notADependency": 6357403,
+    "notNamed": 408743
+  },
+  "corpusSha256": "db5f016057b975a8a53934160e44b6755ea4d6ac198eddf1648610e5b5140a3f",
+  "cover": 0.5,
+  "entries": {
+    "bun-held-bun-cli_eslint-doc-generator-912f7e": "1accf25e082ec6e8ec103feca369842e0fdae5037201a630b31a9f7707d7a64e",
+    "bun-held-bun-cli_hostile-1725f8": "c4560668279ab72189431ad958d00130e5840ea32ba983709faf388ce27c8c42",
+    "bun-held-bun-cli_insert-module-globals-8ef288": "f293f07ab0e4207ae6e5c2639912dd6abfc32005ba59392cc63f5ff734dda8ce",
+    "bun-held-bun-cli_tailwindcss_postcss7-compat-30af7f": "37e1514def7fb7a7c6a2361a0d2e7bfa6271c98df379e71b8959a567ba70e4cd",
+    "bun-held-bun-cli_zuul-f25eae": "b4eb037e43484f14eb626d37ff8bb475f9677aae772eac1692ddd261a331f7f8",
+    "bun-held-bun-electron_gh-benherbst__dalaix-2f0077": "15a3c6bc1806db6c30d2f11b4b8376fced4803e5c35ea04c9d0813980044657f",
+    "bun-held-bun-electron_gh-codex-team__codex.notes-4ada2b": "8e4e50a8b8f79c924fb8ec414736e65ac925ea2a6bb34e1207ea53ac2c8552ba",
+    "bun-held-bun-electron_gh-deepender25__edge-drop-9180d3": "ad0e73588b70de8dfd8d686adf9c096d57dc7085a071e63242a25e70bd8f430a",
+    "bun-held-bun-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "687434e35bb96be5085d79989e9c9dca5bb4999275a1b190dbab65fa4845652e",
+    "bun-held-bun-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "aa3b79d5c9b22c10cd1fd55432d9b722c47b260971b6481d53d807b52b5859ec",
+    "bun-held-bun-vscode_gh-lramseyer__vaporview-461384": "22738da968020b6a90f2143ce9a55200d7e26c1d7654143d8282e458c8831efd",
+    "bun-held-bun-vscode_gh-ryu1kn__vscode-partial-diff-893378": "8a807af7eee6cf9bd1c1fa0195eec63e943d42179edc9c2353d6ca3ba4bb50b3",
+    "bun-held-bun-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "f9218b136b79b5af16fe0282cde65f33cba331253b6db5791fa15decda21ddf3",
+    "bun-held-bun-vscode_gh-tidb-incubator__tide-65cdd1": "c660b87e35a9f4ec9c863adff7477ea8a486b881efbd0b7a650609255699c278",
+    "bun-held-bun-vscode_gh-zd8899__tdad-6da840": "ecb1c1f67a78afd8f786569d106806fbd2228740a649b4c2e2df08af13b3c14b",
+    "bun-held-node-cli_eslint-doc-generator-912f7e": "e569150de3124cae8920098a3e9f1cee4e42aeeb07b7fff529ad1f933d2d15ad",
+    "bun-held-node-cli_hostile-1725f8": "8a0ea5dd569c959156827283c478de64a1b4b3d2e1b261f52126bd4d1fffdb02",
+    "bun-held-node-cli_insert-module-globals-8ef288": "6043c4febda675c8b7796f1cb3b395e95ca894109685c3288adc560884b0aa50",
+    "bun-held-node-cli_tailwindcss_postcss7-compat-30af7f": "e8a84bb177a548e2a5cffb3ffef2efb22940524bb2015f2a657796a6d7356c23",
+    "bun-held-node-cli_zuul-f25eae": "89739a8cc1c1b5f9e2d02833b5a83c2701df3bb192f7253ccf3ac48fe3f9b02d",
+    "bun-held-node-electron_gh-benherbst__dalaix-2f0077": "7334a6df362d717652df6d6f6ea5d8dab2cc70a24f6d65d24a55f480a3a60d6f",
+    "bun-held-node-electron_gh-codex-team__codex.notes-4ada2b": "4c23c403f204ce2bde24979a72468b1d6608b116f8d35c39f37a9e79c60ebdd2",
+    "bun-held-node-electron_gh-deepender25__edge-drop-9180d3": "72a8501625a62dc3ed04b62b3be1400a03a9ca7294904bafe593d90494c90339",
+    "bun-held-node-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "92a9df36d37fff1df145d4f8b19bf910f2bec4daa9c95fef9742b415e52460b9",
+    "bun-held-node-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "c60513a2c8787f0045c1f00fff59d336fe0fd04462c58a60babf80d36c03cff2",
+    "bun-held-node-vscode_gh-lramseyer__vaporview-461384": "c78cc30adceef950c373a41b3502c82b7eb1e45b20bb7158871cafb36d005524",
+    "bun-held-node-vscode_gh-ryu1kn__vscode-partial-diff-893378": "5e22c82d1a86fa251ade6aa80bf3064efc91baff897e08da9eda67324bdf0158",
+    "bun-held-node-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "b23f659a421db11ced448e8dd720c38b40b5de409dbd20eedb57b821a8b832e7",
+    "bun-held-node-vscode_gh-tidb-incubator__tide-65cdd1": "b8e14b9bf46eb32f82bdc6c9f5b4200d88d12afe344672b6856eef8f2b10ad05",
+    "bun-held-node-vscode_gh-zd8899__tdad-6da840": "094cfd36ac0b40356d54fc7b8fbf14a09fe5e1620300174daaca302ca3513c15"
+  },
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
+  "indexes": {
+    "current": "c4d2bd6cfd3135c44db7b0c5a374c12450d040884483e063f1b4ef8a6c72fd5f"
+  },
+  "maxFamilies": 3,
+  "minNodes": 30,
+  "schema": "exp129-copies/2",
+  "tables": [
+    "current/helpers.jsonl",
+    "current/units.bun-bun-cjs-min.jsonl",
+    "current/units.bun-node-cjs-min.jsonl",
+    "current/units.esbuild-node-cjs-min.jsonl",
+    "current/units.rollup-node-cjs-min.jsonl",
+    "current/units.webpack-node-cjs-min.jsonl"
+  ],
+  "unitsFrom": "bun-held-exp150-main"
+}

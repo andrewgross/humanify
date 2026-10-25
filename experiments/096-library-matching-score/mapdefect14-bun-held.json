@@ -1,0 +1,70 @@
+{
+  "about": "scorer 14 rule `mapdefect` (experiments/137-scorer-mapdefect/scorer14/mapdefect14.py): per entry, the sha256 of <DATA>/truth/<id>.mapdefect14.json.gz (rows: unit start, end, old package, new package, version, file, evidence tokens, closure share x1000, holder share x1000, old file; evaluated: every span the rule read, with its verdict)",
+  "bytes": {
+    "bun-held-bun": {
+      "few-evidence (bytes)": 15606247,
+      "label-holds (bytes)": 10408447,
+      "library bytes": 26119056,
+      "library units": 54511,
+      "relabel (bytes)": 33630,
+      "relabelled units": 1,
+      "skipped: copy origin or scorer 13 relabel (bytes)": 70732,
+      "units judged": 56920
+    },
+    "bun-held-node": {
+      "few-evidence (bytes)": 15858234,
+      "label-holds (bytes)": 10724891,
+      "library bytes": 28051137,
+      "library units": 56158,
+      "relabel (bytes)": 1322436,
+      "relabelled units": 10,
+      "skipped: copy origin or scorer 13 relabel (bytes)": 145576,
+      "units judged": 58869
+    }
+  },
+  "corpusSha256": "db5f016057b975a8a53934160e44b6755ea4d6ac198eddf1648610e5b5140a3f",
+  "entries": {
+    "bun-held-bun-cli_eslint-doc-generator-912f7e": "43effc73818cee5f812512a6309a4df62042d2fb3c6920df433c4dddf1b73433",
+    "bun-held-bun-cli_hostile-1725f8": "ff7a166cce39c4fe17f705b94c83a1c9131a6dc31a5638f51be5db8079675aea",
+    "bun-held-bun-cli_insert-module-globals-8ef288": "70e5584f9589662af75235bf2a67464130f9d2d8b41a33ae2ba4a3e5a0598769",
+    "bun-held-bun-cli_tailwindcss_postcss7-compat-30af7f": "b3e82908cdca0f194f0e39684f8501407920ddc8f5cd2f27de9e61c265c6c819",
+    "bun-held-bun-cli_zuul-f25eae": "2e1b0bbc804b6fd794fee15dd42d85f8c25d6a6e89d3a74e3833c13afdbdf413",
+    "bun-held-bun-electron_gh-benherbst__dalaix-2f0077": "cb170a9200b70c62fb1906f78ed901f07cf7d29ce57bbd688947971eb3803fc6",
+    "bun-held-bun-electron_gh-codex-team__codex.notes-4ada2b": "6d037b8ebda9c37d6d22affb78c9b844ccfbef1b91f071729ed7b5bf56bd1e0e",
+    "bun-held-bun-electron_gh-deepender25__edge-drop-9180d3": "a5ab9efa93dc8648abb629515be5f74f1fcaf80469183009beddd34dbb12215c",
+    "bun-held-bun-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "5ec17795cc6a0ad2faa3a8341e5dd9379790f8b0c4abc9a6fa89e445dcb57d2b",
+    "bun-held-bun-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "9dc56b4ee578f211bbe5ec1e663ff8c97d5822265218c759b9b7ceb6c9864acc",
+    "bun-held-bun-vscode_gh-lramseyer__vaporview-461384": "95dd8aa41d15b69b2f7ec822736cbdd5f6e0b5d1225d499b0ec1b114eccc6a31",
+    "bun-held-bun-vscode_gh-ryu1kn__vscode-partial-diff-893378": "383f07ceaf8509c9fb35c3eb5cafcbac405b9758526ceb2c6f3dc3de00d413ec",
+    "bun-held-bun-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "cf4540c72e3f99ac9c623401400941981b7584b07ec9ae6068c8d1f67716c93e",
+    "bun-held-bun-vscode_gh-tidb-incubator__tide-65cdd1": "fe9e662971e01d7bd8484b79547b90860df84bbcc828180236d3efa489e6cc84",
+    "bun-held-bun-vscode_gh-zd8899__tdad-6da840": "5be9d329e237411730f07217821eb07ea827bba1e09fc195ccec342074767e41",
+    "bun-held-node-cli_eslint-doc-generator-912f7e": "3a1c7c72eecbc989ab771bb181e7193434229b4f10bb537a0474397a0723a9b4",
+    "bun-held-node-cli_hostile-1725f8": "e4a1ab523e0b758e59a7374ea9517bd8b09e61c59026b08e8e407ec10c3b9448",
+    "bun-held-node-cli_insert-module-globals-8ef288": "b49b82e922b7940a65d9e16bfa5b5b82cf67ca70230a5d221f45d76d7444d5f5",
+    "bun-held-node-cli_tailwindcss_postcss7-compat-30af7f": "d59ec14b1ade329151eb67b852185996981aee14626b79acb4396173501544e1",
+    "bun-held-node-cli_zuul-f25eae": "ef5ca2dd28b66d865a13799946e3f9b033f369fdee62862619b39eb4be94576a",
+    "bun-held-node-electron_gh-benherbst__dalaix-2f0077": "7113ecc82d4afc017ce96783586436cecc06ed9b9c59b997da6b44fa4b83a392",
+    "bun-held-node-electron_gh-codex-team__codex.notes-4ada2b": "db65dfbb239c6e276e7c92453c8d361d9786b656db9615db5e85011f90453e5f",
+    "bun-held-node-electron_gh-deepender25__edge-drop-9180d3": "913a1da189e8d793e97d9484b741c5ac5ceb74d5c0f3f29e48e41ee8e29d7a28",
+    "bun-held-node-electron_gh-dnschanger__dnschanger-desktop-2ad3a9": "de1e1d73b936b747e535190e096a47efeb3d52a8b107c6fcca9a08d4064ae076",
+    "bun-held-node-electron_gh-marcincichocki__breach-protocol-autosolver-373c35": "5cbc548c51b1ea1176edff807ab0dddbbfbec5d77927a62379178eaeced87167",
+    "bun-held-node-vscode_gh-lramseyer__vaporview-461384": "651b2989fcf32936bf554e0082ea2bfd738d117c6404c418a5de01e1af9783a6",
+    "bun-held-node-vscode_gh-ryu1kn__vscode-partial-diff-893378": "1ea139c5cf311704d818557da2578d28d933aba092d1856ac666a8661b012ed6",
+    "bun-held-node-vscode_gh-thelastoutpostworkshop__arduino-maker-workshop-5a0e21": "9d1ef3672c806805e5487155b09461cbdafe3c62ce76cad2bd7464db09e7007c",
+    "bun-held-node-vscode_gh-tidb-incubator__tide-65cdd1": "cc77e90aecb6ec5dd0e2e43612c2983a4246ba6c6715c40d847fb5cc1a52805c",
+    "bun-held-node-vscode_gh-zd8899__tdad-6da840": "70bb6d104ab5c88ddecdae9cd6a3a34dd348e90f1bf3edc786fe65046a644f18"
+  },
+  "rules": {
+    "candidate": 0.3,
+    "depKeys": ["dependencies", "optionalDependencies", "peerDependencies"],
+    "dfMax": 5,
+    "fileCap": 1000,
+    "hold": 0.8,
+    "lack": 0.2,
+    "minEvidence": 8,
+    "sample": 64
+  },
+  "schema": "exp137-mapdefect14/1",
+  "unitsLabels": ["bun-held-exp150-main"]
+}

@@ -1,0 +1,21 @@
+{
+  "bytes": {},
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "cover": 0.5,
+  "entries": {},
+  "familiesSha256": "2254544b66931385b31a7933fff7f2a40f9ecab78134e25229a7047e862fc983",
+  "indexes": {
+    "current": "c4d2bd6cfd3135c44db7b0c5a374c12450d040884483e063f1b4ef8a6c72fd5f"
+  },
+  "maxFamilies": 3,
+  "minNodes": 30,
+  "schema": "exp129-copies/2",
+  "tables": [
+    "current/units.bun-bun-cjs-min.jsonl",
+    "current/units.bun-node-cjs-min.jsonl",
+    "current/units.esbuild-node-cjs-min.jsonl",
+    "current/units.rollup-node-cjs-min.jsonl",
+    "current/units.webpack-node-cjs-min.jsonl"
+  ],
+  "unitsFrom": "cc-exp150-main"
+}

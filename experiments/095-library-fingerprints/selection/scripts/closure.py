@@ -85,8 +85,9 @@ def unresolved(text):
     return sorted(out)
 
 
-def bundle(d, tool="esbuild", out_dir=None, entry_file="entry.cjs"):
-    """esbuild with metafile (weights) or bun (held-out query bundles); returns (ok, externals, loaders, esm, log)."""
+def bundle(d, tool="esbuild", out_dir=None, entry_file="entry.cjs", target="node"):
+    """esbuild with metafile (weights) or bun (held-out query bundles; `target` is Bun's --target: node, or bun for
+    exp150's target-bun builds); returns (ok, externals, loaders, esm, log)."""
     externals, loaders, esm = [], [], False
     last = ""
     deps = json.load(open(d + "/package.json")).get("dependencies") or {}
@@ -97,7 +98,7 @@ def bundle(d, tool="esbuild", out_dir=None, entry_file="entry.cjs"):
                    "--outfile=out.js", "--log-limit=0", f"--format={'esm' if esm else 'cjs'}", "--loader:.node=empty", '--define:process.env.NODE_ENV="production"']
             cmd += [f"--loader:{x}=empty" for x in loaders] + [f"--external:{x}" for x in externals]
         else:
-            cmd = [tool, "build", entry_file, "--target", "node", "--format", "esm" if esm else "cjs", "--minify",
+            cmd = [tool, "build", entry_file, "--target", target, "--format", "esm" if esm else "cjs", "--minify",
                    "--sourcemap=external", "--outdir", out_dir, "--define", 'process.env.NODE_ENV="production"']
             for x in externals:
                 cmd += ["--external", x]

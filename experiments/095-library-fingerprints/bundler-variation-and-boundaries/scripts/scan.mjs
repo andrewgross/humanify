@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { canonUnit, longStrings, hashStr } from './canon.mjs';
 
 const require = createRequire(import.meta.url);
-const acorn = require('/work/exp095-library-fingerprints/lab/tools/node_modules/acorn');
+const acorn = require(process.env.ACORN || '/work/exp095-library-fingerprints/lab/tools/node_modules/acorn');
 const LAB = process.env.LAB_ROOT || '/work/exp095-library-fingerprints/lab';
 const OUT = process.env.UNITS_OUT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../data/units');
 

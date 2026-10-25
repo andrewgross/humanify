@@ -1,0 +1,6 @@
+{
+  "about": "scorer 5 rule `chained` (experiments/106-matcher-hygiene/scorer5/chained.py): per entry, the sha256 of <DATA>/truth/<id>.chained.json.gz",
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "entries": {},
+  "schema": "exp106-chained/1"
+}

@@ -1,0 +1,17 @@
+{
+  "about": "scorer 13 rule `misattributed` (experiments/132-factory-precision/scorer13/misattr13.py): per entry, the sha256 of <DATA>/truth/<id>.misattr13.json.gz (rows: factory start, end, old package, new package, version, file, evidence, old file)",
+  "corpusSha256": "cd753f375938d83b7769ef1c4545764def662d01faa4a5fd805f8e31abec3f90",
+  "entries": {},
+  "rules": {
+    "found": 0.8,
+    "minStrings": 3,
+    "minTokens": 5,
+    "own": 0.5,
+    "rareMin": 5,
+    "rareShare": 0.02,
+    "sizeFactor": 8,
+    "sizeSlack": 8192
+  },
+  "schema": "exp132-misattr13/4",
+  "unitsLabel": "cc-exp150-main"
+}
