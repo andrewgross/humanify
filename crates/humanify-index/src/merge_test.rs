@@ -182,6 +182,8 @@ fn unit_rows_merge_per_slice_with_the_smallest_module() {
         nodes: 40,
         content: 5,
         module_bytes,
+        inside: vec![],
+        out_of: vec![],
     };
     let mut a = module_shard("1.0.0", &[]);
     a.units = vec![unit("1.0.0", H1, 900), unit("1.0.0", H2, 900)];
@@ -238,6 +240,8 @@ fn the_lookup_tables_answer_what_the_row_tables_say() {
         nodes: 40,
         content: 5,
         module_bytes: 900,
+        inside: vec![],
+        out_of: vec![],
     }];
     shards.push(u);
     let files = merge(meta(), shards).expect("merges").files;
@@ -292,6 +296,8 @@ fn a_unit_group_keeps_the_first_shards_nodes_whatever_order_the_list_had() {
             nodes,
             content: 5,
             module_bytes: 100,
+            inside: vec![],
+            out_of: vec![],
         }];
         s
     };
@@ -321,6 +327,8 @@ fn helper_sources_leave_their_prints_in_the_helper_table() {
         nodes: 40,
         content: 5,
         module_bytes: 100,
+        inside: vec![],
+        out_of: vec![],
     };
     const HB: &str = "00000000000000b0";
     const HC: &str = "00000000000000c0";

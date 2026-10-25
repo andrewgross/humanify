@@ -192,6 +192,45 @@ pub fn bundle_unit_prints(
     grammar: crate::toolchain::ModuleWrapperGrammar,
     interop: crate::toolchain::InteropHelpers,
 ) -> Vec<(crate::cut::units::Unit, StatementPrints)> {
+    let b = bundle_units(code, ingest, layout, grammar, interop, false);
+    b.units
+        .into_iter()
+        .zip(b.prints)
+        .filter_map(|(u, p)| Some((u, p?)))
+        .collect()
+}
+
+/// A RAW bundle's units (containers included), their prints (None for a
+/// container) and the statement reference graph over the SAME units
+/// (`graph::references`, factory bodies cut: unit `i` of the graph is unit
+/// `i` here) — what the index builder records a unit row's edges from
+/// (exp151).
+pub struct BundleUnits {
+    pub units: Vec<crate::cut::units::Unit>,
+    pub prints: Vec<Option<StatementPrints>>,
+    pub graph: Option<crate::graph::references::ReferenceGraph>,
+}
+
+/// [`bundle_unit_prints`]'s units with every container kept, and the
+/// reference graph over them ([`BundleUnits`]).
+pub fn bundle_unit_graph(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'_>,
+    layout: crate::toolchain::BundleLayout,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+    interop: crate::toolchain::InteropHelpers,
+) -> BundleUnits {
+    bundle_units(code, ingest, layout, grammar, interop, true)
+}
+
+fn bundle_units(
+    code: &str,
+    ingest: &crate::ingest::Ingest<'_>,
+    layout: crate::toolchain::BundleLayout,
+    grammar: crate::toolchain::ModuleWrapperGrammar,
+    interop: crate::toolchain::InteropHelpers,
+    with_graph: bool,
+) -> BundleUnits {
     let semantic = ingest.semantic();
     let wrapper = layout.find_wrapper(ingest.program, semantic);
     let body = wrapper.as_ref().map(|w| w.body_span);
@@ -205,12 +244,21 @@ pub fn bundle_unit_prints(
     let units = crate::cut::units::container_units(statements, &factories, &facts, true);
     let blurred = grammar.blurred_literals(statements, semantic);
     let prints = unit_prints(&units, &tables, &blurred);
-    units
-        .units
-        .into_iter()
-        .zip(prints)
-        .filter_map(|(u, p)| Some((u, p?)))
-        .collect()
+    let graph = with_graph.then(|| {
+        crate::graph::references::build_reference_graph_with(
+            code, semantic, statements, &factories, &facts, true,
+        )
+    });
+    debug_assert!(
+        graph
+            .as_ref()
+            .is_none_or(|g| g.units.len() == units.units.len())
+    );
+    BundleUnits {
+        units: units.units,
+        prints,
+        graph,
+    }
 }
 
 /// The prints of every unit (None for a container), parallel to `units`.

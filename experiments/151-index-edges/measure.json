@@ -1,0 +1,114 @@
+{
+  "bytes": {
+    "edgeBin": 2974756,
+    "edgeFiles": {
+      "edges.bun-bun-cjs-min.bin": 1424068,
+      "edges.bun-bun-cjs-min.jsonl": 10194787,
+      "edges.bun-node-cjs-min.bin": 1550688,
+      "edges.bun-node-cjs-min.jsonl": 10927369
+    },
+    "edgeJsonl": 21122156,
+    "lookupWith": 12750404,
+    "lookupWithout": 9775648,
+    "withEdges": 53184854,
+    "withoutEdges": 29087508
+  },
+  "format": "humanify-library-index/4",
+  "representation": {
+    "bun-bun-cjs-min": {
+      "bothBytes": 1716620,
+      "listTableBytes": 1424068,
+      "setHashOnlyBytes": 589704
+    },
+    "bun-node-cjs-min": {
+      "bothBytes": 1869144,
+      "listTableBytes": 1550688,
+      "setHashOnlyBytes": 641912
+    }
+  },
+  "sharedTablesByteIdentical": {
+    "helpers.jsonl": true,
+    "literals.bin": true,
+    "literals.files.jsonl": true,
+    "modules.bun-bun-cjs-min.jsonl": true,
+    "modules.bun-node-cjs-min.jsonl": true,
+    "packages.json": true,
+    "units.bun-bun-cjs-min.bin": true,
+    "units.bun-bun-cjs-min.jsonl": true,
+    "units.bun-node-cjs-min.bin": true,
+    "units.bun-node-cjs-min.jsonl": true,
+    "versions.json": true
+  },
+  "slices": {
+    "bun-bun-cjs-min": {
+      "callees": 341634,
+      "collisions": {
+        "oneOwnerSeveralFiles": {
+          "allDistinct": 6805,
+          "differ": 7114,
+          "differAmongRowsWithEdges": 1069,
+          "groups": 8652,
+          "noRowHasEdges": 1393
+        },
+        "severalOwners": {
+          "allDistinct": 1336,
+          "differ": 1868,
+          "differAmongRowsWithEdges": 1357,
+          "groups": 2106,
+          "noRowHasEdges": 202,
+          "ownersAllDistinct": 1828,
+          "ownersDiffer": 1860
+        }
+      },
+      "distinctLists": 7317,
+      "keyedRows": 36569,
+      "rowsWithAnyEdge": 36569,
+      "rowsWithInside": 36537,
+      "rowsWithOutOf": 647,
+      "shareAny": 0.62,
+      "shareInside": 0.6195,
+      "unitRows": 58982
+    },
+    "bun-node-cjs-min": {
+      "callees": 363053,
+      "collisions": {
+        "oneOwnerSeveralFiles": {
+          "allDistinct": 6872,
+          "differ": 7191,
+          "differAmongRowsWithEdges": 1726,
+          "groups": 8421,
+          "noRowHasEdges": 1041
+        },
+        "severalOwners": {
+          "allDistinct": 1304,
+          "differ": 1841,
+          "differAmongRowsWithEdges": 1446,
+          "groups": 2086,
+          "noRowHasEdges": 174,
+          "ownersAllDistinct": 1806,
+          "ownersDiffer": 1834
+        }
+      },
+      "distinctLists": 8232,
+      "keyedRows": 39807,
+      "rowsWithAnyEdge": 39807,
+      "rowsWithInside": 39768,
+      "rowsWithOutOf": 706,
+      "shareAny": 0.6675,
+      "shareInside": 0.6668,
+      "unitRows": 59636
+    }
+  },
+  "unrecorded": {
+    "bun-bun-cjs-min": {
+      "container": 11775,
+      "recordedOnRows": 737176,
+      "unowned": 982
+    },
+    "bun-node-cjs-min": {
+      "container": 13754,
+      "recordedOnRows": 837654,
+      "unowned": 1042
+    }
+  }
+}

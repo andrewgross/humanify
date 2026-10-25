@@ -13,6 +13,8 @@ mod asof_test;
 #[cfg(test)]
 mod build_test;
 #[cfg(test)]
+mod edges_test;
+#[cfg(test)]
 mod merge_test;
 #[cfg(test)]
 mod recipe_test;

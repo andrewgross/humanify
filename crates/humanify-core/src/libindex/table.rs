@@ -11,7 +11,7 @@
 //! heap. (`humanify-library-index/2` parsed every JSONL row into hash maps
 //! on load: 2.3 s and ~1.3 GB per run on the 577 MB step-4 index.)
 //!
-//! Three tables, one writer and one reader each, in this file:
+//! Four tables, one writer and one reader each, in this file:
 //!
 //! - [`PACKAGES_FILE`] — every owner package, sorted by name; an owner id
 //!   is its position.
@@ -21,6 +21,12 @@
 //!   specificity and containment read; a unit row's file, nodes, content
 //!   and versions stay in `units.<slice>.jsonl` (provenance: the scorer's,
 //!   never the run's).
+//! - `edges.<slice>.bin` ([`EdgeTable`], format `/4`) — per unit row
+//!   (its position in `units.<slice>.bin`, the key) the callees its
+//!   statement references ([`super::format::EdgeRow`]): (owner id, print)
+//!   pairs, each distinct callee list stored once. What a store's INSIDE /
+//!   OUT-OF edge read answers; the row table `edges.<slice>.jsonl` is
+//!   provenance.
 //! - [`LITERALS_FILE`] ([`LiteralTable`]) — every distinct literal (keyed
 //!   by [`literal_key`], confirmed against its stored string), with the
 //!   number of packages holding it and the files holding it; per literal
@@ -34,7 +40,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 use std::path::Path;
 
-use super::format::{LiteralRow, UnitRow};
+use super::format::{EdgeRow, LiteralRow, UnitRow};
 use super::lookup::UnitHit;
 
 /// Every owner package, sorted (a JSON array of names).
@@ -50,12 +56,23 @@ pub fn units_file(slice: &str) -> String {
     format!("units.{slice}.bin")
 }
 
+/// A slice's edge lookup table (format `/4`).
+pub fn edges_file(slice: &str) -> String {
+    format!("edges.{slice}.bin")
+}
+
+/// A slice's edge row table (provenance, format `/4`).
+pub fn edge_rows_file(slice: &str) -> String {
+    format!("edges.{slice}.jsonl")
+}
+
 /// Keys per fence entry: what one lookup reads (512 bytes of keys), and
 /// the share of a key column a process holds (1/64).
 pub const BLOCK: usize = 64;
 
 const UNITS_MAGIC: &[u8; 8] = b"HXUNIT03";
 const LITERALS_MAGIC: &[u8; 8] = b"HXLITS03";
+const EDGES_MAGIC: &[u8; 8] = b"HXEDGE04";
 
 /// A unit hash's key: its 16 lowercase hex digits as a number. Any other
 /// spelling is no key (no indexed row can hold it: the encoder refuses
@@ -74,27 +91,52 @@ pub fn literal_key(literal: &str) -> u64 {
     })
 }
 
-/// Every owner of `units` (any slice) and `literals`, sorted, once.
-pub fn package_table(units: &[&[UnitRow]], literals: &[LiteralRow]) -> Vec<String> {
+/// Every owner of `units` (any slice), of the OUT-OF callees of `edges`
+/// and of `literals`, sorted, once.
+pub fn package_table(
+    units: &[&[UnitRow]],
+    edges: &[&[EdgeRow]],
+    literals: &[LiteralRow],
+) -> Vec<String> {
     let owners: BTreeSet<&str> = units
         .iter()
         .flat_map(|rows| rows.iter().map(|r| r.owner.as_str()))
+        .chain(
+            edges
+                .iter()
+                .flat_map(|rows| rows.iter().flat_map(|r| r.out_of.iter()))
+                .map(|c| c.owner.as_str()),
+        )
         .chain(literals.iter().map(|r| r.owner.as_str()))
         .collect();
     owners.into_iter().map(str::to_string).collect()
 }
 
 /// The lookup files of an index (name → bytes): the package table, one
-/// unit table per slice, the literal table.
+/// unit table per slice, the literal table, and with `edges` (format
+/// `/4`) one edge table per unit slice (a slice `edges` lacks records no
+/// callee); None writes no edge table (`/3`).
 pub fn lookup_files(
     units: &BTreeMap<String, Vec<UnitRow>>,
+    edges: Option<&BTreeMap<String, Vec<EdgeRow>>>,
     literals: &[LiteralRow],
 ) -> Result<BTreeMap<String, Vec<u8>>, String> {
     let slices: Vec<&[UnitRow]> = units.values().map(Vec::as_slice).collect();
-    let packages = package_table(&slices, literals);
+    let edge_slices: Vec<&[EdgeRow]> = edges
+        .into_iter()
+        .flat_map(|e| e.values().map(Vec::as_slice))
+        .collect();
+    let packages = package_table(&slices, &edge_slices, literals);
     let mut files = BTreeMap::new();
     for (slice, rows) in units {
         files.insert(units_file(slice), UnitTable::encode(rows, &packages)?);
+        if let Some(edges) = edges {
+            let edge_rows = edges.get(slice).map_or(&[][..], Vec::as_slice);
+            files.insert(
+                edges_file(slice),
+                EdgeTable::encode(rows, edge_rows, &packages)?,
+            );
+        }
     }
     files.insert(
         LITERALS_FILE.to_string(),
@@ -395,6 +437,24 @@ pub struct UnitTable {
 
 const UNIT_ROW: u64 = 12;
 
+/// Each row's position in the unit table's rows ([`UnitTable::encode`]'s
+/// order: by key, a key's rows in their order in `rows`) — the edge
+/// table's key.
+pub fn unit_row_ids(rows: &[UnitRow]) -> Result<Vec<u32>, String> {
+    let mut keyed: Vec<(u64, usize)> = Vec::with_capacity(rows.len());
+    for (i, r) in rows.iter().enumerate() {
+        let key = unit_key(&r.hash)
+            .ok_or_else(|| format!("unit row hash {:?} is not 16 lowercase hex digits", r.hash))?;
+        keyed.push((key, i));
+    }
+    keyed.sort_unstable();
+    let mut ids = vec![0u32; rows.len()];
+    for (pos, &(_, i)) in keyed.iter().enumerate() {
+        ids[i] = pos as u32;
+    }
+    Ok(ids)
+}
+
 impl UnitTable {
     /// `rows` in any order; a key's rows keep their order in `rows`.
     pub fn encode(rows: &[UnitRow], packages: &[String]) -> Result<Vec<u8>, String> {
@@ -452,9 +512,153 @@ impl UnitTable {
             .as_chunks::<{ UNIT_ROW as usize }>()
             .0
             .iter()
-            .map(|c| UnitHit {
+            .enumerate()
+            .map(|(i, c)| UnitHit {
                 owner: u32::from_le_bytes(c[..4].try_into().expect("4 bytes")),
                 module_bytes: u64::from_le_bytes(c[4..].try_into().expect("8 bytes")),
+                row: (ends[0] + i as u64) as u32,
+                table: 0,
+            })
+            .collect()
+    }
+}
+
+// ----------------------------------------------------------- edge table
+
+/// One recorded callee: its owner's id and its print's unit key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EdgeCallee {
+    pub owner: u32,
+    pub key: u64,
+}
+
+/// `edges.<slice>.bin` (format `/4`): header (magic, keyed rows, lists,
+/// callees), the key column (unit row ids, [`unit_row_ids`], ascending),
+/// per keyed row its list id (u32), list offsets (lists + 1), then the
+/// callees (owner u32, key u64), sorted per list. A list is stored once
+/// however many rows hold it (a statement's function rows share its list).
+pub struct EdgeTable {
+    src: Source,
+    keys: KeyColumn,
+    lists_at: u64,
+    offsets_at: u64,
+    callees_at: u64,
+}
+
+const EDGE_CALLEE: u64 = 12;
+
+impl EdgeTable {
+    /// `edges` keyed by (hash, owner, file) onto `units` (the slice's unit
+    /// rows, any order); an edge row with no unit row is refused.
+    pub fn encode(
+        units: &[UnitRow],
+        edges: &[EdgeRow],
+        packages: &[String],
+    ) -> Result<Vec<u8>, String> {
+        let ids = unit_row_ids(units)?;
+        let row_of: HashMap<(&str, &str, &str), u32> = units
+            .iter()
+            .zip(&ids)
+            .map(|(r, &id)| ((r.hash.as_str(), r.owner.as_str(), r.file.as_str()), id))
+            .collect();
+        let mut keyed: Vec<(u32, Vec<EdgeCallee>)> = Vec::with_capacity(edges.len());
+        for e in edges {
+            let row = *row_of
+                .get(&(e.hash.as_str(), e.owner.as_str(), e.file.as_str()))
+                .ok_or_else(|| {
+                    format!("edge row {} {} {} has no unit row", e.hash, e.owner, e.file)
+                })?;
+            let own = owner_id(packages, &e.owner);
+            let key = |h: &str| {
+                unit_key(h)
+                    .ok_or_else(|| format!("callee hash {h:?} is not 16 lowercase hex digits"))
+            };
+            let mut callees: Vec<EdgeCallee> = Vec::new();
+            for h in &e.inside {
+                callees.push(EdgeCallee {
+                    owner: own,
+                    key: key(h)?,
+                });
+            }
+            for c in &e.out_of {
+                callees.push(EdgeCallee {
+                    owner: owner_id(packages, &c.owner),
+                    key: key(&c.hash)?,
+                });
+            }
+            callees.sort_unstable();
+            callees.dedup();
+            if !callees.is_empty() {
+                keyed.push((row, callees));
+            }
+        }
+        keyed.sort_unstable_by_key(|(row, _)| *row);
+        if keyed.windows(2).any(|w| w[0].0 == w[1].0) {
+            return Err("two edge rows for one unit row".into());
+        }
+        let mut list_ids: HashMap<&[EdgeCallee], u32> = HashMap::new();
+        let mut lists: Vec<&[EdgeCallee]> = Vec::new();
+        let mut row_lists: Vec<u32> = Vec::with_capacity(keyed.len());
+        for (_, callees) in &keyed {
+            let id = *list_ids.entry(callees.as_slice()).or_insert_with(|| {
+                lists.push(callees.as_slice());
+                (lists.len() - 1) as u32
+            });
+            row_lists.push(id);
+        }
+        let n_callees: usize = lists.iter().map(|l| l.len()).sum();
+        let mut out = Out::default();
+        out.0.extend_from_slice(EDGES_MAGIC);
+        out.u64s([keyed.len() as u64, lists.len() as u64, n_callees as u64]);
+        let keys: Vec<u64> = keyed.iter().map(|(row, _)| u64::from(*row)).collect();
+        out.0.extend(KeyColumnBytes::encode(&keys).bytes);
+        out.u32s(row_lists);
+        out.u64s(offsets(lists.iter().map(|l| l.len())));
+        for c in lists.iter().flat_map(|l| l.iter()) {
+            out.u32(c.owner);
+            out.u64(c.key);
+        }
+        Ok(out.0)
+    }
+
+    pub fn open(src: Source) -> Result<EdgeTable, String> {
+        let h = header(&src, EDGES_MAGIC, "edge table", 3)?;
+        let (n_rows, n_lists, n_callees) = (h[0], h[1], h[2]);
+        let keys_at = 8 + 3 * 8;
+        let lists_at = keys_at + KeyColumn::bytes(n_rows);
+        let offsets_at = lists_at + n_rows * 4;
+        let callees_at = offsets_at + (n_lists + 1) * 8;
+        check_size("edge table", &src, callees_at + n_callees * EDGE_CALLEE)?;
+        Ok(EdgeTable {
+            keys: KeyColumn::open(&src, keys_at, n_rows)?,
+            src,
+            lists_at,
+            offsets_at,
+            callees_at,
+        })
+    }
+
+    /// Unit row `row`'s recorded callees, sorted by (owner, key); empty:
+    /// none recorded (the index records every row's edges, so none).
+    pub fn callees(&self, row: u32) -> Vec<EdgeCallee> {
+        let r = self.keys.equal_range(&self.src, u64::from(row));
+        if r.is_empty() {
+            return Vec::new();
+        }
+        let list = u64::from(self.src.u32s(self.lists_at + r.start * 4, 1)[0]);
+        let ends = self.src.u64s(self.offsets_at + list * 8, 2);
+        let n = (ends[1] - ends[0]) as usize;
+        self.src
+            .bytes(
+                self.callees_at + ends[0] * EDGE_CALLEE,
+                n * EDGE_CALLEE as usize,
+            )
+            .as_chunks::<{ EDGE_CALLEE as usize }>()
+            .0
+            .iter()
+            .map(|c| EdgeCallee {
+                owner: u32::from_le_bytes(c[..4].try_into().expect("4 bytes")),
+                key: u64::from_le_bytes(c[4..].try_into().expect("8 bytes")),
             })
             .collect()
     }

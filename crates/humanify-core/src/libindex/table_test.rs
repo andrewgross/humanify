@@ -95,7 +95,7 @@ fn a_unit_table_answers_every_hash_with_its_rows_in_row_order() {
     // order kept), and the owner ids are the package table's
     let mut rows: Vec<UnitRow> = (0..200u64).map(|h| unit(h * 7, "zod", h)).collect();
     rows.insert(11, unit(70, "ajv", 9));
-    let packages = package_table(&[&rows], &[]);
+    let packages = package_table(&[&rows], &[], &[]);
     assert_eq!(packages, vec!["ajv".to_string(), "zod".to_string()]);
     let bytes = UnitTable::encode(&rows, &packages).expect("encodes");
     let table = UnitTable::open(Source::Memory(bytes)).expect("opens");
@@ -122,7 +122,7 @@ fn a_literal_table_resolves_strings_exactly_and_serves_postings_and_files() {
         lits("zod", "z.js", &["P:shared", "S:only-zod"]),
         lits("zod", "y.js", &["P:shared", "S:x"]),
     ];
-    let packages = package_table(&[], &rows);
+    let packages = package_table(&[], &[], &rows);
     let table =
         LiteralTable::open(Source::Memory(LiteralTable::encode(&rows, &packages))).expect("opens");
     assert_eq!(table.literal_packages(), 2);
@@ -160,7 +160,7 @@ fn literals_sharing_one_key_are_told_apart_by_their_strings() {
         lits("p", "f.js", &["S:a", "S:b"]),
         lits("q", "g.js", &["S:b", "S:c"]),
     ];
-    let packages = package_table(&[], &rows);
+    let packages = package_table(&[], &[], &rows);
     let same = |_: &str| 7u64;
     let table = LiteralTable::open_keyed(
         Source::Memory(LiteralTable::encode_keyed(&rows, &packages, same)),
@@ -186,7 +186,7 @@ fn the_files_on_disk_read_the_same_as_memory_and_a_truncated_table_is_refused() 
             .into_iter()
             .collect();
     let literals = vec![lits("zod", "z.js", &["S:x"])];
-    let files = lookup_files(&units, &literals).expect("encodes");
+    let files = lookup_files(&units, None, &literals).expect("encodes");
     let names: Vec<&str> = files.keys().map(String::as_str).collect();
     assert_eq!(
         names,
@@ -205,4 +205,67 @@ fn the_files_on_disk_read_the_same_as_memory_and_a_truncated_table_is_refused() 
         .expect("a short table is refused");
     assert!(err.contains("bytes"), "{err}");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_edge_table_answers_each_unit_row_and_stores_a_shared_list_once() {
+    use crate::libindex::format::{Callee, EdgeRow};
+    use crate::libindex::table::{EdgeCallee, EdgeTable, unit_row_ids};
+    let file = |r: UnitRow, f: &str| UnitRow {
+        file: f.into(),
+        ..r
+    };
+    // rows out of key order; key 7 is held by two files of one owner
+    let units = vec![
+        file(unit(9, "zod", 10), "b.js"),
+        file(unit(7, "zod", 10), "a.js"),
+        file(unit(7, "zod", 10), "c.js"),
+        unit(3, "yup", 10),
+    ];
+    let edge = |hash: u64, f: &str, inside: &[u64], out_of: &[(&str, u64)]| EdgeRow {
+        hash: format!("{hash:016x}"),
+        owner: "zod".into(),
+        file: f.into(),
+        inside: inside.iter().map(|h| format!("{h:016x}")).collect(),
+        out_of: out_of
+            .iter()
+            .map(|(o, h)| Callee {
+                owner: (*o).into(),
+                hash: format!("{h:016x}"),
+            })
+            .collect(),
+    };
+    let edges = vec![
+        edge(7, "a.js", &[1, 2], &[]),
+        edge(7, "c.js", &[5], &[("yup", 3)]),
+        edge(9, "b.js", &[1, 2], &[]),
+    ];
+    let packages = package_table(&[&units], &[&edges], &[]);
+    let bytes = EdgeTable::encode(&units, &edges, &packages).expect("encodes");
+    let table = EdgeTable::open(Source::Memory(bytes.clone())).expect("opens");
+    let ids = unit_row_ids(&units).expect("ids");
+    let zod = |key| EdgeCallee { owner: 1, key };
+    assert_eq!(table.callees(ids[1]), vec![zod(1), zod(2)]);
+    assert_eq!(
+        table.callees(ids[2]),
+        vec![EdgeCallee { owner: 0, key: 3 }, zod(5)]
+    );
+    assert_eq!(table.callees(ids[0]), vec![zod(1), zod(2)]);
+    assert_eq!(table.callees(ids[3]), vec![], "a row with no edge row");
+    // the hits name the same rows the edge table is keyed by
+    let unit_table = UnitTable::open(Source::Memory(
+        UnitTable::encode(&units, &packages).unwrap(),
+    ))
+    .unwrap();
+    let rows: Vec<u32> = unit_table
+        .hits(&format!("{:016x}", 7))
+        .iter()
+        .map(|h| h.row)
+        .collect();
+    assert_eq!(rows, vec![ids[1], ids[2]]);
+    // three keyed rows, two lists: header, keys + fence, list ids, offsets, callees
+    let want = 8 + 3 * 8 + (1 + 3) * 8 + 3 * 4 + (2 + 1) * 8 + (2 + 2) * 12;
+    assert_eq!(bytes.len(), want, "the shared list is stored once");
+    let unknown = vec![edge(4, "a.js", &[1], &[])];
+    assert!(EdgeTable::encode(&units, &unknown, &packages).is_err());
 }

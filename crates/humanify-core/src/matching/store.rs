@@ -13,6 +13,9 @@
 //!   nothing below re-detects). Pieces are unit rows, labels are packages,
 //!   fingerprints are the `units` form. It never stores or serves INTO
 //!   edges: the index cannot know who calls a library in any given app.
+//!   A `/4` index answers INSIDE and OUT-OF from its edge table (a
+//!   callee is its owner and its print: the index's callee need not be a
+//!   row of its own); a `/3` index records none.
 //!
 //! Which side a profile enumerates is the profile's choice, not the
 //! store's: the cross-version cascade walks the PRIOR's entries in entry
@@ -25,6 +28,7 @@ use std::borrow::Cow;
 use crate::graph::edges::Scope;
 use crate::hash::forms::{CanonicalForm, LIBRARY_UNITS, MATCH_KEY};
 use crate::libindex::lookup::{LibraryIndex, UnitHit};
+use crate::libindex::table::EdgeCallee;
 use crate::matching::{FingerprintIndex, IndexKind, IndexNode};
 
 /// Which store answered.
@@ -74,6 +78,9 @@ pub struct Refused(pub String);
 pub trait ReferenceStore {
     /// A reference piece's handle.
     type Piece: Copy;
+    /// What an edge read names at the far end: a piece of the prior; for
+    /// the index, the callee's owner and print.
+    type Callee;
 
     fn identity(&self) -> StoreId;
 
@@ -91,13 +98,17 @@ pub trait ReferenceStore {
     fn literals(&self, piece: Self::Piece) -> Option<&[String]>;
 
     /// The piece's recorded callees in `read`'s scope.
-    fn edges(&self, piece: Self::Piece, read: EdgeRead)
-    -> Result<StoreEdges<Self::Piece>, Refused>;
+    fn edges(
+        &self,
+        piece: Self::Piece,
+        read: EdgeRead,
+    ) -> Result<StoreEdges<Self::Callee>, Refused>;
 }
 
 impl ReferenceStore for FingerprintIndex<'_> {
     /// An index entry.
     type Piece = usize;
+    type Callee = usize;
 
     fn identity(&self) -> StoreId {
         StoreId::Prior {
@@ -155,6 +166,7 @@ impl ReferenceStore for FingerprintIndex<'_> {
 impl ReferenceStore for LibraryIndex {
     /// One indexed occurrence of a unit print.
     type Piece = UnitHit;
+    type Callee = EdgeCallee;
 
     fn identity(&self) -> StoreId {
         StoreId::Index {
@@ -184,13 +196,24 @@ impl ReferenceStore for LibraryIndex {
     }
 
     /// INTO (and every edge) is refused: an index never holds how an app
-    /// calls a library. INSIDE and OUT-OF are not recorded by this index
-    /// format (`humanify-library-index/2` has no edge table), so a rule
-    /// reading them gets [`StoreEdges::NotRecorded`] — absence, never
-    /// evidence against.
-    fn edges(&self, _piece: UnitHit, read: EdgeRead) -> Result<StoreEdges<UnitHit>, Refused> {
+    /// calls a library. INSIDE (callees of the piece's own package) and
+    /// OUT-OF (callees of another package) come from a `/4` index's edge
+    /// table; a `/3` index has none, so a rule reading them gets
+    /// [`StoreEdges::NotRecorded`] — absence, never evidence against.
+    fn edges(&self, piece: UnitHit, read: EdgeRead) -> Result<StoreEdges<EdgeCallee>, Refused> {
         match read {
-            EdgeRead::Scoped(Scope::Inside | Scope::OutOf) => Ok(StoreEdges::NotRecorded),
+            EdgeRead::Scoped(scope @ (Scope::Inside | Scope::OutOf)) => {
+                let Some(callees) = self.row_callees(piece) else {
+                    return Ok(StoreEdges::NotRecorded);
+                };
+                let inside = scope == Scope::Inside;
+                Ok(StoreEdges::Recorded(
+                    callees
+                        .into_iter()
+                        .filter(|c| (c.owner == piece.owner) == inside)
+                        .collect(),
+                ))
+            }
             EdgeRead::Scoped(Scope::Into) | EdgeRead::All => Err(Refused(
                 "the library index never stores INTO edges: how an app calls a library is \
                  the app's, not the library's"

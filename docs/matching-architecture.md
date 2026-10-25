@@ -321,6 +321,10 @@ refused, since one program has no regions). The INDEX store is
 `LibraryIndex`, loaded with ONE recipe slice chosen once in
 `LibraryIndex::load`; it refuses INTO and every-edge reads and answers
 INSIDE / OUT-OF with `NotRecorded` (this index format has no edge table).
+Since exp151 a `humanify-library-index/4` index records each unit row's
+INSIDE and OUT-OF callees (`edges.<slice>.bin`, library-index.md §4) and
+the store answers those reads from it (a callee is its owner and print);
+a `/3` index still answers `NotRecorded`. No rule reads them yet.
 The lookup reads it through the trait. The span map between the raw-bundle
 graph (discovery) and the pre-rename graph (cascade) that §3.6 assigned to
 the store was NOT needed: no step-4 rule reads a region across the two

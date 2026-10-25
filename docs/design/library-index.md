@@ -165,7 +165,7 @@ bundler automatically is deferred.
 - The registry `time` map is the publisher's clock. Mirrors can differ;
   the builder reads `registry.npmjs.org` through npm's own configuration.
 
-## 4. On-disk format (`humanify-library-index/3`)
+## 4. On-disk format (`humanify-library-index/4`)
 
 An index is a directory of two kinds of table: ROW tables (UTF-8 JSON or
 JSON-lines, one row per line, rows sorted, keys in a fixed order, a
@@ -183,6 +183,8 @@ run reads.
   literals.files.jsonl   {"owner", "file", "versions"}   literal file i (its literal SET is file i of literals.bin)
   packages.json          every owner the lookup tables hold, sorted: an owner id is its position
   units.<slice>.bin      lookup: unit hash (16 hex = u64) -> rows (owner id, smallest module bytes)
+  edges.<slice>.jsonl    {"hash", "owner", "file", "inside", "outOf"}   a unit row's recorded callees (/4; rows with none omitted)
+  edges.<slice>.bin      lookup: unit row (its position in units.<slice>.bin) -> callees (owner id, print) (/4)
   literals.bin           lookup: literal -> package count, files; file -> owner id, literal ids
   helpers.jsonl          {"hash", "owners"}   the helper SOURCES' own prints, every slice (exp129; absent when none)
   stoplists.json         copied data (§7); its sha256 in the manifest
@@ -203,6 +205,28 @@ longer grows with the index's size. The literal sets are stored ONLY in
 row's file, nodes, content and versions stay in the row table. The merge
 writes both kinds from the same rows; the loader reads only `/3`.
 
+**Edges (since `/4`, exp151).** Per unit row, the WHOLE prints of the
+statement units its statement references in the bundle's reference
+graph (`graph::references`, the one the pipeline builds, factory bodies
+cut), over the same bundle the row was fingerprinted from
+(`libindex::units::bundle_unit_graph`). A callee its own package owns is
+INSIDE, one another package owns OUT-OF (stored with that owner); a
+callee with no print (a wrapper or a bundled module's factory, a
+container) or no owner (runtime glue, the app entry, a dropped sponge
+unit) is not recorded and is counted in the shard's notes
+(`unrecordedEdges`). Only a unit's OWN references are read: who calls a
+package is the app's, never recorded (INTO,
+docs/matching-architecture.md §4). A row's callee list is the union over
+its versions and occurrences (containment: an index edge a bundle lacks
+counts for nothing). A function row carries its statement's list (the
+reference graph is statement-granular). `edges.<slice>.bin` is keyed by
+unit row position, sorted and fenced like the unit table, and stores each
+distinct callee list once. The store (`matching::store`) answers INSIDE /
+OUT-OF reads from it; a `/3` index (no edge tables, no `edges` stamp)
+still loads and answers `NotRecorded`. The stamp is
+`fingerprints.edges` = `edges/1`, in every module shard's key, so module
+shards rebuild (literal shards do not).
+
 **Version ranges.** `versions` is a list of `[from, to]` pairs over the
 owner's indexed versions in `versions.json` order: `["1.0.0","1.2.0"]`
 means every indexed version from 1.0.0 to 1.2.0 inclusive. A fingerprint
@@ -221,9 +245,9 @@ rules (§8), not build rules, so the index keeps the evidence they need.
 
 ```json
 {
-  "format": "humanify-library-index/3",
+  "format": "humanify-library-index/4",
   "asOf": "2024-06-30T23:59:59.999Z",
-  "fingerprints": {"module": "vendor-content-key/4", "literals": "literals/1"},
+  "fingerprints": {"module": "vendor-content-key/4", "literals": "literals/1", "units": "units/3", "edges": "edges/1"},
   "registry": {"earliestFetch": "...", "latestFetch": "...", "packuments": {"ms": "<sha256>", ...}},
   "slices": [{"slice": "bun", "bundler": "bun", "version": "1.4.0", "published": "...",
               "newestAtAsOf": "1.1.17", "bundlerAfterAsOf": true}],
@@ -296,13 +320,14 @@ A structural fingerprint depends on the bundler (Bun vs esbuild agree on
 
 ## 7. Evidence kinds
 
-| Kind                                                  | In the index?                                               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Whole-module key (CommonJS factory)                   | **yes** — `vendor_content_key`, slice tables                | The pipeline's own vendor content key (strings blurred, numbers exact, references to the rest of the bundle as slots). Not yet the exp095 normaliser (step 3); when it lands it is a new fingerprint version and shards rebuild.                                                                                                                                                                                                                                                       |
-| Whole-module key, lazy ES modules (`__esm`)           | no — deferred                                               | Needs the boundary piece (marker + hoisted functions) the pipeline does not have yet.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Literals from npm source, sponge files dropped        | **yes** — `literals.bin` (+ `literals.files.jsonl`)         | `S:` strings (template chunks, folded `"a"+"b"`), `P:` property names and export names, `N:` numbers by value, `R:` regexes; values over 120 UTF-16 units kept as a sha1 prefix; `0`, `1` dropped; `node:` spelling of builtins unified; `"undefined"` and `"u"` read as one (minifiers rewrite `typeof x=="undefined"` to `typeof x>"u"`).                                                                                                                                            |
-| Sub-tree units (statement + every function inside it) | **yes** — `units.<slice>.bin` (+ `.jsonl`), stamp `units/3` | Built (exp095 → exp097 step 1): `libindex::units` prints the whole statement unit and every function inside it with the `LIBRARY_UNITS` canonical hash, a node count and a content-token count; the builder writes no row under `UNIT_ROW_MIN_NODES` (20). The lookup's own floors (`min_content` 3) and the specificity rule (an index module ≤ 4× the query + 4 KB) sit in `libindex::lookup`. `units/3` re-fingerprinted lazy-body units (`units/2` had reused stale esbuild rows). |
-| Shingles / MinHash                                    | deferred                                                    | Raw shingles are the size problem (246 MB at top-2,000); MinHash was not measured.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Kind                                                   | In the index?                                                      | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Whole-module key (CommonJS factory)                    | **yes** — `vendor_content_key`, slice tables                       | The pipeline's own vendor content key (strings blurred, numbers exact, references to the rest of the bundle as slots). Not yet the exp095 normaliser (step 3); when it lands it is a new fingerprint version and shards rebuild.                                                                                                                                                                                                                                                       |
+| Whole-module key, lazy ES modules (`__esm`)            | no — deferred                                                      | Needs the boundary piece (marker + hoisted functions) the pipeline does not have yet.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Literals from npm source, sponge files dropped         | **yes** — `literals.bin` (+ `literals.files.jsonl`)                | `S:` strings (template chunks, folded `"a"+"b"`), `P:` property names and export names, `N:` numbers by value, `R:` regexes; values over 120 UTF-16 units kept as a sha1 prefix; `0`, `1` dropped; `node:` spelling of builtins unified; `"undefined"` and `"u"` read as one (minifiers rewrite `typeof x=="undefined"` to `typeof x>"u"`).                                                                                                                                            |
+| Sub-tree units (statement + every function inside it)  | **yes** — `units.<slice>.bin` (+ `.jsonl`), stamp `units/3`        | Built (exp095 → exp097 step 1): `libindex::units` prints the whole statement unit and every function inside it with the `LIBRARY_UNITS` canonical hash, a node count and a content-token count; the builder writes no row under `UNIT_ROW_MIN_NODES` (20). The lookup's own floors (`min_content` 3) and the specificity rule (an index module ≤ 4× the query + 4 KB) sit in `libindex::lookup`. `units/3` re-fingerprinted lazy-body units (`units/2` had reused stale esbuild rows). |
+| Call edges of a unit row (INSIDE / OUT-OF its package) | **yes** (`/4`) — `edges.<slice>.bin` (+ `.jsonl`), stamp `edges/1` | Built (exp151): the callee prints of the row's statement in the reference graph, split by owner (§4 "Edges"). No lookup rule reads them yet: the call-context rule is library-names-plan step 2.                                                                                                                                                                                                                                                                                       |
+| Shingles / MinHash                                     | deferred                                                           | Raw shingles are the size problem (246 MB at top-2,000); MinHash was not measured.                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 **Stop-lists and package families are data files** shipped with the index
 (`crates/humanify-index/data/stoplists.json`, and `families.json`, which since

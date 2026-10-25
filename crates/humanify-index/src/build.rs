@@ -235,7 +235,13 @@ fn shard_inputs(
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
             recipe: format!("{RECIPE_VERSION} {}", s.recipe),
-            fingerprint: format!("{}+{}+{}", f.module, f.units, regions.unit_rows_version()),
+            fingerprint: format!(
+                "{}+{}+{}+{}",
+                f.module,
+                f.units,
+                f.edges.as_deref().unwrap_or_default(),
+                regions.unit_rows_version()
+            ),
         });
     }
     out
@@ -702,6 +708,9 @@ pub(crate) fn fingerprint_bundle(
         *shard.notes.sponge_unit_files.entry(kind).or_default() += n;
     }
     shard.notes.sponge_unit_rows += notes.sponge_unit_rows;
+    for (why, n) in notes.unrecorded_edges {
+        *shard.notes.unrecorded_edges.entry(why).or_default() += n;
+    }
     Ok(())
 }
 
@@ -729,22 +738,26 @@ pub fn unit_rows(
         notes.unkeyed += 1;
         return (Vec::new(), notes);
     }
-    let units = humanify_core::libindex::units::bundle_unit_prints(
+    let bundle = humanify_core::libindex::units::bundle_unit_graph(
         code,
         &ingest,
         toolchain.layout.piece,
         toolchain.module_wrappers.piece,
         toolchain.interop.piece,
     );
-    let spans: Vec<(u32, u32)> = units
+    let printed: Vec<usize> = (0..bundle.units.len())
+        .filter(|&i| bundle.prints[i].is_some())
+        .collect();
+    let spans: Vec<(u32, u32)> = printed
         .iter()
-        .map(|(u, _)| (u.span.start, u.span.end))
+        .map(|&i| (bundle.units[i].span.start, bundle.units[i].span.end))
         .collect();
     let mut cache = HashMap::new();
     let mut sponges: HashMap<u32, Sponge> = HashMap::new();
     let mut sponge_files: BTreeSet<u32> = BTreeSet::new();
-    let mut owned = Vec::new();
-    for ((unit, prints), segs) in units.iter().zip(map.span_segments(code, &spans)) {
+    // per unit (graph order), its owner when it has one
+    let mut owner_of: Vec<Option<crate::sourcemap::Owner>> = vec![None; bundle.units.len()];
+    for (&i, segs) in printed.iter().zip(map.span_segments(code, &spans)) {
         let tally = crate::sourcemap::tally_of(&segs);
         match unit_owner(map, out, &tally, &mut cache) {
             UnitOwner::Owned(owner, src) => {
@@ -759,20 +772,26 @@ pub fn unit_rows(
                     notes.sponge_unit_rows += 1;
                     continue;
                 };
-                owned.push((owner, u64::from(unit.bytes), prints));
+                owner_of[i] = Some(owner);
             }
             UnitOwner::Mixed => notes.mixed_spans += 1,
             UnitOwner::Unowned => notes.unowned += 1,
         }
     }
     let mut module_bytes: HashMap<(String, String), u64> = HashMap::new();
-    for (o, bytes, _) in &owned {
-        *module_bytes
-            .entry((o.package.clone(), o.file.clone()))
-            .or_default() += bytes;
+    for (i, o) in owner_of.iter().enumerate() {
+        if let Some(o) = o {
+            *module_bytes
+                .entry((o.package.clone(), o.file.clone()))
+                .or_default() += u64::from(bundle.units[i].bytes);
+        }
     }
     let mut rows = Vec::new();
-    for (o, _, prints) in &owned {
+    for (i, o) in owner_of.iter().enumerate() {
+        let (Some(o), Some(prints)) = (o, &bundle.prints[i]) else {
+            continue;
+        };
+        let (inside, out_of) = unit_edges(&bundle, &owner_of, i, &o.package, &mut notes);
         let size = module_bytes[&(o.package.clone(), o.file.clone())];
         for p in std::iter::once(&prints.whole).chain(&prints.functions) {
             if p.nodes >= UNIT_ROW_MIN_NODES {
@@ -784,11 +803,58 @@ pub fn unit_rows(
                     nodes: p.nodes,
                     content: p.content,
                     module_bytes: size,
+                    inside: inside.clone(),
+                    out_of: out_of.clone(),
                 });
             }
         }
     }
     (rows, notes)
+}
+
+/// Unit `i`'s recorded callees (`edges/1`): the WHOLE print of every unit
+/// its statement references in the reference graph, split by the callee's
+/// owner into INSIDE (`package`'s own) and OUT-OF (another package's).
+/// Only the unit's OWN references are read — never who references it (an
+/// INTO edge describes the caller, docs/matching-architecture.md §4). A
+/// callee with no print (a container) or no owner is counted in the notes,
+/// not recorded.
+fn unit_edges(
+    bundle: &humanify_core::libindex::units::BundleUnits,
+    owner_of: &[Option<crate::sourcemap::Owner>],
+    i: usize,
+    package: &str,
+    notes: &mut ShardNotes,
+) -> (Vec<String>, Vec<humanify_core::libindex::format::Callee>) {
+    let Some(graph) = bundle
+        .graph
+        .as_ref()
+        .filter(|g| g.units.len() == bundle.units.len())
+    else {
+        return (Vec::new(), Vec::new());
+    };
+    let mut inside: BTreeSet<String> = BTreeSet::new();
+    let mut out_of: BTreeSet<humanify_core::libindex::format::Callee> = BTreeSet::new();
+    for &v in &graph.out[i] {
+        let v = v as usize;
+        let why = match (&bundle.prints[v], &owner_of[v]) {
+            (None, _) => "container",
+            (Some(_), None) => "unowned",
+            (Some(p), Some(o)) => {
+                if o.package == package {
+                    inside.insert(p.whole.hash.clone());
+                } else {
+                    out_of.insert(humanify_core::libindex::format::Callee {
+                        owner: o.package.clone(),
+                        hash: p.whole.hash.clone(),
+                    });
+                }
+                continue;
+            }
+        };
+        *notes.unrecorded_edges.entry(why.to_string()).or_default() += 1;
+    }
+    (inside.into_iter().collect(), out_of.into_iter().collect())
 }
 
 /// Whether a package's source file holds pre-bundled copies of OTHER

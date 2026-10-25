@@ -65,7 +65,10 @@ fn self_index(code: &str, name: &str) -> PathBuf {
     let units = [("bun-bun-cjs-min".to_string(), rows)]
         .into_iter()
         .collect();
-    for (name, bytes) in humanify_core::libindex::table::lookup_files(&units, &[]).unwrap() {
+    for (name, bytes) in
+        humanify_core::libindex::table::lookup_files(&units, Some(&Default::default()), &[])
+            .unwrap()
+    {
         std::fs::write(dir.join(name), bytes).unwrap();
     }
     let manifest = Manifest {

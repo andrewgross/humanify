@@ -249,7 +249,9 @@ fn the_loader_reads_the_recipes_slice_and_refuses_another_fingerprint() {
     )]
     .into_iter()
     .collect();
-    for (name, bytes) in crate::libindex::table::lookup_files(&units, &[]).unwrap() {
+    for (name, bytes) in
+        crate::libindex::table::lookup_files(&units, Some(&Default::default()), &[]).unwrap()
+    {
         std::fs::write(dir.join(name), bytes).unwrap();
     }
     let target_bun = detect_recipe(
@@ -435,7 +437,9 @@ fn write_index(dir: &std::path::Path, slices: Vec<(&str, &str, Vec<UnitRow>)>) {
         .into_iter()
         .map(|(slice, _, rows)| (slice.to_string(), rows))
         .collect();
-    for (name, bytes) in crate::libindex::table::lookup_files(&units, &[]).unwrap() {
+    for (name, bytes) in
+        crate::libindex::table::lookup_files(&units, Some(&Default::default()), &[]).unwrap()
+    {
         std::fs::write(dir.join(name), bytes).unwrap();
     }
 }

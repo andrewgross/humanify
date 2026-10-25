@@ -117,6 +117,15 @@ pub struct ShardUnit {
     /// The bundled size of the file the unit came from, in this build —
     /// the lookup's specificity rule compares it with the query's module.
     pub module_bytes: u64,
+    /// The WHOLE prints of the units its statement references in the
+    /// bundle's reference graph that its own package owns (INSIDE edges,
+    /// `edges/1`), sorted and once each.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inside: Vec<String>,
+    /// The same for units another package owns (OUT-OF edges), sorted by
+    /// (owner, hash).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub out_of: Vec<humanify_core::libindex::format::Callee>,
 }
 
 /// One source file's literal set.
@@ -168,6 +177,12 @@ pub struct ShardNotes {
     /// Unit rows dropped for [`ShardNotes::sponge_unit_files`].
     #[serde(default)]
     pub sponge_unit_rows: usize,
+    /// Reference-graph edges of owned units that record no callee, by
+    /// why: `container` (the callee is a wrapper or a bundled module: no
+    /// print), `unowned` (the callee has no owner: runtime glue, the app
+    /// entry, a mixed span, a dropped sponge unit). exp151.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub unrecorded_edges: std::collections::BTreeMap<String, usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
