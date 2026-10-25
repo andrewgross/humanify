@@ -78,6 +78,7 @@ fn claims(
             prints: p,
             module_bytes: 1000,
             text: "",
+            callees: &[],
         })
         .collect();
     claim_units(index, &queries, rules, &same)
@@ -175,12 +176,14 @@ fn agreement_needs_the_literal_rule_to_name_the_same_family() {
             prints: &p[0],
             module_bytes: 1000,
             text: &text,
+            callees: &[],
         },
         UnitQuery {
             unit: 1,
             prints: &p[1],
             module_bytes: 1000,
             text: &text,
+            callees: &[],
         },
     ];
     let family = |p: &str| {
@@ -341,6 +344,7 @@ fn the_literal_margin_by_family_ignores_a_sibling_holding_the_same_literals() {
         prints: &p[0],
         module_bytes: 1000,
         text: &text,
+        callees: &[],
     }];
     let family = |p: &str| {
         if p.starts_with("@aws-sdk/") || p.starts_with("@smithy/") {
@@ -632,4 +636,121 @@ fn the_loader_reads_the_helper_table_when_the_index_has_one() {
     }]);
     assert_eq!(rows.helper_owners(&hx("h")), ["@babel/runtime".to_string()]);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+// ---------------------------------------------------------------------------
+// The call-context rule (exp153)
+// ---------------------------------------------------------------------------
+
+use crate::libindex::callctx::Callee;
+use crate::libindex::format::EdgeRow;
+use crate::libindex::lookup::{CallContextRules, CallSupport};
+
+fn edge(hash: &str, owner: &str, inside: &[&str]) -> EdgeRow {
+    EdgeRow {
+        hash: hx(hash),
+        owner: owner.into(),
+        file: "index.js".into(),
+        inside: inside.iter().map(|h| hx(h)).collect(),
+        out_of: Vec::new(),
+    }
+}
+
+fn callee(name: &str) -> Callee {
+    Callee {
+        key: crate::libindex::table::unit_key(&hx(name)).unwrap(),
+        nodes: 40,
+    }
+}
+
+/// [`claims`] with each query's callees.
+fn claims_called(
+    index: &LibraryIndex,
+    prints: &[(StatementPrints, Vec<Callee>)],
+    rules: LookupRules,
+) -> Vec<(u32, String)> {
+    let queries: Vec<UnitQuery<'_>> = prints
+        .iter()
+        .enumerate()
+        .map(|(i, (p, c))| UnitQuery {
+            unit: i as u32,
+            prints: p,
+            module_bytes: 1000,
+            text: "",
+            callees: c,
+        })
+        .collect();
+    claim_units(index, &queries, rules, &same)
+        .into_iter()
+        .map(|c| (c.unit, c.package))
+        .collect()
+}
+
+fn with_call_context(call_context: CallContextRules) -> LookupRules {
+    LookupRules {
+        call_context,
+        ..structural()
+    }
+}
+
+#[test]
+fn call_context_can_stand_in_for_the_position_window() {
+    let index = LibraryIndex::from_rows_with_edges(
+        vec![row("w", "zod", 40, 2000), row("n", "zod", 40, 2000)],
+        vec![edge("w", "zod", &["h"])],
+        vec![],
+    );
+    // a weak claim with no neighbour, its callee recorded
+    let lone = [(whole("w", 40), vec![callee("h")])];
+    assert!(claims_called(&index, &lone, structural()).is_empty());
+    let or = with_call_context(CallContextRules {
+        support: CallSupport::Or,
+        ..CallContextRules::default()
+    });
+    assert_eq!(claims_called(&index, &lone, or), vec![(0, "zod".into())]);
+    // a weak claim WITH a neighbour but a callee the row does not record:
+    // the window keeps it, call context alone does not
+    let near = [
+        (whole("w", 40), vec![callee("other")]),
+        (whole("n", 40), vec![]),
+    ];
+    assert_eq!(claims_called(&index, &near, structural()).len(), 2);
+    let replace = with_call_context(CallContextRules {
+        support: CallSupport::Replace,
+        ..CallContextRules::default()
+    });
+    assert!(claims_called(&index, &near, replace).is_empty());
+    assert_eq!(claims_called(&index, &near, or).len(), 2);
+}
+
+#[test]
+fn call_context_relaxes_the_node_floor_and_the_package_cap_for_what_it_confirms() {
+    let index = LibraryIndex::from_rows_with_edges(
+        vec![
+            row("small", "zod", 25, 2000),
+            row("many", "a", 150, 2000),
+            row("many", "b", 150, 2000),
+            row("many", "c", 150, 2000),
+            row("many", "d", 150, 2000),
+        ],
+        vec![edge("small", "zod", &["h"]), edge("many", "c", &["k"])],
+        vec![],
+    );
+    let q = [
+        (whole("small", 25), vec![callee("h")]),
+        (whole("many", 150), vec![callee("k")]),
+    ];
+    assert!(claims_called(&index, &q, structural()).is_empty());
+    let relax =
+        with_call_context(CallContextRules::from_name("relax", Default::default()).unwrap());
+    assert_eq!(
+        claims_called(&index, &q, relax),
+        vec![(0, "zod".into()), (1, "c".into())]
+    );
+    // unconfirmed: nothing relaxed
+    let q = [
+        (whole("small", 25), vec![callee("x")]),
+        (whole("many", 150), vec![]),
+    ];
+    assert!(claims_called(&index, &q, relax).is_empty());
 }

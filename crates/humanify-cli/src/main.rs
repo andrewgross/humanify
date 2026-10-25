@@ -137,6 +137,9 @@ enum Command {
         /// Also list every unit with its fingerprints (`unitRows`).
         #[arg(long)]
         unit_prints: bool,
+        /// Also take the call-context census (`callContext`, exp153).
+        #[arg(long)]
+        call_context: bool,
         /// Where the adapter unpacks (default: a scratch dir, removed).
         #[arg(long)]
         work_dir: Option<String>,
@@ -284,6 +287,7 @@ fn main() {
             config,
             bundler,
             unit_prints,
+            call_context,
             work_dir,
             out,
         }) => {
@@ -300,6 +304,7 @@ fn main() {
                 library: &library,
                 bundler: bundler.as_deref(),
                 unit_prints,
+                call_context,
                 work_dir: work_dir.as_deref(),
             };
             if let Err(e) = humanify_cli::discover_verb::run_discover(&args, out.as_deref()) {

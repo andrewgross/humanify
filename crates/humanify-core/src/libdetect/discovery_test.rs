@@ -376,6 +376,7 @@ fn index_seeds_and_targeted_queue_lookups_claim_through_the_index() {
                 min_nodes: 20,
                 ..rules
             }),
+            census: false,
         }),
         DiscoveryOptions::default(),
     );
@@ -676,6 +677,7 @@ fn run_indexed_factories(
             index: &index,
             rules,
             targeted: None,
+            census: false,
         }),
         options,
     );
@@ -1682,4 +1684,88 @@ fn factory_banner_index_refuses_a_banner_the_module_s_own_code_contradicts() {
     // The index silent (or agreeing) on the statement: the banner stands.
     let rows = run(&held[1..], check);
     assert_eq!(claim_of(&rows, "var lib"), Some(("R".into(), Rule::Seed)));
+}
+
+/// exp153: the isolation veto's neighbour test with call context beside
+/// it. `lib` is a print two families hold (zod and a fork of it: the index
+/// is ambiguous), so the small table it calls, claimed only through `lib`'s
+/// own propagation, cannot support it. zod's row records that table as a
+/// callee; the fork's records none.
+#[test]
+fn call_context_can_support_an_ambiguous_seed_against_the_isolation_veto() {
+    use crate::libdetect::discovery::{BundlePieces, IndexLookup, discover_in_bundle};
+    use crate::libindex::format::{EdgeRow, UnitRow};
+    use crate::libindex::lookup::{CallContextRules, CallSupport, LibraryIndex, LookupRules};
+    use crate::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let code = "var table = [\"alpha\", \"beta\"];\nvar lib = function (t) { return t.split(\",\").map(function (e) { return e.trim(); }).filter(Boolean).concat(table).join(\"|\").slice(0, t.length); };\nvar app = () => lib(\"a,b\") + 1;\n";
+    let allocator = Allocator::default();
+    let ingest = Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "must parse: {:?}", ingest.errors);
+    let pieces = BundlePieces {
+        layout: BundleLayout::SingleWrapperFunction,
+        grammar: ModuleWrapperGrammar::BunAndEsbuild,
+        interop: InteropHelpers::Bun,
+    };
+    let prints = crate::libindex::units::bundle_unit_prints(
+        code,
+        &ingest,
+        pieces.layout,
+        pieces.grammar,
+        pieces.interop,
+    );
+    let (table, lib) = (&prints[0].1.whole, &prints[1].1.whole);
+    assert!(lib.nodes >= 30 && table.nodes < 20, "{:?} {:?}", table, lib);
+    let row = |owner: &str| UnitRow {
+        hash: lib.hash.clone(),
+        owner: owner.into(),
+        file: "index.js".into(),
+        nodes: lib.nodes,
+        content: lib.content,
+        module_bytes: 500,
+        versions: vec![("3.0.0".into(), "3.0.0".into())],
+    };
+    let index = LibraryIndex::from_rows_with_edges(
+        vec![row("zod"), row("zzfork")],
+        vec![EdgeRow {
+            hash: lib.hash.clone(),
+            owner: "zod".into(),
+            file: "index.js".into(),
+            inside: vec![table.hash.clone()],
+            out_of: Vec::new(),
+        }],
+        vec![],
+    );
+    let run = |veto: CallSupport| {
+        let rules = LookupRules {
+            agreement: false,
+            support: 0,
+            call_context: CallContextRules {
+                veto,
+                ..CallContextRules::default()
+            },
+            ..LookupRules::default()
+        };
+        let (graph, found) = discover_in_bundle(
+            code,
+            &ingest,
+            pieces,
+            &[],
+            &[],
+            Some(IndexLookup {
+                index: &index,
+                rules,
+                targeted: None,
+                census: false,
+            }),
+            DiscoveryOptions::default(),
+        );
+        let lib_unit = graph.unit_at(code.find("var lib").unwrap() as u32).unwrap();
+        (
+            found.claims.get(&lib_unit).map(|c| c.package.clone()),
+            found.vetoed.iter().any(|s| s.unit == lib_unit),
+        )
+    };
+    assert_eq!(run(CallSupport::Off), (None, true), "today: vetoed");
+    assert_eq!(run(CallSupport::Or), (Some("zod".into()), false));
+    assert_eq!(run(CallSupport::Replace), (Some("zod".into()), false));
 }

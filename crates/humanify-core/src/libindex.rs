@@ -20,6 +20,7 @@
 //! picks one from what detection read off the bundle
 //! (docs/library-matching-config.md §3).
 
+pub mod callctx;
 pub mod families;
 pub mod format;
 pub mod literals;
@@ -28,6 +29,9 @@ pub mod recipe;
 pub mod table;
 pub mod units;
 
+#[cfg(test)]
+#[path = "libindex/callctx_test.rs"]
+mod callctx_test;
 #[cfg(test)]
 #[path = "libindex/families_test.rs"]
 mod families_test;

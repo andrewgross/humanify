@@ -45,6 +45,7 @@ use crate::cut::units::UnitKind;
 use crate::graph::edges::Scope;
 use crate::graph::references::ReferenceGraph;
 use crate::libindex::families::PackageFamilies;
+use crate::libindex::lookup::CallSupport;
 use crate::matching::rules::{
     self, Evidence as Reads, Profile, Refusal, RuleList, RuleSpec, Stage, lib,
 };
@@ -450,6 +451,9 @@ pub struct Discovery {
     /// package's callers should land on its entry points). Read, never
     /// used to claim.
     pub boundary: BTreeMap<String, Boundary>,
+    /// The call-context census, when the lookup asked for it
+    /// ([`IndexLookup::census`]).
+    pub call_context: Vec<CallContextRow>,
 }
 
 impl Discovery {
@@ -989,6 +993,9 @@ pub struct Containment<'c> {
     /// Rivals' prints count only under the specificity rule
     /// ([`DiscoveryOptions::specific_rivals`]).
     specific_rivals: bool,
+    /// Per unit, its own callees (the call-context rule, exp153; empty:
+    /// none known, so call context confirms nothing).
+    callees: Vec<Vec<crate::libindex::callctx::Callee>>,
 }
 
 /// The cover key of the claimed package's own family (see
@@ -1022,7 +1029,37 @@ impl<'c> Containment<'c> {
                 .map(|p| families.family(p))
                 .collect(),
             specific_rivals: false,
+            callees: Vec::new(),
         }
+    }
+
+    /// With each unit's own callees (exp153: the call-context rule reads
+    /// them).
+    pub fn with_callees(mut self, callees: Vec<Vec<crate::libindex::callctx::Callee>>) -> Self {
+        self.callees = callees;
+        self
+    }
+
+    /// `u`'s callees (none when unknown).
+    fn callees_of(&self, u: u32) -> &[crate::libindex::callctx::Callee] {
+        self.callees.get(u as usize).map_or(&[], Vec::as_slice)
+    }
+
+    /// Does `u`'s call context confirm `package`'s family (every counted
+    /// callee of `u` is one the family's rows of its print record)?
+    fn call_confirms(&self, u: u32, package: &str) -> bool {
+        let Some(Some(prints)) = self.prints.get(u as usize) else {
+            return false;
+        };
+        let q = crate::libindex::lookup::UnitQuery {
+            unit: u,
+            prints,
+            module_bytes: self.module_bytes[u as usize],
+            text: "",
+            callees: self.callees_of(u),
+        };
+        self.index
+            .call_confirms(&q, &self.rules, &|o| self.owner_is(o, package))
     }
 
     /// Read rivals under the specificity rule ([`DiscoveryOptions::specific_rivals`]).
@@ -1071,6 +1108,7 @@ impl<'c> Containment<'c> {
             prints,
             module_bytes: self.module_bytes[u as usize],
             text: "",
+            callees: self.callees_of(u),
         };
         self.family_count(
             self.index
@@ -1089,6 +1127,7 @@ impl<'c> Containment<'c> {
             prints,
             module_bytes: self.module_bytes[u as usize],
             text: "",
+            callees: self.callees_of(u),
         };
         self.index
             .structural_owners(&q, &self.rules, &|a, b| self.families.same(a, b))
@@ -1724,9 +1763,18 @@ fn isolated(
             continue;
         };
         let ambiguous = containment.is_some_and(|c| c.families_accepting(seed.unit) > 1);
-        let supported = view.has_inside_neighbour(seed.unit, |w, q| {
-            !(ambiguous && view.derives_only_from(w, seed.unit)) && same(p, q)
-        });
+        let mut neighbour = || {
+            view.has_inside_neighbour(seed.unit, |w, q| {
+                !(ambiguous && view.derives_only_from(w, seed.unit)) && same(p, q)
+            })
+        };
+        // exp153: the seed's own calls, read against the index's record
+        let calls = || containment.is_some_and(|c| c.call_confirms(seed.unit, &seed.package));
+        let supported = match containment.map_or(CallSupport::Off, |c| c.rules.call_context.veto) {
+            CallSupport::Off => neighbour(),
+            CallSupport::Or => neighbour() || calls(),
+            CallSupport::Replace => calls(),
+        };
         if !supported {
             out.insert(seed.unit);
         }
@@ -2511,6 +2559,7 @@ pub fn discover_with(
         library_class: down_class(&st, &groups, options.closure_floor),
         queue: candidate_queue(&st, &groups, options.queue_cap),
         boundary: boundary(&st, &groups),
+        call_context: Vec::new(),
     }
 }
 
@@ -2546,6 +2595,9 @@ pub struct DiscoveryRequest<'x> {
     /// Every unit with its fingerprints in the report (`unitRows`): the
     /// `discover` verb's scorer input (exp096). The pipeline never asks.
     pub unit_prints: bool,
+    /// The call-context census in the report (`callContext`, exp153): the
+    /// `discover` verb's `--call-context`. The pipeline never asks.
+    pub call_context: bool,
 }
 
 impl<'x> DiscoveryRequest<'x> {
@@ -2566,6 +2618,7 @@ impl<'x> DiscoveryRequest<'x> {
                 support,
                 ..rules
             }),
+            census: self.call_context,
         })
     }
 }
@@ -2578,6 +2631,9 @@ pub struct IndexLookup<'x> {
     pub index: &'x crate::libindex::lookup::LibraryIndex,
     pub rules: crate::libindex::lookup::LookupRules,
     pub targeted: Option<crate::libindex::lookup::LookupRules>,
+    /// Also take the call-context census ([`Discovery::call_context`];
+    /// an instrument, the `discover` verb's `--call-context`).
+    pub census: bool,
 }
 
 /// Library discovery over a RAW bundle (comments still in it): the
@@ -2711,6 +2767,7 @@ fn discover_unscoped(
         graph: &graph,
         prints: &prints,
         module_bytes: module_bytes(&graph),
+        callees: crate::libindex::callctx::bundle_callees(&graph, &prints),
         same: &|a: &str, b: &str| families.same(a, b),
     };
     let containment = Containment::new(
@@ -2722,7 +2779,8 @@ fn discover_unscoped(
         lookup.rules,
         &families,
     )
-    .with_specific_rivals(options.specific_rivals);
+    .with_specific_rivals(options.specific_rivals)
+    .with_callees(looker.callees.clone());
     let everything: Vec<u32> = (0..graph.units.len() as u32).collect();
     // The evidence-conflict guard reads index seeds too: the lookup picks
     // the best package under its specificity and package-count filters; a
@@ -2758,7 +2816,14 @@ fn discover_unscoped(
         profile,
         Some(&containment),
     ));
+    let census = |mut found: Discovery| {
+        if lookup.census {
+            found.call_context = looker.call_context_rows(lookup.index, &lookup.rules);
+        }
+        found
+    };
     let Some(targeted) = lookup.targeted else {
+        let found = census(found);
         return (graph, found);
     };
     let mut more = Vec::new();
@@ -2779,6 +2844,7 @@ fn discover_unscoped(
         );
     }
     if more.is_empty() {
+        let found = census(found);
         return (graph, found);
     }
     seeds.extend(more);
@@ -2790,6 +2856,7 @@ fn discover_unscoped(
         profile,
         Some(&containment),
     ));
+    let found = census(found);
     (graph, found)
 }
 
@@ -2959,6 +3026,8 @@ struct Looker<'l> {
     graph: &'l ReferenceGraph,
     prints: &'l [Option<crate::libindex::units::StatementPrints>],
     module_bytes: Vec<u64>,
+    /// Per unit, its own callees ([`crate::libindex::callctx::bundle_callees`]).
+    callees: Vec<Vec<crate::libindex::callctx::Callee>>,
     same: &'l dyn Fn(&str, &str) -> bool,
 }
 
@@ -2971,21 +3040,8 @@ impl Looker<'_> {
         rules: crate::libindex::lookup::LookupRules,
         evidence: Evidence,
     ) -> Vec<Seed> {
-        use crate::libindex::lookup::{UnitQuery, claim_units};
-        let queries: Vec<UnitQuery<'_>> = units
-            .iter()
-            .filter(|&&u| is_statement(self.graph, u) && !self.graph.units[u as usize].runtime)
-            .filter_map(|&u| {
-                let span = self.graph.units[u as usize].span;
-                Some(UnitQuery {
-                    unit: u,
-                    prints: self.prints.get(u as usize)?.as_ref()?,
-                    module_bytes: self.module_bytes[u as usize],
-                    text: &self.code[span.start as usize..span.end as usize],
-                })
-            })
-            .collect();
-        claim_units(index, &queries, rules, self.same)
+        use crate::libindex::lookup::claim_units;
+        claim_units(index, &self.queries(units), rules, self.same)
             .into_iter()
             .map(|c| Seed {
                 unit: c.unit,
@@ -2994,6 +3050,279 @@ impl Looker<'_> {
             })
             .collect()
     }
+}
+
+impl Looker<'_> {
+    /// The lookup's queries for the statement units among `units` (runtime
+    /// helpers and units without prints skipped), in `units` order.
+    fn queries(&self, units: &[u32]) -> Vec<crate::libindex::lookup::UnitQuery<'_>> {
+        units
+            .iter()
+            .filter(|&&u| is_statement(self.graph, u) && !self.graph.units[u as usize].runtime)
+            .filter_map(|&u| {
+                let span = self.graph.units[u as usize].span;
+                Some(crate::libindex::lookup::UnitQuery {
+                    unit: u,
+                    prints: self.prints.get(u as usize)?.as_ref()?,
+                    module_bytes: self.module_bytes[u as usize],
+                    text: &self.code[span.start as usize..span.end as usize],
+                    callees: &self.callees[u as usize],
+                })
+            })
+            .collect()
+    }
+
+    /// The call-context census (exp153, an instrument: decides nothing):
+    /// per statement unit any index row holds a print of, the structural
+    /// rule's pick and every family holding it, each with how the unit's
+    /// own callees sit in what the index records ([`CallContextRow`]).
+    fn call_context_rows(
+        &self,
+        index: &crate::libindex::lookup::LibraryIndex,
+        rules: &crate::libindex::lookup::LookupRules,
+    ) -> Vec<CallContextRow> {
+        use crate::libindex::callctx::{CalleeFloor, IndexTrees, bundle_tree_hashes};
+        use crate::libindex::units::UNIT_ROW_MIN_NODES;
+        use crate::matching::store::ReferenceStore;
+        let everything: Vec<u32> = (0..self.graph.units.len() as u32).collect();
+        let queries = self.queries(&everything);
+        let picks = crate::libindex::lookup::picks(index, &queries, rules, self.same);
+        let trees = bundle_tree_hashes(self.prints, &self.callees);
+        let mut index_trees = IndexTrees::new(index);
+        let mut out = Vec::new();
+        for (q, pick) in queries.iter().zip(picks) {
+            let whole_hits = ReferenceStore::candidates(index, &q.prints.whole.hash);
+            let (route, mut owners): (&'static str, Vec<u32>) = if whole_hits.is_empty() {
+                let mut o: Vec<u32> = q
+                    .prints
+                    .functions
+                    .iter()
+                    .filter(|f| f.nodes >= UNIT_ROW_MIN_NODES)
+                    .flat_map(|f| {
+                        ReferenceStore::candidates(index, &f.hash)
+                            .iter()
+                            .map(|h| h.owner)
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+                o.sort_unstable();
+                o.dedup();
+                ("functions", o)
+            } else {
+                ("whole", whole_hits.iter().map(|h| h.owner).collect())
+            };
+            owners.sort_unstable();
+            owners.dedup();
+            if owners.is_empty() {
+                continue;
+            }
+            let look_owners = whole_hits
+                .iter()
+                .filter(|h| {
+                    rules.specificity.is_none_or(|(factor, slack)| {
+                        h.module_bytes <= factor * q.module_bytes + slack
+                    })
+                })
+                .map(|h| h.owner)
+                .collect::<BTreeSet<u32>>()
+                .len() as u32;
+            let scores = index.structural_scores_for(q, rules, self.same);
+            let fits = |accept: &dyn Fn(u32) -> bool| {
+                (
+                    index.call_fit(q.prints, q.callees, CalleeFloor::All, accept),
+                    index.call_fit(q.prints, q.callees, CalleeFloor::Rowed, accept),
+                )
+            };
+            let bundle_tree = trees.get(&q.unit).copied();
+            let mut tree_of = |members: &[u32]| -> bool {
+                route == "whole"
+                    && bundle_tree.is_some_and(|t| {
+                        members
+                            .iter()
+                            .any(|&o| index_trees.of(&q.prints.whole.hash, o) == Some(t))
+                    })
+            };
+            // families: representatives in owner order
+            let mut groups: Vec<(u32, Vec<u32>)> = Vec::new();
+            for &o in &owners {
+                let name = index.package_name(o);
+                match groups
+                    .iter_mut()
+                    .find(|(r, _)| (self.same)(index.package_name(*r), name))
+                {
+                    Some((_, m)) => m.push(o),
+                    None => groups.push((o, vec![o])),
+                }
+            }
+            let mut families: Vec<FamilyFit> = groups
+                .iter()
+                .map(|(rep, members)| {
+                    let inside = |o: u32| members.contains(&o);
+                    let (fit, rowed_fit) = fits(&inside);
+                    FamilyFit {
+                        package: index.package_name(*rep).to_string(),
+                        members: members.len() as u32,
+                        covered: members
+                            .iter()
+                            .filter_map(|o| scores.get(o))
+                            .copied()
+                            .max()
+                            .unwrap_or(0),
+                        specific: members.iter().any(|o| {
+                            whole_hits.iter().any(|h| {
+                                h.owner == *o
+                                    && rules.specificity.is_none_or(|(factor, slack)| {
+                                        h.module_bytes <= factor * q.module_bytes + slack
+                                    })
+                            })
+                        }),
+                        fit,
+                        rowed_fit,
+                        tree: false,
+                    }
+                })
+                .collect();
+            families.sort_by(|a, b| b.covered.cmp(&a.covered).then(a.package.cmp(&b.package)));
+            let family_count = families.len() as u32;
+            families.truncate(CENSUS_FAMILIES);
+            for f in &mut families {
+                let members: Vec<u32> = groups
+                    .iter()
+                    .find(|(r, _)| index.package_name(*r) == f.package)
+                    .map(|(_, m)| m.clone())
+                    .unwrap_or_default();
+                f.tree = tree_of(&members);
+            }
+            let pick = pick.map(|p| {
+                let (fit, rowed_fit) = fits(&|o| o == p.package);
+                let named = index.package_name(p.package);
+                let in_family = |o: u32| (self.same)(index.package_name(o), named);
+                let (family_fit, family_rowed_fit) = fits(&in_family);
+                let reference = index
+                    .print_callees(q.prints, &in_family)
+                    .unwrap_or_default();
+                let missing: Vec<MissingCallee> = q
+                    .callees
+                    .iter()
+                    .filter(|c| reference.binary_search(&c.key).is_err())
+                    .take(CENSUS_MISSING)
+                    .map(|c| {
+                        let hash = format!("{:016x}", c.key);
+                        let hits = ReferenceStore::candidates(index, &hash);
+                        MissingCallee {
+                            nodes: c.nodes,
+                            indexed: !hits.is_empty(),
+                            in_family: hits.iter().any(|h| in_family(h.owner)),
+                            hash,
+                        }
+                    })
+                    .collect();
+                PickRow {
+                    package: named.to_string(),
+                    covered: p.covered,
+                    supported: p.supported,
+                    fit,
+                    rowed_fit,
+                    family_fit,
+                    family_rowed_fit,
+                    tree: tree_of(&[p.package]),
+                    missing,
+                }
+            });
+            out.push(CallContextRow {
+                unit: q.unit,
+                callees: q.callees.len() as u32,
+                rowed_callees: CalleeFloor::Rowed.keys(q.callees).count() as u32,
+                whole_nodes: q.prints.whole.nodes,
+                route,
+                owners: owners.len() as u32,
+                look_owners,
+                pick,
+                family_count,
+                families,
+            });
+        }
+        out
+    }
+}
+
+/// Families listed per census row (the rest are counted).
+const CENSUS_FAMILIES: usize = 24;
+
+/// One census row ([`Looker::call_context_rows`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallContextRow {
+    pub unit: u32,
+    /// The unit's own callees with a print, and those at or over the
+    /// index's row floor.
+    pub callees: u32,
+    pub rowed_callees: u32,
+    pub whole_nodes: u32,
+    /// Which prints found the owners: the whole print, else functions.
+    pub route: &'static str,
+    /// Distinct owners holding the route's prints, and the owners of the
+    /// whole print the specificity rule lets through (the package cap's
+    /// count).
+    pub owners: u32,
+    pub look_owners: u32,
+    /// The structural rule's pick under the run's rules.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pick: Option<PickRow>,
+    pub family_count: u32,
+    pub families: Vec<FamilyFit>,
+}
+
+/// The structural pick in a census row, with its call-context fits: the
+/// picked owner's rows, then its family's.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickRow {
+    pub package: String,
+    pub covered: u32,
+    pub supported: bool,
+    pub fit: Option<crate::libindex::callctx::Fit>,
+    pub rowed_fit: Option<crate::libindex::callctx::Fit>,
+    pub family_fit: Option<crate::libindex::callctx::Fit>,
+    pub family_rowed_fit: Option<crate::libindex::callctx::Fit>,
+    /// The call-tree hash equals the picked owner's.
+    pub tree: bool,
+    /// The first bundle callees the family's rows do not record.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub missing: Vec<MissingCallee>,
+}
+
+/// A bundle callee the picked family's index rows do not record: its
+/// print, its size, and whether the index holds the print at all (any
+/// owner) or in the family (a row the matched row does not reach).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissingCallee {
+    pub hash: String,
+    pub nodes: u32,
+    pub indexed: bool,
+    pub in_family: bool,
+}
+
+const CENSUS_MISSING: usize = 8;
+
+/// One family holding a census row's prints.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FamilyFit {
+    /// The family's first owner (owner order).
+    pub package: String,
+    pub members: u32,
+    /// The structural rule's score for the family under the run's rules
+    /// (its best member; 0: none).
+    pub covered: u32,
+    /// A member holds the whole print in a module the specificity rule
+    /// lets through.
+    pub specific: bool,
+    pub fit: Option<crate::libindex::callctx::Fit>,
+    pub rowed_fit: Option<crate::libindex::callctx::Fit>,
+    /// The call-tree hash equals a member's.
+    pub tree: bool,
 }
 
 /// One claimed statement in the report.
@@ -3109,6 +3438,10 @@ pub struct DiscoveryReport {
     /// ([`DiscoveryRequest::unit_prints`]; the `discover` verb).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unit_rows: Vec<UnitRow>,
+    /// The call-context census, only when asked for
+    /// ([`DiscoveryRequest::call_context`]; the `discover` verb).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub call_context: Vec<CallContextRow>,
 }
 
 impl DiscoveryReport {
@@ -3117,6 +3450,7 @@ impl DiscoveryReport {
         let mut r = DiscoveryReport {
             graph: graph_stats(graph),
             rounds: found.rounds.clone(),
+            call_context: found.call_context.clone(),
             ..DiscoveryReport::default()
         };
         let mut packages: BTreeMap<String, PackageRow> = BTreeMap::new();
