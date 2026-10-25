@@ -395,8 +395,20 @@ picks one unless `--library-index` names it. The recommendation below is
 what `library.matching = "report"` should be pointed at today, and what the
 eval's library score (`npm run eval -- library`) is judged on.
 
-**Recommended now: `k2-all-r5-origin-prod-asof20261015`** (exp142;
-`/work/exp142-data/full/ix/k2-all-r5-origin-prod-asof20261015`, 7.1 GB, index id `c4d2bd6c...`). It is
+**Where to find it (2026-10-25).** The recommended index lives in one standard store, `/work/library-index/<index
+id>/`, and `/work/library-index/current` links to the recommended one. Point a run at the link
+(`--library-matching report --library-index /work/library-index/current`). Or set `library.index_store =
+"/work/library-index"` and pass the id. All five slices are kept: a run reads only the slice for the bundler it
+detects, Bun included. To adopt a new index, add its directory under its id and move the link.
+
+**Everything else was deleted 2026-10-25** (Andrew: keep the index only). That covers every `/work/expNNN-data`
+path in this section and in the experiment READMEs: the older indexes, the build stores and work dirs, and the
+library-score corpora (dev, test, test2, apps, pop, bundlers, remin, remin2-4). So `npm run eval -- library` has
+nothing to score until a corpus is rebuilt (each corpus's README gives its recipe and seed). The next index is a
+full build, about 12 h on 30 cores (§10, "How to build one"), not a delta.
+
+**Recommended now: `k2-all-r5-origin-prod-asof20261015`** (exp142; installed at
+`/work/library-index/c4d2bd6cfd3135c44db7b0c5a374c12450d040884483e063f1b4ef8a6c72fd5f`, 6.7 GB). It is
 k2-all-r5-origin-prod with its as-of moved from 2026-10-11 to 2026-10-15 by a DELTA build: the 1,633 versions (937
 packages, all already indexed) that the index's own version rules pick at the new as-of and that were published
 after the old one, built with the same recipes (`production`, `--sponge-regions origin`) into a hard-link copy of
