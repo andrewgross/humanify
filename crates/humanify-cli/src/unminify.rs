@@ -215,21 +215,28 @@ fn log_name_sources(outcome: &bun::BunUnpackOutcome) {
     let Some(c) = &outcome.name_counts else {
         return;
     };
-    let total =
-        c.declared + c.carry_over + c.declared_pair + c.content_pair + c.llm + c.fallback + c.asset;
+    let total = c.declared
+        + c.carry_over
+        + c.declared_pair
+        + c.content_pair
+        + c.llm
+        + c.fallback
+        + c.asset
+        + c.index;
     if total == 0 {
         return;
     }
     verbose().log(&format!(
         "Vendor name sources ({total} factories): {} carry-over, {} declared-pair, {} content-pair, \
-         {} declared, {} llm, {} fallback, {} app text asset",
+         {} declared, {} llm, {} fallback, {} app text asset, {} index",
         c.carry_over,
         c.declared_pair,
         c.content_pair,
         c.declared,
         c.llm,
         c.fallback,
-        c.asset
+        c.asset,
+        c.index
     ));
     if outcome.llm_renamed > 0 {
         verbose().log(&format!(

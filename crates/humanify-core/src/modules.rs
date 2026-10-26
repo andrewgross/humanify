@@ -314,6 +314,12 @@ pub enum NameSource {
     /// An app TEXT asset ([`text_assets`]): named from its own text, never
     /// a package name.
     Asset,
+    /// Named for the package the library index's placement answer gave the
+    /// module (`index_path`, library-names plan step 4): the file
+    /// `vendor/<package>/<file>` is the index's real npm spelling, and the
+    /// model is never asked for it. Run-only provenance: the manifest
+    /// label is written the same way, so a later carry keeps it.
+    Index,
 }
 
 impl NameSource {
@@ -327,6 +333,7 @@ impl NameSource {
             NameSource::Llm => "llm",
             NameSource::Fallback => "fallback",
             NameSource::Asset => "asset",
+            NameSource::Index => "index",
         }
     }
 
@@ -339,6 +346,7 @@ impl NameSource {
             NameSource::Llm,
             NameSource::Fallback,
             NameSource::Asset,
+            NameSource::Index,
         ]
         .into_iter()
         .find(|s| Some(s.as_str()) == label)
@@ -422,6 +430,14 @@ pub struct FactoryRecord {
     /// Declared facts too weak to name the module (a version constant, a
     /// repository URL) — shown to the model, never a name.
     pub hints: Vec<String>,
+    /// The names-mode placement answer (library-names plan step 4): the
+    /// full vendor path the library index gives this wholly claimed module
+    /// (`vendor/<package>/<file>.js`). Set by the unpack before any name
+    /// is chosen; the naming ladder's Index rung and the file-name chooser
+    /// are its only readers. None: the planner left the module in place —
+    /// unclaimed, partial, contested, or the index disagrees — or no
+    /// names mode is on.
+    pub index_path: Option<String>,
 }
 
 /// The classification: the helper var + every factory, in source order.
@@ -451,6 +467,9 @@ pub struct FactoryNameCounts {
     pub fallback: usize,
     /// App text assets, decided before the cascade.
     pub asset: usize,
+    /// Named for the library index's placement answer (names mode, after
+    /// the carry rung) — never asked of the model.
+    pub index: usize,
 }
 
 /// The structural hash of a factory body FUNCTION (arrow or function
@@ -662,6 +681,24 @@ pub fn name_cjs_factories(
             counts.carry_over += 1;
             continue;
         }
+        // The names-mode placement answer (library-names plan step 4):
+        // AFTER the carry — a prior release's path is reused before the
+        // index is asked, so an unchanged library's entry is
+        // byte-identical across hops — and BEFORE the model: a placed
+        // module is never asked of it. The package is the answer's
+        // folder; the name is the only thing the ladder ever decides,
+        // the file path comes with the chooser.
+        if let Some(package) = factory
+            .index_path
+            .as_deref()
+            .and_then(vendor_names::index_folder_of)
+        {
+            factory.name = Some(package.to_string());
+            factory.name_source = Some(NameSource::Index);
+            factory.name_origin = Some(NameSource::Index);
+            counts.index += 1;
+            continue;
+        }
         factory.name = Some(hash_fallback_name(&factory.structural_hash));
         factory.name_source = Some(NameSource::Fallback);
         factory.name_origin = Some(NameSource::Fallback);
@@ -809,6 +846,7 @@ pub fn classify_bun_modules<'a>(
                 carried: None,
                 identity: None,
                 hints: Vec::new(),
+                index_path: None,
             });
         }
     }

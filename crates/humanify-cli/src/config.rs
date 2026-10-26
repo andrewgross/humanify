@@ -383,7 +383,11 @@ impl Library {
         index: Option<&'x humanify_core::libindex::lookup::LibraryIndex>,
     ) -> humanify_core::libdetect::discovery::DiscoveryRequest<'x> {
         humanify_core::libdetect::discovery::DiscoveryRequest {
-            list_units: self.report_units,
+            // The claim rows the placement planner folds live in the
+            // report's `claims`, which `list_units` fills: a names run
+            // always asks for them (the unpack refuses a names request
+            // that would read none).
+            list_units: self.report_units || self.matching == LibraryMatching::Names,
             index,
             rules: Some(self.rules()),
             targeted: Some((self.lookup.targeted_min_nodes, self.lookup.targeted_support)),
@@ -391,6 +395,7 @@ impl Library {
             unit_prints: false,
             call_context: false,
             placement_groups: self.matching == LibraryMatching::Names,
+            module_answers: None,
         }
     }
 
