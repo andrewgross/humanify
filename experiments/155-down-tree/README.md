@@ -168,7 +168,25 @@ what a future veto would have to solve first.
 
 ## Gate and neutrality
 
-PLACEHOLDER-GATE-TABLE
+All runs warm, both legs replaying `/work/neutrality-cache` (rule 10 permits the
+cache for a determinism verdict with the model held fixed), dead endpoint
+`http://127.0.0.1:9/v1`, pair 2.1.85→2.1.86, candidate = this branch vs
+baseline = main `928965118`. The baseline leg's zero cache-writes was checked
+before every verdict line.
+
+| Check                                                                                                                             | Verdict                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run check` (full 13 stages, bare)                                                                                            | **PASS — ALL 13 STAGES PASSED**, exit 0 (typecheck, lint, rust:fmt, rust:clippy, knip, knip:prod, census:clones, census:concurrency, unit, rust:unit, rust:build, rust:format-golden, e2e: 18 fixture pairs, 0 unexpected)                                                                                                                             |
+| Warm neutrality, DEFAULT mode (every new key off — no index is read at all)                                                       | **NEUTRAL**: 0 differing files / 0 differing lines, cache writes candidate +0 / baseline +0, exit 0/0                                                                                                                                                                                                                                                  |
+| Warm neutrality, REPORT mode (`--report`, reads the index) on the edges/2 index vs main                                           | **IMPOSSIBLE BY CONSTRUCTION** — main's binary reads `edges/1` and refuses the edges/2 index at startup, naming both spellings: "built with edges edges/2 (this binary reads edges/1); rebuild the index with this binary's `humanify-index build`". That refusal is the new fail-early stamp check doing its job; the stamp change IS this experiment |
+| Warm neutrality, REPORT mode on the shared `/3` index (`/work/library-index/current`, readable by BOTH binaries — the substitute) | **NEUTRAL**: 0 differing files / 0 differing lines, cache writes +0/+0, exit 0/0                                                                                                                                                                                                                                                                       |
+| Claim-inertness of the edges/2-reading binary on the edges/2 index                                                                | 90 bun-dev + 1 cc bundle-runs, 0 claim mismatches, DOWN tree rows byte-identical to exp153; plus the 121 bundle-runs of the base re-scores came out byte-identical to exp153's /4 bases                                                                                                                                                                |
+
+The report-mode substitute is honest about what it cannot prove: it proves the
+`--report` code path is byte-neutral on an index both binaries read, while the
+edges/2 path itself is covered by the claim-inertness row (the same binary,
+index and lookup rules as the scores above, just without the rule names turned
+on).
 
 ## Where things live
 
