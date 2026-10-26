@@ -1,0 +1,367 @@
+{
+ "maxPeakRssMb": 4315,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "bun-dev-bun-cli_babel-istanbul-f3b1f1": {
+   "peakRssMb": 120,
+   "wallSeconds": 0.2
+  },
+  "bun-dev-bun-cli_cross-var-efce52": {
+   "peakRssMb": 167,
+   "wallSeconds": 2.21
+  },
+  "bun-dev-bun-cli_cz-customizable-36f649": {
+   "peakRssMb": 147,
+   "wallSeconds": 2.62
+  },
+  "bun-dev-bun-cli_doctoc-fa09a2": {
+   "peakRssMb": 232,
+   "wallSeconds": 0.67
+  },
+  "bun-dev-bun-cli_ember-cli-afb389": {
+   "peakRssMb": 119,
+   "wallSeconds": 0.14
+  },
+  "bun-dev-bun-cli_health-88539c": {
+   "peakRssMb": 119,
+   "wallSeconds": 0.14
+  },
+  "bun-dev-bun-cli_jsforce-566556": {
+   "peakRssMb": 119,
+   "wallSeconds": 0.14
+  },
+  "bun-dev-bun-cli_just-bash-6676e9": {
+   "peakRssMb": 774,
+   "wallSeconds": 2.05
+  },
+  "bun-dev-bun-cli_lingui_cli-33be9c": {
+   "peakRssMb": 124,
+   "wallSeconds": 0.24
+  },
+  "bun-dev-bun-cli_opennextjs_aws-9820f5": {
+   "peakRssMb": 213,
+   "wallSeconds": 1.48
+  },
+  "bun-dev-bun-cli_ts-json-schema-generator-1165fe": {
+   "peakRssMb": 1112,
+   "wallSeconds": 8.59
+  },
+  "bun-dev-bun-cli_ts-patch-3ab5bd": {
+   "peakRssMb": 150,
+   "wallSeconds": 0.82
+  },
+  "bun-dev-bun-cli_ts-standard-e79c0d": {
+   "peakRssMb": 365,
+   "wallSeconds": 1.12
+  },
+  "bun-dev-bun-cli_umijs_fabric-f601b5": {
+   "peakRssMb": 164,
+   "wallSeconds": 0.22
+  },
+  "bun-dev-bun-cli_workflow_nest-9c1822": {
+   "peakRssMb": 147,
+   "wallSeconds": 1.09
+  },
+  "bun-dev-bun-electron_gh-agustinmista__positron-7412d5": {
+   "peakRssMb": 182,
+   "wallSeconds": 2.43
+  },
+  "bun-dev-bun-electron_gh-cclank__quickshot-6f4904": {
+   "peakRssMb": 256,
+   "wallSeconds": 1.57
+  },
+  "bun-dev-bun-electron_gh-dfarm6__prism-browser-community-d453ee": {
+   "peakRssMb": 802,
+   "wallSeconds": 19.68
+  },
+  "bun-dev-bun-electron_gh-dotenorio__clipboard-manager-electron-cc055f": {
+   "peakRssMb": 163,
+   "wallSeconds": 0.37
+  },
+  "bun-dev-bun-electron_gh-hamedgitty__bloks-5da2e6": {
+   "peakRssMb": 445,
+   "wallSeconds": 9.87
+  },
+  "bun-dev-bun-electron_gh-john-paul-ruf__novel-engine-3b897e": {
+   "peakRssMb": 835,
+   "wallSeconds": 7.64
+  },
+  "bun-dev-bun-electron_gh-kryptokrona__hugin-desktop-474f08": {
+   "peakRssMb": 969,
+   "wallSeconds": 7.23
+  },
+  "bun-dev-bun-electron_gh-mubaidr__vue-electron-template-9c708d": {
+   "peakRssMb": 205,
+   "wallSeconds": 2.45
+  },
+  "bun-dev-bun-electron_gh-rhysd__tui-a8566f": {
+   "peakRssMb": 150,
+   "wallSeconds": 0.2
+  },
+  "bun-dev-bun-electron_gh-sanlinhtik3__thalika-voice-clone-9c854e": {
+   "peakRssMb": 302,
+   "wallSeconds": 1.89
+  },
+  "bun-dev-bun-electron_gh-shotheadman__mdcz-d7405c": {
+   "peakRssMb": 2691,
+   "wallSeconds": 19.24
+  },
+  "bun-dev-bun-electron_gh-simon-fraser__musictube-player-904ca4": {
+   "peakRssMb": 135,
+   "wallSeconds": 0.32
+  },
+  "bun-dev-bun-electron_gh-toantranmei__electron-vite-starter-16153e": {
+   "peakRssMb": 478,
+   "wallSeconds": 4.97
+  },
+  "bun-dev-bun-electron_gh-yaonieyo__doubao-account-pool-220bd1": {
+   "peakRssMb": 244,
+   "wallSeconds": 0.55
+  },
+  "bun-dev-bun-electron_gh-z-------------__cpod-e10580": {
+   "peakRssMb": 428,
+   "wallSeconds": 4.97
+  },
+  "bun-dev-bun-vscode_gh-altimateai__vscode-dbt-power-user-a91260": {
+   "peakRssMb": 978,
+   "wallSeconds": 16.1
+  },
+  "bun-dev-bun-vscode_gh-antfu__vscode-array-index-inlay-336411": {
+   "peakRssMb": 1293,
+   "wallSeconds": 28.39
+  },
+  "bun-dev-bun-vscode_gh-cschlosser__doxdocgen-435b5b": {
+   "peakRssMb": 128,
+   "wallSeconds": 0.62
+  },
+  "bun-dev-bun-vscode_gh-deepmyst__mysti-4faa9b": {
+   "peakRssMb": 1689,
+   "wallSeconds": 21.7
+  },
+  "bun-dev-bun-vscode_gh-ducphamngoc08__codevisualizer-16f73c": {
+   "peakRssMb": 246,
+   "wallSeconds": 1.35
+  },
+  "bun-dev-bun-vscode_gh-github__vscode-github-actions-a3e642": {
+   "peakRssMb": 1120,
+   "wallSeconds": 12.65
+  },
+  "bun-dev-bun-vscode_gh-lostintangent__gistpad-447521": {
+   "peakRssMb": 870,
+   "wallSeconds": 7.54
+  },
+  "bun-dev-bun-vscode_gh-midudev__better-svg-2d5738": {
+   "peakRssMb": 339,
+   "wallSeconds": 13.15
+  },
+  "bun-dev-bun-vscode_gh-mrmlnc__vscode-scss-ef9914": {
+   "peakRssMb": 199,
+   "wallSeconds": 1.12
+  },
+  "bun-dev-bun-vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a": {
+   "peakRssMb": 650,
+   "wallSeconds": 6.31
+  },
+  "bun-dev-bun-vscode_gh-panoply__vscode-liquid-26655d": {
+   "peakRssMb": 212,
+   "wallSeconds": 1.26
+  },
+  "bun-dev-bun-vscode_gh-rudreshveerkhare__catalyst-05cf16": {
+   "peakRssMb": 499,
+   "wallSeconds": 3.93
+  },
+  "bun-dev-bun-vscode_gh-rusiaaman__chat.md-331c54": {
+   "peakRssMb": 387,
+   "wallSeconds": 9.32
+  },
+  "bun-dev-bun-vscode_gh-tim-koehler__helm-intellisense-296441": {
+   "peakRssMb": 234,
+   "wallSeconds": 1.51
+  },
+  "bun-dev-bun-vscode_gh-yessglory17__argus-c36d36": {
+   "peakRssMb": 3350,
+   "wallSeconds": 21.57
+  },
+  "bun-dev-node-cli_babel-istanbul-f3b1f1": {
+   "peakRssMb": 145,
+   "wallSeconds": 0.17
+  },
+  "bun-dev-node-cli_cross-var-efce52": {
+   "peakRssMb": 161,
+   "wallSeconds": 1.79
+  },
+  "bun-dev-node-cli_cz-customizable-36f649": {
+   "peakRssMb": 206,
+   "wallSeconds": 1.65
+  },
+  "bun-dev-node-cli_doctoc-fa09a2": {
+   "peakRssMb": 226,
+   "wallSeconds": 0.65
+  },
+  "bun-dev-node-cli_ember-cli-afb389": {
+   "peakRssMb": 120,
+   "wallSeconds": 0.14
+  },
+  "bun-dev-node-cli_health-88539c": {
+   "peakRssMb": 119,
+   "wallSeconds": 0.14
+  },
+  "bun-dev-node-cli_jsforce-566556": {
+   "peakRssMb": 119,
+   "wallSeconds": 0.14
+  },
+  "bun-dev-node-cli_just-bash-6676e9": {
+   "peakRssMb": 802,
+   "wallSeconds": 2.04
+  },
+  "bun-dev-node-cli_lingui_cli-33be9c": {
+   "peakRssMb": 150,
+   "wallSeconds": 0.18
+  },
+  "bun-dev-node-cli_opennextjs_aws-9820f5": {
+   "peakRssMb": 194,
+   "wallSeconds": 1.73
+  },
+  "bun-dev-node-cli_ts-json-schema-generator-1165fe": {
+   "peakRssMb": 1101,
+   "wallSeconds": 8.36
+  },
+  "bun-dev-node-cli_ts-patch-3ab5bd": {
+   "peakRssMb": 156,
+   "wallSeconds": 0.87
+  },
+  "bun-dev-node-cli_ts-standard-e79c0d": {
+   "peakRssMb": 374,
+   "wallSeconds": 1.13
+  },
+  "bun-dev-node-cli_umijs_fabric-f601b5": {
+   "peakRssMb": 144,
+   "wallSeconds": 0.23
+  },
+  "bun-dev-node-cli_workflow_nest-9c1822": {
+   "peakRssMb": 141,
+   "wallSeconds": 1.66
+  },
+  "bun-dev-node-electron_gh-agustinmista__positron-7412d5": {
+   "peakRssMb": 173,
+   "wallSeconds": 2.28
+  },
+  "bun-dev-node-electron_gh-cclank__quickshot-6f4904": {
+   "peakRssMb": 2827,
+   "wallSeconds": 11.43
+  },
+  "bun-dev-node-electron_gh-dfarm6__prism-browser-community-d453ee": {
+   "peakRssMb": 800,
+   "wallSeconds": 19.4
+  },
+  "bun-dev-node-electron_gh-dotenorio__clipboard-manager-electron-cc055f": {
+   "peakRssMb": 166,
+   "wallSeconds": 0.35
+  },
+  "bun-dev-node-electron_gh-hamedgitty__bloks-5da2e6": {
+   "peakRssMb": 447,
+   "wallSeconds": 10.63
+  },
+  "bun-dev-node-electron_gh-john-paul-ruf__novel-engine-3b897e": {
+   "peakRssMb": 864,
+   "wallSeconds": 7.49
+  },
+  "bun-dev-node-electron_gh-kryptokrona__hugin-desktop-474f08": {
+   "peakRssMb": 1035,
+   "wallSeconds": 6.78
+  },
+  "bun-dev-node-electron_gh-mubaidr__vue-electron-template-9c708d": {
+   "peakRssMb": 282,
+   "wallSeconds": 0.77
+  },
+  "bun-dev-node-electron_gh-rhysd__tui-a8566f": {
+   "peakRssMb": 164,
+   "wallSeconds": 0.2
+  },
+  "bun-dev-node-electron_gh-sanlinhtik3__thalika-voice-clone-9c854e": {
+   "peakRssMb": 4315,
+   "wallSeconds": 29.91
+  },
+  "bun-dev-node-electron_gh-shotheadman__mdcz-d7405c": {
+   "peakRssMb": 3112,
+   "wallSeconds": 20.89
+  },
+  "bun-dev-node-electron_gh-simon-fraser__musictube-player-904ca4": {
+   "peakRssMb": 174,
+   "wallSeconds": 0.2
+  },
+  "bun-dev-node-electron_gh-toantranmei__electron-vite-starter-16153e": {
+   "peakRssMb": 459,
+   "wallSeconds": 6.13
+  },
+  "bun-dev-node-electron_gh-yaonieyo__doubao-account-pool-220bd1": {
+   "peakRssMb": 217,
+   "wallSeconds": 0.81
+  },
+  "bun-dev-node-electron_gh-z-------------__cpod-e10580": {
+   "peakRssMb": 508,
+   "wallSeconds": 2.04
+  },
+  "bun-dev-node-vscode_gh-altimateai__vscode-dbt-power-user-a91260": {
+   "peakRssMb": 988,
+   "wallSeconds": 16.99
+  },
+  "bun-dev-node-vscode_gh-antfu__vscode-array-index-inlay-336411": {
+   "peakRssMb": 1271,
+   "wallSeconds": 30.2
+  },
+  "bun-dev-node-vscode_gh-cschlosser__doxdocgen-435b5b": {
+   "peakRssMb": 160,
+   "wallSeconds": 0.28
+  },
+  "bun-dev-node-vscode_gh-deepmyst__mysti-4faa9b": {
+   "peakRssMb": 1735,
+   "wallSeconds": 22.02
+  },
+  "bun-dev-node-vscode_gh-ducphamngoc08__codevisualizer-16f73c": {
+   "peakRssMb": 238,
+   "wallSeconds": 1.29
+  },
+  "bun-dev-node-vscode_gh-github__vscode-github-actions-a3e642": {
+   "peakRssMb": 1202,
+   "wallSeconds": 12.91
+  },
+  "bun-dev-node-vscode_gh-lostintangent__gistpad-447521": {
+   "peakRssMb": 886,
+   "wallSeconds": 7.68
+  },
+  "bun-dev-node-vscode_gh-midudev__better-svg-2d5738": {
+   "peakRssMb": 333,
+   "wallSeconds": 12.41
+  },
+  "bun-dev-node-vscode_gh-mrmlnc__vscode-scss-ef9914": {
+   "peakRssMb": 204,
+   "wallSeconds": 0.63
+  },
+  "bun-dev-node-vscode_gh-nuxtrdev__nuxtr-vscode-1fe62a": {
+   "peakRssMb": 619,
+   "wallSeconds": 5.95
+  },
+  "bun-dev-node-vscode_gh-panoply__vscode-liquid-26655d": {
+   "peakRssMb": 143,
+   "wallSeconds": 1.57
+  },
+  "bun-dev-node-vscode_gh-rudreshveerkhare__catalyst-05cf16": {
+   "peakRssMb": 490,
+   "wallSeconds": 4.24
+  },
+  "bun-dev-node-vscode_gh-rusiaaman__chat.md-331c54": {
+   "peakRssMb": 415,
+   "wallSeconds": 6.74
+  },
+  "bun-dev-node-vscode_gh-tim-koehler__helm-intellisense-296441": {
+   "peakRssMb": 235,
+   "wallSeconds": 1.48
+  },
+  "bun-dev-node-vscode_gh-yessglory17__argus-c36d36": {
+   "peakRssMb": 4241,
+   "wallSeconds": 24.72
+  }
+ },
+ "totalWallSeconds": 540.9
+}
