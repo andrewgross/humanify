@@ -269,3 +269,66 @@ fn the_edge_table_answers_each_unit_row_and_stores_a_shared_list_once() {
     let unknown = vec![edge(4, "a.js", &[1], &[])];
     assert!(EdgeTable::encode(&units, &unknown, &packages).is_err());
 }
+
+#[test]
+fn a_callee_print_exists_in_the_edge_data_without_owning_a_unit_row() {
+    // exp155: the flat callee-print table indexes every callee print any
+    // row records — keyed, with its recorders — so one under the row floor
+    // (or dropped with its row) is queryable. INSIDE entries credit the
+    // row's owner; OUT-OF entries the callee's own recorded owner.
+    use crate::libindex::format::{Callee, EdgeRow};
+    use crate::libindex::table::CalleePrintTable;
+    let file = |r: UnitRow, f: &str| UnitRow {
+        file: f.into(),
+        ..r
+    };
+    let units = vec![
+        file(unit(7, "zod", 10), "a.js"),
+        file(unit(7, "zod", 10), "b.js"),
+        unit(3, "yup", 10),
+    ];
+    let edge = |hash: u64, f: &str, inside: &[u64], out_of: &[(&str, u64)]| EdgeRow {
+        hash: format!("{hash:016x}"),
+        owner: "zod".into(),
+        file: f.into(),
+        inside: inside.iter().map(|h| format!("{h:016x}")).collect(),
+        out_of: out_of
+            .iter()
+            .map(|(o, h)| Callee {
+                owner: (*o).into(),
+                hash: format!("{h:016x}"),
+            })
+            .collect(),
+    };
+    // 11 and 12 are rowless (no unit row holds them); 3 has a row under
+    // yup but is recorded here by zod as OUT-OF
+    let edges = vec![
+        edge(7, "a.js", &[11, 12], &[]),
+        edge(7, "b.js", &[12], &[("yup", 3)]),
+    ];
+    let packages = package_table(&[&units], &[&edges], &[]);
+    let bytes = CalleePrintTable::encode(&edges, &packages).expect("encodes");
+    let table = CalleePrintTable::open(Source::Memory(bytes)).expect("opens");
+    let key = |k: u64| k;
+    // zod (id 1) is the row owner of both rows; yup (id 0) records 3
+    assert_eq!(table.recorders(key(11)), vec![1], "a rowless INSIDE callee");
+    assert_eq!(table.recorders(key(12)), vec![1]);
+    assert_eq!(
+        table.recorders(key(3)),
+        vec![0],
+        "an OUT-OF entry credits the callee's own owner"
+    );
+    assert!(table.recorders(key(99)).is_empty(), "an unrecorded print");
+    let mut files = crate::libindex::table::lookup_files(
+        &std::iter::once(("bun-node-cjs-min".to_string(), units)).collect(),
+        Some(&std::iter::once(("bun-node-cjs-min".to_string(), edges)).collect()),
+        &[],
+    )
+    .expect("lookup files");
+    assert!(
+        files
+            .remove("callee-prints.bun-node-cjs-min.bin")
+            .is_some_and(|b| CalleePrintTable::open(Source::Memory(b)).is_ok()),
+        "lookup files write one callee-print table per edge slice"
+    );
+}

@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use humanify_core::graph::edges::Scope;
+use humanify_core::libdetect::discovery::CallContextRow;
 use humanify_core::libindex::format::{Callee, EdgeRow, SliceRecord};
 use humanify_core::libindex::lookup::LibraryIndex;
 use humanify_core::libindex::recipe::{TerserSlices, detect_recipe};
@@ -334,13 +335,19 @@ fn package_shard(tag: &str, package: &str, lines: &[(&str, &str)]) -> (PathBuf, 
     (root, rows)
 }
 
-/// The claims discovery makes on `code` (a Bun target-node bundle with no
-/// module helper) against `ix` under the shipped rules with `call_context`.
-fn claims_with(
+/// Discovery on `code` (a Bun target-node bundle with no module helper)
+/// against `ix` under the shipped rules with `call_context`; `census`
+/// asks for the call-context rows (the exp153 instrument: decides
+/// nothing).
+fn discover_with(
     ix: &LibraryIndex,
     code: &str,
     call_context: humanify_core::libindex::lookup::CallContextRules,
-) -> Vec<(String, String)> {
+    census: bool,
+) -> (
+    humanify_core::graph::references::ReferenceGraph,
+    humanify_core::libdetect::discovery::Discovery,
+) {
     use humanify_core::libdetect::discovery::{
         BundlePieces, DiscoveryOptions, IndexLookup, discover_in_bundle,
     };
@@ -371,10 +378,21 @@ fn claims_with(
                 support: 0,
                 ..rules
             }),
-            census: false,
+            census,
         }),
         DiscoveryOptions::recommended(),
     );
+    (graph, found)
+}
+
+/// The claims discovery makes on `code` (a Bun target-node bundle with no
+/// module helper) against `ix` under the shipped rules with `call_context`.
+fn claims_with(
+    ix: &LibraryIndex,
+    code: &str,
+    call_context: humanify_core::libindex::lookup::CallContextRules,
+) -> Vec<(String, String)> {
+    let (graph, found) = discover_with(ix, code, call_context, false);
     found
         .claims
         .iter()
@@ -387,6 +405,18 @@ fn claims_with(
             )
         })
         .collect()
+}
+
+/// The call-context census rows of discovery on `code` (the exp153
+/// instrument, plus exp155's scoped fits and `recorded_by`).
+fn census_with(ix: &LibraryIndex, code: &str) -> Vec<CallContextRow> {
+    let (_, found) = discover_with(
+        ix,
+        code,
+        humanify_core::libindex::lookup::CallContextRules::default(),
+        true,
+    );
+    found.call_context
 }
 
 #[test]
@@ -444,6 +474,234 @@ fn call_context_breaks_a_tie_between_twin_bodies_by_their_callees() {
     assert!(
         with.iter().all(|(_, p)| p == "beta"),
         "no alpha claim anywhere: {with:?}"
+    );
+    std::fs::remove_dir_all(&ra).ok();
+    std::fs::remove_dir_all(&rb).ok();
+}
+
+// ---------------------------------------------------------------------------
+// The DOWN tree's flat callee-print table (exp155, edges/2): a callee the
+// index records without it owning a unit row — below the row floor, or in
+// another package's OUT-OF list — is key-queryable, and the census's
+// scoped fits can tell "the index knows this nowhere" (silence) apart
+// from "another family records it" (the veto's evidence).
+// ---------------------------------------------------------------------------
+
+const DP_API: &str = "function depapi(t){return t.split(\",\").map(function(e){return e.trim().toUpperCase().padEnd(5,\"x\")}).filter(Boolean).join(\"|\").repeat(2)}";
+const LB_TINY: &str = "function tinyBase(s){return s.trim()}";
+const LB_MAIN: &str = "function mainlib(x){var r=tinyBase(x.split(\",\")),d=depapi(r),s=\"items\";return d.length+r.concat([x]).length+s.length+r.indexOf(\"first\").valueOf()+r.lastIndexOf(\"last\").trim()+1}";
+
+/// A library calling an under-row-floor helper of its own and a function
+/// in its dependency: the helper can own no unit row (the floor) and the
+/// dependency's print sits in ANOTHER package's rows — the naive fit
+/// always held both as contained keys, but before edges/2 nothing could
+/// ask "who records this print" for either; the flat table answers, and
+/// the DOWN containment stays confirming across the floor and the package
+/// boundary.
+#[test]
+fn the_flat_table_names_a_rowless_below_floor_helper_and_a_cross_package_callee() {
+    let (root, code, map) = bundle(
+        "down-lib",
+        &[
+            (Some("dep"), "api.js", DP_API),
+            (Some("lib"), "tiny.js", LB_TINY),
+            (Some("lib"), "main.js", LB_MAIN),
+            (
+                None,
+                "",
+                "var main=function(){return mainlib(process.argv.slice(2))+depapi(\"x\").length}",
+            ),
+        ],
+    );
+    let (rows, _) = rows_of(&root, &code, &map);
+    assert!(
+        !rows.iter().any(|r| r.file == "tiny.js"),
+        "the fixture's premise: the helper is below the row floor, so it owns no row"
+    );
+    let main = whole(&rows, "lib", "main.js");
+    let helper = main.inside[0].clone();
+    let api = whole(&rows, "dep", "api.js").hash.clone();
+    assert_eq!(
+        main.out_of
+            .iter()
+            .map(|c| (c.owner.clone(), c.hash.clone()))
+            .collect::<Vec<_>>(),
+        vec![("dep".to_string(), api.clone())]
+    );
+    let (ix, _) = load_merged(&root.join("ix"), vec![shard_of(rows)]);
+    assert!(
+        ix.has_callee_prints(),
+        "a merged edges/2 index opens its flat callee-print table"
+    );
+    let id = |h: &str| u64::from_str_radix(h, 16).expect("a print key");
+    assert!(
+        ix.candidates(&helper).is_empty(),
+        "the helper print owns no row anywhere"
+    );
+    assert_eq!(
+        ix.callee_recorders(id(&helper))
+            .iter()
+            .map(|&o| ix.package_name(o).to_string())
+            .collect::<Vec<_>>(),
+        vec!["lib".to_string()],
+        "the rowless helper print is key-queryable (INSIDE records the caller's package)"
+    );
+    assert_eq!(
+        ix.callee_recorders(id(&api))
+            .iter()
+            .map(|&o| ix.package_name(o).to_string())
+            .collect::<Vec<_>>(),
+        vec!["dep".to_string()],
+        "an OUT-OF callee is flat-recorded under its own package"
+    );
+    // lib's own code as the bundle: the pick's DOWN tree must hold BOTH
+    // callees — the rowless helper and the one in another package's rows
+    let down_code = format!(
+        "{LB_TINY}\n{DP_API}\n{LB_MAIN}\nvar main=function(){{return mainlib(process.argv.slice(2))+depapi(\"x\").length}};\n"
+    );
+    let census = census_with(&ix, &down_code);
+    let pick = census
+        .iter()
+        .find_map(|r| r.pick.as_ref().filter(|p| p.package == "lib"))
+        .unwrap_or_else(|| panic!("a pick of lib: {census:?}"));
+    assert!(
+        pick.missing.is_empty(),
+        "lib's row records both callees: {pick:?}"
+    );
+    let scoped = [
+        pick.known_fit,
+        pick.known_rowed_fit,
+        pick.foreign_fit,
+        pick.foreign_rowed_fit,
+    ];
+    assert!(
+        scoped.iter().all(|f| f.is_some_and(|f| f.confirms())),
+        "the DOWN containment stays confirming below the floor and across the package boundary: {pick:?}"
+    );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+const UNKNOWN_HELPER: &str = "function quantum(x){return x.trim()}";
+const CC_USE_Q: &str = "function useQ(x){var r=quantum(x),s=\"items\";return r.length+r.concat([x]).length+s.length+r.indexOf(\"first\")+r.lastIndexOf(\"last\")+1}";
+
+/// A wrong-family claim whose callees genuinely diverge (the veto's case:
+/// another family records them — `foreign_fit` refutes, `recorded_by`
+/// names the right family), against an unknown callee (the census's old
+/// refutation trap: the index knows it nowhere — the scoped fit goes
+/// SILENT where the naive fit refutes).
+#[test]
+fn a_foreign_callee_refutes_the_wrong_family_and_an_unknown_callee_stays_silent() {
+    let (ra, alpha) = package_shard(
+        "c2-alpha",
+        "alpha",
+        &[("split.js", CC_SPLIT), ("use.js", CC_USE_A)],
+    );
+    let (rb, beta) = package_shard(
+        "c2-beta",
+        "beta",
+        &[
+            ("join.js", CC_JOIN),
+            ("esc.js", CC_ESC),
+            ("use.js", CC_USE_B),
+            ("use-esc.js", CC_USE_ESC),
+        ],
+    );
+    assert_eq!(
+        whole(&alpha, "alpha", "use.js").hash,
+        whole(&beta, "beta", "use.js").hash,
+        "the fixture's premise: one twin print, two families"
+    );
+    let join = whole(&beta, "beta", "join.js").hash.clone();
+    let (ix, _) = load_merged(&ra.join("ix"), vec![shard_of(alpha), shard_of(beta)]);
+    // the app bundles alpha's splitter just before beta's useB (only beta
+    // records joiner: foreign evidence) and a twin useQ whose helper only
+    // the bundle knows. The structural tie follows the PREVIOUS pick, and
+    // alpha's splitter right before the twin hands the tie to alpha: the
+    // wrong family claims both twins
+    let code = format!(
+        "{CC_JOIN}\n{CC_ESC}\n{UNKNOWN_HELPER}\n{CC_SPLIT}\n{CC_USE_B}\n{CC_USE_Q}\nvar main=function(){{return useB(process.argv)+useQ(process.argv[0])+splitter(process.argv)}};\n"
+    );
+    let census = census_with(&ix, &code);
+    let row_with =
+        |wanted: &dyn Fn(&humanify_core::libdetect::discovery::MissingCallee) -> bool| {
+            census
+                .iter()
+                .find(|r| {
+                    r.pick
+                        .as_ref()
+                        .is_some_and(|p| p.missing.iter().any(wanted))
+                })
+                .unwrap_or_else(|| panic!("a pick with such a missing callee: {census:?}"))
+        };
+    // the WRONG family: alpha won the twin tie by adjacency, but only beta
+    // records joiner
+    let wrong_row = row_with(&|m| m.hash == join);
+    let wrong = wrong_row.pick.as_ref().expect("checked");
+    assert_eq!(
+        wrong.package, "alpha",
+        "the twin tie went to the family claimed just before it"
+    );
+    assert!(
+        wrong.fit.is_some_and(|f| f.refutes()),
+        "the naive fit refutes: {wrong:?}"
+    );
+    let foreign = wrong
+        .foreign_fit
+        .expect("the scoped fit reads the flat table");
+    assert_eq!(
+        (foreign.counted, foreign.held, foreign.skipped),
+        (1, 0, 0),
+        "joiner is recorded by another family: genuine refutation evidence, nothing skipped"
+    );
+    assert!(
+        foreign.refutes(),
+        "the veto's case: the wrong family's callees diverge"
+    );
+    assert!(wrong.known_fit.is_some_and(|f| f.refutes()));
+    let missing = wrong.missing.iter().find(|m| m.hash == join).unwrap();
+    assert!(missing.indexed && !missing.in_family);
+    assert_eq!(
+        missing.recorded_by,
+        vec!["beta".to_string()],
+        "the flat table names the right family for a row-holding callee too"
+    );
+    let family_fit = |pkg: &str| {
+        wrong_row
+            .families
+            .iter()
+            .find(|f| f.package == pkg)
+            .unwrap_or_else(|| panic!("a {pkg} family: {wrong_row:?}"))
+    };
+    assert!(
+        family_fit("beta").foreign_fit.is_some_and(|f| f.confirms()),
+        "the right family's scoped fit confirms where the wrong one refutes"
+    );
+    assert!(
+        family_fit("alpha").foreign_fit.is_some_and(|f| f.refutes()),
+        "the wrong family's own scoped fit refutes: the veto's evidence"
+    );
+    // the UNKNOWN callee: the naive fit refutes; the scoped fit skips it
+    let silent_row = row_with(&|m| !m.indexed);
+    let silent = silent_row.pick.as_ref().expect("checked");
+    assert!(
+        silent.fit.is_some_and(|f| f.refutes()),
+        "today's trap: unknown looks like refutation: {silent:?}"
+    );
+    let scoped = silent
+        .known_fit
+        .expect("the scoped fit reads the flat table");
+    assert_eq!(
+        (scoped.counted, scoped.held, scoped.skipped),
+        (0, 0, 1),
+        "the index knows the helper NOWHERE: skipped, not evidence against"
+    );
+    assert!(
+        !scoped.confirms() && !scoped.refutes(),
+        "silence, never a verdict"
+    );
+    assert!(
+        silent.missing.iter().all(|m| m.recorded_by.is_empty()),
+        "no flat record exists for it either: {silent:?}"
     );
     std::fs::remove_dir_all(&ra).ok();
     std::fs::remove_dir_all(&rb).ok();

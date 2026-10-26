@@ -5,8 +5,12 @@ usage: python3 -I simulate.py <census-<corpus>.json> <baseline summary.json> [..
 First order only: a decision the census sees flips, nothing propagates from it (a new seed's DOWN / MODULE claims, a
 dropped seed's stranded propagation and the veto's second round are not simulated: the built variant is measured).
 
-Variants, per signal (fit = every callee with a print held; rowed = callees at or over the 20-node row floor; tree =
-the call-tree hash, which only confirms):
+Signals: fit = every callee with a print held; rowed = the same over the 20-node row floor; tree = the call-tree
+hash, which only confirms; known / foreign = the exp155 scoped fits over the flat `edges/2` callee-print table
+(an unheld callee the index knows nowhere, or the family holds anywhere, is skipped instead of counting against;
+SILENT never drops a kept seed in the support variant, and the refute variant is the kill side of a veto).
+
+Variants, per signal:
   tie-break     a tie the signal resolves to one family: a claimed unit's verdict becomes the resolved family's
                 (a tie whose pick was dropped stays dropped: `tieUnclaimedUpper` counts what it could add)
   support-or    + the position-window drops it confirms, + the isolation-veto drops it confirms
@@ -21,7 +25,7 @@ the call-tree hash, which only confirms):
 import json
 import sys
 
-SIGNALS = ("fit", "rowed", "tree")
+SIGNALS = ("fit", "rowed", "tree", "known", "foreign")
 VARIANTS = ("tie-break", "support-or", "veto-or", "support", "relax-floor", "relax-common", "relax", "refute")
 
 
@@ -70,7 +74,11 @@ def deltas(c, sig):
     out["support-or"] = {k: plus_support[k] + plus_veto[k] for k in plus_veto}
     minus = d()
     for parts, v in rows("claim"):
-        if parts[1] != "confirm":
+        # a scoped signal's SILENCE (and its NONE, an index without the
+        # flat table) is not evidence against a kept seed (exp155): the
+        # DOWN-support rule drops only what the signal REFUTES
+        drop = parts[1] == "refute" if sig in ("known", "foreign") else parts[1] != "confirm"
+        if drop:
             add(minus, parts[2], v["bytes"], v["units"], -1)
     out["support"] = {k: out["support-or"][k] + minus[k] for k in minus}
     for name, cat in (("relax-floor", "floor"), ("relax-common", "common")):

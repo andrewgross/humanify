@@ -106,6 +106,27 @@ fn the_fingerprint_stamp_names_the_pipelines_own_versions() {
     );
 }
 
+#[test]
+fn the_edge_stamps_split_between_the_shard_rows_and_the_readable_contract() {
+    // exp155: the ROWS' schema (in every module shard's key — unchanged, so
+    // an edges/2 index re-merges a reuse store without one fingerprint)
+    // and the READABLE edge data (the manifest's edges stamp: rows + the
+    // derived callee-print table) are two stamps with one shared history.
+    assert_eq!(super::format::LIBRARY_EDGE_ROWS_VERSION, "edges/1");
+    assert_eq!(super::format::LIBRARY_EDGES_VERSION, "edges/2");
+    // an edges/1 /4 manifest (exp152's index) names both spellings in its
+    // refusal — it cannot answer callee-print queries this binary's rules
+    // may rely on
+    let mut old = manifest_for(&[BUN]);
+    old.fingerprints.edges = Some(super::format::LIBRARY_EDGE_ROWS_VERSION.into());
+    let err = old.check_compatible().expect_err("an edges/1 index");
+    assert!(err.contains("edges/1") && err.contains("edges/2"), "{err}");
+    assert!(
+        super::format::check_manifest_stamps(&serde_json::to_string(&old).unwrap()).is_err(),
+        "the stamp check refuses before the parse"
+    );
+}
+
 fn manifest_for(recipes: &[&str]) -> super::format::Manifest {
     use super::format::{INDEX_FORMAT, Manifest, RECIPE_VERSION, SliceRecord};
     use super::recipe::Recipe;

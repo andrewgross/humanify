@@ -134,6 +134,50 @@ fn merge_only_builds_nothing_and_merges_what_the_store_holds() {
 }
 
 #[test]
+fn a_module_shard_key_spells_the_rows_edge_stamp_never_the_readable_one() {
+    // exp155: the readable edge data's stamp is edges/2 (the rows plus the
+    // derived callee-print table), but a module shard HOLDS only rows, so
+    // its key keeps edges/1 — an edges/2 index re-merges an edges/1 store
+    // (exp152's) without one re-fingerprint. If these stamps ever collapse
+    // or swap, this is the line that says which one a shard is keyed by.
+    use crate::build::shard_inputs;
+    use crate::shard::ShardKind;
+    use humanify_core::libindex::format::{
+        LIBRARY_EDGE_ROWS_VERSION, LIBRARY_EDGES_VERSION, RECIPE_VERSION, SliceRecord,
+    };
+    assert_eq!(
+        (LIBRARY_EDGE_ROWS_VERSION, LIBRARY_EDGES_VERSION),
+        ("edges/1", "edges/2")
+    );
+    let slices = vec![SliceRecord {
+        slice: "bun-node-cjs-min".into(),
+        recipe: "bun:target=node,format=cjs,minify".into(),
+        recipe_version: RECIPE_VERSION.into(),
+        default_for_bundler: true,
+        bundler: "bun".into(),
+        version: "1.0.0".into(),
+        published: None,
+        newest_at_as_of: None,
+        bundler_after_as_of: false,
+    }];
+    let inputs = shard_inputs("ms", "2.1.2", &slices, SpongeRegions::Drop);
+    let module = inputs
+        .iter()
+        .find(|i| matches!(i.kind, ShardKind::Modules(_)))
+        .expect("a module shard");
+    assert!(
+        module.fingerprint.contains("+edges/1+"),
+        "the shard key carries the ROWS stamp: {}",
+        module.fingerprint
+    );
+    assert!(
+        !module.fingerprint.contains("edges/2"),
+        "the readable stamp never keys a shard: {}",
+        module.fingerprint
+    );
+}
+
+#[test]
 fn unit_rows_are_attributed_through_the_sourcemap() {
     use crate::build::unit_rows;
     use crate::sourcemap::SourceMap;

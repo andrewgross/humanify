@@ -290,7 +290,7 @@ fn slice_records(
 }
 
 /// The shard inputs of one `package@version`: literals, then each slice.
-fn shard_inputs(
+pub(crate) fn shard_inputs(
     name: &str,
     version: &str,
     slices: &[SliceRecord],
@@ -321,11 +321,17 @@ fn shard_inputs(
             version: version.to_string(),
             bundler: Some(format!("{}@{}", s.bundler, s.version)),
             recipe: format!("{RECIPE_VERSION} {}", s.recipe),
+            // The shard holds ROWS: its key spells the rows' edge stamp
+            // (LIBRARY_EDGE_ROWS_VERSION), never the readable contract's
+            // (f.edges — "edges/2" since exp155's derived callee-print
+            // table). The flat table is derived from these rows at merge
+            // time, so a store keyed edges/1 — exp152's — is re-merged
+            // by an edges/2 index without one re-fingerprint.
             fingerprint: format!(
                 "{}+{}+{}+{}",
                 f.module,
                 f.units,
-                f.edges.as_deref().unwrap_or_default(),
+                humanify_core::libindex::format::LIBRARY_EDGE_ROWS_VERSION,
                 regions.unit_rows_version()
             ),
         });

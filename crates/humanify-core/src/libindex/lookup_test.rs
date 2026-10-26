@@ -400,8 +400,18 @@ fn owners_counted_by_family_let_a_family_and_one_carrier_through() {
 }
 
 /// An on-disk index of `slices` (slice name, recipe, rows; each its
-/// bundler's default), current stamps.
+/// bundler's default), current stamps, no edge rows.
 fn write_index(dir: &std::path::Path, slices: Vec<(&str, &str, Vec<UnitRow>)>) {
+    write_index_with_edges(dir, slices, Vec::new());
+}
+
+/// [`write_index`] with edge rows per slice (an `/4` index's full table
+/// set, exp155's callee-print table included).
+fn write_index_with_edges(
+    dir: &std::path::Path,
+    slices: Vec<(&str, &str, Vec<UnitRow>)>,
+    edges: Vec<(&str, Vec<EdgeRow>)>,
+) {
     use crate::libindex::format::{
         INDEX_FORMAT, Manifest, RECIPE_VERSION, SliceRecord, fingerprint_versions,
     };
@@ -441,9 +451,8 @@ fn write_index(dir: &std::path::Path, slices: Vec<(&str, &str, Vec<UnitRow>)>) {
         .into_iter()
         .map(|(slice, _, rows)| (slice.to_string(), rows))
         .collect();
-    for (name, bytes) in
-        crate::libindex::table::lookup_files(&units, Some(&Default::default()), &[]).unwrap()
-    {
+    let edges = edges.into_iter().map(|(s, e)| (s.to_string(), e)).collect();
+    for (name, bytes) in crate::libindex::table::lookup_files(&units, Some(&edges), &[]).unwrap() {
         std::fs::write(dir.join(name), bytes).unwrap();
     }
 }
@@ -770,4 +779,131 @@ fn call_context_named_settings_round_trip_and_the_full_combo_turns_every_role_on
     assert_eq!(full.relax_floor, crate::libindex::units::UNIT_ROW_MIN_NODES);
     assert!(full.relax_common);
     assert_eq!(full.name(), Some("tie-break+support-or+relax"));
+}
+
+// ---------------------------------------------------------------------------
+// The flat callee-print table (exp155): every callee print any edge row
+// records, keyed — including one with no unit row of its own (under the
+// row floor, or dropped with its row), so a scoped fit can tell "unknown
+// to the index" from "recorded, by another family" instead of refuting
+// both alike (the exp153 census's refutation gap).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_rowless_callee_print_resolves_to_its_recorders_in_memory_and_on_disk() {
+    let key = |h: &str| crate::libindex::table::unit_key(&hx(h)).unwrap();
+    let index = LibraryIndex::from_rows_with_edges(
+        vec![row("w", "zod", 40, 2000), row("y", "yup", 40, 2000)],
+        vec![edge("w", "zod", &["h"]), edge("y", "yup", &["w"])],
+        vec![],
+    );
+    assert!(index.has_callee_prints());
+    // "h" holds NO unit row anywhere — yet the flat table answers for it
+    assert!(
+        index.unit_hits(&hx("h")).is_empty(),
+        "h is under the row floor"
+    );
+    // owner ids are sorted package names: yup = 0, zod = 1
+    assert_eq!(
+        index.callee_recorders(key("h")),
+        vec![1],
+        "zod records h INSIDE"
+    );
+    // "w" has a row of its own and is ALSO recorded by yup's row
+    assert_eq!(
+        index.callee_recorders(key("w")),
+        vec![0],
+        "yup records w INSIDE"
+    );
+    assert!(
+        index.callee_recorders(key("nope")).is_empty(),
+        "an unrecorded print"
+    );
+    // a /3 index records no edges and no callee prints: every query is
+    // silence, never evidence against a claim
+    let plain = LibraryIndex::from_rows(vec![row("w", "zod", 40, 2000)], vec![]);
+    assert!(!plain.has_callee_prints());
+    assert!(plain.callee_recorders(key("h")).is_empty());
+
+    // the same answer from an index on disk, read on demand
+    use crate::libindex::recipe::{TerserSlices, detect_recipe};
+    use humanify_model::detection::{BundlerType, MinifierType};
+    let dir = std::env::temp_dir().join(format!("humanify-callee-prints-{}", std::process::id()));
+    write_index_with_edges(
+        &dir,
+        vec![(
+            "bun-node-cjs-min",
+            "bun:target=node,format=cjs,minify",
+            vec![row("w", "zod", 40, 2000)],
+        )],
+        vec![("bun-node-cjs-min", vec![edge("w", "zod", &["h"])])],
+    );
+    let bun = detect_recipe("var a;", BundlerType::Bun, MinifierType::Bun);
+    let loaded = LibraryIndex::load(&dir, &bun, TerserSlices::Off).expect("loads");
+    assert!(loaded.has_callee_prints());
+    assert!(
+        loaded.unit_hits(&hx("h")).is_empty(),
+        "the row floor holds on disk too"
+    );
+    assert_eq!(
+        loaded.callee_recorders(key("h")),
+        vec![0],
+        "the on-disk flat table answers a rowless print"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+// ---------------------------------------------------------------------------
+// The down-scoped tie-break (exp155): what the flat callee-print table
+// buys exp153's tie resolution — an unheld callee the index knows NOWHERE
+// is skipped instead of counted against (the DOWN-only deviation, declared
+// in docs/responsibility.md), so the one tied family whose rows hold every
+// callee the index has ever recorded wins a tie the plain fit cannot
+// touch, and an index without the table answers nothing.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_down_scoped_tie_break_resolves_a_tie_the_plain_fit_cannot() {
+    let index = LibraryIndex::from_rows_with_edges(
+        vec![row("w", "alpha", 40, 2000), row("w", "beta", 40, 2000)],
+        vec![edge("w", "alpha", &[]), edge("w", "beta", &["held"])],
+        vec![],
+    );
+    let prints = [(whole("w", 40), vec![callee("held"), callee("unknown")])];
+    let queries: Vec<UnitQuery<'_>> = prints
+        .iter()
+        .enumerate()
+        .map(|(i, (p, c))| UnitQuery {
+            unit: i as u32,
+            prints: p,
+            module_bytes: 1000,
+            text: "",
+            callees: c,
+        })
+        .collect();
+    let pick = |index: &LibraryIndex, rules: LookupRules| {
+        crate::libindex::lookup::picks(index, &queries, &rules, &same)[0]
+            .map(|p| index.package_name(p.package).to_string())
+    };
+    // both tied packages refute under the plain fit — alpha's rows hold
+    // nothing, beta's lack the unknown callee — so exp153's tie-break
+    // confirms neither and the package-order fallback wins
+    let plain = with_call_context(
+        CallContextRules::from_name("tie-break", Default::default()).expect("a named setting"),
+    );
+    assert_eq!(pick(&index, plain).as_deref(), Some("alpha"));
+    // the DOWN-scoped fit skips the callee the index knows nowhere and
+    // confirms the one tied family that holds every recorded callee
+    let down = with_call_context(
+        CallContextRules::from_name("tie-break-down", Default::default()).expect("a named setting"),
+    );
+    assert_eq!(pick(&index, down).as_deref(), Some("beta"));
+    // a scoped fit on an index without the flat table is SILENT — never
+    // evidence against a tied family — so the fallback pick stands
+    let no_table = LibraryIndex::from_rows(
+        vec![row("w", "alpha", 40, 2000), row("w", "beta", 40, 2000)],
+        vec![],
+    );
+    assert!(!no_table.has_callee_prints());
+    assert_eq!(pick(&no_table, down).as_deref(), Some("alpha"));
 }

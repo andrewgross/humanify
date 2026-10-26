@@ -1,0 +1,2885 @@
+{
+ "baseline": "bun-dev-exp155-edges2-base",
+ "censusDir": "/work/exp155-data/census/bun-dev",
+ "claimsChecked": 90,
+ "claimsMismatched": 0,
+ "corpus": "bun-dev",
+ "sets": {
+  "bun-dev-bun": {
+   "claim": {
+    "fit:confirm:other": {
+     "bytes": 116711,
+     "units": 236
+    },
+    "fit:confirm:right": {
+     "bytes": 47050250,
+     "units": 53778
+    },
+    "fit:confirm:wrong": {
+     "bytes": 60851,
+     "units": 91
+    },
+    "fit:none:other": {
+     "bytes": 3121,
+     "units": 15
+    },
+    "fit:none:right": {
+     "bytes": 20210822,
+     "units": 9150
+    },
+    "fit:none:wrong": {
+     "bytes": 11661,
+     "units": 38
+    },
+    "fit:refute:other": {
+     "bytes": 265766,
+     "units": 67
+    },
+    "fit:refute:right": {
+     "bytes": 9321876,
+     "units": 3128
+    },
+    "fit:refute:wrong": {
+     "bytes": 36995,
+     "units": 60
+    },
+    "foreign:confirm:other": {
+     "bytes": 139073,
+     "units": 270
+    },
+    "foreign:confirm:right": {
+     "bytes": 54632890,
+     "units": 55709
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 89379,
+     "units": 129
+    },
+    "foreign:none:right": {
+     "bytes": 1400,
+     "units": 1
+    },
+    "foreign:refute:other": {
+     "bytes": 236324,
+     "units": 13
+    },
+    "foreign:refute:right": {
+     "bytes": 1195934,
+     "units": 487
+    },
+    "foreign:refute:wrong": {
+     "bytes": 5720,
+     "units": 13
+    },
+    "foreign:silent:other": {
+     "bytes": 10201,
+     "units": 35
+    },
+    "foreign:silent:right": {
+     "bytes": 20752724,
+     "units": 9859
+    },
+    "foreign:silent:wrong": {
+     "bytes": 14408,
+     "units": 47
+    },
+    "known:confirm:other": {
+     "bytes": 139073,
+     "units": 270
+    },
+    "known:confirm:right": {
+     "bytes": 54322692,
+     "units": 55600
+    },
+    "known:confirm:wrong": {
+     "bytes": 88001,
+     "units": 127
+    },
+    "known:none:right": {
+     "bytes": 1400,
+     "units": 1
+    },
+    "known:refute:other": {
+     "bytes": 242077,
+     "units": 29
+    },
+    "known:refute:right": {
+     "bytes": 1735502,
+     "units": 907
+    },
+    "known:refute:wrong": {
+     "bytes": 7098,
+     "units": 15
+    },
+    "known:silent:other": {
+     "bytes": 4448,
+     "units": 19
+    },
+    "known:silent:right": {
+     "bytes": 20523354,
+     "units": 9548
+    },
+    "known:silent:wrong": {
+     "bytes": 14408,
+     "units": 47
+    },
+    "rowed:confirm:other": {
+     "bytes": 75346,
+     "units": 101
+    },
+    "rowed:confirm:right": {
+     "bytes": 41653669,
+     "units": 44856
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 54957,
+     "units": 70
+    },
+    "rowed:none:other": {
+     "bytes": 46368,
+     "units": 154
+    },
+    "rowed:none:right": {
+     "bytes": 30130818,
+     "units": 18418
+    },
+    "rowed:none:wrong": {
+     "bytes": 22567,
+     "units": 73
+    },
+    "rowed:refute:other": {
+     "bytes": 263884,
+     "units": 63
+    },
+    "rowed:refute:right": {
+     "bytes": 4798461,
+     "units": 2782
+    },
+    "rowed:refute:wrong": {
+     "bytes": 31983,
+     "units": 46
+    },
+    "tree:confirm:other": {
+     "bytes": 88508,
+     "units": 172
+    },
+    "tree:confirm:right": {
+     "bytes": 13122128,
+     "units": 16744
+    },
+    "tree:confirm:wrong": {
+     "bytes": 33000,
+     "units": 61
+    },
+    "tree:none:other": {
+     "bytes": 297090,
+     "units": 146
+    },
+    "tree:none:right": {
+     "bytes": 63460820,
+     "units": 49312
+    },
+    "tree:none:wrong": {
+     "bytes": 76507,
+     "units": 128
+    }
+   },
+   "claimRefuteCallees": {
+    "family-other-row:other": {
+     "bytes": 8189,
+     "units": 22
+    },
+    "family-other-row:right": {
+     "bytes": 1246029,
+     "units": 809
+    },
+    "family-other-row:wrong": {
+     "bytes": 95,
+     "units": 1
+    },
+    "not-indexed:other": {
+     "bytes": 315955,
+     "units": 126
+    },
+    "not-indexed:right": {
+     "bytes": 8100703,
+     "units": 4850
+    },
+    "not-indexed:wrong": {
+     "bytes": 39030,
+     "units": 54
+    },
+    "other-family:other": {
+     "bytes": 5664,
+     "units": 13
+    },
+    "other-family:right": {
+     "bytes": 247289,
+     "units": 73
+    },
+    "other-family:wrong": {
+     "bytes": 1239,
+     "units": 4
+    },
+    "small:other": {
+     "bytes": 237867,
+     "units": 20
+    },
+    "small:right": {
+     "bytes": 6136367,
+     "units": 1268
+    },
+    "small:wrong": {
+     "bytes": 38539,
+     "units": 35
+    }
+   },
+   "claimRefuteScope": {
+    "absent:other": {
+     "bytes": 315955,
+     "units": 126
+    },
+    "absent:right": {
+     "bytes": 12848850,
+     "units": 5521
+    },
+    "absent:wrong": {
+     "bytes": 71090,
+     "units": 79
+    },
+    "family:other": {
+     "bytes": 9429,
+     "units": 26
+    },
+    "family:right": {
+     "bytes": 1425443,
+     "units": 983
+    },
+    "family:wrong": {
+     "bytes": 1378,
+     "units": 2
+    },
+    "other-family:other": {
+     "bytes": 242291,
+     "units": 29
+    },
+    "other-family:right": {
+     "bytes": 1456095,
+     "units": 496
+    },
+    "other-family:wrong": {
+     "bytes": 6435,
+     "units": 13
+    }
+   },
+   "common": {
+    "fit:other": {
+     "bytes": 1339,
+     "units": 3
+    },
+    "fit:right": {
+     "bytes": 29403,
+     "units": 137
+    },
+    "fit:unresolved": {
+     "bytes": 1007519,
+     "units": 3501
+    },
+    "fit:wrong": {
+     "bytes": 2261,
+     "units": 6
+    },
+    "foreign:other": {
+     "bytes": 1339,
+     "units": 3
+    },
+    "foreign:right": {
+     "bytes": 31698,
+     "units": 147
+    },
+    "foreign:unresolved": {
+     "bytes": 1003437,
+     "units": 3486
+    },
+    "foreign:wrong": {
+     "bytes": 4048,
+     "units": 11
+    },
+    "known:other": {
+     "bytes": 1339,
+     "units": 3
+    },
+    "known:right": {
+     "bytes": 32153,
+     "units": 149
+    },
+    "known:unresolved": {
+     "bytes": 1003137,
+     "units": 3485
+    },
+    "known:wrong": {
+     "bytes": 3893,
+     "units": 10
+    },
+    "rowed:other": {
+     "bytes": 449,
+     "units": 2
+    },
+    "rowed:right": {
+     "bytes": 10775,
+     "units": 55
+    },
+    "rowed:unresolved": {
+     "bytes": 1027474,
+     "units": 3584
+    },
+    "rowed:wrong": {
+     "bytes": 1824,
+     "units": 6
+    },
+    "tree:right": {
+     "bytes": 11208,
+     "units": 72
+    },
+    "tree:unresolved": {
+     "bytes": 1027818,
+     "units": 3569
+    },
+    "tree:wrong": {
+     "bytes": 1496,
+     "units": 6
+    }
+   },
+   "floor": {
+    "fit:other": {
+     "bytes": 647,
+     "units": 6
+    },
+    "fit:right": {
+     "bytes": 690071,
+     "units": 1596
+    },
+    "fit:unresolved": {
+     "bytes": 88905,
+     "units": 1020
+    },
+    "fit:wrong": {
+     "bytes": 1467,
+     "units": 17
+    },
+    "foreign:other": {
+     "bytes": 778,
+     "units": 8
+    },
+    "foreign:right": {
+     "bytes": 692784,
+     "units": 1637
+    },
+    "foreign:unresolved": {
+     "bytes": 85059,
+     "units": 966
+    },
+    "foreign:wrong": {
+     "bytes": 2469,
+     "units": 28
+    },
+    "known:other": {
+     "bytes": 778,
+     "units": 8
+    },
+    "known:right": {
+     "bytes": 691887,
+     "units": 1619
+    },
+    "known:unresolved": {
+     "bytes": 85956,
+     "units": 984
+    },
+    "known:wrong": {
+     "bytes": 2469,
+     "units": 28
+    },
+    "rowed:other": {
+     "bytes": 299,
+     "units": 3
+    },
+    "rowed:right": {
+     "bytes": 97267,
+     "units": 992
+    },
+    "rowed:unresolved": {
+     "bytes": 682378,
+     "units": 1630
+    },
+    "rowed:wrong": {
+     "bytes": 1146,
+     "units": 14
+    },
+    "tree:other": {
+     "bytes": 529,
+     "units": 5
+    },
+    "tree:right": {
+     "bytes": 603276,
+     "units": 713
+    },
+    "tree:unresolved": {
+     "bytes": 174656,
+     "units": 1886
+    },
+    "tree:wrong": {
+     "bytes": 2629,
+     "units": 35
+    }
+   },
+   "propagated": {
+    "fit:confirm:other": {
+     "bytes": 2818,
+     "units": 27
+    },
+    "fit:confirm:right": {
+     "bytes": 2382350,
+     "units": 16978
+    },
+    "fit:confirm:wrong": {
+     "bytes": 4027,
+     "units": 32
+    },
+    "fit:none:other": {
+     "bytes": 17968,
+     "units": 98
+    },
+    "fit:none:right": {
+     "bytes": 2004414,
+     "units": 10268
+    },
+    "fit:none:wrong": {
+     "bytes": 6770,
+     "units": 44
+    },
+    "fit:refute:other": {
+     "bytes": 367481,
+     "units": 53
+    },
+    "fit:refute:right": {
+     "bytes": 259997,
+     "units": 1231
+    },
+    "fit:refute:wrong": {
+     "bytes": 13411,
+     "units": 31
+    },
+    "foreign:confirm:other": {
+     "bytes": 346640,
+     "units": 59
+    },
+    "foreign:confirm:right": {
+     "bytes": 2550355,
+     "units": 17789
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 8178,
+     "units": 41
+    },
+    "foreign:none:other": {
+     "bytes": 4592,
+     "units": 37
+    },
+    "foreign:none:right": {
+     "bytes": 868497,
+     "units": 2879
+    },
+    "foreign:none:wrong": {
+     "bytes": 711,
+     "units": 3
+    },
+    "foreign:refute:other": {
+     "bytes": 6823,
+     "units": 11
+    },
+    "foreign:refute:right": {
+     "bytes": 49388,
+     "units": 207
+    },
+    "foreign:refute:wrong": {
+     "bytes": 8437,
+     "units": 16
+    },
+    "foreign:silent:other": {
+     "bytes": 30212,
+     "units": 71
+    },
+    "foreign:silent:right": {
+     "bytes": 1178521,
+     "units": 7602
+    },
+    "foreign:silent:wrong": {
+     "bytes": 6882,
+     "units": 47
+    },
+    "known:confirm:other": {
+     "bytes": 342972,
+     "units": 57
+    },
+    "known:confirm:right": {
+     "bytes": 2528553,
+     "units": 17722
+    },
+    "known:confirm:wrong": {
+     "bytes": 7878,
+     "units": 38
+    },
+    "known:none:other": {
+     "bytes": 4592,
+     "units": 37
+    },
+    "known:none:right": {
+     "bytes": 868497,
+     "units": 2879
+    },
+    "known:none:wrong": {
+     "bytes": 711,
+     "units": 3
+    },
+    "known:refute:other": {
+     "bytes": 23356,
+     "units": 17
+    },
+    "known:refute:right": {
+     "bytes": 81449,
+     "units": 327
+    },
+    "known:refute:wrong": {
+     "bytes": 8737,
+     "units": 19
+    },
+    "known:silent:other": {
+     "bytes": 17347,
+     "units": 67
+    },
+    "known:silent:right": {
+     "bytes": 1168262,
+     "units": 7549
+    },
+    "known:silent:wrong": {
+     "bytes": 6882,
+     "units": 47
+    },
+    "rowed:confirm:other": {
+     "bytes": 2043,
+     "units": 23
+    },
+    "rowed:confirm:right": {
+     "bytes": 1957507,
+     "units": 14665
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 2772,
+     "units": 24
+    },
+    "rowed:none:other": {
+     "bytes": 31680,
+     "units": 107
+    },
+    "rowed:none:right": {
+     "bytes": 2450313,
+     "units": 12710
+    },
+    "rowed:none:wrong": {
+     "bytes": 8736,
+     "units": 58
+    },
+    "rowed:refute:other": {
+     "bytes": 354544,
+     "units": 48
+    },
+    "rowed:refute:right": {
+     "bytes": 238941,
+     "units": 1102
+    },
+    "rowed:refute:wrong": {
+     "bytes": 12700,
+     "units": 25
+    },
+    "tree:confirm:other": {
+     "bytes": 847,
+     "units": 5
+    },
+    "tree:confirm:right": {
+     "bytes": 707875,
+     "units": 4060
+    },
+    "tree:confirm:wrong": {
+     "bytes": 2610,
+     "units": 17
+    },
+    "tree:none:other": {
+     "bytes": 387420,
+     "units": 173
+    },
+    "tree:none:right": {
+     "bytes": 3938886,
+     "units": 24417
+    },
+    "tree:none:wrong": {
+     "bytes": 21598,
+     "units": 90
+    }
+   },
+   "support": {
+    "fit:confirm:other": {
+     "bytes": 746,
+     "units": 4
+    },
+    "fit:confirm:right": {
+     "bytes": 164094,
+     "units": 1173
+    },
+    "fit:confirm:wrong": {
+     "bytes": 406,
+     "units": 1
+    },
+    "fit:none:other": {
+     "bytes": 1309,
+     "units": 6
+    },
+    "fit:none:right": {
+     "bytes": 742953,
+     "units": 1042
+    },
+    "fit:none:wrong": {
+     "bytes": 5388,
+     "units": 18
+    },
+    "fit:refute:other": {
+     "bytes": 978,
+     "units": 6
+    },
+    "fit:refute:right": {
+     "bytes": 3141,
+     "units": 13
+    },
+    "fit:refute:wrong": {
+     "bytes": 9527,
+     "units": 17
+    },
+    "foreign:confirm:other": {
+     "bytes": 1220,
+     "units": 8
+    },
+    "foreign:confirm:right": {
+     "bytes": 164094,
+     "units": 1173
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 406,
+     "units": 1
+    },
+    "foreign:refute:other": {
+     "bytes": 504,
+     "units": 2
+    },
+    "foreign:refute:right": {
+     "bytes": 2535,
+     "units": 9
+    },
+    "foreign:refute:wrong": {
+     "bytes": 8889,
+     "units": 14
+    },
+    "foreign:silent:other": {
+     "bytes": 1309,
+     "units": 6
+    },
+    "foreign:silent:right": {
+     "bytes": 743559,
+     "units": 1046
+    },
+    "foreign:silent:wrong": {
+     "bytes": 6026,
+     "units": 21
+    },
+    "known:confirm:other": {
+     "bytes": 1220,
+     "units": 8
+    },
+    "known:confirm:right": {
+     "bytes": 163871,
+     "units": 1172
+    },
+    "known:confirm:wrong": {
+     "bytes": 406,
+     "units": 1
+    },
+    "known:refute:other": {
+     "bytes": 504,
+     "units": 2
+    },
+    "known:refute:right": {
+     "bytes": 2758,
+     "units": 10
+    },
+    "known:refute:wrong": {
+     "bytes": 9352,
+     "units": 16
+    },
+    "known:silent:other": {
+     "bytes": 1309,
+     "units": 6
+    },
+    "known:silent:right": {
+     "bytes": 743559,
+     "units": 1046
+    },
+    "known:silent:wrong": {
+     "bytes": 5563,
+     "units": 19
+    },
+    "rowed:confirm:other": {
+     "bytes": 458,
+     "units": 2
+    },
+    "rowed:confirm:right": {
+     "bytes": 124134,
+     "units": 947
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 406,
+     "units": 1
+    },
+    "rowed:none:other": {
+     "bytes": 1597,
+     "units": 8
+    },
+    "rowed:none:right": {
+     "bytes": 785256,
+     "units": 1277
+    },
+    "rowed:none:wrong": {
+     "bytes": 7095,
+     "units": 28
+    },
+    "rowed:refute:other": {
+     "bytes": 978,
+     "units": 6
+    },
+    "rowed:refute:right": {
+     "bytes": 798,
+     "units": 4
+    },
+    "rowed:refute:wrong": {
+     "bytes": 7820,
+     "units": 7
+    },
+    "tree:confirm:other": {
+     "bytes": 746,
+     "units": 4
+    },
+    "tree:confirm:right": {
+     "bytes": 44429,
+     "units": 252
+    },
+    "tree:none:other": {
+     "bytes": 2287,
+     "units": 12
+    },
+    "tree:none:right": {
+     "bytes": 865759,
+     "units": 1976
+    },
+    "tree:none:wrong": {
+     "bytes": 15321,
+     "units": 36
+    }
+   },
+   "tie": {
+    "fit:today-other:other:claimed": {
+     "bytes": 1442,
+     "units": 3
+    },
+    "fit:today-other:unresolved:claimed": {
+     "bytes": 8101,
+     "units": 24
+    },
+    "fit:today-other:unresolved:unclaimed": {
+     "bytes": 6515,
+     "units": 26
+    },
+    "fit:today-right:right:claimed": {
+     "bytes": 1407998,
+     "units": 3725
+    },
+    "fit:today-right:right:unclaimed": {
+     "bytes": 27388,
+     "units": 70
+    },
+    "fit:today-right:unresolved:claimed": {
+     "bytes": 815120,
+     "units": 2043
+    },
+    "fit:today-right:unresolved:unclaimed": {
+     "bytes": 351425,
+     "units": 874
+    },
+    "fit:today-right:wrong:claimed": {
+     "bytes": 1271,
+     "units": 2
+    },
+    "fit:today-right:wrong:unclaimed": {
+     "bytes": 165,
+     "units": 1
+    },
+    "fit:today-wrong:right:claimed": {
+     "bytes": 18009,
+     "units": 44
+    },
+    "fit:today-wrong:right:unclaimed": {
+     "bytes": 35957,
+     "units": 32
+    },
+    "fit:today-wrong:unresolved:claimed": {
+     "bytes": 27239,
+     "units": 73
+    },
+    "fit:today-wrong:unresolved:unclaimed": {
+     "bytes": 141094,
+     "units": 282
+    },
+    "fit:today-wrong:wrong:claimed": {
+     "bytes": 1344,
+     "units": 4
+    },
+    "fit:today-wrong:wrong:unclaimed": {
+     "bytes": 282,
+     "units": 1
+    },
+    "foreign:today-other:other:claimed": {
+     "bytes": 5091,
+     "units": 13
+    },
+    "foreign:today-other:unresolved:claimed": {
+     "bytes": 4452,
+     "units": 14
+    },
+    "foreign:today-other:unresolved:unclaimed": {
+     "bytes": 6515,
+     "units": 26
+    },
+    "foreign:today-right:right:claimed": {
+     "bytes": 1423015,
+     "units": 3726
+    },
+    "foreign:today-right:right:unclaimed": {
+     "bytes": 30123,
+     "units": 71
+    },
+    "foreign:today-right:unresolved:claimed": {
+     "bytes": 799858,
+     "units": 2041
+    },
+    "foreign:today-right:unresolved:unclaimed": {
+     "bytes": 348690,
+     "units": 873
+    },
+    "foreign:today-right:wrong:claimed": {
+     "bytes": 1516,
+     "units": 3
+    },
+    "foreign:today-right:wrong:unclaimed": {
+     "bytes": 165,
+     "units": 1
+    },
+    "foreign:today-wrong:right:claimed": {
+     "bytes": 18009,
+     "units": 44
+    },
+    "foreign:today-wrong:right:unclaimed": {
+     "bytes": 51652,
+     "units": 35
+    },
+    "foreign:today-wrong:unresolved:claimed": {
+     "bytes": 26319,
+     "units": 71
+    },
+    "foreign:today-wrong:unresolved:unclaimed": {
+     "bytes": 124366,
+     "units": 277
+    },
+    "foreign:today-wrong:wrong:claimed": {
+     "bytes": 2264,
+     "units": 6
+    },
+    "foreign:today-wrong:wrong:unclaimed": {
+     "bytes": 1315,
+     "units": 3
+    },
+    "known:today-other:other:claimed": {
+     "bytes": 5091,
+     "units": 13
+    },
+    "known:today-other:unresolved:claimed": {
+     "bytes": 4452,
+     "units": 14
+    },
+    "known:today-other:unresolved:unclaimed": {
+     "bytes": 6515,
+     "units": 26
+    },
+    "known:today-right:right:claimed": {
+     "bytes": 1449975,
+     "units": 3766
+    },
+    "known:today-right:right:unclaimed": {
+     "bytes": 50426,
+     "units": 73
+    },
+    "known:today-right:unresolved:claimed": {
+     "bytes": 772898,
+     "units": 2001
+    },
+    "known:today-right:unresolved:unclaimed": {
+     "bytes": 328387,
+     "units": 871
+    },
+    "known:today-right:wrong:claimed": {
+     "bytes": 1516,
+     "units": 3
+    },
+    "known:today-right:wrong:unclaimed": {
+     "bytes": 165,
+     "units": 1
+    },
+    "known:today-wrong:right:claimed": {
+     "bytes": 18009,
+     "units": 44
+    },
+    "known:today-wrong:right:unclaimed": {
+     "bytes": 36411,
+     "units": 33
+    },
+    "known:today-wrong:unresolved:claimed": {
+     "bytes": 26319,
+     "units": 71
+    },
+    "known:today-wrong:unresolved:unclaimed": {
+     "bytes": 139607,
+     "units": 279
+    },
+    "known:today-wrong:wrong:claimed": {
+     "bytes": 2264,
+     "units": 6
+    },
+    "known:today-wrong:wrong:unclaimed": {
+     "bytes": 1315,
+     "units": 3
+    },
+    "rowed:today-other:other:claimed": {
+     "bytes": 134,
+     "units": 1
+    },
+    "rowed:today-other:unresolved:claimed": {
+     "bytes": 9409,
+     "units": 26
+    },
+    "rowed:today-other:unresolved:unclaimed": {
+     "bytes": 6515,
+     "units": 26
+    },
+    "rowed:today-right:right:claimed": {
+     "bytes": 1328059,
+     "units": 3485
+    },
+    "rowed:today-right:right:unclaimed": {
+     "bytes": 16422,
+     "units": 35
+    },
+    "rowed:today-right:unresolved:claimed": {
+     "bytes": 895901,
+     "units": 2284
+    },
+    "rowed:today-right:unresolved:unclaimed": {
+     "bytes": 362391,
+     "units": 909
+    },
+    "rowed:today-right:wrong:claimed": {
+     "bytes": 429,
+     "units": 1
+    },
+    "rowed:today-right:wrong:unclaimed": {
+     "bytes": 165,
+     "units": 1
+    },
+    "rowed:today-wrong:right:claimed": {
+     "bytes": 14664,
+     "units": 33
+    },
+    "rowed:today-wrong:right:unclaimed": {
+     "bytes": 30800,
+     "units": 25
+    },
+    "rowed:today-wrong:unresolved:claimed": {
+     "bytes": 30584,
+     "units": 84
+    },
+    "rowed:today-wrong:unresolved:unclaimed": {
+     "bytes": 146251,
+     "units": 289
+    },
+    "rowed:today-wrong:wrong:claimed": {
+     "bytes": 1344,
+     "units": 4
+    },
+    "rowed:today-wrong:wrong:unclaimed": {
+     "bytes": 282,
+     "units": 1
+    },
+    "tree:today-other:other:claimed": {
+     "bytes": 1308,
+     "units": 2
+    },
+    "tree:today-other:unresolved:claimed": {
+     "bytes": 8235,
+     "units": 25
+    },
+    "tree:today-other:unresolved:unclaimed": {
+     "bytes": 6515,
+     "units": 26
+    },
+    "tree:today-right:right:claimed": {
+     "bytes": 168008,
+     "units": 499
+    },
+    "tree:today-right:right:unclaimed": {
+     "bytes": 13721,
+     "units": 64
+    },
+    "tree:today-right:unresolved:claimed": {
+     "bytes": 2041224,
+     "units": 5211
+    },
+    "tree:today-right:unresolved:unclaimed": {
+     "bytes": 347042,
+     "units": 819
+    },
+    "tree:today-right:wrong:claimed": {
+     "bytes": 15157,
+     "units": 60
+    },
+    "tree:today-right:wrong:unclaimed": {
+     "bytes": 18215,
+     "units": 62
+    },
+    "tree:today-wrong:right:claimed": {
+     "bytes": 5957,
+     "units": 17
+    },
+    "tree:today-wrong:right:unclaimed": {
+     "bytes": 7273,
+     "units": 20
+    },
+    "tree:today-wrong:unresolved:claimed": {
+     "bytes": 39837,
+     "units": 99
+    },
+    "tree:today-wrong:unresolved:unclaimed": {
+     "bytes": 163192,
+     "units": 276
+    },
+    "tree:today-wrong:wrong:claimed": {
+     "bytes": 798,
+     "units": 5
+    },
+    "tree:today-wrong:wrong:unclaimed": {
+     "bytes": 6868,
+     "units": 19
+    }
+   },
+   "veto": {
+    "fit:confirm:right": {
+     "bytes": 235615,
+     "units": 145
+    },
+    "fit:confirm:wrong": {
+     "bytes": 851,
+     "units": 2
+    },
+    "fit:none:other": {
+     "bytes": 15801,
+     "units": 48
+    },
+    "fit:none:right": {
+     "bytes": 3393629,
+     "units": 2469
+    },
+    "fit:none:wrong": {
+     "bytes": 7083,
+     "units": 44
+    },
+    "fit:refute:other": {
+     "bytes": 4423,
+     "units": 12
+    },
+    "fit:refute:right": {
+     "bytes": 155439,
+     "units": 136
+    },
+    "fit:refute:wrong": {
+     "bytes": 7499,
+     "units": 14
+    },
+    "foreign:confirm:right": {
+     "bytes": 245212,
+     "units": 161
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 966,
+     "units": 3
+    },
+    "foreign:none:other": {
+     "bytes": 762,
+     "units": 2
+    },
+    "foreign:refute:other": {
+     "bytes": 2942,
+     "units": 6
+    },
+    "foreign:refute:right": {
+     "bytes": 15062,
+     "units": 12
+    },
+    "foreign:refute:wrong": {
+     "bytes": 4516,
+     "units": 8
+    },
+    "foreign:silent:other": {
+     "bytes": 16520,
+     "units": 52
+    },
+    "foreign:silent:right": {
+     "bytes": 3524409,
+     "units": 2577
+    },
+    "foreign:silent:wrong": {
+     "bytes": 9951,
+     "units": 49
+    },
+    "known:confirm:right": {
+     "bytes": 241095,
+     "units": 155
+    },
+    "known:confirm:wrong": {
+     "bytes": 966,
+     "units": 3
+    },
+    "known:none:other": {
+     "bytes": 762,
+     "units": 2
+    },
+    "known:refute:other": {
+     "bytes": 2942,
+     "units": 6
+    },
+    "known:refute:right": {
+     "bytes": 25661,
+     "units": 45
+    },
+    "known:refute:wrong": {
+     "bytes": 4516,
+     "units": 8
+    },
+    "known:silent:other": {
+     "bytes": 16520,
+     "units": 52
+    },
+    "known:silent:right": {
+     "bytes": 3517927,
+     "units": 2550
+    },
+    "known:silent:wrong": {
+     "bytes": 9951,
+     "units": 49
+    },
+    "rowed:confirm:right": {
+     "bytes": 212231,
+     "units": 76
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 851,
+     "units": 2
+    },
+    "rowed:none:other": {
+     "bytes": 17276,
+     "units": 50
+    },
+    "rowed:none:right": {
+     "bytes": 3426819,
+     "units": 2545
+    },
+    "rowed:none:wrong": {
+     "bytes": 9481,
+     "units": 50
+    },
+    "rowed:refute:other": {
+     "bytes": 2948,
+     "units": 10
+    },
+    "rowed:refute:right": {
+     "bytes": 145633,
+     "units": 129
+    },
+    "rowed:refute:wrong": {
+     "bytes": 5101,
+     "units": 8
+    },
+    "tree:confirm:right": {
+     "bytes": 223726,
+     "units": 123
+    },
+    "tree:none:other": {
+     "bytes": 20224,
+     "units": 60
+    },
+    "tree:none:right": {
+     "bytes": 3560957,
+     "units": 2627
+    },
+    "tree:none:wrong": {
+     "bytes": 15433,
+     "units": 60
+    }
+   },
+   "weakClaim": {
+    "fit:confirm:other": {
+     "bytes": 28005,
+     "units": 145
+    },
+    "fit:confirm:right": {
+     "bytes": 6224521,
+     "units": 30452
+    },
+    "fit:confirm:wrong": {
+     "bytes": 9864,
+     "units": 57
+    },
+    "fit:none:other": {
+     "bytes": 1626,
+     "units": 12
+    },
+    "fit:none:right": {
+     "bytes": 1395761,
+     "units": 6372
+    },
+    "fit:none:wrong": {
+     "bytes": 4932,
+     "units": 28
+    },
+    "fit:refute:other": {
+     "bytes": 7356,
+     "units": 35
+    },
+    "fit:refute:right": {
+     "bytes": 724743,
+     "units": 1832
+    },
+    "fit:refute:wrong": {
+     "bytes": 7319,
+     "units": 35
+    },
+    "foreign:confirm:other": {
+     "bytes": 31019,
+     "units": 163
+    },
+    "foreign:confirm:right": {
+     "bytes": 6789573,
+     "units": 31571
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 13091,
+     "units": 74
+    },
+    "foreign:refute:other": {
+     "bytes": 1549,
+     "units": 5
+    },
+    "foreign:refute:right": {
+     "bytes": 61049,
+     "units": 282
+    },
+    "foreign:refute:wrong": {
+     "bytes": 2458,
+     "units": 11
+    },
+    "foreign:silent:other": {
+     "bytes": 4419,
+     "units": 24
+    },
+    "foreign:silent:right": {
+     "bytes": 1494403,
+     "units": 6803
+    },
+    "foreign:silent:wrong": {
+     "bytes": 6566,
+     "units": 35
+    },
+    "known:confirm:other": {
+     "bytes": 31019,
+     "units": 163
+    },
+    "known:confirm:right": {
+     "bytes": 6782383,
+     "units": 31539
+    },
+    "known:confirm:wrong": {
+     "bytes": 12996,
+     "units": 73
+    },
+    "known:refute:other": {
+     "bytes": 4084,
+     "units": 15
+    },
+    "known:refute:right": {
+     "bytes": 99664,
+     "units": 463
+    },
+    "known:refute:wrong": {
+     "bytes": 2553,
+     "units": 12
+    },
+    "known:silent:other": {
+     "bytes": 1884,
+     "units": 14
+    },
+    "known:silent:right": {
+     "bytes": 1462978,
+     "units": 6654
+    },
+    "known:silent:wrong": {
+     "bytes": 6566,
+     "units": 35
+    },
+    "rowed:confirm:other": {
+     "bytes": 10042,
+     "units": 47
+    },
+    "rowed:confirm:right": {
+     "bytes": 5222787,
+     "units": 25435
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 7178,
+     "units": 43
+    },
+    "rowed:none:other": {
+     "bytes": 20163,
+     "units": 112
+    },
+    "rowed:none:right": {
+     "bytes": 2432432,
+     "units": 11576
+    },
+    "rowed:none:wrong": {
+     "bytes": 9584,
+     "units": 52
+    },
+    "rowed:refute:other": {
+     "bytes": 6782,
+     "units": 33
+    },
+    "rowed:refute:right": {
+     "bytes": 689806,
+     "units": 1645
+    },
+    "rowed:refute:wrong": {
+     "bytes": 5353,
+     "units": 25
+    },
+    "tree:confirm:other": {
+     "bytes": 19015,
+     "units": 98
+    },
+    "tree:confirm:right": {
+     "bytes": 1765699,
+     "units": 8520
+    },
+    "tree:confirm:wrong": {
+     "bytes": 6523,
+     "units": 38
+    },
+    "tree:none:other": {
+     "bytes": 17972,
+     "units": 94
+    },
+    "tree:none:right": {
+     "bytes": 6579326,
+     "units": 30136
+    },
+    "tree:none:wrong": {
+     "bytes": 15592,
+     "units": 82
+    }
+   }
+  },
+  "bun-dev-node": {
+   "claim": {
+    "fit:confirm:other": {
+     "bytes": 349395,
+     "units": 637
+    },
+    "fit:confirm:right": {
+     "bytes": 51016584,
+     "units": 58867
+    },
+    "fit:confirm:wrong": {
+     "bytes": 98122,
+     "units": 217
+    },
+    "fit:none:other": {
+     "bytes": 28168,
+     "units": 70
+    },
+    "fit:none:right": {
+     "bytes": 20799258,
+     "units": 9987
+    },
+    "fit:none:wrong": {
+     "bytes": 25527,
+     "units": 84
+    },
+    "fit:refute:other": {
+     "bytes": 278685,
+     "units": 99
+    },
+    "fit:refute:right": {
+     "bytes": 9452367,
+     "units": 2435
+    },
+    "fit:refute:wrong": {
+     "bytes": 47703,
+     "units": 67
+    },
+    "foreign:confirm:other": {
+     "bytes": 373894,
+     "units": 674
+    },
+    "foreign:confirm:right": {
+     "bytes": 58244966,
+     "units": 60557
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 135452,
+     "units": 257
+    },
+    "foreign:none:right": {
+     "bytes": 646,
+     "units": 1
+    },
+    "foreign:refute:other": {
+     "bytes": 246792,
+     "units": 41
+    },
+    "foreign:refute:right": {
+     "bytes": 1111985,
+     "units": 405
+    },
+    "foreign:refute:wrong": {
+     "bytes": 7508,
+     "units": 17
+    },
+    "foreign:silent:other": {
+     "bytes": 35562,
+     "units": 91
+    },
+    "foreign:silent:right": {
+     "bytes": 21910612,
+     "units": 10326
+    },
+    "foreign:silent:wrong": {
+     "bytes": 28392,
+     "units": 94
+    },
+    "known:confirm:other": {
+     "bytes": 373737,
+     "units": 673
+    },
+    "known:confirm:right": {
+     "bytes": 58064422,
+     "units": 60533
+    },
+    "known:confirm:wrong": {
+     "bytes": 134169,
+     "units": 256
+    },
+    "known:none:right": {
+     "bytes": 646,
+     "units": 1
+    },
+    "known:refute:other": {
+     "bytes": 253016,
+     "units": 59
+    },
+    "known:refute:right": {
+     "bytes": 1328029,
+     "units": 451
+    },
+    "known:refute:wrong": {
+     "bytes": 8791,
+     "units": 18
+    },
+    "known:silent:other": {
+     "bytes": 29495,
+     "units": 74
+    },
+    "known:silent:right": {
+     "bytes": 21875112,
+     "units": 10304
+    },
+    "known:silent:wrong": {
+     "bytes": 28392,
+     "units": 94
+    },
+    "rowed:confirm:other": {
+     "bytes": 272926,
+     "units": 425
+    },
+    "rowed:confirm:right": {
+     "bytes": 45534919,
+     "units": 49678
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 76548,
+     "units": 183
+    },
+    "rowed:none:other": {
+     "bytes": 106870,
+     "units": 288
+    },
+    "rowed:none:right": {
+     "bytes": 31620141,
+     "units": 19396
+    },
+    "rowed:none:wrong": {
+     "bytes": 50563,
+     "units": 132
+    },
+    "rowed:refute:other": {
+     "bytes": 276452,
+     "units": 93
+    },
+    "rowed:refute:right": {
+     "bytes": 4113149,
+     "units": 2215
+    },
+    "rowed:refute:wrong": {
+     "bytes": 44241,
+     "units": 53
+    },
+    "tree:confirm:other": {
+     "bytes": 190522,
+     "units": 342
+    },
+    "tree:confirm:right": {
+     "bytes": 12948879,
+     "units": 17124
+    },
+    "tree:confirm:wrong": {
+     "bytes": 62070,
+     "units": 164
+    },
+    "tree:none:other": {
+     "bytes": 465726,
+     "units": 464
+    },
+    "tree:none:right": {
+     "bytes": 68319330,
+     "units": 54165
+    },
+    "tree:none:wrong": {
+     "bytes": 109282,
+     "units": 204
+    }
+   },
+   "claimRefuteCallees": {
+    "family-other-row:other": {
+     "bytes": 8688,
+     "units": 24
+    },
+    "family-other-row:right": {
+     "bytes": 243188,
+     "units": 206
+    },
+    "family-other-row:wrong": {
+     "bytes": 1206,
+     "units": 1
+    },
+    "not-indexed:other": {
+     "bytes": 324453,
+     "units": 137
+    },
+    "not-indexed:right": {
+     "bytes": 5604033,
+     "units": 4066
+    },
+    "not-indexed:wrong": {
+     "bytes": 50499,
+     "units": 62
+    },
+    "other-family:other": {
+     "bytes": 46892,
+     "units": 105
+    },
+    "other-family:right": {
+     "bytes": 264465,
+     "units": 78
+    },
+    "other-family:wrong": {
+     "bytes": 2834,
+     "units": 7
+    },
+    "small:other": {
+     "bytes": 240790,
+     "units": 24
+    },
+    "small:right": {
+     "bytes": 6176700,
+     "units": 465
+    },
+    "small:wrong": {
+     "bytes": 37153,
+     "units": 36
+    }
+   },
+   "claimRefuteScope": {
+    "absent:other": {
+     "bytes": 324453,
+     "units": 137
+    },
+    "absent:right": {
+     "bytes": 10777554,
+     "units": 4342
+    },
+    "absent:wrong": {
+     "bytes": 79774,
+     "units": 86
+    },
+    "family:other": {
+     "bytes": 9928,
+     "units": 28
+    },
+    "family:right": {
+     "bytes": 252539,
+     "units": 211
+    },
+    "family:wrong": {
+     "bytes": 2489,
+     "units": 2
+    },
+    "other-family:other": {
+     "bytes": 286442,
+     "units": 125
+    },
+    "other-family:right": {
+     "bytes": 1258293,
+     "units": 262
+    },
+    "other-family:wrong": {
+     "bytes": 9429,
+     "units": 18
+    }
+   },
+   "common": {
+    "fit:other": {
+     "bytes": 1873,
+     "units": 6
+    },
+    "fit:right": {
+     "bytes": 37933,
+     "units": 179
+    },
+    "fit:unresolved": {
+     "bytes": 1335592,
+     "units": 3818
+    },
+    "fit:wrong": {
+     "bytes": 2765,
+     "units": 7
+    },
+    "foreign:other": {
+     "bytes": 1873,
+     "units": 6
+    },
+    "foreign:right": {
+     "bytes": 40212,
+     "units": 192
+    },
+    "foreign:unresolved": {
+     "bytes": 1332790,
+     "units": 3803
+    },
+    "foreign:wrong": {
+     "bytes": 3288,
+     "units": 9
+    },
+    "known:other": {
+     "bytes": 1873,
+     "units": 6
+    },
+    "known:right": {
+     "bytes": 40252,
+     "units": 190
+    },
+    "known:unresolved": {
+     "bytes": 1332750,
+     "units": 3805
+    },
+    "known:wrong": {
+     "bytes": 3288,
+     "units": 9
+    },
+    "rowed:other": {
+     "bytes": 868,
+     "units": 4
+    },
+    "rowed:right": {
+     "bytes": 17103,
+     "units": 86
+    },
+    "rowed:unresolved": {
+     "bytes": 1358208,
+     "units": 3915
+    },
+    "rowed:wrong": {
+     "bytes": 1984,
+     "units": 5
+    },
+    "tree:other": {
+     "bytes": 3102,
+     "units": 14
+    },
+    "tree:right": {
+     "bytes": 12347,
+     "units": 76
+    },
+    "tree:unresolved": {
+     "bytes": 1353608,
+     "units": 3880
+    },
+    "tree:wrong": {
+     "bytes": 9106,
+     "units": 40
+    }
+   },
+   "floor": {
+    "fit:other": {
+     "bytes": 1467,
+     "units": 18
+    },
+    "fit:right": {
+     "bytes": 1621843,
+     "units": 1538
+    },
+    "fit:unresolved": {
+     "bytes": 109454,
+     "units": 1244
+    },
+    "fit:wrong": {
+     "bytes": 1264,
+     "units": 14
+    },
+    "foreign:other": {
+     "bytes": 1671,
+     "units": 21
+    },
+    "foreign:right": {
+     "bytes": 1622322,
+     "units": 1547
+    },
+    "foreign:unresolved": {
+     "bytes": 108078,
+     "units": 1225
+    },
+    "foreign:wrong": {
+     "bytes": 1957,
+     "units": 21
+    },
+    "known:other": {
+     "bytes": 1598,
+     "units": 20
+    },
+    "known:right": {
+     "bytes": 1622778,
+     "units": 1552
+    },
+    "known:unresolved": {
+     "bytes": 107780,
+     "units": 1222
+    },
+    "known:wrong": {
+     "bytes": 1872,
+     "units": 20
+    },
+    "rowed:other": {
+     "bytes": 665,
+     "units": 8
+    },
+    "rowed:right": {
+     "bytes": 95417,
+     "units": 971
+    },
+    "rowed:unresolved": {
+     "bytes": 1637003,
+     "units": 1824
+    },
+    "rowed:wrong": {
+     "bytes": 943,
+     "units": 11
+    },
+    "tree:other": {
+     "bytes": 1019,
+     "units": 12
+    },
+    "tree:right": {
+     "bytes": 1538516,
+     "units": 697
+    },
+    "tree:unresolved": {
+     "bytes": 189328,
+     "units": 2044
+    },
+    "tree:wrong": {
+     "bytes": 5165,
+     "units": 61
+    }
+   },
+   "propagated": {
+    "fit:confirm:other": {
+     "bytes": 24817,
+     "units": 149
+    },
+    "fit:confirm:right": {
+     "bytes": 2553826,
+     "units": 18401
+    },
+    "fit:confirm:wrong": {
+     "bytes": 11690,
+     "units": 74
+    },
+    "fit:none:other": {
+     "bytes": 22510,
+     "units": 152
+    },
+    "fit:none:right": {
+     "bytes": 2192723,
+     "units": 10683
+    },
+    "fit:none:wrong": {
+     "bytes": 10671,
+     "units": 78
+    },
+    "fit:refute:other": {
+     "bytes": 374285,
+     "units": 66
+    },
+    "fit:refute:right": {
+     "bytes": 277136,
+     "units": 1036
+    },
+    "fit:refute:wrong": {
+     "bytes": 15226,
+     "units": 34
+    },
+    "foreign:confirm:other": {
+     "bytes": 368725,
+     "units": 182
+    },
+    "foreign:confirm:right": {
+     "bytes": 2701381,
+     "units": 19138
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 17741,
+     "units": 85
+    },
+    "foreign:none:other": {
+     "bytes": 5030,
+     "units": 44
+    },
+    "foreign:none:right": {
+     "bytes": 885196,
+     "units": 2882
+    },
+    "foreign:none:wrong": {
+     "bytes": 792,
+     "units": 4
+    },
+    "foreign:refute:other": {
+     "bytes": 13541,
+     "units": 23
+    },
+    "foreign:refute:right": {
+     "bytes": 110684,
+     "units": 187
+    },
+    "foreign:refute:wrong": {
+     "bytes": 8553,
+     "units": 18
+    },
+    "foreign:silent:other": {
+     "bytes": 34316,
+     "units": 118
+    },
+    "foreign:silent:right": {
+     "bytes": 1326424,
+     "units": 7913
+    },
+    "foreign:silent:wrong": {
+     "bytes": 10501,
+     "units": 79
+    },
+    "known:confirm:other": {
+     "bytes": 365057,
+     "units": 180
+    },
+    "known:confirm:right": {
+     "bytes": 2679876,
+     "units": 19083
+    },
+    "known:confirm:wrong": {
+     "bytes": 17286,
+     "units": 81
+    },
+    "known:none:other": {
+     "bytes": 5030,
+     "units": 44
+    },
+    "known:none:right": {
+     "bytes": 885196,
+     "units": 2882
+    },
+    "known:none:wrong": {
+     "bytes": 792,
+     "units": 4
+    },
+    "known:refute:other": {
+     "bytes": 30074,
+     "units": 29
+    },
+    "known:refute:right": {
+     "bytes": 133064,
+     "units": 250
+    },
+    "known:refute:wrong": {
+     "bytes": 9008,
+     "units": 22
+    },
+    "known:silent:other": {
+     "bytes": 21451,
+     "units": 114
+    },
+    "known:silent:right": {
+     "bytes": 1325549,
+     "units": 7905
+    },
+    "known:silent:wrong": {
+     "bytes": 10501,
+     "units": 79
+    },
+    "rowed:confirm:other": {
+     "bytes": 10153,
+     "units": 106
+    },
+    "rowed:confirm:right": {
+     "bytes": 2171610,
+     "units": 16042
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 10383,
+     "units": 69
+    },
+    "rowed:none:other": {
+     "bytes": 50111,
+     "units": 200
+    },
+    "rowed:none:right": {
+     "bytes": 2591640,
+     "units": 13140
+    },
+    "rowed:none:wrong": {
+     "bytes": 12643,
+     "units": 89
+    },
+    "rowed:refute:other": {
+     "bytes": 361348,
+     "units": 61
+    },
+    "rowed:refute:right": {
+     "bytes": 260435,
+     "units": 938
+    },
+    "rowed:refute:wrong": {
+     "bytes": 14561,
+     "units": 28
+    },
+    "tree:confirm:other": {
+     "bytes": 16293,
+     "units": 53
+    },
+    "tree:confirm:right": {
+     "bytes": 643903,
+     "units": 3935
+    },
+    "tree:confirm:wrong": {
+     "bytes": 8254,
+     "units": 42
+    },
+    "tree:none:other": {
+     "bytes": 405319,
+     "units": 314
+    },
+    "tree:none:right": {
+     "bytes": 4379782,
+     "units": 26185
+    },
+    "tree:none:wrong": {
+     "bytes": 29333,
+     "units": 144
+    }
+   },
+   "support": {
+    "fit:confirm:other": {
+     "bytes": 2707,
+     "units": 15
+    },
+    "fit:confirm:right": {
+     "bytes": 170650,
+     "units": 1169
+    },
+    "fit:confirm:wrong": {
+     "bytes": 3694,
+     "units": 18
+    },
+    "fit:none:other": {
+     "bytes": 1436,
+     "units": 7
+    },
+    "fit:none:right": {
+     "bytes": 745291,
+     "units": 1047
+    },
+    "fit:none:wrong": {
+     "bytes": 6144,
+     "units": 23
+    },
+    "fit:refute:other": {
+     "bytes": 1314,
+     "units": 9
+    },
+    "fit:refute:right": {
+     "bytes": 3351,
+     "units": 12
+    },
+    "fit:refute:wrong": {
+     "bytes": 3979,
+     "units": 20
+    },
+    "foreign:confirm:other": {
+     "bytes": 3301,
+     "units": 20
+    },
+    "foreign:confirm:right": {
+     "bytes": 171949,
+     "units": 1172
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 4012,
+     "units": 20
+    },
+    "foreign:refute:other": {
+     "bytes": 622,
+     "units": 3
+    },
+    "foreign:refute:right": {
+     "bytes": 881,
+     "units": 4
+    },
+    "foreign:refute:wrong": {
+     "bytes": 3305,
+     "units": 16
+    },
+    "foreign:silent:other": {
+     "bytes": 1534,
+     "units": 8
+    },
+    "foreign:silent:right": {
+     "bytes": 746462,
+     "units": 1052
+    },
+    "foreign:silent:wrong": {
+     "bytes": 6500,
+     "units": 25
+    },
+    "known:confirm:other": {
+     "bytes": 3301,
+     "units": 20
+    },
+    "known:confirm:right": {
+     "bytes": 171949,
+     "units": 1172
+    },
+    "known:confirm:wrong": {
+     "bytes": 3901,
+     "units": 19
+    },
+    "known:refute:other": {
+     "bytes": 720,
+     "units": 4
+    },
+    "known:refute:right": {
+     "bytes": 881,
+     "units": 4
+    },
+    "known:refute:wrong": {
+     "bytes": 3597,
+     "units": 18
+    },
+    "known:silent:other": {
+     "bytes": 1436,
+     "units": 7
+    },
+    "known:silent:right": {
+     "bytes": 746462,
+     "units": 1052
+    },
+    "known:silent:wrong": {
+     "bytes": 6319,
+     "units": 24
+    },
+    "rowed:confirm:other": {
+     "bytes": 1175,
+     "units": 6
+    },
+    "rowed:confirm:right": {
+     "bytes": 131261,
+     "units": 954
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 1586,
+     "units": 6
+    },
+    "rowed:none:other": {
+     "bytes": 3066,
+     "units": 17
+    },
+    "rowed:none:right": {
+     "bytes": 785136,
+     "units": 1264
+    },
+    "rowed:none:wrong": {
+     "bytes": 9531,
+     "units": 42
+    },
+    "rowed:refute:other": {
+     "bytes": 1216,
+     "units": 8
+    },
+    "rowed:refute:right": {
+     "bytes": 2895,
+     "units": 10
+    },
+    "rowed:refute:wrong": {
+     "bytes": 2700,
+     "units": 13
+    },
+    "tree:confirm:other": {
+     "bytes": 1990,
+     "units": 11
+    },
+    "tree:confirm:right": {
+     "bytes": 43553,
+     "units": 237
+    },
+    "tree:confirm:wrong": {
+     "bytes": 2456,
+     "units": 14
+    },
+    "tree:none:other": {
+     "bytes": 3467,
+     "units": 20
+    },
+    "tree:none:right": {
+     "bytes": 875739,
+     "units": 1991
+    },
+    "tree:none:wrong": {
+     "bytes": 11361,
+     "units": 47
+    }
+   },
+   "tie": {
+    "fit:today-other:other:claimed": {
+     "bytes": 4064,
+     "units": 13
+    },
+    "fit:today-other:other:unclaimed": {
+     "bytes": 9445,
+     "units": 7
+    },
+    "fit:today-other:unresolved:claimed": {
+     "bytes": 18967,
+     "units": 53
+    },
+    "fit:today-other:unresolved:unclaimed": {
+     "bytes": 20437,
+     "units": 60
+    },
+    "fit:today-right:right:claimed": {
+     "bytes": 1305793,
+     "units": 3148
+    },
+    "fit:today-right:right:unclaimed": {
+     "bytes": 24933,
+     "units": 69
+    },
+    "fit:today-right:unresolved:claimed": {
+     "bytes": 884035,
+     "units": 2375
+    },
+    "fit:today-right:unresolved:unclaimed": {
+     "bytes": 939372,
+     "units": 1207
+    },
+    "fit:today-right:wrong:claimed": {
+     "bytes": 842,
+     "units": 1
+    },
+    "fit:today-right:wrong:unclaimed": {
+     "bytes": 165,
+     "units": 1
+    },
+    "fit:today-wrong:right:claimed": {
+     "bytes": 24134,
+     "units": 56
+    },
+    "fit:today-wrong:right:unclaimed": {
+     "bytes": 25062,
+     "units": 33
+    },
+    "fit:today-wrong:unresolved:claimed": {
+     "bytes": 125402,
+     "units": 265
+    },
+    "fit:today-wrong:unresolved:unclaimed": {
+     "bytes": 458694,
+     "units": 747
+    },
+    "fit:today-wrong:wrong:claimed": {
+     "bytes": 1869,
+     "units": 7
+    },
+    "fit:today-wrong:wrong:unclaimed": {
+     "bytes": 2432,
+     "units": 5
+    },
+    "foreign:today-other:other:claimed": {
+     "bytes": 9007,
+     "units": 24
+    },
+    "foreign:today-other:other:unclaimed": {
+     "bytes": 9445,
+     "units": 7
+    },
+    "foreign:today-other:unresolved:claimed": {
+     "bytes": 14024,
+     "units": 42
+    },
+    "foreign:today-other:unresolved:unclaimed": {
+     "bytes": 20437,
+     "units": 60
+    },
+    "foreign:today-right:right:claimed": {
+     "bytes": 1274674,
+     "units": 3113
+    },
+    "foreign:today-right:right:unclaimed": {
+     "bytes": 26927,
+     "units": 69
+    },
+    "foreign:today-right:unresolved:claimed": {
+     "bytes": 915154,
+     "units": 2410
+    },
+    "foreign:today-right:unresolved:unclaimed": {
+     "bytes": 936584,
+     "units": 1206
+    },
+    "foreign:today-right:wrong:claimed": {
+     "bytes": 842,
+     "units": 1
+    },
+    "foreign:today-right:wrong:unclaimed": {
+     "bytes": 959,
+     "units": 2
+    },
+    "foreign:today-wrong:right:claimed": {
+     "bytes": 32764,
+     "units": 59
+    },
+    "foreign:today-wrong:right:unclaimed": {
+     "bytes": 26132,
+     "units": 35
+    },
+    "foreign:today-wrong:unresolved:claimed": {
+     "bytes": 106028,
+     "units": 258
+    },
+    "foreign:today-wrong:unresolved:unclaimed": {
+     "bytes": 457624,
+     "units": 745
+    },
+    "foreign:today-wrong:wrong:claimed": {
+     "bytes": 12613,
+     "units": 11
+    },
+    "foreign:today-wrong:wrong:unclaimed": {
+     "bytes": 2432,
+     "units": 5
+    },
+    "known:today-other:other:claimed": {
+     "bytes": 7713,
+     "units": 23
+    },
+    "known:today-other:other:unclaimed": {
+     "bytes": 9445,
+     "units": 7
+    },
+    "known:today-other:unresolved:claimed": {
+     "bytes": 15318,
+     "units": 43
+    },
+    "known:today-other:unresolved:unclaimed": {
+     "bytes": 20437,
+     "units": 60
+    },
+    "known:today-right:right:claimed": {
+     "bytes": 1313596,
+     "units": 3169
+    },
+    "known:today-right:right:unclaimed": {
+     "bytes": 24933,
+     "units": 69
+    },
+    "known:today-right:unresolved:claimed": {
+     "bytes": 876232,
+     "units": 2354
+    },
+    "known:today-right:unresolved:unclaimed": {
+     "bytes": 938578,
+     "units": 1206
+    },
+    "known:today-right:wrong:claimed": {
+     "bytes": 842,
+     "units": 1
+    },
+    "known:today-right:wrong:unclaimed": {
+     "bytes": 959,
+     "units": 2
+    },
+    "known:today-wrong:right:claimed": {
+     "bytes": 24381,
+     "units": 57
+    },
+    "known:today-wrong:right:unclaimed": {
+     "bytes": 26101,
+     "units": 35
+    },
+    "known:today-wrong:unresolved:claimed": {
+     "bytes": 114411,
+     "units": 260
+    },
+    "known:today-wrong:unresolved:unclaimed": {
+     "bytes": 457655,
+     "units": 745
+    },
+    "known:today-wrong:wrong:claimed": {
+     "bytes": 12613,
+     "units": 11
+    },
+    "known:today-wrong:wrong:unclaimed": {
+     "bytes": 2432,
+     "units": 5
+    },
+    "rowed:today-other:other:claimed": {
+     "bytes": 1654,
+     "units": 9
+    },
+    "rowed:today-other:other:unclaimed": {
+     "bytes": 8058,
+     "units": 4
+    },
+    "rowed:today-other:unresolved:claimed": {
+     "bytes": 21377,
+     "units": 57
+    },
+    "rowed:today-other:unresolved:unclaimed": {
+     "bytes": 21824,
+     "units": 63
+    },
+    "rowed:today-right:right:claimed": {
+     "bytes": 1211093,
+     "units": 2900
+    },
+    "rowed:today-right:right:unclaimed": {
+     "bytes": 13230,
+     "units": 33
+    },
+    "rowed:today-right:unresolved:claimed": {
+     "bytes": 979577,
+     "units": 2624
+    },
+    "rowed:today-right:unresolved:unclaimed": {
+     "bytes": 951075,
+     "units": 1243
+    },
+    "rowed:today-right:wrong:unclaimed": {
+     "bytes": 165,
+     "units": 1
+    },
+    "rowed:today-wrong:right:claimed": {
+     "bytes": 19587,
+     "units": 42
+    },
+    "rowed:today-wrong:right:unclaimed": {
+     "bytes": 22933,
+     "units": 27
+    },
+    "rowed:today-wrong:unresolved:claimed": {
+     "bytes": 130348,
+     "units": 280
+    },
+    "rowed:today-wrong:unresolved:unclaimed": {
+     "bytes": 462793,
+     "units": 756
+    },
+    "rowed:today-wrong:wrong:claimed": {
+     "bytes": 1470,
+     "units": 6
+    },
+    "rowed:today-wrong:wrong:unclaimed": {
+     "bytes": 462,
+     "units": 2
+    },
+    "tree:today-other:other:claimed": {
+     "bytes": 3399,
+     "units": 7
+    },
+    "tree:today-other:other:unclaimed": {
+     "bytes": 3006,
+     "units": 9
+    },
+    "tree:today-other:unresolved:claimed": {
+     "bytes": 19632,
+     "units": 59
+    },
+    "tree:today-other:unresolved:unclaimed": {
+     "bytes": 26876,
+     "units": 58
+    },
+    "tree:today-right:right:claimed": {
+     "bytes": 147368,
+     "units": 385
+    },
+    "tree:today-right:right:unclaimed": {
+     "bytes": 16291,
+     "units": 74
+    },
+    "tree:today-right:unresolved:claimed": {
+     "bytes": 2017575,
+     "units": 5039
+    },
+    "tree:today-right:unresolved:unclaimed": {
+     "bytes": 889327,
+     "units": 1020
+    },
+    "tree:today-right:wrong:claimed": {
+     "bytes": 25727,
+     "units": 100
+    },
+    "tree:today-right:wrong:unclaimed": {
+     "bytes": 58852,
+     "units": 183
+    },
+    "tree:today-wrong:right:claimed": {
+     "bytes": 7036,
+     "units": 22
+    },
+    "tree:today-wrong:right:unclaimed": {
+     "bytes": 6137,
+     "units": 22
+    },
+    "tree:today-wrong:unresolved:claimed": {
+     "bytes": 125425,
+     "units": 220
+    },
+    "tree:today-wrong:unresolved:unclaimed": {
+     "bytes": 460608,
+     "units": 712
+    },
+    "tree:today-wrong:wrong:claimed": {
+     "bytes": 18944,
+     "units": 86
+    },
+    "tree:today-wrong:wrong:unclaimed": {
+     "bytes": 19443,
+     "units": 51
+    }
+   },
+   "veto": {
+    "fit:confirm:other": {
+     "bytes": 2570,
+     "units": 10
+    },
+    "fit:confirm:right": {
+     "bytes": 184877,
+     "units": 154
+    },
+    "fit:confirm:wrong": {
+     "bytes": 7316,
+     "units": 13
+    },
+    "fit:none:other": {
+     "bytes": 19339,
+     "units": 69
+    },
+    "fit:none:right": {
+     "bytes": 2967699,
+     "units": 2437
+    },
+    "fit:none:wrong": {
+     "bytes": 10565,
+     "units": 60
+    },
+    "fit:refute:other": {
+     "bytes": 5125,
+     "units": 17
+    },
+    "fit:refute:right": {
+     "bytes": 144359,
+     "units": 128
+    },
+    "fit:refute:wrong": {
+     "bytes": 6668,
+     "units": 16
+    },
+    "foreign:confirm:other": {
+     "bytes": 2570,
+     "units": 10
+    },
+    "foreign:confirm:right": {
+     "bytes": 192829,
+     "units": 162
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 7411,
+     "units": 14
+    },
+    "foreign:none:other": {
+     "bytes": 762,
+     "units": 2
+    },
+    "foreign:refute:other": {
+     "bytes": 3392,
+     "units": 9
+    },
+    "foreign:refute:right": {
+     "bytes": 12240,
+     "units": 35
+    },
+    "foreign:refute:wrong": {
+     "bytes": 3915,
+     "units": 12
+    },
+    "foreign:silent:other": {
+     "bytes": 20310,
+     "units": 75
+    },
+    "foreign:silent:right": {
+     "bytes": 3091866,
+     "units": 2522
+    },
+    "foreign:silent:wrong": {
+     "bytes": 13223,
+     "units": 63
+    },
+    "known:confirm:other": {
+     "bytes": 2570,
+     "units": 10
+    },
+    "known:confirm:right": {
+     "bytes": 192586,
+     "units": 161
+    },
+    "known:confirm:wrong": {
+     "bytes": 7316,
+     "units": 13
+    },
+    "known:none:other": {
+     "bytes": 762,
+     "units": 2
+    },
+    "known:refute:other": {
+     "bytes": 3392,
+     "units": 9
+    },
+    "known:refute:right": {
+     "bytes": 14274,
+     "units": 37
+    },
+    "known:refute:wrong": {
+     "bytes": 4010,
+     "units": 13
+    },
+    "known:silent:other": {
+     "bytes": 20310,
+     "units": 75
+    },
+    "known:silent:right": {
+     "bytes": 3090075,
+     "units": 2521
+    },
+    "known:silent:wrong": {
+     "bytes": 13223,
+     "units": 63
+    },
+    "rowed:confirm:other": {
+     "bytes": 1183,
+     "units": 7
+    },
+    "rowed:confirm:right": {
+     "bytes": 154130,
+     "units": 72
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 4006,
+     "units": 5
+    },
+    "rowed:none:other": {
+     "bytes": 22201,
+     "units": 74
+    },
+    "rowed:none:right": {
+     "bytes": 3001485,
+     "units": 2520
+    },
+    "rowed:none:wrong": {
+     "bytes": 14423,
+     "units": 70
+    },
+    "rowed:refute:other": {
+     "bytes": 3650,
+     "units": 15
+    },
+    "rowed:refute:right": {
+     "bytes": 141320,
+     "units": 127
+    },
+    "rowed:refute:wrong": {
+     "bytes": 6120,
+     "units": 14
+    },
+    "tree:confirm:other": {
+     "bytes": 2473,
+     "units": 9
+    },
+    "tree:confirm:right": {
+     "bytes": 176194,
+     "units": 134
+    },
+    "tree:confirm:wrong": {
+     "bytes": 6465,
+     "units": 11
+    },
+    "tree:none:other": {
+     "bytes": 24561,
+     "units": 87
+    },
+    "tree:none:right": {
+     "bytes": 3120741,
+     "units": 2585
+    },
+    "tree:none:wrong": {
+     "bytes": 18084,
+     "units": 78
+    }
+   },
+   "weakClaim": {
+    "fit:confirm:other": {
+     "bytes": 63291,
+     "units": 334
+    },
+    "fit:confirm:right": {
+     "bytes": 7015854,
+     "units": 33516
+    },
+    "fit:confirm:wrong": {
+     "bytes": 30673,
+     "units": 160
+    },
+    "fit:none:other": {
+     "bytes": 12225,
+     "units": 51
+    },
+    "fit:none:right": {
+     "bytes": 1560692,
+     "units": 7090
+    },
+    "fit:none:wrong": {
+     "bytes": 17720,
+     "units": 74
+    },
+    "fit:refute:other": {
+     "bytes": 10658,
+     "units": 51
+    },
+    "fit:refute:right": {
+     "bytes": 656086,
+     "units": 1490
+    },
+    "fit:refute:wrong": {
+     "bytes": 8276,
+     "units": 40
+    },
+    "foreign:confirm:other": {
+     "bytes": 66644,
+     "units": 354
+    },
+    "foreign:confirm:right": {
+     "bytes": 7561337,
+     "units": 34537
+    },
+    "foreign:confirm:wrong": {
+     "bytes": 34157,
+     "units": 178
+    },
+    "foreign:refute:other": {
+     "bytes": 4198,
+     "units": 18
+    },
+    "foreign:refute:right": {
+     "bytes": 52984,
+     "units": 242
+    },
+    "foreign:refute:wrong": {
+     "bytes": 3040,
+     "units": 14
+    },
+    "foreign:silent:other": {
+     "bytes": 15332,
+     "units": 64
+    },
+    "foreign:silent:right": {
+     "bytes": 1618311,
+     "units": 7317
+    },
+    "foreign:silent:wrong": {
+     "bytes": 19472,
+     "units": 82
+    },
+    "known:confirm:other": {
+     "bytes": 66487,
+     "units": 353
+    },
+    "known:confirm:right": {
+     "bytes": 7559572,
+     "units": 34528
+    },
+    "known:confirm:wrong": {
+     "bytes": 34157,
+     "units": 178
+    },
+    "known:refute:other": {
+     "bytes": 7204,
+     "units": 30
+    },
+    "known:refute:right": {
+     "bytes": 58227,
+     "units": 262
+    },
+    "known:refute:wrong": {
+     "bytes": 3040,
+     "units": 14
+    },
+    "known:silent:other": {
+     "bytes": 12483,
+     "units": 53
+    },
+    "known:silent:right": {
+     "bytes": 1614833,
+     "units": 7306
+    },
+    "known:silent:wrong": {
+     "bytes": 19472,
+     "units": 82
+    },
+    "rowed:confirm:other": {
+     "bytes": 37334,
+     "units": 187
+    },
+    "rowed:confirm:right": {
+     "bytes": 5975140,
+     "units": 28307
+    },
+    "rowed:confirm:wrong": {
+     "bytes": 27380,
+     "units": 143
+    },
+    "rowed:none:other": {
+     "bytes": 39107,
+     "units": 202
+    },
+    "rowed:none:right": {
+     "bytes": 2622480,
+     "units": 12404
+    },
+    "rowed:none:wrong": {
+     "bytes": 23172,
+     "units": 102
+    },
+    "rowed:refute:other": {
+     "bytes": 9733,
+     "units": 47
+    },
+    "rowed:refute:right": {
+     "bytes": 635012,
+     "units": 1385
+    },
+    "rowed:refute:wrong": {
+     "bytes": 6117,
+     "units": 29
+    },
+    "tree:confirm:other": {
+     "bytes": 35097,
+     "units": 187
+    },
+    "tree:confirm:right": {
+     "bytes": 1812561,
+     "units": 8701
+    },
+    "tree:confirm:wrong": {
+     "bytes": 23749,
+     "units": 120
+    },
+    "tree:none:other": {
+     "bytes": 51077,
+     "units": 249
+    },
+    "tree:none:right": {
+     "bytes": 7420071,
+     "units": 33395
+    },
+    "tree:none:wrong": {
+     "bytes": 32920,
+     "units": 154
+    }
+   }
+  }
+ }
+}

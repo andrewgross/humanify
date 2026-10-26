@@ -8,8 +8,11 @@ Per bundle it reads the census run's reports (census_run.py: `--call-context`, m
 
 Signals, per (unit, package family): `fit` (every callee of the unit with a print is one the family's index rows
 record; at least one callee), `rowed` (the same over callees at or over the 20-node row floor), `tree` (the
-unit's call-tree hash equals one of the family's). A signal CONFIRMS, REFUTES (a callee the rows lack; never for
-`tree`, which only confirms) or says NOTHING (no callee / no row).
+unit's call-tree hash equals one of the family's), and since exp155 the scoped fits `known` / `foreign` (the
+flat `edges/2` callee-print table: unheld callees the index knows nowhere, or the family holds anywhere, are
+SKIPPED instead of counting against). A signal CONFIRMS, REFUTES (a callee the rows lack; never for `tree`,
+which only confirms) or says NOTHING (no callee / no row); a scoped signal can also read SILENT (nothing
+counted — never evidence against) and NONE when the index has no flat table.
 
 Decisions (the unit's verdict under main's defaults):
   claim       an index seed that was kept (evidence index or queueIndex): the claimed family's signal
@@ -36,7 +39,7 @@ SCORE = os.path.join(HERE, "../../096-library-matching-score")
 sys.path.insert(0, SCORE)
 import lib096  # noqa: E402
 
-SIGNALS = ("fit", "rowed", "tree")
+SIGNALS = ("fit", "rowed", "tree", "known", "foreign")
 MAX_PACKAGES = 3
 FLOOR = 30
 STRONG = 100
@@ -44,11 +47,23 @@ STRONG = 100
 
 def signal(fam, sig, row=None):
     """'confirm' | 'refute' | 'none' for one FamilyFit / PickRow dict (`tree` confirms only a unit with a callee:
-    a leaf's tree is its own print)."""
+    a leaf's tree is its own print).
+
+    exp155 scoped signals: `known` / `foreign` read the ScopedFit fields (the flat `edges/2` callee-print table) —
+    `confirm` (every counted callee held, at least one), `refute` (a counted callee the family does not record:
+    the veto's evidence), `silent` (nothing counted: every unheld callee was skipped as unknown, or family-held) —
+    silence is never evidence against — and `none` (no accepted row, or an index without the flat table)."""
     if fam is None:
         return "none"
     if sig == "tree":
         return "confirm" if fam.get("tree") and (row is None or row["callees"] > 0) else "none"
+    if sig in ("known", "foreign"):
+        f = fam.get("knownFit" if sig == "known" else "foreignFit")
+        if f is None:
+            return "none"
+        if f["counted"] == 0:
+            return "silent"
+        return "confirm" if f["held"] == f["counted"] else "refute"
     f = fam.get("fit" if sig == "fit" else "rowedFit")
     if f is None and sig != "fit":
         f = fam.get("familyRowedFit")
@@ -107,6 +122,12 @@ def classify(row, claim, vetoed, verdict, weight, tally, same):
                 why = ("small" if m["nodes"] < 20 else "family-other-row" if m["inFamily"]
                        else "other-family" if m["indexed"] else "not-indexed")
                 tally.add("claimRefuteCallees", f"{why}:{v}", weight)
+                # exp155: the class the SCOPED fit acts on — named recorders
+                # decide it (a rowless print answers there, not among rows)
+                rec = m.get("recordedBy") or []
+                cls = ("family" if m["inFamily"] or any(same(r, claim["package"]) for r in rec)
+                       else "other-family" if m["indexed"] or rec else "absent")
+                tally.add("claimRefuteScope", f"{cls}:{v}", weight)
     elif claimed and claim["rule"] != "seed":
         fam = family_of(row, claim["package"], same)
         v = verdict(claim["package"])
@@ -120,7 +141,8 @@ def classify(row, claim, vetoed, verdict, weight, tally, same):
     if pick and not pick["supported"] and not claimed:
         v = verdict(pick["package"])
         for s in SIGNALS:
-            st = signal({"fit": pick["familyFit"], "rowedFit": pick["familyRowedFit"], "tree": pick["tree"]}, s, row)
+            st = signal({"fit": pick["familyFit"], "rowedFit": pick["familyRowedFit"], "tree": pick["tree"],
+                         "knownFit": pick.get("knownFit"), "foreignFit": pick.get("foreignFit")}, s, row)
             tally.add("support", f"{s}:{st}:{v}", weight)
     if pick:
         tied = [f for f in row["families"] if f["covered"] == pick["covered"] and f["covered"] > 0]

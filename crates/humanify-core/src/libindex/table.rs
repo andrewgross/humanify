@@ -11,7 +11,7 @@
 //! heap. (`humanify-library-index/2` parsed every JSONL row into hash maps
 //! on load: 2.3 s and ~1.3 GB per run on the 577 MB step-4 index.)
 //!
-//! Four tables, one writer and one reader each, in this file:
+//! Five tables, one writer and one reader each, in this file:
 //!
 //! - [`PACKAGES_FILE`] — every owner package, sorted by name; an owner id
 //!   is its position.
@@ -27,6 +27,13 @@
 //!   pairs, each distinct callee list stored once. What a store's INSIDE /
 //!   OUT-OF edge read answers; the row table `edges.<slice>.jsonl` is
 //!   provenance.
+//! - `callee-prints.<slice>.bin` ([`CalleePrintTable`], format `/4`,
+//!   edges/2) — every DISTINCT callee print any edge row records, with the
+//!   owners whose rows record it. Derived from the same rows at merge
+//!   time, so a print needs no unit row to be queryable by key (a callee
+//!   can exist in the edge data without owning a row); an INSIDE entry
+//!   credits the row's owner, an OUT-OF entry the callee's own recorded
+//!   owner.
 //! - [`LITERALS_FILE`] ([`LiteralTable`]) — every distinct literal (keyed
 //!   by [`literal_key`], confirmed against its stored string), with the
 //!   number of packages holding it and the files holding it; per literal
@@ -66,6 +73,12 @@ pub fn edge_rows_file(slice: &str) -> String {
     format!("edges.{slice}.jsonl")
 }
 
+/// A slice's callee-print table (format `/4`, edges/2): the flat index of
+/// every callee print the slice's edge rows record ([`CalleePrintTable`]).
+pub fn callee_prints_file(slice: &str) -> String {
+    format!("callee-prints.{slice}.bin")
+}
+
 /// Keys per fence entry: what one lookup reads (512 bytes of keys), and
 /// the share of a key column a process holds (1/64).
 pub const BLOCK: usize = 64;
@@ -73,6 +86,7 @@ pub const BLOCK: usize = 64;
 const UNITS_MAGIC: &[u8; 8] = b"HXUNIT03";
 const LITERALS_MAGIC: &[u8; 8] = b"HXLITS03";
 const EDGES_MAGIC: &[u8; 8] = b"HXEDGE04";
+const CALLEE_PRINTS_MAGIC: &[u8; 8] = b"HXCLPR01";
 
 /// A unit hash's key: its 16 lowercase hex digits as a number. Any other
 /// spelling is no key (no indexed row can hold it: the encoder refuses
@@ -114,8 +128,9 @@ pub fn package_table(
 
 /// The lookup files of an index (name → bytes): the package table, one
 /// unit table per slice, the literal table, and with `edges` (format
-/// `/4`) one edge table per unit slice (a slice `edges` lacks records no
-/// callee); None writes no edge table (`/3`).
+/// `/4`) one edge table and one callee-print table per unit slice (a
+/// slice `edges` lacks records no callee); None writes no edge table
+/// (`/3`).
 pub fn lookup_files(
     units: &BTreeMap<String, Vec<UnitRow>>,
     edges: Option<&BTreeMap<String, Vec<EdgeRow>>>,
@@ -135,6 +150,10 @@ pub fn lookup_files(
             files.insert(
                 edges_file(slice),
                 EdgeTable::encode(rows, edge_rows, &packages)?,
+            );
+            files.insert(
+                callee_prints_file(slice),
+                CalleePrintTable::encode(edge_rows, &packages)?,
             );
         }
     }
@@ -661,6 +680,86 @@ impl EdgeTable {
                 key: u64::from_le_bytes(c[4..].try_into().expect("8 bytes")),
             })
             .collect()
+    }
+}
+
+// ------------------------------------------------------- callee prints
+
+/// `callee-prints.<slice>.bin` (format `/4`, edges/2): header (magic,
+/// prints, recorders), the key column (every distinct callee print any edge
+/// row records, ascending), per print its recorder offsets (prints + 1),
+/// then the recorders (owner ids, ascending per print, once each). Derived
+/// entirely from the slice's edge rows: a print the slice records as a
+/// callee is queryable here EVEN WHEN no unit row holds it (under the
+/// 20-node row floor, a stop-listed helper, or a row dropped for evidence).
+pub struct CalleePrintTable {
+    src: Source,
+    keys: KeyColumn,
+    offsets_at: u64,
+    recorders_at: u64,
+}
+
+impl CalleePrintTable {
+    /// `edges` in any order: every INSIDE print credited to its row's
+    /// owner, every OUT-OF print to the owner the row records for it,
+    /// sorted per print and once each.
+    pub fn encode(edges: &[EdgeRow], packages: &[String]) -> Result<Vec<u8>, String> {
+        let mut by_key: BTreeMap<u64, BTreeSet<u32>> = BTreeMap::new();
+        for e in edges {
+            let own = owner_id(packages, &e.owner);
+            for h in &e.inside {
+                let key = unit_key(h)
+                    .ok_or_else(|| format!("callee hash {h:?} is not 16 lowercase hex digits"))?;
+                by_key.entry(key).or_default().insert(own);
+            }
+            for c in &e.out_of {
+                let key = unit_key(&c.hash).ok_or_else(|| {
+                    format!("callee hash {:?} is not 16 lowercase hex digits", c.hash)
+                })?;
+                by_key
+                    .entry(key)
+                    .or_default()
+                    .insert(owner_id(packages, &c.owner));
+            }
+        }
+        let keys: Vec<u64> = by_key.keys().copied().collect();
+        let owners: Vec<u32> = by_key.values().flatten().copied().collect();
+        let mut out = Out::default();
+        out.0.extend(CALLEE_PRINTS_MAGIC);
+        out.u64s([keys.len() as u64, owners.len() as u64]);
+        out.0.extend(KeyColumnBytes::encode(&keys).bytes);
+        out.u64s(offsets(by_key.values().map(BTreeSet::len)));
+        out.u32s(owners);
+        Ok(out.0)
+    }
+
+    pub fn open(src: Source) -> Result<CalleePrintTable, String> {
+        let h = header(&src, CALLEE_PRINTS_MAGIC, "callee-print table", 2)?;
+        let (n_keys, n_owners) = (h[0], h[1]);
+        let keys_at = 8 + 2 * 8;
+        let offsets_at = keys_at + KeyColumn::bytes(n_keys);
+        let recorders_at = offsets_at + (n_keys + 1) * 8;
+        check_size("callee-print table", &src, recorders_at + n_owners * 4)?;
+        Ok(CalleePrintTable {
+            keys: KeyColumn::open(&src, keys_at, n_keys)?,
+            src,
+            offsets_at,
+            recorders_at,
+        })
+    }
+
+    /// The owners whose rows record callee print `key`, ascending; empty:
+    /// no row of the slice records it.
+    pub fn recorders(&self, key: u64) -> Vec<u32> {
+        let r = self.keys.equal_range(&self.src, key);
+        if r.is_empty() {
+            return Vec::new();
+        }
+        let ends = self.src.u64s(self.offsets_at + r.start * 8, 2);
+        self.src.u32s(
+            self.recorders_at + ends[0] * 4,
+            (ends[1] - ends[0]) as usize,
+        )
     }
 }
 

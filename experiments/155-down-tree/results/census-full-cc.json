@@ -1,0 +1,321 @@
+{
+ "baseline": "cc-exp155-edges2-base",
+ "censusDir": "/work/exp155-data/census/cc",
+ "claimsChecked": 1,
+ "claimsMismatched": 0,
+ "corpus": "cc",
+ "sets": {
+  "cc": {
+   "claim": {
+    "fit:confirm:right": {
+     "bytes": 1128802,
+     "units": 37
+    },
+    "fit:none:right": {
+     "bytes": 138541,
+     "units": 5
+    },
+    "fit:refute:right": {
+     "bytes": 178586,
+     "units": 6
+    },
+    "foreign:confirm:right": {
+     "bytes": 1230383,
+     "units": 40
+    },
+    "foreign:refute:right": {
+     "bytes": 77005,
+     "units": 3
+    },
+    "foreign:silent:right": {
+     "bytes": 138541,
+     "units": 5
+    },
+    "known:confirm:right": {
+     "bytes": 1205888,
+     "units": 39
+    },
+    "known:refute:right": {
+     "bytes": 101500,
+     "units": 4
+    },
+    "known:silent:right": {
+     "bytes": 138541,
+     "units": 5
+    },
+    "rowed:confirm:right": {
+     "bytes": 870429,
+     "units": 27
+    },
+    "rowed:none:right": {
+     "bytes": 396914,
+     "units": 15
+    },
+    "rowed:refute:right": {
+     "bytes": 178586,
+     "units": 6
+    },
+    "tree:confirm:right": {
+     "bytes": 426135,
+     "units": 13
+    },
+    "tree:none:right": {
+     "bytes": 1019795,
+     "units": 35
+    }
+   },
+   "claimRefuteCallees": {
+    "family-other-row:right": {
+     "bytes": 30747,
+     "units": 2
+    },
+    "not-indexed:right": {
+     "bytes": 101581,
+     "units": 3
+    },
+    "other-family:right": {
+     "bytes": 112978,
+     "units": 5
+    },
+    "small:right": {
+     "bytes": 96273,
+     "units": 4
+    }
+   },
+   "claimRefuteScope": {
+    "absent:right": {
+     "bytes": 101581,
+     "units": 3
+    },
+    "family:right": {
+     "bytes": 46121,
+     "units": 3
+    },
+    "other-family:right": {
+     "bytes": 193878,
+     "units": 8
+    }
+   },
+   "common": {
+    "fit:right": {
+     "bytes": 8971,
+     "units": 1
+    },
+    "fit:unresolved": {
+     "bytes": 22856,
+     "units": 1
+    },
+    "foreign:right": {
+     "bytes": 8971,
+     "units": 1
+    },
+    "foreign:unresolved": {
+     "bytes": 22856,
+     "units": 1
+    },
+    "known:right": {
+     "bytes": 8971,
+     "units": 1
+    },
+    "known:unresolved": {
+     "bytes": 22856,
+     "units": 1
+    },
+    "rowed:unresolved": {
+     "bytes": 31827,
+     "units": 2
+    },
+    "tree:unresolved": {
+     "bytes": 31827,
+     "units": 2
+    }
+   },
+   "floor": {
+    "fit:unresolved": {
+     "bytes": 28260,
+     "units": 1
+    },
+    "foreign:unresolved": {
+     "bytes": 28260,
+     "units": 1
+    },
+    "known:unresolved": {
+     "bytes": 28260,
+     "units": 1
+    },
+    "rowed:unresolved": {
+     "bytes": 28260,
+     "units": 1
+    },
+    "tree:unresolved": {
+     "bytes": 28260,
+     "units": 1
+    }
+   },
+   "propagated": {
+    "fit:confirm:right": {
+     "bytes": 62824,
+     "units": 3
+    },
+    "fit:refute:right": {
+     "bytes": 31324,
+     "units": 1
+    },
+    "foreign:confirm:right": {
+     "bytes": 62824,
+     "units": 3
+    },
+    "foreign:refute:right": {
+     "bytes": 31324,
+     "units": 1
+    },
+    "known:confirm:right": {
+     "bytes": 62824,
+     "units": 3
+    },
+    "known:refute:right": {
+     "bytes": 31324,
+     "units": 1
+    },
+    "rowed:confirm:right": {
+     "bytes": 12169,
+     "units": 1
+    },
+    "rowed:none:right": {
+     "bytes": 50655,
+     "units": 2
+    },
+    "rowed:refute:right": {
+     "bytes": 31324,
+     "units": 1
+    },
+    "tree:confirm:right": {
+     "bytes": 50655,
+     "units": 2
+    },
+    "tree:none:right": {
+     "bytes": 43493,
+     "units": 2
+    }
+   },
+   "tie": {
+    "fit:today-right:unresolved:claimed": {
+     "bytes": 99671,
+     "units": 1
+    },
+    "fit:today-right:unresolved:unclaimed": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "foreign:today-right:unresolved:claimed": {
+     "bytes": 99671,
+     "units": 1
+    },
+    "foreign:today-right:unresolved:unclaimed": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "known:today-right:unresolved:claimed": {
+     "bytes": 99671,
+     "units": 1
+    },
+    "known:today-right:unresolved:unclaimed": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "rowed:today-right:unresolved:claimed": {
+     "bytes": 99671,
+     "units": 1
+    },
+    "rowed:today-right:unresolved:unclaimed": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "tree:today-right:unresolved:claimed": {
+     "bytes": 99671,
+     "units": 1
+    },
+    "tree:today-right:unresolved:unclaimed": {
+     "bytes": 20722,
+     "units": 1
+    }
+   },
+   "veto": {
+    "fit:confirm:right": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "foreign:confirm:right": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "known:confirm:right": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "rowed:none:right": {
+     "bytes": 20722,
+     "units": 1
+    },
+    "tree:confirm:right": {
+     "bytes": 20722,
+     "units": 1
+    }
+   },
+   "weakClaim": {
+    "fit:confirm:right": {
+     "bytes": 135109,
+     "units": 8
+    },
+    "fit:none:right": {
+     "bytes": 67477,
+     "units": 4
+    },
+    "fit:refute:right": {
+     "bytes": 24494,
+     "units": 1
+    },
+    "foreign:confirm:right": {
+     "bytes": 159603,
+     "units": 9
+    },
+    "foreign:silent:right": {
+     "bytes": 67477,
+     "units": 4
+    },
+    "known:confirm:right": {
+     "bytes": 135109,
+     "units": 8
+    },
+    "known:refute:right": {
+     "bytes": 24494,
+     "units": 1
+    },
+    "known:silent:right": {
+     "bytes": 67477,
+     "units": 4
+    },
+    "rowed:confirm:right": {
+     "bytes": 39784,
+     "units": 2
+    },
+    "rowed:none:right": {
+     "bytes": 162802,
+     "units": 10
+    },
+    "rowed:refute:right": {
+     "bytes": 24494,
+     "units": 1
+    },
+    "tree:confirm:right": {
+     "bytes": 96261,
+     "units": 5
+    },
+    "tree:none:right": {
+     "bytes": 130819,
+     "units": 8
+    }
+   }
+  }
+ }
+}
