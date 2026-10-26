@@ -61,6 +61,9 @@ fn bundlers() -> Vec<String> {
 fn library_modes() -> Vec<String> {
     ["off", "report", "names"].map(String::from).to_vec()
 }
+fn index_build_modes() -> Vec<String> {
+    ["off", "auto"].map(String::from).to_vec()
+}
 fn unnamed_modes() -> Vec<String> {
     ["leave", "model"].map(String::from).to_vec()
 }
@@ -413,6 +416,43 @@ pub static KEYS: &[Key] = &[
         "index_store",
         "an index id cannot be resolved: pass the index directory",
         "Where index ids live (<index_store>/<id>/manifest.json).",
+    ),
+    // The run's index cache and the run-time build (exp154,
+    // docs/design/library-names-plan.md step 3).
+    Key {
+        section: "library",
+        name: "index_store_dir",
+        kind: Kind::Text,
+        flag: Some("--library-index-store"),
+        default: || text(".humanify/library-index"),
+        unset: "",
+        doc: "The run's library-index cache, resolved against the output dir: the shard \
+              store/ (reused across builds), the packument snapshot registry/, the pinned \
+              bundler tools tools/, and every merged index as <id>/ with its build.json \
+              sidecar. Nothing outside it is ever autoloaded.",
+    },
+    Key {
+        section: "library",
+        name: "index_build",
+        kind: Kind::Choice(index_build_modes),
+        flag: None,
+        default: || text("off"),
+        unset: "",
+        doc: "Whether a run may build the index it needs AT RUN TIME (exp154): \"off\" \
+              (report needs --library-index <dir|id>) or \"auto\" (matching \"report\" \
+              with no index: search index_store_dir for one with the bundle's bundler \
+              slice, else build one from the packages the bundle itself reveals — any \
+              build failure fails the run loudly; an explicit --library-index wins and \
+              the machinery stays off).",
+    },
+    lib_int(
+        "library",
+        "index_build_max_packages",
+        1,
+        U32,
+        || int(300),
+        "The safety cap on the packages a run-time index build may plan from the \
+         bundle's own evidence: over it the run refuses instead of indexing.",
     ),
     Key {
         section: "library",

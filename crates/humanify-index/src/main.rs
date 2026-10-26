@@ -229,6 +229,7 @@ fn main() {
             jobs,
             offline,
             merge_only,
+            quiet: false,
             sponge_regions: match sponge_regions.as_str() {
                 "drop" => SpongeRegions::Drop,
                 "origin" => SpongeRegions::Origin,

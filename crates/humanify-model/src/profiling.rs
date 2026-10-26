@@ -22,6 +22,9 @@ pub mod trace_tid {
     pub const RENAME_FUNCTION: u32 = 2;
     /// Module binding rename spans.
     pub const RENAME_MODULE_BINDING: u32 = 3;
+    /// The run-time library index machinery (exp154, library-names-plan
+    /// step 3): the store search, each build stage, and the run's wait.
+    pub const LIBRARY_INDEX: u32 = 5;
 }
 
 /// An f64 that serializes the way `JSON.stringify` prints a JS number.

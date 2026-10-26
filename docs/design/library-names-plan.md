@@ -92,6 +92,23 @@ sample of 2.1.216). Rebuild only what Bun needs:
 
 ### 3. The builder as a library, a cache, and run-time builds
 
+> **STATUS: BUILT (exp154, 2026-10-26), default off.** The cache layout, the
+> store finder (`search_store`), the in-process run-time build
+> (`build_runtime`, called from the CLI's `runtime_index` on a scope thread
+> joined under one deadline — span `library.index.wait`), the `build.json`
+> sidecar (`library-index-build/1`) and the profile spans are on branch
+> `exp154-run-time-index`. Keys: `index_store_dir` (`--library-index-store`,
+> default `.humanify/library-index`), `index_build` ("off"|"auto", no flag),
+> `index_build_max_packages` (300, refused at the parse point when exceeded).
+> An explicit `--library-index` still wins and the machinery stays off; a
+> default run never reads the store and never spawns a build process. **Two
+> pieces of this section are deliberately NOT built**: the shared base list
+> (the package list is the bundle's own evidence + its dependency closure
+> only — no bootstrap), and downloading Bun (the pinned Bun must already be
+> in `<store>/tools/`; the JS-bundle Bun-version guess is out of scope — the
+> detected version is recorded `"unknown"` and the newest cached Bun is
+> picked, with the choice in the report's `indexSource` trail).
+
 - **Cache layout.**
   - Default: `.humanify/library-index/` under the working directory. A run finds it there by itself;
     `--library-index-store <dir>` overrides it.

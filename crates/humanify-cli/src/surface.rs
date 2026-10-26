@@ -127,6 +127,15 @@ pub struct CommandOptions {
                 refused with off"
     )]
     pub library_index: Option<String>,
+    #[arg(
+        long,
+        value_name = "dir",
+        help = "The run's library-index cache (library.index_store_dir, resolved \
+                against the output dir): the shard store, the registry snapshot, \
+                the pinned bundler tools and every merged index a run-time build \
+                (library.index_build) finds there"
+    )]
+    pub library_index_store: Option<String>,
 }
 
 /// Flags MOVED into the config file (config sweep step 5, 2026-10-13; no

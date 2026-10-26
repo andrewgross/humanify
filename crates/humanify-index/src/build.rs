@@ -12,6 +12,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use humanify_core::libindex::format::compare_versions;
 use humanify_core::libindex::format::{
@@ -103,6 +105,86 @@ pub struct BuildConfig {
     pub merge_only: bool,
     /// What a pre-bundled file's foreign regions become.
     pub sponge_regions: SpongeRegions,
+    /// Suppress the plan printout and the per-task progress lines: the
+    /// in-process run-time build (exp154, `cache::build_runtime`) runs
+    /// inside a pipeline, where stray stdout would corrupt the run's
+    /// surface. The FAILED lines stay (stderr, errors only).
+    pub quiet: bool,
+}
+
+/// What the run-time build records into the run's profiler, and the two
+/// noticeboards its caller reads (exp154, library-names-plan step 3):
+/// the run passes the profiler it plans to write its own profile from,
+/// a stop flag it sets when its wait deadline expires (checked between
+/// tasks), the "current stage" the deadline error names, and the per-stage
+/// wall times the build sidecar records. All None on the offline CLI verb.
+#[derive(Clone, Copy, Default)]
+pub struct Trace<'p> {
+    /// The run's profiler; spans are `library.index.<stage>`.
+    pub prof: Option<&'p humanify_core::profiling::Profiler>,
+    /// The run set it: stop at the next task boundary.
+    pub stop: Option<&'p AtomicBool>,
+    /// The job's current stage ("plan", "install", ...).
+    pub stage: Option<&'p Mutex<String>>,
+    /// Stage name → wall ms, accumulated over every occurrence.
+    pub stages: Option<&'p Mutex<BTreeMap<String, u64>>>,
+}
+
+impl Trace<'_> {
+    /// The run asked the build to stop (its wait deadline expired).
+    pub fn stopped(&self) -> bool {
+        self.stop.is_some_and(|s| s.load(Ordering::SeqCst))
+    }
+
+    /// One stage: a `library.index.<stage>` span, the caller's noticeboards
+    /// updated (the tracker at the START — it answers "where is it" — the
+    /// wall time at the end). A guard: ended on every path, `?` errors
+    /// included.
+    fn stage(&self, name: &'static str) -> Option<Stage<'_>> {
+        if let Some(t) = self.stage {
+            *t.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = name.to_string();
+        }
+        let span = self.prof.map(|p| {
+            p.start_span(
+                name,
+                "library-index",
+                humanify_model::profiling::trace_tid::LIBRARY_INDEX,
+                None,
+            )
+        });
+        Some(Stage {
+            span,
+            name,
+            started: Instant::now(),
+            stages: self.stages,
+        })
+    }
+}
+
+/// A [`Trace::stage`] guard: recording happens in `Drop`, so an early `?`
+/// still ends the span.
+struct Stage<'p> {
+    span: Option<humanify_core::profiling::SpanHandle<'p>>,
+    name: &'static str,
+    started: Instant,
+    stages: Option<&'p Mutex<BTreeMap<String, u64>>>,
+}
+
+impl Drop for Stage<'_> {
+    fn drop(&mut self) {
+        if let Some(span) = self.span.take() {
+            span.end(None);
+        }
+        if let Some(stages) = self.stages {
+            let ms = self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+            stages
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .entry(self.name.to_string())
+                .and_modify(|t| *t += ms)
+                .or_insert(ms);
+        }
+    }
 }
 
 /// One `package@version` to index.
@@ -169,13 +251,17 @@ fn note_fetch(snapshot: &mut RegistrySnapshot, fetched: Option<&str>) {
 fn slice_records(
     cfg: &BuildConfig,
     snapshot: &mut RegistrySnapshot,
+    trace: Trace<'_>,
 ) -> Result<Vec<SliceRecord>, String> {
     let mut out = Vec::new();
     let mut seen_bundlers = BTreeSet::new();
     for build in &cfg.recipes {
         let version = build.bundler_version()?;
         let package = bundler_package(build.recipe.bundler);
-        let dated = registry::load(&cfg.registry, package, cfg.offline).ok();
+        let dated = {
+            let _s = trace.stage("library.index.registry");
+            registry::load(&cfg.registry, package, cfg.offline).ok()
+        };
         let (published, newest) = match &dated {
             Some((p, sha)) => {
                 snapshot.packuments.insert(package.to_string(), sha.clone());
@@ -248,9 +334,13 @@ fn shard_inputs(
 }
 
 /// What an as-of build would index and which shards it would reuse.
-pub fn plan(cfg: &BuildConfig) -> Result<Plan, String> {
+///
+/// Every registry read is a `library.index.registry` stage when the
+/// run-time caller passed a [`Trace`]; the `library.index.plan` stage that
+/// wraps the whole plan belongs to [`build`].
+pub fn plan(cfg: &BuildConfig, trace: Trace<'_>) -> Result<Plan, String> {
     let mut snapshot = RegistrySnapshot::default();
-    let slices = slice_records(cfg, &mut snapshot)?;
+    let slices = slice_records(cfg, &mut snapshot, trace)?;
     let mut tasks = Vec::new();
     let mut refused = Vec::new();
     // `--pinned` specs join a listed package's pins, or are indexed at
@@ -266,7 +356,10 @@ pub fn plan(cfg: &BuildConfig) -> Result<Plan, String> {
         }
     }
     for (name, pins, policy) in groups {
-        let (packument, sha) = registry::load(&cfg.registry, &name, cfg.offline)?;
+        let (packument, sha) = {
+            let _s = trace.stage("library.index.registry");
+            registry::load(&cfg.registry, &name, cfg.offline)?
+        };
         snapshot.packuments.insert(name.clone(), sha);
         note_fetch(&mut snapshot, packument.fetched_at.as_deref());
         let chosen = select_versions(&packument, &cfg.as_of, &pins, policy);
@@ -477,7 +570,7 @@ fn write_entries(dir: &Path, name: &str) -> Result<(), String> {
 
 /// Install `task` (once) in its work directory: dependencies as of its
 /// own publish time (`--before`), no install scripts.
-fn install(work: &Path, task: &Task) -> Result<PathBuf, String> {
+fn install(work: &Path, task: &Task, trace: Trace<'_>) -> Result<PathBuf, String> {
     let dir = work.join(format!("{}@{}", task.name.replace('/', "__"), task.version));
     if dir.join(".installed").exists() {
         return Ok(dir);
@@ -494,21 +587,18 @@ fn install(work: &Path, task: &Task) -> Result<PathBuf, String> {
         "--no-fund",
         "--loglevel=error",
     ];
-    let first = run_cmd(
-        Command::new("npm")
-            .current_dir(&dir)
-            .args(base)
-            .arg(&before),
-    );
-    if let Err(e) = first {
-        run_cmd(
-            Command::new("npm")
-                .current_dir(&dir)
-                .args(base)
-                .arg(&before)
-                .arg("--legacy-peer-deps"),
-        )
-        .map_err(|e2| format!("npm install {}@{}: {e} / {e2}", task.name, task.version))?;
+    let npm = |legacy: bool, trace: Trace<'_>| -> Result<(), String> {
+        let mut cmd = Command::new("npm");
+        cmd.current_dir(&dir).args(base).arg(&before);
+        if legacy {
+            cmd.arg("--legacy-peer-deps");
+        }
+        let _s = trace.stage("library.index.install");
+        run_cmd(&mut cmd)
+    };
+    if let Err(e) = npm(false, trace) {
+        npm(true, trace)
+            .map_err(|e2| format!("npm install {}@{}: {e} / {e2}", task.name, task.version))?;
     }
     strip_source_map_comments(&dir.join("node_modules"));
     std::fs::write(dir.join(".installed"), "").map_err(|e| e.to_string())?;
@@ -1152,13 +1242,20 @@ const BUILD_STAMP: &str = ".recipe";
 /// Build `entry` into `out` unless a build of the same entry under the
 /// current recipe is already there (the literal shard reads the same
 /// builds).
-fn ensure_build(recipe: &RecipeBuild, dir: &Path, entry: &str, out: &Path) -> Result<(), String> {
+fn ensure_build(
+    recipe: &RecipeBuild,
+    dir: &Path,
+    entry: &str,
+    out: &Path,
+    trace: Trace<'_>,
+) -> Result<(), String> {
     let text = std::fs::read_to_string(dir.join(entry)).map_err(|e| format!("{entry}: {e}"))?;
     let want = format!("{RECIPE_VERSION}\n{}\n{text}", recipe.recipe.spelling());
     let stamp = out.join(BUILD_STAMP);
     if std::fs::read_to_string(&stamp).is_ok_and(|s| s == want) {
         return Ok(());
     }
+    let _s = trace.stage("library.index.bundle");
     build_entry(recipe, dir, entry, out)?;
     std::fs::write(&stamp, want).map_err(|e| e.to_string())
 }
@@ -1169,12 +1266,15 @@ fn module_shard(
     recipe: &RecipeBuild,
     inputs: &ShardInputs,
     regions: SpongeRegions,
+    trace: Trace<'_>,
 ) -> Shard {
     let mut shard = Shard::new(inputs);
     for (tag, entry) in ENTRIES {
         let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
-        let result = ensure_build(recipe, dir, entry, &out)
-            .and_then(|()| fingerprint_bundle(recipe.recipe, &out, &mut shard, regions));
+        let result = ensure_build(recipe, dir, entry, &out, trace).and_then(|()| {
+            let _s = trace.stage("library.index.fingerprint");
+            fingerprint_bundle(recipe.recipe, &out, &mut shard, regions)
+        });
         let status = match result {
             Ok(()) => "ok".to_string(),
             Err(e) => e,
@@ -1186,8 +1286,8 @@ fn module_shard(
 
 /// Build every missing shard of `task`: the module shards first, since the
 /// literal shard reads their builds (any build not yet made is made).
-fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
-    let dir = install(&cfg.work, task)?;
+fn execute(cfg: &BuildConfig, task: &Task, trace: Trace<'_>) -> Result<(), String> {
+    let dir = install(&cfg.work, task, trace)?;
     // the entries are the recipe's: rewritten on every build
     write_entries(&dir, &task.name)?;
     let mut missing: Vec<&ShardInputs> = task.missing.iter().collect();
@@ -1199,13 +1299,14 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
                     let out = dir.join("build").join(recipe.recipe.slice_name()).join(tag);
                     // a failed build contributes no files; the module
                     // shard records the error
-                    let _ = ensure_build(recipe, &dir, entry, &out);
+                    let _ = ensure_build(recipe, &dir, entry, &out, trace);
                 }
             }
         }
         let shard = match inputs.kind {
             ShardKind::Literals => {
                 let slices: Vec<Recipe> = cfg.recipes.iter().map(|r| r.recipe).collect();
+                let _s = trace.stage("library.index.fingerprint");
                 literal_shard(&dir, inputs, &slices)
             }
             ShardKind::Modules(want) => {
@@ -1214,7 +1315,7 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
                     .iter()
                     .find(|r| r.recipe == want)
                     .ok_or("no recipe for slice")?;
-                module_shard(&dir, recipe, inputs, cfg.sponge_regions)
+                module_shard(&dir, recipe, inputs, cfg.sponge_regions, trace)
             }
         };
         write_shard(&cfg.store, &shard)?;
@@ -1223,8 +1324,10 @@ fn execute(cfg: &BuildConfig, task: &Task) -> Result<(), String> {
 }
 
 /// Run the missing tasks on `cfg.jobs` threads; per-task errors are
-/// returned (a failed task writes no shard and is not indexed).
-fn execute_all(cfg: &BuildConfig, tasks: &[Task]) -> Vec<(String, String)> {
+/// returned (a failed task writes no shard and is not indexed). A stop in
+/// `trace` (the run's wait deadline expired) ends the sweep at the next
+/// task boundary — every task under way ends at its OWN deadline.
+fn execute_all(cfg: &BuildConfig, tasks: &[Task], trace: Trace<'_>) -> Vec<(String, String)> {
     let todo: Vec<&Task> = tasks.iter().filter(|t| !t.missing.is_empty()).collect();
     let next = Mutex::new(0usize);
     let errors = Mutex::new(Vec::new());
@@ -1232,14 +1335,19 @@ fn execute_all(cfg: &BuildConfig, tasks: &[Task]) -> Vec<(String, String)> {
         for _ in 0..cfg.jobs.clamp(1, 4) {
             scope.spawn(|| {
                 loop {
+                    if trace.stopped() {
+                        break;
+                    }
                     let i = {
                         let mut n = next.lock().expect("lock");
                         *n += 1;
                         *n - 1
                     };
                     let Some(task) = todo.get(i) else { break };
-                    eprintln!("building {}@{}", task.name, task.version);
-                    if let Err(e) = execute(cfg, task) {
+                    if !cfg.quiet {
+                        eprintln!("building {}@{}", task.name, task.version);
+                    }
+                    if let Err(e) = execute(cfg, task, trace) {
                         let label = format!("{}@{}", task.name, task.version);
                         errors.lock().expect("lock").push((label, e));
                     }
@@ -1252,6 +1360,26 @@ fn execute_all(cfg: &BuildConfig, tasks: &[Task]) -> Vec<(String, String)> {
     errors
 }
 
+/// What a full build ended with (the run-time caller records the counts
+/// in its `build.json` sidecar; the CLI verb wants only the id).
+#[derive(Default)]
+pub struct BuildOutcome {
+    pub index_id: String,
+    /// The package versions the plan indexed.
+    pub tasks: usize,
+    /// Versions every shard of which the store already held.
+    pub reused: usize,
+    /// Versions with shards built this run.
+    pub built: usize,
+    /// The slice records, as the manifest carries them.
+    pub slices: Vec<SliceRecord>,
+    /// Task errors: `pkg@version` → why.
+    pub errors: Vec<(String, String)>,
+    /// Versions the plan refused (a run-time build fails on any), with
+    /// their reasons.
+    pub refused: Vec<RefusedRecord>,
+}
+
 /// Plan, build what is missing (none with `cfg.merge_only`), merge into
 /// `cfg.out`. Returns the index id. `dry_run`: print the plan and stop
 /// (returns an empty id).
@@ -1259,15 +1387,35 @@ fn execute_all(cfg: &BuildConfig, tasks: &[Task]) -> Vec<(String, String)> {
 /// The merge streams: every task's shards are read from the store one at
 /// a time, in label order, into the [`Merger`] — never all at once.
 pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
-    let mut plan = plan(cfg)?;
-    print!("{}", describe(&plan));
-    if dry_run {
-        return Ok(String::new());
+    build(cfg, dry_run, Trace::default()).map(|o| o.index_id)
+}
+
+/// [`run`] with the run-time caller's [`Trace`] (exp154,
+/// library-names-plan step 3): every stage is a `library.index.<stage>`
+/// span when a profiler is given, a stop flag ends the package sweep at
+/// the next task boundary, and the counts come back for the caller's
+/// build sidecar.
+pub fn build(cfg: &BuildConfig, dry_run: bool, trace: Trace<'_>) -> Result<BuildOutcome, String> {
+    let mut plan = {
+        let _s = trace.stage("library.index.plan");
+        plan(cfg, trace)?
+    };
+    if !cfg.quiet {
+        print!("{}", describe(&plan));
     }
+    if dry_run {
+        return Ok(BuildOutcome::default());
+    }
+    let mut errors = Vec::new();
     if !cfg.merge_only {
-        let errors = execute_all(cfg, &plan.tasks);
+        errors = execute_all(cfg, &plan.tasks, trace);
         for (label, e) in &errors {
             eprintln!("FAILED {label}: {e}");
+        }
+        if trace.stopped() {
+            return Err("the run stopped the build: its wait deadline \
+                 (library.index.wait) expired"
+                .to_string());
         }
     }
     let mut inputs: Vec<(String, usize, ShardInputs)> = plan
@@ -1283,13 +1431,17 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
     inputs.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     let mut found = vec![false; plan.tasks.len()];
     let mut merger = Merger::default();
-    for (_, i, s) in &inputs {
-        if let Some(shard) = read_current(&cfg.store, s) {
-            found[*i] = true;
-            merger.add(shard)?;
+    {
+        let _s = trace.stage("library.index.merge");
+        for (_, i, s) in &inputs {
+            if let Some(shard) = read_current(&cfg.store, s) {
+                found[*i] = true;
+                merger.add(shard)?;
+            }
         }
     }
     let mut packages = Vec::new();
+    let (mut built, mut reused) = (0usize, 0usize);
     for (t, found) in plan.tasks.iter().zip(found) {
         if !found {
             plan.refused.push(RefusedRecord {
@@ -1303,6 +1455,11 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
                 .into(),
             });
             continue;
+        }
+        if t.missing.is_empty() {
+            reused += 1;
+        } else {
+            built += 1;
         }
         packages.push(PackageRecord {
             name: t.name.clone(),
@@ -1326,7 +1483,15 @@ pub fn run(cfg: &BuildConfig, dry_run: bool) -> Result<String, String> {
     if let Some(out) = &cfg.out {
         write_index(out, &index.files)?;
     }
-    Ok(index.id)
+    Ok(BuildOutcome {
+        index_id: index.id,
+        tasks: plan.tasks.len(),
+        reused,
+        built,
+        slices: plan.slices,
+        errors,
+        refused: plan.refused,
+    })
 }
 
 fn write_index(out: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(), String> {

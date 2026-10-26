@@ -492,6 +492,97 @@
       "pattern": "retry-envelope",
       "reason": "limiter-layer retry backoff 1/2/4 s, holding the slot by design (rate.rs header)",
       "exception": "audit R1: un-jittered, and a second retry layer around the SDK's; one jittered layer with a total-time cap is the target, the decision is open"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "IndexJob::join",
+      "construct": "atomic",
+      "pattern": "deadline",
+      "reason": "exp154 run-time index machinery: the WAIT_DEADLINE expired, so the join sets the stop flag (SeqCst) and the build halts at its next task boundary; the flag gates nothing else and no output depends on its ordering"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "IndexJob::join",
+      "construct": "timeout",
+      "pattern": "deadline",
+      "reason": "the joint: one recv_timeout over the whole wait (WAIT_DEADLINE, 90 min), then a STOP_GRACE recv for the build's final word once the stop flag is set \u2014 every subprocess the build runs is itself deadline'd and stop is checked between tasks, so the grace is guaranteed; a miss panics (a bug), never an unbounded wait"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "struct IndexJob",
+      "construct": "channel",
+      "pattern": "deadline",
+      "reason": "exp154: a bounded mpsc::sync_channel(1) carrying the job's ONE answer to the joint; a closed channel (the run failed before it took the answer) is a decided outcome \u2014 the thread exits, the answer is dropped, nothing silently retries"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "start",
+      "construct": "atomic",
+      "pattern": "deadline",
+      "reason": "exp154: the run's stop flag, handed to the job thread so an expired wait (or a failed run) halts the build at its next task boundary; a pure halt signal, nothing that decides output reads it"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "start",
+      "construct": "channel",
+      "pattern": "deadline",
+      "reason": "exp154: bounded sync_channel(1) for the job's single answer; the sender blocks at most until the joint takes it under its deadline, a closed channel ends the thread"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "job",
+      "construct": "atomic",
+      "pattern": "deadline",
+      "reason": "exp154: the job checks the stop flag (SeqCst) once before it starts \u2014 a run that already failed never launches a build; a pure halt signal"
+    },
+    {
+      "file": "crates/humanify-cli/src/runtime_index.rs",
+      "scope": "job",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "exp154: the two noticeboard Mutexes handed to the build's Trace (current stage name, stage\u2192wall-ms map) \u2014 taken briefly to write one string / bump one counter, never held across a subprocess or any call; the same locks build.rs's Trace::stage takes"
+    },
+    {
+      "file": "crates/humanify-cli/src/unified.rs",
+      "scope": "pipeline_body",
+      "construct": "atomic",
+      "pattern": "deadline",
+      "reason": "exp154: the run's stop flag for the index machinery \u2014 set when the run fails before it takes the job's answer (the scope's join then waits at most one in-flight subprocess, never the build's deadline) and by the joint itself on expiry"
+    },
+    {
+      "file": "crates/humanify-cli/src/unified.rs",
+      "scope": "pipeline_body",
+      "construct": "thread-scope",
+      "pattern": "deadline",
+      "reason": "exp154: the store search / run-time build runs on a scoped thread so it overlaps the run's prior load and dispatch setup; it is never detached \u2014 the scope cannot end before the library load has taken the answer through the deadline'd joint, and thread::scope joins it there"
+    },
+    {
+      "file": "crates/humanify-cli/src/unified.rs",
+      "scope": "load_library_index",
+      "construct": "atomic",
+      "pattern": "deadline",
+      "reason": "exp154: the joint takes the run's stop flag to wait on the machinery's answer (and to set it if the wait deadline expires); nothing that decides output races on it"
+    },
+    {
+      "file": "crates/humanify-index/src/build.rs",
+      "scope": "<module>",
+      "construct": "atomic",
+      "pattern": "deadline",
+      "reason": "exp154: Trace.stop \u2014 the flag a deadline'd caller sets; the build loads it (SeqCst) between tasks only, a pure halt signal"
+    },
+    {
+      "file": "crates/humanify-index/src/build.rs",
+      "scope": "<module>",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "exp154: Trace.stage / Trace.stages \u2014 the caller's noticeboards (current stage name, stage\u2192wall-ms map); taken briefly per stage boundary, never held across the stage's own work"
+    },
+    {
+      "file": "crates/humanify-index/src/build.rs",
+      "scope": "struct Stage",
+      "construct": "lock",
+      "pattern": "short-lock",
+      "reason": "exp154: the stage guard takes the stage-name Mutex on drop to write one string; a RAII boundary write, nothing else"
     }
   ]
 }

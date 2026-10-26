@@ -857,3 +857,247 @@ fn an_index_with_no_slice_for_the_bundles_recipe_warns_naming_both() {
     );
     assert!(err.contains(w), "{err}");
 }
+
+// --- the run-time index machinery (exp154) ----------------------------------
+//
+// library.index_build = "auto" + report + NO index: the run must FIND the
+// index it needs in its store (<out>/.humanify/library-index, the disk
+// convention: one id-named directory per merged index, the id the
+// manifest's sha256) and use it without building anything — or fail
+// loudly. The default stays OFF: a run without the keys never reads the
+// store, never spawns a build process.
+
+/// The run's DEFAULT store root, pre-populated with ONE usable index: a
+/// copy of the tiny node-target index (BUN_BUNDLE has no `// @bun` banner),
+/// named by its manifest's sha256 the way the disk convention spells it.
+fn prepopulated_store(out: &Path) -> String {
+    let staging = out.join("staged-index");
+    library_index_with(&staging, &[NODE_RECIPE]);
+    let bytes = std::fs::read(staging.join("manifest.json")).unwrap();
+    use sha2::{Digest, Sha256};
+    let id = format!("{:x}", Sha256::digest(&bytes));
+    let root = out.join(".humanify/library-index");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::rename(&staging, root.join(&id)).expect("move into the store");
+    id
+}
+
+/// The library report, parsed.
+fn library_report(out: &Path) -> serde_json::Value {
+    serde_json::from_str(
+        &std::fs::read_to_string(out.join(".humanify/library-report.json")).expect("written"),
+    )
+    .unwrap()
+}
+
+/// index_build defaults to "off": a run with defaults, a report run with
+/// an explicit index, and even an auto run with an explicit index (the
+/// explicit index WINS) never touch the store — the default root is
+/// neither read nor created, and no build process is ever spawned (the
+/// auto+explicit twin says so on stderr).
+#[test]
+fn with_the_machinery_off_no_run_ever_touches_the_store() {
+    let s = Scratch::new("ix-off");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let store = |tag: &str| s.0.join(tag).join(".humanify/library-index");
+
+    // Defaults: matching off, build off.
+    let plain = s.0.join("plain");
+    let o = run(&s.0, &[&input, "-o", plain.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    assert!(
+        !store("plain").exists(),
+        "a default run never reads (so never creates) the store"
+    );
+
+    // Report with an explicit index (build still off).
+    let ix = library_index(&s.0.join("ix"), true);
+    let explicit = s.0.join("explicit");
+    let o = run(
+        &s.0,
+        &[
+            &input,
+            "-o",
+            explicit.to_str().unwrap(),
+            "--library-matching",
+            "report",
+            "--library-index",
+            &ix,
+        ],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    assert!(!store("explicit").exists(), "the machinery never ran");
+
+    // Auto + an explicit index: the explicit index wins, the machinery
+    // stays off — and the run SAYS so.
+    let wins = s.0.join("wins");
+    let o = run_with(
+        &s.0,
+        &[
+            &input,
+            "-o",
+            wins.to_str().unwrap(),
+            "--library-matching",
+            "report",
+            "--library-index",
+            &ix,
+        ],
+        &["[library]", "index_build = \"auto\""],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+    assert!(
+        err.contains("stays off: --library-index was passed"),
+        "the run says the machinery stayed off: {err}"
+    );
+    assert!(!store("wins").exists(), "the machinery never ran");
+    // ... and using the explicit index produced the usual report.
+    assert!(library_report(&wins)["indexSource"].is_null());
+}
+
+/// index_build = "auto" with a pre-populated store: FIND then USE. The
+/// run discovers its own index, loads it, and the output tree is
+/// byte-identical to the explicit-index run — only the library report
+/// differs, by gaining the machinery's usage trail (indexSource). No
+/// build ever starts: the store holds exactly what it held.
+#[test]
+fn auto_finds_a_pre_populated_index_and_uses_it_without_building() {
+    let s = Scratch::new("ix-found");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+
+    // The explicit-index run: the comparison's other leg (and shows the
+    // trail is the ONLY difference).
+    let ix = library_index(&s.0.join("ix"), true);
+    let explicit_dir = explicit_index_leg(&s.0, &input, &ix);
+
+    // The auto run: no --library-index, one index already in the store
+    // under the run's DEFAULT root.
+    let auto_dir = s.0.join("auto");
+    let id = prepopulated_store(&auto_dir);
+    let o = run_with(
+        &s.0,
+        &[
+            &input,
+            "-o",
+            auto_dir.to_str().unwrap(),
+            "--library-matching",
+            "report",
+        ],
+        &["[library]", "index_build = \"auto\""],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(0), "{err}");
+
+    // Found — the trail says so, with the properties it matched on.
+    let report = library_report(&auto_dir);
+    assert_found_trail(&report);
+
+    // The trees are byte-identical; the ONLY difference is the report's
+    // indexSource (and nothing else — the found index is the SAME index).
+    // (`.humanify/` is the diagnostics sidecar area — the store I placed
+    // there and the report both live under it, and neither is output.)
+    let explicit = library_report(&explicit_dir);
+    assert!(explicit["indexSource"].is_null());
+    let strip = |mut m: std::collections::BTreeMap<String, Vec<u8>>| {
+        m.retain(|k, _| !k.starts_with(".humanify/"));
+        m
+    };
+    assert_eq!(
+        strip(snapshot(&auto_dir)),
+        strip(snapshot(&explicit_dir)),
+        "a found index changed an output byte"
+    );
+
+    // Nothing was built: the store still holds exactly the one index,
+    // with no build sidecar and no .building- directory.
+    let root = auto_dir.join(".humanify/library-index");
+    let entries: Vec<String> = std::fs::read_dir(&root)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().into_string().unwrap())
+        .collect();
+    assert_eq!(entries, [id.as_str()], "untouched by the run");
+    assert!(
+        !root.join(&id).join("build.json").exists(),
+        "no run-time build happened"
+    );
+}
+
+/// The find test's other leg: the same bundle against the SAME index,
+/// passed explicitly (so the machinery never runs). Its output tree is
+/// what the auto leg must match byte for byte.
+fn explicit_index_leg(dir: &Path, input: &str, ix: &str) -> PathBuf {
+    let explicit_dir = dir.join("explicit");
+    let o = run(
+        dir,
+        &[
+            input,
+            "-o",
+            explicit_dir.to_str().unwrap(),
+            "--library-matching",
+            "report",
+            "--library-index",
+            ix,
+        ],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", stderr(&o));
+    explicit_dir
+}
+
+/// What the library report's `indexSource` must say when the machinery
+/// FOUND a stored index: outcome, identity, the slice it matched on, the
+/// deliberately-unknown bundle Bun version, and the search's candidates.
+fn assert_found_trail(report: &serde_json::Value) {
+    let source = &report["indexSource"];
+    assert_eq!(source["outcome"], "found", "{report}");
+    assert_eq!(source["indexId"].as_str().map(str::len), Some(64));
+    assert_eq!(report["indexId"], source["indexId"], "{report}");
+    assert_eq!(source["slice"], "bun-node-cjs-min", "{report}");
+    assert_eq!(source["bundler"], "bun", "{report}");
+    assert_eq!(
+        source["detectedBundlerVersion"], "unknown",
+        "reading the bundle's own Bun version is out of this lane's scope"
+    );
+    assert!(
+        source["store"]
+            .as_str()
+            .is_some_and(|p| p.ends_with(".humanify/library-index")),
+        "{report}"
+    );
+    assert!(source["pickedBun"].is_null(), "nothing was built: {report}");
+    assert!(source["seeds"].is_null(), "nothing was built: {report}");
+    let candidates = source["candidates"].as_array().expect("a list");
+    assert!(
+        candidates
+            .iter()
+            .any(|c| c["id"] == source["indexId"]
+                && c["verdict"].as_str().unwrap().contains("as-of")),
+        "{candidates:?}"
+    );
+}
+
+/// index_build = "auto" with NOTHING usable: the run fails loudly (never
+/// silently downgrades to path/banner-only) naming the failed stage and
+/// the two escape hatches. BUN_BUNDLE reveals no package, so the failure
+/// is the plan stage — before any process is spawned.
+#[test]
+fn auto_with_nothing_usable_fails_the_run_loudly() {
+    let s = Scratch::new("ix-fail");
+    let input = s.write("bundle.js", BUN_BUNDLE);
+    let out = s.out().display().to_string();
+    let o = run_with(
+        &s.0,
+        &[&input, "-o", &out, "--library-matching", "report"],
+        &["[library]", "index_build = \"auto\""],
+    );
+    let err = stderr(&o);
+    assert_eq!(o.status.code(), Some(1), "fail loud: {err}");
+    assert!(err.contains("run-time library index"), "{err}");
+    assert!(err.contains("reveals no package to index"), "{err}");
+    assert!(err.contains("--library-index <dir|id>"), "{err}");
+    assert!(err.contains("library.index_build = \"off\""), "{err}");
+    assert!(
+        !s.out().join(".humanify/library-index").exists(),
+        "the plan refused before anything was created: {err}"
+    );
+}

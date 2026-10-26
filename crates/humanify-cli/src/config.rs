@@ -271,6 +271,20 @@ pub enum Unnamed {
     Model,
 }
 
+/// `library.index_build` (exp154, library-names-plan step 3): whether a
+/// run may build the index it needs at run time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IndexBuild {
+    /// REPORT needs an index passed with `--library-index` (the old
+    /// behavior, the default).
+    Off,
+    /// REPORT with no index: search `index_store_dir` for a usable one,
+    /// else build one from the bundle's own revealed packages — any build
+    /// failure fails the run loudly.
+    Auto,
+}
+
 /// The ONE library decision (config sweep step 6): what matching does, the
 /// index, what unnamed library code gets, and the lookup's and
 /// discovery's tunables.
@@ -281,6 +295,15 @@ pub struct Library {
     /// The index as given (a directory or an id).
     pub index: Option<String>,
     pub index_store: Option<String>,
+    /// The run's index cache (`library.index_store_dir`): shard store,
+    /// packument snapshot, pinned bundler tools, and the merged indexes a
+    /// run finds or builds — resolved against the output dir by the
+    /// machinery (exp154).
+    pub index_store_dir: String,
+    /// Whether a run may build the index it needs at run time (exp154).
+    pub index_build: IndexBuild,
+    /// The safety cap on a run-time build's package list (exp154).
+    pub index_build_max_packages: usize,
     pub unnamed: Unnamed,
     pub report_units: bool,
     pub lookup: LibraryLookup,
@@ -361,6 +384,23 @@ impl Library {
             options: self.discovery_options(),
             unit_prints: false,
         }
+    }
+
+    /// Whether the run-time index machinery runs (exp154): matching is
+    /// `report`, NO index was passed (an explicit index wins and the
+    /// machinery stays off), and `index_build` is `auto`. Everything the
+    /// machinery touches lives under `index_store_dir`; a run without it
+    /// — the default — never reads the store, never spawns a build.
+    pub fn runs_index_machinery(&self) -> bool {
+        self.matching == LibraryMatching::Report
+            && self.index.is_none()
+            && self.index_build == IndexBuild::Auto
+    }
+
+    /// The store's root, resolved against the output dir (an absolute
+    /// `index_store_dir` replaces it outright — `Path::join` semantics).
+    pub fn index_store_root(&self, output_dir: &str) -> std::path::PathBuf {
+        std::path::Path::new(output_dir).join(&self.index_store_dir)
     }
 
     /// The index directory `index` names: a directory as given, else an id
@@ -581,6 +621,7 @@ fn flag_values(opts: &CommandOptions) -> Vec<FlagValue> {
         text("matching.prior_version", &opts.prior_version),
         text("library.matching", &opts.library_matching),
         text("library.index", &opts.library_index),
+        text("library.index_store_dir", &opts.library_index_store),
         (opts.verbose > 0).then(|| ("diagnostics.verbosity", Val::Int(u64::from(opts.verbose)))),
     ]
     .into_iter()
@@ -599,6 +640,9 @@ fn library_of(r: &Resolved) -> Library {
         matching: parse_enum(r.text("library.matching")).expect("a checked choice"),
         index: r.text("library.index"),
         index_store: r.text("library.index_store"),
+        index_store_dir: r.text("library.index_store_dir").expect("defaulted"),
+        index_build: parse_enum(r.text("library.index_build")).expect("a checked choice"),
+        index_build_max_packages: n("library.index_build_max_packages") as usize,
         unnamed: parse_enum(r.text("library.unnamed")).expect("a checked choice"),
         report_units: r.flag_on("library.report_units"),
         lookup: LibraryLookup {
@@ -695,15 +739,26 @@ fn library_violations(r: &Resolved) -> Vec<String> {
              (docs/library-matching-config.md §2): use --library-matching report"
                 .to_string(),
         ),
-        ("report", false) => {
-            out.push("--library-matching report needs --library-index <dir|id>".to_string())
-        }
+        ("report", false) if r.text("library.index_build").as_deref() == Some("auto") => {}
+        ("report", false) => out.push(
+            "--library-matching report needs --library-index <dir|id>, or \
+             library.index_build = \"auto\" to let the run find or build one in \
+             library.index_store_dir"
+                .to_string(),
+        ),
         ("off", true) => out.push(
             "--library-index given with --library-matching off: the index would be \
              silently ignored — pass --library-matching report, or drop the index"
                 .to_string(),
         ),
         _ => {}
+    }
+    if mode.as_str() != "report" && r.text("library.index_build").as_deref() == Some("auto") {
+        out.push(
+            "library.index_build = \"auto\" needs --library-matching report: with matching \
+             off the run would never read the index it built"
+                .to_string(),
+        );
     }
     out
 }
@@ -857,6 +912,12 @@ impl Config {
     /// before any work (its recipe slice needs detection, later).
     pub fn library_index_problem(&self) -> Option<String> {
         if self.library.matching == LibraryMatching::Off {
+            return None;
+        }
+        if self.library.runs_index_machinery() {
+            // The machinery owns the question: it SEARCHES the store at run
+            // time and builds what it does not find, so "no --library-index"
+            // is not a problem here (exp154).
             return None;
         }
         let dir = match self.library.index_dir()? {

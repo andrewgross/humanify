@@ -8,6 +8,7 @@ use std::fmt::Write as _;
 
 use humanify_model::js::{format_duration, to_fixed as js_to_fixed, utf16_len};
 use humanify_model::profiling::{ProfileReport, StageSummary};
+use serde_json::Value;
 
 /// `s.padEnd(n)` / `s.padStart(n)` — widths in UTF-16 code units.
 fn pad_end(s: &str, n: usize) -> String {
@@ -47,6 +48,85 @@ fn stage_lines(stages: &[StageSummary], total: f64, lines: &mut Vec<String>) {
     lines.push(String::new());
 }
 
+/// The run-time library index block (exp154, library-names-plan step 3):
+/// every span named `library.index.*` (any tid) renders as two small lines
+/// after the stage breakdown — what the machinery DID (found / built /
+/// failed, read from the metadata of the LAST span with an `outcome`:
+/// the wait ends last), then each stage's total in first-seen order.
+fn library_index_lines(report: &ProfileReport, lines: &mut Vec<String>) {
+    const PREFIX: &str = "library.index.";
+    let spans: Vec<&humanify_model::profiling::ProfileSpan> = report
+        .spans
+        .iter()
+        .filter(|s| s.name.starts_with(PREFIX) && s.name.len() > PREFIX.len())
+        .collect();
+    if spans.is_empty() {
+        return;
+    }
+    lines.push("Library index:".to_string());
+    if let Some(meta) = spans
+        .iter()
+        .rev()
+        .find_map(|s| s.metadata.as_ref().filter(|m| m.get("outcome").is_some()))
+    {
+        let id = meta.get("indexId").and_then(Value::as_str).unwrap_or("-");
+        let count = |k: &str| {
+            meta.get(k)
+                .and_then(Value::as_u64)
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".to_string())
+        };
+        match meta.get("outcome").and_then(Value::as_str) {
+            Some("found") => lines.push(format!("  found {id} in the index store")),
+            Some("built") => lines.push(format!(
+                "  built {}: {} version(s) ({} built, {} reused, {} refused)",
+                id,
+                count("versions"),
+                count("built"),
+                count("reused"),
+                count("refused")
+            )),
+            Some("failed") => lines.push(format!(
+                "  failed{}",
+                meta.get("error")
+                    .and_then(Value::as_str)
+                    .map(|e| format!(": {e}"))
+                    .unwrap_or_default()
+            )),
+            _ => {}
+        }
+    }
+    let mut stages: Vec<(String, f64, usize)> = Vec::new();
+    for span in &spans {
+        let dur = span.end_ms.0 - span.start_ms.0;
+        match stages.iter_mut().find(|(n, _, _)| n == &span.name) {
+            Some((_, total, count)) => {
+                *total += dur;
+                *count += 1;
+            }
+            None => stages.push((span.name.clone(), dur, 1)),
+        }
+    }
+    let joined = stages
+        .iter()
+        .map(|(name, total, count)| {
+            format!(
+                "{} {}{}",
+                &name[PREFIX.len()..],
+                format_duration(*total),
+                if *count > 1 {
+                    format!(" ({count})")
+                } else {
+                    Default::default()
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("  ");
+    lines.push(format!("  {joined}"));
+    lines.push(String::new());
+}
+
 /// TS `formatProfileSummary`.
 pub fn format_profile_summary(report: &ProfileReport) -> String {
     let total = report.meta.total_duration_ms.0;
@@ -59,6 +139,8 @@ pub fn format_profile_summary(report: &ProfileReport) -> String {
     if !report.stage_summaries.is_empty() {
         stage_lines(&report.stage_summaries, total, &mut lines);
     }
+
+    library_index_lines(report, &mut lines);
 
     if let Some(rt) = &report.rename_timing {
         lines.push(format!("Rename timing ({} functions):", rt.count));

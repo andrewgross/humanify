@@ -411,3 +411,81 @@ fn summary_text_renders_the_report() {
         "{text}"
     );
 }
+
+// ---- the library index block (exp154, library-names-plan step 3) ------------
+
+/// The `library.index.*` spans become one small block after the stage
+/// breakdown: the first line says what the machinery DID (found / built /
+/// failed, with the version counts a build ended with), read from the
+/// metadata of the last span that carries an `outcome`; the second is the
+/// per-stage totals in first-seen order. No such spans, no block.
+#[test]
+fn summary_text_renders_the_library_index_block() {
+    let lib_span = |name: &str, start: f64, end: f64| {
+        let mut s = span(name, "library-index", start, end, 5);
+        s.tid = 5;
+        s
+    };
+    let mut search = lib_span("library.index.search-store", 0.0, 5.0);
+    search.metadata = Some(JsObject::new().with("outcome", "miss"));
+    let mut registry = lib_span("library.index.registry", 5.0, 100.0);
+    registry.metadata = None;
+    let mut plan = lib_span("library.index.plan", 100.0, 205.0);
+    plan.metadata = None;
+    let mut wait = lib_span("library.index.wait", 205.0, 72000.0);
+    wait.metadata = Some(
+        JsObject::new()
+            .with("outcome", "built")
+            .with("indexId", "deadbeef".to_string())
+            .with("versions", 3_u64)
+            .with("built", 1_u64)
+            .with("reused", 2_u64)
+            .with("refused", 0_u64),
+    );
+    let mut report = make_report(vec![search, registry, plan, wait], vec![]);
+    report.stage_summaries.push(StageSummary {
+        name: "parse".to_string(),
+        duration_ms: JsNumber(1000.0),
+        span_count: 1,
+    });
+    let text = format_profile_summary(&report);
+    assert!(
+        text.contains(
+            "Library index:\n  built deadbeef: 3 version(s) (1 built, 2 reused, 0 refused)\n"
+        ),
+        "the outcome line, from the wait span's metadata: {text}"
+    );
+    assert!(
+        text.contains("  search-store 5ms  registry 95ms  plan 105ms  wait 1m 12s\n"),
+        "the stage totals, first-seen order: {text}"
+    );
+    assert!(text.contains("Stage breakdown:"), "still there: {text}");
+}
+
+/// A "found" outcome renders its line; a run without any
+/// `library.index.*` span renders no block at all.
+#[test]
+fn summary_text_library_index_block_only_when_it_ran() {
+    let mut search = span("library.index.search-store", "library-index", 0.0, 5.0, 5);
+    search.metadata = Some(
+        JsObject::new()
+            .with("outcome", "found")
+            .with("indexId", "cafe".to_string()),
+    );
+    let mut wait = span("library.index.wait", "library-index", 5.0, 12.0, 5);
+    wait.metadata = Some(
+        JsObject::new()
+            .with("outcome", "found")
+            .with("indexId", "cafe".to_string()),
+    );
+    let with = format_profile_summary(&make_report(vec![search, wait], vec![]));
+    assert!(
+        with.contains("Library index:\n  found cafe in the index store\n"),
+        "{with}"
+    );
+    let without = format_profile_summary(&make_report(
+        vec![span("parse", "pipeline", 0.0, 5.0, 1)],
+        vec![],
+    ));
+    assert!(!without.contains("Library index:"), "{without}");
+}
