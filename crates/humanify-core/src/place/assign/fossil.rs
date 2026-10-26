@@ -859,6 +859,7 @@ definitions) — fix detection or run with --disable fossil-split"
                 hashes,
                 prior_modules,
                 matched: &matched.pair_tiers,
+                library: options.library,
                 final_file: &final_file,
             },
         );
@@ -899,6 +900,9 @@ struct FossilTrailInput<'a> {
     hashes: &'a [String],
     prior_modules: &'a [FossilLedgerModule],
     matched: &'a HashMap<usize, &'static str>,
+    /// The names mode's pre-filled modules (exp156): they record their
+    /// own tier so the trail is the one record of what the index moved.
+    library: &'a [(usize, String)],
     final_file: &'a [String],
 }
 
@@ -922,9 +926,13 @@ fn record_fossil_trail(trail: &mut PlacementTrail, input: &FossilTrailInput) {
         }
     }
     for (i, module) in input.extract.modules.iter().enumerate() {
-        let placed_by = match input.matched.get(&i) {
-            Some(tier) => format!("fossil:{tier}"),
-            None => "fossil-fresh".to_string(),
+        let placed_by = if input.library.iter().any(|&(lib, _)| lib == i) {
+            "library-index".to_string()
+        } else {
+            match input.matched.get(&i) {
+                Some(tier) => format!("fossil:{tier}"),
+                None => "fossil-fresh".to_string(),
+            }
         };
         for &s in &module.statements {
             let prior_file = prior_hash_file
