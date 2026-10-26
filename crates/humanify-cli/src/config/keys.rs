@@ -616,7 +616,8 @@ pub static KEYS: &[Key] = &[
               window and the isolation veto's neighbour test); \"veto\" / \"veto-or\" (the \
               veto's test only); \"relax-floor\" (a whole print of 20 nodes up is looked up \
               for the owners it confirms); \"relax-common\" (a print held by too many owners \
-              is narrowed to those it confirms); \"relax\" (both); \"tie-break+relax\".",
+              is narrowed to those it confirms); \"relax\" (both); \"tie-break+relax\"; \
+              \"tie-break+support-or+relax\" (every role, all additive).",
     },
     Key {
         section: "library.lookup",

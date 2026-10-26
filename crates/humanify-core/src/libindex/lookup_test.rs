@@ -754,3 +754,20 @@ fn call_context_relaxes_the_node_floor_and_the_package_cap_for_what_it_confirms(
     ];
     assert!(claims_called(&index, &q, relax).is_empty());
 }
+
+#[test]
+fn call_context_named_settings_round_trip_and_the_full_combo_turns_every_role_on() {
+    for name in CallContextRules::NAMES {
+        let rules = CallContextRules::from_name(name, Default::default())
+            .unwrap_or_else(|| panic!("{name} must parse"));
+        assert_eq!(rules.name(), Some(name), "{name} must round-trip");
+    }
+    let full = CallContextRules::from_name("tie-break+support-or+relax", Default::default())
+        .expect("the full combination is a named setting");
+    assert!(full.tie_break);
+    assert_eq!(full.support, CallSupport::Or);
+    assert_eq!(full.veto, CallSupport::Or);
+    assert_eq!(full.relax_floor, crate::libindex::units::UNIT_ROW_MIN_NODES);
+    assert!(full.relax_common);
+    assert_eq!(full.name(), Some("tie-break+support-or+relax"));
+}

@@ -849,7 +849,7 @@ pub struct CallContextRules {
 impl CallContextRules {
     /// The named settings the config key `library.lookup.call_context`
     /// chooses from, in this order ("off" first: the default).
-    pub const NAMES: [&'static str; 10] = [
+    pub const NAMES: [&'static str; 11] = [
         "off",
         "tie-break",
         "support",
@@ -860,6 +860,7 @@ impl CallContextRules {
         "relax-common",
         "relax",
         "tie-break+relax",
+        "tie-break+support-or+relax",
     ];
 
     /// The setting a name stands for (`callees` as given).
@@ -910,6 +911,17 @@ impl CallContextRules {
                 tie_break: true,
                 ..relax
             },
+            "tie-break+support-or+relax" => {
+                let both = CallContextRules {
+                    support: CallSupport::Or,
+                    veto: CallSupport::Or,
+                    ..relax
+                };
+                CallContextRules {
+                    tie_break: true,
+                    ..both
+                }
+            }
             _ => return None,
         })
     }
