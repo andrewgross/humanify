@@ -409,6 +409,58 @@ impl LibraryIndex {
         (!owners.is_empty() && !many).then_some(owners)
     }
 
+    /// The call-context relaxers (exp153, [`CallContextRules::relax_floor`],
+    /// [`CallContextRules::relax_common`]): the owners of `q`'s WHOLE print
+    /// its call context confirms, when the plain lookup refused the print
+    /// for its size (at or over the relaxed floor) or for too many owners,
+    /// and the confirmed ones are within the package cap. None otherwise.
+    fn look_confirmed(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Option<BTreeSet<u32>> {
+        let cc = rules.call_context;
+        let whole = &q.prints.whole;
+        if whole.content < rules.min_content {
+            return None;
+        }
+        let small = whole.nodes < rules.min_nodes;
+        if small && (cc.relax_floor == 0 || whole.nodes < cc.relax_floor) {
+            return None;
+        }
+        if !small && !cc.relax_common {
+            return None;
+        }
+        let owners: BTreeSet<u32> = ReferenceStore::candidates(self, &whole.hash)
+            .iter()
+            .filter(|h| {
+                rules
+                    .specificity
+                    .is_none_or(|(factor, slack)| h.module_bytes <= factor * q.module_bytes + slack)
+            })
+            .map(|h| h.owner)
+            .collect();
+        let many = |o: &BTreeSet<u32>| {
+            if rules.max_packages_by_family {
+                self.families_exceed(o, rules.max_packages, same)
+            } else {
+                o.len() > rules.max_packages
+            }
+        };
+        if owners.is_empty() || (!small && !many(&owners)) {
+            return None;
+        }
+        if small && many(&owners) && !cc.relax_common {
+            return None;
+        }
+        let confirmed: BTreeSet<u32> = owners
+            .into_iter()
+            .filter(|&o| self.call_confirms(q, rules, &|x| x == o))
+            .collect();
+        (!confirmed.is_empty() && !many(&confirmed)).then_some(confirmed)
+    }
+
     /// Do `owners` span more than `max` families under `same`? Stops at the
     /// first family past `max`, so a print every package holds costs at
     /// most `max + 1` comparisons per owner.
@@ -550,8 +602,8 @@ impl LibraryIndex {
         rules: &LookupRules,
         previous: Option<u32>,
         same: &dyn Fn(&str, &str) -> bool,
-    ) -> Option<(u32, u32)> {
-        let score = self.structural_scores(q, rules, same);
+    ) -> Option<(u32, u32, bool)> {
+        let (score, relaxed) = self.structural_scores_relaxed(q, rules, same);
         let whole = &q.prints.whole;
         let best = *score.values().max()?;
         let mut tied: Vec<u32> = score
@@ -560,8 +612,34 @@ impl LibraryIndex {
             .map(|(k, _)| *k)
             .collect();
         tied.sort_by(|a, b| self.packages[*a as usize].cmp(&self.packages[*b as usize]));
+        if rules.call_context.tie_break && tied.len() > 1 {
+            // exp153: the one tied package whose own rows record every
+            // callee of the unit
+            let confirmed: Vec<u32> = tied
+                .iter()
+                .copied()
+                .filter(|&p| self.call_confirms(q, rules, &|o| o == p))
+                .collect();
+            if confirmed.len() == 1 {
+                tied = confirmed;
+            }
+        }
         let p = previous.filter(|p| tied.contains(p)).unwrap_or(tied[0]);
-        (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1))).then_some((p, best))
+        (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1)))
+            .then_some((p, best, relaxed))
+    }
+
+    /// Does `q`'s call context confirm the owners `accept` takes (every
+    /// counted callee of the unit is one their rows of its print record;
+    /// [`super::callctx`])?
+    pub(crate) fn call_confirms(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        accept: &dyn Fn(u32) -> bool,
+    ) -> bool {
+        self.call_fit(q.prints, q.callees, rules.call_context.callees, accept)
+            .is_some_and(super::callctx::Fit::confirms)
     }
 
     /// Every package the structural rule would accept for `q` on its own
@@ -584,6 +662,17 @@ impl LibraryIndex {
         owners
     }
 
+    /// [`Self::structural_scores`] for an instrument (the call-context
+    /// census).
+    pub(crate) fn structural_scores_for(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> HashMap<u32, u32> {
+        self.structural_scores(q, rules, same)
+    }
+
     /// The structural rule's scores: per package, the nodes its hits cover
     /// (the whole print, else the largest non-overlapping functions).
     fn structural_scores(
@@ -592,6 +681,17 @@ impl LibraryIndex {
         rules: &LookupRules,
         same: &dyn Fn(&str, &str) -> bool,
     ) -> HashMap<u32, u32> {
+        self.structural_scores_relaxed(q, rules, same).0
+    }
+
+    /// [`Self::structural_scores`], and whether the scores came from a
+    /// call-context relaxer ([`Self::look_confirmed`]).
+    fn structural_scores_relaxed(
+        &self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> (HashMap<u32, u32>, bool) {
         let usable =
             |p: &UnitPrint, content: u32| p.nodes >= rules.min_nodes && p.content >= content;
         let whole = &q.prints.whole;
@@ -602,6 +702,14 @@ impl LibraryIndex {
             for p in owners {
                 score.insert(p, whole.nodes);
             }
+        }
+        if score.is_empty()
+            && let Some(owners) = self.look_confirmed(q, rules, same)
+        {
+            for p in owners {
+                score.insert(p, whole.nodes);
+            }
+            return (score, true);
         }
         if score.is_empty() {
             let mut hits: Vec<(&UnitPrint, BTreeSet<u32>)> = q
@@ -624,7 +732,7 @@ impl LibraryIndex {
                 }
             }
         }
-        score
+        (score, false)
     }
 }
 
@@ -710,6 +818,141 @@ pub struct LookupRules {
     /// its origin are one identity, and a bigger index adds carriers of the
     /// same code until a print every one of them holds says nothing.
     pub max_packages_by_family: bool,
+    /// The call-context rule (exp153; default off): what a unit's own
+    /// callees, read against the index's recorded ones, may decide.
+    pub call_context: CallContextRules,
+}
+
+/// How call context is used ([`super::callctx`]; exp153). Every use is
+/// off by default. A unit's call context CONFIRMS a package when it has at
+/// least one counted callee ([`CallContextRules::callees`]) and every one
+/// is a callee the package's index rows holding the unit's print record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct CallContextRules {
+    /// The position window's support ([`LookupRules::support`]).
+    pub support: CallSupport,
+    /// The isolation veto's neighbour test (discovery).
+    pub veto: CallSupport,
+    /// A structural tie between packages goes to the one tied package
+    /// whose call context confirms it.
+    pub tie_break: bool,
+    /// A whole print under `min_nodes` but at or over this floor is looked
+    /// up, for the owners whose call context confirms it (0: off).
+    pub relax_floor: u32,
+    /// A print more than `max_packages` owners hold is narrowed to the
+    /// owners whose call context confirms it.
+    pub relax_common: bool,
+    /// Which callees count.
+    pub callees: super::callctx::CalleeFloor,
+}
+
+impl CallContextRules {
+    /// The named settings the config key `library.lookup.call_context`
+    /// chooses from, in this order ("off" first: the default).
+    pub const NAMES: [&'static str; 11] = [
+        "off",
+        "tie-break",
+        "support",
+        "support-or",
+        "veto",
+        "veto-or",
+        "relax-floor",
+        "relax-common",
+        "relax",
+        "tie-break+relax",
+        "tie-break+support-or+relax",
+    ];
+
+    /// The setting a name stands for (`callees` as given).
+    pub fn from_name(name: &str, callees: super::callctx::CalleeFloor) -> Option<CallContextRules> {
+        let off = CallContextRules {
+            callees,
+            ..CallContextRules::default()
+        };
+        let relax = CallContextRules {
+            relax_floor: super::units::UNIT_ROW_MIN_NODES,
+            relax_common: true,
+            ..off
+        };
+        Some(match name {
+            "off" => off,
+            "tie-break" => CallContextRules {
+                tie_break: true,
+                ..off
+            },
+            "support" => CallContextRules {
+                support: CallSupport::Replace,
+                veto: CallSupport::Replace,
+                ..off
+            },
+            "support-or" => CallContextRules {
+                support: CallSupport::Or,
+                veto: CallSupport::Or,
+                ..off
+            },
+            "veto" => CallContextRules {
+                veto: CallSupport::Replace,
+                ..off
+            },
+            "veto-or" => CallContextRules {
+                veto: CallSupport::Or,
+                ..off
+            },
+            "relax-floor" => CallContextRules {
+                relax_floor: super::units::UNIT_ROW_MIN_NODES,
+                ..off
+            },
+            "relax-common" => CallContextRules {
+                relax_common: true,
+                ..off
+            },
+            "relax" => relax,
+            "tie-break+relax" => CallContextRules {
+                tie_break: true,
+                ..relax
+            },
+            "tie-break+support-or+relax" => {
+                let both = CallContextRules {
+                    support: CallSupport::Or,
+                    veto: CallSupport::Or,
+                    ..relax
+                };
+                CallContextRules {
+                    tie_break: true,
+                    ..both
+                }
+            }
+            _ => return None,
+        })
+    }
+
+    /// This setting's name (None: not one of [`Self::NAMES`]).
+    pub fn name(&self) -> Option<&'static str> {
+        Self::NAMES
+            .into_iter()
+            .find(|n| Self::from_name(n, self.callees).as_ref() == Some(self))
+    }
+
+    /// Is any use on?
+    pub fn is_on(&self) -> bool {
+        self.support != CallSupport::Off
+            || self.veto != CallSupport::Off
+            || self.tie_break
+            || self.relax_floor > 0
+            || self.relax_common
+    }
+}
+
+/// How call context stands beside a support test.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CallSupport {
+    /// Not read: the test as it is.
+    #[default]
+    Off,
+    /// The test passes, or the call context confirms.
+    Or,
+    /// The call context confirms (the test is not read).
+    Replace,
 }
 
 impl Default for LookupRules {
@@ -730,6 +973,7 @@ impl Default for LookupRules {
             literal_margin: 10.0,
             literal_margin_by_family: false,
             max_packages_by_family: false,
+            call_context: CallContextRules::default(),
         }
     }
 }
@@ -757,6 +1001,9 @@ pub struct UnitQuery<'q> {
     pub module_bytes: u64,
     /// The unit's text (the literal rule reads it).
     pub text: &'q str,
+    /// The unit's own callees in the bundle (the call-context rule reads
+    /// them; [`super::callctx::bundle_callees`]).
+    pub callees: &'q [super::callctx::Callee],
 }
 
 /// One claim.
@@ -770,20 +1017,31 @@ pub struct UnitClaim {
     pub literal: Option<(String, f64)>,
 }
 
-/// The claims of `queries` (statement units, in statement order) under
-/// `rules`; `same` (one package family?) decides agreement.
-pub fn claim_units(
+/// The structural rule's pick for one query, before literal agreement:
+/// the package, the nodes its hits cover, and whether the claim stands on
+/// its own or has the support it needs ([`LookupRules::support`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Pick {
+    pub package: u32,
+    pub covered: u32,
+    pub supported: bool,
+}
+
+/// The structural rule's picks for `queries` (statement units, in
+/// statement order) under `rules`: what [`claim_units`] claims from,
+/// before the literal rule.
+pub fn picks(
     index: &LibraryIndex,
     queries: &[UnitQuery<'_>],
-    rules: LookupRules,
+    rules: &LookupRules,
     same: &dyn Fn(&str, &str) -> bool,
-) -> Vec<UnitClaim> {
+) -> Vec<Option<Pick>> {
     let mut previous = None;
-    let structural: Vec<Option<(u32, u32)>> = queries
+    let structural: Vec<Option<(u32, u32, bool)>> = queries
         .iter()
         .map(|q| {
-            let hit = index.structural(q, &rules, previous, same);
-            if let Some((p, _)) = hit {
+            let hit = index.structural(q, rules, previous, same);
+            if let Some((p, _, _)) = hit {
                 previous = Some(p);
             }
             hit
@@ -792,16 +1050,53 @@ pub fn claim_units(
     let supported = |i: usize, p: u32| {
         let lo = i.saturating_sub(rules.support);
         let hi = (i + rules.support + 1).min(structural.len());
-        (lo..hi).any(|j| j != i && structural[j].is_some_and(|(q, _)| q == p))
+        (lo..hi).any(|j| j != i && structural[j].is_some_and(|(q, _, _)| q == p))
     };
+    let calls = |i: usize, p: u32| {
+        let named = index.package_name(p);
+        index.call_confirms(&queries[i], rules, &|o| same(index.package_name(o), named))
+    };
+    structural
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let (package, covered, relaxed) = (*s)?;
+            let window = || rules.support == 0 || supported(i, package);
+            // a relaxed pick stands on its confirmation (look_confirmed)
+            let supported = relaxed
+                || covered >= rules.strong
+                || match rules.call_context.support {
+                    CallSupport::Off => window(),
+                    CallSupport::Or => window() || calls(i, package),
+                    CallSupport::Replace => calls(i, package),
+                };
+            Some(Pick {
+                package,
+                covered,
+                supported,
+            })
+        })
+        .collect()
+}
+
+/// The claims of `queries` (statement units, in statement order) under
+/// `rules`; `same` (one package family?) decides agreement.
+pub fn claim_units(
+    index: &LibraryIndex,
+    queries: &[UnitQuery<'_>],
+    rules: LookupRules,
+    same: &dyn Fn(&str, &str) -> bool,
+) -> Vec<UnitClaim> {
     let mut out = Vec::new();
-    for (i, q) in queries.iter().enumerate() {
-        let Some((p, covered)) = structural[i] else {
+    for (q, pick) in queries.iter().zip(picks(index, queries, &rules, same)) {
+        let Some(Pick {
+            package: p,
+            covered,
+            supported: true,
+        }) = pick
+        else {
             continue;
         };
-        if rules.support > 0 && covered < rules.strong && !supported(i, p) {
-            continue;
-        }
         let package = &index.packages[p as usize];
         let mut claim = UnitClaim {
             unit: q.unit,

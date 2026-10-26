@@ -17,7 +17,10 @@
 //!   lab's knobs, read by the same owner as the pipeline's;
 //! - `--unit-prints`: every unit with the fingerprints the lookup read
 //!   (`unitRows`), so a scorer can say WHY a library unit was missed
-//!   without re-implementing the unit model.
+//!   without re-implementing the unit model;
+//! - `--call-context`: the call-context census (`callContext`, exp153):
+//!   per unit the index holds, how its own callees sit in what the index
+//!   records for each family holding it. An instrument; decides nothing.
 //!
 //! An index that cannot be read FAILS the verb (the pipeline, report-only,
 //! carries on without it): a score taken without its index would read as a
@@ -46,6 +49,8 @@ pub struct DiscoverArgs<'a> {
     /// recorded either way, under `detected`).
     pub bundler: Option<&'a str>,
     pub unit_prints: bool,
+    /// `--call-context`: the call-context census (`callContext`, exp153).
+    pub call_context: bool,
     /// Where the adapter unpacks (default: a scratch dir, removed after).
     pub work_dir: Option<&'a str>,
 }
@@ -109,6 +114,7 @@ pub fn discover(code: &str, args: &DiscoverArgs<'_>) -> Result<Value, String> {
         library_discovery: Some(humanify_core::libdetect::discovery::DiscoveryRequest {
             list_units: true,
             unit_prints: args.unit_prints,
+            call_context: args.call_context,
             ..args.library.discovery_request(index.as_ref())
         }),
         ..humanify_core::unpack::AdapterRun::new(

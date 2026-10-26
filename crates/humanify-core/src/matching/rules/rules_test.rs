@@ -128,3 +128,24 @@ fn every_tier_a_pair_row_can_carry_is_a_cross_version_rule() {
 fn a_rule_off_the_list_cannot_decide() {
     library().decide("unit@0-1".into(), "index:P".into(), "memberKey");
 }
+
+#[test]
+fn the_call_context_rule_reads_only_inside_and_out_of_and_the_library_profile_admits_it() {
+    use crate::matching::rules::lib;
+    let graph: Vec<Evidence> = lib::CALL_CONTEXT
+        .reads
+        .iter()
+        .copied()
+        .filter(|e| matches!(e, Evidence::Graph(_) | Evidence::GraphAll))
+        .collect();
+    assert_eq!(
+        graph,
+        vec![
+            Evidence::Graph(Scope::Inside),
+            Evidence::Graph(Scope::OutOf)
+        ]
+    );
+    let mut list = RuleList::new(Profile::Library);
+    list.push(lib::CALL_CONTEXT)
+        .expect("INSIDE and OUT-OF are identity evidence");
+}

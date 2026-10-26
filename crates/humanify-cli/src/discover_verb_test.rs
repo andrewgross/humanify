@@ -125,6 +125,7 @@ fn the_rule_reaches_the_lookup_and_the_units_are_listed() {
                 library: &rule(name),
                 bundler: None,
                 unit_prints,
+                call_context: false,
                 work_dir: None,
             },
         )
@@ -167,6 +168,7 @@ fn a_bad_setting_or_an_unreadable_index_fails_the_verb() {
         library: &agreement,
         bundler: None,
         unit_prints: false,
+        call_context: false,
         work_dir: None,
     };
     assert!(discover(&code, &args(Some("/nonexistent/index"))).is_err());
@@ -230,6 +232,7 @@ fn the_bundler_override_resolves_the_slice_and_the_verdict_is_kept() {
                 library: &rule("agreement"),
                 bundler,
                 unit_prints: false,
+                call_context: false,
                 work_dir: None,
             },
         )
@@ -260,6 +263,7 @@ fn a_bundle_no_module_helper_wraps_is_discovered_statement_by_statement() {
             library: &rule("agreement"),
             bundler: Some("bun"),
             unit_prints: true,
+            call_context: false,
             work_dir: None,
         },
     )
@@ -282,6 +286,7 @@ fn a_bundle_that_does_not_parse_reports_that_no_discovery_ran() {
             library: &rule("agreement"),
             bundler: Some("rollup"),
             unit_prints: true,
+            call_context: false,
             work_dir: None,
         },
     )
@@ -321,6 +326,7 @@ fn webpack_and_rollup_bundles_are_discovered_with_their_own_grammar() {
                     library: &rule("structural"),
                     bundler: forced,
                     unit_prints: true,
+                    call_context: false,
                     work_dir: None,
                 },
             )
@@ -354,6 +360,7 @@ fn a_bundle_whose_recipe_the_index_lacks_fails_the_instrument() {
             library: &rule("structural"),
             bundler: Some("bun"),
             unit_prints: false,
+            call_context: false,
             work_dir: None,
         },
     )

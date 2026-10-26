@@ -120,11 +120,12 @@ fn twin_bodies_with_different_callees_record_different_edges() {
     std::fs::remove_dir_all(&root).ok();
 }
 
-/// A shard of `rows` (the bun-node slice of `dep@1.0.0`).
+/// A shard of `rows` (the bun-node slice of `<first row's owner>@1.0.0`).
 fn shard_of(rows: Vec<ShardUnit>) -> Shard {
+    let package = rows.first().map_or("dep".to_string(), |r| r.owner.clone());
     let mut s = Shard::new(&ShardInputs {
         kind: ShardKind::Modules(bun_node()),
-        package: "dep".into(),
+        package,
         version: "1.0.0".into(),
         bundler: Some("bun@1.4.0".into()),
         recipe: "recipe/4 bun:target=node,format=cjs,minify".into(),
@@ -311,4 +312,139 @@ fn merged_edges_stay_with_their_owner(
     let names: Vec<&str> = out.iter().map(|c| ix.package_name(c.owner)).collect();
     assert_eq!(names, ["beta"]);
     assert!(ix.edges(main_hit, EdgeRead::Scoped(Scope::Into)).is_err());
+}
+
+// ---------------------------------------------------------------------------
+// The call-context rule (exp153, library-names plan step 2)
+// ---------------------------------------------------------------------------
+
+const CC_SPLIT: &str = "function splitter(t){return t.split(\",\").map(function(e){return e.trim().toLowerCase().replace(/\\s+/g,\"-\")}).filter(Boolean).slice(0,t.length)}";
+const CC_JOIN: &str = "function joiner(t){return t.join(\"|\").toUpperCase().trim().padStart(3,\"-\").slice(1).concat(\"!\").repeat(2).split(\"|\")}";
+const CC_ESC: &str = "function escaper(t){return String(t).split(\"<\").join(\"&lt;\").split(\">\").join(\"&gt;\").trim().replace(/&/g,\"&amp;\").concat(\"\")}";
+const CC_USE_A: &str = "function useA(x){var r=splitter(x),s=\"items\";return r.length+r.concat([x]).length+s.length+r.indexOf(\"first\")+r.lastIndexOf(\"last\")+1}";
+const CC_USE_B: &str = "function useB(x){var r=joiner(x),s=\"items\";return r.length+r.concat([x]).length+s.length+r.indexOf(\"first\")+r.lastIndexOf(\"last\")+1}";
+const CC_USE_ESC: &str = "function useEsc(x){var r=escaper(x),k=\"label\";return r.length+joiner(r).length+r.indexOf(x)+k.length+r.lastIndexOf(\"end\")+2}";
+
+/// One package's fake build (`lines` all its own), as a shard of its rows.
+fn package_shard(tag: &str, package: &str, lines: &[(&str, &str)]) -> (PathBuf, Vec<ShardUnit>) {
+    let owned: Vec<(Option<&str>, &str, &str)> =
+        lines.iter().map(|(f, t)| (Some(package), *f, *t)).collect();
+    let (root, code, map) = bundle(tag, &owned);
+    let (rows, _) = rows_of(&root, &code, &map);
+    (root, rows)
+}
+
+/// The claims discovery makes on `code` (a Bun target-node bundle with no
+/// module helper) against `ix` under the shipped rules with `call_context`.
+fn claims_with(
+    ix: &LibraryIndex,
+    code: &str,
+    call_context: humanify_core::libindex::lookup::CallContextRules,
+) -> Vec<(String, String)> {
+    use humanify_core::libdetect::discovery::{
+        BundlePieces, DiscoveryOptions, IndexLookup, discover_in_bundle,
+    };
+    use humanify_core::libindex::lookup::LookupRules;
+    use humanify_core::toolchain::{BundleLayout, InteropHelpers, ModuleWrapperGrammar};
+    let allocator = oxc_allocator::Allocator::default();
+    let ingest = humanify_core::ingest::Ingest::parse(&allocator, code, "input.js");
+    assert!(ingest.errors.is_empty(), "{:?}", ingest.errors);
+    let rules = LookupRules {
+        call_context,
+        ..LookupRules::recommended()
+    };
+    let (graph, found) = discover_in_bundle(
+        code,
+        &ingest,
+        BundlePieces {
+            layout: BundleLayout::SingleWrapperFunction,
+            grammar: ModuleWrapperGrammar::BunAndEsbuild,
+            interop: InteropHelpers::Bun,
+        },
+        &[],
+        &[],
+        Some(IndexLookup {
+            index: ix,
+            rules,
+            targeted: Some(LookupRules {
+                min_nodes: 20,
+                support: 0,
+                ..rules
+            }),
+            census: false,
+        }),
+        DiscoveryOptions::recommended(),
+    );
+    found
+        .claims
+        .iter()
+        .map(|(&u, c)| {
+            let span = graph.units[u as usize].span;
+            let text = &code[span.start as usize..span.end as usize];
+            (
+                text.split('(').next().unwrap_or("").to_string(),
+                c.package.clone(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn call_context_breaks_a_tie_between_twin_bodies_by_their_callees() {
+    // alpha and beta ship the same body (`useA` / `useB` print the same:
+    // the callee is a slot) calling different helpers
+    let (ra, alpha) = package_shard(
+        "cc-alpha",
+        "alpha",
+        &[("split.js", CC_SPLIT), ("use.js", CC_USE_A)],
+    );
+    let (rb, beta) = package_shard(
+        "cc-beta",
+        "beta",
+        &[
+            ("join.js", CC_JOIN),
+            ("esc.js", CC_ESC),
+            ("use.js", CC_USE_B),
+            ("use-esc.js", CC_USE_ESC),
+        ],
+    );
+    assert_eq!(
+        whole(&alpha, "alpha", "use.js").hash,
+        whole(&beta, "beta", "use.js").hash,
+        "the fixture's premise: one print, two packages"
+    );
+    let (ix, _) = load_merged(&ra.join("ix"), vec![shard_of(alpha), shard_of(beta)]);
+    // the app bundles beta: the twin first (no earlier pick to lean on)
+    let code = format!(
+        "{CC_USE_B}\n{CC_JOIN}\n{CC_ESC}\n{CC_USE_ESC}\nvar main=function(){{return useB(process.argv)+useEsc(process.argv[0])}};\n"
+    );
+    let off = humanify_core::libindex::lookup::CallContextRules::default();
+    let today = claims_with(&ix, &code, off);
+    let twin = |claims: &[(String, String)]| {
+        claims
+            .iter()
+            .find(|(head, _)| head == "function useB")
+            .map(|(_, p)| p.clone())
+    };
+    assert_ne!(
+        twin(&today),
+        Some("beta".to_string()),
+        "today the tie goes alphabetically to alpha, which nothing supports: {today:?}"
+    );
+    let tie_break = humanify_core::libindex::lookup::CallContextRules {
+        tie_break: true,
+        ..off
+    };
+    let with = claims_with(&ix, &code, tie_break);
+    assert_eq!(
+        twin(&with),
+        Some("beta".to_string()),
+        "the twin calls joiner, which only beta's row records: {with:?}"
+    );
+    assert!(
+        with.iter().all(|(_, p)| p == "beta"),
+        "no alpha claim anywhere: {with:?}"
+    );
+    std::fs::remove_dir_all(&ra).ok();
+    std::fs::remove_dir_all(&rb).ok();
 }

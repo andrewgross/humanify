@@ -426,6 +426,17 @@ pub mod lib {
     /// Lookup: the literal rule names the same family (agreement).
     pub const AGREEMENT: RuleSpec =
         RuleSpec::new("agreement", Stage::Guard, &[Literals, Families, Text]);
+    /// The call-context rule (exp153, `library.lookup.call_context`;
+    /// default off, so not in [`library`]'s list, which a run reports): a
+    /// unit's OWN callees (its INSIDE and OUT-OF edges, never who calls it)
+    /// held against the INSIDE and OUT-OF callees the index records for
+    /// the matched print, by containment — as a tie-break, a support test
+    /// or a relaxer of the node floor and the package cap.
+    pub const CALL_CONTEXT: RuleSpec = RuleSpec::new(
+        "callContext",
+        Stage::Guard,
+        &[UNITS, INSIDE, OUT_OF, Families],
+    );
     /// Discovery seeds: package readers and kept banners in the unit's own
     /// text.
     pub const DECLARED: RuleSpec = RuleSpec::new("declared", Stage::Seed, &[Text]);

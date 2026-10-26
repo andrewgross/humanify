@@ -1,0 +1,11 @@
+{
+ "maxPeakRssMb": 1507,
+ "note": "NOT deterministic: wall clock and peak memory of each `humanify discover` run (index load included); the cards and summary.json are the deterministic part",
+ "perEntry": {
+  "cc-2.1.216": {
+   "peakRssMb": 1507,
+   "wallSeconds": 8.48
+  }
+ },
+ "totalWallSeconds": 8.5
+}

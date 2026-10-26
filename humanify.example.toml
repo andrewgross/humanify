@@ -116,6 +116,10 @@ max_packages_by_family = false
 terser_slices = "off"
 # terser_slices = "auto": the share of the bundle's looked-up whole-unit nodes the terser-built slices alone must hold for the bundle to read them (exp127).
 terser_share = 0.2
+# The call-context rule (exp153): what a unit's own callees, read against the callees a /4 index records for the matched print (containment), may decide. "off"; "tie-break" (a structural tie goes to the one tied package it confirms); "support" / "support-or" (it replaces / joins the position window and the isolation veto's neighbour test); "veto" / "veto-or" (the veto's test only); "relax-floor" (a whole print of 20 nodes up is looked up for the owners it confirms); "relax-common" (a print held by too many owners is narrowed to those it confirms); "relax" (both); "tie-break+relax"; "tie-break+support-or+relax" (every role, all additive).
+call_context = "off"
+# Which callees the call-context rule counts (exp153): "all" with a print, or "rowed" (at or over the index's 20-node row floor).
+call_context_callees = "all"
 
 [library.lookup.targeted]
 # The targeted round's node floor (the other rules are the lookup's).

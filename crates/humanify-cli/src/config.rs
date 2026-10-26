@@ -312,6 +312,7 @@ impl Library {
             literal_margin: l.literal_margin,
             literal_margin_by_family: l.literal_margin_by_family,
             max_packages_by_family: l.max_packages_by_family,
+            call_context: l.call_context,
         }
     }
 
@@ -360,6 +361,7 @@ impl Library {
             targeted: Some((self.lookup.targeted_min_nodes, self.lookup.targeted_support)),
             options: self.discovery_options(),
             unit_prints: false,
+            call_context: false,
         }
     }
 
@@ -412,6 +414,13 @@ pub struct LibraryLookup {
     pub literal_margin: f64,
     pub literal_margin_by_family: bool,
     pub max_packages_by_family: bool,
+    /// The call-context rule (exp153): written only when on, so a dump of
+    /// the default settings is the one it was before the key existed.
+    #[serde(
+        skip_serializing_if = "call_context_off",
+        serialize_with = "serialize_call_context"
+    )]
+    pub call_context: humanify_core::libindex::lookup::CallContextRules,
     #[serde(serialize_with = "serialize_terser_slices")]
     pub terser_slices: humanify_core::libindex::recipe::TerserSlices,
     pub targeted_min_nodes: u32,
@@ -465,6 +474,21 @@ fn serialize_helper_prints<S: serde::Serializer>(
     s: S,
 ) -> Result<S::Ok, S::Error> {
     s.serialize_str(v.name())
+}
+
+fn call_context_off(v: &humanify_core::libindex::lookup::CallContextRules) -> bool {
+    *v == humanify_core::libindex::lookup::CallContextRules::default()
+}
+
+fn serialize_call_context<S: serde::Serializer>(
+    v: &humanify_core::libindex::lookup::CallContextRules,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&format!(
+        "{}/{}",
+        v.name().unwrap_or("custom"),
+        v.callees.name()
+    ))
 }
 
 fn serialize_terser_slices<S: serde::Serializer>(
@@ -622,6 +646,19 @@ fn library_of(r: &Resolved) -> Library {
             literal_margin: r.float("library.lookup.literal_margin"),
             literal_margin_by_family: r.flag_on("library.lookup.literal_margin_by_family"),
             max_packages_by_family: r.flag_on("library.lookup.max_packages_by_family"),
+            call_context: r
+                .text("library.lookup.call_context")
+                .as_deref()
+                .and_then(|t| {
+                    humanify_core::libindex::lookup::CallContextRules::from_name(
+                        t,
+                        r.text("library.lookup.call_context_callees")
+                            .as_deref()
+                            .and_then(humanify_core::libindex::callctx::CalleeFloor::parse)
+                            .expect("a checked choice"),
+                    )
+                })
+                .expect("a checked choice"),
             terser_slices: r
                 .text("library.lookup.terser_slices")
                 .as_deref()

@@ -81,6 +81,16 @@ fn terser_slices_choices() -> Vec<String> {
         .map(String::from)
         .to_vec()
 }
+fn call_context_choices() -> Vec<String> {
+    humanify_core::libindex::lookup::CallContextRules::NAMES
+        .map(String::from)
+        .to_vec()
+}
+fn call_context_callee_choices() -> Vec<String> {
+    humanify_core::libindex::callctx::CalleeFloor::NAMES
+        .map(String::from)
+        .to_vec()
+}
 fn helper_prints_choices() -> Vec<String> {
     humanify_core::libdetect::discovery::HelperPrints::NAMES
         .map(String::from)
@@ -592,6 +602,33 @@ pub static KEYS: &[Key] = &[
         "terser_slices = \"auto\": the share of the bundle's looked-up whole-unit nodes the \
          terser-built slices alone must hold for the bundle to read them (exp127).",
     ),
+    Key {
+        section: "library.lookup",
+        name: "call_context",
+        kind: Kind::Choice(call_context_choices),
+        flag: None,
+        default: || text("off"),
+        unset: "",
+        doc: "The call-context rule (exp153): what a unit's own callees, read against the \
+              callees a /4 index records for the matched print (containment), may decide. \
+              \"off\"; \"tie-break\" (a structural tie goes to the one tied package it \
+              confirms); \"support\" / \"support-or\" (it replaces / joins the position \
+              window and the isolation veto's neighbour test); \"veto\" / \"veto-or\" (the \
+              veto's test only); \"relax-floor\" (a whole print of 20 nodes up is looked up \
+              for the owners it confirms); \"relax-common\" (a print held by too many owners \
+              is narrowed to those it confirms); \"relax\" (both); \"tie-break+relax\"; \
+              \"tie-break+support-or+relax\" (every role, all additive).",
+    },
+    Key {
+        section: "library.lookup",
+        name: "call_context_callees",
+        kind: Kind::Choice(call_context_callee_choices),
+        flag: None,
+        default: || text("all"),
+        unset: "",
+        doc: "Which callees the call-context rule counts (exp153): \"all\" with a print, or \
+              \"rowed\" (at or over the index's 20-node row floor).",
+    },
     // [library.lookup.targeted]: the second round, on queued regions.
     lib_int(
         "library.lookup.targeted",
