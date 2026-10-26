@@ -9,7 +9,9 @@ use std::path::Path;
 
 use super::format::{EdgeRow, HelperRow, LiteralRow, Manifest, UnitRow};
 use super::literals::{LiteralMode, code_literals};
-use super::table::{self, EdgeCallee, EdgeTable, LiteralTable, Source, UnitTable};
+use super::table::{
+    self, CalleePrintTable, EdgeCallee, EdgeTable, LiteralTable, Source, UnitTable,
+};
 use super::units::{StatementPrints, UnitPrint};
 use crate::matching::store::ReferenceStore;
 
@@ -53,6 +55,11 @@ pub struct LibraryIndex {
     /// slice first, then the terser-built ones); None for a `/3` index,
     /// which records no edges.
     edges: Option<Vec<EdgeTable>>,
+    /// The flat callee-print tables (exp155, `edges/2`), parallel to
+    /// `edges`: every callee print any edge row records — INSIDE entries
+    /// under the row's owner, OUT-OF under the callee's own — including
+    /// prints with no unit row of their own. None for a `/3` index.
+    callee_prints: Option<Vec<CalleePrintTable>>,
     /// Every package name the index knows: its owners, and (loaded) the
     /// packages its manifest records registry metadata or builds for.
     known: BTreeSet<String>,
@@ -85,6 +92,12 @@ impl LibraryIndex {
     ) -> LibraryIndex {
         let edge_rows: &[EdgeRow] = edges.as_deref().unwrap_or(&[]);
         let packages = table::package_table(&[&units], &[edge_rows], &literals);
+        // the flat callee-print table is derived from the same rows a
+        // merge writes beside the edge table (`table::lookup_files`)
+        let callee_prints = edges.as_ref().map(|e| {
+            let bytes = CalleePrintTable::encode(e, &packages).expect("callee prints encode");
+            vec![CalleePrintTable::open(Source::Memory(bytes)).expect("an encoded table opens")]
+        });
         let edges = edges.map(|e| {
             let bytes = EdgeTable::encode(&units, &e, &packages).expect("edge rows encode");
             vec![EdgeTable::open(Source::Memory(bytes)).expect("an encoded edge table opens")]
@@ -103,6 +116,7 @@ impl LibraryIndex {
             )))
             .expect("an encoded literal table opens"),
             edges,
+            callee_prints,
             known: packages.iter().cloned().collect(),
             packages,
             helpers: BTreeMap::new(),
@@ -256,9 +270,21 @@ impl LibraryIndex {
             let file = table::edges_file(slice);
             EdgeTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))
         };
+        // exp155: every `/4` index this binary accepts (`edges/2`) writes
+        // the flat callee-print table beside the edge table — a missing
+        // file is a refusal, not an empty table: a rule that reads it
+        // must never mistake a broken index for recorded silence
+        let open_callee_prints = |slice: &str| {
+            let file = table::callee_prints_file(slice);
+            CalleePrintTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))
+        };
         let mut edges = manifest
             .has_edges()
             .then(|| open_edges(&slice).map(|t| vec![t]))
+            .transpose()?;
+        let mut callee_prints = manifest
+            .has_edges()
+            .then(|| open_callee_prints(&slice).map(|t| vec![t]))
             .transpose()?;
         let mut reason = reason.to_string();
         let mut terser_units = Vec::new();
@@ -271,6 +297,9 @@ impl LibraryIndex {
                     .push(UnitTable::open(open(&file)?).map_err(|e| format!("{file}: {e}"))?);
                 if let Some(tables) = edges.as_mut() {
                     tables.push(open_edges(name)?);
+                }
+                if let Some(tables) = callee_prints.as_mut() {
+                    tables.push(open_callee_prints(name)?);
                 }
             }
             reason.push_str(&format!(
@@ -311,6 +340,7 @@ impl LibraryIndex {
             terser_verdict: std::sync::OnceLock::new(),
             literals,
             edges,
+            callee_prints,
             helpers,
         })
     }
@@ -349,6 +379,45 @@ impl LibraryIndex {
     /// Does the index record edges (format `/4`)?
     pub fn has_edges(&self) -> bool {
         self.edges.is_some()
+    }
+
+    /// Does the index hold the flat callee-print table (`edges/2`, exp155)
+    /// to answer [`LibraryIndex::callee_recorders`] with? False for a `/3`
+    /// index — whose silence is no evidence, so a caller gating on this
+    /// must stay silent in turn.
+    pub fn has_callee_prints(&self) -> bool {
+        self.callee_prints.is_some()
+    }
+
+    /// The owners that RECORD `key` as a callee (exp155's flat table):
+    /// INSIDE entries credit the recording row's owner, OUT-OF entries the
+    /// callee's own. A print under the row floor — with no unit row of its
+    /// own — still answers here; that is the whole point: this is the
+    /// query that tells "the index never saw this print" from "it did,
+    /// under another family". Sorted owner ids; empty when nothing
+    /// records it or the index holds no table.
+    pub fn callee_recorders(&self, key: u64) -> Vec<u32> {
+        use super::recipe::TerserSlices;
+        let Some(tables) = self.callee_prints.as_ref() else {
+            return Vec::new();
+        };
+        let read_terser = match self.terser_reading {
+            TerserSlices::Off => false,
+            TerserSlices::Union => true,
+            // a print the chosen slice does not record may be recorded by a
+            // terser-built one — the same fallback the unit lookup reads
+            TerserSlices::Fallback => tables.first().is_none_or(|t| t.recorders(key).is_empty()),
+            TerserSlices::Auto { .. } => self.terser_verdict.get().is_some_and(|v| v.0),
+        };
+        let mut owners: Vec<u32> = tables.first().map_or_else(Vec::new, |t| t.recorders(key));
+        if read_terser {
+            for t in &tables[1..] {
+                owners.extend(t.recorders(key));
+            }
+        }
+        owners.sort_unstable();
+        owners.dedup();
+        owners
     }
 
     /// The callees a unit hit's row records, sorted by (owner, print key);

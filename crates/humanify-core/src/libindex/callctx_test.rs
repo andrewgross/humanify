@@ -179,3 +179,96 @@ fn equal_call_trees_hash_equal_whatever_the_node_ids() {
     assert_ne!(ma[&1], mc[&1]);
     assert_eq!(ma[&4], mb[&40]);
 }
+
+// ---------------------------------------------------------------------------
+// The scoped fit (exp155): which UNHELD callees may count as evidence
+// ---------------------------------------------------------------------------
+
+use crate::libindex::callctx::{FitScope, ScopedFit};
+
+/// The census-measured gap, at index scale: a callee the index has never
+/// seen must be SILENCE (skipped), one another family records is genuine
+/// refutation material, one the accepting family holds anywhere (its row,
+/// or a flat record under its name) is family-neutral.
+#[test]
+fn a_scoped_fit_skips_the_unknown_and_the_family_held_and_keeps_the_recorded_elsewhere() {
+    let ix = LibraryIndex::from_rows_with_edges(
+        vec![
+            row("twin", "alpha"),
+            row("twin", "beta"),
+            row("other", "alpha"),
+            row("owned", "alpha"),
+        ],
+        vec![
+            edge("twin", "alpha", &["a1"], &[]),
+            edge("twin", "beta", &["b1"], &[]),
+            // "sided": recorded INSIDE by alpha's OTHER row — the family
+            // holds it, this row does not
+            edge("other", "alpha", &["sided"], &[]),
+        ],
+        vec![],
+    );
+    let alpha = ix
+        .package_names()
+        .iter()
+        .position(|p| p == "alpha")
+        .unwrap() as u32;
+    let prints = whole("twin");
+    let fit = |bundle: &[(&str, u32)], scope: FitScope| {
+        ix.call_fit_scoped(&prints, &callees(bundle), CalleeFloor::All, scope, &|o| {
+            o == alpha
+        })
+    };
+    // a1 held; stranger nowhere in the index (no row, no record)
+    let unheld = fit(&[("a1", 30), ("stranger", 30)], FitScope::All).unwrap();
+    assert!(unheld.refutes(), "today's fit refutes what it cannot know");
+    let unknown = fit(&[("a1", 30), ("stranger", 30)], FitScope::Known).unwrap();
+    assert_eq!(
+        unknown,
+        ScopedFit {
+            counted: 1,
+            held: 1,
+            skipped: 1
+        },
+        "the unknown callee is skipped, not counted"
+    );
+    assert!(unknown.confirms() && !unknown.refutes());
+    // "sided": the family records it in another row; "owned": the family
+    // holds its ROW. Both refute under Known and are skipped under Family
+    let sided = fit(&[("a1", 30), ("sided", 30)], FitScope::Known).unwrap();
+    assert!(sided.refutes(), "Known still counts the recorded elsewhere");
+    let family = fit(
+        &[("a1", 30), ("sided", 30), ("owned", 30)],
+        FitScope::Family,
+    )
+    .unwrap();
+    assert_eq!(family.counted, 1, "a1; the family-held are skipped");
+    assert_eq!(family.skipped, 2, "sided by record, owned by row");
+    assert!(family.confirms() && !family.refutes());
+    // a callee only ANOTHER family records stays counted under Family:
+    // genuine refutation material
+    let foreign = fit(&[("a1", 30), ("b1", 30)], FitScope::Family).unwrap();
+    assert!(foreign.refutes(), "b1 is recorded by beta alone");
+    assert_eq!(foreign.skipped, 0);
+    // nothing counted: no verdict either way
+    let mute = fit(&[("stranger", 30)], FitScope::Known).unwrap();
+    assert!(!mute.confirms() && !mute.refutes());
+    // the flat table IS the scope's instrument: a /3 index cannot scope,
+    // and says nothing rather than evidence against
+    let old = LibraryIndex::from_rows(vec![row("twin", "alpha")], vec![]);
+    assert_eq!(
+        old.call_fit_scoped(
+            &prints,
+            &callees(&[("a1", 30), ("stranger", 30)]),
+            CalleeFloor::All,
+            FitScope::Known,
+            &|_| true
+        ),
+        None
+    );
+    // the scope names round-trip
+    for name in FitScope::NAMES {
+        assert_eq!(FitScope::parse(name).unwrap().name(), name, "{name}");
+    }
+    assert_eq!(FitScope::parse("nope"), None);
+}

@@ -3075,13 +3075,16 @@ impl Looker<'_> {
     /// The call-context census (exp153, an instrument: decides nothing):
     /// per statement unit any index row holds a print of, the structural
     /// rule's pick and every family holding it, each with how the unit's
-    /// own callees sit in what the index records ([`CallContextRow`]).
+    /// own callees sit in what the index records ([`CallContextRow`]) —
+    /// and, since exp155, the scoped fits and the flat `edges/2`
+    /// recorders: which missing callees the index knows nowhere (silence)
+    /// and which only another family records (the veto's evidence).
     fn call_context_rows(
         &self,
         index: &crate::libindex::lookup::LibraryIndex,
         rules: &crate::libindex::lookup::LookupRules,
     ) -> Vec<CallContextRow> {
-        use crate::libindex::callctx::{CalleeFloor, IndexTrees, bundle_tree_hashes};
+        use crate::libindex::callctx::{CalleeFloor, FitScope, IndexTrees, bundle_tree_hashes};
         use crate::libindex::units::UNIT_ROW_MIN_NODES;
         use crate::matching::store::ReferenceStore;
         let everything: Vec<u32> = (0..self.graph.units.len() as u32).collect();
@@ -3178,6 +3181,20 @@ impl Looker<'_> {
                         }),
                         fit,
                         rowed_fit,
+                        known_fit: index.call_fit_scoped(
+                            q.prints,
+                            q.callees,
+                            CalleeFloor::All,
+                            FitScope::Known,
+                            &inside,
+                        ),
+                        foreign_fit: index.call_fit_scoped(
+                            q.prints,
+                            q.callees,
+                            CalleeFloor::All,
+                            FitScope::Family,
+                            &inside,
+                        ),
                         tree: false,
                     }
                 })
@@ -3194,7 +3211,8 @@ impl Looker<'_> {
                 f.tree = tree_of(&members);
             }
             let pick = pick.map(|p| {
-                let (fit, rowed_fit) = fits(&|o| o == p.package);
+                let own = |o: u32| o == p.package;
+                let (fit, rowed_fit) = fits(&own);
                 let named = index.package_name(p.package);
                 let in_family = |o: u32| (self.same)(index.package_name(o), named);
                 let (family_fit, family_rowed_fit) = fits(&in_family);
@@ -3213,6 +3231,14 @@ impl Looker<'_> {
                             nodes: c.nodes,
                             indexed: !hits.is_empty(),
                             in_family: hits.iter().any(|h| in_family(h.owner)),
+                            recorded_by: index
+                                .callee_recorders(c.key)
+                                .iter()
+                                .map(|&o| index.package_name(o).to_string())
+                                .collect::<BTreeSet<_>>()
+                                .into_iter()
+                                .take(CENSUS_RECORDED_BY)
+                                .collect(),
                             hash,
                         }
                     })
@@ -3225,6 +3251,34 @@ impl Looker<'_> {
                     rowed_fit,
                     family_fit,
                     family_rowed_fit,
+                    known_fit: index.call_fit_scoped(
+                        q.prints,
+                        q.callees,
+                        CalleeFloor::All,
+                        FitScope::Known,
+                        &own,
+                    ),
+                    known_rowed_fit: index.call_fit_scoped(
+                        q.prints,
+                        q.callees,
+                        CalleeFloor::Rowed,
+                        FitScope::Known,
+                        &own,
+                    ),
+                    foreign_fit: index.call_fit_scoped(
+                        q.prints,
+                        q.callees,
+                        CalleeFloor::All,
+                        FitScope::Family,
+                        &in_family,
+                    ),
+                    foreign_rowed_fit: index.call_fit_scoped(
+                        q.prints,
+                        q.callees,
+                        CalleeFloor::Rowed,
+                        FitScope::Family,
+                        &in_family,
+                    ),
                     tree: tree_of(&[p.package]),
                     missing,
                 }
@@ -3285,6 +3339,17 @@ pub struct PickRow {
     pub rowed_fit: Option<crate::libindex::callctx::Fit>,
     pub family_fit: Option<crate::libindex::callctx::Fit>,
     pub family_rowed_fit: Option<crate::libindex::callctx::Fit>,
+    /// The exp155 scoped fits (DOWN-only evidence, the flat `edges/2`
+    /// callee-print table): the pick's own owners under
+    /// [`crate::libindex::callctx::FitScope::Known`] and its family under
+    /// [`crate::libindex::callctx::FitScope::Family`] — an unheld callee
+    /// the index knows nowhere (Known) or the family holds anywhere
+    /// (Family) is `skipped`, not counted; None when the index records no
+    /// flat table (`/3`): silence, never evidence against.
+    pub known_fit: Option<crate::libindex::callctx::ScopedFit>,
+    pub known_rowed_fit: Option<crate::libindex::callctx::ScopedFit>,
+    pub foreign_fit: Option<crate::libindex::callctx::ScopedFit>,
+    pub foreign_rowed_fit: Option<crate::libindex::callctx::ScopedFit>,
     /// The call-tree hash equals the picked owner's.
     pub tree: bool,
     /// The first bundle callees the family's rows do not record.
@@ -3302,9 +3367,20 @@ pub struct MissingCallee {
     pub nodes: u32,
     pub indexed: bool,
     pub in_family: bool,
+    /// The packages whose edges flat-record this print (exp155,
+    /// `edges/2`): a print below the row floor or inside another
+    /// package's OUT-OF list owns no row of its own, and this is the only
+    /// place it answers — `indexed` stays false while `recorded_by` names
+    /// its recorders.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub recorded_by: Vec<String>,
 }
 
 const CENSUS_MISSING: usize = 8;
+
+/// Packages a missing callee's flat recorders are capped at (the rest are
+/// counted, not named).
+const CENSUS_RECORDED_BY: usize = 6;
 
 /// One family holding a census row's prints.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -3321,6 +3397,12 @@ pub struct FamilyFit {
     pub specific: bool,
     pub fit: Option<crate::libindex::callctx::Fit>,
     pub rowed_fit: Option<crate::libindex::callctx::Fit>,
+    /// The exp155 scoped fits: this family's owners under
+    /// [`crate::libindex::callctx::FitScope::Known`] and
+    /// [`crate::libindex::callctx::FitScope::Family`] (None on an index
+    /// without the flat table).
+    pub known_fit: Option<crate::libindex::callctx::ScopedFit>,
+    pub foreign_fit: Option<crate::libindex::callctx::ScopedFit>,
     /// The call-tree hash equals a member's.
     pub tree: bool,
 }

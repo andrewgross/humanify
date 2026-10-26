@@ -7,6 +7,15 @@
 //!   describes the app, docs/matching-architecture.md §4), each callee as
 //!   its whole print. Runtime helpers and containers are skipped: the
 //!   builder records neither (`humanify_index::build::unit_edges`).
+//! - **DOWN ONLY — a declared deviation from the cross-version matcher**
+//!   (Andrew, 2026-10-26; the row lives in docs/responsibility.md):
+//!   library-matching evidence looks only DOWN the graph — a unit's
+//!   recursive callee tree, crossing package boundaries (OUT-OF callees
+//!   of the row's owner) and below the index's 20-node row floor (the
+//!   flat callee-print table, exp155). It never looks UP: callers are app
+//!   integration code, INTO stays unread. The cross-version matcher
+//!   forbids exactly this asymmetry; the library profile declares it,
+//!   and it lives HERE, never in `matching/cascade`.
 //! - **The index side** is the INSIDE and OUT-OF callees a `/4` index
 //!   records for the rows holding the matched print
 //!   ([`ReferenceStore::edges`]), a union over the rows an owner (or its
@@ -18,10 +27,21 @@
 //!   (`matching::cascade`, `CalleeHashes`) asks the same question with
 //!   EQUALITY, because both of its sides are whole programs; here the
 //!   bundle is a subset of the build.
+//! - **Which unheld callees count** ([`FitScope`], exp155): the plain fit
+//!   counts them all — and exp153's census measured where that lies: a
+//!   callee the index has never seen (version skew, print drift) refutes
+//!   right code, 9.1–9.2 MB of it per bun-dev set. The scoped fit skips
+//!   what the index knows nowhere (`Known`) and additionally what the
+//!   accepting family holds anywhere — its rows, or flat callee records
+//!   under its name (`Family`). A scope other than `All` needs the flat
+//!   callee-print table (`edges/2`): an index without it stays silent,
+//!   never evidence against.
 //! - **The call-tree hash** ([`tree_hashes`]): a unit's print combined
 //!   with its callees' tree hashes, bottom-up, a strongly connected
 //!   component hashed as one. Callees below the index's row floor are
-//!   leaves on both sides (the index records no edges for them).
+//!   leaves on both sides (the index records no callee LISTS for a print
+//!   with no row — the flat table names its recorders, not what it
+//!   calls: a rowless callee stays a leaf by design, exp155).
 
 use std::collections::{BTreeSet, HashMap};
 use std::hash::Hash;
@@ -140,6 +160,70 @@ impl CalleeFloor {
     }
 }
 
+/// Which unheld callees a fit may count against a claim (exp155). The
+/// plain fit counts them all; the census measured what that costs — a
+/// callee the index has never seen refutes right code (9.1–9.2 MB per
+/// bun-dev set) because "unknown" and "recorded elsewhere" look alike.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FitScope {
+    /// Today's fit: every floor-passing callee counts, and one the index
+    /// does not record is counted as unheld.
+    #[default]
+    All,
+    /// Skip a callee the index knows NOWHERE — no unit row of anyone's,
+    /// no flat record: it cannot say which family is right.
+    Known,
+    /// Additionally skip a callee the accepting family holds anywhere —
+    /// a row of its own, or a flat record under its name. Version skew
+    /// and print drift inside the family are not evidence against it;
+    /// what only another family records still counts.
+    Family,
+}
+
+impl FitScope {
+    /// The config spellings, in this order.
+    pub const NAMES: [&'static str; 3] = ["all", "known", "family"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            FitScope::All => "all",
+            FitScope::Known => "known",
+            FitScope::Family => "family",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<FitScope> {
+        match text {
+            "all" => Some(FitScope::All),
+            "known" => Some(FitScope::Known),
+            "family" => Some(FitScope::Family),
+            _ => None,
+        }
+    }
+}
+
+/// A fit with its evidence scoped (exp155): `held` of the `counted`
+/// callees, `skipped` the floor-passing callees the scope would not let
+/// count — the unknown, and under [`FitScope::Family`] the family-held.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ScopedFit {
+    pub counted: u32,
+    pub held: u32,
+    pub skipped: u32,
+}
+
+impl ScopedFit {
+    /// At least one counted callee, and every counted one held.
+    pub fn confirms(self) -> bool {
+        self.counted > 0 && self.held == self.counted
+    }
+
+    /// A counted callee the reference does not record.
+    pub fn refutes(self) -> bool {
+        self.held < self.counted
+    }
+}
+
 impl LibraryIndex {
     /// The callees the index records for `hits` (rows holding one print)
     /// whose owner `accept` takes: the union of their INSIDE and OUT-OF
@@ -201,6 +285,66 @@ impl LibraryIndex {
     ) -> Option<Fit> {
         let reference = self.print_callees(prints, accept)?;
         Some(Fit::of(floor.keys(callees), &reference))
+    }
+
+    /// Does the index know `key` ANYWHERE — a unit row of anyone's, or a
+    /// flat callee record? (under [`FitScope::Known`] an unheld callee
+    /// this returns false for is skipped, not evidence against).
+    fn callee_known(&self, key: u64) -> bool {
+        !self.unit_hits(&format!("{key:016x}")).is_empty() || !self.callee_recorders(key).is_empty()
+    }
+
+    /// Does the family `accept` takes hold `key` anywhere: a row of its
+    /// own, or a flat callee record under its name?
+    fn callee_family_held(&self, key: u64, accept: &dyn Fn(u32) -> bool) -> bool {
+        self.callee_recorders(key).iter().any(|&o| accept(o))
+            || self
+                .unit_hits(&format!("{key:016x}"))
+                .iter()
+                .any(|h| accept(h.owner))
+    }
+
+    /// [`LibraryIndex::call_fit`] with its evidence scoped (exp155):
+    /// a callee the reference does not record counts only when the scope
+    /// lets it — [`FitScope::All`] keeps today's verdict, [`FitScope::Known`]
+    /// skips what the index knows nowhere, [`FitScope::Family`] also skips
+    /// what the accepting family holds anywhere. A scope other than `All`
+    /// reads the flat callee-print table (`edges/2`); an index without it
+    /// answers None — silence, never evidence against a claim.
+    pub fn call_fit_scoped(
+        &self,
+        prints: &StatementPrints,
+        callees: &[Callee],
+        floor: CalleeFloor,
+        scope: FitScope,
+        accept: &dyn Fn(u32) -> bool,
+    ) -> Option<ScopedFit> {
+        let reference = self.print_callees(prints, accept)?;
+        if scope == FitScope::All {
+            let fit = Fit::of(floor.keys(callees), &reference);
+            return Some(ScopedFit {
+                counted: fit.callees,
+                held: fit.held,
+                skipped: 0,
+            });
+        }
+        if !self.has_callee_prints() {
+            return None;
+        }
+        let mut fit = ScopedFit::default();
+        for k in floor.keys(callees) {
+            if reference.binary_search(&k).is_ok() {
+                fit.counted += 1;
+                fit.held += 1;
+            } else if scope == FitScope::Family && self.callee_family_held(k, accept) {
+                fit.skipped += 1;
+            } else if self.callee_known(k) {
+                fit.counted += 1;
+            } else {
+                fit.skipped += 1;
+            }
+        }
+        Some(fit)
     }
 }
 

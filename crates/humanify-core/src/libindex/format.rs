@@ -16,20 +16,42 @@ use serde::{Deserialize, Serialize};
 use crate::hash::forms::{LIBRARY_LITERALS_VERSION, LIBRARY_UNITS, VENDOR_CONTENT};
 
 /// The format tag this binary writes: `/4` adds the edge tables
-/// (`edges.<slice>.bin` + `edges.<slice>.jsonl`, exp151).
+/// (`edges.<slice>.bin` + `edges.<slice>.jsonl`, and the flat
+/// `callee-prints.<slice>.bin` — exp151 + exp155).
 pub const INDEX_FORMAT: &str = "humanify-library-index/4";
 
 /// The one older format this binary still reads: the same tables without
 /// edges, so its store answers every edge read `NotRecorded`.
 pub const INDEX_FORMAT_NO_EDGES: &str = "humanify-library-index/3";
 
-/// The edge rows' version (exp151): per unit row, the WHOLE prints of the
-/// statement units its statement references in the bundle's reference
-/// graph (`graph::references`, factory bodies cut), split by the callee's
-/// owner into INSIDE (the row's own package) and OUT-OF (another package);
-/// a callee with no print (a container) or no owner is not recorded. In
-/// every module shard's key.
-pub const LIBRARY_EDGES_VERSION: &str = "edges/1";
+/// The edge ROWS' version (exp151, unchanged in exp155): per unit row, the
+/// WHOLE prints of the statement units its statement references in the
+/// bundle's reference graph (`graph::references`, factory bodies cut),
+/// split by the callee's owner into INSIDE (the row's own package) and
+/// OUT-OF (another package); a callee with no print (a container) or no
+/// owner is not recorded. In every module shard's key — the flat
+/// callee-print table an `edges/2` index adds is DERIVED from these rows at
+/// merge time, so a shard re-keys only when its rows do (identical rows,
+/// identical key: an index rebuilt on a reused store re-merges without one
+/// fingerprint).
+pub const LIBRARY_EDGE_ROWS_VERSION: &str = "edges/1";
+
+/// The readable edge data's version (exp155 bumps it to `edges/2`): what a
+/// `/4` index's edge data answers IN TOTAL — the edge rows
+/// ([`LIBRARY_EDGE_ROWS_VERSION`]) plus the flat callee-print table
+/// (`callee-prints.<slice>.bin`, derived from the same rows at merge
+/// time): every DISTINCT callee print any row records, with the owners
+/// whose rows record it, so a callee that exists in the edge data WITHOUT
+/// owning a unit row (under the 20-node row floor, a stop-listed helper, a
+/// row dropped for evidence) is queryable by key. This is what lets the
+/// call-context fit tell "the index does not know this print" (version
+/// skew, print drift: silence, not evidence against the family) from "the
+/// family's rows lack it but other families record it" (refutation), which
+/// edges/1 could not (exp153's census: 9.1–9.2 MB of RIGHT claim bytes per
+/// bun-dev set refuted through that gap). The manifest's
+/// `fingerprints.edges`; a `/4` manifest stamped differently is refused
+/// ([`check_manifest_stamps`]).
+pub const LIBRARY_EDGES_VERSION: &str = "edges/2";
 
 /// The build recipe's version (`humanify-index`'s `recipe` module: every
 /// rule of how a slice's bundles are made). Recorded per slice in the
