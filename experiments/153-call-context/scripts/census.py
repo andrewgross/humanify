@@ -13,6 +13,7 @@ unit's call-tree hash equals one of the family's). A signal CONFIRMS, REFUTES (a
 
 Decisions (the unit's verdict under main's defaults):
   claim       an index seed that was kept (evidence index or queueIndex): the claimed family's signal
+  weakClaim   the kept index seeds (evidence index) under 100 covered nodes: what the position window passed
   propagated  a unit the fixpoint claimed (down / module / glue) that the index holds a print of
   veto        an index seed the isolation veto dropped: confirm = would be rescued
   support     a structural pick the position window refused (covered < 100 nodes, no claim of its package
@@ -98,6 +99,9 @@ def classify(row, claim, vetoed, verdict, weight, tally, same):
         v = verdict(claim["package"])
         for s in SIGNALS:
             tally.add("claim", f"{s}:{signal(fam, s, row)}:{v}", weight)
+        if pick and pick["covered"] < STRONG and (claim.get("evidence") or {}).get("kind") == "index":
+            for s in SIGNALS:
+                tally.add("weakClaim", f"{s}:{signal(fam, s, row)}:{v}", weight)
         if pick and same(pick["package"], claim["package"]) and signal(fam, "fit", row) == "refute":
             for m in pick.get("missing", []):
                 why = ("small" if m["nodes"] < 20 else "family-other-row" if m["inFamily"]
