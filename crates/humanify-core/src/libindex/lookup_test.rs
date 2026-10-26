@@ -852,3 +852,58 @@ fn a_rowless_callee_print_resolves_to_its_recorders_in_memory_and_on_disk() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ---------------------------------------------------------------------------
+// The down-scoped tie-break (exp155): what the flat callee-print table
+// buys exp153's tie resolution — an unheld callee the index knows NOWHERE
+// is skipped instead of counted against (the DOWN-only deviation, declared
+// in docs/responsibility.md), so the one tied family whose rows hold every
+// callee the index has ever recorded wins a tie the plain fit cannot
+// touch, and an index without the table answers nothing.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_down_scoped_tie_break_resolves_a_tie_the_plain_fit_cannot() {
+    let index = LibraryIndex::from_rows_with_edges(
+        vec![row("w", "alpha", 40, 2000), row("w", "beta", 40, 2000)],
+        vec![edge("w", "alpha", &[]), edge("w", "beta", &["held"])],
+        vec![],
+    );
+    let prints = [(whole("w", 40), vec![callee("held"), callee("unknown")])];
+    let queries: Vec<UnitQuery<'_>> = prints
+        .iter()
+        .enumerate()
+        .map(|(i, (p, c))| UnitQuery {
+            unit: i as u32,
+            prints: p,
+            module_bytes: 1000,
+            text: "",
+            callees: c,
+        })
+        .collect();
+    let pick = |index: &LibraryIndex, rules: LookupRules| {
+        crate::libindex::lookup::picks(index, &queries, &rules, &same)[0]
+            .map(|p| index.package_name(p.package).to_string())
+    };
+    // both tied packages refute under the plain fit — alpha's rows hold
+    // nothing, beta's lack the unknown callee — so exp153's tie-break
+    // confirms neither and the package-order fallback wins
+    let plain = with_call_context(
+        CallContextRules::from_name("tie-break", Default::default()).expect("a named setting"),
+    );
+    assert_eq!(pick(&index, plain).as_deref(), Some("alpha"));
+    // the DOWN-scoped fit skips the callee the index knows nowhere and
+    // confirms the one tied family that holds every recorded callee
+    let down = with_call_context(
+        CallContextRules::from_name("tie-break-down", Default::default()).expect("a named setting"),
+    );
+    assert_eq!(pick(&index, down).as_deref(), Some("beta"));
+    // a scoped fit on an index without the flat table is SILENT — never
+    // evidence against a tied family — so the fallback pick stands
+    let no_table = LibraryIndex::from_rows(
+        vec![row("w", "alpha", 40, 2000), row("w", "beta", 40, 2000)],
+        vec![],
+    );
+    assert!(!no_table.has_callee_prints());
+    assert_eq!(pick(&no_table, down).as_deref(), Some("alpha"));
+}

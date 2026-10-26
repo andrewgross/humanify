@@ -682,20 +682,69 @@ impl LibraryIndex {
             .collect();
         tied.sort_by(|a, b| self.packages[*a as usize].cmp(&self.packages[*b as usize]));
         if rules.call_context.tie_break && tied.len() > 1 {
-            // exp153: the one tied package whose own rows record every
-            // callee of the unit
-            let confirmed: Vec<u32> = tied
-                .iter()
-                .copied()
-                .filter(|&p| self.call_confirms(q, rules, &|o| o == p))
-                .collect();
-            if confirmed.len() == 1 {
-                tied = confirmed;
+            if rules.call_context.scope == super::callctx::FitScope::All {
+                // exp153: the one tied package whose own rows record every
+                // callee of the unit
+                let confirmed: Vec<u32> = tied
+                    .iter()
+                    .copied()
+                    .filter(|&p| self.call_confirms(q, rules, &|o| o == p))
+                    .collect();
+                if confirmed.len() == 1 {
+                    tied = confirmed;
+                }
+            } else if let Some(family) = self.down_tie_family(q, rules, &tied, same) {
+                // exp155 (`tie-break-down`): the one tied FAMILY the
+                // DOWN-scoped fit confirms — evidence only the flat
+                // `edges/2` callee-print table can tell apart
+                tied.retain(|&p| same(self.package_name(p), family));
             }
         }
         let p = previous.filter(|p| tied.contains(p)).unwrap_or(tied[0]);
         (f64::from(best) >= rules.cover * f64::from(whole.nodes.max(1)))
             .then_some((p, best, relaxed))
+    }
+
+    /// The one tied family a DOWN scope ([`CallContextRules::scope`])
+    /// confirms — the tie resolution of `tie-break-down` (exp155): each
+    /// family is tested once, through the same-package owners
+    /// ([`crate::libindex::callctx::call_fit_scoped`]), a callee the index
+    /// knows nowhere or the family holds anywhere skipped instead of
+    /// counted against (the DOWN-only deviation; `docs/responsibility.md`).
+    /// None: no family confirms, or more than one does — an unresolved tie
+    /// keeps `tied` whole, silence never resolves.
+    fn down_tie_family<'i>(
+        &'i self,
+        q: &UnitQuery<'_>,
+        rules: &LookupRules,
+        tied: &[u32],
+        same: &dyn Fn(&str, &str) -> bool,
+    ) -> Option<&'i str> {
+        let mut seen: Vec<&str> = Vec::new();
+        let mut winner: Option<&str> = None;
+        for &p in tied {
+            let name = self.package_name(p);
+            if seen.iter().any(|&n| same(n, name)) {
+                continue; // the family's tied packages answer alike
+            }
+            seen.push(name);
+            let confirms = self
+                .call_fit_scoped(
+                    q.prints,
+                    q.callees,
+                    rules.call_context.callees,
+                    rules.call_context.scope,
+                    &|o| same(self.package_name(o), name),
+                )
+                .is_some_and(super::callctx::ScopedFit::confirms);
+            if confirms {
+                if winner.is_some() {
+                    return None; // two families confirm: no resolution
+                }
+                winner = Some(name);
+            }
+        }
+        winner
     }
 
     /// Does `q`'s call context confirm the owners `accept` takes (every
@@ -892,7 +941,7 @@ pub struct LookupRules {
     pub call_context: CallContextRules,
 }
 
-/// How call context is used ([`super::callctx`]; exp153). Every use is
+/// How call context is used ([`super::callctx`]; exp153, exp155). Every use is
 /// off by default. A unit's call context CONFIRMS a package when it has at
 /// least one counted callee ([`CallContextRules::callees`]) and every one
 /// is a callee the package's index rows holding the unit's print record.
@@ -913,14 +962,24 @@ pub struct CallContextRules {
     pub relax_common: bool,
     /// Which callees count.
     pub callees: super::callctx::CalleeFloor,
+    /// The tie-break's evidence scope (exp155, `tie-break-down`): `All`
+    /// keeps exp153's package-level confirm; a DOWN scope confirms a tied
+    /// FAMILY through [`super::callctx::call_fit_scoped`], an unheld
+    /// callee the index knows nowhere (or the family holds anywhere)
+    /// skipped instead of counted against — the DOWN-only deviation,
+    /// declared in `docs/responsibility.md`, read only against an `edges/2`
+    /// index (an older one is silence and the fallback stands). The other
+    /// roles do not read it.
+    pub scope: super::callctx::FitScope,
 }
 
 impl CallContextRules {
     /// The named settings the config key `library.lookup.call_context`
     /// chooses from, in this order ("off" first: the default).
-    pub const NAMES: [&'static str; 11] = [
+    pub const NAMES: [&'static str; 12] = [
         "off",
         "tie-break",
+        "tie-break-down",
         "support",
         "support-or",
         "veto",
@@ -947,6 +1006,11 @@ impl CallContextRules {
             "off" => off,
             "tie-break" => CallContextRules {
                 tie_break: true,
+                ..off
+            },
+            "tie-break-down" => CallContextRules {
+                tie_break: true,
+                scope: super::callctx::FitScope::Family,
                 ..off
             },
             "support" => CallContextRules {

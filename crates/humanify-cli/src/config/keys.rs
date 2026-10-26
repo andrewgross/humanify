@@ -649,10 +649,14 @@ pub static KEYS: &[Key] = &[
         flag: None,
         default: || text("off"),
         unset: "",
-        doc: "The call-context rule (exp153): what a unit's own callees, read against the \
-              callees a /4 index records for the matched print (containment), may decide. \
-              \"off\"; \"tie-break\" (a structural tie goes to the one tied package it \
-              confirms); \"support\" / \"support-or\" (it replaces / joins the position \
+        doc: "The call-context rule (exp153, exp155): what a unit's own callees, read against \
+              the callees a /4 index records for the matched print (containment), may \
+              decide. \"off\"; \"tie-break\" (a structural tie goes to the one tied package \
+              it confirms); \"tie-break-down\" (exp155, the edges/2 flat callee-print \
+              table: the tie goes to the one tied family whose DOWN-scoped fit confirms \
+              it — an unheld callee the index knows nowhere, or the family holds anywhere, \
+              is skipped instead of counted against; an older index is silence and the tie \
+              stands); \"support\" / \"support-or\" (it replaces / joins the position \
               window and the isolation veto's neighbour test); \"veto\" / \"veto-or\" (the \
               veto's test only); \"relax-floor\" (a whole print of 20 nodes up is looked up \
               for the owners it confirms); \"relax-common\" (a print held by too many owners \
